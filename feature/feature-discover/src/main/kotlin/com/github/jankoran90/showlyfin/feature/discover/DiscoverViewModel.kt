@@ -1,47 +1,243 @@
 package com.github.jankoran90.showlyfin.feature.discover
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.domain.AgeRating
+import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
+import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.TraktRemoteDataSource
+import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
 import com.github.jankoran90.showlyfin.feature.discover.mapper.toMediaItem
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.jellyfin.sdk.model.UUID
 import javax.inject.Inject
+import javax.inject.Named
 
 @HiltViewModel
 class DiscoverViewModel @Inject constructor(
     private val traktApi: TraktRemoteDataSource,
+    private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
     private val tmdbApi: TmdbRemoteDataSource,
+    private val jellyfinLibraryService: JellyfinLibraryService,
+    private val parentalControlsRepository: ParentalControlsRepository,
+    private val tokenProvider: TokenProvider,
+    @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DiscoverUiState())
     val uiState: StateFlow<DiscoverUiState> = _uiState.asStateFlow()
 
+    private var searchJob: Job? = null
+
     init {
         load(DiscoverTab.MOVIES, DiscoverFilter.TRENDING)
+        loadFilterContext()
+        parentalControlsRepository.profile
+            .onEach { profile ->
+                _uiState.update {
+                    it.copy(parentalLockedAgeRating = if (profile.isLocked) profile.effectiveAgeRating else null)
+                }
+                reapplyFilters()
+            }
+            .launchIn(viewModelScope)
     }
 
     fun selectTab(tab: DiscoverTab) {
         val filter = _uiState.value.activeFilter
-        _uiState.update { it.copy(activeTab = tab, items = emptyList()) }
+        _uiState.update { it.copy(activeTab = tab, items = emptyList(), rawItems = emptyList()) }
         load(tab, filter)
     }
 
     fun selectFilter(filter: DiscoverFilter) {
         val tab = _uiState.value.activeTab
-        _uiState.update { it.copy(activeFilter = filter, items = emptyList()) }
+        _uiState.update { it.copy(activeFilter = filter, items = emptyList(), rawItems = emptyList()) }
         load(tab, filter)
     }
 
     fun refresh() = load(_uiState.value.activeTab, _uiState.value.activeFilter)
+
+    fun onSearchQueryChange(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(searchResults = emptyList(), rawSearchResults = emptyList(), isSearching = false) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(300)
+            runSearch(query)
+        }
+    }
+
+    fun clearSearch() {
+        searchJob?.cancel()
+        _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), rawSearchResults = emptyList(), isSearching = false) }
+    }
+
+    fun openFilterSheet() = _uiState.update { it.copy(isFilterSheetOpen = true) }
+    fun closeFilterSheet() = _uiState.update { it.copy(isFilterSheetOpen = false) }
+
+    fun updateFilters(filters: DiscoverFilters) {
+        _uiState.update { it.copy(filters = filters) }
+        reapplyFilters()
+    }
+
+    fun resetFilters() {
+        _uiState.update { it.copy(filters = DiscoverFilters()) }
+        reapplyFilters()
+    }
+
+    private fun reapplyFilters() {
+        val state = _uiState.value
+        val filteredItems = applyFilters(state.rawItems, state.filters, state)
+        val filteredSearch = applyFilters(state.rawSearchResults, state.filters, state)
+        _uiState.update { it.copy(items = filteredItems, searchResults = filteredSearch) }
+    }
+
+    private fun applyFilters(items: List<MediaItem>, filters: DiscoverFilters, state: DiscoverUiState): List<MediaItem> {
+        var result = items
+        if (filters.selectedGenres.isNotEmpty()) {
+            result = result.filter { item ->
+                item.genres.orEmpty().any { genre -> filters.selectedGenres.contains(genre) }
+            }
+        }
+        if (filters.yearMin > 1950 || filters.yearMax < 2030) {
+            result = result.filter { item ->
+                val year = item.year ?: return@filter true
+                year in filters.yearMin..filters.yearMax
+            }
+        }
+        if (filters.minRating > 0f) {
+            result = result.filter { item ->
+                (item.rating ?: 0f) >= filters.minRating
+            }
+        }
+        if (filters.hideInJellyfin && state.ownedImdbIds.isNotEmpty()) {
+            result = result.filter { item ->
+                item.imdbId == null || !state.ownedImdbIds.contains(item.imdbId)
+            }
+        }
+        if (filters.hideInWatchlist && state.watchlistTraktIds.isNotEmpty()) {
+            result = result.filter { item -> !state.watchlistTraktIds.contains(item.traktId) }
+        }
+        if (filters.hideWatched && state.watchedTraktIds.isNotEmpty()) {
+            result = result.filter { item -> !state.watchedTraktIds.contains(item.traktId) }
+        }
+        state.parentalLockedAgeRating?.let { lockedRating ->
+            result = result.filter { item -> isAllowedForRating(item, lockedRating) }
+        }
+        result = when (filters.sortBy) {
+            DiscoverSort.DEFAULT -> result
+            DiscoverSort.RATING_DESC -> result.sortedByDescending { it.rating ?: 0f }
+            DiscoverSort.YEAR_DESC -> result.sortedByDescending { it.year ?: 0 }
+            DiscoverSort.YEAR_ASC -> result.sortedBy { it.year ?: Int.MAX_VALUE }
+            DiscoverSort.ALPHABETICAL -> result.sortedBy { it.title }
+        }
+        return result
+    }
+
+    private fun isAllowedForRating(item: MediaItem, lockedRating: AgeRating): Boolean {
+        val genres = item.genres.orEmpty().map { it.lowercase() }
+        return when (lockedRating) {
+            AgeRating.UNRESTRICTED -> true
+            AgeRating.CHILDREN -> genres.any { it in CHILDREN_ALLOWED_GENRES } &&
+                genres.none { it in ADULT_GENRES }
+            AgeRating.FAMILY -> genres.none { it in FAMILY_BLOCKED_GENRES } &&
+                genres.none { it in ADULT_GENRES }
+            AgeRating.TEEN -> genres.none { it in ADULT_GENRES }
+            AgeRating.ADULT -> true
+        }
+    }
+
+    companion object {
+        private val CHILDREN_ALLOWED_GENRES = setOf(
+            "family", "animation", "rodinné", "rodinný", "animovaný", "animovaný film",
+            "kids", "children", "dětský",
+        )
+        private val FAMILY_BLOCKED_GENRES = setOf(
+            "horror", "horor", "thriller", "war", "válečný", "erotic", "erotika",
+        )
+        private val ADULT_GENRES = setOf(
+            "horror", "horor", "erotic", "erotika", "adult",
+        )
+    }
+
+    private fun loadFilterContext() {
+        viewModelScope.launch {
+            if (tokenProvider.getToken() != null) {
+                runCatching {
+                    val watchlistMovies = authorizedTraktApi.fetchSyncMoviesWatchlist()
+                    val watchlistShows = authorizedTraktApi.fetchSyncShowsWatchlist()
+                    val ids = (watchlistMovies + watchlistShows).mapNotNull { it.getTraktId() }.toSet()
+                    _uiState.update { it.copy(watchlistTraktIds = ids) }
+                }
+                runCatching {
+                    val watchedMovies = authorizedTraktApi.fetchSyncWatchedMovies()
+                    val watchedShows = authorizedTraktApi.fetchSyncWatchedShows()
+                    val ids = (watchedMovies + watchedShows).mapNotNull { it.getTraktId() }.toSet()
+                    _uiState.update { it.copy(watchedTraktIds = ids) }
+                }
+            }
+            val userId = prefs.getString("jellyfin_user_id", "") ?: ""
+            if (userId.isNotBlank()) {
+                runCatching {
+                    val owned = jellyfinLibraryService.getOwnedIds(UUID.fromString(userId))
+                    _uiState.update { it.copy(ownedImdbIds = owned.imdbIds) }
+                }
+            }
+        }
+    }
+
+    private suspend fun runSearch(query: String) {
+        _uiState.update { it.copy(isSearching = true, error = null) }
+        try {
+            val results = traktApi.fetchSearch(query, withMovies = true)
+            val mediaItems = results.mapNotNull { it.toMediaItem() }
+            val enriched = coroutineScope {
+                mediaItems.map { item ->
+                    async {
+                        val tmdbId = item.tmdbId ?: return@async item
+                        if (item.type == MediaType.MOVIE) {
+                            val details = runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull()
+                            item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path)
+                        } else {
+                            val details = runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull()
+                            item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path)
+                        }
+                    }
+                }.awaitAll()
+            }
+            val state = _uiState.value
+            val filtered = applyFilters(enriched, state.filters, state)
+            _uiState.update {
+                it.copy(
+                    rawSearchResults = enriched,
+                    searchResults = filtered,
+                    availableGenres = mergeGenres(it.availableGenres, enriched),
+                    isSearching = false,
+                )
+            }
+        } catch (e: Throwable) {
+            _uiState.update { it.copy(isSearching = false, error = e.message ?: "Chyba vyhledávání") }
+        }
+    }
 
     private fun load(tab: DiscoverTab, filter: DiscoverFilter) {
         viewModelScope.launch {
@@ -76,10 +272,24 @@ class DiscoverViewModel @Inject constructor(
                         }
                     }.awaitAll()
                 }
-                _uiState.update { it.copy(items = enriched, isLoading = false) }
+                val state = _uiState.value
+                val filtered = applyFilters(enriched, state.filters, state)
+                _uiState.update {
+                    it.copy(
+                        rawItems = enriched,
+                        items = filtered,
+                        availableGenres = mergeGenres(it.availableGenres, enriched),
+                        isLoading = false,
+                    )
+                }
             } catch (e: Throwable) {
                 _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba načítání") }
             }
         }
+    }
+
+    private fun mergeGenres(existing: List<String>, items: List<MediaItem>): List<String> {
+        val merged = (existing + items.flatMap { it.genres.orEmpty() }).toSortedSet()
+        return merged.toList()
     }
 }

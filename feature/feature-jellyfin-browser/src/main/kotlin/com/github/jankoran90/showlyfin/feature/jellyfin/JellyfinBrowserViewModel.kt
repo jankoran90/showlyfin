@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.authenticateUserByName
@@ -26,6 +27,7 @@ class JellyfinBrowserViewModel @Inject constructor(
     private val jellyfinApiClient: ApiClient,
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
+    private val parentalControlsRepository: ParentalControlsRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -69,6 +71,14 @@ class JellyfinBrowserViewModel @Inject constructor(
                     .putString(KEY_TOKEN, accessToken)
                     .putString(KEY_USER_ID, userId)
                     .apply()
+
+                jellyfinApiClient.update(
+                    baseUrl = serverUrl,
+                    accessToken = accessToken,
+                    clientInfo = clientInfo,
+                    deviceInfo = deviceInfo,
+                )
+                parentalControlsRepository.refreshFromJellyfin(userId)
 
                 loadLibraries(serverUrl, accessToken, userId)
             } catch (e: Throwable) {

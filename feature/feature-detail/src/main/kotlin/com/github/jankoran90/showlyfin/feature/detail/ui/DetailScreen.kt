@@ -88,7 +88,6 @@ fun DetailScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // Backdrop
             val backdropUrl = displayItem.backdropUrl()
             Box(
                 Modifier
@@ -110,7 +109,6 @@ fun DetailScreen(
                 }
             }
 
-            // Poster + info row
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -154,6 +152,9 @@ fun DetailScreen(
                                 Text("%.1f".format(rating * 10f / 10f), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
+                        uiState.csfdRating?.let { rating ->
+                            CsfdRatingBadge(rating = rating)
+                        }
                     }
                     val tmdbRating = uiState.movieDetails?.vote_average ?: uiState.showDetails?.vote_average
                     tmdbRating?.let {
@@ -164,18 +165,32 @@ fun DetailScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Overview
-            val overview = uiState.movieDetails?.overview ?: uiState.showDetails?.overview ?: displayItem.overview
-            if (!overview.isNullOrBlank()) {
+            val tmdbOverview = uiState.movieDetails?.overview ?: uiState.showDetails?.overview ?: displayItem.overview
+            if (!tmdbOverview.isNullOrBlank()) {
                 Text(
-                    text = overview,
+                    text = tmdbOverview,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 Spacer(Modifier.height(12.dp))
             }
 
-            // Genres
+            val csfdPlot = uiState.csfdPlot
+            if (!csfdPlot.isNullOrBlank() && csfdPlot != tmdbOverview) {
+                Text(
+                    text = "Popis (ČSFD)",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = csfdPlot,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
             val genres = uiState.movieDetails?.genres?.map { it.name }
                 ?: uiState.showDetails?.genres?.map { it.name }
                 ?: displayItem.genres
@@ -191,7 +206,6 @@ fun DetailScreen(
                 }
             }
 
-            // Smart Remux button (only for items with imdbId)
             if (onSmartDetect != null && displayItem.imdbId != null) {
                 androidx.compose.material3.OutlinedButton(
                     onClick = { onSmartDetect(displayItem) },
@@ -201,6 +215,8 @@ fun DetailScreen(
                 }
                 Spacer(Modifier.height(8.dp))
             }
+
+            CsfdReviewsSection(reviews = uiState.csfdReviews)
 
             Spacer(Modifier.height(24.dp))
         }

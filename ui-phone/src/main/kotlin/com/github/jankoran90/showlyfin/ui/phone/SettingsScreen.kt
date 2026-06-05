@@ -64,6 +64,14 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.85f),
                     )
+                    if (uiState.jellyfinUserName.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Profil: ${uiState.jellyfinUserName}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.85f),
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = "Připojeno",
@@ -88,6 +96,41 @@ fun SettingsScreen(
             }
         }
         Spacer(Modifier.height(16.dp))
+
+        // Profil & parental controls
+        if (uiState.jellyfinConnected) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Profil", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Věkové omezení: ${uiState.parentalAgeRating.displayName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.85f),
+                    )
+                    uiState.maxParentalRating?.let { rating ->
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Jellyfin MaxParentalRating: $rating",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.6f),
+                        )
+                    }
+                    if (uiState.parentalLocked) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Filtr je uzamčen profilem Jellyfin — nelze přepnout.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
 
         // Trakt sekce
         Card(

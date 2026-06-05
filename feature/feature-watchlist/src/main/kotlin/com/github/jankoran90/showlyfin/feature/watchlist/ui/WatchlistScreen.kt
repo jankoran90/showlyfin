@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistTab
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistViewModel
@@ -77,7 +79,22 @@ fun WatchlistScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
-                        MediaCard(item = item, onClick = { onItemClick(item) })
+                        val progressData = uiState.progressMap[item.traktId]
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            MediaCard(
+                                item = item,
+                                onClick = { onItemClick(item) },
+                                progress = if (item.type == MediaType.SHOW) progressData?.fraction else null,
+                            )
+                            if (item.type == MediaType.SHOW && progressData != null) {
+                                Text(
+                                    text = "${progressData.watchedEpisodes}/${progressData.totalEpisodes} epizod",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }

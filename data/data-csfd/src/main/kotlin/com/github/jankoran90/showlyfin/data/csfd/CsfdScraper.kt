@@ -101,6 +101,21 @@ class CsfdScraper @Inject constructor() {
         }
     }
 
+    suspend fun scrapeRating(csfdId: Long): Int? = withContext(Dispatchers.IO) {
+        try {
+            val html = fetchWithAnubis("$BASE_URL/film/$csfdId/") ?: return@withContext null
+            val doc = Jsoup.parse(html, BASE_URL)
+            val ratingEl = doc.selectFirst(".film-rating-average")
+                ?: doc.selectFirst(".rating-average")
+                ?: doc.selectFirst("[class*=rating-average]")
+            val text = ratingEl?.text()?.trim() ?: return@withContext null
+            Regex("(\\d+)").find(text)?.groupValues?.get(1)?.toIntOrNull()
+        } catch (e: Exception) {
+            Timber.w(e, "[CsfdScraper] scrapeRating failed for csfdId=$csfdId")
+            null
+        }
+    }
+
     suspend fun scrapeTitle(csfdId: Long): String? = withContext(Dispatchers.IO) {
         try {
             val html = fetchWithAnubis("$BASE_URL/film/$csfdId/") ?: return@withContext null

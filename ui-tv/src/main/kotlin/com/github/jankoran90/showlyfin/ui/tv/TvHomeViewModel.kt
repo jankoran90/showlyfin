@@ -81,6 +81,19 @@ class TvHomeViewModel @Inject constructor(
                 val rows = mutableListOf<TvHomeRow>()
                 val filter = _state.value.filter
 
+                if (filter == null) {
+                    runCatching {
+                        apiClient.userLibraryApi.getResumeItems(
+                            userId = userUuid,
+                            limit = 20,
+                            fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
+                            mediaTypes = listOf(MediaType.VIDEO),
+                        ).content
+                    }.getOrNull()?.items?.takeIf { it.isNotEmpty() }?.let { items ->
+                        rows.add(TvHomeRow("Pokračovat v přehrávání", items.map { it.toTvItem(serverUrl, token) }))
+                    }
+                }
+
                 if (filter == null || filter == BaseItemKind.MOVIE) {
                     runCatching {
                         apiClient.userLibraryApi.getLatestMedia(
@@ -90,7 +103,7 @@ class TvHomeViewModel @Inject constructor(
                             limit = 20,
                         ).content
                     }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                        rows.add(TvHomeRow("Filmy", items.map { it.toTvItem(serverUrl, token) }))
+                        rows.add(TvHomeRow("Nejnovější filmy", items.map { it.toTvItem(serverUrl, token) }))
                     }
                 }
 
@@ -103,7 +116,7 @@ class TvHomeViewModel @Inject constructor(
                             limit = 20,
                         ).content
                     }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                        rows.add(TvHomeRow("Seriály", items.map { it.toTvItem(serverUrl, token) }))
+                        rows.add(TvHomeRow("Nejnovější seriály", items.map { it.toTvItem(serverUrl, token) }))
                     }
                 }
 

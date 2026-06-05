@@ -3,11 +3,15 @@ package com.github.jankoran90.showlyfin.ui.phone
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.domain.AgeRating
+import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -19,11 +23,16 @@ data class SettingsUiState(
     val error: String? = null,
     val jellyfinServerUrl: String = "",
     val jellyfinConnected: Boolean = false,
+    val jellyfinUserName: String = "",
+    val parentalAgeRating: AgeRating = AgeRating.UNRESTRICTED,
+    val parentalLocked: Boolean = false,
+    val maxParentalRating: Int? = null,
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val traktAuthManager: TraktAuthManager,
+    private val parentalControlsRepository: ParentalControlsRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -50,6 +59,18 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
+        parentalControlsRepository.profile
+            .onEach { profile ->
+                _uiState.update {
+                    it.copy(
+                        jellyfinUserName = profile.userInfo?.userName ?: "",
+                        parentalAgeRating = profile.effectiveAgeRating,
+                        parentalLocked = profile.isLocked,
+                        maxParentalRating = profile.userInfo?.maxParentalRating,
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
     }
 
     private fun refreshJellyfinState() {
@@ -75,6 +96,7 @@ class SettingsViewModel @Inject constructor(
             .remove(KEY_TOKEN)
             .remove(KEY_USER_ID)
             .apply()
+        parentalControlsRepository.clear()
         refreshJellyfinState()
     }
 }

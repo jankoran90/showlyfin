@@ -2,6 +2,9 @@ package com.github.jankoran90.showlyfin.feature.watchlist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.domain.AgeRating
+import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
@@ -14,6 +17,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -23,7 +28,11 @@ class WatchlistViewModel @Inject constructor(
     private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
     private val tmdbApi: TmdbRemoteDataSource,
     private val tokenProvider: TokenProvider,
+    private val parentalControlsRepository: ParentalControlsRepository,
 ) : ViewModel() {
+
+    private val _rawItems = MutableStateFlow<List<MediaItem>>(emptyList())
+    private var lockedRating: AgeRating? = null
 
     private val _uiState = MutableStateFlow(WatchlistUiState())
     val uiState: StateFlow<WatchlistUiState> = _uiState.asStateFlow()
@@ -32,10 +41,17 @@ class WatchlistViewModel @Inject constructor(
         val loggedIn = tokenProvider.getToken() != null
         _uiState.update { it.copy(isLoggedIn = loggedIn) }
         if (loggedIn) load(WatchlistTab.MOVIES)
+        parentalControlsRepository.profile
+            .onEach { profile ->
+                lockedRating = if (profile.isLocked) profile.effectiveAgeRating else null
+                reapply()
+            }
+            .launchIn(viewModelScope)
     }
 
     fun selectTab(tab: WatchlistTab) {
-        _uiState.update { it.copy(activeTab = tab, items = emptyList()) }
+        _uiState.update { it.copy(activeTab = tab, items = emptyList(), progressMap = emptyMap()) }
+        _rawItems.value = emptyList()
         if (_uiState.value.isLoggedIn) load(tab)
     }
 
@@ -66,10 +82,58 @@ class WatchlistViewModel @Inject constructor(
                         }
                     }.awaitAll()
                 }
-                _uiState.update { it.copy(items = enriched, isLoading = false) }
+                _rawItems.value = enriched
+                _uiState.update { it.copy(items = applyLock(enriched), isLoading = false) }
+
+                if (tab == WatchlistTab.SHOWS) {
+                    loadProgress()
+                }
             } catch (e: Throwable) {
                 _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba načítání") }
             }
         }
+    }
+
+    private suspend fun loadProgress() {
+        runCatching {
+            val watched = authorizedTraktApi.fetchSyncWatchedShows(extended = "full")
+            val map = mutableMapOf<Long, WatchProgress>()
+            for (entry in watched) {
+                val show = entry.show ?: continue
+                val traktId = show.ids?.trakt ?: continue
+                val totalEpisodes = show.aired_episodes ?: continue
+                val watchedEpisodes = entry.seasons?.sumOf { season ->
+                    season.episodes?.size ?: 0
+                } ?: 0
+                if (totalEpisodes > 0) {
+                    map[traktId] = WatchProgress(watchedEpisodes, totalEpisodes)
+                }
+            }
+            _uiState.update { it.copy(progressMap = map) }
+        }
+    }
+
+    private fun reapply() {
+        _uiState.update { it.copy(items = applyLock(_rawItems.value)) }
+    }
+
+    private fun applyLock(items: List<MediaItem>): List<MediaItem> {
+        val rating = lockedRating ?: return items
+        return items.filter { item ->
+            val genres = item.genres.orEmpty().map { it.lowercase() }
+            when (rating) {
+                AgeRating.UNRESTRICTED -> true
+                AgeRating.CHILDREN -> genres.any { it in CHILDREN_ALLOWED } && genres.none { it in ADULT }
+                AgeRating.FAMILY -> genres.none { it in FAMILY_BLOCKED } && genres.none { it in ADULT }
+                AgeRating.TEEN -> genres.none { it in ADULT }
+                AgeRating.ADULT -> true
+            }
+        }
+    }
+
+    companion object {
+        private val CHILDREN_ALLOWED = setOf("family", "animation", "rodinné", "rodinný", "animovaný", "animovaný film", "kids", "children", "dětský")
+        private val FAMILY_BLOCKED = setOf("horror", "horor", "thriller", "war", "válečný", "erotic", "erotika")
+        private val ADULT = setOf("horror", "horor", "erotic", "erotika", "adult")
     }
 }

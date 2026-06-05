@@ -26,6 +26,7 @@ dependencies {
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-network"))
     implementation(project(":data:data-trakt"))
+    implementation(project(":data:data-jellyfin"))
     implementation(project(":feature:feature-discover"))
     implementation(project(":feature:feature-watchlist"))
     implementation(project(":feature:feature-detail"))
