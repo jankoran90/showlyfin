@@ -70,7 +70,6 @@ class JellyfinBrowserViewModel @Inject constructor(
                         id = view.id.toString(),
                         name = view.name ?: "",
                         itemCount = view.childCount,
-                        imageTag = view.imageTags?.get("Primary"),
                     )
                 } ?: emptyList()
                 _uiState.update { it.copy(libraries = libraries, isLoading = false, isConnected = true) }

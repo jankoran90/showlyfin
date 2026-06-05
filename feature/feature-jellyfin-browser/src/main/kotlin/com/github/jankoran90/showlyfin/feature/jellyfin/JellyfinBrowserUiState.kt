@@ -4,7 +4,6 @@ data class JellyfinLibrary(
     val id: String,
     val name: String,
     val itemCount: Int?,
-    val imageTag: String?,
 )
 
 data class JellyfinBrowserUiState(
