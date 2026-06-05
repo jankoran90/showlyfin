@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Card
@@ -68,11 +70,11 @@ fun MediaCard(
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp)
-                        .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
                         .padding(4.dp),
                 ) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Check,
+                        imageVector = Icons.Default.Check,
                         contentDescription = "V knihovně",
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.height(16.dp),
