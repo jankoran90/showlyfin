@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.sessionApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.api.sockets.subscribe
@@ -83,13 +84,14 @@ class TvHomeViewModel @Inject constructor(
 
                 if (filter == null) {
                     runCatching {
-                        apiClient.userLibraryApi.getResumeItems(
+                        apiClient.itemsApi.getResumeItems(
                             userId = userUuid,
                             limit = 20,
                             fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
                             mediaTypes = listOf(MediaType.VIDEO),
-                        ).content
-                    }.getOrNull()?.items?.takeIf { it.isNotEmpty() }?.let { items ->
+                            enableTotalRecordCount = false,
+                        ).content.items
+                    }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
                         rows.add(TvHomeRow("Pokračovat v přehrávání", items.map { it.toTvItem(serverUrl, token) }))
                     }
                 }
