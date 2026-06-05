@@ -27,6 +27,7 @@ include(":app")
 include(":core:core-data")
 include(":core:core-network")
 include(":core:core-domain")
+include(":core:core-ui")
 
 // Data
 include(":data:data-trakt")

@@ -5,6 +5,14 @@ import com.github.jankoran90.showlyfin.data.tmdb.model.*
 
 internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource {
 
+    override suspend fun fetchMovieDetails(tmdbId: Long) =
+        try { if (tmdbId <= 0) null else service.fetchMovieDetails(tmdbId) }
+        catch (e: Throwable) { null }
+
+    override suspend fun fetchShowDetails(tmdbId: Long) =
+        try { if (tmdbId <= 0) null else service.fetchShowDetails(tmdbId) }
+        catch (e: Throwable) { null }
+
     override suspend fun fetchShowImages(tmdbId: Long) =
         try { if (tmdbId <= 0) TmdbImages.EMPTY else service.fetchShowImages(tmdbId) }
         catch (e: Throwable) { TmdbImages.EMPTY }

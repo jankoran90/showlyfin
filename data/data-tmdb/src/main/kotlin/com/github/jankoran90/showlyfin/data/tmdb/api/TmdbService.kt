@@ -5,6 +5,13 @@ import retrofit2.http.GET
 import retrofit2.http.Path
 
 interface TmdbService {
+
+    @GET("movie/{tmdbId}")
+    suspend fun fetchMovieDetails(@Path("tmdbId") tmdbId: Long): TmdbMovieDetails
+
+    @GET("tv/{tmdbId}")
+    suspend fun fetchShowDetails(@Path("tmdbId") tmdbId: Long): TmdbShowDetails
+
     @GET("tv/{tmdbId}/images")
     suspend fun fetchShowImages(@Path("tmdbId") tmdbId: Long): TmdbImages
 

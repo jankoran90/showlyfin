@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.data.tmdb
 import com.github.jankoran90.showlyfin.data.tmdb.model.*
 
 interface TmdbRemoteDataSource {
+    suspend fun fetchMovieDetails(tmdbId: Long): TmdbMovieDetails?
+    suspend fun fetchShowDetails(tmdbId: Long): TmdbShowDetails?
     suspend fun fetchShowImages(tmdbId: Long): TmdbImages
     suspend fun fetchEpisodeImage(showTmdbId: Long?, season: Int?, episode: Int?): TmdbImage?
     suspend fun fetchMovieImages(tmdbId: Long): TmdbImages

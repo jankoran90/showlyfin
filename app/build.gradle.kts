@@ -26,8 +26,8 @@ android {
         applicationId = "com.github.jankoran90.showlyfin"
         minSdk = 23
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -82,6 +82,7 @@ dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-data"))
     implementation(project(":core:core-network"))
+    implementation(project(":core:core-ui"))
 
     implementation(project(":data:data-trakt"))
     implementation(project(":data:data-tmdb"))
