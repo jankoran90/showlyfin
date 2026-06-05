@@ -31,6 +31,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        buildConfigField("String", "TRAKT_CLIENT_ID", "\"${System.getenv("TRAKT_CLIENT_ID") ?: ""}\"")
+        buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"${System.getenv("TRAKT_CLIENT_SECRET") ?: ""}\"")
+        buildConfigField("String", "TMDB_API_KEY", "\"${System.getenv("TMDB_API_KEY") ?: ""}\"")
     }
 
     if (shouldSign) {
@@ -78,6 +82,12 @@ dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-data"))
     implementation(project(":core:core-network"))
+
+    implementation(project(":data:data-trakt"))
+    implementation(project(":data:data-tmdb"))
+    implementation(project(":data:data-csfd"))
+    implementation(project(":data:data-jellyfin"))
+    implementation(project(":data:data-uploader"))
 
     implementation(project(":ui-phone"))
     implementation(project(":ui-tv"))

@@ -1,0 +1,16 @@
+package com.github.jankoran90.showlyfin.data.tmdb
+
+import com.github.jankoran90.showlyfin.data.tmdb.model.*
+
+interface TmdbRemoteDataSource {
+    suspend fun fetchShowImages(tmdbId: Long): TmdbImages
+    suspend fun fetchEpisodeImage(showTmdbId: Long?, season: Int?, episode: Int?): TmdbImage?
+    suspend fun fetchMovieImages(tmdbId: Long): TmdbImages
+    suspend fun fetchMoviePeople(tmdbId: Long): Map<TmdbPerson.Type, List<TmdbPerson>>
+    suspend fun fetchShowPeople(tmdbId: Long): Map<TmdbPerson.Type, List<TmdbPerson>>
+    suspend fun fetchShowWatchProviders(tmdbId: Long, countryCode: String): TmdbStreamingCountry?
+    suspend fun fetchMovieWatchProviders(tmdbId: Long, countryCode: String): TmdbStreamingCountry?
+    suspend fun fetchPersonDetails(id: Long): TmdbPerson
+    suspend fun fetchPersonTranslations(id: Long): Map<String, TmdbTranslation.Data>
+    suspend fun fetchPersonImages(tmdbId: Long): TmdbImages
+}

@@ -1,0 +1,66 @@
+package com.github.jankoran90.showlyfin.data.uploader.api
+
+import com.github.jankoran90.showlyfin.data.uploader.model.*
+import okhttp3.RequestBody
+import okhttp3.ResponseBody
+import retrofit2.Response
+import retrofit2.http.*
+
+interface UploaderService {
+    @GET suspend fun getStreams(@Url url: String, @Header("Cookie") cookie: String): UploaderStreamsResponse
+    @POST suspend fun capture(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderCaptureRequest): UploaderCaptureResponse
+    @POST suspend fun login(@Url url: String, @Body request: UploaderLoginRequest): Response<ResponseBody>
+
+    // TMM Pipeline
+    @GET suspend fun getTmmSession(@Url url: String, @Header("Cookie") cookie: String): TmmSession
+    @POST suspend fun tmmSearch(@Url url: String, @Header("Cookie") cookie: String, @Body request: TmmSearchRequest): TmmSearchResponse
+    @POST suspend fun tmmConfirm(@Url url: String, @Header("Cookie") cookie: String, @Body request: TmmConfirmRequest): TmmConfirmResponse
+    @POST suspend fun tmmProcess(@Url url: String, @Header("Cookie") cookie: String, @Body request: TmmProcessRequest): TmmProcessResponse
+    @POST suspend fun tmmMove(@Url url: String, @Header("Cookie") cookie: String, @Body request: TmmMoveRequest): TmmMoveResponse
+
+    // Libraries
+    @GET suspend fun getLibraries(@Url url: String, @Header("Cookie") cookie: String): List<String>
+    @GET suspend fun scanLibrary(@Url url: String, @Header("Cookie") cookie: String): LibraryScanResponse
+    @PATCH suspend fun updateUserdata(@Url url: String, @Header("Cookie") cookie: String, @Body request: StorageboxUserdataRequest): Any
+
+    // Probe + Remux
+    @GET suspend fun probeStreams(@Url url: String, @Header("Cookie") cookie: String): ProbeResponse
+    @POST suspend fun startRemux(@Url url: String, @Header("Cookie") cookie: String, @Body request: RemuxStartRequest): RemuxStartResponse
+    @GET suspend fun getRemuxStatus(@Url url: String, @Header("Cookie") cookie: String): RemuxJob
+
+    // Smart Pair
+    @POST suspend fun startPair(@Url url: String, @Header("Cookie") cookie: String, @Body request: PairRequest): PairResponse
+    @GET suspend fun getPairStatus(@Url url: String, @Header("Cookie") cookie: String): PairJob
+    @POST suspend fun selectPairTracks(@Url url: String, @Header("Cookie") cookie: String, @Body request: PairMergeRequest): Response<ResponseBody>
+    @DELETE suspend fun cancelPair(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+
+    // TMDB detail
+    @GET suspend fun getTmdbDetail(@Url url: String, @Header("Cookie") cookie: String): TmdbDetail
+
+    // Storagebox detail operations
+    @POST suspend fun storageboxSearch(@Url url: String, @Header("Cookie") cookie: String, @Body request: StorageboxSearchRequest): TmmSearchResponse
+    @POST suspend fun storageboxConfirm(@Url url: String, @Header("Cookie") cookie: String, @Body request: StorageboxConfirmRequest): StorageboxConfirmResponse
+    @PATCH suspend fun setArtwork(@Url url: String, @Header("Cookie") cookie: String, @Body request: StorageboxArtworkRequest): Any
+    @PATCH suspend fun setCollection(@Url url: String, @Header("Cookie") cookie: String, @Body request: StorageboxCollectionRequest): Any
+    @GET suspend fun getCollections(@Url url: String, @Header("Cookie") cookie: String): StorageboxCollectionsResponse
+    @GET suspend fun checkLibraryPresence(@Url url: String, @Header("Cookie") cookie: String): Map<String, Boolean>
+    @PATCH suspend fun setDateAdded(@Url url: String, @Header("Cookie") cookie: String, @Body request: StorageboxDateAddedRequest): Any
+    @DELETE suspend fun deleteFolder(@Url url: String, @Header("Cookie") cookie: String): Any
+
+    // Fix Audio Delay
+    @POST suspend fun startFixAudioDelay(@Url url: String, @Header("Cookie") cookie: String, @Body request: FixAudioDelayRequest): FixAudioDelayStartResponse
+    @GET suspend fun getFixAudioDelayStatus(@Url url: String, @Header("Cookie") cookie: String): FixAudioDelayJob
+    @DELETE suspend fun deleteFixAudioDelayBackup(@Url url: String, @Header("Cookie") cookie: String): Any
+
+    // Smart Pair Preview
+    @GET @Streaming suspend fun getPairPreview(@Url url: String, @Header("Cookie") cookie: String): ResponseBody
+
+    // Android log upload
+    @POST suspend fun uploadLog(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Any
+
+    // Remux History
+    @GET suspend fun getRemuxHistory(@Url url: String, @Header("Cookie") cookie: String): RemuxHistoryResponse
+    @GET suspend fun getRemuxSession(@Url url: String, @Header("Cookie") cookie: String): RemuxSession
+    @DELETE suspend fun deleteRemuxSession(@Url url: String, @Header("Cookie") cookie: String): Any
+    @POST suspend fun reDetectRemuxSession(@Url url: String, @Header("Cookie") cookie: String): RemuxReDetectResponse
+}

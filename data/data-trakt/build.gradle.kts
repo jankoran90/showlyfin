@@ -17,6 +17,7 @@ android {
 dependencies {
     implementation(project(":core:core-network"))
     implementation(project(":core:core-domain"))
+    implementation(project(":data:data-tmdb"))
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.core.ktx)
@@ -24,6 +25,7 @@ dependencies {
     implementation(libs.timber)
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
 }
