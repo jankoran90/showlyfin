@@ -9,11 +9,10 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
         try { if (tmdbId <= 0) TmdbImages.EMPTY else service.fetchShowImages(tmdbId) }
         catch (e: Throwable) { TmdbImages.EMPTY }
 
-    override suspend fun fetchEpisodeImage(showTmdbId: Long?, season: Int?, episode: Int?) =
-        try {
-            if (showTmdbId == null || showTmdbId <= 0 || season == null || season <= 0 || episode == null || episode <= 0) return null
-            service.fetchEpisodeImages(showTmdbId, season, episode).stills?.firstOrNull()
-        } catch (e: Throwable) { null }
+    override suspend fun fetchEpisodeImage(showTmdbId: Long?, season: Int?, episode: Int?): TmdbImage? {
+        if (showTmdbId == null || showTmdbId <= 0 || season == null || season <= 0 || episode == null || episode <= 0) return null
+        return try { service.fetchEpisodeImages(showTmdbId, season, episode).stills?.firstOrNull() } catch (e: Throwable) { null }
+    }
 
     override suspend fun fetchMovieImages(tmdbId: Long) =
         try { if (tmdbId <= 0) TmdbImages.EMPTY else service.fetchMovieImages(tmdbId) }
