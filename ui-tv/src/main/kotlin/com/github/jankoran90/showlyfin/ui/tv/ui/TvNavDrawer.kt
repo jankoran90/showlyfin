@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -21,14 +22,24 @@ import androidx.tv.material3.NavigationDrawer
 import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
+import com.github.jankoran90.showlyfin.ui.tv.TvDestination
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TvNavDrawer(
+    selected: TvDestination,
     onNavigateHome: () -> Unit,
+    onFilterMovies: () -> Unit,
+    onFilterSeries: () -> Unit,
+    onOpenSettings: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val isHome = selected is TvDestination.Home
+    val isMovies = selected is TvDestination.HomeFiltered && selected.mediaType.name == "MOVIE"
+    val isSeries = selected is TvDestination.HomeFiltered && selected.mediaType.name == "SERIES"
+    val isSettings = selected is TvDestination.Settings
+
     NavigationDrawer(
         drawerState = drawerState,
         drawerContent = { _ ->
@@ -40,43 +51,56 @@ fun TvNavDrawer(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 NavigationDrawerItem(
-                    selected = true,
+                    selected = isHome,
                     onClick = onNavigateHome,
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Default.Home,
                             contentDescription = "Domů",
-                            tint = Color.White,
+                            tint = if (isHome) Color.White else Color.White.copy(alpha = 0.7f),
                         )
                     },
                 ) {
                     Text("Domů", style = MaterialTheme.typography.bodyMedium)
                 }
                 NavigationDrawerItem(
-                    selected = false,
-                    onClick = onNavigateHome,
+                    selected = isMovies,
+                    onClick = onFilterMovies,
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Default.Movie,
                             contentDescription = "Filmy",
-                            tint = Color.White.copy(alpha = 0.7f),
+                            tint = if (isMovies) Color.White else Color.White.copy(alpha = 0.7f),
                         )
                     },
                 ) {
                     Text("Filmy", style = MaterialTheme.typography.bodyMedium)
                 }
                 NavigationDrawerItem(
-                    selected = false,
-                    onClick = onNavigateHome,
+                    selected = isSeries,
+                    onClick = onFilterSeries,
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Default.Tv,
                             contentDescription = "Seriály",
-                            tint = Color.White.copy(alpha = 0.7f),
+                            tint = if (isSeries) Color.White else Color.White.copy(alpha = 0.7f),
                         )
                     },
                 ) {
                     Text("Seriály", style = MaterialTheme.typography.bodyMedium)
+                }
+                NavigationDrawerItem(
+                    selected = isSettings,
+                    onClick = onOpenSettings,
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Nastavení",
+                            tint = if (isSettings) Color.White else Color.White.copy(alpha = 0.7f),
+                        )
+                    },
+                ) {
+                    Text("Nastavení", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },

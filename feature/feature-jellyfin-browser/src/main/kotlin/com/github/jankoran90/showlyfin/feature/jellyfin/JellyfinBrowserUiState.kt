@@ -3,7 +3,8 @@ package com.github.jankoran90.showlyfin.feature.jellyfin
 data class JellyfinLibrary(
     val id: String,
     val name: String,
-    val itemCount: Int?,
+    val collectionType: String?,
+    val imageUrl: String?,
 )
 
 data class JellyfinBrowserUiState(

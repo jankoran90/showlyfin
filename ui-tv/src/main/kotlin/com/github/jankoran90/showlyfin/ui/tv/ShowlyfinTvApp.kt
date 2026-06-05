@@ -16,7 +16,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvHomeScreen
+import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinSetupScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvNavDrawer
+import com.github.jankoran90.showlyfin.ui.tv.ui.TvSettingsScreen
+import org.jellyfin.sdk.model.api.BaseItemKind
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -33,20 +36,55 @@ fun ShowlyfinTvApp(
 
     MaterialTheme(colorScheme = darkColorScheme()) {
         when (val dest = currentDestination) {
-            is TvDestination.Home -> {
+            is TvDestination.Home, is TvDestination.HomeFiltered, is TvDestination.Settings -> {
                 TvNavDrawer(
-                    onNavigateHome = { currentDestination = TvDestination.Home },
+                    selected = dest,
+                    onNavigateHome = {
+                        viewModel.setFilter(null)
+                        currentDestination = TvDestination.Home
+                    },
+                    onFilterMovies = {
+                        viewModel.setFilter(BaseItemKind.MOVIE)
+                        currentDestination = TvDestination.HomeFiltered(BaseItemKind.MOVIE)
+                    },
+                    onFilterSeries = {
+                        viewModel.setFilter(BaseItemKind.SERIES)
+                        currentDestination = TvDestination.HomeFiltered(BaseItemKind.SERIES)
+                    },
+                    onOpenSettings = { currentDestination = TvDestination.Settings },
                 ) {
-                    TvHomeScreen(
-                        onItemClick = { itemId ->
-                            currentDestination = TvDestination.Playback(itemId)
-                        },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFF0D0D1A)),
-                        viewModel = viewModel,
-                    )
+                    when (dest) {
+                        is TvDestination.Settings -> TvSettingsScreen(
+                            onChangeServer = { currentDestination = TvDestination.Setup },
+                            onBack = { currentDestination = TvDestination.Home },
+                            onDisconnected = {
+                                viewModel.reload()
+                                currentDestination = TvDestination.Home
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        else -> TvHomeScreen(
+                            onItemClick = { itemId ->
+                                currentDestination = TvDestination.Playback(itemId)
+                            },
+                            onOpenSetup = { currentDestination = TvDestination.Setup },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF0D0D1A)),
+                            viewModel = viewModel,
+                        )
+                    }
                 }
+            }
+            is TvDestination.Setup -> {
+                TvJellyfinSetupScreen(
+                    onConnected = {
+                        viewModel.reload()
+                        currentDestination = TvDestination.Home
+                    },
+                    onBack = { currentDestination = TvDestination.Home },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             is TvDestination.Playback -> {
                 PlaybackScreen(

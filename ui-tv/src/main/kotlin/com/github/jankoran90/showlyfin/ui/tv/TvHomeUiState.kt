@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.tv
 
+import org.jellyfin.sdk.model.api.BaseItemKind
+
 data class TvJellyfinItem(
     val id: String,
     val name: String,
@@ -20,4 +22,5 @@ data class TvHomeUiState(
     val rows: List<TvHomeRow> = emptyList(),
     val error: String? = null,
     val isNotConfigured: Boolean = false,
+    val filter: BaseItemKind? = null,
 )

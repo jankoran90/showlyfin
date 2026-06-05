@@ -28,6 +28,8 @@ import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinBrowserScreen
+import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinLibraryItemsScreen
+import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxHistoryScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxPickerScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxProgressScreen
@@ -57,6 +59,8 @@ private sealed interface Destination {
     data class RemuxPicker(val library: String, val folder: String) : Destination
     data class RemuxProgress(val jobId: String, val folder: String) : Destination
     data object RemuxHistory : Destination
+    data class JellyfinLibrary(val libraryId: String, val libraryName: String) : Destination
+    data class JellyfinPlayback(val itemId: String, val libraryId: String, val libraryName: String) : Destination
 }
 
 private val bottomTabs = listOf(
@@ -72,13 +76,16 @@ fun ShowlyfinPhoneApp() {
         val isSubScreen = currentDestination !in bottomTabs
 
         BackHandler(enabled = isSubScreen) {
-            currentDestination = when (currentDestination) {
+            val current = currentDestination
+            currentDestination = when (current) {
                 is Destination.ReviewStep, is Destination.MoveStep -> Destination.Uploader
                 is Destination.LibraryDetail -> Destination.LibraryBrowser
                 is Destination.LibraryBrowser -> Destination.Uploader
                 is Destination.RemuxPicker -> Destination.LibraryBrowser
                 is Destination.RemuxProgress -> Destination.LibraryBrowser
                 is Destination.RemuxHistory -> Destination.Uploader
+                is Destination.JellyfinLibrary -> Destination.Jellyfin
+                is Destination.JellyfinPlayback -> Destination.JellyfinLibrary(current.libraryId, current.libraryName)
                 else -> bottomTab
             }
         }
@@ -132,7 +139,25 @@ fun ShowlyfinPhoneApp() {
                     modifier = Modifier.fillMaxSize().padding(paddingValues),
                 )
                 is Destination.Jellyfin -> JellyfinBrowserScreen(
+                    onLibraryClick = { libraryId, libraryName ->
+                        currentDestination = Destination.JellyfinLibrary(libraryId, libraryName)
+                    },
                     modifier = Modifier.fillMaxSize().padding(paddingValues),
+                )
+                is Destination.JellyfinLibrary -> JellyfinLibraryItemsScreen(
+                    libraryId = dest.libraryId,
+                    libraryName = dest.libraryName,
+                    onBack = { currentDestination = Destination.Jellyfin },
+                    onItemPlay = { itemId ->
+                        currentDestination = Destination.JellyfinPlayback(itemId, dest.libraryId, dest.libraryName)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.JellyfinPlayback -> PlaybackScreen(
+                    itemId = dest.itemId,
+                    onBack = {
+                        currentDestination = Destination.JellyfinLibrary(dest.libraryId, dest.libraryName)
+                    },
                 )
                 is Destination.Uploader -> UploaderScreen(
                     onOpenReviewStep = { sid, fid, filename ->

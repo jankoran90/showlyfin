@@ -13,7 +13,7 @@ import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.authenticateUserByName
 import org.jellyfin.sdk.api.client.extensions.userApi
-import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
@@ -87,18 +87,16 @@ class JellyfinBrowserViewModel @Inject constructor(
                 deviceInfo = deviceInfo,
             )
             val userUuid = UUID.fromString(userId)
-            val items = jellyfinApiClient.userLibraryApi.getLatestMedia(
-                userId = userUuid,
-                limit = 50,
-            ).content
-            val libraries = items.groupBy { it.collectionType?.name ?: it.type?.name ?: "Ostatní" }
-                .map { (type, group) ->
-                    JellyfinLibrary(
-                        id = type,
-                        name = type.replaceFirstChar { it.uppercase() },
-                        itemCount = group.size,
-                    )
-                }
+            val views = jellyfinApiClient.userViewsApi.getUserViews(userId = userUuid).content
+            val libraries = views.items.map { view ->
+                val viewId = view.id.toString()
+                JellyfinLibrary(
+                    id = viewId,
+                    name = view.name ?: "Knihovna",
+                    collectionType = view.collectionType?.name,
+                    imageUrl = "$serverUrl/Items/$viewId/Images/Primary?fillWidth=400&quality=85&api_key=$token",
+                )
+            }
             _uiState.update { it.copy(libraries = libraries, isLoading = false, isConnected = true) }
         } catch (e: Throwable) {
             _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba připojení") }

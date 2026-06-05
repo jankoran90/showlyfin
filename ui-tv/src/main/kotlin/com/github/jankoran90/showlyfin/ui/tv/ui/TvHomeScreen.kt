@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -30,6 +31,7 @@ import com.github.jankoran90.showlyfin.ui.tv.TvHomeViewModel
 @Composable
 fun TvHomeScreen(
     onItemClick: (itemId: String) -> Unit,
+    onOpenSetup: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: TvHomeViewModel = hiltViewModel(),
 ) {
@@ -55,10 +57,14 @@ fun TvHomeScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Otevři Showlyfin na telefonu a nastav Jellyfin připojení",
+                        text = "Zadej server URL, uživatele a heslo přímo na TV",
                         color = Color.White.copy(alpha = 0.6f),
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    Spacer(Modifier.height(24.dp))
+                    Button(onClick = onOpenSetup) {
+                        Text("Nastavit Jellyfin")
+                    }
                 }
             }
             state.error != null -> {

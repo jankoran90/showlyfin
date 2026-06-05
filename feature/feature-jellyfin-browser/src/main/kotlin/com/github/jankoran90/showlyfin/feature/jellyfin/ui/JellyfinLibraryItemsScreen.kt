@@ -1,0 +1,166 @@
+package com.github.jankoran90.showlyfin.feature.jellyfin.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinItem
+import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinLibraryItemsViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun JellyfinLibraryItemsScreen(
+    libraryId: String,
+    libraryName: String,
+    onBack: () -> Unit,
+    onItemPlay: (itemId: String) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: JellyfinLibraryItemsViewModel = hiltViewModel(),
+) {
+    LaunchedEffect(libraryId) {
+        viewModel.load(libraryId, libraryName)
+    }
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    Scaffold(
+        modifier = modifier,
+        containerColor = Color(0xFF0D0D1A),
+        topBar = {
+            TopAppBar(
+                title = { Text(state.libraryName.ifBlank { libraryName }, color = Color.White) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Zpět",
+                            tint = Color.White,
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1A1A2E)),
+            )
+        },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            when {
+                state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                state.error != null -> Text(
+                    text = state.error!!,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                )
+                state.items.isEmpty() -> Text(
+                    text = "Knihovna je prázdná",
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.align(Alignment.Center),
+                )
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 120.dp),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(state.items, key = { it.id }) { item ->
+                        JellyfinItemCard(item = item, onClick = { onItemPlay(item.id) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JellyfinItemCard(item: JellyfinItem, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f),
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = item.imageUrl,
+                contentDescription = item.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .align(Alignment.BottomStart)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
+                        ),
+                    ),
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = item.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                item.year?.let {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = it.toString(),
+                        color = Color.White.copy(alpha = 0.65f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            item.progressPct?.takeIf { it > 0 }?.let { pct ->
+                LinearProgressIndicator(
+                    progress = { pct / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .align(Alignment.BottomStart),
+                    color = MaterialTheme.colorScheme.secondary,
+                    trackColor = Color.White.copy(alpha = 0.2f),
+                )
+            }
+        }
+    }
+}

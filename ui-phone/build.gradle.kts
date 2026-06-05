@@ -30,6 +30,7 @@ dependencies {
     implementation(project(":feature:feature-watchlist"))
     implementation(project(":feature:feature-detail"))
     implementation(project(":feature:feature-jellyfin-browser"))
+    implementation(project(":feature:feature-playback"))
     implementation(project(":feature:feature-remux"))
     implementation(project(":feature:feature-uploader"))
     implementation(project(":data:data-uploader"))

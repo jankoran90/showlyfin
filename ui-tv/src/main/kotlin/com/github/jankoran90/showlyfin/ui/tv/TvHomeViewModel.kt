@@ -45,9 +45,18 @@ class TvHomeViewModel @Inject constructor(
     private val _playEvents = MutableSharedFlow<PlayMessageEvent>(extraBufferCapacity = 1)
     val playEvents: SharedFlow<PlayMessageEvent> = _playEvents.asSharedFlow()
 
+    private var socketSetup = false
+
     init {
         loadItems()
     }
+
+    fun setFilter(filter: BaseItemKind?) {
+        _state.update { it.copy(filter = filter) }
+        loadItems()
+    }
+
+    fun reload() = loadItems()
 
     private fun loadItems() {
         viewModelScope.launch {
@@ -60,6 +69,7 @@ class TvHomeViewModel @Inject constructor(
                 return@launch
             }
 
+            _state.update { it.copy(isLoading = true, isNotConfigured = false, error = null) }
             try {
                 apiClient.update(
                     baseUrl = serverUrl,
@@ -69,31 +79,39 @@ class TvHomeViewModel @Inject constructor(
                 )
                 val userUuid = UUID.fromString(userId)
                 val rows = mutableListOf<TvHomeRow>()
+                val filter = _state.value.filter
 
-                runCatching {
-                    apiClient.userLibraryApi.getLatestMedia(
-                        userId = userUuid,
-                        includeItemTypes = listOf(BaseItemKind.MOVIE),
-                        fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
-                        limit = 20,
-                    ).content
-                }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                    rows.add(TvHomeRow("Filmy", items.map { it.toTvItem(serverUrl, token) }))
+                if (filter == null || filter == BaseItemKind.MOVIE) {
+                    runCatching {
+                        apiClient.userLibraryApi.getLatestMedia(
+                            userId = userUuid,
+                            includeItemTypes = listOf(BaseItemKind.MOVIE),
+                            fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
+                            limit = 20,
+                        ).content
+                    }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
+                        rows.add(TvHomeRow("Filmy", items.map { it.toTvItem(serverUrl, token) }))
+                    }
                 }
 
-                runCatching {
-                    apiClient.userLibraryApi.getLatestMedia(
-                        userId = userUuid,
-                        includeItemTypes = listOf(BaseItemKind.SERIES),
-                        fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
-                        limit = 20,
-                    ).content
-                }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                    rows.add(TvHomeRow("Seriály", items.map { it.toTvItem(serverUrl, token) }))
+                if (filter == null || filter == BaseItemKind.SERIES) {
+                    runCatching {
+                        apiClient.userLibraryApi.getLatestMedia(
+                            userId = userUuid,
+                            includeItemTypes = listOf(BaseItemKind.SERIES),
+                            fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
+                            limit = 20,
+                        ).content
+                    }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
+                        rows.add(TvHomeRow("Seriály", items.map { it.toTvItem(serverUrl, token) }))
+                    }
                 }
 
                 _state.update { it.copy(isLoading = false, rows = rows) }
-                setupPlayMessages()
+                if (!socketSetup) {
+                    socketSetup = true
+                    setupPlayMessages()
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = e.message ?: "Chyba připojení") }
             }
