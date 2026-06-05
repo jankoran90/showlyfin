@@ -1,0 +1,3 @@
+-keepattributes *Annotation*
+-keepattributes SourceFile,LineNumberTable
+-keep class com.github.jankoran90.showlyfin.** { *; }

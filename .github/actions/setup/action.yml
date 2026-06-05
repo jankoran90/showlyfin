@@ -1,0 +1,19 @@
+name: Setup
+description: "Setup the environment for Showlyfin builds"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: gradle
+    - name: Set versions
+      shell: bash
+      run: echo "BUILD_TOOLS_VERSION=36.0.0" >> $GITHUB_ENV
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        packages: "tools platform-tools build-tools;${{ env.BUILD_TOOLS_VERSION }}"
