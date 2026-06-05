@@ -12,9 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.darkColorScheme
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
+import com.github.jankoran90.showlyfin.ui.tv.theme.ShowlyfinTvTheme
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinSetupScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvNavDrawer
@@ -34,7 +33,7 @@ fun ShowlyfinTvApp(
         }
     }
 
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    ShowlyfinTvTheme {
         when (val dest = currentDestination) {
             is TvDestination.Home, is TvDestination.HomeFiltered, is TvDestination.Settings -> {
                 TvNavDrawer(
@@ -70,7 +69,7 @@ fun ShowlyfinTvApp(
                             onOpenSetup = { currentDestination = TvDestination.Setup },
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(Color(0xFF0D0D1A)),
+                                .background(Color(0xFF07071A)),
                             viewModel = viewModel,
                         )
                     }

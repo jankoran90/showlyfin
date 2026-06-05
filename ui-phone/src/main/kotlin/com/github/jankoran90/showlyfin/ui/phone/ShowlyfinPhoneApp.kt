@@ -15,7 +15,6 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +39,7 @@ import com.github.jankoran90.showlyfin.feature.uploader.MoveStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.ReviewStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderScreen
 import com.github.jankoran90.showlyfin.feature.watchlist.ui.WatchlistScreen
+import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
 
 private sealed interface Destination {
     // Bottom tabs
@@ -69,7 +69,7 @@ private val bottomTabs = listOf(
 
 @Composable
 fun ShowlyfinPhoneApp() {
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    ShowlyfinPhoneTheme {
         var currentDestination by remember { mutableStateOf<Destination>(Destination.Discover) }
         var bottomTab by remember { mutableStateOf<Destination>(Destination.Discover) }
 

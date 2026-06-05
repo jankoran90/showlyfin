@@ -1,6 +1,9 @@
 package com.github.jankoran90.showlyfin.ui.tv.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,10 +11,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -31,11 +43,31 @@ fun TvItemCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.08f else 1.0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "tv-card-scale",
+    )
+    val titleAlpha by animateFloatAsState(
+        targetValue = if (focused) 0f else 1f,
+        animationSpec = tween(durationMillis = 220),
+        label = "tv-card-title-alpha",
+    )
+    val accent = MaterialTheme.colorScheme.primary
+    val borderColor = if (focused) accent else Color.Transparent
+    val elevation = if (focused) 18.dp else 4.dp
+
     Card(
         onClick = onClick,
         modifier = modifier
             .width(160.dp)
-            .aspectRatio(2f / 3f),
+            .aspectRatio(2f / 3f)
+            .scale(scale)
+            .shadow(elevation = elevation, shape = RoundedCornerShape(12.dp), clip = false)
+            .onFocusChanged { focused = it.isFocused }
+            .border(width = 3.dp, color = borderColor, shape = RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp)),
     ) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(
@@ -57,7 +89,7 @@ fun TvItemCard(
             )
             Text(
                 text = item.name,
-                color = Color.White,
+                color = Color.White.copy(alpha = titleAlpha),
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -72,7 +104,7 @@ fun TvItemCard(
                         .fillMaxWidth()
                         .height(3.dp)
                         .align(Alignment.BottomStart),
-                    color = MaterialTheme.colorScheme.secondary,
+                    color = accent,
                     trackColor = Color.White.copy(alpha = 0.2f),
                 )
             }

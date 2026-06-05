@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- Background gradient -->
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr name="android:fillColor" xmlns:aapt="http://schemas.android.com/aapt">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="320"
+                android:endY="180"
+                android:type="linear">
+                <item android:offset="0" android:color="#07071A" />
+                <item android:offset="0.55" android:color="#1A1230" />
+                <item android:offset="1" android:color="#3A0A12" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Logo circle (gradient accent) -->
+    <path
+        android:pathData="M82,90 m-58,0 a58,58 0 1,0 116,0 a58,58 0 1,0 -116,0">
+        <aapt:attr name="android:fillColor" xmlns:aapt="http://schemas.android.com/aapt">
+            <gradient
+                android:centerX="82"
+                android:centerY="90"
+                android:gradientRadius="58"
+                android:type="radial">
+                <item android:offset="0" android:color="#FFB66A" />
+                <item android:offset="0.7" android:color="#FF7A1A" />
+                <item android:offset="1" android:color="#ED1C24" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Stylized S -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M104,76
+                           C104,66 94,60 82,60
+                           C68,60 58,68 58,80
+                           C58,90 66,94 78,96
+                           L88,98
+                           C98,100 104,104 104,114
+                           C104,126 94,132 80,132
+                           C68,132 58,128 56,118
+                           L66,116
+                           C68,122 72,124 80,124
+                           C88,124 94,120 94,114
+                           C94,108 88,106 78,104
+                           L70,102
+                           C60,100 50,94 50,82
+                           C50,68 64,52 82,52
+                           C96,52 106,60 108,72
+                           Z" />
+
+    <!-- Play triangle inside S -->
+    <path
+        android:fillColor="#FF7A1A"
+        android:pathData="M74,82 L94,92 L74,102 Z" />
+
+    <!-- Accent stripe under wordmark area -->
+    <path
+        android:fillColor="#FF7A1A"
+        android:pathData="M170,128 L300,128 L300,132 L170,132 z" />
+
+    <!-- Right side: subtle hint of stream/timeline ticks -->
+    <path android:fillColor="#FFFFFF" android:pathData="M170,68 L188,68 L188,74 L170,74 z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M194,68 L214,68 L214,74 L194,74 z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M220,68 L246,68 L246,74 L220,74 z" />
+
+    <path android:fillColor="#FFFFFFFF" android:pathData="M170,84 L210,84 L210,108 L170,108 z" />
+    <path android:fillColor="#FFB66A" android:pathData="M214,84 L260,84 L260,108 L214,108 z" />
+    <path android:fillColor="#ED1C24" android:pathData="M264,84 L294,84 L294,108 L264,108 z" />
+</vector>

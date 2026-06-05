@@ -11,11 +11,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -36,6 +42,13 @@ fun TvHomeScreen(
     viewModel: TvHomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val firstRowFocus = remember { FocusRequester() }
+
+    LaunchedEffect(state.rows) {
+        if (state.rows.isNotEmpty()) {
+            runCatching { firstRowFocus.requestFocus() }
+        }
+    }
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -87,8 +100,12 @@ fun TvHomeScreen(
                     contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
                     verticalArrangement = Arrangement.spacedBy(32.dp),
                 ) {
-                    items(state.rows) { row ->
-                        TvContentRow(row = row, onItemClick = onItemClick)
+                    itemsIndexed(state.rows) { index, row ->
+                        TvContentRow(
+                            row = row,
+                            onItemClick = onItemClick,
+                            firstItemFocusRequester = if (index == 0) firstRowFocus else null,
+                        )
                     }
                 }
             }
@@ -101,6 +118,7 @@ fun TvHomeScreen(
 private fun TvContentRow(
     row: TvHomeRow,
     onItemClick: (String) -> Unit,
+    firstItemFocusRequester: FocusRequester? = null,
 ) {
     Column {
         Text(
@@ -110,13 +128,16 @@ private fun TvContentRow(
             modifier = Modifier.padding(horizontal = 48.dp, vertical = 8.dp),
         )
         LazyRow(
+            modifier = Modifier.focusRestorer(),
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(row.items) { item ->
+            itemsIndexed(row.items) { index, item ->
+                val isFirst = index == 0 && firstItemFocusRequester != null
                 TvItemCard(
                     item = item,
                     onClick = { onItemClick(item.id) },
+                    modifier = if (isFirst) Modifier.focusRequester(firstItemFocusRequester!!) else Modifier,
                 )
             }
         }

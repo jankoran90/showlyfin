@@ -1,5 +1,10 @@
 package com.github.jankoran90.showlyfin.feature.discover.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -139,19 +144,26 @@ fun DiscoverScreen(
                 )
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 110.dp),
-                contentPadding = PaddingValues(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(items, key = { "${it.type}_${it.traktId}" }) { item ->
-                    val inLibrary = item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false
-                    MediaCard(
-                        item = item,
-                        onClick = { onItemClick(item) },
-                        inLibrary = inLibrary,
-                    )
+            val animKey = "${uiState.activeTab.name}_${uiState.activeFilter.name}_${isSearchMode}"
+            AnimatedContent(
+                targetState = animKey,
+                transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(140)) },
+                label = "discover-grid-swap",
+            ) { _ ->
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 110.dp),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(items, key = { "${it.type}_${it.traktId}" }) { item ->
+                        val inLibrary = item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false
+                        MediaCard(
+                            item = item,
+                            onClick = { onItemClick(item) },
+                            inLibrary = inLibrary,
+                        )
+                    }
                 }
             }
         }

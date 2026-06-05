@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -82,11 +83,12 @@ fun DetailScreen(
             return@Scaffold
         }
 
+        val scrollState = rememberScrollState()
         Column(
             Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
         ) {
             val backdropUrl = displayItem.backdropUrl()
             Box(
@@ -99,7 +101,9 @@ fun DetailScreen(
                     AsyncImage(
                         model = backdropUrl,
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { translationY = scrollState.value * 0.45f },
                         contentScale = ContentScale.Crop,
                     )
                     Box(
