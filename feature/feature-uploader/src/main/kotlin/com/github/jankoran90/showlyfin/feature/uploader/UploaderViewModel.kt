@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.TmmFile
-import com.github.jankoran90.showlyfin.feature.remux.SmartDetectViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -36,6 +35,9 @@ class UploaderViewModel @Inject constructor(
 
     companion object {
         private val TERMINAL_STATES = setOf("moved", "error")
+        const val PREF_TMM_SESSION_ID = "uploader_tmm_session_id"
+        private const val PREF_UPLOADER_URL = "uploader_base_url"
+        private const val PREF_UPLOADER_COOKIE = "uploader_session_cookie"
     }
 
     private val _uiState = MutableStateFlow(UploaderUiState())
@@ -43,8 +45,8 @@ class UploaderViewModel @Inject constructor(
 
     private var pollingJob: Job? = null
 
-    val baseUrl get() = prefs.getString(SmartDetectViewModel.PREF_UPLOADER_URL, "") ?: ""
-    private val cookie get() = prefs.getString(SmartDetectViewModel.PREF_UPLOADER_COOKIE, "") ?: ""
+    val baseUrl get() = prefs.getString(PREF_UPLOADER_URL, "") ?: ""
+    private val cookie get() = prefs.getString(PREF_UPLOADER_COOKIE, "") ?: ""
 
     val isConfigured get() = baseUrl.isNotBlank()
 
@@ -60,7 +62,7 @@ class UploaderViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             runCatching { uploaderDs.login(baseUrl, password) }
                 .onSuccess { sessionCookie ->
-                    prefs.edit().putString(SmartDetectViewModel.PREF_UPLOADER_COOKIE, sessionCookie).apply()
+                    prefs.edit().putString(PREF_UPLOADER_COOKIE, sessionCookie).apply()
                     _uiState.update { it.copy(isLoading = false, isNotConfigured = false) }
                     checkConfiguration()
                 }
@@ -69,7 +71,7 @@ class UploaderViewModel @Inject constructor(
     }
 
     fun saveBaseUrl(url: String) {
-        prefs.edit().putString(SmartDetectViewModel.PREF_UPLOADER_URL, url.trimEnd('/')).apply()
+        prefs.edit().putString(PREF_UPLOADER_URL, url.trimEnd('/')).apply()
         _uiState.update { it.copy(isNotConfigured = !url.isNotBlank()) }
     }
 
@@ -102,8 +104,4 @@ class UploaderViewModel @Inject constructor(
     fun clearMessage() { _uiState.update { it.copy(message = null, error = null) } }
 
     override fun onCleared() { super.onCleared(); pollingJob?.cancel() }
-
-    companion object {
-        const val PREF_TMM_SESSION_ID = "uploader_tmm_session_id"
-    }
 }
