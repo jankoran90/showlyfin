@@ -27,7 +27,7 @@ android {
         minSdk = 23
         targetSdk = 36
         versionCode = 5
-        versionName = "0.4.1"
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -89,6 +89,9 @@ dependencies {
     implementation(project(":data:data-csfd"))
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-uploader"))
+
+    implementation(project(":feature:feature-remux"))
+    implementation(project(":feature:feature-uploader"))
 
     implementation(project(":ui-phone"))
     implementation(project(":ui-tv"))

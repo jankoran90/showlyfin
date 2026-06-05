@@ -49,6 +49,7 @@ import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 fun DetailScreen(
     item: MediaItem,
     onBack: () -> Unit,
+    onSmartDetect: ((MediaItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -188,6 +189,17 @@ fun DetailScreen(
                         AssistChip(onClick = {}, label = { Text(genre, style = MaterialTheme.typography.labelSmall) })
                     }
                 }
+            }
+
+            // Smart Remux button (only for items with imdbId)
+            if (onSmartDetect != null && displayItem.imdbId != null) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { onSmartDetect(displayItem) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                ) {
+                    Text("Smart Remux (4K + CZ audio)")
+                }
+                Spacer(Modifier.height(8.dp))
             }
 
             Spacer(Modifier.height(24.dp))
