@@ -9,8 +9,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.userViewsApi
+import org.jellyfin.sdk.api.client.extensions.userApi
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
@@ -19,6 +21,7 @@ import javax.inject.Named
 
 @HiltViewModel
 class JellyfinBrowserViewModel @Inject constructor(
+    private val jellyfin: Jellyfin,
     private val jellyfinApiClient: ApiClient,
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
@@ -40,42 +43,64 @@ class JellyfinBrowserViewModel @Inject constructor(
         val savedUserId = prefs.getString(KEY_USER_ID, "") ?: ""
         _uiState.update { it.copy(serverUrl = savedUrl) }
         if (savedUrl.isNotBlank() && savedToken.isNotBlank() && savedUserId.isNotBlank()) {
-            loadLibraries(savedUrl, savedToken, savedUserId)
+            viewModelScope.launch {
+                loadLibraries(savedUrl, savedToken, savedUserId)
+            }
         }
     }
 
-    fun connect(serverUrl: String, token: String, userId: String) {
-        prefs.edit()
-            .putString(KEY_URL, serverUrl)
-            .putString(KEY_TOKEN, token)
-            .putString(KEY_USER_ID, userId)
-            .apply()
-        loadLibraries(serverUrl, token, userId)
-    }
-
-    private fun loadLibraries(serverUrl: String, token: String, userId: String) {
+    fun connect(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null, serverUrl = serverUrl) }
             try {
-                jellyfinApiClient.update(
-                    baseUrl = serverUrl,
-                    accessToken = token,
-                    clientInfo = clientInfo,
-                    deviceInfo = deviceInfo,
+                val tempApi = jellyfin.createApi(baseUrl = serverUrl)
+                val authResult by tempApi.userApi.authenticateUserByName(
+                    username = username,
+                    password = password,
                 )
-                val userUuid = UUID.fromString(userId)
-                val response = jellyfinApiClient.userViewsApi.getUserViews(userId = userUuid)
-                val libraries = response.content.items?.map { view ->
-                    JellyfinLibrary(
-                        id = view.id.toString(),
-                        name = view.name ?: "",
-                        itemCount = view.childCount,
-                    )
-                } ?: emptyList()
-                _uiState.update { it.copy(libraries = libraries, isLoading = false, isConnected = true) }
+                val accessToken = authResult.accessToken
+                    ?: throw IllegalStateException("Server nevrátil přístupový token")
+                val userId = authResult.user?.id?.toString()
+                    ?: throw IllegalStateException("Server nevrátil ID uživatele")
+
+                prefs.edit()
+                    .putString(KEY_URL, serverUrl)
+                    .putString(KEY_TOKEN, accessToken)
+                    .putString(KEY_USER_ID, userId)
+                    .apply()
+
+                loadLibraries(serverUrl, accessToken, userId)
             } catch (e: Throwable) {
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba připojení") }
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba přihlášení") }
             }
+        }
+    }
+
+    private suspend fun loadLibraries(serverUrl: String, token: String, userId: String) {
+        _uiState.update { it.copy(isLoading = true, error = null, serverUrl = serverUrl) }
+        try {
+            jellyfinApiClient.update(
+                baseUrl = serverUrl,
+                accessToken = token,
+                clientInfo = clientInfo,
+                deviceInfo = deviceInfo,
+            )
+            val userUuid = UUID.fromString(userId)
+            val items = jellyfinApiClient.userLibraryApi.getLatestMedia(
+                userId = userUuid,
+                limit = 50,
+            ).content
+            val libraries = items.groupBy { it.collectionType?.name ?: it.type?.name ?: "Ostatní" }
+                .map { (type, group) ->
+                    JellyfinLibrary(
+                        id = type,
+                        name = type.replaceFirstChar { it.uppercase() },
+                        itemCount = group.size,
+                    )
+                }
+            _uiState.update { it.copy(libraries = libraries, isLoading = false, isConnected = true) }
+        } catch (e: Throwable) {
+            _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba připojení") }
         }
     }
 }

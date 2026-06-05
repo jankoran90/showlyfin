@@ -44,7 +44,7 @@ fun JellyfinBrowserScreen(
     if (!uiState.isConnected) {
         JellyfinSetupScreen(
             initialUrl = uiState.serverUrl,
-            onConnect = { url, token, userId -> viewModel.connect(url, token, userId) },
+            onConnect = { url, username, password -> viewModel.connect(url, username, password) },
             isLoading = uiState.isLoading,
             error = uiState.error,
             modifier = modifier,
@@ -96,14 +96,14 @@ fun JellyfinBrowserScreen(
 @Composable
 private fun JellyfinSetupScreen(
     initialUrl: String,
-    onConnect: (url: String, token: String, userId: String) -> Unit,
+    onConnect: (url: String, username: String, password: String) -> Unit,
     isLoading: Boolean,
     error: String?,
     modifier: Modifier = Modifier,
 ) {
     var serverUrl by remember { mutableStateOf(initialUrl) }
-    var token by remember { mutableStateOf("") }
-    var userId by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -118,26 +118,26 @@ private fun JellyfinSetupScreen(
             value = serverUrl,
             onValueChange = { serverUrl = it },
             label = { Text("Server URL") },
-            placeholder = { Text("http://server:8096") },
+            placeholder = { Text("https://video.jankoran.cz") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
-            value = token,
-            onValueChange = { token = it },
-            label = { Text("API Token") },
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Uživatelské jméno") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Heslo") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = userId,
-            onValueChange = { userId = it },
-            label = { Text("User ID (UUID)") },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
@@ -146,11 +146,11 @@ private fun JellyfinSetupScreen(
             Spacer(Modifier.height(8.dp))
         }
         Button(
-            onClick = { onConnect(serverUrl.trim(), token.trim(), userId.trim()) },
-            enabled = !isLoading && serverUrl.isNotBlank() && token.isNotBlank() && userId.isNotBlank(),
+            onClick = { onConnect(serverUrl.trim(), username.trim(), password) },
+            enabled = !isLoading && serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            if (isLoading) CircularProgressIndicator(Modifier.padding(4.dp)) else Text("Připojit")
+            if (isLoading) CircularProgressIndicator(Modifier.padding(4.dp)) else Text("Přihlásit")
         }
     }
 }

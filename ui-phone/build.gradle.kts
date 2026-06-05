@@ -24,6 +24,8 @@ android {
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-ui"))
+    implementation(project(":core:core-network"))
+    implementation(project(":data:data-trakt"))
     implementation(project(":feature:feature-discover"))
     implementation(project(":feature:feature-watchlist"))
     implementation(project(":feature:feature-detail"))

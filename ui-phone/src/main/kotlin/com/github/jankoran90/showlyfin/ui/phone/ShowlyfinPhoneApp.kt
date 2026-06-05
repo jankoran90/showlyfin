@@ -4,9 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -31,6 +32,7 @@ private sealed interface Destination {
     data object Discover : Destination
     data object Watchlist : Destination
     data object Jellyfin : Destination
+    data object Settings : Destination
     data class Detail(val item: MediaItem) : Destination
 }
 
@@ -78,6 +80,15 @@ fun ShowlyfinPhoneApp() {
                             icon = { Icon(Icons.Default.Tv, contentDescription = null) },
                             label = { Text("Jellyfin") },
                         )
+                        NavigationBarItem(
+                            selected = bottomTab is Destination.Settings,
+                            onClick = {
+                                bottomTab = Destination.Settings
+                                currentDestination = Destination.Settings
+                            },
+                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                            label = { Text("Nastavení") },
+                        )
                     }
                 }
             },
@@ -98,6 +109,9 @@ fun ShowlyfinPhoneApp() {
                     modifier = Modifier.fillMaxSize().padding(paddingValues),
                 )
                 is Destination.Jellyfin -> JellyfinBrowserScreen(
+                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                )
+                is Destination.Settings -> SettingsScreen(
                     modifier = Modifier.fillMaxSize().padding(paddingValues),
                 )
                 is Destination.Detail -> DetailScreen(
