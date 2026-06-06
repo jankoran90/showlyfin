@@ -43,12 +43,11 @@ class MainActivity : ComponentActivity() {
         UpdateCheckWorker.enqueue(applicationContext)
         runStartupUpdateCheck()
         maybeShowUpdateDialogFromIntent(intent)
+        val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         lifecycleScope.launch {
             profileRepository.migrateLegacyPrefsIfNeeded()
-            profileRepository.restoreActive()
+            profileRepository.restoreActive(preferTv = isTV)
         }
-
-        val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
 
         val launcher = object : UpdateLauncher {
             override fun checkNow(onResult: (UpdateCheckResult) -> Unit) {

@@ -24,7 +24,6 @@ import com.github.jankoran90.showlyfin.ui.tv.theme.ShowlyfinTvTheme
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvDetailScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvDiscoverScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvHomeScreen
-import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinSetupScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvNavDrawer
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvSettingsScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvWatchlistScreen
@@ -149,12 +148,11 @@ fun ShowlyfinTvApp(
                 )
             }
             is TvDestination.Setup -> {
-                TvJellyfinSetupScreen(
-                    onConnected = {
+                TvServerSetupScreen(
+                    onDone = {
                         viewModel.reload()
                         currentDestination = TvDestination.Home
                     },
-                    onBack = { currentDestination = TvDestination.Home },
                     modifier = Modifier.fillMaxSize(),
                 )
             }

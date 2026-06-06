@@ -32,6 +32,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
@@ -82,6 +83,10 @@ class TvSettingsViewModel @Inject constructor(
         viewModelScope.launch { profileRepository.setDefault(profileId) }
     }
 
+    fun setTvDefaultProfile(profileId: Long) {
+        viewModelScope.launch { profileRepository.setTvDefault(profileId) }
+    }
+
     fun deleteProfile(profile: ProfileEntity) {
         viewModelScope.launch { profileRepository.delete(profile) }
     }
@@ -108,7 +113,7 @@ fun TvSettingsScreen(
     modifier: Modifier = Modifier,
     viewModel: TvSettingsViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycleSafe()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val activeProfile = state.profiles.firstOrNull { it.id == state.activeProfileId }
     val updateLauncher = LocalUpdateLauncher.current
     val context = LocalContext.current
@@ -169,7 +174,8 @@ fun TvSettingsScreen(
                         text = buildString {
                             append(profile.name)
                             if (profile.isAdmin) append(" · Admin")
-                            if (profile.isDefault) append(" · Výchozí")
+                            if (profile.isDefault) append(" · Výchozí (phone)")
+                            if (profile.tvDefault) append(" · Výchozí (TV)")
                             if (isActive) append(" · Aktivní")
                         },
                         color = if (isActive) MaterialTheme.colorScheme.primary else Color.White,
@@ -182,7 +188,10 @@ fun TvSettingsScreen(
                             Button(onClick = { viewModel.switchProfile(profile.id) }) { Text("Přepnout") }
                         }
                         if (!profile.isDefault) {
-                            Button(onClick = { viewModel.setDefaultProfile(profile.id) }) { Text("Výchozí") }
+                            Button(onClick = { viewModel.setDefaultProfile(profile.id) }) { Text("Výchozí pro telefon") }
+                        }
+                        if (!profile.tvDefault) {
+                            Button(onClick = { viewModel.setTvDefaultProfile(profile.id) }) { Text("Výchozí pro TV") }
                         }
                         Button(onClick = { viewModel.deleteProfile(profile) }) { Text("Smazat") }
                     }
@@ -249,7 +258,3 @@ fun TvSettingsScreen(
     }
 }
 
-@Composable
-private fun <T> StateFlow<T>.collectAsStateWithLifecycleSafe(): androidx.compose.runtime.State<T> {
-    return androidx.lifecycle.compose.collectAsStateWithLifecycle(this)
-}

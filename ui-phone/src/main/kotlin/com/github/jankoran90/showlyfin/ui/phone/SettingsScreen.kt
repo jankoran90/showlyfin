@@ -196,6 +196,7 @@ fun SettingsScreen(
             activeProfileId = uiState.activeProfileId,
             onSwitch = { viewModel.switchProfile(it) },
             onSetDefault = { viewModel.setDefaultProfile(it) },
+            onSetTvDefault = { viewModel.setTvDefaultProfile(it) },
             onDelete = { viewModel.deleteProfile(it) },
         )
         val activeProfile = uiState.profiles.firstOrNull { it.id == uiState.activeProfileId }
@@ -290,6 +291,7 @@ private fun ProfilesSection(
     activeProfileId: Long?,
     onSwitch: (Long) -> Unit,
     onSetDefault: (Long) -> Unit,
+    onSetTvDefault: (Long) -> Unit,
     onDelete: (ProfileEntity) -> Unit,
 ) {
     Card(
@@ -313,7 +315,8 @@ private fun ProfilesSection(
                             text = buildString {
                                 append(profile.name)
                                 if (profile.isAdmin) append(" · Admin")
-                                if (profile.isDefault) append(" · Výchozí")
+                                if (profile.isDefault) append(" · Výchozí (phone)")
+                                if (profile.tvDefault) append(" · Výchozí (TV)")
                                 if (isActive) append(" · Aktivní")
                             },
                             color = if (isActive) MaterialTheme.colorScheme.primary else Color.White,
@@ -334,7 +337,13 @@ private fun ProfilesSection(
                             }
                             if (!profile.isDefault) {
                                 OutlinedButton(onClick = { onSetDefault(profile.id) }) {
-                                    Text("Výchozí")
+                                    Text("Výchozí pro telefon")
+                                }
+                                Spacer(Modifier.padding(end = 8.dp))
+                            }
+                            if (!profile.tvDefault) {
+                                OutlinedButton(onClick = { onSetTvDefault(profile.id) }) {
+                                    Text("Výchozí pro TV")
                                 }
                                 Spacer(Modifier.padding(end = 8.dp))
                             }

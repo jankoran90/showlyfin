@@ -24,6 +24,9 @@ interface ProfileDao {
     @Query("SELECT * FROM profile WHERE isDefault = 1 LIMIT 1")
     suspend fun getDefault(): ProfileEntity?
 
+    @Query("SELECT * FROM profile WHERE tvDefault = 1 LIMIT 1")
+    suspend fun getTvDefault(): ProfileEntity?
+
     @Query("SELECT COUNT(*) FROM profile")
     suspend fun count(): Int
 
@@ -41,4 +44,10 @@ interface ProfileDao {
 
     @Query("UPDATE profile SET isDefault = 1 WHERE id = :id")
     suspend fun setDefault(id: Long)
+
+    @Query("UPDATE profile SET tvDefault = 0")
+    suspend fun clearTvDefault()
+
+    @Query("UPDATE profile SET tvDefault = 1 WHERE id = :id")
+    suspend fun setTvDefault(id: Long)
 }

@@ -92,6 +92,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { profileRepository.setDefault(profileId) }
     }
 
+    fun setTvDefaultProfile(profileId: Long) {
+        viewModelScope.launch { profileRepository.setTvDefault(profileId) }
+    }
+
     fun deleteProfile(profile: ProfileEntity) {
         viewModelScope.launch { profileRepository.delete(profile) }
     }

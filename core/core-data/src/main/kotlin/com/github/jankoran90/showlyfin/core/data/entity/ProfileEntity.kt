@@ -13,6 +13,7 @@ data class ProfileEntity(
     val avatarTag: String? = null,
     val isAdmin: Boolean = false,
     val isDefault: Boolean = false,
+    val tvDefault: Boolean = false,
     val maxAgeRating: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
 )

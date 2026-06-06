@@ -45,6 +45,13 @@ class ProfileRepository @Inject constructor(
         dao.setDefault(profileId)
     }
 
+    suspend fun setTvDefault(profileId: Long) {
+        dao.clearTvDefault()
+        dao.setTvDefault(profileId)
+    }
+
+    suspend fun getTvDefault(): ProfileEntity? = dao.getTvDefault()
+
     suspend fun updateMaxAgeRating(profileId: Long, rating: String?) {
         val profile = dao.getById(profileId) ?: return
         dao.update(profile.copy(maxAgeRating = rating))
@@ -67,9 +74,10 @@ class ProfileRepository @Inject constructor(
             .apply()
     }
 
-    suspend fun restoreActive() {
+    suspend fun restoreActive(preferTv: Boolean = false) {
         val id = prefs.getLong(PREF_ACTIVE_PROFILE_ID, 0L).takeIf { it > 0L }
-        val profile = id?.let { dao.getById(it) } ?: dao.getDefault()
+        val profile = id?.let { dao.getById(it) }
+            ?: if (preferTv) dao.getTvDefault() ?: dao.getDefault() else dao.getDefault()
         if (profile != null) setActive(profile.id)
     }
 

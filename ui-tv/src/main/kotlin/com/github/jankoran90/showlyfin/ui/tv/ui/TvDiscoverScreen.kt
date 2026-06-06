@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,8 +25,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverTab
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -39,9 +36,7 @@ fun TvDiscoverScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
-        viewModel.load(DiscoverTab.MOVIES, DiscoverFilter.TRENDING)
-    }
+    // DiscoverViewModel.init() už načte výchozí tab+filter — žádný explicitní load potřeba.
 
     Box(modifier.fillMaxSize().background(Color(0xFF07071A))) {
         when {
