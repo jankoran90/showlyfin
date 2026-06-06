@@ -8,15 +8,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Card
@@ -103,20 +102,7 @@ fun MediaCard(
                 }
             }
             if (inLibrary) {
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .padding(4.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "V knihovně",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.height(16.dp),
-                    )
-                }
+                InLibraryBadge(modifier = Modifier.align(Alignment.TopEnd))
             }
             Box(
                 Modifier
@@ -130,13 +116,20 @@ fun MediaCard(
                     .padding(horizontal = 6.dp, vertical = 8.dp)
             ) {
                 Column {
-                    Text(
-                        text = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (inLibrary) {
+                            InLibraryTitleBadgeSpacer()
+                            InLibraryTitleBadge()
+                        }
+                    }
                     item.year?.let {
                         Text(
                             text = "$it",

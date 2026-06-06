@@ -263,7 +263,7 @@ fun DetailScreen(
                         CollectionPart(
                             key = "tmdb_${part.id}",
                             tmdbId = part.id,
-                            jellyfinId = null,
+                            jellyfinId = uiState.ownedTmdbToJellyfin[part.id],
                             title = part.title ?: "",
                             posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
                             year = part.release_date?.take(4),

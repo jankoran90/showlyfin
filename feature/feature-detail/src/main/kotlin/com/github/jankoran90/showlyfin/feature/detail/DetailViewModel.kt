@@ -1,11 +1,13 @@
 package com.github.jankoran90.showlyfin.feature.detail
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.csfd.CsfdScraper
+import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
@@ -15,13 +17,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.jellyfin.sdk.model.UUID
 import javax.inject.Inject
+import javax.inject.Named
 
 @HiltViewModel
 class DetailViewModel @Inject constructor(
     private val tmdbApi: TmdbRemoteDataSource,
     private val csfdScraper: CsfdScraper,
     private val csfdRepository: CsfdRepository,
+    private val jellyfinLibraryService: JellyfinLibraryService,
+    @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DetailUiState())
@@ -48,9 +54,12 @@ class DetailViewModel @Inject constructor(
                 csfdPlot = null,
                 csfdReviews = emptyList(),
                 collection = null,
+                isOwnedInLibrary = false,
+                ownedJellyfinId = null,
                 error = null,
             )
         }
+        viewModelScope.launch { loadJellyfinOwned(item) }
         viewModelScope.launch {
             try {
                 val tmdbId = item.tmdbId
@@ -108,6 +117,22 @@ class DetailViewModel @Inject constructor(
             } catch (e: Throwable) {
                 _uiState.update { it.copy(isLoading = false, isCsfdLoading = false, error = e.message) }
             }
+        }
+    }
+
+    private suspend fun loadJellyfinOwned(item: MediaItem) {
+        val userIdString = prefs.getString("jellyfin_user_id", "")?.takeIf { it.isNotBlank() } ?: return
+        val userUuid = runCatching { UUID.fromString(userIdString) }.getOrNull() ?: return
+        val owned = runCatching { jellyfinLibraryService.getOwnedIds(userUuid) }.getOrNull() ?: return
+        val matchedJellyfinId = item.imdbId?.let { owned.imdbToJellyfin[it] }
+            ?: item.tmdbId?.let { owned.tmdbToJellyfin[it] }
+        _uiState.update {
+            it.copy(
+                ownedImdbToJellyfin = owned.imdbToJellyfin,
+                ownedTmdbToJellyfin = owned.tmdbToJellyfin,
+                isOwnedInLibrary = matchedJellyfinId != null,
+                ownedJellyfinId = matchedJellyfinId,
+            )
         }
     }
 

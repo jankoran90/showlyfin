@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.InLibraryBadge
+import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadge
+import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadgeSpacer
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinItem
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinLibraryItemsViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinSort
@@ -187,7 +191,11 @@ private fun JellyfinChipsRow(
 }
 
 @Composable
-private fun JellyfinItemCard(item: JellyfinItem, onClick: () -> Unit) {
+private fun JellyfinItemCard(
+    item: JellyfinItem,
+    onClick: () -> Unit,
+    inLibrary: Boolean = true,
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f),
@@ -199,6 +207,9 @@ private fun JellyfinItemCard(item: JellyfinItem, onClick: () -> Unit) {
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
+            if (inLibrary) {
+                InLibraryBadge(modifier = Modifier.align(Alignment.TopEnd))
+            }
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -215,13 +226,20 @@ private fun JellyfinItemCard(item: JellyfinItem, onClick: () -> Unit) {
                     .align(Alignment.BottomStart)
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             ) {
-                Text(
-                    text = item.name,
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = item.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (inLibrary) {
+                        InLibraryTitleBadgeSpacer()
+                        InLibraryTitleBadge()
+                    }
+                }
                 item.year?.let {
                     Spacer(Modifier.height(2.dp))
                     Text(

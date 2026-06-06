@@ -5,13 +5,20 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,6 +49,7 @@ fun TvItemCard(
     item: TvJellyfinItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    inLibrary: Boolean = true,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -87,16 +95,52 @@ fun TvItemCard(
                         ),
                     ),
             )
-            Text(
-                text = item.name,
-                color = Color.White.copy(alpha = titleAlpha),
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(horizontal = 8.dp, vertical = 6.dp),
-            )
+            ) {
+                Text(
+                    text = item.name,
+                    color = Color.White.copy(alpha = titleAlpha),
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (inLibrary) {
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        Modifier
+                            .background(accent.copy(alpha = titleAlpha), CircleShape)
+                            .padding(2.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "V knihovně",
+                            tint = Color.Black.copy(alpha = titleAlpha),
+                            modifier = Modifier.size(10.dp),
+                        )
+                    }
+                }
+            }
+            if (inLibrary) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(accent, CircleShape)
+                        .padding(4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "V knihovně",
+                        tint = Color.Black,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
             item.progressPct?.let { pct ->
                 LinearProgressIndicator(
                     progress = { pct / 100f },

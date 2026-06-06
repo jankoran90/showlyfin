@@ -28,4 +28,8 @@ data class DetailUiState(
     val tmdbCzOverview: String? = null,
     val tmdbCzTitle: String? = null,
     val collection: TmdbCollection? = null,
+    val ownedImdbToJellyfin: Map<String, String> = emptyMap(),
+    val ownedTmdbToJellyfin: Map<Long, String> = emptyMap(),
+    val isOwnedInLibrary: Boolean = false,
+    val ownedJellyfinId: String? = null,
 )

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
+import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,7 @@ class JellyfinDetailViewModel @Inject constructor(
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
     private val tmdbApi: TmdbRemoteDataSource,
+    private val jellyfinLibraryService: JellyfinLibraryService,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -101,7 +103,7 @@ class JellyfinDetailViewModel @Inject constructor(
                 return@launch
             }
             if (tmdbId != null && tmdbId > 0) {
-                val tmdbCollection = loadTmdbCollection(tmdbId)
+                val tmdbCollection = loadTmdbCollection(tmdbId, userUuid)
                 if (tmdbCollection != null) {
                     _state.update { it.copy(collection = tmdbCollection) }
                 }
@@ -149,15 +151,18 @@ class JellyfinDetailViewModel @Inject constructor(
         return null
     }
 
-    private suspend fun loadTmdbCollection(tmdbId: Long): MediaCollection? {
+    private suspend fun loadTmdbCollection(tmdbId: Long, userUuid: UUID): MediaCollection? {
         val collectionId = runCatching { tmdbApi.fetchMovieDetails(tmdbId)?.belongs_to_collection?.id }.getOrNull()
         if (collectionId == null || collectionId <= 0) return null
         val collection = runCatching { tmdbApi.fetchCollection(collectionId) }.getOrNull() ?: return null
+        val ownedTmdbToJellyfin = runCatching {
+            jellyfinLibraryService.getOwnedIds(userUuid).tmdbToJellyfin
+        }.getOrNull().orEmpty()
         val parts = collection.parts.orEmpty().map { part ->
             CollectionPart(
                 key = "tmdb_${part.id}",
                 tmdbId = part.id,
-                jellyfinId = null,
+                jellyfinId = ownedTmdbToJellyfin[part.id],
                 title = part.title ?: "",
                 posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
                 year = part.release_date?.take(4),
