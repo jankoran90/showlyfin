@@ -17,4 +17,5 @@ interface TmdbRemoteDataSource {
     suspend fun fetchPersonImages(tmdbId: Long): TmdbImages
     suspend fun fetchMovieTranslation(tmdbId: Long, language: String = "cs"): TmdbTranslation.Data?
     suspend fun fetchShowTranslation(tmdbId: Long, language: String = "cs"): TmdbTranslation.Data?
+    suspend fun fetchCollection(collectionId: Long): TmdbCollection?
 }

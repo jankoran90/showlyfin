@@ -76,4 +76,10 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
                 ?.firstOrNull { it.iso_639_1.lowercase() == language.lowercase() }
                 ?.data
         } catch (e: Throwable) { null }
+
+    override suspend fun fetchCollection(collectionId: Long): TmdbCollection? =
+        try {
+            if (collectionId <= 0) null
+            else service.fetchCollection(collectionId)
+        } catch (e: Throwable) { null }
 }

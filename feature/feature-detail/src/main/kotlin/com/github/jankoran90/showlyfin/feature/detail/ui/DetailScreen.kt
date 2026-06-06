@@ -1,11 +1,13 @@
 package com.github.jankoran90.showlyfin.feature.detail.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -14,7 +16,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -37,10 +42,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -245,9 +252,81 @@ fun DetailScreen(
                 onShare = onShare,
             )
 
+            uiState.collection?.let { coll ->
+                CollectionSection(collection = coll, currentTmdbId = displayItem.tmdbId)
+            }
+
             CsfdReviewsSection(reviews = uiState.csfdReviews)
 
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun CollectionSection(
+    collection: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection,
+    currentTmdbId: Long?,
+) {
+    val parts = collection.parts?.filter { it.id != currentTmdbId }.orEmpty()
+    if (parts.isEmpty()) return
+    Spacer(Modifier.height(12.dp))
+    Text(
+        text = collection.name ?: "Kolekce",
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    Spacer(Modifier.height(8.dp))
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(parts) { part ->
+            CollectionPartCard(part = part)
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
+@Composable
+private fun CollectionPartCard(part: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollectionPart) {
+    val posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" }
+    Column(
+        modifier = Modifier
+            .width(110.dp)
+            .clickable(enabled = false) {},
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            if (posterUrl != null) {
+                AsyncImage(
+                    model = posterUrl,
+                    contentDescription = part.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = part.title ?: "",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        part.release_date?.take(4)?.takeIf { it.isNotBlank() }?.let { year ->
+            Text(
+                text = year,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

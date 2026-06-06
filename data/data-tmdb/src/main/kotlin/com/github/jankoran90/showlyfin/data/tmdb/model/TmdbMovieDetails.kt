@@ -12,4 +12,12 @@ data class TmdbMovieDetails(
     val genres: List<TmdbGenre>?,
     val tagline: String?,
     val status: String?,
+    val belongs_to_collection: TmdbBelongsToCollection? = null,
+)
+
+data class TmdbBelongsToCollection(
+    val id: Long,
+    val name: String?,
+    val poster_path: String?,
+    val backdrop_path: String?,
 )

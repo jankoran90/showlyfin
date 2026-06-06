@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.detail
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbMovieDetails
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbShowDetails
 
@@ -26,4 +27,5 @@ data class DetailUiState(
     val isCsfdLoading: Boolean = false,
     val tmdbCzOverview: String? = null,
     val tmdbCzTitle: String? = null,
+    val collection: TmdbCollection? = null,
 )

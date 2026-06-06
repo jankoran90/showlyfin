@@ -47,6 +47,12 @@ class DetailViewModel @Inject constructor(
                                     isLoading = false,
                                 )
                             }
+                            details?.belongs_to_collection?.id?.takeIf { it > 0 }?.let { collectionId ->
+                                launch {
+                                    val collection = tmdbApi.fetchCollection(collectionId)
+                                    _uiState.update { it.copy(collection = collection) }
+                                }
+                            }
                         }
                     } else {
                         coroutineScope {
