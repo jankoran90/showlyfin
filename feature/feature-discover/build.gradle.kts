@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":data:data-tmdb"))
     implementation(project(":data:data-jellyfin"))
     implementation(libs.hilt.android)
+    implementation(libs.timber)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.core.ktx)

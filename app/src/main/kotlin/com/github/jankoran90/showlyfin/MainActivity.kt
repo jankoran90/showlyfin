@@ -9,11 +9,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.lifecycleScope
+import com.github.jankoran90.showlyfin.core.ui.DebugCaptureLauncher
+import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 import com.github.jankoran90.showlyfin.core.ui.UpdateLauncher
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
 import com.github.jankoran90.showlyfin.debug.DebugCaptureGestureHost
+import com.github.jankoran90.showlyfin.debug.DebugCaptureManager
 import com.github.jankoran90.showlyfin.services.EXTRA_OPEN_UPDATE_DIALOG
 import com.github.jankoran90.showlyfin.services.UpdateCheckWorker
 import com.github.jankoran90.showlyfin.services.UpdateChecker
@@ -76,8 +79,20 @@ class MainActivity : ComponentActivity() {
             override fun lastCheckAt(): Long = UpdatePreferences.lastCheckAt(applicationContext)
         }
 
+        val debugLauncher = object : DebugCaptureLauncher {
+            override fun captureNow(onResult: (Boolean) -> Unit) {
+                lifecycleScope.launch {
+                    val ok = DebugCaptureManager.captureAndUpload(this@MainActivity)
+                    onResult(ok)
+                }
+            }
+        }
+
         setContent {
-            CompositionLocalProvider(LocalUpdateLauncher provides launcher) {
+            CompositionLocalProvider(
+                LocalUpdateLauncher provides launcher,
+                LocalDebugCaptureLauncher provides debugLauncher,
+            ) {
                 DebugCaptureGestureHost {
                     Box {
                         if (isTV) {

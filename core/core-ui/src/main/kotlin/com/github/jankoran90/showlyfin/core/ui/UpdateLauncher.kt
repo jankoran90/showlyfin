@@ -21,3 +21,15 @@ val LocalUpdateLauncher = compositionLocalOf<UpdateLauncher> {
         override fun lastCheckAt(): Long = 0L
     }
 }
+
+interface DebugCaptureLauncher {
+    fun captureNow(onResult: (Boolean) -> Unit)
+}
+
+val LocalDebugCaptureLauncher = compositionLocalOf<DebugCaptureLauncher> {
+    object : DebugCaptureLauncher {
+        override fun captureNow(onResult: (Boolean) -> Unit) {
+            onResult(false)
+        }
+    }
+}

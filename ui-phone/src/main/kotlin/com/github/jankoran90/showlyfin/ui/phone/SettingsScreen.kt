@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.network.Config
+import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 import java.text.SimpleDateFormat
@@ -189,6 +190,8 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
         UpdateSection()
+        Spacer(Modifier.height(16.dp))
+        DebugSection()
 
         uiState.error?.let {
             Spacer(Modifier.height(8.dp))
@@ -199,6 +202,7 @@ fun SettingsScreen(
 
 @Composable
 private fun UpdateSection() {
+    val context = LocalContext.current
     val launcher = LocalUpdateLauncher.current
     var isChecking by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf<String?>(null) }
@@ -206,6 +210,14 @@ private fun UpdateSection() {
     val lastText = if (lastCheck > 0L) {
         SimpleDateFormat("d.M.yyyy HH:mm", Locale("cs", "CZ")).format(Date(lastCheck))
     } else "—"
+    val buildInfo = remember {
+        runCatching {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            val code = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
+                info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
+            "${info.versionName} (build $code)"
+        }.getOrDefault("—")
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -214,6 +226,12 @@ private fun UpdateSection() {
         Column(Modifier.padding(16.dp)) {
             Text("Aktualizace", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Aktuální verze: $buildInfo",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.85f),
+            )
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = "Poslední kontrola: $lastText",
                 style = MaterialTheme.typography.bodySmall,
@@ -237,6 +255,46 @@ private fun UpdateSection() {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (isChecking) "Kontroluji…" else "Zkontrolovat aktualizace")
+            }
+            statusText?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebugSection() {
+    val launcher = LocalDebugCaptureLauncher.current
+    var isSending by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf<String?>(null) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Debug", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Manuální screenshot + log dump → upload na server",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = {
+                    isSending = true
+                    statusText = "Posílám…"
+                    launcher.captureNow { ok ->
+                        isSending = false
+                        statusText = if (ok) "Odesláno ✓" else "Odeslání selhalo"
+                    }
+                },
+                enabled = !isSending,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (isSending) "Posílám…" else "Poslat debug snapshot")
             }
             statusText?.let {
                 Spacer(Modifier.height(8.dp))

@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
@@ -59,9 +60,14 @@ class WatchlistViewModel @Inject constructor(
     private fun loadJellyfinOwned() {
         viewModelScope.launch {
             val userId = prefs.getString("jellyfin_user_id", "") ?: ""
-            if (userId.isBlank()) return@launch
+            Timber.d("[Watchlist] loadJellyfinOwned userId=$userId")
+            if (userId.isBlank()) {
+                Timber.w("[Watchlist] userId BLANK — Jellyfin nepřihlášen?")
+                return@launch
+            }
             runCatching {
                 val owned = jellyfinLibraryService.getOwnedIds(UUID.fromString(userId))
+                Timber.i("[Watchlist] OwnedIds loaded: imdb=${owned.imdbIds.size} tmdb=${owned.tmdbIds.size}")
                 _uiState.update {
                     it.copy(
                         ownedImdbIds = owned.imdbIds,
@@ -69,7 +75,7 @@ class WatchlistViewModel @Inject constructor(
                         tmdbToJellyfin = owned.tmdbToJellyfin,
                     )
                 }
-            }
+            }.onFailure { Timber.w(it, "[Watchlist] OwnedIds failed") }
         }
     }
 

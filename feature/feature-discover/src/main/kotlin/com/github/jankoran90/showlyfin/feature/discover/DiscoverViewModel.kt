@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.UUID
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -203,9 +204,11 @@ class DiscoverViewModel @Inject constructor(
                 }
             }
             val userId = prefs.getString("jellyfin_user_id", "") ?: ""
+            Timber.d("[Discover] loadFilterContext userId=$userId")
             if (userId.isNotBlank()) {
                 runCatching {
                     val owned = jellyfinLibraryService.getOwnedIds(UUID.fromString(userId))
+                    Timber.i("[Discover] OwnedIds loaded: imdb=${owned.imdbIds.size} tmdb=${owned.tmdbIds.size} imdbMap=${owned.imdbToJellyfin.size} tmdbMap=${owned.tmdbToJellyfin.size}")
                     _uiState.update {
                         it.copy(
                             ownedImdbIds = owned.imdbIds,
@@ -213,7 +216,9 @@ class DiscoverViewModel @Inject constructor(
                             tmdbToJellyfin = owned.tmdbToJellyfin,
                         )
                     }
-                }
+                }.onFailure { Timber.w(it, "[Discover] OwnedIds failed") }
+            } else {
+                Timber.w("[Discover] userId BLANK in prefs — Jellyfin nepřihlášen?")
             }
         }
     }

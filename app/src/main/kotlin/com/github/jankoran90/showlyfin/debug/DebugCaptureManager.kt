@@ -2,8 +2,15 @@ package com.github.jankoran90.showlyfin.debug
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
+import android.view.PixelCopy
 import androidx.core.view.drawToBitmap
 import com.github.jankoran90.showlyfin.BuildConfig
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -42,16 +49,49 @@ object DebugCaptureManager {
         upload(timestamp, screenshotFile, logFile)
     }
 
-    private suspend fun captureScreenshot(activity: Activity, timestamp: String): File = withContext(Dispatchers.Main) {
-        val bitmap = activity.window.decorView.drawToBitmap()
+    private suspend fun captureScreenshot(activity: Activity, timestamp: String): File {
+        val bitmap = captureViaPixelCopy(activity) ?: captureViaDrawToBitmap(activity)
         val dir = File(activity.cacheDir, "screenshots").apply { mkdirs() }
         val file = File(dir, "screenshot-$timestamp.png")
         withContext(Dispatchers.IO) {
             FileOutputStream(file).use { out ->
-                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
         }
-        file
+        return file
+    }
+
+    private suspend fun captureViaPixelCopy(activity: Activity): Bitmap? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        val window = activity.window
+        val view = window.decorView
+        val width = view.width
+        val height = view.height
+        if (width <= 0 || height <= 0) return null
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val thread = HandlerThread("pixel-copy-debug").apply { start() }
+        val handler = Handler(thread.looper)
+        val result = CompletableDeferred<Bitmap?>()
+        try {
+            PixelCopy.request(window, bitmap, { code ->
+                if (code == PixelCopy.SUCCESS) result.complete(bitmap) else result.complete(null)
+            }, handler)
+            return result.await()
+        } catch (t: Throwable) {
+            return null
+        } finally {
+            thread.quitSafely()
+        }
+    }
+
+    private suspend fun captureViaDrawToBitmap(activity: Activity): Bitmap = withContext(Dispatchers.Main) {
+        runCatching { activity.window.decorView.drawToBitmap() }.getOrElse {
+            val w = activity.window.decorView.width.coerceAtLeast(1)
+            val h = activity.window.decorView.height.coerceAtLeast(1)
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            Canvas(bmp).also { activity.window.decorView.draw(it) }
+            bmp
+        }
     }
 
     private fun dumpLog(context: Context, timestamp: String): File {

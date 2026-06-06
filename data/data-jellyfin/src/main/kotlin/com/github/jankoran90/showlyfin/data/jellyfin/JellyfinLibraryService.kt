@@ -8,6 +8,7 @@ import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFields
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -24,8 +25,12 @@ class JellyfinLibraryService @Inject constructor(
     private val cacheValidMs = 5 * 60 * 1000L
 
     private fun ensureApiConfigured(): Boolean {
-        val serverUrl = prefs.getString("jellyfin_server_url", "")?.takeIf { it.isNotBlank() } ?: return false
-        val token = prefs.getString("jellyfin_token", "")?.takeIf { it.isNotBlank() } ?: return false
+        val serverUrl = prefs.getString("jellyfin_server_url", "")?.takeIf { it.isNotBlank() }
+        val token = prefs.getString("jellyfin_token", "")?.takeIf { it.isNotBlank() }
+        if (serverUrl == null || token == null) {
+            Timber.d("ensureApiConfigured: missing serverUrl=$serverUrl token=${token?.take(8)}…")
+            return false
+        }
         runCatching {
             apiClient.update(
                 baseUrl = serverUrl,
@@ -33,7 +38,7 @@ class JellyfinLibraryService @Inject constructor(
                 clientInfo = clientInfo,
                 deviceInfo = deviceInfo,
             )
-        }
+        }.onFailure { Timber.w(it, "apiClient.update failed") }
         return true
     }
 
@@ -41,11 +46,14 @@ class JellyfinLibraryService @Inject constructor(
         val now = System.currentTimeMillis()
         val cached = cachedOwned
         if (cached != null && (now - cacheTimestamp) < cacheValidMs) {
+            Timber.d("getOwnedIds cache hit: imdb=${cached.imdbIds.size} tmdb=${cached.tmdbIds.size} boxSets=${cached.boxSets.size}")
             return cached
         }
         if (!ensureApiConfigured()) {
+            Timber.w("getOwnedIds: ApiClient not configured (Jellyfin nepřihlášen)")
             return OwnedIds(emptySet(), emptySet())
         }
+        Timber.d("getOwnedIds fetching for userId=$userId")
 
         val imdb = mutableSetOf<String>()
         val tmdb = mutableSetOf<Long>()
@@ -59,6 +67,7 @@ class JellyfinLibraryService @Inject constructor(
                 fields = listOf(ItemFields.PROVIDER_IDS),
                 limit = 5000,
             ).content
+            Timber.d("getOwnedIds Movies+Series response: ${response.items.size}")
             for (item in response.items) {
                 val ids = item.providerIds ?: continue
                 val jellyfinId = item.id.toString()
@@ -71,7 +80,7 @@ class JellyfinLibraryService @Inject constructor(
                     tmdbToJellyfin.putIfAbsent(it, jellyfinId)
                 }
             }
-        }
+        }.onFailure { Timber.w(it, "getItems(MOVIE,SERIES) failed") }
 
         val boxSets = mutableListOf<BoxSetInfo>()
         val boxSetByTmdbCollection = mutableMapOf<Long, String>()
@@ -96,7 +105,8 @@ class JellyfinLibraryService @Inject constructor(
                     boxSetByNormalizedName.putIfAbsent(normalized, jellyfinId)
                 }
             }
-        }
+        }.onFailure { Timber.w(it, "getItems(BOX_SET) failed") }
+        Timber.i("getOwnedIds DONE: imdb=${imdb.size} tmdb=${tmdb.size} boxSets=${boxSets.size}")
 
         val owned = OwnedIds(
             imdbIds = imdb,
