@@ -73,7 +73,7 @@ fun DetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(item.traktId) { viewModel.load(item) }
+    LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) { viewModel.load(item) }
 
     val displayItem = uiState.item ?: item
 
