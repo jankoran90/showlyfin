@@ -1,7 +1,9 @@
 package com.github.jankoran90.showlyfin.ui.tv.ui
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,7 +45,7 @@ import com.github.jankoran90.showlyfin.ui.tv.TvCardSize
 import com.github.jankoran90.showlyfin.ui.tv.TvHomeRow
 import com.github.jankoran90.showlyfin.ui.tv.TvHomeViewModel
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TvHomeScreen(
     onItemClick: (itemId: String) -> Unit,
@@ -130,19 +133,29 @@ fun TvHomeScreen(
                             }
                         }
                     }
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
-                        verticalArrangement = Arrangement.spacedBy(32.dp),
+                    val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
+                    CompositionLocalProvider(
+                        LocalBringIntoViewSpec provides ScrollToTopBringIntoViewSpec(),
                     ) {
-                        itemsIndexed(state.rows) { index, row ->
-                            TvContentRow(
-                                row = row,
-                                onItemClick = onItemClick,
-                                cardSize = state.cardSize,
-                                onItemFocused = { item -> backdropUrl = item.backdropUrl ?: item.imageUrl },
-                                firstItemFocusRequester = if (index == 0) firstRowFocus else null,
-                            )
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
+                            verticalArrangement = Arrangement.spacedBy(32.dp),
+                        ) {
+                            itemsIndexed(state.rows) { index, row ->
+                                // Uvnitř řady obnovit default spec → horizontální LazyRow nescrolluje vertikálně
+                                CompositionLocalProvider(
+                                    LocalBringIntoViewSpec provides defaultBringIntoViewSpec,
+                                ) {
+                                    TvContentRow(
+                                        row = row,
+                                        onItemClick = onItemClick,
+                                        cardSize = state.cardSize,
+                                        onItemFocused = { item -> backdropUrl = item.backdropUrl ?: item.imageUrl },
+                                        firstItemFocusRequester = if (index == 0) firstRowFocus else null,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
