@@ -66,6 +66,7 @@ import com.github.jankoran90.showlyfin.feature.uploader.MoveStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.ReviewStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderScreen
 import com.github.jankoran90.showlyfin.feature.watchlist.ui.WatchlistScreen
+import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfileGateViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfilePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ServerSetupScreen
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme

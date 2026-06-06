@@ -1,18 +1,25 @@
 package com.github.jankoran90.showlyfin.ui.tv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfileGateViewModel
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
+import com.github.jankoran90.showlyfin.ui.tv.setup.TvProfilePickerScreen
+import com.github.jankoran90.showlyfin.ui.tv.setup.TvServerSetupScreen
 import com.github.jankoran90.showlyfin.ui.tv.theme.ShowlyfinTvTheme
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinSetupScreen
@@ -25,6 +32,44 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 fun ShowlyfinTvApp(
     viewModel: TvHomeViewModel = hiltViewModel(),
 ) {
+    val gateViewModel: ProfileGateViewModel = hiltViewModel()
+    val gateState by gateViewModel.state.collectAsStateWithLifecycle()
+
+    if (gateState.isLoading) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF07071A)), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Color.White)
+        }
+        return
+    }
+
+    if (gateState.isAddingProfile || gateState.profiles.isEmpty()) {
+        ShowlyfinTvTheme {
+            TvServerSetupScreen(
+                onDone = {
+                    gateViewModel.cancelAddProfile()
+                    viewModel.reload()
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        return
+    }
+
+    if (gateState.activeProfile == null) {
+        ShowlyfinTvTheme {
+            TvProfilePickerScreen(
+                profiles = gateState.profiles,
+                onProfileSelected = {
+                    gateViewModel.selectProfile(it)
+                    viewModel.reload()
+                },
+                onAddProfile = { gateViewModel.startAddProfile() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        return
+    }
+
     var currentDestination by remember { mutableStateOf<TvDestination>(TvDestination.Home) }
 
     LaunchedEffect(Unit) {

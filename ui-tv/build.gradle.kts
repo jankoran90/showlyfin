@@ -24,7 +24,9 @@ android {
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-ui"))
+    implementation(project(":core:core-data"))
     implementation(project(":data:data-jellyfin"))
+    implementation(project(":feature:feature-jellyfin-browser"))
     implementation(project(":feature:feature-playback"))
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

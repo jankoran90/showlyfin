@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.ui.phone
+package com.github.jankoran90.showlyfin.feature.jellyfin.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
