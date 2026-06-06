@@ -10,12 +10,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
@@ -23,6 +29,9 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -32,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistSort
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistTab
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistViewModel
 
@@ -54,6 +64,16 @@ fun WatchlistScreen(
             }
         }
 
+        if (uiState.isLoggedIn && (uiState.items.isNotEmpty() || uiState.genreFilter != null)) {
+            WatchlistChips(
+                sort = uiState.sort,
+                genreFilter = uiState.genreFilter,
+                availableGenres = uiState.availableGenres,
+                onSortSelected = { viewModel.selectSort(it) },
+                onGenreSelected = { viewModel.selectGenre(it) },
+            )
+        }
+
         when {
             !uiState.isLoggedIn -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -69,7 +89,7 @@ fun WatchlistScreen(
                     CircularProgressIndicator()
                 }
             }
-            uiState.items.isEmpty() -> {
+            uiState.items.isEmpty() && uiState.genreFilter == null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -96,6 +116,15 @@ fun WatchlistScreen(
                             textAlign = TextAlign.Center,
                         )
                     }
+                }
+            }
+            uiState.items.isEmpty() && uiState.genreFilter != null -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "Žádné položky pro filtr „${uiState.genreFilter}\"",
+                        modifier = Modifier.padding(24.dp),
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
             else -> {
@@ -125,6 +154,58 @@ fun WatchlistScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun WatchlistChips(
+    sort: WatchlistSort,
+    genreFilter: String?,
+    availableGenres: List<String>,
+    onSortSelected: (WatchlistSort) -> Unit,
+    onGenreSelected: (String?) -> Unit,
+) {
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Box {
+                FilterChip(
+                    selected = sort != WatchlistSort.DEFAULT,
+                    onClick = { sortMenuOpen = true },
+                    label = { Text(sort.label) },
+                    leadingIcon = { Icon(Icons.Default.Sort, contentDescription = null) },
+                )
+                DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                    WatchlistSort.entries.forEach { entry ->
+                        DropdownMenuItem(
+                            text = { Text(entry.label) },
+                            onClick = {
+                                onSortSelected(entry)
+                                sortMenuOpen = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        item {
+            FilterChip(
+                selected = genreFilter == null,
+                onClick = { onGenreSelected(null) },
+                label = { Text("Vše") },
+            )
+        }
+        items(availableGenres) { genre ->
+            FilterChip(
+                selected = genreFilter == genre,
+                onClick = { onGenreSelected(if (genreFilter == genre) null else genre) },
+                label = { Text(genre) },
+            )
         }
     }
 }

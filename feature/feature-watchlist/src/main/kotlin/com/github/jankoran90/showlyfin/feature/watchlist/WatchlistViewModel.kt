@@ -50,9 +50,27 @@ class WatchlistViewModel @Inject constructor(
     }
 
     fun selectTab(tab: WatchlistTab) {
-        _uiState.update { it.copy(activeTab = tab, items = emptyList(), progressMap = emptyMap()) }
+        _uiState.update {
+            it.copy(
+                activeTab = tab,
+                items = emptyList(),
+                progressMap = emptyMap(),
+                genreFilter = null,
+                availableGenres = emptyList(),
+            )
+        }
         _rawItems.value = emptyList()
         if (_uiState.value.isLoggedIn) load(tab)
+    }
+
+    fun selectSort(sort: WatchlistSort) {
+        _uiState.update { it.copy(sort = sort) }
+        reapply()
+    }
+
+    fun selectGenre(genre: String?) {
+        _uiState.update { it.copy(genreFilter = genre) }
+        reapply()
     }
 
     fun refresh() {
@@ -83,7 +101,19 @@ class WatchlistViewModel @Inject constructor(
                     }.awaitAll()
                 }
                 _rawItems.value = enriched
-                _uiState.update { it.copy(items = applyLock(enriched), isLoading = false) }
+                val genres = enriched
+                    .flatMap { it.genres.orEmpty() }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .sorted()
+                _uiState.update { state ->
+                    state.copy(
+                        items = applyAll(enriched, state.sort, state.genreFilter),
+                        availableGenres = genres,
+                        isLoading = false,
+                    )
+                }
 
                 if (tab == WatchlistTab.SHOWS) {
                     loadProgress()
@@ -114,7 +144,23 @@ class WatchlistViewModel @Inject constructor(
     }
 
     private fun reapply() {
-        _uiState.update { it.copy(items = applyLock(_rawItems.value)) }
+        val state = _uiState.value
+        _uiState.update { it.copy(items = applyAll(_rawItems.value, state.sort, state.genreFilter)) }
+    }
+
+    private fun applyAll(items: List<MediaItem>, sort: WatchlistSort, genre: String?): List<MediaItem> {
+        var result = applyLock(items)
+        if (!genre.isNullOrBlank()) {
+            result = result.filter { it.genres.orEmpty().any { g -> g.equals(genre, ignoreCase = true) } }
+        }
+        result = when (sort) {
+            WatchlistSort.DEFAULT -> result
+            WatchlistSort.TITLE -> result.sortedBy { it.title.lowercase() }
+            WatchlistSort.YEAR_DESC -> result.sortedByDescending { it.year ?: Int.MIN_VALUE }
+            WatchlistSort.YEAR_ASC -> result.sortedBy { it.year ?: Int.MAX_VALUE }
+            WatchlistSort.RATING_DESC -> result.sortedByDescending { it.rating ?: -1f }
+        }
+        return result
     }
 
     private fun applyLock(items: List<MediaItem>): List<MediaItem> {
