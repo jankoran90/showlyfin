@@ -247,11 +247,15 @@ fun DiscoverScreen(
                                 ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
                             val inLibrary = jellyfinId != null
                                 || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
-                            timber.log.Timber.d("[Discover] render '${item.title}' imdb=${item.imdbId} tmdb=${item.tmdbId} → jfId=$jellyfinId inLib=$inLibrary (maps: imdb=${uiState.imdbToJellyfin.size} tmdb=${uiState.tmdbToJellyfin.size})")
+                            val watched = (item.imdbId?.let { uiState.watchedImdbIds.contains(it) } ?: false)
+                                || (item.tmdbId?.let { uiState.watchedTmdbIds.contains(it) } ?: false)
+                                || uiState.watchedTraktIds.contains(item.traktId)
+                            timber.log.Timber.d("[Discover] render '${item.title}' imdb=${item.imdbId} tmdb=${item.tmdbId} → jfId=$jellyfinId inLib=$inLibrary watched=$watched")
                             MediaCard(
                                 item = item,
                                 onClick = { onItemClick(item, jellyfinId) },
                                 inLibrary = inLibrary,
+                                watched = watched,
                             )
                         }
                     }

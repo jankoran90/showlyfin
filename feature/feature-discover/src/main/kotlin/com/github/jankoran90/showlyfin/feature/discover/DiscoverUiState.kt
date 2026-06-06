@@ -23,6 +23,8 @@ data class DiscoverUiState(
     val tmdbToJellyfin: Map<Long, String> = emptyMap(),
     val watchlistTraktIds: Set<Long> = emptySet(),
     val watchedTraktIds: Set<Long> = emptySet(),
+    val watchedImdbIds: Set<String> = emptySet(),
+    val watchedTmdbIds: Set<Long> = emptySet(),
     val isFilterSheetOpen: Boolean = false,
     val parentalLockedAgeRating: com.github.jankoran90.showlyfin.core.domain.AgeRating? = null,
     val sessionAgeOverride: com.github.jankoran90.showlyfin.core.domain.AgeRating? = null,

@@ -22,6 +22,7 @@ data class JellyfinItem(
     val type: String,
     val isFolder: Boolean,
     val progressPct: Int?,
+    val watched: Boolean = false,
 )
 
 data class JellyfinLibraryItemsUiState(

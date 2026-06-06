@@ -53,6 +53,8 @@ import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.ui.InLibraryBadge
 import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadge
 import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadgeSpacer
+import com.github.jankoran90.showlyfin.core.ui.WatchedBadge
+import com.github.jankoran90.showlyfin.core.ui.WatchedTitleBadge
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinItem
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinLibraryItemsViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinSort
@@ -134,6 +136,7 @@ fun JellyfinLibraryItemsScreen(
                                         onItemPlay(item.id)
                                     }
                                 },
+                                watched = item.watched,
                             )
                         }
                     }
@@ -194,7 +197,7 @@ private fun JellyfinChipsRow(
 private fun JellyfinItemCard(
     item: JellyfinItem,
     onClick: () -> Unit,
-    inLibrary: Boolean = true,
+    watched: Boolean = false,
 ) {
     Card(
         onClick = onClick,
@@ -207,8 +210,8 @@ private fun JellyfinItemCard(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
-            if (inLibrary) {
-                InLibraryBadge(modifier = Modifier.align(Alignment.TopEnd))
+            if (watched) {
+                WatchedBadge(modifier = Modifier.align(Alignment.TopStart))
             }
             Box(
                 Modifier
@@ -235,9 +238,9 @@ private fun JellyfinItemCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (inLibrary) {
+                    if (watched) {
                         InLibraryTitleBadgeSpacer()
-                        InLibraryTitleBadge()
+                        WatchedTitleBadge()
                     }
                 }
                 item.year?.let {

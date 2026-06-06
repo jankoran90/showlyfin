@@ -73,6 +73,7 @@ fun MediaCard(
     modifier: Modifier = Modifier,
     progress: Float? = null,
     inLibrary: Boolean = false,
+    watched: Boolean = false,
 ) {
     Card(
         onClick = onClick,
@@ -104,6 +105,9 @@ fun MediaCard(
             if (inLibrary) {
                 InLibraryBadge(modifier = Modifier.align(Alignment.TopEnd))
             }
+            if (watched) {
+                WatchedBadge(modifier = Modifier.align(Alignment.TopStart))
+            }
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -125,6 +129,10 @@ fun MediaCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false),
                         )
+                        if (watched) {
+                            InLibraryTitleBadgeSpacer()
+                            WatchedTitleBadge()
+                        }
                         if (inLibrary) {
                             InLibraryTitleBadgeSpacer()
                             InLibraryTitleBadge()

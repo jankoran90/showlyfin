@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -51,4 +52,37 @@ fun InLibraryTitleBadge(modifier: Modifier = Modifier) {
 @Composable
 fun InLibraryTitleBadgeSpacer() {
     Spacer(Modifier.width(4.dp))
+}
+
+@Composable
+fun WatchedBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .padding(4.dp)
+            .background(androidx.compose.ui.graphics.Color(0xFF1F1F2E).copy(alpha = 0.85f), CircleShape)
+            .padding(4.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.Visibility,
+            contentDescription = "Zhlédnuto",
+            tint = androidx.compose.ui.graphics.Color.White,
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+@Composable
+fun WatchedTitleBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .background(androidx.compose.ui.graphics.Color(0xFF1F1F2E).copy(alpha = 0.85f), CircleShape)
+            .padding(2.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.Visibility,
+            contentDescription = "Zhlédnuto",
+            tint = androidx.compose.ui.graphics.Color.White,
+            modifier = Modifier.size(10.dp),
+        )
+    }
 }

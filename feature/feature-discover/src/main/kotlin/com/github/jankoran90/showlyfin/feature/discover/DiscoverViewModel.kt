@@ -199,8 +199,18 @@ class DiscoverViewModel @Inject constructor(
                 runCatching {
                     val watchedMovies = authorizedTraktApi.fetchSyncWatchedMovies()
                     val watchedShows = authorizedTraktApi.fetchSyncWatchedShows()
-                    val ids = (watchedMovies + watchedShows).mapNotNull { it.getTraktId() }.toSet()
-                    _uiState.update { it.copy(watchedTraktIds = ids) }
+                    val combined = watchedMovies + watchedShows
+                    val traktIds = combined.mapNotNull { it.getTraktId() }.toSet()
+                    val imdbIds = combined.mapNotNull { it.getImdbId()?.takeIf { s -> s.isNotBlank() } }.toSet()
+                    val tmdbIds = combined.mapNotNull { it.getTmdbId() }.toSet()
+                    _uiState.update {
+                        it.copy(
+                            watchedTraktIds = traktIds,
+                            watchedImdbIds = it.watchedImdbIds + imdbIds,
+                            watchedTmdbIds = it.watchedTmdbIds + tmdbIds,
+                        )
+                    }
+                    Timber.i("[Discover] Trakt watched: trakt=${traktIds.size} imdb=${imdbIds.size} tmdb=${tmdbIds.size}")
                 }
             }
             val userId = prefs.getString("jellyfin_user_id", "") ?: ""
@@ -208,12 +218,14 @@ class DiscoverViewModel @Inject constructor(
             if (userId.isNotBlank()) {
                 runCatching {
                     val owned = jellyfinLibraryService.getOwnedIds(UUID.fromString(userId))
-                    Timber.i("[Discover] OwnedIds loaded: imdb=${owned.imdbIds.size} tmdb=${owned.tmdbIds.size} imdbMap=${owned.imdbToJellyfin.size} tmdbMap=${owned.tmdbToJellyfin.size}")
+                    Timber.i("[Discover] OwnedIds loaded: imdb=${owned.imdbIds.size} tmdb=${owned.tmdbIds.size} imdbMap=${owned.imdbToJellyfin.size} tmdbMap=${owned.tmdbToJellyfin.size} watchedJf=${owned.watchedJellyfinIds.size}")
                     _uiState.update {
                         it.copy(
                             ownedImdbIds = owned.imdbIds,
                             imdbToJellyfin = owned.imdbToJellyfin,
                             tmdbToJellyfin = owned.tmdbToJellyfin,
+                            watchedImdbIds = it.watchedImdbIds + owned.watchedImdbIds,
+                            watchedTmdbIds = it.watchedTmdbIds + owned.watchedTmdbIds,
                         )
                     }
                 }.onFailure { Timber.w(it, "[Discover] OwnedIds failed") }

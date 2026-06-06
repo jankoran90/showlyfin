@@ -67,12 +67,14 @@ class WatchlistViewModel @Inject constructor(
             }
             runCatching {
                 val owned = jellyfinLibraryService.getOwnedIds(UUID.fromString(userId))
-                Timber.i("[Watchlist] OwnedIds loaded: imdb=${owned.imdbIds.size} tmdb=${owned.tmdbIds.size}")
+                Timber.i("[Watchlist] OwnedIds loaded: imdb=${owned.imdbIds.size} tmdb=${owned.tmdbIds.size} watchedJf=${owned.watchedJellyfinIds.size}")
                 _uiState.update {
                     it.copy(
                         ownedImdbIds = owned.imdbIds,
                         imdbToJellyfin = owned.imdbToJellyfin,
                         tmdbToJellyfin = owned.tmdbToJellyfin,
+                        watchedImdbIds = it.watchedImdbIds + owned.watchedImdbIds,
+                        watchedTmdbIds = it.watchedTmdbIds + owned.watchedTmdbIds,
                     )
                 }
             }.onFailure { Timber.w(it, "[Watchlist] OwnedIds failed") }
@@ -172,9 +174,9 @@ class WatchlistViewModel @Inject constructor(
 
     private suspend fun loadProgress() {
         runCatching {
-            val watched = authorizedTraktApi.fetchSyncWatchedShows(extended = "full")
+            val watchedShows = authorizedTraktApi.fetchSyncWatchedShows(extended = "full")
             val map = mutableMapOf<Long, WatchProgress>()
-            for (entry in watched) {
+            for (entry in watchedShows) {
                 val show = entry.show ?: continue
                 val traktId = show.ids?.trakt ?: continue
                 val totalEpisodes = show.aired_episodes ?: continue
@@ -185,7 +187,20 @@ class WatchlistViewModel @Inject constructor(
                     map[traktId] = WatchProgress(watchedEpisodes, totalEpisodes)
                 }
             }
-            _uiState.update { it.copy(progressMap = map) }
+            val watchedMovies = runCatching { authorizedTraktApi.fetchSyncWatchedMovies() }.getOrDefault(emptyList())
+            val combined = watchedShows + watchedMovies
+            val traktIds = combined.mapNotNull { it.getTraktId() }.toSet()
+            val imdbIds = combined.mapNotNull { it.getImdbId()?.takeIf { s -> s.isNotBlank() } }.toSet()
+            val tmdbIds = combined.mapNotNull { it.getTmdbId() }.toSet()
+            Timber.i("[Watchlist] Trakt watched: trakt=${traktIds.size} imdb=${imdbIds.size} tmdb=${tmdbIds.size}")
+            _uiState.update {
+                it.copy(
+                    progressMap = map,
+                    watchedTraktIds = traktIds,
+                    watchedImdbIds = it.watchedImdbIds + imdbIds,
+                    watchedTmdbIds = it.watchedTmdbIds + tmdbIds,
+                )
+            }
         }
     }
 

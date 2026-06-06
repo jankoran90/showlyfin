@@ -156,6 +156,7 @@ class JellyfinDetailViewModel @Inject constructor(
                         title = child.name ?: "",
                         posterUrl = "$serverUrl/Items/${child.id}/Images/Primary?quality=85&api_key=$token",
                         year = child.productionYear?.toString(),
+                        watched = child.userData?.played == true,
                     )
                 }
                 return MediaCollection(
@@ -171,9 +172,9 @@ class JellyfinDetailViewModel @Inject constructor(
         val collectionId = runCatching { tmdbApi.fetchMovieDetails(tmdbId)?.belongs_to_collection?.id }.getOrNull()
         if (collectionId == null || collectionId <= 0) return null
         val collection = runCatching { tmdbApi.fetchCollection(collectionId) }.getOrNull() ?: return null
-        val ownedTmdbToJellyfin = runCatching {
-            jellyfinLibraryService.getOwnedIds(userUuid).tmdbToJellyfin
-        }.getOrNull().orEmpty()
+        val owned = runCatching { jellyfinLibraryService.getOwnedIds(userUuid) }.getOrNull()
+        val ownedTmdbToJellyfin = owned?.tmdbToJellyfin.orEmpty()
+        val watchedTmdb = owned?.watchedTmdbIds.orEmpty()
         val parts = collection.parts.orEmpty().map { part ->
             CollectionPart(
                 key = "tmdb_${part.id}",
@@ -182,6 +183,7 @@ class JellyfinDetailViewModel @Inject constructor(
                 title = part.title ?: "",
                 posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
                 year = part.release_date?.take(4),
+                watched = watchedTmdb.contains(part.id),
             )
         }
         return MediaCollection(

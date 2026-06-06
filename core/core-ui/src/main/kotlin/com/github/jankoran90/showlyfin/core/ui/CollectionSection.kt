@@ -35,6 +35,7 @@ data class CollectionPart(
     val title: String,
     val posterUrl: String?,
     val year: String?,
+    val watched: Boolean = false,
 )
 
 data class MediaCollection(
@@ -95,6 +96,9 @@ private fun CollectionPartCard(part: CollectionPart, onClick: () -> Unit) {
             if (inLibrary) {
                 InLibraryBadge(modifier = Modifier.align(Alignment.TopEnd))
             }
+            if (part.watched) {
+                WatchedBadge(modifier = Modifier.align(Alignment.TopStart))
+            }
         }
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -106,6 +110,10 @@ private fun CollectionPartCard(part: CollectionPart, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
+            if (part.watched) {
+                InLibraryTitleBadgeSpacer()
+                WatchedTitleBadge()
+            }
             if (inLibrary) {
                 InLibraryTitleBadgeSpacer()
                 InLibraryTitleBadge()

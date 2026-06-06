@@ -20,6 +20,18 @@ data class SyncItem(
         return null
     }
 
+    fun getImdbId(): String? {
+        if (show != null) return show.ids?.imdb
+        if (movie != null) return movie.ids?.imdb
+        return null
+    }
+
+    fun getTmdbId(): Long? {
+        if (show != null) return show.ids?.tmdb
+        if (movie != null) return movie.ids?.tmdb
+        return null
+    }
+
     fun getType(): String? {
         if (show != null) return "show"
         if (movie != null) return "movie"

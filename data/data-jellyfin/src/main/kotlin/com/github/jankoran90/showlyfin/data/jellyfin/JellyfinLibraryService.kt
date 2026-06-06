@@ -59,6 +59,9 @@ class JellyfinLibraryService @Inject constructor(
         val tmdb = mutableSetOf<Long>()
         val imdbToJellyfin = mutableMapOf<String, String>()
         val tmdbToJellyfin = mutableMapOf<Long, String>()
+        val watchedImdb = mutableSetOf<String>()
+        val watchedTmdb = mutableSetOf<Long>()
+        val watchedJellyfin = mutableSetOf<String>()
         runCatching {
             val response = apiClient.itemsApi.getItems(
                 userId = userId,
@@ -84,16 +87,21 @@ class JellyfinLibraryService @Inject constructor(
                     Timber.w("[Jellyfin] item bez providerIds: '$name' (id=$jellyfinId)")
                     continue
                 }
+                val isPlayed = item.userData?.played == true
+                if (isPlayed) watchedJellyfin.add(jellyfinId)
                 ids["Imdb"]?.takeIf { it.isNotBlank() }?.let {
                     imdb.add(it)
                     imdbToJellyfin.putIfAbsent(it, jellyfinId)
+                    if (isPlayed) watchedImdb.add(it)
                 }
                 ids["Tmdb"]?.toLongOrNull()?.let {
                     tmdb.add(it)
                     tmdbToJellyfin.putIfAbsent(it, jellyfinId)
+                    if (isPlayed) watchedTmdb.add(it)
                 }
             }
             if (skippedByPath > 0) Timber.i("[Jellyfin] skipped $skippedByPath items by excluded path (RealDebrid)")
+            Timber.i("[Jellyfin] watched: jellyfin=${watchedJellyfin.size} imdb=${watchedImdb.size} tmdb=${watchedTmdb.size}")
         }.onFailure { Timber.w(it, "getItems(MOVIE,SERIES) failed") }
 
         val boxSets = mutableListOf<BoxSetInfo>()
@@ -130,6 +138,9 @@ class JellyfinLibraryService @Inject constructor(
             boxSets = boxSets,
             boxSetByTmdbCollection = boxSetByTmdbCollection,
             boxSetByNormalizedName = boxSetByNormalizedName,
+            watchedImdbIds = watchedImdb,
+            watchedTmdbIds = watchedTmdb,
+            watchedJellyfinIds = watchedJellyfin,
         )
         cachedOwned = owned
         cacheTimestamp = now
@@ -166,4 +177,7 @@ data class OwnedIds(
     val boxSets: List<BoxSetInfo> = emptyList(),
     val boxSetByTmdbCollection: Map<Long, String> = emptyMap(),
     val boxSetByNormalizedName: Map<String, String> = emptyMap(),
+    val watchedImdbIds: Set<String> = emptySet(),
+    val watchedTmdbIds: Set<Long> = emptySet(),
+    val watchedJellyfinIds: Set<String> = emptySet(),
 )

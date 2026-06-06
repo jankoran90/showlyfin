@@ -32,4 +32,7 @@ data class WatchlistUiState(
     val ownedImdbIds: Set<String> = emptySet(),
     val imdbToJellyfin: Map<String, String> = emptyMap(),
     val tmdbToJellyfin: Map<Long, String> = emptyMap(),
+    val watchedImdbIds: Set<String> = emptySet(),
+    val watchedTmdbIds: Set<Long> = emptySet(),
+    val watchedTraktIds: Set<Long> = emptySet(),
 )

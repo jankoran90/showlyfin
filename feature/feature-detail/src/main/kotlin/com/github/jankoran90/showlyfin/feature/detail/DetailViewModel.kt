@@ -133,12 +133,17 @@ class DetailViewModel @Inject constructor(
         val owned = runCatching { jellyfinLibraryService.getOwnedIds(userUuid) }.getOrNull() ?: return
         val matchedJellyfinId = item.imdbId?.let { owned.imdbToJellyfin[it] }
             ?: item.tmdbId?.let { owned.tmdbToJellyfin[it] }
+        val isWatched = (item.imdbId?.let { owned.watchedImdbIds.contains(it) } ?: false)
+            || (item.tmdbId?.let { owned.watchedTmdbIds.contains(it) } ?: false)
         _uiState.update {
             it.copy(
                 ownedImdbToJellyfin = owned.imdbToJellyfin,
                 ownedTmdbToJellyfin = owned.tmdbToJellyfin,
+                watchedImdbIds = owned.watchedImdbIds,
+                watchedTmdbIds = owned.watchedTmdbIds,
                 isOwnedInLibrary = matchedJellyfinId != null,
                 ownedJellyfinId = matchedJellyfinId,
+                isWatched = isWatched,
                 boxSets = owned.boxSets,
                 boxSetByTmdbCollection = owned.boxSetByTmdbCollection,
                 boxSetByNormalizedName = owned.boxSetByNormalizedName,
@@ -156,6 +161,7 @@ class DetailViewModel @Inject constructor(
             ?.takeIf { it.isNotBlank() }
             ?.let { state.boxSetByNormalizedName[normalizeBoxSetName(it)] }
         val resolvedBoxSetId = boxSetByTmdb ?: boxSetByName
+        val watchedTmdb = state.watchedTmdbIds
         val parts = collection.parts.orEmpty().map { part ->
             CollectionPart(
                 key = "tmdb_${part.id}",
@@ -164,6 +170,7 @@ class DetailViewModel @Inject constructor(
                 title = part.title ?: "",
                 posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
                 year = part.release_date?.take(4),
+                watched = watchedTmdb.contains(part.id),
             )
         }
         val displayName = state.boxSets.firstOrNull { it.jellyfinId == resolvedBoxSetId }?.name

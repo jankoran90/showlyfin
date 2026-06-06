@@ -139,4 +139,5 @@ private fun BaseItemDto.toJellyfinItem(serverUrl: String, token: String) = Jelly
     type = type.name,
     isFolder = isFolder == true,
     progressPct = userData?.playedPercentage?.toInt(),
+    watched = userData?.played == true,
 )
