@@ -28,8 +28,29 @@ class DetailViewModel @Inject constructor(
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
 
     fun load(item: MediaItem) {
-        if (_uiState.value.item?.traktId == item.traktId) return
-        _uiState.update { it.copy(item = item, isLoading = true, isCsfdLoading = item.type == MediaType.MOVIE) }
+        val current = _uiState.value.item
+        if (current != null) {
+            val sameTrakt = current.traktId != 0L && current.traktId == item.traktId
+            val sameTmdb = current.tmdbId != null && item.tmdbId != null && current.tmdbId == item.tmdbId
+            if (sameTrakt || sameTmdb) return
+        }
+        _uiState.update {
+            it.copy(
+                item = item,
+                isLoading = true,
+                isCsfdLoading = item.type == MediaType.MOVIE,
+                movieDetails = null,
+                showDetails = null,
+                tmdbCzOverview = null,
+                tmdbCzTitle = null,
+                csfdId = null,
+                csfdRating = null,
+                csfdPlot = null,
+                csfdReviews = emptyList(),
+                collection = null,
+                error = null,
+            )
+        }
         viewModelScope.launch {
             try {
                 val tmdbId = item.tmdbId

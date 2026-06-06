@@ -46,6 +46,7 @@ import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
@@ -156,6 +157,30 @@ fun ShowlyfinPhoneApp() {
             context.startActivity(Intent.createChooser(intent, "Sdílet").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
+        }
+
+        val onCollectionPartClick: (CollectionPart) -> Unit = { part ->
+            if (part.jellyfinId != null) {
+                val currentJellyfinParent = (currentDestination as? Destination.JellyfinDetail)?.parent
+                    ?: (currentDestination as? Destination.JellyfinLibrary)
+                    ?: Destination.JellyfinLibrary(libraryId = "", libraryName = "")
+                currentDestination = Destination.JellyfinDetail(part.jellyfinId, currentJellyfinParent)
+            } else if (part.tmdbId != null) {
+                val stub = MediaItem(
+                    traktId = 0L,
+                    tmdbId = part.tmdbId,
+                    imdbId = null,
+                    title = part.title,
+                    year = part.year?.toIntOrNull(),
+                    overview = null,
+                    rating = null,
+                    genres = null,
+                    type = MediaType.MOVIE,
+                    posterPath = null,
+                    backdropPath = null,
+                )
+                currentDestination = Destination.Detail(stub)
+            }
         }
 
         val onStremioItem: (MediaItem) -> Unit = { item ->
@@ -287,6 +312,7 @@ fun ShowlyfinPhoneApp() {
                     onPlay = { itemId ->
                         currentDestination = Destination.JellyfinPlayback(itemId, dest.parent)
                     },
+                    onCollectionPartClick = onCollectionPartClick,
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.JellyfinPlayback -> PlaybackScreen(
@@ -321,6 +347,7 @@ fun ShowlyfinPhoneApp() {
                     onNaTv = { item -> naTvCoordinator.playOnTv(item) },
                     onStremio = onStremioItem,
                     onShare = onShareItem,
+                    onCollectionPartClick = onCollectionPartClick,
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.SmartDetect -> SmartDetectScreen(

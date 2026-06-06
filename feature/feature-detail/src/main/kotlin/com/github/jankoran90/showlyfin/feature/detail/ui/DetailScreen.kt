@@ -53,6 +53,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.CollectionPart
+import com.github.jankoran90.showlyfin.core.ui.CollectionSection
+import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -64,6 +67,7 @@ fun DetailScreen(
     onNaTv: ((MediaItem) -> Unit)? = null,
     onStremio: ((MediaItem) -> Unit)? = null,
     onShare: ((MediaItem) -> Unit)? = null,
+    onCollectionPartClick: ((CollectionPart) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -253,80 +257,29 @@ fun DetailScreen(
             )
 
             uiState.collection?.let { coll ->
-                CollectionSection(collection = coll, currentTmdbId = displayItem.tmdbId)
+                val mediaCollection = MediaCollection(
+                    name = coll.name ?: "Kolekce",
+                    parts = coll.parts.orEmpty().map { part ->
+                        CollectionPart(
+                            key = "tmdb_${part.id}",
+                            tmdbId = part.id,
+                            jellyfinId = null,
+                            title = part.title ?: "",
+                            posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
+                            year = part.release_date?.take(4),
+                        )
+                    },
+                )
+                CollectionSection(
+                    collection = mediaCollection,
+                    excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                    onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                )
             }
 
             CsfdReviewsSection(reviews = uiState.csfdReviews)
 
             Spacer(Modifier.height(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun CollectionSection(
-    collection: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection,
-    currentTmdbId: Long?,
-) {
-    val parts = collection.parts?.filter { it.id != currentTmdbId }.orEmpty()
-    if (parts.isEmpty()) return
-    Spacer(Modifier.height(12.dp))
-    Text(
-        text = collection.name ?: "Kolekce",
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(horizontal = 16.dp),
-    )
-    Spacer(Modifier.height(8.dp))
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(parts) { part ->
-            CollectionPartCard(part = part)
-        }
-    }
-    Spacer(Modifier.height(12.dp))
-}
-
-@Composable
-private fun CollectionPartCard(part: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollectionPart) {
-    val posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" }
-    Column(
-        modifier = Modifier
-            .width(110.dp)
-            .clickable(enabled = false) {},
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            if (posterUrl != null) {
-                AsyncImage(
-                    model = posterUrl,
-                    contentDescription = part.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = part.title ?: "",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        part.release_date?.take(4)?.takeIf { it.isNotBlank() }?.let { year ->
-            Text(
-                text = year,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

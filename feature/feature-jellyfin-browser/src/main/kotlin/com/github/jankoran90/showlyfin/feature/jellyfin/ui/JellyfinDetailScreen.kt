@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.CollectionPart
+import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinDetailViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -50,6 +52,7 @@ fun JellyfinDetailScreen(
     itemId: String,
     onBack: () -> Unit,
     onPlay: (itemId: String) -> Unit,
+    onCollectionPartClick: ((CollectionPart) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: JellyfinDetailViewModel = hiltViewModel(),
 ) {
@@ -171,6 +174,15 @@ fun JellyfinDetailScreen(
                             }
                         }
                     }
+
+                    state.collection?.let { coll ->
+                        CollectionSection(
+                            collection = coll,
+                            excludeKey = "jellyfin_${detail.id}",
+                            onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                        )
+                    }
+
                     Spacer(Modifier.height(24.dp))
                 }
             }
