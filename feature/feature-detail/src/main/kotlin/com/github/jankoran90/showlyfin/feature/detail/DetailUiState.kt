@@ -42,6 +42,7 @@ data class DetailUiState(
     val boxSetByTmdbCollection: Map<Long, String> = emptyMap(),
     val boxSetByNormalizedName: Map<String, String> = emptyMap(),
     val matchingBoxSetId: String? = null,
+    val jellyfinCollection: MediaCollection? = null,
     val mergedCollection: MediaCollection? = null,
     val isTraktLoggedIn: Boolean = false,
     val isInWatchlist: Boolean = false,

@@ -51,18 +51,23 @@ class JellyfinLibraryItemsViewModel @Inject constructor(
         val isBoxSetContext =
             parentItemType.equals("BOX_SET", ignoreCase = true) ||
                 collectionType.equals("BOXSETS", ignoreCase = true)
+        val savedSort = runCatching {
+            JellyfinSort.valueOf(prefs.getString("jellyfin_sort", null) ?: "")
+        }.getOrDefault(JellyfinSort.NAME)
         _state.update {
             it.copy(
                 libraryName = libraryName,
                 isLoading = true,
                 error = null,
                 isBoxSetContext = isBoxSetContext,
+                sort = savedSort,
             )
         }
         reload()
     }
 
     fun selectSort(sort: JellyfinSort) {
+        prefs.edit().putString("jellyfin_sort", sort.name).apply()
         _state.update { it.copy(sort = sort, isLoading = true) }
         reload()
     }

@@ -67,6 +67,7 @@ class DetailViewModel @Inject constructor(
                 isOwnedInLibrary = false,
                 ownedJellyfinId = null,
                 matchingBoxSetId = null,
+                jellyfinCollection = null,
                 mergedCollection = null,
                 isTraktLoggedIn = tokenProvider.getToken() != null,
                 isInWatchlist = false,
@@ -104,7 +105,7 @@ class DetailViewModel @Inject constructor(
                                 launch {
                                     val collection = tmdbApi.fetchCollection(collectionId)
                                     _uiState.update { it.copy(collection = collection) }
-                                    if (collection != null) rebuildMergedCollection(collection, item)
+                                    recomputeMergedCollection(item)
                                 }
                             }
                         }
@@ -201,6 +202,24 @@ class DetailViewModel @Inject constructor(
             ?: item.tmdbId?.let { owned.tmdbToJellyfin[it] }
         val isWatched = (item.imdbId?.let { owned.watchedImdbIds.contains(it) } ?: false)
             || (item.tmdbId?.let { owned.watchedTmdbIds.contains(it) } ?: false)
+        val jfCollection = matchedJellyfinId?.let { jfId ->
+            runCatching { jellyfinLibraryService.findBoxSetCollectionForItem(userUuid, jfId) }.getOrNull()
+        }?.let { jf ->
+            MediaCollection(
+                name = jf.name,
+                parts = jf.parts.map { p ->
+                    CollectionPart(
+                        key = "jellyfin_${p.jellyfinId}",
+                        tmdbId = p.tmdbId,
+                        jellyfinId = p.jellyfinId,
+                        title = p.title,
+                        posterUrl = p.posterUrl,
+                        year = p.year?.toString(),
+                        watched = p.watched,
+                    )
+                },
+            )
+        }
         _uiState.update {
             it.copy(
                 ownedImdbToJellyfin = owned.imdbToJellyfin,
@@ -213,22 +232,21 @@ class DetailViewModel @Inject constructor(
                 boxSets = owned.boxSets,
                 boxSetByTmdbCollection = owned.boxSetByTmdbCollection,
                 boxSetByNormalizedName = owned.boxSetByNormalizedName,
+                jellyfinCollection = jfCollection,
             )
         }
-        _uiState.value.collection?.let { rebuildMergedCollection(it, item) }
+        recomputeMergedCollection(item)
     }
 
-    private fun rebuildMergedCollection(collection: TmdbCollection, item: MediaItem) {
-        val tmdbCollectionId = collection.id
+    /** Jellyfin BoxSet má přednost; doplní TMDB díly mimo knihovnu; řadí nejstarší→nejnovější. */
+    private fun recomputeMergedCollection(item: MediaItem) {
         val state = _uiState.value
+        val jf = state.jellyfinCollection
+        val tmdb = state.collection
         val ownedTmdb = state.ownedTmdbToJellyfin
-        val boxSetByTmdb = state.boxSetByTmdbCollection[tmdbCollectionId]
-        val boxSetByName = collection.name
-            ?.takeIf { it.isNotBlank() }
-            ?.let { state.boxSetByNormalizedName[normalizeBoxSetName(it)] }
-        val resolvedBoxSetId = boxSetByTmdb ?: boxSetByName
         val watchedTmdb = state.watchedTmdbIds
-        val parts = collection.parts.orEmpty().map { part ->
+
+        fun tmdbParts(): List<CollectionPart> = tmdb?.parts.orEmpty().map { part ->
             CollectionPart(
                 key = "tmdb_${part.id}",
                 tmdbId = part.id,
@@ -239,15 +257,26 @@ class DetailViewModel @Inject constructor(
                 watched = watchedTmdb.contains(part.id),
             )
         }
-        val displayName = state.boxSets.firstOrNull { it.jellyfinId == resolvedBoxSetId }?.name
-            ?: collection.name
-            ?: "Kolekce"
-        _uiState.update {
-            it.copy(
-                matchingBoxSetId = resolvedBoxSetId,
-                mergedCollection = MediaCollection(name = displayName, parts = parts),
-            )
+        fun sortByYear(parts: List<CollectionPart>) =
+            parts.sortedBy { it.year?.toIntOrNull() ?: Int.MAX_VALUE }
+
+        val merged: MediaCollection? = when {
+            jf != null -> {
+                val jfTmdbIds = jf.parts.mapNotNull { it.tmdbId }.toSet()
+                val missing = tmdbParts().filter { it.tmdbId != null && it.tmdbId !in jfTmdbIds }
+                MediaCollection(name = jf.name, parts = sortByYear(jf.parts + missing))
+            }
+            tmdb != null -> {
+                val resolvedBoxSetId = state.boxSetByTmdbCollection[tmdb.id]
+                    ?: tmdb.name?.takeIf { it.isNotBlank() }
+                        ?.let { state.boxSetByNormalizedName[normalizeBoxSetName(it)] }
+                val displayName = state.boxSets.firstOrNull { it.jellyfinId == resolvedBoxSetId }?.name
+                    ?: tmdb.name ?: "Kolekce"
+                MediaCollection(name = displayName, parts = sortByYear(tmdbParts()))
+            }
+            else -> null
         }
+        _uiState.update { it.copy(mergedCollection = merged) }
     }
 
     private suspend fun loadCsfd(item: MediaItem, czTitle: String?) {

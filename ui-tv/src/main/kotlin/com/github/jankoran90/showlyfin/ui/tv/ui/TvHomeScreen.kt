@@ -178,6 +178,7 @@ private fun TvContentRow(
                     item = item,
                     onClick = { onItemClick(item.id) },
                     cardSize = cardSize,
+                    inLibrary = false, // Home = Jellyfin obsah → badge nemá smysl (jen u Trakt výsledků)
                     onFocused = { onItemFocused(item) },
                     modifier = if (isFirst) Modifier.focusRequester(firstItemFocusRequester!!) else Modifier,
                 )

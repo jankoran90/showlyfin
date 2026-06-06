@@ -46,7 +46,10 @@ class WatchlistViewModel @Inject constructor(
 
     init {
         val loggedIn = tokenProvider.getToken() != null
-        _uiState.update { it.copy(isLoggedIn = loggedIn) }
+        val savedSort = runCatching {
+            WatchlistSort.valueOf(prefs.getString("watchlist_sort", null) ?: "")
+        }.getOrDefault(WatchlistSort.DEFAULT)
+        _uiState.update { it.copy(isLoggedIn = loggedIn, sort = savedSort) }
         if (loggedIn) load(WatchlistTab.MOVIES)
         loadJellyfinOwned()
         parentalControlsRepository.profile
@@ -96,6 +99,7 @@ class WatchlistViewModel @Inject constructor(
     }
 
     fun selectSort(sort: WatchlistSort) {
+        prefs.edit().putString("watchlist_sort", sort.name).apply()
         _uiState.update { it.copy(sort = sort) }
         reapply()
     }

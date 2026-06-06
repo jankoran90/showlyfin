@@ -123,7 +123,7 @@ class JellyfinDetailViewModel @Inject constructor(
         val missing = tmdb.parts.filter { it.tmdbId != null && it.tmdbId !in jellyfinTmdbIds }
         return MediaCollection(
             name = jellyfin.name,
-            parts = jellyfin.parts + missing,
+            parts = (jellyfin.parts + missing).sortedBy { it.year?.toIntOrNull() ?: Int.MAX_VALUE },
         )
     }
 
@@ -158,7 +158,7 @@ class JellyfinDetailViewModel @Inject constructor(
                         year = child.productionYear?.toString(),
                         watched = child.userData?.played == true,
                     )
-                }
+                }.sortedBy { it.year?.toIntOrNull() ?: Int.MAX_VALUE }
                 return MediaCollection(
                     name = boxSet.name ?: "Kolekce",
                     parts = parts,
@@ -188,7 +188,7 @@ class JellyfinDetailViewModel @Inject constructor(
         }
         return MediaCollection(
             name = collection.name ?: "Kolekce",
-            parts = parts,
+            parts = parts.sortedBy { it.year?.toIntOrNull() ?: Int.MAX_VALUE },
         )
     }
 }

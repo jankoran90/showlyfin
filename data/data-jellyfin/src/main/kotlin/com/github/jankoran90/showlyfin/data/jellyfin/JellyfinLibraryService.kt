@@ -147,11 +147,69 @@ class JellyfinLibraryService @Inject constructor(
         return owned
     }
 
+    /**
+     * Najde Jellyfin BoxSet, který obsahuje danou položku, a vrátí jeho děti
+     * jako kolekci seřazenou od nejstarší po nejnovější. Null pokud item v žádném BoxSetu není.
+     */
+    suspend fun findBoxSetCollectionForItem(userId: UUID, jellyfinItemId: String): JfCollection? {
+        if (!ensureApiConfigured()) return null
+        val serverUrl = prefs.getString("jellyfin_server_url", "")?.takeIf { it.isNotBlank() } ?: return null
+        val token = prefs.getString("jellyfin_token", "")?.takeIf { it.isNotBlank() } ?: return null
+        val itemUuid = runCatching { UUID.fromString(jellyfinItemId) }.getOrNull() ?: return null
+
+        val boxSets = runCatching {
+            apiClient.itemsApi.getItems(
+                userId = userId,
+                includeItemTypes = listOf(BaseItemKind.BOX_SET),
+                recursive = true,
+            ).content.items.orEmpty()
+        }.getOrNull() ?: return null
+
+        for (boxSet in boxSets) {
+            val children = runCatching {
+                apiClient.itemsApi.getItems(
+                    userId = userId,
+                    parentId = boxSet.id,
+                    fields = listOf(ItemFields.PROVIDER_IDS),
+                ).content.items.orEmpty()
+            }.getOrNull() ?: continue
+
+            if (children.any { it.id == itemUuid }) {
+                val parts = children.map { child ->
+                    JfCollectionPart(
+                        jellyfinId = child.id.toString(),
+                        tmdbId = child.providerIds?.get("Tmdb")?.toLongOrNull(),
+                        title = child.name ?: "",
+                        posterUrl = "$serverUrl/Items/${child.id}/Images/Primary?quality=85&api_key=$token",
+                        year = child.productionYear,
+                        watched = child.userData?.played == true,
+                    )
+                }.sortedBy { it.year ?: Int.MAX_VALUE }
+                return JfCollection(name = boxSet.name ?: "Kolekce", parts = parts)
+            }
+        }
+        return null
+    }
+
     fun invalidate() {
         cachedOwned = null
         cacheTimestamp = 0L
     }
 }
+
+data class JfCollectionPart(
+    val jellyfinId: String,
+    val tmdbId: Long?,
+    val title: String,
+    val posterUrl: String,
+    val year: Int?,
+    val watched: Boolean,
+)
+
+data class JfCollection(
+    val name: String,
+    val parts: List<JfCollectionPart>,
+)
 
 fun normalizeBoxSetName(name: String): String =
     name.lowercase().filter { it.isLetterOrDigit() }

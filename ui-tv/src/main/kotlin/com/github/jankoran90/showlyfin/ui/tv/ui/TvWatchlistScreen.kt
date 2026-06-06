@@ -102,10 +102,13 @@ fun TvWatchlistScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
+                            val inLib = (item.imdbId != null && item.imdbId in uiState.ownedImdbIds) ||
+                                (item.tmdbId != null && uiState.tmdbToJellyfin.containsKey(item.tmdbId))
                             TvDiscoverCard(
                                 item = item,
                                 onClick = { onItemClick(item) },
                                 progress = uiState.progressMap[item.traktId]?.fraction,
+                                inLibrary = inLib,
                             )
                         }
                     }
