@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -29,11 +30,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -176,14 +179,14 @@ fun ShowlyfinPhoneApp() {
         val isSubScreen = currentDestination !in bottomTabs
 
         val density = LocalDensity.current
-        val bottomBarHeightPx = remember(density) { with(density) { 80.dp.toPx() } }
+        val measuredBarHeightPx = remember { mutableFloatStateOf(with(density) { 80.dp.toPx() }) }
         val bottomBarOffsetPx = remember { mutableFloatStateOf(0f) }
         LaunchedEffect(currentDestination) { bottomBarOffsetPx.floatValue = 0f }
 
-        val nestedScrollConnection = remember(bottomBarHeightPx) {
+        val nestedScrollConnection = remember {
             object : NestedScrollConnection {
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    val newOffset = (bottomBarOffsetPx.floatValue - available.y).coerceIn(0f, bottomBarHeightPx)
+                    val newOffset = (bottomBarOffsetPx.floatValue - available.y).coerceIn(0f, measuredBarHeightPx.floatValue)
                     bottomBarOffsetPx.floatValue = newOffset
                     return Offset.Zero
                 }
@@ -216,57 +219,21 @@ fun ShowlyfinPhoneApp() {
         Scaffold(
             containerColor = Color(0xFF0D0D1A),
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            bottomBar = {
-                if (!isSubScreen) {
-                    Box(
-                        modifier = Modifier.offset { IntOffset(0, bottomBarOffsetPx.floatValue.roundToInt()) }
-                    ) {
-                    NavigationBar(containerColor = Color(0xFF1A1A2E)) {
-                        NavigationBarItem(
-                            selected = bottomTab is Destination.Discover,
-                            onClick = { bottomTab = Destination.Discover; currentDestination = Destination.Discover },
-                            icon = { Icon(Icons.Default.Explore, contentDescription = null) },
-                            label = { Text("Discover") },
-                        )
-                        NavigationBarItem(
-                            selected = bottomTab is Destination.Watchlist,
-                            onClick = { bottomTab = Destination.Watchlist; currentDestination = Destination.Watchlist },
-                            icon = { Icon(Icons.Default.Bookmarks, contentDescription = null) },
-                            label = { Text("Watchlist") },
-                        )
-                        NavigationBarItem(
-                            selected = bottomTab is Destination.Jellyfin,
-                            onClick = { bottomTab = Destination.Jellyfin; currentDestination = Destination.Jellyfin },
-                            icon = { Icon(Icons.Default.Tv, contentDescription = null) },
-                            label = { Text("Jellyfin") },
-                        )
-                        NavigationBarItem(
-                            selected = bottomTab is Destination.Uploader,
-                            onClick = { bottomTab = Destination.Uploader; currentDestination = Destination.Uploader },
-                            icon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
-                            label = { Text("Uploader") },
-                        )
-                        NavigationBarItem(
-                            selected = bottomTab is Destination.Settings,
-                            onClick = { bottomTab = Destination.Settings; currentDestination = Destination.Settings },
-                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                            label = { Text("Nastavení") },
-                        )
-                    }
-                    }
-                }
-            },
         ) { paddingValues ->
             val effectiveBottomDp = if (isSubScreen) {
                 0.dp
             } else {
-                with(density) { (bottomBarHeightPx - bottomBarOffsetPx.floatValue).coerceAtLeast(0f).toDp() }
+                with(density) { (measuredBarHeightPx.floatValue - bottomBarOffsetPx.floatValue).coerceAtLeast(0f).toDp() }
             }
             Box(modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(nestedScrollConnection)
-                .padding(top = paddingValues.calculateTopPadding(), bottom = effectiveBottomDp)
+                .padding(top = paddingValues.calculateTopPadding())
             ) {
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(nestedScrollConnection)
+                    .padding(bottom = effectiveBottomDp)
+                ) {
             when (val dest = currentDestination) {
                 is Destination.Discover -> DiscoverScreen(
                     onItemClick = { item -> bottomTab = Destination.Discover; currentDestination = Destination.Detail(item) },
@@ -407,6 +374,50 @@ fun ShowlyfinPhoneApp() {
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+                }
+
+                if (!isSubScreen) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .onSizeChanged { measuredBarHeightPx.floatValue = it.height.toFloat() }
+                            .offset { IntOffset(0, bottomBarOffsetPx.floatValue.roundToInt()) },
+                    ) {
+                        NavigationBar(containerColor = Color(0xFF1A1A2E)) {
+                            NavigationBarItem(
+                                selected = bottomTab is Destination.Discover,
+                                onClick = { bottomTab = Destination.Discover; currentDestination = Destination.Discover },
+                                icon = { Icon(Icons.Default.Explore, contentDescription = null) },
+                                label = { Text("Discover") },
+                            )
+                            NavigationBarItem(
+                                selected = bottomTab is Destination.Watchlist,
+                                onClick = { bottomTab = Destination.Watchlist; currentDestination = Destination.Watchlist },
+                                icon = { Icon(Icons.Default.Bookmarks, contentDescription = null) },
+                                label = { Text("Watchlist") },
+                            )
+                            NavigationBarItem(
+                                selected = bottomTab is Destination.Jellyfin,
+                                onClick = { bottomTab = Destination.Jellyfin; currentDestination = Destination.Jellyfin },
+                                icon = { Icon(Icons.Default.Tv, contentDescription = null) },
+                                label = { Text("Jellyfin") },
+                            )
+                            NavigationBarItem(
+                                selected = bottomTab is Destination.Uploader,
+                                onClick = { bottomTab = Destination.Uploader; currentDestination = Destination.Uploader },
+                                icon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
+                                label = { Text("Uploader") },
+                            )
+                            NavigationBarItem(
+                                selected = bottomTab is Destination.Settings,
+                                onClick = { bottomTab = Destination.Settings; currentDestination = Destination.Settings },
+                                icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                label = { Text("Nastavení") },
+                            )
+                        }
+                    }
+                }
             }
         }
     }

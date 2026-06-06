@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import timber.log.Timber
 import java.net.HttpURLConnection
 import java.net.URL
@@ -23,38 +24,49 @@ class CsfdRepository @Inject constructor(
     }
 
     suspend fun getCsfdId(imdbId: String, title: String = "", year: Int = 0): Long? = withContext(Dispatchers.IO) {
+        Timber.d("[CsfdRepository] getCsfdId(imdbId=$imdbId, title=$title, year=$year)")
         if (imdbId.isBlank() && title.isBlank()) return@withContext null
 
         val overrideKey = "CSFD_OVERRIDE_$imdbId"
         if (imdbId.isNotBlank()) {
             val override = prefs.getLong(overrideKey, -1L)
-            if (override != -1L) return@withContext override
+            if (override != -1L) {
+                Timber.d("[CsfdRepository] override hit: csfdId=$override")
+                return@withContext override
+            }
         }
 
         val cacheKey = if (imdbId.isNotBlank()) "CSFD_ID_$imdbId" else "CSFD_ID_TITLE_${normalize(title)}_$year"
         val cached = prefs.getLong(cacheKey, -1L)
-        if (cached != -1L) return@withContext cached
+        if (cached != -1L) {
+            Timber.d("[CsfdRepository] cache hit: csfdId=$cached")
+            return@withContext cached
+        }
 
         val wikidataId = if (imdbId.isNotBlank()) wikidataLookup(imdbId) else null
+        Timber.d("[CsfdRepository] wikidata lookup → csfdId=$wikidataId for imdbId=$imdbId")
 
         if (wikidataId != null) {
             val csfdTitle = runCatching { scraper.scrapeTitle(wikidataId) }.getOrNull()
             if (csfdTitle != null) {
+                Timber.d("[CsfdRepository] wikidata accepted (page='$csfdTitle')")
                 prefs.edit { putLong(cacheKey, wikidataId) }
                 return@withContext wikidataId
             } else {
-                Timber.w("[CsfdRepository] Wikidata id=$wikidataId REJECTED (page inaccessible) for title=$title → title search")
+                Timber.w("[CsfdRepository] Wikidata id=$wikidataId REJECTED (page inaccessible) → title search fallback")
             }
         }
 
         if (title.isNotBlank()) {
             val searchId = runCatching { scraper.searchByTitle(title, year) }.getOrNull()
             if (searchId != null) {
+                Timber.d("[CsfdRepository] title search → csfdId=$searchId")
                 prefs.edit { putLong(cacheKey, searchId) }
                 return@withContext searchId
             }
         }
 
+        Timber.w("[CsfdRepository] getCsfdId returned null for imdbId=$imdbId, title=$title")
         null
     }
 
@@ -97,15 +109,32 @@ class CsfdRepository @Inject constructor(
             val query = """SELECT ?csfdId WHERE { ?item wdt:P345 "$imdbId". ?item wdt:P2529 ?csfdId }"""
             val url = "https://query.wikidata.org/sparql?query=${URLEncoder.encode(query, "UTF-8")}&format=json"
             val conn = URL(url).openConnection() as HttpURLConnection
-            conn.setRequestProperty("User-Agent", "Showlyfin/0.13.1 (https://github.com/jankoran90/showlyfin)")
+            conn.setRequestProperty("User-Agent", "Showlyfin/0.13.2 (https://github.com/jankoran90/showlyfin)")
             conn.setRequestProperty("Accept", "application/json")
             conn.connectTimeout = 8000
             conn.readTimeout = 8000
             val json = conn.inputStream.bufferedReader().readText()
             conn.disconnect()
-            Regex(""""value"\s*:\s*"(\d+)"""").find(json)?.groupValues?.get(1)?.toLongOrNull()
+            parseWikidataCsfdId(json)
         } catch (e: Exception) {
             Timber.w(e, "[CsfdRepository] Wikidata lookup failed for imdbId=$imdbId")
+            null
+        }
+    }
+
+    internal fun parseWikidataCsfdId(json: String): Long? {
+        return try {
+            val obj = JSONObject(json)
+            val bindings = obj.optJSONObject("results")?.optJSONArray("bindings") ?: return null
+            for (i in 0 until bindings.length()) {
+                val binding = bindings.optJSONObject(i) ?: continue
+                val csfdField = binding.optJSONObject("csfdId") ?: continue
+                val value = csfdField.optString("value", null) ?: continue
+                value.toLongOrNull()?.let { return it }
+            }
+            null
+        } catch (e: Exception) {
+            Timber.w(e, "[CsfdRepository] parseWikidataCsfdId failed")
             null
         }
     }
