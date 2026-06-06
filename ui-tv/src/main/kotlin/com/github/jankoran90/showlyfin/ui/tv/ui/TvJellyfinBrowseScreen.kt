@@ -101,23 +101,22 @@ private fun TvLibraryCard(library: JellyfinLibrary, onClick: () -> Unit) {
     ) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)) {
             if (library.imageUrl != null) {
+                // Knihovna má vlastní obrázek (často s názvem zapečeným) → název NEpřekreslujeme (jinak 2×)
                 AsyncImage(
                     model = library.imageUrl,
                     contentDescription = library.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
+            } else {
+                // Bez obrázku → název jako fallback label
+                Text(
+                    text = library.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 12.dp),
+                )
             }
-            Box(
-                Modifier.fillMaxWidth().height(48.dp).align(Alignment.BottomStart)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))),
-            )
-            Text(
-                text = library.name,
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 12.dp, vertical = 8.dp),
-            )
         }
     }
     Spacer(Modifier.height(0.dp))

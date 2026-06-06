@@ -1,182 +1,157 @@
 package com.github.jankoran90.showlyfin.ui.tv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.NavigationDrawer
-import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
-import com.github.jankoran90.showlyfin.ui.tv.TvDestination
-import com.github.jankoran90.showlyfin.ui.tv.TvLibraryRef
+
+/** Jedna položka postranního menu — data-driven, řaditelná. */
+data class TvDrawerEntry(
+    val key: String,
+    val label: String,
+    val icon: ImageVector,
+    val selected: Boolean,
+    val onClick: () -> Unit,
+)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TvNavDrawer(
-    selected: TvDestination,
-    onNavigateHome: () -> Unit,
-    onOpenDiscover: () -> Unit,
-    onOpenWatchlist: () -> Unit,
-    onOpenJellyfin: () -> Unit,
-    onFilterMovies: () -> Unit,
-    onFilterSeries: () -> Unit,
-    onOpenSettings: () -> Unit,
-    pinnedLibraries: List<TvLibraryRef> = emptyList(),
-    onOpenPinnedLibrary: (TvLibraryRef) -> Unit = {},
+    entries: List<TvDrawerEntry>,
+    moveMode: Boolean = false,
+    movingKey: String? = null,
+    onToggleMove: (String) -> Unit = {},
+    onMove: (key: String, up: Boolean) -> Unit = { _, _ -> },
     content: @Composable () -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val isHome = selected is TvDestination.Home
-    val isDiscover = selected is TvDestination.Discover
-    val isWatchlist = selected is TvDestination.Watchlist
-    // "Knihovna" položka aktivní jen pro browse/library mimo připnuté zkratky
-    val pinnedIds = pinnedLibraries.map { it.id }.toSet()
-    val isJellyfin = selected is TvDestination.JellyfinBrowse ||
-        (selected is TvDestination.JellyfinLibrary && selected.libraryId !in pinnedIds)
-    val isMovies = selected is TvDestination.HomeFiltered && selected.mediaType.name == "MOVIE"
-    val isSeries = selected is TvDestination.HomeFiltered && selected.mediaType.name == "SERIES"
-    val isSettings = selected is TvDestination.Settings
 
     NavigationDrawer(
         drawerState = drawerState,
-        drawerContent = { _ ->
+        drawerContent = { drawerValue ->
+            val expanded = drawerValue == DrawerValue.Open
             Column(
                 modifier = Modifier
                     .background(Color(0xFF1A1A2E))
                     .fillMaxHeight()
-                    .padding(vertical = 16.dp, horizontal = 4.dp),
+                    .padding(vertical = 16.dp, horizontal = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                NavigationDrawerItem(
-                    selected = isHome,
-                    onClick = onNavigateHome,
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Default.Home,
-                            contentDescription = "Domů",
-                            tint = if (isHome) Color.White else Color.White.copy(alpha = 0.7f),
-                        )
-                    },
-                ) {
-                    Text("Domů", style = MaterialTheme.typography.bodyMedium)
-                }
-                NavigationDrawerItem(
-                    selected = isDiscover,
-                    onClick = onOpenDiscover,
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Discover",
-                            tint = if (isDiscover) Color.White else Color.White.copy(alpha = 0.7f),
-                        )
-                    },
-                ) {
-                    Text("Discover", style = MaterialTheme.typography.bodyMedium)
-                }
-                NavigationDrawerItem(
-                    selected = isWatchlist,
-                    onClick = onOpenWatchlist,
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Default.Bookmark,
-                            contentDescription = "Watchlist",
-                            tint = if (isWatchlist) Color.White else Color.White.copy(alpha = 0.7f),
-                        )
-                    },
-                ) {
-                    Text("Watchlist", style = MaterialTheme.typography.bodyMedium)
-                }
-                NavigationDrawerItem(
-                    selected = isJellyfin,
-                    onClick = onOpenJellyfin,
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Default.VideoLibrary,
-                            contentDescription = "Knihovna",
-                            tint = if (isJellyfin) Color.White else Color.White.copy(alpha = 0.7f),
-                        )
-                    },
-                ) {
-                    Text("Knihovna", style = MaterialTheme.typography.bodyMedium)
-                }
-                pinnedLibraries.forEach { lib ->
-                    val isPinSelected = selected is TvDestination.JellyfinLibrary &&
-                        selected.libraryId == lib.id
-                    NavigationDrawerItem(
-                        selected = isPinSelected,
-                        onClick = { onOpenPinnedLibrary(lib) },
-                        leadingContent = {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = lib.name,
-                                tint = if (isPinSelected) Color.White else Color.White.copy(alpha = 0.7f),
-                            )
-                        },
-                    ) {
-                        Text(lib.name, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                NavigationDrawerItem(
-                    selected = isMovies,
-                    onClick = onFilterMovies,
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Default.Movie,
-                            contentDescription = "Filmy",
-                            tint = if (isMovies) Color.White else Color.White.copy(alpha = 0.7f),
-                        )
-                    },
-                ) {
-                    Text("Filmy", style = MaterialTheme.typography.bodyMedium)
-                }
-                NavigationDrawerItem(
-                    selected = isSeries,
-                    onClick = onFilterSeries,
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Default.Tv,
-                            contentDescription = "Seriály",
-                            tint = if (isSeries) Color.White else Color.White.copy(alpha = 0.7f),
-                        )
-                    },
-                ) {
-                    Text("Seriály", style = MaterialTheme.typography.bodyMedium)
-                }
-                NavigationDrawerItem(
-                    selected = isSettings,
-                    onClick = onOpenSettings,
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Nastavení",
-                            tint = if (isSettings) Color.White else Color.White.copy(alpha = 0.7f),
-                        )
-                    },
-                ) {
-                    Text("Nastavení", style = MaterialTheme.typography.bodyMedium)
+                entries.forEach { entry ->
+                    DrawerRow(
+                        entry = entry,
+                        expanded = expanded,
+                        moveMode = moveMode,
+                        isMoving = moveMode && movingKey == entry.key,
+                        onToggleMove = { onToggleMove(entry.key) },
+                        onMove = { up -> onMove(entry.key, up) },
+                    )
                 }
             }
         },
     ) {
         content()
+    }
+}
+
+@Composable
+private fun DrawerRow(
+    entry: TvDrawerEntry,
+    expanded: Boolean,
+    moveMode: Boolean,
+    isMoving: Boolean,
+    onToggleMove: () -> Unit,
+    onMove: (up: Boolean) -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+
+    // Při přesunu drží fokus na pohybující se položce (i když změní pozici v seznamu)
+    LaunchedEffect(isMoving) {
+        if (isMoving) runCatching { focusRequester.requestFocus() }
+    }
+
+    val accent = MaterialTheme.colorScheme.primary
+    val bg = when {
+        isMoving -> accent
+        entry.selected -> accent.copy(alpha = 0.28f)
+        focused -> Color.White.copy(alpha = 0.14f)
+        else -> Color.Transparent
+    }
+    val tint = when {
+        isMoving -> Color.Black
+        entry.selected || focused -> Color.White
+        else -> Color.White.copy(alpha = 0.7f)
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .focusRequester(focusRequester)
+            .onFocusChanged { focused = it.isFocused }
+            .onKeyEvent { ke ->
+                if (!isMoving) return@onKeyEvent false
+                if (ke.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (ke.key) {
+                    Key.DirectionUp -> { onMove(true); true }
+                    Key.DirectionDown -> { onMove(false); true }
+                    Key.Back -> { onToggleMove(); true }
+                    else -> false
+                }
+            }
+            .combinedClickable(
+                onClick = { if (isMoving) onToggleMove() else if (!moveMode) entry.onClick() },
+                onLongClick = { if (!moveMode) onToggleMove() },
+            )
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Icon(
+            imageVector = entry.icon,
+            contentDescription = entry.label,
+            tint = tint,
+        )
+        if (expanded) {
+            Spacer(Modifier.width(16.dp))
+            Text(
+                text = if (isMoving) "${entry.label}  ↕" else entry.label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = tint,
+            )
+        }
     }
 }

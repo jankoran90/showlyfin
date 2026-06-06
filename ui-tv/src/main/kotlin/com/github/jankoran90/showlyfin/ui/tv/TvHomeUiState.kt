@@ -14,6 +14,8 @@ data class TvJellyfinItem(
 data class TvHomeRow(
     val title: String,
     val items: List<TvJellyfinItem>,
+    // Stable key pro řazení/přesun řad: "resume" | "nextup" | "lib:<id>"
+    val key: String,
     // Set for per-library rows → enables "Do knihovny" end card navigation
     val libraryId: String? = null,
     val libraryName: String? = null,
@@ -36,4 +38,5 @@ data class TvHomeUiState(
     val filter: BaseItemKind? = null,
     val cardSize: TvCardSize = TvCardSize.MEDIUM,
     val pinnedLibraries: List<TvLibraryRef> = emptyList(),
+    val drawerOrder: List<String> = emptyList(),
 )

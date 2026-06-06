@@ -56,7 +56,13 @@ class TvHomeViewModel @Inject constructor(
     init {
         tvPreferences.state
             .onEach { p ->
-                _state.update { it.copy(cardSize = p.cardSize, pinnedLibraries = p.pinnedLibraries) }
+                _state.update {
+                    it.copy(
+                        cardSize = p.cardSize,
+                        pinnedLibraries = p.pinnedLibraries,
+                        drawerOrder = p.drawerOrder,
+                    )
+                }
                 val key = "${p.showResumeRow}|${p.showNextUp}|${p.showRecentlyAdded}|" +
                     "${p.rowItemLimit}|${p.enabledLibraryIds.sorted()}"
                 if (lastRowPrefsKey != null && lastRowPrefsKey != key) loadItems()
@@ -72,6 +78,29 @@ class TvHomeViewModel @Inject constructor(
     }
 
     fun reload() = loadItems()
+
+    fun setDrawerOrder(order: List<String>) = tvPreferences.setDrawerOrder(order)
+
+    /** Přesun řady na Home nahoru/dolů (move mode) — persist + okamžitě přeskládá state. */
+    fun moveRow(key: String, up: Boolean) {
+        val current = _state.value.rows
+        val idx = current.indexOfFirst { it.key == key }
+        val target = if (up) idx - 1 else idx + 1
+        if (idx < 0 || target !in current.indices) return
+        val reordered = current.toMutableList().apply { add(target, removeAt(idx)) }
+        tvPreferences.setRowOrder(reordered.map { it.key })
+        _state.update { it.copy(rows = reordered) }
+    }
+
+    /** Seřadí řady dle uloženého rowOrder; neznámé klíče (nové řady) zachová na původním místě na konci. */
+    private fun orderRows(rows: List<TvHomeRow>): List<TvHomeRow> {
+        val order = tvPreferences.state.value.rowOrder
+        if (order.isEmpty()) return rows
+        val byKey = rows.associateBy { it.key }
+        val ordered = order.mapNotNull { byKey[it] }
+        val rest = rows.filter { it.key !in order }
+        return ordered + rest
+    }
 
     private fun loadItems() {
         viewModelScope.launch {
@@ -111,7 +140,7 @@ class TvHomeViewModel @Inject constructor(
                             enableTotalRecordCount = false,
                         ).content.items
                     }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                        rows.add(TvHomeRow("Pokračovat v přehrávání", items.map { it.toTvItem(serverUrl, token) }))
+                        rows.add(TvHomeRow("Pokračovat v přehrávání", items.map { it.toTvItem(serverUrl, token) }, key = "resume"))
                     }
                 }
 
@@ -125,7 +154,7 @@ class TvHomeViewModel @Inject constructor(
                             enableTotalRecordCount = false,
                         ).content.items
                     }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                        rows.add(TvHomeRow("Pokračovat v seriálech", items.map { it.toTvItem(serverUrl, token) }))
+                        rows.add(TvHomeRow("Pokračovat v seriálech", items.map { it.toTvItem(serverUrl, token) }, key = "nextup"))
                     }
                 }
 
@@ -155,6 +184,7 @@ class TvHomeViewModel @Inject constructor(
                                 TvHomeRow(
                                     title = "Nejnovější: ${view.name}",
                                     items = items.map { it.toTvItem(serverUrl, token) },
+                                    key = "lib:$viewId",
                                     libraryId = viewId,
                                     libraryName = view.name ?: "",
                                     collectionType = view.collectionType?.name,
@@ -164,7 +194,7 @@ class TvHomeViewModel @Inject constructor(
                     }
                 }
 
-                _state.update { it.copy(isLoading = false, rows = rows) }
+                _state.update { it.copy(isLoading = false, rows = orderRows(rows)) }
                 if (!socketSetup) {
                     socketSetup = true
                     setupPlayMessages()

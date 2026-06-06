@@ -111,6 +111,7 @@ private fun LibraryCard(library: JellyfinLibrary, onClick: () -> Unit) {
         Box(Modifier.fillMaxSize()) {
             val img = library.imageUrl
             if (img != null) {
+                // Knihovna má vlastní obrázek (často s názvem zapečeným) → název NEpřekreslujeme (jinak 2×)
                 AsyncImage(
                     model = img,
                     contentDescription = library.name,
@@ -118,6 +119,7 @@ private fun LibraryCard(library: JellyfinLibrary, onClick: () -> Unit) {
                     contentScale = ContentScale.Crop,
                 )
             } else {
+                // Bez obrázku → folder ikona + název jako fallback label
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -130,28 +132,28 @@ private fun LibraryCard(library: JellyfinLibrary, onClick: () -> Unit) {
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .align(Alignment.BottomStart)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .align(Alignment.BottomStart)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
+                            ),
                         ),
-                    ),
-            )
-            Text(
-                text = library.name,
-                color = Color.White,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-            )
+                )
+                Text(
+                    text = library.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+            }
         }
     }
 }

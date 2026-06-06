@@ -16,6 +16,11 @@ private const val KEY_SHOW_RESUME = "show_resume"
 private const val KEY_ROW_ITEM_LIMIT = "row_item_limit"
 private const val KEY_ENABLED_LIBRARIES = "enabled_libraries"
 private const val KEY_PINNED_LIBRARIES = "pinned_libraries"
+private const val KEY_DRAWER_ORDER = "drawer_order"
+private const val KEY_ROW_ORDER = "row_order"
+
+// Ordered key lists ukládáme jako jeden string spojený \n (klíče nikdy neobsahují newline)
+private const val ORDER_SEP = "\n"
 
 // Encoded entry "id<US>name<US>collectionType" — unit separator (0x1F) unlikely in library names
 private const val PIN_SEP = "\\u001F"
@@ -24,9 +29,10 @@ const val DEFAULT_ROW_ITEM_LIMIT = 20
 val ROW_ITEM_LIMITS = listOf(10, 20, 30, 50)
 
 enum class TvCardSize(val widthDp: Int, val displayName: String) {
-    SMALL(120, "Malé"),
-    MEDIUM(160, "Střední"),
-    LARGE(200, "Velké");
+    // ~10 % zmenšeno (TV-HOME-3) ať se vejde stálý postranní rail
+    SMALL(108, "Malé"),
+    MEDIUM(144, "Střední"),
+    LARGE(180, "Velké");
 
     companion object {
         fun fromName(name: String?): TvCardSize =
@@ -42,6 +48,10 @@ data class TvDisplayPrefs(
     val rowItemLimit: Int = DEFAULT_ROW_ITEM_LIMIT,
     val enabledLibraryIds: Set<String> = emptySet(),
     val pinnedLibraries: List<TvLibraryRef> = emptyList(),
+    // Ordered klíče pro drawer položky (home/discover/watchlist/library/movies/series/settings + pin:<id>)
+    val drawerOrder: List<String> = emptyList(),
+    // Ordered klíče pro Home řady (resume/nextup/lib:<id>)
+    val rowOrder: List<String> = emptyList(),
 )
 
 @Singleton
@@ -61,7 +71,12 @@ class TvPreferences @Inject constructor(
         rowItemLimit = prefs.getInt(KEY_ROW_ITEM_LIMIT, DEFAULT_ROW_ITEM_LIMIT),
         enabledLibraryIds = prefs.getStringSet(KEY_ENABLED_LIBRARIES, emptySet())?.toSet() ?: emptySet(),
         pinnedLibraries = prefs.getStringSet(KEY_PINNED_LIBRARIES, emptySet()).orEmpty().mapNotNull(::decodePin),
+        drawerOrder = prefs.getString(KEY_DRAWER_ORDER, null).toOrderList(),
+        rowOrder = prefs.getString(KEY_ROW_ORDER, null).toOrderList(),
     )
+
+    private fun String?.toOrderList(): List<String> =
+        this?.split(ORDER_SEP)?.filter { it.isNotBlank() } ?: emptyList()
 
     fun setCardSize(size: TvCardSize) {
         prefs.edit().putString(KEY_CARD_SIZE, size.name).apply()
@@ -114,6 +129,16 @@ class TvPreferences @Inject constructor(
 
     fun isLibraryPinned(libraryId: String): Boolean =
         _state.value.pinnedLibraries.any { it.id == libraryId }
+
+    fun setDrawerOrder(order: List<String>) {
+        prefs.edit().putString(KEY_DRAWER_ORDER, order.joinToString(ORDER_SEP)).apply()
+        _state.value = _state.value.copy(drawerOrder = order)
+    }
+
+    fun setRowOrder(order: List<String>) {
+        prefs.edit().putString(KEY_ROW_ORDER, order.joinToString(ORDER_SEP)).apply()
+        _state.value = _state.value.copy(rowOrder = order)
+    }
 
     private fun encodePin(ref: TvLibraryRef): String =
         listOf(ref.id, ref.name, ref.collectionType ?: "").joinToString(PIN_SEP)

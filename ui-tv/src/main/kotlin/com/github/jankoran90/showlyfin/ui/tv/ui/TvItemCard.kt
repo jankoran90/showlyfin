@@ -33,6 +33,12 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,6 +59,11 @@ fun TvItemCard(
     inLibrary: Boolean = true,
     cardSize: TvCardSize = TvCardSize.MEDIUM,
     onFocused: () -> Unit = {},
+    // Move mode (řazení řad): long-press = vstup, v režimu ↑/↓ posune řadu, OK potvrdí
+    moveActive: Boolean = false,
+    onLongPress: () -> Unit = {},
+    onMoveKey: (up: Boolean) -> Unit = {},
+    onMoveCommit: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -66,11 +77,16 @@ fun TvItemCard(
         label = "tv-card-title-alpha",
     )
     val accent = MaterialTheme.colorScheme.primary
-    val borderColor = if (focused) accent else Color.Transparent
-    val elevation = if (focused) 18.dp else 4.dp
+    val moveColor = Color(0xFFFFD24A)
+    val borderColor = when {
+        moveActive -> moveColor
+        focused -> accent
+        else -> Color.Transparent
+    }
+    val elevation = if (focused || moveActive) 18.dp else 4.dp
 
     Card(
-        onClick = onClick,
+        onClick = { if (moveActive) onMoveCommit() else onClick() },
         modifier = modifier
             .width(cardSize.widthDp.dp)
             .aspectRatio(2f / 3f)
@@ -80,7 +96,21 @@ fun TvItemCard(
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
             }
-            .border(width = 3.dp, color = borderColor, shape = RoundedCornerShape(12.dp))
+            .onKeyEvent { ke ->
+                if (ke.type != KeyEventType.KeyDown) return@onKeyEvent false
+                if (moveActive) {
+                    when (ke.key) {
+                        Key.DirectionUp -> { onMoveKey(true); true }
+                        Key.DirectionDown -> { onMoveKey(false); true }
+                        else -> false
+                    }
+                } else if (ke.key == Key.DirectionCenter && ke.nativeKeyEvent.isLongPress) {
+                    onLongPress(); true
+                } else {
+                    false
+                }
+            }
+            .border(width = if (moveActive) 4.dp else 3.dp, color = borderColor, shape = RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp)),
     ) {
         Box(Modifier.fillMaxSize()) {

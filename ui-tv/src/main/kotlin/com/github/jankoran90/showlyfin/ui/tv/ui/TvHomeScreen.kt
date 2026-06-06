@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.ui.tv.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -59,12 +60,16 @@ fun TvHomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val firstRowFocus = remember { FocusRequester() }
     var backdropUrl by remember { mutableStateOf<String?>(null) }
+    var movingRowKey by remember { mutableStateOf<String?>(null) }
 
+    // Při přesunu řady NEpřebírat fokus na první řadu (jinak by změna pořadí ztratila fokus)
     LaunchedEffect(state.rows) {
-        if (state.rows.isNotEmpty()) {
+        if (state.rows.isNotEmpty() && movingRowKey == null) {
             runCatching { firstRowFocus.requestFocus() }
         }
     }
+
+    BackHandler(enabled = movingRowKey != null) { movingRowKey = null }
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -145,7 +150,7 @@ fun TvHomeScreen(
                             contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
                             verticalArrangement = Arrangement.spacedBy(32.dp),
                         ) {
-                            itemsIndexed(state.rows) { index, row ->
+                            itemsIndexed(state.rows, key = { _, row -> row.key }) { index, row ->
                                 // Uvnitř řady obnovit default spec → horizontální LazyRow nescrolluje vertikálně
                                 CompositionLocalProvider(
                                     LocalBringIntoViewSpec provides defaultBringIntoViewSpec,
@@ -156,6 +161,10 @@ fun TvHomeScreen(
                                         cardSize = state.cardSize,
                                         onItemFocused = { item -> backdropUrl = item.backdropUrl ?: item.imageUrl },
                                         onOpenLibrary = onOpenLibrary,
+                                        isMoving = movingRowKey == row.key,
+                                        onLongPressRow = { movingRowKey = row.key },
+                                        onMoveRow = { up -> viewModel.moveRow(row.key, up) },
+                                        onCommitMove = { movingRowKey = null },
                                         firstItemFocusRequester = if (index == 0) firstRowFocus else null,
                                     )
                                 }
@@ -176,12 +185,17 @@ private fun TvContentRow(
     cardSize: TvCardSize,
     onItemFocused: (com.github.jankoran90.showlyfin.ui.tv.TvJellyfinItem) -> Unit = {},
     onOpenLibrary: (libraryId: String, name: String, collectionType: String?) -> Unit = { _, _, _ -> },
+    isMoving: Boolean = false,
+    onLongPressRow: () -> Unit = {},
+    onMoveRow: (up: Boolean) -> Unit = {},
+    onCommitMove: () -> Unit = {},
     firstItemFocusRequester: FocusRequester? = null,
 ) {
+    val moveColor = Color(0xFFFFD24A)
     Column {
         Text(
-            text = row.title,
-            color = Color.White,
+            text = if (isMoving) "↕  ${row.title}   (↑/↓ posunout · OK hotovo)" else row.title,
+            color = if (isMoving) moveColor else Color.White,
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 48.dp, vertical = 8.dp),
         )
@@ -198,6 +212,10 @@ private fun TvContentRow(
                     cardSize = cardSize,
                     inLibrary = false, // Home = Jellyfin obsah → badge nemá smysl (jen u Trakt výsledků)
                     onFocused = { onItemFocused(item) },
+                    moveActive = isMoving,
+                    onLongPress = onLongPressRow,
+                    onMoveKey = onMoveRow,
+                    onMoveCommit = onCommitMove,
                     modifier = if (isFirst) Modifier.focusRequester(firstItemFocusRequester!!) else Modifier,
                 )
             }

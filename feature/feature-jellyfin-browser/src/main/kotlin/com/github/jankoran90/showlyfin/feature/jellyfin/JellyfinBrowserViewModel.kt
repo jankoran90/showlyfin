@@ -20,6 +20,7 @@ import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
+import org.jellyfin.sdk.model.api.ImageType
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -126,11 +127,18 @@ class JellyfinBrowserViewModel @Inject constructor(
             val views = jellyfinApiClient.userViewsApi.getUserViews(userId = userUuid).content
             val libraries = views.items.map { view ->
                 val viewId = view.id.toString()
+                // Knihovní Primary obrázky mají často název zapečený v sobě (self-labeling).
+                // imageUrl jen když Primary existuje → karta pak nekreslí náš text overlay (jinak dvojitý název).
+                val hasPrimary = view.imageTags?.containsKey(ImageType.PRIMARY) == true
                 JellyfinLibrary(
                     id = viewId,
                     name = view.name ?: "Knihovna",
                     collectionType = view.collectionType?.name,
-                    imageUrl = "$serverUrl/Items/$viewId/Images/Primary?fillWidth=400&quality=85&api_key=$token",
+                    imageUrl = if (hasPrimary) {
+                        "$serverUrl/Items/$viewId/Images/Primary?fillWidth=400&quality=85&api_key=$token"
+                    } else {
+                        null
+                    },
                 )
             }
             _uiState.update { it.copy(libraries = libraries, isLoading = false, isConnected = true) }
