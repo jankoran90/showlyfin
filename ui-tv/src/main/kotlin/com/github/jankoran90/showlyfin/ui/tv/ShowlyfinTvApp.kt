@@ -21,10 +21,13 @@ import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.tv.setup.TvProfilePickerScreen
 import com.github.jankoran90.showlyfin.ui.tv.setup.TvServerSetupScreen
 import com.github.jankoran90.showlyfin.ui.tv.theme.ShowlyfinTvTheme
+import com.github.jankoran90.showlyfin.ui.tv.ui.TvDetailScreen
+import com.github.jankoran90.showlyfin.ui.tv.ui.TvDiscoverScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinSetupScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvNavDrawer
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvSettingsScreen
+import com.github.jankoran90.showlyfin.ui.tv.ui.TvWatchlistScreen
 import org.jellyfin.sdk.model.api.BaseItemKind
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -80,13 +83,16 @@ fun ShowlyfinTvApp(
 
     ShowlyfinTvTheme {
         when (val dest = currentDestination) {
-            is TvDestination.Home, is TvDestination.HomeFiltered, is TvDestination.Settings -> {
+            is TvDestination.Home, is TvDestination.HomeFiltered, is TvDestination.Settings,
+            is TvDestination.Discover, is TvDestination.Watchlist -> {
                 TvNavDrawer(
                     selected = dest,
                     onNavigateHome = {
                         viewModel.setFilter(null)
                         currentDestination = TvDestination.Home
                     },
+                    onOpenDiscover = { currentDestination = TvDestination.Discover },
+                    onOpenWatchlist = { currentDestination = TvDestination.Watchlist },
                     onFilterMovies = {
                         viewModel.setFilter(BaseItemKind.MOVIE)
                         currentDestination = TvDestination.HomeFiltered(BaseItemKind.MOVIE)
@@ -107,6 +113,18 @@ fun ShowlyfinTvApp(
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
+                        is TvDestination.Discover -> TvDiscoverScreen(
+                            onItemClick = { mediaItem ->
+                                currentDestination = TvDestination.Detail(mediaItem)
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        is TvDestination.Watchlist -> TvWatchlistScreen(
+                            onItemClick = { mediaItem ->
+                                currentDestination = TvDestination.Detail(mediaItem)
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
                         else -> TvHomeScreen(
                             onItemClick = { itemId ->
                                 currentDestination = TvDestination.Playback(itemId)
@@ -119,6 +137,16 @@ fun ShowlyfinTvApp(
                         )
                     }
                 }
+            }
+            is TvDestination.Detail -> {
+                TvDetailScreen(
+                    item = dest.item,
+                    onPlayJellyfin = { itemId ->
+                        currentDestination = TvDestination.Playback(itemId)
+                    },
+                    onBack = { currentDestination = TvDestination.Discover },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             is TvDestination.Setup -> {
                 TvJellyfinSetupScreen(

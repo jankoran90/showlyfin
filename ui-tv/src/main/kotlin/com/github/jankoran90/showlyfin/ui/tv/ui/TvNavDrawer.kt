@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
@@ -29,6 +31,8 @@ import com.github.jankoran90.showlyfin.ui.tv.TvDestination
 fun TvNavDrawer(
     selected: TvDestination,
     onNavigateHome: () -> Unit,
+    onOpenDiscover: () -> Unit,
+    onOpenWatchlist: () -> Unit,
     onFilterMovies: () -> Unit,
     onFilterSeries: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -36,6 +40,8 @@ fun TvNavDrawer(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val isHome = selected is TvDestination.Home
+    val isDiscover = selected is TvDestination.Discover
+    val isWatchlist = selected is TvDestination.Watchlist
     val isMovies = selected is TvDestination.HomeFiltered && selected.mediaType.name == "MOVIE"
     val isSeries = selected is TvDestination.HomeFiltered && selected.mediaType.name == "SERIES"
     val isSettings = selected is TvDestination.Settings
@@ -62,6 +68,32 @@ fun TvNavDrawer(
                     },
                 ) {
                     Text("Domů", style = MaterialTheme.typography.bodyMedium)
+                }
+                NavigationDrawerItem(
+                    selected = isDiscover,
+                    onClick = onOpenDiscover,
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Discover",
+                            tint = if (isDiscover) Color.White else Color.White.copy(alpha = 0.7f),
+                        )
+                    },
+                ) {
+                    Text("Discover", style = MaterialTheme.typography.bodyMedium)
+                }
+                NavigationDrawerItem(
+                    selected = isWatchlist,
+                    onClick = onOpenWatchlist,
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Bookmark,
+                            contentDescription = "Watchlist",
+                            tint = if (isWatchlist) Color.White else Color.White.copy(alpha = 0.7f),
+                        )
+                    },
+                ) {
+                    Text("Watchlist", style = MaterialTheme.typography.bodyMedium)
                 }
                 NavigationDrawerItem(
                     selected = isMovies,
