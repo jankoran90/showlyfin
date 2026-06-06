@@ -1,0 +1,56 @@
+package com.github.jankoran90.showlyfin.ui.phone
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class ProfileGateState(
+    val isLoading: Boolean = true,
+    val profiles: List<ProfileEntity> = emptyList(),
+    val activeProfile: ProfileEntity? = null,
+    val isAddingProfile: Boolean = false,
+)
+
+@HiltViewModel
+class ProfileGateViewModel @Inject constructor(
+    private val profileRepository: ProfileRepository,
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(ProfileGateState())
+    val state: StateFlow<ProfileGateState> = _state.asStateFlow()
+
+    init {
+        profileRepository.observeAll()
+            .combine(profileRepository.activeProfile) { profiles, active -> profiles to active }
+            .onEach { (profiles, active) ->
+                _state.value = _state.value.copy(
+                    profiles = profiles,
+                    activeProfile = active,
+                    isLoading = false,
+                )
+            }
+            .launchIn(viewModelScope)
+    }
+
+    fun selectProfile(profile: ProfileEntity) {
+        viewModelScope.launch { profileRepository.setActive(profile.id) }
+    }
+
+    fun startAddProfile() {
+        _state.value = _state.value.copy(isAddingProfile = true)
+    }
+
+    fun cancelAddProfile() {
+        _state.value = _state.value.copy(isAddingProfile = false)
+    }
+}

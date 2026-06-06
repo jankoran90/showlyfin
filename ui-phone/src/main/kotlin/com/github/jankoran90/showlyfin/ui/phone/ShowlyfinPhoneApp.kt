@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -26,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +66,8 @@ import com.github.jankoran90.showlyfin.feature.uploader.MoveStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.ReviewStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderScreen
 import com.github.jankoran90.showlyfin.feature.watchlist.ui.WatchlistScreen
+import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfilePickerScreen
+import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ServerSetupScreen
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
 
 private sealed interface Destination {
@@ -124,6 +128,35 @@ private val bottomTabs = listOf(
 @Composable
 fun ShowlyfinPhoneApp() {
     ShowlyfinPhoneTheme {
+        val gateViewModel: ProfileGateViewModel = hiltViewModel()
+        val gateState by gateViewModel.state.collectAsStateWithLifecycle()
+
+        if (gateState.isLoading) {
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxSize(),
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) { CircularProgressIndicator() }
+            return@ShowlyfinPhoneTheme
+        }
+
+        if (gateState.isAddingProfile || gateState.profiles.isEmpty()) {
+            ServerSetupScreen(
+                onDone = { gateViewModel.cancelAddProfile() },
+                modifier = Modifier.fillMaxSize(),
+            )
+            return@ShowlyfinPhoneTheme
+        }
+
+        if (gateState.activeProfile == null) {
+            ProfilePickerScreen(
+                profiles = gateState.profiles,
+                onProfileSelected = { gateViewModel.selectProfile(it) },
+                onAddProfile = { gateViewModel.startAddProfile() },
+                modifier = Modifier.fillMaxSize(),
+            )
+            return@ShowlyfinPhoneTheme
+        }
+
         var currentDestination by remember { mutableStateOf<Destination>(Destination.Discover) }
         var bottomTab by remember { mutableStateOf<Destination>(Destination.Discover) }
         val context = LocalContext.current
