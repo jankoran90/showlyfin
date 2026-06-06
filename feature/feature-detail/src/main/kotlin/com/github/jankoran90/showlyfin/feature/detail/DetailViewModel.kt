@@ -29,10 +29,11 @@ class DetailViewModel @Inject constructor(
 
     fun load(item: MediaItem) {
         if (_uiState.value.item?.traktId == item.traktId) return
-        _uiState.update { it.copy(item = item, isLoading = true) }
+        _uiState.update { it.copy(item = item, isLoading = true, isCsfdLoading = item.type == MediaType.MOVIE) }
         viewModelScope.launch {
             try {
                 val tmdbId = item.tmdbId
+                var resolvedCzTitle: String? = item.titleCz?.takeIf { it.isNotBlank() }
                 if (tmdbId != null) {
                     if (item.type == MediaType.MOVIE) {
                         coroutineScope {
@@ -40,11 +41,13 @@ class DetailViewModel @Inject constructor(
                             val translationDeferred = async { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }
                             val details = detailsDeferred.await()
                             val translation = translationDeferred.await()
+                            val tmdbCzTitle = translation?.title?.takeIf { it.isNotBlank() }
+                            if (tmdbCzTitle != null) resolvedCzTitle = tmdbCzTitle
                             _uiState.update {
                                 it.copy(
                                     movieDetails = details,
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
-                                    tmdbCzTitle = translation?.title?.takeIf { t -> t.isNotBlank() },
+                                    tmdbCzTitle = tmdbCzTitle,
                                     item = item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path),
                                     isLoading = false,
                                 )
@@ -62,11 +65,13 @@ class DetailViewModel @Inject constructor(
                             val translationDeferred = async { tmdbApi.fetchShowTranslation(tmdbId, "cs") }
                             val details = detailsDeferred.await()
                             val translation = translationDeferred.await()
+                            val tmdbCzTitle = translation?.name?.takeIf { it.isNotBlank() }
+                            if (tmdbCzTitle != null) resolvedCzTitle = tmdbCzTitle
                             _uiState.update {
                                 it.copy(
                                     showDetails = details,
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
-                                    tmdbCzTitle = translation?.name?.takeIf { t -> t.isNotBlank() },
+                                    tmdbCzTitle = tmdbCzTitle,
                                     item = item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path),
                                     isLoading = false,
                                 )
@@ -76,43 +81,51 @@ class DetailViewModel @Inject constructor(
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
                 }
+                if (item.type == MediaType.MOVIE) {
+                    loadCsfd(item, resolvedCzTitle)
+                }
             } catch (e: Throwable) {
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+                _uiState.update { it.copy(isLoading = false, isCsfdLoading = false, error = e.message) }
             }
         }
-        loadCsfd(item)
     }
 
-    private fun loadCsfd(item: MediaItem) {
-        if (item.type != MediaType.MOVIE) return
-        val title = item.title.ifBlank { return }
+    private suspend fun loadCsfd(item: MediaItem, czTitle: String?) {
+        val titles = buildList {
+            czTitle?.takeIf { it.isNotBlank() }?.let { add(it) }
+            item.title.takeIf { it.isNotBlank() }?.let { if (!contains(it)) add(it) }
+        }
         val year = item.year ?: 0
         val imdbId = item.imdbId.orEmpty()
-        if (imdbId.isBlank() && title.isBlank()) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isCsfdLoading = true) }
-            try {
-                val csfdId = csfdRepository.getCsfdId(imdbId, title, year) ?: run {
-                    _uiState.update { it.copy(isCsfdLoading = false) }
-                    return@launch
-                }
-                _uiState.update { it.copy(csfdId = csfdId) }
-                coroutineScope {
-                    val plotDeferred = async { csfdRepository.getCzechPlot(csfdId) }
-                    val ratingDeferred = async { csfdScraper.scrapeRating(csfdId) }
-                    val reviewsDeferred = async { csfdScraper.scrapeReviews(csfdId).take(3) }
-                    _uiState.update {
-                        it.copy(
-                            csfdPlot = plotDeferred.await(),
-                            csfdRating = ratingDeferred.await(),
-                            csfdReviews = reviewsDeferred.await(),
-                            isCsfdLoading = false,
-                        )
-                    }
-                }
-            } catch (e: Throwable) {
-                _uiState.update { it.copy(isCsfdLoading = false) }
+        try {
+            var csfdId: Long? = null
+            for (title in titles) {
+                csfdId = csfdRepository.getCsfdId(imdbId, title, year)
+                if (csfdId != null) break
             }
+            if (csfdId == null && imdbId.isNotBlank()) {
+                csfdId = csfdRepository.getCsfdId(imdbId, "", year)
+            }
+            if (csfdId == null) {
+                _uiState.update { it.copy(isCsfdLoading = false) }
+                return
+            }
+            _uiState.update { it.copy(csfdId = csfdId) }
+            coroutineScope {
+                val plotDeferred = async { csfdRepository.getCzechPlot(csfdId) }
+                val ratingDeferred = async { csfdScraper.scrapeRating(csfdId) }
+                val reviewsDeferred = async { csfdScraper.scrapeReviews(csfdId).take(3) }
+                _uiState.update {
+                    it.copy(
+                        csfdPlot = plotDeferred.await(),
+                        csfdRating = ratingDeferred.await(),
+                        csfdReviews = reviewsDeferred.await(),
+                        isCsfdLoading = false,
+                    )
+                }
+            }
+        } catch (e: Throwable) {
+            _uiState.update { it.copy(isCsfdLoading = false) }
         }
     }
 }
