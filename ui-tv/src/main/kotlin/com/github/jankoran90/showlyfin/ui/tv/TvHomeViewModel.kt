@@ -56,8 +56,9 @@ class TvHomeViewModel @Inject constructor(
     init {
         tvPreferences.state
             .onEach { p ->
-                _state.update { it.copy(cardSize = p.cardSize) }
-                val key = "${p.showNextUp}|${p.showRecentlyAdded}|${p.enabledLibraryIds.sorted()}"
+                _state.update { it.copy(cardSize = p.cardSize, pinnedLibraries = p.pinnedLibraries) }
+                val key = "${p.showResumeRow}|${p.showNextUp}|${p.showRecentlyAdded}|" +
+                    "${p.rowItemLimit}|${p.enabledLibraryIds.sorted()}"
                 if (lastRowPrefsKey != null && lastRowPrefsKey != key) loadItems()
                 lastRowPrefsKey = key
             }
@@ -97,12 +98,14 @@ class TvHomeViewModel @Inject constructor(
                 val display = tvPreferences.state.value
                 val fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO)
 
-                // Resume (Continue Watching) — only on unfiltered Home
-                if (filter == null) {
+                val rowLimit = display.rowItemLimit
+
+                // Resume (Continue Watching) — only on unfiltered Home, toggle controlled
+                if (filter == null && display.showResumeRow) {
                     runCatching {
                         apiClient.itemsApi.getResumeItems(
                             userId = userUuid,
-                            limit = 20,
+                            limit = rowLimit,
                             fields = fields,
                             mediaTypes = listOf(MediaType.VIDEO),
                             enableTotalRecordCount = false,
@@ -117,7 +120,7 @@ class TvHomeViewModel @Inject constructor(
                     runCatching {
                         apiClient.tvShowsApi.getNextUp(
                             userId = userUuid,
-                            limit = 20,
+                            limit = rowLimit,
                             fields = fields,
                             enableTotalRecordCount = false,
                         ).content.items
@@ -145,10 +148,18 @@ class TvHomeViewModel @Inject constructor(
                                 userId = userUuid,
                                 parentId = view.id,
                                 fields = fields,
-                                limit = 20,
+                                limit = rowLimit,
                             ).content
                         }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                            rows.add(TvHomeRow("Nejnovější: ${view.name}", items.map { it.toTvItem(serverUrl, token) }))
+                            rows.add(
+                                TvHomeRow(
+                                    title = "Nejnovější: ${view.name}",
+                                    items = items.map { it.toTvItem(serverUrl, token) },
+                                    libraryId = viewId,
+                                    libraryName = view.name ?: "",
+                                    collectionType = view.collectionType?.name,
+                                ),
+                            )
                         }
                     }
                 }

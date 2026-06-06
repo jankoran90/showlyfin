@@ -77,6 +77,7 @@ fun ShowlyfinTvApp(
     }
 
     var currentDestination by remember { mutableStateOf<TvDestination>(TvDestination.Home) }
+    val homeState by viewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.playEvents.collect { event ->
@@ -120,6 +121,15 @@ fun ShowlyfinTvApp(
                         currentDestination = TvDestination.HomeFiltered(BaseItemKind.SERIES)
                     },
                     onOpenSettings = { currentDestination = TvDestination.Settings },
+                    pinnedLibraries = homeState.pinnedLibraries,
+                    onOpenPinnedLibrary = { lib ->
+                        currentDestination = TvDestination.JellyfinLibrary(
+                            libraryId = lib.id,
+                            libraryName = lib.name,
+                            collectionType = lib.collectionType,
+                            parent = TvDestination.Home,
+                        )
+                    },
                 ) {
                     when (dest) {
                         is TvDestination.Settings -> TvSettingsScreen(
@@ -158,6 +168,14 @@ fun ShowlyfinTvApp(
                                 currentDestination = TvDestination.JellyfinDetail(itemId, parent = dest)
                             },
                             onOpenSetup = { currentDestination = TvDestination.Setup },
+                            onOpenLibrary = { libId, name, ct ->
+                                currentDestination = TvDestination.JellyfinLibrary(
+                                    libraryId = libId,
+                                    libraryName = name,
+                                    collectionType = ct,
+                                    parent = dest,
+                                )
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(Color(0xFF07071A)),

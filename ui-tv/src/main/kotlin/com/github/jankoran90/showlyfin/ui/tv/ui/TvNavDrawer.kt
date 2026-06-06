@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.github.jankoran90.showlyfin.ui.tv.TvDestination
+import com.github.jankoran90.showlyfin.ui.tv.TvLibraryRef
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -38,13 +40,18 @@ fun TvNavDrawer(
     onFilterMovies: () -> Unit,
     onFilterSeries: () -> Unit,
     onOpenSettings: () -> Unit,
+    pinnedLibraries: List<TvLibraryRef> = emptyList(),
+    onOpenPinnedLibrary: (TvLibraryRef) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val isHome = selected is TvDestination.Home
     val isDiscover = selected is TvDestination.Discover
     val isWatchlist = selected is TvDestination.Watchlist
-    val isJellyfin = selected is TvDestination.JellyfinBrowse || selected is TvDestination.JellyfinLibrary
+    // "Knihovna" položka aktivní jen pro browse/library mimo připnuté zkratky
+    val pinnedIds = pinnedLibraries.map { it.id }.toSet()
+    val isJellyfin = selected is TvDestination.JellyfinBrowse ||
+        (selected is TvDestination.JellyfinLibrary && selected.libraryId !in pinnedIds)
     val isMovies = selected is TvDestination.HomeFiltered && selected.mediaType.name == "MOVIE"
     val isSeries = selected is TvDestination.HomeFiltered && selected.mediaType.name == "SERIES"
     val isSettings = selected is TvDestination.Settings
@@ -110,6 +117,23 @@ fun TvNavDrawer(
                     },
                 ) {
                     Text("Knihovna", style = MaterialTheme.typography.bodyMedium)
+                }
+                pinnedLibraries.forEach { lib ->
+                    val isPinSelected = selected is TvDestination.JellyfinLibrary &&
+                        selected.libraryId == lib.id
+                    NavigationDrawerItem(
+                        selected = isPinSelected,
+                        onClick = { onOpenPinnedLibrary(lib) },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = lib.name,
+                                tint = if (isPinSelected) Color.White else Color.White.copy(alpha = 0.7f),
+                            )
+                        },
+                    ) {
+                        Text(lib.name, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
                 NavigationDrawerItem(
                     selected = isMovies,

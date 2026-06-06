@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -50,6 +52,7 @@ import com.github.jankoran90.showlyfin.ui.tv.TvHomeViewModel
 fun TvHomeScreen(
     onItemClick: (itemId: String) -> Unit,
     onOpenSetup: () -> Unit,
+    onOpenLibrary: (libraryId: String, name: String, collectionType: String?) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: TvHomeViewModel = hiltViewModel(),
 ) {
@@ -152,6 +155,7 @@ fun TvHomeScreen(
                                         onItemClick = onItemClick,
                                         cardSize = state.cardSize,
                                         onItemFocused = { item -> backdropUrl = item.backdropUrl ?: item.imageUrl },
+                                        onOpenLibrary = onOpenLibrary,
                                         firstItemFocusRequester = if (index == 0) firstRowFocus else null,
                                     )
                                 }
@@ -171,6 +175,7 @@ private fun TvContentRow(
     onItemClick: (String) -> Unit,
     cardSize: TvCardSize,
     onItemFocused: (com.github.jankoran90.showlyfin.ui.tv.TvJellyfinItem) -> Unit = {},
+    onOpenLibrary: (libraryId: String, name: String, collectionType: String?) -> Unit = { _, _, _ -> },
     firstItemFocusRequester: FocusRequester? = null,
 ) {
     Column {
@@ -195,6 +200,22 @@ private fun TvContentRow(
                     onFocused = { onItemFocused(item) },
                     modifier = if (isFirst) Modifier.focusRequester(firstItemFocusRequester!!) else Modifier,
                 )
+            }
+            // Per-library řada → poslední karta "Do knihovny" otevře celou knihovnu
+            val libId = row.libraryId
+            if (libId != null) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .width(cardSize.widthDp.dp)
+                            .aspectRatio(2f / 3f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Button(onClick = { onOpenLibrary(libId, row.libraryName ?: row.title, row.collectionType) }) {
+                            Text("Do knihovny →")
+                        }
+                    }
+                }
             }
         }
     }

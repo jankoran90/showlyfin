@@ -41,6 +41,7 @@ import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 import com.github.jankoran90.showlyfin.data.trakt.TraktDeviceAuthManager
 import com.github.jankoran90.showlyfin.data.trakt.TraktDevicePollResult
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
+import com.github.jankoran90.showlyfin.ui.tv.ROW_ITEM_LIMITS
 import com.github.jankoran90.showlyfin.ui.tv.TvCardSize
 import com.github.jankoran90.showlyfin.ui.tv.TvDisplayPrefs
 import com.github.jankoran90.showlyfin.ui.tv.TvLibraryRef
@@ -135,10 +136,13 @@ class TvSettingsViewModel @Inject constructor(
     }
 
     fun setCardSize(size: TvCardSize) = tvPreferences.setCardSize(size)
+    fun setShowResumeRow(value: Boolean) = tvPreferences.setShowResumeRow(value)
     fun setShowNextUp(value: Boolean) = tvPreferences.setShowNextUp(value)
     fun setShowRecentlyAdded(value: Boolean) = tvPreferences.setShowRecentlyAdded(value)
+    fun setRowItemLimit(value: Int) = tvPreferences.setRowItemLimit(value)
     fun toggleLibrary(libraryId: String) = tvPreferences.toggleLibrary(libraryId)
     fun isLibraryEnabled(libraryId: String): Boolean = tvPreferences.isLibraryEnabled(libraryId)
+    fun togglePinLibrary(ref: TvLibraryRef) = tvPreferences.togglePinnedLibrary(ref)
 
     fun startTraktLogin() {
         if (_state.value.traktUserCode != null) return
@@ -351,12 +355,27 @@ fun TvSettingsScreen(
             }
 
             Spacer(Modifier.height(8.dp))
+            Text("Řady na domovské obrazovce", color = Color.White.copy(alpha = 0.85f))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { viewModel.setShowResumeRow(!display.showResumeRow) }) {
+                    Text(if (display.showResumeRow) "✓ Pokračovat v přehrávání" else "Pokračovat v přehrávání")
+                }
                 Button(onClick = { viewModel.setShowRecentlyAdded(!display.showRecentlyAdded) }) {
                     Text(if (display.showRecentlyAdded) "✓ Nedávno přidané" else "Nedávno přidané")
                 }
                 Button(onClick = { viewModel.setShowNextUp(!display.showNextUp) }) {
                     Text(if (display.showNextUp) "✓ Pokračovat (Next Up)" else "Pokračovat (Next Up)")
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text("Počet položek v řadě", color = Color.White.copy(alpha = 0.85f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ROW_ITEM_LIMITS.forEach { limit ->
+                    val selected = display.rowItemLimit == limit
+                    Button(onClick = { viewModel.setRowItemLimit(limit) }) {
+                        Text(if (selected) "✓ $limit" else "$limit")
+                    }
                 }
             }
 
@@ -367,14 +386,21 @@ fun TvSettingsScreen(
                     color = Color.White.copy(alpha = 0.85f),
                 )
                 Text(
-                    "Vyber které Jellyfin knihovny se zobrazí jako řady. (Žádná vybraná = všechny.)",
+                    "Vyber které Jellyfin knihovny se zobrazí jako řady. (Žádná vybraná = všechny.) " +
+                        "Hvězdičkou připneš knihovnu jako zkratku do postranního menu.",
                     color = Color.White.copy(alpha = 0.55f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 state.libraries.forEach { lib ->
                     val enabled = display.enabledLibraryIds.isEmpty() || lib.id in display.enabledLibraryIds
-                    Button(onClick = { viewModel.toggleLibrary(lib.id) }) {
-                        Text(if (enabled) "✓ ${lib.name}" else lib.name)
+                    val pinned = display.pinnedLibraries.any { it.id == lib.id }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { viewModel.toggleLibrary(lib.id) }) {
+                            Text(if (enabled) "✓ ${lib.name}" else lib.name)
+                        }
+                        Button(onClick = { viewModel.togglePinLibrary(lib) }) {
+                            Text(if (pinned) "★ V menu" else "☆ Připnout do menu")
+                        }
                     }
                 }
             }

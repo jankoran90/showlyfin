@@ -12,7 +12,16 @@ private const val PREFS_NAME = "tv_prefs"
 private const val KEY_CARD_SIZE = "card_size"
 private const val KEY_SHOW_NEXT_UP = "show_next_up"
 private const val KEY_SHOW_RECENTLY_ADDED = "show_recently_added"
+private const val KEY_SHOW_RESUME = "show_resume"
+private const val KEY_ROW_ITEM_LIMIT = "row_item_limit"
 private const val KEY_ENABLED_LIBRARIES = "enabled_libraries"
+private const val KEY_PINNED_LIBRARIES = "pinned_libraries"
+
+// Encoded entry "id<US>name<US>collectionType" — unit separator (0x1F) unlikely in library names
+private const val PIN_SEP = "\\u001F"
+
+const val DEFAULT_ROW_ITEM_LIMIT = 20
+val ROW_ITEM_LIMITS = listOf(10, 20, 30, 50)
 
 enum class TvCardSize(val widthDp: Int, val displayName: String) {
     SMALL(120, "Malé"),
@@ -27,9 +36,12 @@ enum class TvCardSize(val widthDp: Int, val displayName: String) {
 
 data class TvDisplayPrefs(
     val cardSize: TvCardSize = TvCardSize.MEDIUM,
+    val showResumeRow: Boolean = true,
     val showNextUp: Boolean = true,
     val showRecentlyAdded: Boolean = true,
+    val rowItemLimit: Int = DEFAULT_ROW_ITEM_LIMIT,
     val enabledLibraryIds: Set<String> = emptySet(),
+    val pinnedLibraries: List<TvLibraryRef> = emptyList(),
 )
 
 @Singleton
@@ -43,14 +55,22 @@ class TvPreferences @Inject constructor(
 
     private fun load(): TvDisplayPrefs = TvDisplayPrefs(
         cardSize = TvCardSize.fromName(prefs.getString(KEY_CARD_SIZE, null)),
+        showResumeRow = prefs.getBoolean(KEY_SHOW_RESUME, true),
         showNextUp = prefs.getBoolean(KEY_SHOW_NEXT_UP, true),
         showRecentlyAdded = prefs.getBoolean(KEY_SHOW_RECENTLY_ADDED, true),
+        rowItemLimit = prefs.getInt(KEY_ROW_ITEM_LIMIT, DEFAULT_ROW_ITEM_LIMIT),
         enabledLibraryIds = prefs.getStringSet(KEY_ENABLED_LIBRARIES, emptySet())?.toSet() ?: emptySet(),
+        pinnedLibraries = prefs.getStringSet(KEY_PINNED_LIBRARIES, emptySet()).orEmpty().mapNotNull(::decodePin),
     )
 
     fun setCardSize(size: TvCardSize) {
         prefs.edit().putString(KEY_CARD_SIZE, size.name).apply()
         _state.value = _state.value.copy(cardSize = size)
+    }
+
+    fun setShowResumeRow(value: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_RESUME, value).apply()
+        _state.value = _state.value.copy(showResumeRow = value)
     }
 
     fun setShowNextUp(value: Boolean) {
@@ -61,6 +81,11 @@ class TvPreferences @Inject constructor(
     fun setShowRecentlyAdded(value: Boolean) {
         prefs.edit().putBoolean(KEY_SHOW_RECENTLY_ADDED, value).apply()
         _state.value = _state.value.copy(showRecentlyAdded = value)
+    }
+
+    fun setRowItemLimit(value: Int) {
+        prefs.edit().putInt(KEY_ROW_ITEM_LIMIT, value).apply()
+        _state.value = _state.value.copy(rowItemLimit = value)
     }
 
     fun toggleLibrary(libraryId: String) {
@@ -74,5 +99,32 @@ class TvPreferences @Inject constructor(
         val ids = _state.value.enabledLibraryIds
         // Empty set = all libraries enabled (default opt-in for first run)
         return ids.isEmpty() || libraryId in ids
+    }
+
+    fun togglePinnedLibrary(ref: TvLibraryRef) {
+        val current = _state.value.pinnedLibraries
+        val updated = if (current.any { it.id == ref.id }) {
+            current.filterNot { it.id == ref.id }
+        } else {
+            current + ref
+        }
+        prefs.edit().putStringSet(KEY_PINNED_LIBRARIES, updated.map(::encodePin).toSet()).apply()
+        _state.value = _state.value.copy(pinnedLibraries = updated)
+    }
+
+    fun isLibraryPinned(libraryId: String): Boolean =
+        _state.value.pinnedLibraries.any { it.id == libraryId }
+
+    private fun encodePin(ref: TvLibraryRef): String =
+        listOf(ref.id, ref.name, ref.collectionType ?: "").joinToString(PIN_SEP)
+
+    private fun decodePin(encoded: String): TvLibraryRef? {
+        val parts = encoded.split(PIN_SEP)
+        if (parts.size < 2 || parts[0].isBlank()) return null
+        return TvLibraryRef(
+            id = parts[0],
+            name = parts[1],
+            collectionType = parts.getOrNull(2)?.takeIf { it.isNotBlank() },
+        )
     }
 }
