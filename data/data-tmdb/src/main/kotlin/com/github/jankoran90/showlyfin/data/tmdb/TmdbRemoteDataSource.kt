@@ -18,4 +18,6 @@ interface TmdbRemoteDataSource {
     suspend fun fetchMovieTranslation(tmdbId: Long, language: String = "cs"): TmdbTranslation.Data?
     suspend fun fetchShowTranslation(tmdbId: Long, language: String = "cs"): TmdbTranslation.Data?
     suspend fun fetchCollection(collectionId: Long): TmdbCollection?
+    suspend fun searchMovies(query: String, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
+    suspend fun searchShows(query: String, language: String = "cs-CZ"): List<TmdbSearchShowItem>
 }

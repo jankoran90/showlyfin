@@ -23,51 +23,69 @@ class CsfdRepository @Inject constructor(
         private const val TTL_PLOT_MS = 24 * 60 * 60 * 1000L
     }
 
-    suspend fun getCsfdId(imdbId: String, title: String = "", year: Int = 0): Long? = withContext(Dispatchers.IO) {
-        Timber.d("[CsfdRepository] getCsfdId(imdbId=$imdbId, title=$title, year=$year)")
-        if (imdbId.isBlank() && title.isBlank()) return@withContext null
+    suspend fun getCsfdId(imdbId: String, tmdbId: Long? = null, title: String = "", year: Int = 0): Long? = withContext(Dispatchers.IO) {
+        Timber.d("[CsfdRepository] getCsfdId(imdbId=$imdbId, tmdbId=$tmdbId, title=$title, year=$year)")
+        if (imdbId.isBlank() && tmdbId == null && title.isBlank()) return@withContext null
 
-        val overrideKey = "CSFD_OVERRIDE_$imdbId"
         if (imdbId.isNotBlank()) {
-            val override = prefs.getLong(overrideKey, -1L)
+            val override = prefs.getLong("CSFD_OVERRIDE_$imdbId", -1L)
             if (override != -1L) {
                 Timber.d("[CsfdRepository] override hit: csfdId=$override")
                 return@withContext override
             }
         }
 
-        val cacheKey = if (imdbId.isNotBlank()) "CSFD_ID_$imdbId" else "CSFD_ID_TITLE_${normalize(title)}_$year"
+        val cacheKey = when {
+            imdbId.isNotBlank() -> "CSFD_ID_$imdbId"
+            tmdbId != null -> "CSFD_ID_TMDB_$tmdbId"
+            else -> "CSFD_ID_TITLE_${normalize(title)}_$year"
+        }
         val cached = prefs.getLong(cacheKey, -1L)
         if (cached != -1L) {
             Timber.d("[CsfdRepository] cache hit: csfdId=$cached")
             return@withContext cached
         }
 
-        val wikidataId = if (imdbId.isNotBlank()) wikidataLookup(imdbId) else null
-        Timber.d("[CsfdRepository] wikidata lookup → csfdId=$wikidataId for imdbId=$imdbId")
-
-        if (wikidataId != null) {
-            val csfdTitle = runCatching { scraper.scrapeTitle(wikidataId) }.getOrNull()
-            if (csfdTitle != null) {
-                Timber.d("[CsfdRepository] wikidata accepted (page='$csfdTitle')")
+        if (imdbId.isNotBlank()) {
+            val wikidataId = wikidataLookupByImdb(imdbId)
+            Timber.d("[CsfdRepository] wikidata(imdb=$imdbId) → csfdId=$wikidataId")
+            if (wikidataId != null && verifyCsfdId(wikidataId)) {
                 prefs.edit { putLong(cacheKey, wikidataId) }
                 return@withContext wikidataId
-            } else {
-                Timber.w("[CsfdRepository] Wikidata id=$wikidataId REJECTED (page inaccessible) → title search fallback")
+            }
+        }
+
+        if (tmdbId != null && tmdbId > 0) {
+            val wikidataId = wikidataLookupByTmdb(tmdbId)
+            Timber.d("[CsfdRepository] wikidata(tmdb=$tmdbId) → csfdId=$wikidataId")
+            if (wikidataId != null && verifyCsfdId(wikidataId)) {
+                prefs.edit { putLong(cacheKey, wikidataId) }
+                return@withContext wikidataId
             }
         }
 
         if (title.isNotBlank()) {
             val searchId = runCatching { scraper.searchByTitle(title, year) }.getOrNull()
             if (searchId != null) {
-                Timber.d("[CsfdRepository] title search → csfdId=$searchId")
+                Timber.d("[CsfdRepository] title search('$title', $year) → csfdId=$searchId")
                 prefs.edit { putLong(cacheKey, searchId) }
                 return@withContext searchId
             }
         }
 
-        Timber.w("[CsfdRepository] getCsfdId returned null for imdbId=$imdbId, title=$title")
+        Timber.w("[CsfdRepository] getCsfdId returned null for imdbId=$imdbId, tmdbId=$tmdbId, title=$title")
         null
+    }
+
+    private suspend fun verifyCsfdId(csfdId: Long): Boolean {
+        val csfdTitle = runCatching { scraper.scrapeTitle(csfdId) }.getOrNull()
+        return if (csfdTitle != null) {
+            Timber.d("[CsfdRepository] wikidata id=$csfdId accepted (page='$csfdTitle')")
+            true
+        } else {
+            Timber.w("[CsfdRepository] wikidata id=$csfdId REJECTED (page inaccessible)")
+            false
+        }
     }
 
     suspend fun getCzechPlot(csfdId: Long): String? = withContext(Dispatchers.IO) {
@@ -104,12 +122,21 @@ class CsfdRepository @Inject constructor(
         prefs.edit { csfdKeys.forEach { remove(it) } }
     }
 
-    private fun wikidataLookup(imdbId: String): Long? {
+    private fun wikidataLookupByImdb(imdbId: String): Long? = wikidataSparql(
+        """SELECT ?csfdId WHERE { ?item wdt:P345 "$imdbId". ?item wdt:P2529 ?csfdId }""",
+        "imdb=$imdbId",
+    )
+
+    private fun wikidataLookupByTmdb(tmdbId: Long): Long? = wikidataSparql(
+        """SELECT ?csfdId WHERE { ?item wdt:P4947 "$tmdbId". ?item wdt:P2529 ?csfdId }""",
+        "tmdb=$tmdbId",
+    )
+
+    private fun wikidataSparql(query: String, debugLabel: String): Long? {
         return try {
-            val query = """SELECT ?csfdId WHERE { ?item wdt:P345 "$imdbId". ?item wdt:P2529 ?csfdId }"""
             val url = "https://query.wikidata.org/sparql?query=${URLEncoder.encode(query, "UTF-8")}&format=json"
             val conn = URL(url).openConnection() as HttpURLConnection
-            conn.setRequestProperty("User-Agent", "Showlyfin/0.13.2 (https://github.com/jankoran90/showlyfin)")
+            conn.setRequestProperty("User-Agent", "Showlyfin/0.13.4 (https://github.com/jankoran90/showlyfin)")
             conn.setRequestProperty("Accept", "application/json")
             conn.connectTimeout = 8000
             conn.readTimeout = 8000
@@ -117,7 +144,7 @@ class CsfdRepository @Inject constructor(
             conn.disconnect()
             parseWikidataCsfdId(json)
         } catch (e: Exception) {
-            Timber.w(e, "[CsfdRepository] Wikidata lookup failed for imdbId=$imdbId")
+            Timber.w(e, "[CsfdRepository] wikidataSparql failed: $debugLabel")
             null
         }
     }

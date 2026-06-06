@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.data.tmdb.api
 import com.github.jankoran90.showlyfin.data.tmdb.model.*
 import retrofit2.http.GET
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface TmdbService {
 
@@ -50,4 +51,16 @@ interface TmdbService {
 
     @GET("tv/{tmdbId}/watch/providers")
     suspend fun fetchShowWatchProviders(@Path("tmdbId") tmdbId: Long): TmdbStreamings
+
+    @GET("search/movie?include_adult=false")
+    suspend fun searchMovies(
+        @Query("query") query: String,
+        @Query("language") language: String = "cs-CZ",
+    ): TmdbSearchMovieResponse
+
+    @GET("search/tv?include_adult=false")
+    suspend fun searchShows(
+        @Query("query") query: String,
+        @Query("language") language: String = "cs-CZ",
+    ): TmdbSearchShowResponse
 }

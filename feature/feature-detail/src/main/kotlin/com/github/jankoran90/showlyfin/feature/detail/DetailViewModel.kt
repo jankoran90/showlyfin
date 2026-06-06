@@ -97,14 +97,15 @@ class DetailViewModel @Inject constructor(
         }
         val year = item.year ?: 0
         val imdbId = item.imdbId.orEmpty()
+        val tmdbId = item.tmdbId
         try {
             var csfdId: Long? = null
             for (title in titles) {
-                csfdId = csfdRepository.getCsfdId(imdbId, title, year)
+                csfdId = csfdRepository.getCsfdId(imdbId, tmdbId, title, year)
                 if (csfdId != null) break
             }
-            if (csfdId == null && imdbId.isNotBlank()) {
-                csfdId = csfdRepository.getCsfdId(imdbId, "", year)
+            if (csfdId == null) {
+                csfdId = csfdRepository.getCsfdId(imdbId, tmdbId, "", year)
             }
             if (csfdId == null) {
                 _uiState.update { it.copy(isCsfdLoading = false) }

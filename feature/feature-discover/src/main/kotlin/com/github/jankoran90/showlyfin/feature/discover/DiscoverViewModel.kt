@@ -215,8 +215,41 @@ class DiscoverViewModel @Inject constructor(
     private suspend fun runSearch(query: String) {
         _uiState.update { it.copy(isSearching = true, error = null) }
         try {
-            val results = traktApi.fetchSearch(query, withMovies = true)
-            val mediaItems = results.mapNotNull { it.toMediaItem() }
+            val combined = coroutineScope {
+                val traktDeferred = async {
+                    runCatching { traktApi.fetchSearch(query, withMovies = true).mapNotNull { it.toMediaItem() } }
+                        .getOrDefault(emptyList())
+                }
+                val tmdbMoviesDeferred = async {
+                    runCatching {
+                        val tmdbResults = tmdbApi.searchMovies(query, "cs-CZ").take(10)
+                        tmdbResults.map { tmdb ->
+                            async {
+                                val traktResults = runCatching {
+                                    traktApi.fetchSearchId("tmdb", tmdb.id.toString())
+                                }.getOrDefault(emptyList())
+                                traktResults.firstOrNull { it.movie?.ids?.tmdb == tmdb.id }?.toMediaItem()
+                            }
+                        }.awaitAll().filterNotNull()
+                    }.getOrDefault(emptyList())
+                }
+                val tmdbShowsDeferred = async {
+                    runCatching {
+                        val tmdbResults = tmdbApi.searchShows(query, "cs-CZ").take(10)
+                        tmdbResults.map { tmdb ->
+                            async {
+                                val traktResults = runCatching {
+                                    traktApi.fetchSearchId("tmdb", tmdb.id.toString())
+                                }.getOrDefault(emptyList())
+                                traktResults.firstOrNull { it.show?.ids?.tmdb == tmdb.id }?.toMediaItem()
+                            }
+                        }.awaitAll().filterNotNull()
+                    }.getOrDefault(emptyList())
+                }
+                (traktDeferred.await() + tmdbMoviesDeferred.await() + tmdbShowsDeferred.await())
+                    .distinctBy { "${it.type}_${it.traktId}" }
+            }
+            val mediaItems = combined
             val enriched = coroutineScope {
                 mediaItems.map { item ->
                     async {
