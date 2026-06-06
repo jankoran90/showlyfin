@@ -3,7 +3,9 @@ package com.github.jankoran90.showlyfin.ui.phone
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
@@ -22,12 +24,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
@@ -164,6 +175,21 @@ fun ShowlyfinPhoneApp() {
 
         val isSubScreen = currentDestination !in bottomTabs
 
+        val density = LocalDensity.current
+        val bottomBarHeightPx = remember(density) { with(density) { 80.dp.toPx() } }
+        val bottomBarOffsetPx = remember { mutableFloatStateOf(0f) }
+        LaunchedEffect(currentDestination) { bottomBarOffsetPx.floatValue = 0f }
+
+        val nestedScrollConnection = remember(bottomBarHeightPx) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    val newOffset = (bottomBarOffsetPx.floatValue - available.y).coerceIn(0f, bottomBarHeightPx)
+                    bottomBarOffsetPx.floatValue = newOffset
+                    return Offset.Zero
+                }
+            }
+        }
+
         BackHandler(enabled = isSubScreen) {
             val current = currentDestination
             currentDestination = when (current) {
@@ -192,6 +218,9 @@ fun ShowlyfinPhoneApp() {
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 if (!isSubScreen) {
+                    Box(
+                        modifier = Modifier.offset { IntOffset(0, bottomBarOffsetPx.floatValue.roundToInt()) }
+                    ) {
                     NavigationBar(containerColor = Color(0xFF1A1A2E)) {
                         NavigationBarItem(
                             selected = bottomTab is Destination.Discover,
@@ -224,9 +253,11 @@ fun ShowlyfinPhoneApp() {
                             label = { Text("Nastavení") },
                         )
                     }
+                    }
                 }
             },
         ) { paddingValues ->
+            Box(modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)) {
             when (val dest = currentDestination) {
                 is Destination.Discover -> DiscoverScreen(
                     onItemClick = { item -> bottomTab = Destination.Discover; currentDestination = Destination.Detail(item) },
@@ -366,6 +397,7 @@ fun ShowlyfinPhoneApp() {
                     onBack = { currentDestination = Destination.Uploader },
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
             }
         }
     }

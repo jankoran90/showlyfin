@@ -47,6 +47,7 @@ class DiscoverViewModel @Inject constructor(
     private var searchJob: Job? = null
 
     init {
+        _uiState.update { it.copy(isTraktLoggedIn = tokenProvider.getToken() != null) }
         load(DiscoverTab.MOVIES, DiscoverFilter.TRENDING)
         loadFilterContext()
         parentalControlsRepository.profile
@@ -57,6 +58,11 @@ class DiscoverViewModel @Inject constructor(
                 reapplyFilters()
             }
             .launchIn(viewModelScope)
+    }
+
+    fun setSessionAgeOverride(rating: AgeRating?) {
+        _uiState.update { it.copy(sessionAgeOverride = rating) }
+        reapplyFilters()
     }
 
     fun selectTab(tab: DiscoverTab) {
@@ -140,8 +146,9 @@ class DiscoverViewModel @Inject constructor(
         if (filters.hideWatched && state.watchedTraktIds.isNotEmpty()) {
             result = result.filter { item -> !state.watchedTraktIds.contains(item.traktId) }
         }
-        state.parentalLockedAgeRating?.let { lockedRating ->
-            result = result.filter { item -> isAllowedForRating(item, lockedRating) }
+        val effectiveAgeRating = state.sessionAgeOverride ?: state.parentalLockedAgeRating
+        effectiveAgeRating?.let { rating ->
+            result = result.filter { item -> isAllowedForRating(item, rating) }
         }
         result = when (filters.sortBy) {
             DiscoverSort.DEFAULT -> result
@@ -215,11 +222,27 @@ class DiscoverViewModel @Inject constructor(
                     async {
                         val tmdbId = item.tmdbId ?: return@async item
                         if (item.type == MediaType.MOVIE) {
-                            val details = runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull()
-                            item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path)
+                            val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
+                            val translationDeferred = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
+                            val details = detailsDeferred.await()
+                            val translation = translationDeferred.await()
+                            item.copy(
+                                posterPath = details?.poster_path,
+                                backdropPath = details?.backdrop_path,
+                                titleCz = translation?.title?.takeIf { it.isNotBlank() },
+                                overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
+                            )
                         } else {
-                            val details = runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull()
-                            item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path)
+                            val detailsDeferred = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
+                            val translationDeferred = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
+                            val details = detailsDeferred.await()
+                            val translation = translationDeferred.await()
+                            item.copy(
+                                posterPath = details?.poster_path,
+                                backdropPath = details?.backdrop_path,
+                                titleCz = translation?.name?.takeIf { it.isNotBlank() },
+                                overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
+                            )
                         }
                     }
                 }.awaitAll()
@@ -243,6 +266,17 @@ class DiscoverViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
+                if (filter == DiscoverFilter.RECOMMENDED && tokenProvider.getToken() == null) {
+                    _uiState.update {
+                        it.copy(
+                            rawItems = emptyList(),
+                            items = emptyList(),
+                            isLoading = false,
+                            error = "needs_trakt_login",
+                        )
+                    }
+                    return@launch
+                }
                 val rawItems = when (tab to filter) {
                     DiscoverTab.MOVIES to DiscoverFilter.TRENDING ->
                         traktApi.fetchTrendingMovies("", "", 40).map { it.toMediaItem() }
@@ -250,12 +284,16 @@ class DiscoverViewModel @Inject constructor(
                         traktApi.fetchPopularMovies("", "", 40).map { it.toMediaItem() }
                     DiscoverTab.MOVIES to DiscoverFilter.ANTICIPATED ->
                         traktApi.fetchAnticipatedMovies("", "", 40).map { it.toMediaItem() }
+                    DiscoverTab.MOVIES to DiscoverFilter.RECOMMENDED ->
+                        authorizedTraktApi.fetchRecommendedMovies(40).map { it.toMediaItem() }
                     DiscoverTab.SHOWS to DiscoverFilter.TRENDING ->
                         traktApi.fetchTrendingShows("", "", 40).map { it.toMediaItem() }
                     DiscoverTab.SHOWS to DiscoverFilter.POPULAR ->
                         traktApi.fetchPopularShows("", "", 40).map { it.toMediaItem() }
                     DiscoverTab.SHOWS to DiscoverFilter.ANTICIPATED ->
                         traktApi.fetchAnticipatedShows("", "", 40).map { it.toMediaItem() }
+                    DiscoverTab.SHOWS to DiscoverFilter.RECOMMENDED ->
+                        authorizedTraktApi.fetchRecommendedShows(40).map { it.toMediaItem() }
                     else -> emptyList()
                 }
                 val enriched = coroutineScope {
@@ -263,11 +301,27 @@ class DiscoverViewModel @Inject constructor(
                         async {
                             val tmdbId = item.tmdbId ?: return@async item
                             if (tab == DiscoverTab.MOVIES) {
-                                val details = tmdbApi.fetchMovieDetails(tmdbId)
-                                item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path)
+                                val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
+                                val translationDeferred = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
+                                val details = detailsDeferred.await()
+                                val translation = translationDeferred.await()
+                                item.copy(
+                                    posterPath = details?.poster_path,
+                                    backdropPath = details?.backdrop_path,
+                                    titleCz = translation?.title?.takeIf { it.isNotBlank() },
+                                    overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
+                                )
                             } else {
-                                val details = tmdbApi.fetchShowDetails(tmdbId)
-                                item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path)
+                                val detailsDeferred = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
+                                val translationDeferred = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
+                                val details = detailsDeferred.await()
+                                val translation = translationDeferred.await()
+                                item.copy(
+                                    posterPath = details?.poster_path,
+                                    backdropPath = details?.backdrop_path,
+                                    titleCz = translation?.name?.takeIf { it.isNotBlank() },
+                                    overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
+                                )
                             }
                         }
                     }.awaitAll()

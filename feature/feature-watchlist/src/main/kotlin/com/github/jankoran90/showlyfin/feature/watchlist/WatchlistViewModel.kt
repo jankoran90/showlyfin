@@ -91,11 +91,27 @@ class WatchlistViewModel @Inject constructor(
                         async {
                             val tmdbId = item.tmdbId ?: return@async item
                             if (tab == WatchlistTab.MOVIES) {
-                                val details = tmdbApi.fetchMovieDetails(tmdbId)
-                                item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path)
+                                val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
+                                val translationDeferred = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
+                                val details = detailsDeferred.await()
+                                val translation = translationDeferred.await()
+                                item.copy(
+                                    posterPath = details?.poster_path,
+                                    backdropPath = details?.backdrop_path,
+                                    titleCz = translation?.title?.takeIf { it.isNotBlank() },
+                                    overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
+                                )
                             } else {
-                                val details = tmdbApi.fetchShowDetails(tmdbId)
-                                item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path)
+                                val detailsDeferred = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
+                                val translationDeferred = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
+                                val details = detailsDeferred.await()
+                                val translation = translationDeferred.await()
+                                item.copy(
+                                    posterPath = details?.poster_path,
+                                    backdropPath = details?.backdrop_path,
+                                    titleCz = translation?.name?.takeIf { it.isNotBlank() },
+                                    overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
+                                )
                             }
                         }
                     }.awaitAll()

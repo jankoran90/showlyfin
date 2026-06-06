@@ -131,7 +131,7 @@ fun MediaCard(
             ) {
                 Column {
                     Text(
-                        text = item.title,
+                        text = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White,
                         maxLines = 2,

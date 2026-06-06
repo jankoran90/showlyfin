@@ -12,6 +12,8 @@ data class MediaItem(
     val type: MediaType,
     val posterPath: String? = null,
     val backdropPath: String? = null,
+    val titleCz: String? = null,
+    val overviewCz: String? = null,
 ) {
     fun posterUrl(size: String = "w342") = posterPath?.let { "https://image.tmdb.org/t/p/$size$it" }
     fun backdropUrl(size: String = "w780") = backdropPath?.let { "https://image.tmdb.org/t/p/$size$it" }

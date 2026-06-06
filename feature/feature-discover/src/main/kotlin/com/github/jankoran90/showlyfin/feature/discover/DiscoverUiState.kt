@@ -2,7 +2,7 @@ package com.github.jankoran90.showlyfin.feature.discover
 
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 
-enum class DiscoverFilter { TRENDING, POPULAR, ANTICIPATED }
+enum class DiscoverFilter { TRENDING, POPULAR, ANTICIPATED, RECOMMENDED }
 enum class DiscoverTab { MOVIES, SHOWS }
 
 data class DiscoverUiState(
@@ -23,4 +23,6 @@ data class DiscoverUiState(
     val watchedTraktIds: Set<Long> = emptySet(),
     val isFilterSheetOpen: Boolean = false,
     val parentalLockedAgeRating: com.github.jankoran90.showlyfin.core.domain.AgeRating? = null,
+    val sessionAgeOverride: com.github.jankoran90.showlyfin.core.domain.AgeRating? = null,
+    val isTraktLoggedIn: Boolean = false,
 )
