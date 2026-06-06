@@ -18,6 +18,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +54,9 @@ fun DetailScreen(
     item: MediaItem,
     onBack: () -> Unit,
     onSmartDetect: ((MediaItem) -> Unit)? = null,
+    onNaTv: ((MediaItem) -> Unit)? = null,
+    onStremio: ((MediaItem) -> Unit)? = null,
+    onShare: ((MediaItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -170,17 +176,37 @@ fun DetailScreen(
             Spacer(Modifier.height(16.dp))
 
             val tmdbOverview = uiState.movieDetails?.overview ?: uiState.showDetails?.overview ?: displayItem.overview
-            if (!tmdbOverview.isNullOrBlank()) {
+            val tmdbCz = uiState.tmdbCzOverview
+            val csfdPlot = uiState.csfdPlot
+
+            val primaryPlot = tmdbCz?.takeIf { it.isNotBlank() }
+                ?: csfdPlot?.takeIf { it.isNotBlank() }
+                ?: tmdbOverview?.takeIf { it.isNotBlank() }
+            val primarySource = when {
+                tmdbCz?.isNotBlank() == true -> "TMDB CZ"
+                csfdPlot?.isNotBlank() == true -> "ČSFD"
+                else -> null
+            }
+
+            if (!primaryPlot.isNullOrBlank()) {
+                if (primarySource != null) {
+                    Text(
+                        text = "Popis ($primarySource)",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
                 Text(
-                    text = tmdbOverview,
+                    text = primaryPlot,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 Spacer(Modifier.height(12.dp))
             }
 
-            val csfdPlot = uiState.csfdPlot
-            if (!csfdPlot.isNullOrBlank() && csfdPlot != tmdbOverview) {
+            val showCsfdSeparately = !csfdPlot.isNullOrBlank() && tmdbCz?.isNotBlank() == true && csfdPlot != tmdbCz
+            if (showCsfdSeparately) {
                 Text(
                     text = "Popis (ČSFD)",
                     style = MaterialTheme.typography.titleSmall,
@@ -188,7 +214,7 @@ fun DetailScreen(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = csfdPlot,
+                    text = csfdPlot!!,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
@@ -210,19 +236,67 @@ fun DetailScreen(
                 }
             }
 
-            if (onSmartDetect != null && displayItem.imdbId != null) {
-                androidx.compose.material3.OutlinedButton(
-                    onClick = { onSmartDetect(displayItem) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                ) {
-                    Text("Smart Remux (4K + CZ audio)")
-                }
-                Spacer(Modifier.height(8.dp))
-            }
+            Spacer(Modifier.height(8.dp))
+            DetailActionRow(
+                item = displayItem,
+                onNaTv = onNaTv,
+                onSmartDetect = onSmartDetect,
+                onStremio = onStremio,
+                onShare = onShare,
+            )
 
             CsfdReviewsSection(reviews = uiState.csfdReviews)
 
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DetailActionRow(
+    item: MediaItem,
+    onNaTv: ((MediaItem) -> Unit)?,
+    onSmartDetect: ((MediaItem) -> Unit)?,
+    onStremio: ((MediaItem) -> Unit)?,
+    onShare: ((MediaItem) -> Unit)?,
+) {
+    val hasImdb = item.imdbId != null
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (onNaTv != null) {
+            AssistChip(
+                onClick = { onNaTv(item) },
+                label = { Text("Na TV") },
+                leadingIcon = { Icon(Icons.Default.Cast, contentDescription = null) },
+            )
+        }
+        if (onSmartDetect != null && hasImdb) {
+            AssistChip(
+                onClick = { onSmartDetect(item) },
+                label = { Text("Smart Remux") },
+                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+            )
+        }
+        if (onStremio != null) {
+            AssistChip(
+                onClick = { onStremio(item) },
+                label = { Text("Stremio") },
+                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+            )
+        }
+        if (onShare != null) {
+            AssistChip(
+                onClick = { onShare(item) },
+                label = { Text("Sdílet") },
+                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+            )
+        }
+    }
+    Spacer(Modifier.height(8.dp))
 }

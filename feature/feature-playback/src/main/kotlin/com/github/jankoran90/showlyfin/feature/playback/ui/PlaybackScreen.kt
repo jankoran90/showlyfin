@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -47,11 +48,16 @@ fun PlaybackScreen(
 
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val view = LocalView.current
 
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
 
     DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
+        view.keepScreenOn = true
+        onDispose {
+            view.keepScreenOn = false
+            exoPlayer.release()
+        }
     }
 
     LaunchedEffect(state.streamUrl) {

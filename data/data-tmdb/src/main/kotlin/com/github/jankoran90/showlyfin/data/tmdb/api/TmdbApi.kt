@@ -60,4 +60,20 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
     override suspend fun fetchPersonImages(tmdbId: Long) =
         try { if (tmdbId <= 0) TmdbImages.EMPTY else service.fetchPersonImages(tmdbId) }
         catch (e: Throwable) { TmdbImages.EMPTY }
+
+    override suspend fun fetchMovieTranslation(tmdbId: Long, language: String): TmdbTranslation.Data? =
+        try {
+            if (tmdbId <= 0) null
+            else service.fetchMovieTranslations(tmdbId).translations
+                ?.firstOrNull { it.iso_639_1.lowercase() == language.lowercase() }
+                ?.data
+        } catch (e: Throwable) { null }
+
+    override suspend fun fetchShowTranslation(tmdbId: Long, language: String): TmdbTranslation.Data? =
+        try {
+            if (tmdbId <= 0) null
+            else service.fetchShowTranslations(tmdbId).translations
+                ?.firstOrNull { it.iso_639_1.lowercase() == language.lowercase() }
+                ?.data
+        } catch (e: Throwable) { null }
 }

@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -14,15 +16,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
@@ -72,6 +80,57 @@ fun ShowlyfinPhoneApp() {
     ShowlyfinPhoneTheme {
         var currentDestination by remember { mutableStateOf<Destination>(Destination.Discover) }
         var bottomTab by remember { mutableStateOf<Destination>(Destination.Discover) }
+        val context = LocalContext.current
+        val naTvCoordinator: NaTvCoordinator = hiltViewModel()
+        val snackbarHostState = remember { SnackbarHostState() }
+
+        LaunchedEffect(Unit) {
+            naTvCoordinator.messages.collect { msg ->
+                snackbarHostState.showSnackbar(msg)
+            }
+        }
+
+        val onShareItem: (MediaItem) -> Unit = { item ->
+            val slug = item.title.lowercase()
+                .replace(Regex("[^a-z0-9 ]"), "")
+                .trim()
+                .replace(Regex("\\s+"), "-")
+            val mediaPath = if (item.type == MediaType.MOVIE) "movies" else "shows"
+            val url = "https://trakt.tv/$mediaPath/$slug"
+            val text = buildString {
+                append(item.title)
+                item.year?.let { append(" ($it)") }
+                append('\n')
+                append(url)
+            }
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, text)
+                putExtra(Intent.EXTRA_SUBJECT, item.title)
+            }
+            context.startActivity(Intent.createChooser(intent, "Sdílet").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
+
+        val onStremioItem: (MediaItem) -> Unit = { item ->
+            val mediaType = if (item.type == MediaType.MOVIE) "movie" else "series"
+            val targetId = item.imdbId ?: item.tmdbId?.toString()
+            if (targetId != null) {
+                val uri = Uri.parse("stremio:///detail/$mediaType/$targetId")
+                val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(intent)
+                } catch (_: Throwable) {
+                    val storeUri = Uri.parse("https://www.stremio.com/downloads")
+                    context.startActivity(Intent(Intent.ACTION_VIEW, storeUri).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                }
+            }
+        }
 
         val isSubScreen = currentDestination !in bottomTabs
 
@@ -92,6 +151,7 @@ fun ShowlyfinPhoneApp() {
 
         Scaffold(
             containerColor = Color(0xFF0D0D1A),
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 if (!isSubScreen) {
                     NavigationBar(containerColor = Color(0xFF1A1A2E)) {
@@ -182,6 +242,9 @@ fun ShowlyfinPhoneApp() {
                             mediaType = item.type.name.lowercase(),
                         )
                     },
+                    onNaTv = { item -> naTvCoordinator.playOnTv(item) },
+                    onStremio = onStremioItem,
+                    onShare = onShareItem,
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.SmartDetect -> SmartDetectScreen(

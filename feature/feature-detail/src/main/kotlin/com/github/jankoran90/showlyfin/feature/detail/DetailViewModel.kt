@@ -33,22 +33,36 @@ class DetailViewModel @Inject constructor(
                 val tmdbId = item.tmdbId
                 if (tmdbId != null) {
                     if (item.type == MediaType.MOVIE) {
-                        val details = tmdbApi.fetchMovieDetails(tmdbId)
-                        _uiState.update {
-                            it.copy(
-                                movieDetails = details,
-                                item = item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path),
-                                isLoading = false,
-                            )
+                        coroutineScope {
+                            val detailsDeferred = async { tmdbApi.fetchMovieDetails(tmdbId) }
+                            val translationDeferred = async { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }
+                            val details = detailsDeferred.await()
+                            val translation = translationDeferred.await()
+                            _uiState.update {
+                                it.copy(
+                                    movieDetails = details,
+                                    tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
+                                    tmdbCzTitle = translation?.title?.takeIf { t -> t.isNotBlank() },
+                                    item = item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path),
+                                    isLoading = false,
+                                )
+                            }
                         }
                     } else {
-                        val details = tmdbApi.fetchShowDetails(tmdbId)
-                        _uiState.update {
-                            it.copy(
-                                showDetails = details,
-                                item = item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path),
-                                isLoading = false,
-                            )
+                        coroutineScope {
+                            val detailsDeferred = async { tmdbApi.fetchShowDetails(tmdbId) }
+                            val translationDeferred = async { tmdbApi.fetchShowTranslation(tmdbId, "cs") }
+                            val details = detailsDeferred.await()
+                            val translation = translationDeferred.await()
+                            _uiState.update {
+                                it.copy(
+                                    showDetails = details,
+                                    tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
+                                    tmdbCzTitle = translation?.name?.takeIf { t -> t.isNotBlank() },
+                                    item = item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path),
+                                    isLoading = false,
+                                )
+                            }
                         }
                     }
                 } else {

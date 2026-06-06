@@ -24,4 +24,6 @@ data class DetailUiState(
     val csfdPlot: String? = null,
     val csfdReviews: List<CsfdReviewRaw> = emptyList(),
     val isCsfdLoading: Boolean = false,
+    val tmdbCzOverview: String? = null,
+    val tmdbCzTitle: String? = null,
 )
