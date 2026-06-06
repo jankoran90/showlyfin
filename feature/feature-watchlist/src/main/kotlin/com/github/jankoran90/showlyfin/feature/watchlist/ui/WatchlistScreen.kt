@@ -136,9 +136,10 @@ fun WatchlistScreen(
                 ) {
                     items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
                         val progressData = uiState.progressMap[item.traktId]
-                        val inLibrary = item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false
                         val jellyfinId = item.imdbId?.let { uiState.imdbToJellyfin[it] }
                             ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
+                        val inLibrary = jellyfinId != null
+                            || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
                         Column(modifier = Modifier.fillMaxWidth()) {
                             MediaCard(
                                 item = item,

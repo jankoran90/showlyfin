@@ -243,9 +243,10 @@ fun DiscoverScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(items, key = { "${it.type}_${it.traktId}" }) { item ->
-                            val inLibrary = item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false
                             val jellyfinId = item.imdbId?.let { uiState.imdbToJellyfin[it] }
                                 ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
+                            val inLibrary = jellyfinId != null
+                                || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
                             MediaCard(
                                 item = item,
                                 onClick = { onItemClick(item, jellyfinId) },

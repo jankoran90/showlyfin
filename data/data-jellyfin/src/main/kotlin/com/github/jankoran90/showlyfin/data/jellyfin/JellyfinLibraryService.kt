@@ -1,26 +1,50 @@
 package com.github.jankoran90.showlyfin.data.jellyfin
 
+import android.content.SharedPreferences
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.model.ClientInfo
+import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFields
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
 class JellyfinLibraryService @Inject constructor(
     private val apiClient: ApiClient,
+    private val clientInfo: ClientInfo,
+    private val deviceInfo: DeviceInfo,
+    @Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
     private var cachedOwned: OwnedIds? = null
     private var cacheTimestamp: Long = 0L
     private val cacheValidMs = 5 * 60 * 1000L
+
+    private fun ensureApiConfigured(): Boolean {
+        val serverUrl = prefs.getString("jellyfin_server_url", "")?.takeIf { it.isNotBlank() } ?: return false
+        val token = prefs.getString("jellyfin_token", "")?.takeIf { it.isNotBlank() } ?: return false
+        runCatching {
+            apiClient.update(
+                baseUrl = serverUrl,
+                accessToken = token,
+                clientInfo = clientInfo,
+                deviceInfo = deviceInfo,
+            )
+        }
+        return true
+    }
 
     suspend fun getOwnedIds(userId: UUID): OwnedIds {
         val now = System.currentTimeMillis()
         val cached = cachedOwned
         if (cached != null && (now - cacheTimestamp) < cacheValidMs) {
             return cached
+        }
+        if (!ensureApiConfigured()) {
+            return OwnedIds(emptySet(), emptySet())
         }
 
         val imdb = mutableSetOf<String>()
