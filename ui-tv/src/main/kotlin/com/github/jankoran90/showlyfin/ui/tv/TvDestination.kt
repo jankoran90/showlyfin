@@ -23,5 +23,11 @@ sealed class TvDestination {
         val itemId: String,
         val parent: TvDestination = JellyfinBrowse,
     ) : TvDestination()
-    data class Playback(val itemId: String, val positionMs: Long = 0L) : TvDestination()
+    data class Playback(
+        val itemId: String = "",
+        val positionMs: Long = 0L,
+        val externalUrl: String? = null,
+        val title: String = "",
+    ) : TvDestination()
+    data class SmartDetect(val item: MediaItem) : TvDestination()
 }

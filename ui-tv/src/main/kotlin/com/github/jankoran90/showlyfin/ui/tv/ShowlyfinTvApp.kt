@@ -26,8 +26,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfileGateViewModel
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
+import com.github.jankoran90.showlyfin.feature.remux.SmartDetectScreen
 import com.github.jankoran90.showlyfin.ui.tv.setup.TvProfilePickerScreen
 import com.github.jankoran90.showlyfin.ui.tv.setup.TvServerSetupScreen
 import com.github.jankoran90.showlyfin.ui.tv.theme.ShowlyfinTvTheme
@@ -115,6 +118,7 @@ fun ShowlyfinTvApp(
             is TvDestination.JellyfinLibrary -> d.parent
             is TvDestination.JellyfinDetail -> d.parent
             is TvDestination.Detail -> TvDestination.Discover
+            is TvDestination.SmartDetect -> TvDestination.Detail(d.item)
             is TvDestination.Setup -> TvDestination.Settings
             else -> TvDestination.Home
         }
@@ -137,6 +141,7 @@ fun ShowlyfinTvApp(
     val drawerSelected: TvDestination = when (val d = currentDestination) {
         is TvDestination.JellyfinDetail -> d.parent
         is TvDestination.Detail -> TvDestination.Discover
+        is TvDestination.SmartDetect -> TvDestination.Discover
         else -> d
     }
 
@@ -203,6 +208,8 @@ fun ShowlyfinTvApp(
             is TvDestination.Playback -> PlaybackScreen(
                 itemId = dest.itemId,
                 positionMs = dest.positionMs,
+                externalUrl = dest.externalUrl,
+                externalTitle = dest.title,
                 onBack = { currentDestination = TvDestination.Home },
             )
             else -> TvNavDrawer(
@@ -279,8 +286,34 @@ fun ShowlyfinTvApp(
                     )
                     is TvDestination.Detail -> TvDetailScreen(
                         item = dest.item,
-                        onPlayJellyfin = { itemId -> currentDestination = TvDestination.Playback(itemId) },
+                        onPlayJellyfin = { itemId -> currentDestination = TvDestination.Playback(itemId = itemId) },
                         onBack = { currentDestination = TvDestination.Discover },
+                        onPlayStreamUrl = { url, title -> currentDestination = TvDestination.Playback(externalUrl = url, title = title) },
+                        onSmartDetect = { mediaItem -> currentDestination = TvDestination.SmartDetect(mediaItem) },
+                        onPartClick = { part ->
+                            val jfId = part.jellyfinId
+                            currentDestination = if (jfId != null) {
+                                TvDestination.JellyfinDetail(jfId, parent = dest)
+                            } else if (part.tmdbId != null) {
+                                TvDestination.Detail(
+                                    MediaItem(
+                                        traktId = 0L, tmdbId = part.tmdbId, imdbId = null,
+                                        title = part.title, year = part.year?.toIntOrNull(),
+                                        overview = null, rating = null, genres = null,
+                                        type = MediaType.MOVIE, posterPath = null, backdropPath = null,
+                                    ),
+                                )
+                            } else dest
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    is TvDestination.SmartDetect -> SmartDetectScreen(
+                        imdbId = dest.item.imdbId ?: "",
+                        title = dest.item.title,
+                        titleCs = dest.item.titleCz?.takeIf { it.isNotBlank() } ?: dest.item.title,
+                        year = dest.item.year,
+                        mediaType = if (dest.item.type == MediaType.MOVIE) "movie" else "series",
+                        onBack = { currentDestination = TvDestination.Detail(dest.item) },
                         modifier = Modifier.fillMaxSize(),
                     )
                     else -> TvHomeScreen(
