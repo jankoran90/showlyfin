@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.ui.phone
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
@@ -27,12 +29,15 @@ data class SettingsUiState(
     val parentalAgeRating: AgeRating = AgeRating.UNRESTRICTED,
     val parentalLocked: Boolean = false,
     val maxParentalRating: Int? = null,
+    val profiles: List<ProfileEntity> = emptyList(),
+    val activeProfileId: Long? = null,
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val traktAuthManager: TraktAuthManager,
     private val parentalControlsRepository: ParentalControlsRepository,
+    private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -71,6 +76,24 @@ class SettingsViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+        profileRepository.observeAll()
+            .onEach { list -> _uiState.update { it.copy(profiles = list) } }
+            .launchIn(viewModelScope)
+        profileRepository.activeProfile
+            .onEach { active -> _uiState.update { it.copy(activeProfileId = active?.id) } }
+            .launchIn(viewModelScope)
+    }
+
+    fun switchProfile(profileId: Long) {
+        viewModelScope.launch { profileRepository.setActive(profileId) }
+    }
+
+    fun setDefaultProfile(profileId: Long) {
+        viewModelScope.launch { profileRepository.setDefault(profileId) }
+    }
+
+    fun deleteProfile(profile: ProfileEntity) {
+        viewModelScope.launch { profileRepository.delete(profile) }
     }
 
     private fun refreshJellyfinState() {

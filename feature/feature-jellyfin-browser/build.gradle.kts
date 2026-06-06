@@ -19,6 +19,7 @@ android {
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-ui"))
+    implementation(project(":core:core-data"))
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-tmdb"))
     implementation(libs.hilt.android)

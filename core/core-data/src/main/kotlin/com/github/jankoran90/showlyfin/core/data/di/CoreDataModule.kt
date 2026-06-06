@@ -27,7 +27,11 @@ object CoreDataModule {
         context,
         ShowlyfinDatabase::class.java,
         "showlyfin.db",
-    ).build()
+    ).fallbackToDestructiveMigration(dropAllTables = true)
+        .build()
+
+    @Provides
+    fun providesProfileDao(db: ShowlyfinDatabase) = db.profileDao()
 
     @Provides
     @Singleton

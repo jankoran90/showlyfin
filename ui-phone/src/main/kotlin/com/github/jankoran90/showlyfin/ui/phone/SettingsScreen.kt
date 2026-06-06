@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
@@ -189,6 +190,14 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(16.dp))
+        ProfilesSection(
+            profiles = uiState.profiles,
+            activeProfileId = uiState.activeProfileId,
+            onSwitch = { viewModel.switchProfile(it) },
+            onSetDefault = { viewModel.setDefaultProfile(it) },
+            onDelete = { viewModel.deleteProfile(it) },
+        )
+        Spacer(Modifier.height(16.dp))
         UpdateSection()
         Spacer(Modifier.height(16.dp))
         DebugSection()
@@ -259,6 +268,74 @@ private fun UpdateSection() {
             statusText?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfilesSection(
+    profiles: List<ProfileEntity>,
+    activeProfileId: Long?,
+    onSwitch: (Long) -> Unit,
+    onSetDefault: (Long) -> Unit,
+    onDelete: (ProfileEntity) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Profily", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Spacer(Modifier.height(8.dp))
+            if (profiles.isEmpty()) {
+                Text(
+                    text = "Žádné uložené profily. Přihlas se přes Jellyfin tab.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.65f),
+                )
+            } else {
+                profiles.forEach { profile ->
+                    val isActive = profile.id == activeProfileId
+                    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        Text(
+                            text = buildString {
+                                append(profile.name)
+                                if (profile.isAdmin) append(" · Admin")
+                                if (profile.isDefault) append(" · Výchozí")
+                                if (isActive) append(" · Aktivní")
+                            },
+                            color = if (isActive) MaterialTheme.colorScheme.primary else Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            text = profile.serverUrl,
+                            color = Color.White.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row {
+                            if (!isActive) {
+                                OutlinedButton(onClick = { onSwitch(profile.id) }) {
+                                    Text("Přepnout")
+                                }
+                                Spacer(Modifier.padding(end = 8.dp))
+                            }
+                            if (!profile.isDefault) {
+                                OutlinedButton(onClick = { onSetDefault(profile.id) }) {
+                                    Text("Výchozí")
+                                }
+                                Spacer(Modifier.padding(end = 8.dp))
+                            }
+                            OutlinedButton(
+                                onClick = { onDelete(profile) },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            ) {
+                                Text("Smazat")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

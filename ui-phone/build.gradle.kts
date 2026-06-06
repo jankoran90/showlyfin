@@ -24,6 +24,7 @@ android {
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-ui"))
+    implementation(project(":core:core-data"))
     implementation(project(":core:core-network"))
     implementation(project(":data:data-trakt"))
     implementation(project(":data:data-jellyfin"))

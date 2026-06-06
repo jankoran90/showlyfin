@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
@@ -28,6 +30,7 @@ class JellyfinBrowserViewModel @Inject constructor(
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
     private val parentalControlsRepository: ParentalControlsRepository,
+    private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -70,6 +73,7 @@ class JellyfinBrowserViewModel @Inject constructor(
                     .putString(KEY_URL, serverUrl)
                     .putString(KEY_TOKEN, accessToken)
                     .putString(KEY_USER_ID, userId)
+                    .putString("jellyfin_user_name", authResult.user?.name ?: username)
                     .apply()
 
                 jellyfinApiClient.update(
@@ -79,6 +83,28 @@ class JellyfinBrowserViewModel @Inject constructor(
                     deviceInfo = deviceInfo,
                 )
                 parentalControlsRepository.refreshFromJellyfin(userId)
+
+                val isAdmin = runCatching {
+                    jellyfinApiClient.userApi.getUserById(userId = UUID.fromString(userId))
+                        .content.policy?.isAdministrator ?: false
+                }.getOrDefault(false)
+
+                val existing = profileRepository.getAll().firstOrNull {
+                    it.serverUrl == serverUrl && it.jellyfinUserId == userId
+                }
+                val profile = ProfileEntity(
+                    id = existing?.id ?: 0L,
+                    name = authResult.user?.name ?: username,
+                    serverUrl = serverUrl,
+                    jellyfinUserId = userId,
+                    jellyfinToken = accessToken,
+                    isAdmin = isAdmin,
+                    isDefault = existing?.isDefault ?: (profileRepository.count() == 0),
+                    maxAgeRating = existing?.maxAgeRating,
+                    createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                )
+                val savedId = profileRepository.upsert(profile)
+                profileRepository.setActive(savedId)
 
                 loadLibraries(serverUrl, accessToken, userId)
             } catch (e: Throwable) {

@@ -14,6 +14,7 @@ import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 import com.github.jankoran90.showlyfin.core.ui.UpdateLauncher
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
 import com.github.jankoran90.showlyfin.debug.DebugCaptureGestureHost
 import com.github.jankoran90.showlyfin.debug.DebugCaptureManager
@@ -33,6 +34,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var traktAuthManager: TraktAuthManager
+    @Inject lateinit var profileRepository: ProfileRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +43,10 @@ class MainActivity : ComponentActivity() {
         UpdateCheckWorker.enqueue(applicationContext)
         runStartupUpdateCheck()
         maybeShowUpdateDialogFromIntent(intent)
+        lifecycleScope.launch {
+            profileRepository.migrateLegacyPrefsIfNeeded()
+            profileRepository.restoreActive()
+        }
 
         val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
 
