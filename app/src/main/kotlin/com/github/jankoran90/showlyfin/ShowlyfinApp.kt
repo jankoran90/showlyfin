@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin
 
 import android.app.Application
 import com.github.jankoran90.showlyfin.core.network.Config
+import com.github.jankoran90.showlyfin.debug.BufferTree
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
 
@@ -10,6 +11,7 @@ class ShowlyfinApp : Application() {
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
+        Timber.plant(BufferTree.INSTANCE)
         Config.initialize(
             traktClientId = BuildConfig.TRAKT_CLIENT_ID,
             traktClientSecret = BuildConfig.TRAKT_CLIENT_SECRET,

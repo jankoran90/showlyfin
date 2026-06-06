@@ -82,6 +82,8 @@ timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "tim
 
 jellyfin-sdk = { group = "org.jellyfin.sdk", name = "jellyfin-core", version.ref = "jellyfinSdk" }
 
+gson = { group = "com.google.code.gson", name = "gson", version = "2.11.0" }
+
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
 
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }

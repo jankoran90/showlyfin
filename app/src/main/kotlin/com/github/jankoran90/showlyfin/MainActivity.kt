@@ -13,6 +13,7 @@ import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 import com.github.jankoran90.showlyfin.core.ui.UpdateLauncher
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
+import com.github.jankoran90.showlyfin.debug.DebugCaptureGestureHost
 import com.github.jankoran90.showlyfin.services.EXTRA_OPEN_UPDATE_DIALOG
 import com.github.jankoran90.showlyfin.services.UpdateCheckWorker
 import com.github.jankoran90.showlyfin.services.UpdateChecker
@@ -77,13 +78,15 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CompositionLocalProvider(LocalUpdateLauncher provides launcher) {
-                Box {
-                    if (isTV) {
-                        ShowlyfinTvApp()
-                    } else {
-                        ShowlyfinPhoneApp()
+                DebugCaptureGestureHost {
+                    Box {
+                        if (isTV) {
+                            ShowlyfinTvApp()
+                        } else {
+                            ShowlyfinPhoneApp()
+                        }
+                        UpdateOverlayHost()
                     }
-                    UpdateOverlayHost()
                 }
             }
         }

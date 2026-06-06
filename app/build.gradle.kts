@@ -26,8 +26,8 @@ android {
         applicationId = "com.github.jankoran90.showlyfin"
         minSdk = 23
         targetSdk = 36
-        versionCode = 29
-        versionName = "0.16.0"
+        versionCode = 30
+        versionName = "0.17.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -107,6 +107,7 @@ dependencies {
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.gson)
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
