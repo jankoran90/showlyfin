@@ -64,7 +64,7 @@ fun TvJellyfinItemsScreen(
     modifier: Modifier = Modifier,
     viewModel: JellyfinLibraryItemsViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState by viewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(libraryId, collectionType, parentItemType) {
         viewModel.load(libraryId, libraryName, collectionType, parentItemType)
