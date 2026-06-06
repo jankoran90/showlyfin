@@ -10,7 +10,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 private const val LONG_PRESS_MS = 800L
@@ -24,7 +23,7 @@ fun DebugCaptureGestureHost(content: @Composable () -> Unit) {
         modifier = Modifier.pointerInput(Unit) {
             awaitPointerEventScope {
                 var fireJob: Job? = null
-                while (isActive) {
+                while (true) {
                     val event = awaitPointerEvent()
                     val pressedCount = event.changes.count { it.pressed }
                     if (pressedCount >= 3) {
