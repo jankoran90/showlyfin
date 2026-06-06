@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -180,6 +183,56 @@ fun TvDetailScreen(
                                     contentDescription = part.title,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (uiState.cast.isNotEmpty()) {
+                Spacer(Modifier.height(40.dp))
+                Text(text = "Obsazení", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(12.dp))
+                LazyRow(
+                    contentPadding = PaddingValues(end = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    items(uiState.cast, key = { it.id }) { person ->
+                        Column(
+                            modifier = Modifier.width(110.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(110.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                            ) {
+                                person.profile_path?.let { path ->
+                                    AsyncImage(
+                                        model = "https://image.tmdb.org/t/p/w185$path",
+                                        contentDescription = person.name,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = person.name.orEmpty(),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            val role = person.character ?: person.roles?.firstOrNull()?.character
+                            if (!role.isNullOrBlank()) {
+                                Text(
+                                    text = role,
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                         }

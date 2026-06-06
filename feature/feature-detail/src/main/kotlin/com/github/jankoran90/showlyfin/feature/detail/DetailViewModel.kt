@@ -71,11 +71,13 @@ class DetailViewModel @Inject constructor(
                 isTraktLoggedIn = tokenProvider.getToken() != null,
                 isInWatchlist = false,
                 isTogglingWatchlist = false,
+                cast = emptyList(),
                 error = null,
             )
         }
         viewModelScope.launch { loadJellyfinOwned(item) }
         viewModelScope.launch { loadWatchlistMembership(item) }
+        viewModelScope.launch { loadCast(item) }
         viewModelScope.launch {
             try {
                 val tmdbId = item.tmdbId
@@ -134,6 +136,20 @@ class DetailViewModel @Inject constructor(
             } catch (e: Throwable) {
                 _uiState.update { it.copy(isLoading = false, isCsfdLoading = false, error = e.message) }
             }
+        }
+    }
+
+    private suspend fun loadCast(item: MediaItem) {
+        val tmdbId = item.tmdbId ?: return
+        runCatching {
+            val people = if (item.type == MediaType.MOVIE) {
+                tmdbApi.fetchMoviePeople(tmdbId)
+            } else {
+                tmdbApi.fetchShowPeople(tmdbId)
+            }
+            people[com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson.Type.CAST].orEmpty().take(20)
+        }.getOrNull()?.let { cast ->
+            _uiState.update { it.copy(cast = cast) }
         }
     }
 

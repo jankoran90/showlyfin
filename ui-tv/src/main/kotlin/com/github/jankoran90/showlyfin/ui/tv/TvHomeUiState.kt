@@ -8,6 +8,7 @@ data class TvJellyfinItem(
     val imageUrl: String,
     val progressPct: Int?,
     val type: String,
+    val backdropUrl: String? = null,
 )
 
 data class TvHomeRow(

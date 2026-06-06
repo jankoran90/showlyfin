@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.tv.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,14 +18,20 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Button
@@ -44,6 +52,7 @@ fun TvHomeScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val firstRowFocus = remember { FocusRequester() }
+    var backdropUrl by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(state.rows) {
         if (state.rows.isNotEmpty()) {
@@ -96,18 +105,45 @@ fun TvHomeScreen(
                 )
             }
             else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
-                    verticalArrangement = Arrangement.spacedBy(32.dp),
-                ) {
-                    itemsIndexed(state.rows) { index, row ->
-                        TvContentRow(
-                            row = row,
-                            onItemClick = onItemClick,
-                            cardSize = state.cardSize,
-                            firstItemFocusRequester = if (index == 0) firstRowFocus else null,
-                        )
+                Box(Modifier.fillMaxSize()) {
+                    Crossfade(targetState = backdropUrl, label = "tv-home-backdrop") { url ->
+                        if (url != null) {
+                            Box(Modifier.fillMaxSize()) {
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    alpha = 0.55f,
+                                    modifier = Modifier.fillMaxSize().blur(24.dp),
+                                )
+                                Box(
+                                    Modifier.fillMaxSize().background(
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                Color(0xFF07071A).copy(alpha = 0.4f),
+                                                Color(0xFF07071A).copy(alpha = 0.85f),
+                                                Color(0xFF07071A),
+                                            ),
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
+                        verticalArrangement = Arrangement.spacedBy(32.dp),
+                    ) {
+                        itemsIndexed(state.rows) { index, row ->
+                            TvContentRow(
+                                row = row,
+                                onItemClick = onItemClick,
+                                cardSize = state.cardSize,
+                                onItemFocused = { item -> backdropUrl = item.backdropUrl ?: item.imageUrl },
+                                firstItemFocusRequester = if (index == 0) firstRowFocus else null,
+                            )
+                        }
                     }
                 }
             }
@@ -121,6 +157,7 @@ private fun TvContentRow(
     row: TvHomeRow,
     onItemClick: (String) -> Unit,
     cardSize: TvCardSize,
+    onItemFocused: (com.github.jankoran90.showlyfin.ui.tv.TvJellyfinItem) -> Unit = {},
     firstItemFocusRequester: FocusRequester? = null,
 ) {
     Column {
@@ -141,6 +178,7 @@ private fun TvContentRow(
                     item = item,
                     onClick = { onItemClick(item.id) },
                     cardSize = cardSize,
+                    onFocused = { onItemFocused(item) },
                     modifier = if (isFirst) Modifier.focusRequester(firstItemFocusRequester!!) else Modifier,
                 )
             }

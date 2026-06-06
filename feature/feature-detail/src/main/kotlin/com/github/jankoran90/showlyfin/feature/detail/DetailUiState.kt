@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
 import com.github.jankoran90.showlyfin.data.jellyfin.BoxSetInfo
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbMovieDetails
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbShowDetails
 
 data class DetailArgs(
@@ -45,4 +46,5 @@ data class DetailUiState(
     val isTraktLoggedIn: Boolean = false,
     val isInWatchlist: Boolean = false,
     val isTogglingWatchlist: Boolean = false,
+    val cast: List<TmdbPerson> = emptyList(),
 )

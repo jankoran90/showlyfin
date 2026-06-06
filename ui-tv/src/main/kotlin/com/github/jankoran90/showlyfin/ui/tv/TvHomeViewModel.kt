@@ -190,10 +190,21 @@ class TvHomeViewModel @Inject constructor(
 
 private val VIDEO_COLLECTION_TYPES = setOf("movies", "tvshows", "boxsets", "homevideos", "mixed")
 
-private fun BaseItemDto.toTvItem(serverUrl: String, token: String) = TvJellyfinItem(
-    id = id.toString(),
-    name = name ?: "",
-    imageUrl = "$serverUrl/Items/$id/Images/Primary?fillWidth=300&quality=90&api_key=$token",
-    progressPct = userData?.playedPercentage?.toInt(),
-    type = type?.name ?: "",
-)
+private fun BaseItemDto.toTvItem(serverUrl: String, token: String): TvJellyfinItem {
+    // backdrop: vlastní, nebo z rodiče (epizoda → seriál); fallback řeší UI
+    val backdropItemId = when {
+        !backdropImageTags.isNullOrEmpty() -> id
+        parentBackdropItemId != null -> parentBackdropItemId
+        else -> null
+    }
+    return TvJellyfinItem(
+        id = id.toString(),
+        name = name ?: "",
+        imageUrl = "$serverUrl/Items/$id/Images/Primary?fillWidth=300&quality=90&api_key=$token",
+        progressPct = userData?.playedPercentage?.toInt(),
+        type = type?.name ?: "",
+        backdropUrl = backdropItemId?.let {
+            "$serverUrl/Items/$it/Images/Backdrop/0?fillWidth=1280&quality=80&api_key=$token"
+        },
+    )
+}

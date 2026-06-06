@@ -52,6 +52,7 @@ fun TvItemCard(
     modifier: Modifier = Modifier,
     inLibrary: Boolean = true,
     cardSize: TvCardSize = TvCardSize.MEDIUM,
+    onFocused: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -75,7 +76,10 @@ fun TvItemCard(
             .aspectRatio(2f / 3f)
             .scale(scale)
             .shadow(elevation = elevation, shape = RoundedCornerShape(12.dp), clip = false)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocused()
+            }
             .border(width = 3.dp, color = borderColor, shape = RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp)),
     ) {
