@@ -160,15 +160,17 @@ fun ShowlyfinPhoneApp() {
         }
 
         val onCollectionPartClick: (CollectionPart) -> Unit = { part ->
-            if (part.jellyfinId != null) {
+            val jfId = part.jellyfinId
+            val tmdb = part.tmdbId
+            if (jfId != null) {
                 val currentJellyfinParent = (currentDestination as? Destination.JellyfinDetail)?.parent
                     ?: (currentDestination as? Destination.JellyfinLibrary)
                     ?: Destination.JellyfinLibrary(libraryId = "", libraryName = "")
-                currentDestination = Destination.JellyfinDetail(part.jellyfinId, currentJellyfinParent)
-            } else if (part.tmdbId != null) {
+                currentDestination = Destination.JellyfinDetail(jfId, currentJellyfinParent)
+            } else if (tmdb != null) {
                 val stub = MediaItem(
                     traktId = 0L,
-                    tmdbId = part.tmdbId,
+                    tmdbId = tmdb,
                     imdbId = null,
                     title = part.title,
                     year = part.year?.toIntOrNull(),
