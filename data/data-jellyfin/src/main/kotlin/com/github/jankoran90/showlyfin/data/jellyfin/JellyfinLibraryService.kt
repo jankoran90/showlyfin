@@ -64,13 +64,26 @@ class JellyfinLibraryService @Inject constructor(
                 userId = userId,
                 includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
                 recursive = true,
-                fields = listOf(ItemFields.PROVIDER_IDS),
+                fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PATH),
                 limit = 5000,
             ).content
             Timber.d("getOwnedIds Movies+Series response: ${response.items.size}")
+            var skippedByPath = 0
             for (item in response.items) {
-                val ids = item.providerIds ?: continue
+                val name = item.name ?: "?"
+                val path = item.path
+                if (isExcludedPath(path)) {
+                    skippedByPath++
+                    continue
+                }
+                val ids = item.providerIds
                 val jellyfinId = item.id.toString()
+                val hasImdb = ids?.get("Imdb")?.takeIf { it.isNotBlank() } != null
+                val hasTmdb = ids?.get("Tmdb")?.toLongOrNull() != null
+                if (ids == null || (!hasImdb && !hasTmdb)) {
+                    Timber.w("[Jellyfin] item bez providerIds: '$name' (id=$jellyfinId)")
+                    continue
+                }
                 ids["Imdb"]?.takeIf { it.isNotBlank() }?.let {
                     imdb.add(it)
                     imdbToJellyfin.putIfAbsent(it, jellyfinId)
@@ -80,6 +93,7 @@ class JellyfinLibraryService @Inject constructor(
                     tmdbToJellyfin.putIfAbsent(it, jellyfinId)
                 }
             }
+            if (skippedByPath > 0) Timber.i("[Jellyfin] skipped $skippedByPath items by excluded path (RealDebrid)")
         }.onFailure { Timber.w(it, "getItems(MOVIE,SERIES) failed") }
 
         val boxSets = mutableListOf<BoxSetInfo>()
@@ -130,6 +144,13 @@ class JellyfinLibraryService @Inject constructor(
 
 fun normalizeBoxSetName(name: String): String =
     name.lowercase().filter { it.isLetterOrDigit() }
+
+private val EXCLUDED_PATH_SUBSTRINGS = listOf("realdebrid", "/rd/", "real-debrid")
+
+private fun isExcludedPath(path: String?): Boolean {
+    val lower = path?.lowercase() ?: return false
+    return EXCLUDED_PATH_SUBSTRINGS.any { lower.contains(it) }
+}
 
 data class BoxSetInfo(
     val jellyfinId: String,

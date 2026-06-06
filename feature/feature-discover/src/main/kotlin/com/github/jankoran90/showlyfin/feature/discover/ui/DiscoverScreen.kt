@@ -247,6 +247,7 @@ fun DiscoverScreen(
                                 ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
                             val inLibrary = jellyfinId != null
                                 || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
+                            timber.log.Timber.d("[Discover] render '${item.title}' imdb=${item.imdbId} tmdb=${item.tmdbId} → jfId=$jellyfinId inLib=$inLibrary (maps: imdb=${uiState.imdbToJellyfin.size} tmdb=${uiState.tmdbToJellyfin.size})")
                             MediaCard(
                                 item = item,
                                 onClick = { onItemClick(item, jellyfinId) },

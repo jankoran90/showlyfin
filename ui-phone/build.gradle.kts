@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":feature:feature-uploader"))
     implementation(project(":data:data-uploader"))
     implementation(libs.hilt.android)
+    implementation(libs.timber)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.core.ktx)

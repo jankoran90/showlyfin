@@ -162,6 +162,7 @@ fun ShowlyfinPhoneApp() {
         val onCollectionPartClick: (CollectionPart) -> Unit = { part ->
             val jfId = part.jellyfinId
             val tmdb = part.tmdbId
+            timber.log.Timber.d("[CollectionClick] part='${part.title}' jfId=$jfId tmdb=$tmdb currentDest=${currentDestination::class.simpleName}")
             if (jfId != null) {
                 val currentJellyfinParent = (currentDestination as? Destination.JellyfinDetail)?.parent
                     ?: (currentDestination as? Destination.JellyfinLibrary)
