@@ -5,5 +5,6 @@ data class PlaybackUiState(
     val title: String = "",
     val streamUrl: String? = null,
     val positionMs: Long = 0L,
+    val resumePositionMs: Long = 0L,
     val error: String? = null,
 )

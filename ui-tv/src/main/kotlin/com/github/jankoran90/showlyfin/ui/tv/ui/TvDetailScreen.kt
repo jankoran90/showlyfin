@@ -105,15 +105,6 @@ fun TvDetailScreen(
                 }
             }
             Spacer(Modifier.height(24.dp))
-            val plot = uiState.tmdbCzOverview?.takeIf { it.isNotBlank() }
-                ?: uiState.csfdPlot?.takeIf { it.isNotBlank() }
-                ?: uiState.movieDetails?.overview
-                ?: uiState.showDetails?.overview
-                ?: item.overview.orEmpty()
-            if (plot.isNotBlank()) {
-                Text(text = plot, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyLarge)
-            }
-            Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 uiState.ownedJellyfinId?.let { jfId ->
                     Button(onClick = { onPlayJellyfin?.invoke(jfId) }, modifier = Modifier.height(56.dp)) {
@@ -160,6 +151,15 @@ fun TvDetailScreen(
                 Button(onClick = onBack, modifier = Modifier.height(56.dp)) {
                     Text("Zpět")
                 }
+            }
+            val plot = uiState.tmdbCzOverview?.takeIf { it.isNotBlank() }
+                ?: uiState.csfdPlot?.takeIf { it.isNotBlank() }
+                ?: uiState.movieDetails?.overview
+                ?: uiState.showDetails?.overview
+                ?: item.overview.orEmpty()
+            if (plot.isNotBlank()) {
+                Spacer(Modifier.height(24.dp))
+                Text(text = plot, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyLarge)
             }
             uiState.mergedCollection?.let { coll ->
                 Spacer(Modifier.height(40.dp))

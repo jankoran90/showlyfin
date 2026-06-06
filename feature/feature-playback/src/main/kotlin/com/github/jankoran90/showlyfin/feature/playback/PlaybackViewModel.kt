@@ -50,12 +50,14 @@ class PlaybackViewModel @Inject constructor(
                     deviceInfo = deviceInfo,
                 )
 
-                val title = runCatching {
+                val item = runCatching {
                     val userUuid = UUID.fromString(userId)
                     val itemUuid = UUID.fromString(itemId)
-                    apiClient.userLibraryApi.getItem(userId = userUuid, itemId = itemUuid)
-                        .content.name ?: itemId
-                }.getOrDefault(itemId)
+                    apiClient.userLibraryApi.getItem(userId = userUuid, itemId = itemUuid).content
+                }.getOrNull()
+                val title = item?.name ?: itemId
+                val userResumeMs = (item?.userData?.playbackPositionTicks ?: 0L) / 10_000L
+                val resumeMs = if (positionMs > 0L) positionMs else userResumeMs
 
                 val streamUrl = "$serverUrl/Videos/$itemId/stream?static=true&api_key=$token"
 
@@ -65,6 +67,7 @@ class PlaybackViewModel @Inject constructor(
                         title = title,
                         streamUrl = streamUrl,
                         positionMs = positionMs,
+                        resumePositionMs = resumeMs,
                     )
                 }
             } catch (e: Exception) {

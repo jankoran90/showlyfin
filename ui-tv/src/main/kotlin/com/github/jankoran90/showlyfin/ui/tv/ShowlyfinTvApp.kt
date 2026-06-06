@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.ui.tv
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +26,7 @@ import com.github.jankoran90.showlyfin.ui.tv.ui.TvDetailScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvDiscoverScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinBrowseScreen
+import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinDetailScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinItemsScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvNavDrawer
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvSettingsScreen
@@ -79,6 +81,20 @@ fun ShowlyfinTvApp(
     LaunchedEffect(Unit) {
         viewModel.playEvents.collect { event ->
             currentDestination = TvDestination.Playback(event.itemId, event.positionMs)
+        }
+    }
+
+    // Back: navigace v rámci appky místo ukončení (Playback řeší vlastní BackHandler)
+    BackHandler(
+        enabled = currentDestination !is TvDestination.Home &&
+            currentDestination !is TvDestination.Playback,
+    ) {
+        currentDestination = when (val d = currentDestination) {
+            is TvDestination.JellyfinLibrary -> d.parent
+            is TvDestination.JellyfinDetail -> d.parent
+            is TvDestination.Detail -> TvDestination.Discover
+            is TvDestination.Setup -> TvDestination.Settings
+            else -> TvDestination.Home
         }
     }
 
@@ -139,7 +155,7 @@ fun ShowlyfinTvApp(
                         )
                         else -> TvHomeScreen(
                             onItemClick = { itemId ->
-                                currentDestination = TvDestination.Playback(itemId)
+                                currentDestination = TvDestination.JellyfinDetail(itemId, parent = dest)
                             },
                             onOpenSetup = { currentDestination = TvDestination.Setup },
                             modifier = Modifier
@@ -164,6 +180,16 @@ fun ShowlyfinTvApp(
                             parent = dest,
                         )
                     },
+                    onPlay = { itemId ->
+                        currentDestination = TvDestination.JellyfinDetail(itemId, parent = dest)
+                    },
+                    onBack = { currentDestination = dest.parent },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            is TvDestination.JellyfinDetail -> {
+                TvJellyfinDetailScreen(
+                    itemId = dest.itemId,
                     onPlay = { itemId -> currentDestination = TvDestination.Playback(itemId) },
                     onBack = { currentDestination = dest.parent },
                     modifier = Modifier.fillMaxSize(),
