@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.csfd.CsfdScraper
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,6 +21,7 @@ import javax.inject.Inject
 class DetailViewModel @Inject constructor(
     private val tmdbApi: TmdbRemoteDataSource,
     private val csfdScraper: CsfdScraper,
+    private val csfdRepository: CsfdRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DetailUiState())
@@ -84,17 +86,19 @@ class DetailViewModel @Inject constructor(
     private fun loadCsfd(item: MediaItem) {
         if (item.type != MediaType.MOVIE) return
         val title = item.title.ifBlank { return }
-        val year = item.year ?: return
+        val year = item.year ?: 0
+        val imdbId = item.imdbId.orEmpty()
+        if (imdbId.isBlank() && title.isBlank()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isCsfdLoading = true) }
             try {
-                val csfdId = csfdScraper.searchByTitle(title, year) ?: run {
+                val csfdId = csfdRepository.getCsfdId(imdbId, title, year) ?: run {
                     _uiState.update { it.copy(isCsfdLoading = false) }
                     return@launch
                 }
                 _uiState.update { it.copy(csfdId = csfdId) }
                 coroutineScope {
-                    val plotDeferred = async { csfdScraper.scrapePlot(csfdId) }
+                    val plotDeferred = async { csfdRepository.getCzechPlot(csfdId) }
                     val ratingDeferred = async { csfdScraper.scrapeRating(csfdId) }
                     val reviewsDeferred = async { csfdScraper.scrapeReviews(csfdId).take(3) }
                     _uiState.update {

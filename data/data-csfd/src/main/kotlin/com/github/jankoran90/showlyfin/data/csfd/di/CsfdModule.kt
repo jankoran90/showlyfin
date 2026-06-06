@@ -14,3 +14,4 @@ object CsfdModule {
     @Singleton
     fun providesCsfdScraper(): CsfdScraper = CsfdScraper()
 }
+

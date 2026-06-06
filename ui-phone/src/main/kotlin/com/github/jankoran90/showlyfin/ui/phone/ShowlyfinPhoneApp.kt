@@ -257,15 +257,24 @@ fun ShowlyfinPhoneApp() {
                 }
             },
         ) { paddingValues ->
-            Box(modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)) {
+            val effectiveBottomDp = if (isSubScreen) {
+                0.dp
+            } else {
+                with(density) { (bottomBarHeightPx - bottomBarOffsetPx.floatValue).coerceAtLeast(0f).toDp() }
+            }
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(nestedScrollConnection)
+                .padding(top = paddingValues.calculateTopPadding(), bottom = effectiveBottomDp)
+            ) {
             when (val dest = currentDestination) {
                 is Destination.Discover -> DiscoverScreen(
                     onItemClick = { item -> bottomTab = Destination.Discover; currentDestination = Destination.Detail(item) },
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Watchlist -> WatchlistScreen(
                     onItemClick = { item -> bottomTab = Destination.Watchlist; currentDestination = Destination.Detail(item) },
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Jellyfin -> JellyfinBrowserScreen(
                     onLibraryClick = { libraryId, libraryName, collectionType ->
@@ -275,7 +284,7 @@ fun ShowlyfinPhoneApp() {
                             collectionType = collectionType,
                         )
                     },
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.JellyfinLibrary -> JellyfinLibraryItemsScreen(
                     libraryId = dest.libraryId,
@@ -323,10 +332,10 @@ fun ShowlyfinPhoneApp() {
                     },
                     onOpenMoveStep = { sid -> currentDestination = Destination.MoveStep(sid) },
                     onOpenLibrary = { currentDestination = Destination.LibraryBrowser },
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Settings -> SettingsScreen(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Detail -> DetailScreen(
                     item = dest.item,

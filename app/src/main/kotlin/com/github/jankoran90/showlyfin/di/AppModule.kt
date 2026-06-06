@@ -20,4 +20,11 @@ object AppModule {
     fun providesTraktPreferences(
         @ApplicationContext context: Context,
     ): SharedPreferences = context.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE)
+
+    @Provides
+    @Singleton
+    @Named("csfdPreferences")
+    fun providesCsfdPreferences(
+        @ApplicationContext context: Context,
+    ): SharedPreferences = context.getSharedPreferences("csfd_prefs", Context.MODE_PRIVATE)
 }
