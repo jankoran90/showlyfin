@@ -18,6 +18,13 @@ internal class UploaderApi(
         return service.getStreams(url, cookie).streams
     }
 
+    override suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int): String {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(infoHash, fileIdx))
+        return resp.url ?: throw IllegalStateException(resp.error ?: "RD resolve nevrátil URL")
+    }
+
     override suspend fun capture(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

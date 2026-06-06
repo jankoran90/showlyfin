@@ -28,6 +28,17 @@ class PlaybackViewModel @Inject constructor(
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
+    /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
+    fun loadExternal(url: String, title: String) {
+        _state.value = PlaybackUiState(
+            isLoading = false,
+            title = title,
+            streamUrl = url,
+            positionMs = 0L,
+            resumePositionMs = 0L,
+        )
+    }
+
     fun load(itemId: String, positionMs: Long) {
         _state.value = PlaybackUiState(isLoading = true)
         viewModelScope.launch {

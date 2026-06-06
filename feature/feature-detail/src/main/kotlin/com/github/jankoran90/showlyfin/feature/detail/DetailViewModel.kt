@@ -17,6 +17,9 @@ import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSourc
 import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportItem
 import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportRequest
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.model.UploaderCaptureRequest
+import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -37,11 +40,15 @@ class DetailViewModel @Inject constructor(
     private val jellyfinLibraryService: JellyfinLibraryService,
     private val authorizedTrakt: AuthorizedTraktRemoteDataSource,
     private val tokenProvider: TokenProvider,
+    private val uploaderDs: UploaderRemoteDataSource,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DetailUiState())
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
+
+    private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     fun load(item: MediaItem) {
         val current = _uiState.value.item
@@ -73,12 +80,32 @@ class DetailViewModel @Inject constructor(
                 isInWatchlist = false,
                 isTogglingWatchlist = false,
                 cast = emptyList(),
+                uploaderConfigured = uploaderBaseUrl.isNotBlank(),
+                showStreamPicker = false,
+                isLoadingStreams = false,
+                streams = emptyList(),
+                streamError = null,
+                isResolvingStream = false,
+                showDownloadMenu = false,
+                showSdilejPicker = false,
+                isLoadingSdilej = false,
+                sdilejStreams = emptyList(),
+                sdilejError = null,
+                captureMessage = null,
+                pendingPlaybackUrl = null,
+                pendingPlaybackTitle = "",
+                requestStremioFallback = false,
+                directorName = null,
+                directorMovies = null,
+                studioName = null,
+                studioMovies = null,
                 error = null,
             )
         }
         viewModelScope.launch { loadJellyfinOwned(item) }
         viewModelScope.launch { loadWatchlistMembership(item) }
         viewModelScope.launch { loadCast(item) }
+        viewModelScope.launch { loadRelated(item) }
         viewModelScope.launch {
             try {
                 val tmdbId = item.tmdbId
@@ -154,6 +181,59 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /** Sekce „Od stejného režiséra" + „Od stejného studia" (TMDB, jen filmy). Univerzální (v knihovně i mimo). */
+    private suspend fun loadRelated(item: MediaItem) {
+        if (item.type != MediaType.MOVIE) return
+        val tmdbId = item.tmdbId ?: return
+        coroutineScope {
+            val peopleDeferred = async { runCatching { tmdbApi.fetchMoviePeople(tmdbId) }.getOrNull() }
+            val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
+            val people = peopleDeferred.await()
+            val details = detailsDeferred.await()
+
+            val crew = people?.get(com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson.Type.CREW).orEmpty()
+            val director = crew.firstOrNull { p ->
+                p.job.equals("Director", ignoreCase = true) || p.jobs?.any { it.job.equals("Director", ignoreCase = true) } == true
+            }
+            if (director != null && director.id > 0) {
+                val movies = tmdbApi.discoverMoviesByPerson(director.id)
+                val header = "Od stejného režiséra" + (director.name?.let { ": $it" } ?: "")
+                val coll = moviesToCollection(header, movies, tmdbId)
+                if (coll != null) _uiState.update { it.copy(directorName = director.name, directorMovies = coll) }
+            }
+
+            val company = details?.production_companies?.firstOrNull { it.id > 0 }
+            if (company != null) {
+                val movies = tmdbApi.discoverMoviesByCompany(company.id)
+                val header = "Od stejného studia" + (company.name?.let { ": $it" } ?: "")
+                val coll = moviesToCollection(header, movies, tmdbId)
+                if (coll != null) _uiState.update { it.copy(studioName = company.name, studioMovies = coll) }
+            }
+        }
+    }
+
+    private fun moviesToCollection(
+        name: String,
+        movies: List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSearchMovieItem>,
+        excludeTmdbId: Long,
+    ): MediaCollection? {
+        val parts = movies
+            .filter { it.id != excludeTmdbId && !it.poster_path.isNullOrBlank() }
+            .take(20)
+            .map { m ->
+                CollectionPart(
+                    key = "tmdb_${m.id}",
+                    tmdbId = m.id,
+                    jellyfinId = _uiState.value.ownedTmdbToJellyfin[m.id],
+                    title = m.title ?: "",
+                    posterUrl = m.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
+                    year = m.release_date?.take(4),
+                    watched = _uiState.value.watchedTmdbIds.contains(m.id),
+                )
+            }
+        return if (parts.isEmpty()) null else MediaCollection(name = name, parts = parts)
+    }
+
     private suspend fun loadWatchlistMembership(item: MediaItem) {
         if (tokenProvider.getToken() == null || item.traktId == 0L) return
         runCatching {
@@ -193,6 +273,96 @@ class DetailViewModel @Inject constructor(
             }
         }
     }
+
+    // ── Stream / Stáhnout (Stremio + Sdílej.cz + Smart Remux hub) ──────────────
+
+    private fun mediaTypeStr(item: MediaItem) = if (item.type == MediaType.MOVIE) "movie" else "series"
+
+    /** ▶ Stream — otevře picker se Stremio streamy (jen přehrávání). */
+    fun openStreamPicker() {
+        val item = _uiState.value.item ?: return
+        val imdb = item.imdbId
+        if (imdb.isNullOrBlank() || uploaderBaseUrl.isBlank()) {
+            _uiState.update { it.copy(showStreamPicker = true, streamError = "Uploader není nastaven nebo film nemá IMDB ID.") }
+            return
+        }
+        _uiState.update { it.copy(showStreamPicker = true, isLoadingStreams = true, streamError = null, streams = emptyList()) }
+        viewModelScope.launch {
+            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb) }
+                .onSuccess { list -> _uiState.update { it.copy(isLoadingStreams = false, streams = list, streamError = if (list.isEmpty()) "Žádné streamy nenalezeny." else null) } }
+                .onFailure { e -> _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") } }
+        }
+    }
+
+    fun dismissStreamPicker() = _uiState.update { it.copy(showStreamPicker = false) }
+
+    /** Klik na konkrétní stream → přímé url / RD resolve → předá URL navigaci k přehrání. */
+    fun playStream(stream: UploaderStream) {
+        if (_uiState.value.isResolvingStream) return
+        val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
+            ?: _uiState.value.item?.title.orEmpty()
+        val direct = stream.url
+        if (!direct.isNullOrBlank()) {
+            _uiState.update { it.copy(showStreamPicker = false, pendingPlaybackUrl = direct, pendingPlaybackTitle = title) }
+            return
+        }
+        val infoHash = stream.infoHash
+        if (infoHash.isNullOrBlank()) {
+            _uiState.update { it.copy(streamError = "Stream nemá URL ani infoHash.") }
+            return
+        }
+        _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
+        viewModelScope.launch {
+            runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, stream.fileIdx) }
+                .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
+                .onFailure { e -> _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
+        }
+    }
+
+    fun consumePlayback() = _uiState.update { it.copy(pendingPlaybackUrl = null, pendingPlaybackTitle = "") }
+    fun consumeStremioFallback() = _uiState.update { it.copy(requestStremioFallback = false) }
+
+    // ── Stáhnout menu (Sdílej.cz + Smart Remux) ────────────────────────────────
+
+    fun openDownloadMenu() = _uiState.update { it.copy(showDownloadMenu = true) }
+    fun dismissDownloadMenu() = _uiState.update { it.copy(showDownloadMenu = false) }
+
+    /** Stáhnout → Sdílej.cz: seznam souborů z sdilej.cz k zachycení do knihovny. */
+    fun openSdilejPicker() {
+        val item = _uiState.value.item ?: return
+        val imdb = item.imdbId
+        if (imdb.isNullOrBlank() || uploaderBaseUrl.isBlank()) {
+            _uiState.update { it.copy(showDownloadMenu = false, showSdilejPicker = true, sdilejError = "Uploader není nastaven nebo film nemá IMDB ID.") }
+            return
+        }
+        val titleCs = item.titleCz?.takeIf { it.isNotBlank() } ?: _uiState.value.tmdbCzTitle.orEmpty()
+        _uiState.update { it.copy(showDownloadMenu = false, showSdilejPicker = true, isLoadingSdilej = true, sdilejError = null, sdilejStreams = emptyList()) }
+        viewModelScope.launch {
+            runCatching { uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, item.title, titleCs, item.year) }
+                .onSuccess { list -> _uiState.update { it.copy(isLoadingSdilej = false, sdilejStreams = list, sdilejError = if (list.isEmpty()) "Na Sdílej.cz nic nenalezeno." else null) } }
+                .onFailure { e -> _uiState.update { it.copy(isLoadingSdilej = false, sdilejError = e.message ?: "Chyba Sdílej.cz") } }
+        }
+    }
+
+    fun dismissSdilejPicker() = _uiState.update { it.copy(showSdilejPicker = false) }
+
+    /** Zachytí vybraný Sdílej.cz stream do TMM pipeline (stažení do knihovny). */
+    fun captureSdilej(stream: UploaderStream) {
+        val item = _uiState.value.item ?: return
+        val imdb = item.imdbId ?: ""
+        viewModelScope.launch {
+            runCatching {
+                uploaderDs.captureSdillej(
+                    uploaderBaseUrl, uploaderCookie,
+                    UploaderCaptureRequest(stream, imdb, item.title, item.year, mediaTypeStr(item), tmm = true),
+                )
+            }
+                .onSuccess { _uiState.update { it.copy(showSdilejPicker = false, captureMessage = "Staženo do fronty — dokonči v Uploaderu.") } }
+                .onFailure { e -> _uiState.update { it.copy(sdilejError = e.message ?: "Chyba stažení") } }
+        }
+    }
+
+    fun consumeCaptureMessage() = _uiState.update { it.copy(captureMessage = null) }
 
     private suspend fun loadJellyfinOwned(item: MediaItem) {
         val userIdString = prefs.getString("jellyfin_user_id", "")?.takeIf { it.isNotBlank() } ?: return

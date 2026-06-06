@@ -4,6 +4,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.*
 
 interface UploaderRemoteDataSource {
     suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int? = null, episode: Int? = null): List<UploaderStream>
+    suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int = 0): String
     suspend fun capture(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse
     suspend fun login(baseUrl: String, password: String): String
     suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int? = null, season: Int? = null, episode: Int? = null): List<UploaderStream>

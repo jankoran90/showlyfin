@@ -98,6 +98,7 @@ private sealed interface Destination {
     ) : Destination
     data class JellyfinDetail(val itemId: String, val parent: Destination) : Destination
     data class JellyfinPlayback(val itemId: String, val parent: JellyfinDetail) : Destination
+    data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination) : Destination
 }
 
 private data class JellyfinLibraryRef(
@@ -275,6 +276,7 @@ fun ShowlyfinPhoneApp() {
                 }
                 is Destination.JellyfinDetail -> current.parent
                 is Destination.JellyfinPlayback -> current.parent
+                is Destination.Player -> current.parent
                 else -> bottomTab
             }
         }
@@ -397,7 +399,19 @@ fun ShowlyfinPhoneApp() {
                     onStremio = onStremioItem,
                     onShare = onShareItem,
                     onCollectionPartClick = onCollectionPartClick,
+                    onPlayJellyfin = { jfId ->
+                        currentDestination = Destination.Player(itemId = jfId, externalUrl = null, title = dest.item.title, parent = dest)
+                    },
+                    onPlayStreamUrl = { url, title ->
+                        currentDestination = Destination.Player(itemId = null, externalUrl = url, title = title, parent = dest)
+                    },
                     modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.Player -> PlaybackScreen(
+                    itemId = dest.itemId ?: "",
+                    externalUrl = dest.externalUrl,
+                    externalTitle = dest.title,
+                    onBack = { currentDestination = dest.parent },
                 )
                 is Destination.SmartDetect -> SmartDetectScreen(
                     imdbId = dest.imdbId,

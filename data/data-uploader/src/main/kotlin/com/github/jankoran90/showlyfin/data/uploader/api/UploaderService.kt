@@ -8,6 +8,7 @@ import retrofit2.http.*
 
 interface UploaderService {
     @GET suspend fun getStreams(@Url url: String, @Header("Cookie") cookie: String): UploaderStreamsResponse
+    @POST suspend fun resolveStream(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderResolveRequest): UploaderResolveResponse
     @POST suspend fun capture(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderCaptureRequest): UploaderCaptureResponse
     @POST suspend fun login(@Url url: String, @Body request: UploaderLoginRequest): Response<ResponseBody>
 

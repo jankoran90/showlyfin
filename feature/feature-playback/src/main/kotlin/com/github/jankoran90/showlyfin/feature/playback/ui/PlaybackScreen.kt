@@ -46,8 +46,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import com.github.jankoran90.showlyfin.feature.playback.PlaybackCache
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
 import kotlinx.coroutines.delay
 
@@ -63,19 +68,38 @@ private fun fmtTime(ms: Long): String {
 @OptIn(UnstableApi::class)
 @Composable
 fun PlaybackScreen(
-    itemId: String,
+    itemId: String = "",
     positionMs: Long = 0L,
+    externalUrl: String? = null,
+    externalTitle: String = "",
     onBack: () -> Unit,
     viewModel: PlaybackViewModel = hiltViewModel(),
 ) {
-    LaunchedEffect(itemId) { viewModel.load(itemId, positionMs) }
+    LaunchedEffect(itemId, externalUrl) {
+        if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle)
+        else viewModel.load(itemId, positionMs)
+    }
 
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
 
     val exoPlayer = remember {
+        // Disk-backed cache + generous buffer → smooth streaming over jittery links (RD/Jellyfin).
+        val upstream = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(30_000)
+            .setReadTimeoutMs(30_000)
+        val cacheFactory = CacheDataSource.Factory()
+            .setCache(PlaybackCache.get(context))
+            .setUpstreamDataSourceFactory(upstream)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(60_000, 300_000, 5_000, 10_000)
+            .build()
         ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
+            .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .build()

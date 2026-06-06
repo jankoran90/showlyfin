@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":data:data-tmdb"))
     implementation(project(":data:data-csfd"))
     implementation(project(":data:data-jellyfin"))
+    implementation(project(":data:data-uploader"))
     implementation(libs.jellyfin.sdk)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

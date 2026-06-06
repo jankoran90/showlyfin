@@ -21,13 +21,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -68,14 +76,65 @@ fun DetailScreen(
     onStremio: ((MediaItem) -> Unit)? = null,
     onShare: ((MediaItem) -> Unit)? = null,
     onCollectionPartClick: ((CollectionPart) -> Unit)? = null,
+    onPlayJellyfin: ((String) -> Unit)? = null,
+    onPlayStreamUrl: ((String, String) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) { viewModel.load(item) }
 
     val displayItem = uiState.item ?: item
+
+    // Stremio stream resolved → přehraj externí URL
+    LaunchedEffect(uiState.pendingPlaybackUrl) {
+        val url = uiState.pendingPlaybackUrl ?: return@LaunchedEffect
+        onPlayStreamUrl?.invoke(url, uiState.pendingPlaybackTitle)
+        viewModel.consumePlayback()
+    }
+    // RD resolve selhal → fallback do Stremio app
+    LaunchedEffect(uiState.requestStremioFallback) {
+        if (uiState.requestStremioFallback) {
+            onStremio?.invoke(displayItem)
+            viewModel.consumeStremioFallback()
+        }
+    }
+    // Sdílej.cz capture → toast
+    LaunchedEffect(uiState.captureMessage) {
+        uiState.captureMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.consumeCaptureMessage()
+        }
+    }
+
+    if (uiState.showStreamPicker) {
+        StreamPickerSheet(
+            streams = uiState.streams,
+            isLoading = uiState.isLoadingStreams,
+            isResolving = uiState.isResolvingStream,
+            error = uiState.streamError,
+            onPlay = { viewModel.playStream(it) },
+            onDismiss = { viewModel.dismissStreamPicker() },
+        )
+    }
+    if (uiState.showDownloadMenu) {
+        DownloadMenuSheet(
+            onSdilej = { viewModel.openSdilejPicker() },
+            onSmartRemux = { viewModel.dismissDownloadMenu(); onSmartDetect?.invoke(displayItem) },
+            onDismiss = { viewModel.dismissDownloadMenu() },
+        )
+    }
+    if (uiState.showSdilejPicker) {
+        SdilejPickerSheet(
+            streams = uiState.sdilejStreams,
+            isLoading = uiState.isLoadingSdilej,
+            error = uiState.sdilejError,
+            onCapture = { viewModel.captureSdilej(it) },
+            onDismiss = { viewModel.dismissSdilejPicker() },
+        )
+    }
 
     Scaffold(
         modifier = modifier,
@@ -250,10 +309,14 @@ fun DetailScreen(
             Spacer(Modifier.height(8.dp))
             DetailActionRow(
                 item = displayItem,
-                onNaTv = onNaTv,
-                onSmartDetect = onSmartDetect,
-                onStremio = onStremio,
+                inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
+                csfdId = uiState.csfdId,
+                onPlayNaTv = onNaTv?.let { cb -> { cb(displayItem) } },
+                onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
+                onStream = { viewModel.openStreamPicker() },
+                onDownload = { viewModel.openDownloadMenu() },
                 onShare = onShare,
+                onCsfd = uiState.csfdId?.let { id -> { openCsfd(context, id) } },
             )
 
             val mergedCollection = uiState.mergedCollection ?: uiState.collection?.let { coll ->
@@ -279,6 +342,20 @@ fun DetailScreen(
                     onPartClick = { part -> onCollectionPartClick?.invoke(part) },
                 )
             }
+            uiState.directorMovies?.let { coll ->
+                CollectionSection(
+                    collection = coll,
+                    excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                    onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                )
+            }
+            uiState.studioMovies?.let { coll ->
+                CollectionSection(
+                    collection = coll,
+                    excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                    onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                )
+            }
 
             CsfdReviewsSection(reviews = uiState.csfdReviews)
 
@@ -287,16 +364,26 @@ fun DetailScreen(
     }
 }
 
+private fun openCsfd(context: android.content.Context, csfdId: Long) {
+    val uri = Uri.parse("https://www.csfd.cz/film/$csfdId/")
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailActionRow(
     item: MediaItem,
-    onNaTv: ((MediaItem) -> Unit)?,
-    onSmartDetect: ((MediaItem) -> Unit)?,
-    onStremio: ((MediaItem) -> Unit)?,
+    inLibrary: Boolean,
+    csfdId: Long?,
+    onPlayNaTv: (() -> Unit)?,
+    onPlayHere: (() -> Unit)?,
+    onStream: () -> Unit,
+    onDownload: () -> Unit,
     onShare: ((MediaItem) -> Unit)?,
+    onCsfd: (() -> Unit)?,
 ) {
-    val hasImdb = item.imdbId != null
     FlowRow(
         modifier = Modifier
             .fillMaxWidth()
@@ -304,23 +391,29 @@ private fun DetailActionRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (onNaTv != null) {
+        if (inLibrary) {
+            // Film je v Jellyfin knihovně → přehrávání
+            if (onPlayNaTv != null) {
+                Button(onClick = onPlayNaTv) {
+                    Icon(Icons.Default.Cast, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                    Text("Přehrát Na TV")
+                }
+            }
+            if (onPlayHere != null) {
+                Button(onClick = onPlayHere) {
+                    Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                    Text("V tomto zařízení")
+                }
+            }
+        } else {
+            // Mimo knihovnu → akvizice / stream
             AssistChip(
-                onClick = { onNaTv(item) },
-                label = { Text("Na TV") },
-                leadingIcon = { Icon(Icons.Default.Cast, contentDescription = null) },
+                onClick = onDownload,
+                label = { Text("Stáhnout") },
+                leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
             )
-        }
-        if (onSmartDetect != null && hasImdb) {
             AssistChip(
-                onClick = { onSmartDetect(item) },
-                label = { Text("Smart Remux") },
-                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-            )
-        }
-        if (onStremio != null) {
-            AssistChip(
-                onClick = { onStremio(item) },
+                onClick = onStream,
                 label = { Text("Stremio") },
                 leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             )
@@ -330,6 +423,13 @@ private fun DetailActionRow(
                 onClick = { onShare(item) },
                 label = { Text("Sdílet") },
                 leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+            )
+        }
+        if (csfdId != null && onCsfd != null) {
+            AssistChip(
+                onClick = onCsfd,
+                label = { Text("ČSFD") },
+                leadingIcon = { Icon(Icons.Default.OpenInNew, contentDescription = null) },
             )
         }
     }

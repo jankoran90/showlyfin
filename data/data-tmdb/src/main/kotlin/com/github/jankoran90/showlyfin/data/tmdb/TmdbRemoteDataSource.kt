@@ -20,4 +20,6 @@ interface TmdbRemoteDataSource {
     suspend fun fetchCollection(collectionId: Long): TmdbCollection?
     suspend fun searchMovies(query: String, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
     suspend fun searchShows(query: String, language: String = "cs-CZ"): List<TmdbSearchShowItem>
+    suspend fun discoverMoviesByPerson(personId: Long, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
+    suspend fun discoverMoviesByCompany(companyId: Long, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
 }

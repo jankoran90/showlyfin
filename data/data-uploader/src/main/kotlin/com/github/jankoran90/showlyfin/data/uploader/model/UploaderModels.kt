@@ -35,6 +35,16 @@ data class UploaderStreamsResponse(
     val error: String? = null,
 )
 
+data class UploaderResolveRequest(
+    @SerializedName("infoHash") val infoHash: String,
+    @SerializedName("fileIdx") val fileIdx: Int = 0,
+)
+
+data class UploaderResolveResponse(
+    val url: String? = null,
+    val error: String? = null,
+)
+
 data class UploaderCaptureRequest(
     val stream: UploaderStream,
     @SerializedName("imdb_id") val imdbId: String,

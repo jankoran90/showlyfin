@@ -63,4 +63,11 @@ interface TmdbService {
         @Query("query") query: String,
         @Query("language") language: String = "cs-CZ",
     ): TmdbSearchShowResponse
+
+    @GET("discover/movie?include_adult=false&sort_by=popularity.desc")
+    suspend fun discoverMovies(
+        @Query("with_people") withPeople: String? = null,
+        @Query("with_companies") withCompanies: String? = null,
+        @Query("language") language: String = "cs-CZ",
+    ): TmdbSearchMovieResponse
 }

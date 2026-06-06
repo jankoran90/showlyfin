@@ -13,6 +13,13 @@ data class TmdbMovieDetails(
     val tagline: String?,
     val status: String?,
     val belongs_to_collection: TmdbBelongsToCollection? = null,
+    val production_companies: List<TmdbProductionCompany>? = null,
+)
+
+data class TmdbProductionCompany(
+    val id: Long,
+    val name: String? = null,
+    val logo_path: String? = null,
 )
 
 data class TmdbBelongsToCollection(
