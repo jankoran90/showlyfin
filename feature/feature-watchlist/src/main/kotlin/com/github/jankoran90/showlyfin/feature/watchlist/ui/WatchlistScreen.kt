@@ -47,7 +47,7 @@ import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistViewModel
 
 @Composable
 fun WatchlistScreen(
-    onItemClick: (MediaItem) -> Unit,
+    onItemClick: (MediaItem, jellyfinId: String?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WatchlistViewModel = hiltViewModel(),
 ) {
@@ -136,11 +136,15 @@ fun WatchlistScreen(
                 ) {
                     items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
                         val progressData = uiState.progressMap[item.traktId]
+                        val inLibrary = item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false
+                        val jellyfinId = item.imdbId?.let { uiState.imdbToJellyfin[it] }
+                            ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
                         Column(modifier = Modifier.fillMaxWidth()) {
                             MediaCard(
                                 item = item,
-                                onClick = { onItemClick(item) },
+                                onClick = { onItemClick(item, jellyfinId) },
                                 progress = if (item.type == MediaType.SHOW) progressData?.fraction else null,
+                                inLibrary = inLibrary,
                             )
                             if (item.type == MediaType.SHOW && progressData != null) {
                                 Text(

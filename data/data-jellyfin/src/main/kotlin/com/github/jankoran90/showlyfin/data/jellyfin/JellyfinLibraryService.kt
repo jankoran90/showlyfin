@@ -12,21 +12,21 @@ import javax.inject.Singleton
 class JellyfinLibraryService @Inject constructor(
     private val apiClient: ApiClient,
 ) {
-    private var cachedImdbIds: Set<String>? = null
-    private var cachedTmdbIds: Set<Long>? = null
+    private var cachedOwned: OwnedIds? = null
     private var cacheTimestamp: Long = 0L
     private val cacheValidMs = 5 * 60 * 1000L
 
     suspend fun getOwnedIds(userId: UUID): OwnedIds {
         val now = System.currentTimeMillis()
-        val cachedImdb = cachedImdbIds
-        val cachedTmdb = cachedTmdbIds
-        if (cachedImdb != null && cachedTmdb != null && (now - cacheTimestamp) < cacheValidMs) {
-            return OwnedIds(cachedImdb, cachedTmdb)
+        val cached = cachedOwned
+        if (cached != null && (now - cacheTimestamp) < cacheValidMs) {
+            return cached
         }
 
         val imdb = mutableSetOf<String>()
         val tmdb = mutableSetOf<Long>()
+        val imdbToJellyfin = mutableMapOf<String, String>()
+        val tmdbToJellyfin = mutableMapOf<Long, String>()
         runCatching {
             val response = apiClient.itemsApi.getItems(
                 userId = userId,
@@ -37,21 +37,32 @@ class JellyfinLibraryService @Inject constructor(
             ).content
             for (item in response.items) {
                 val ids = item.providerIds ?: continue
-                ids["Imdb"]?.takeIf { it.isNotBlank() }?.let { imdb.add(it) }
-                ids["Tmdb"]?.toLongOrNull()?.let { tmdb.add(it) }
+                val jellyfinId = item.id.toString()
+                ids["Imdb"]?.takeIf { it.isNotBlank() }?.let {
+                    imdb.add(it)
+                    imdbToJellyfin.putIfAbsent(it, jellyfinId)
+                }
+                ids["Tmdb"]?.toLongOrNull()?.let {
+                    tmdb.add(it)
+                    tmdbToJellyfin.putIfAbsent(it, jellyfinId)
+                }
             }
         }
-        cachedImdbIds = imdb
-        cachedTmdbIds = tmdb
+        val owned = OwnedIds(imdb, tmdb, imdbToJellyfin, tmdbToJellyfin)
+        cachedOwned = owned
         cacheTimestamp = now
-        return OwnedIds(imdb, tmdb)
+        return owned
     }
 
     fun invalidate() {
-        cachedImdbIds = null
-        cachedTmdbIds = null
+        cachedOwned = null
         cacheTimestamp = 0L
     }
 }
 
-data class OwnedIds(val imdbIds: Set<String>, val tmdbIds: Set<Long>)
+data class OwnedIds(
+    val imdbIds: Set<String>,
+    val tmdbIds: Set<Long>,
+    val imdbToJellyfin: Map<String, String> = emptyMap(),
+    val tmdbToJellyfin: Map<Long, String> = emptyMap(),
+)

@@ -1,13 +1,17 @@
 package com.github.jankoran90.showlyfin.feature.watchlist
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
+import org.jellyfin.sdk.model.UUID
+import javax.inject.Named
 import com.github.jankoran90.showlyfin.feature.watchlist.mapper.toMovieMediaItem
 import com.github.jankoran90.showlyfin.feature.watchlist.mapper.toShowMediaItem
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,6 +33,8 @@ class WatchlistViewModel @Inject constructor(
     private val tmdbApi: TmdbRemoteDataSource,
     private val tokenProvider: TokenProvider,
     private val parentalControlsRepository: ParentalControlsRepository,
+    private val jellyfinLibraryService: JellyfinLibraryService,
+    @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _rawItems = MutableStateFlow<List<MediaItem>>(emptyList())
@@ -41,12 +47,30 @@ class WatchlistViewModel @Inject constructor(
         val loggedIn = tokenProvider.getToken() != null
         _uiState.update { it.copy(isLoggedIn = loggedIn) }
         if (loggedIn) load(WatchlistTab.MOVIES)
+        loadJellyfinOwned()
         parentalControlsRepository.profile
             .onEach { profile ->
                 lockedRating = if (profile.isLocked) profile.effectiveAgeRating else null
                 reapply()
             }
             .launchIn(viewModelScope)
+    }
+
+    private fun loadJellyfinOwned() {
+        viewModelScope.launch {
+            val userId = prefs.getString("jellyfin_user_id", "") ?: ""
+            if (userId.isBlank()) return@launch
+            runCatching {
+                val owned = jellyfinLibraryService.getOwnedIds(UUID.fromString(userId))
+                _uiState.update {
+                    it.copy(
+                        ownedImdbIds = owned.imdbIds,
+                        imdbToJellyfin = owned.imdbToJellyfin,
+                        tmdbToJellyfin = owned.tmdbToJellyfin,
+                    )
+                }
+            }
+        }
     }
 
     fun selectTab(tab: WatchlistTab) {

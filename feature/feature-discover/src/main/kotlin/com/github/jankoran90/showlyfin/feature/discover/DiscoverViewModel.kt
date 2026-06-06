@@ -206,7 +206,13 @@ class DiscoverViewModel @Inject constructor(
             if (userId.isNotBlank()) {
                 runCatching {
                     val owned = jellyfinLibraryService.getOwnedIds(UUID.fromString(userId))
-                    _uiState.update { it.copy(ownedImdbIds = owned.imdbIds) }
+                    _uiState.update {
+                        it.copy(
+                            ownedImdbIds = owned.imdbIds,
+                            imdbToJellyfin = owned.imdbToJellyfin,
+                            tmdbToJellyfin = owned.tmdbToJellyfin,
+                        )
+                    }
                 }
             }
         }

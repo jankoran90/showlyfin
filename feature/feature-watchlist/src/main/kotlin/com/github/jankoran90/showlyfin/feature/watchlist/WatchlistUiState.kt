@@ -29,4 +29,7 @@ data class WatchlistUiState(
     val sort: WatchlistSort = WatchlistSort.DEFAULT,
     val genreFilter: String? = null,
     val availableGenres: List<String> = emptyList(),
+    val ownedImdbIds: Set<String> = emptySet(),
+    val imdbToJellyfin: Map<String, String> = emptyMap(),
+    val tmdbToJellyfin: Map<Long, String> = emptyMap(),
 )

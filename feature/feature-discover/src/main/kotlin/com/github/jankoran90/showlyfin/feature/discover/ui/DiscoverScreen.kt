@@ -72,7 +72,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun DiscoverScreen(
-    onItemClick: (MediaItem) -> Unit,
+    onItemClick: (MediaItem, jellyfinId: String?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DiscoverViewModel = hiltViewModel(),
 ) {
@@ -244,9 +244,11 @@ fun DiscoverScreen(
                     ) {
                         items(items, key = { "${it.type}_${it.traktId}" }) { item ->
                             val inLibrary = item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false
+                            val jellyfinId = item.imdbId?.let { uiState.imdbToJellyfin[it] }
+                                ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
                             MediaCard(
                                 item = item,
-                                onClick = { onItemClick(item) },
+                                onClick = { onItemClick(item, jellyfinId) },
                                 inLibrary = inLibrary,
                             )
                         }

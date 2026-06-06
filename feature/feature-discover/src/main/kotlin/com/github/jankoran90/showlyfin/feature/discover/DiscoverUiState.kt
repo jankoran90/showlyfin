@@ -19,6 +19,8 @@ data class DiscoverUiState(
     val filters: DiscoverFilters = DiscoverFilters(),
     val availableGenres: List<String> = emptyList(),
     val ownedImdbIds: Set<String> = emptySet(),
+    val imdbToJellyfin: Map<String, String> = emptyMap(),
+    val tmdbToJellyfin: Map<Long, String> = emptyMap(),
     val watchlistTraktIds: Set<Long> = emptySet(),
     val watchedTraktIds: Set<Long> = emptySet(),
     val isFilterSheetOpen: Boolean = false,

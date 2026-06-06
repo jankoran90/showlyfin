@@ -91,8 +91,8 @@ private sealed interface Destination {
         val parentItemType: String? = null,
         val ancestors: List<JellyfinLibraryRef> = emptyList(),
     ) : Destination
-    data class JellyfinDetail(val itemId: String, val parent: JellyfinLibrary) : Destination
-    data class JellyfinPlayback(val itemId: String, val parent: JellyfinLibrary) : Destination
+    data class JellyfinDetail(val itemId: String, val parent: Destination) : Destination
+    data class JellyfinPlayback(val itemId: String, val parent: JellyfinDetail) : Destination
 }
 
 private data class JellyfinLibraryRef(
@@ -239,7 +239,7 @@ fun ShowlyfinPhoneApp() {
                     }
                 }
                 is Destination.JellyfinDetail -> current.parent
-                is Destination.JellyfinPlayback -> Destination.JellyfinDetail(current.itemId, current.parent)
+                is Destination.JellyfinPlayback -> current.parent
                 else -> bottomTab
             }
         }
@@ -265,11 +265,25 @@ fun ShowlyfinPhoneApp() {
                 ) {
             when (val dest = currentDestination) {
                 is Destination.Discover -> DiscoverScreen(
-                    onItemClick = { item -> bottomTab = Destination.Discover; currentDestination = Destination.Detail(item) },
+                    onItemClick = { item, jellyfinId ->
+                        bottomTab = Destination.Discover
+                        currentDestination = if (jellyfinId != null) {
+                            Destination.JellyfinDetail(jellyfinId, parent = Destination.Discover)
+                        } else {
+                            Destination.Detail(item)
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Watchlist -> WatchlistScreen(
-                    onItemClick = { item -> bottomTab = Destination.Watchlist; currentDestination = Destination.Detail(item) },
+                    onItemClick = { item, jellyfinId ->
+                        bottomTab = Destination.Watchlist
+                        currentDestination = if (jellyfinId != null) {
+                            Destination.JellyfinDetail(jellyfinId, parent = Destination.Watchlist)
+                        } else {
+                            Destination.Detail(item)
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Jellyfin -> JellyfinBrowserScreen(
@@ -312,16 +326,14 @@ fun ShowlyfinPhoneApp() {
                     itemId = dest.itemId,
                     onBack = { currentDestination = dest.parent },
                     onPlay = { itemId ->
-                        currentDestination = Destination.JellyfinPlayback(itemId, dest.parent)
+                        currentDestination = Destination.JellyfinPlayback(itemId, dest)
                     },
                     onCollectionPartClick = onCollectionPartClick,
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.JellyfinPlayback -> PlaybackScreen(
                     itemId = dest.itemId,
-                    onBack = {
-                        currentDestination = Destination.JellyfinDetail(dest.itemId, dest.parent)
-                    },
+                    onBack = { currentDestination = dest.parent },
                 )
                 is Destination.Uploader -> UploaderScreen(
                     onOpenReviewStep = { sid, fid, filename ->
