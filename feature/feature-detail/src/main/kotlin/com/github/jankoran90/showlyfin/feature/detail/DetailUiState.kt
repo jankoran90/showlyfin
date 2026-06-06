@@ -2,7 +2,9 @@ package com.github.jankoran90.showlyfin.feature.detail
 
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
+import com.github.jankoran90.showlyfin.data.jellyfin.BoxSetInfo
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbMovieDetails
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbShowDetails
@@ -32,4 +34,9 @@ data class DetailUiState(
     val ownedTmdbToJellyfin: Map<Long, String> = emptyMap(),
     val isOwnedInLibrary: Boolean = false,
     val ownedJellyfinId: String? = null,
+    val boxSets: List<BoxSetInfo> = emptyList(),
+    val boxSetByTmdbCollection: Map<Long, String> = emptyMap(),
+    val boxSetByNormalizedName: Map<String, String> = emptyMap(),
+    val matchingBoxSetId: String? = null,
+    val mergedCollection: MediaCollection? = null,
 )

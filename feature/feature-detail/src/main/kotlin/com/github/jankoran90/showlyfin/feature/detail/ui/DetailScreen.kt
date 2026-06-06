@@ -256,8 +256,8 @@ fun DetailScreen(
                 onShare = onShare,
             )
 
-            uiState.collection?.let { coll ->
-                val mediaCollection = MediaCollection(
+            val mergedCollection = uiState.mergedCollection ?: uiState.collection?.let { coll ->
+                MediaCollection(
                     name = coll.name ?: "Kolekce",
                     parts = coll.parts.orEmpty().map { part ->
                         CollectionPart(
@@ -270,8 +270,10 @@ fun DetailScreen(
                         )
                     },
                 )
+            }
+            mergedCollection?.let { coll ->
                 CollectionSection(
-                    collection = mediaCollection,
+                    collection = coll,
                     excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
                     onPartClick = { part -> onCollectionPartClick?.invoke(part) },
                 )

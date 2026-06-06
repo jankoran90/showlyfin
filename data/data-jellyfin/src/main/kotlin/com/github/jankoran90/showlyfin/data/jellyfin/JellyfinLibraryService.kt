@@ -48,7 +48,41 @@ class JellyfinLibraryService @Inject constructor(
                 }
             }
         }
-        val owned = OwnedIds(imdb, tmdb, imdbToJellyfin, tmdbToJellyfin)
+
+        val boxSets = mutableListOf<BoxSetInfo>()
+        val boxSetByTmdbCollection = mutableMapOf<Long, String>()
+        val boxSetByNormalizedName = mutableMapOf<String, String>()
+        runCatching {
+            val response = apiClient.itemsApi.getItems(
+                userId = userId,
+                includeItemTypes = listOf(BaseItemKind.BOX_SET),
+                recursive = true,
+                fields = listOf(ItemFields.PROVIDER_IDS),
+                limit = 1000,
+            ).content
+            for (item in response.items) {
+                val jellyfinId = item.id.toString()
+                val name = item.name ?: continue
+                val tmdbCollectionId = item.providerIds?.get("TmdbCollection")?.toLongOrNull()
+                    ?: item.providerIds?.get("Tmdb")?.toLongOrNull()
+                boxSets.add(BoxSetInfo(jellyfinId, name, tmdbCollectionId))
+                tmdbCollectionId?.let { boxSetByTmdbCollection.putIfAbsent(it, jellyfinId) }
+                val normalized = normalizeBoxSetName(name)
+                if (normalized.isNotBlank()) {
+                    boxSetByNormalizedName.putIfAbsent(normalized, jellyfinId)
+                }
+            }
+        }
+
+        val owned = OwnedIds(
+            imdbIds = imdb,
+            tmdbIds = tmdb,
+            imdbToJellyfin = imdbToJellyfin,
+            tmdbToJellyfin = tmdbToJellyfin,
+            boxSets = boxSets,
+            boxSetByTmdbCollection = boxSetByTmdbCollection,
+            boxSetByNormalizedName = boxSetByNormalizedName,
+        )
         cachedOwned = owned
         cacheTimestamp = now
         return owned
@@ -60,9 +94,21 @@ class JellyfinLibraryService @Inject constructor(
     }
 }
 
+internal fun normalizeBoxSetName(name: String): String =
+    name.lowercase().filter { it.isLetterOrDigit() }
+
+data class BoxSetInfo(
+    val jellyfinId: String,
+    val name: String,
+    val tmdbCollectionId: Long?,
+)
+
 data class OwnedIds(
     val imdbIds: Set<String>,
     val tmdbIds: Set<Long>,
     val imdbToJellyfin: Map<String, String> = emptyMap(),
     val tmdbToJellyfin: Map<Long, String> = emptyMap(),
+    val boxSets: List<BoxSetInfo> = emptyList(),
+    val boxSetByTmdbCollection: Map<Long, String> = emptyMap(),
+    val boxSetByNormalizedName: Map<String, String> = emptyMap(),
 )

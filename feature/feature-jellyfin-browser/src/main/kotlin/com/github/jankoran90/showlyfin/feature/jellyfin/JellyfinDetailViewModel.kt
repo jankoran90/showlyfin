@@ -98,8 +98,15 @@ class JellyfinDetailViewModel @Inject constructor(
             val jellyfinCollection = runCatching {
                 findJellyfinBoxSet(itemUuid, userUuid, serverUrl, token)
             }.getOrNull()
+
             if (jellyfinCollection != null) {
-                _state.update { it.copy(collection = jellyfinCollection) }
+                val tmdbCollectionResolved = if (tmdbId != null && tmdbId > 0) {
+                    runCatching { loadTmdbCollection(tmdbId, userUuid) }.getOrNull()
+                } else null
+                val merged = if (tmdbCollectionResolved != null) {
+                    mergeBoxSetWithTmdb(jellyfinCollection, tmdbCollectionResolved)
+                } else jellyfinCollection
+                _state.update { it.copy(collection = merged) }
                 return@launch
             }
             if (tmdbId != null && tmdbId > 0) {
@@ -109,6 +116,15 @@ class JellyfinDetailViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun mergeBoxSetWithTmdb(jellyfin: MediaCollection, tmdb: MediaCollection): MediaCollection {
+        val jellyfinTmdbIds = jellyfin.parts.mapNotNull { it.tmdbId }.toSet()
+        val missing = tmdb.parts.filter { it.tmdbId != null && it.tmdbId !in jellyfinTmdbIds }
+        return MediaCollection(
+            name = jellyfin.name,
+            parts = jellyfin.parts + missing,
+        )
     }
 
     private suspend fun findJellyfinBoxSet(

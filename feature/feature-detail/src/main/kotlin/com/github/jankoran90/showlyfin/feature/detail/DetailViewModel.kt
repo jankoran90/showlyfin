@@ -5,10 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.CollectionPart
+import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.csfd.CsfdScraper
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
+import com.github.jankoran90.showlyfin.data.jellyfin.normalizeBoxSetName
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -56,6 +60,8 @@ class DetailViewModel @Inject constructor(
                 collection = null,
                 isOwnedInLibrary = false,
                 ownedJellyfinId = null,
+                matchingBoxSetId = null,
+                mergedCollection = null,
                 error = null,
             )
         }
@@ -86,6 +92,7 @@ class DetailViewModel @Inject constructor(
                                 launch {
                                     val collection = tmdbApi.fetchCollection(collectionId)
                                     _uiState.update { it.copy(collection = collection) }
+                                    if (collection != null) rebuildMergedCollection(collection, item)
                                 }
                             }
                         }
@@ -132,6 +139,40 @@ class DetailViewModel @Inject constructor(
                 ownedTmdbToJellyfin = owned.tmdbToJellyfin,
                 isOwnedInLibrary = matchedJellyfinId != null,
                 ownedJellyfinId = matchedJellyfinId,
+                boxSets = owned.boxSets,
+                boxSetByTmdbCollection = owned.boxSetByTmdbCollection,
+                boxSetByNormalizedName = owned.boxSetByNormalizedName,
+            )
+        }
+        _uiState.value.collection?.let { rebuildMergedCollection(it, item) }
+    }
+
+    private fun rebuildMergedCollection(collection: TmdbCollection, item: MediaItem) {
+        val tmdbCollectionId = collection.id
+        val state = _uiState.value
+        val ownedTmdb = state.ownedTmdbToJellyfin
+        val boxSetByTmdb = state.boxSetByTmdbCollection[tmdbCollectionId]
+        val boxSetByName = collection.name
+            ?.takeIf { it.isNotBlank() }
+            ?.let { state.boxSetByNormalizedName[normalizeBoxSetName(it)] }
+        val resolvedBoxSetId = boxSetByTmdb ?: boxSetByName
+        val parts = collection.parts.orEmpty().map { part ->
+            CollectionPart(
+                key = "tmdb_${part.id}",
+                tmdbId = part.id,
+                jellyfinId = ownedTmdb[part.id],
+                title = part.title ?: "",
+                posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
+                year = part.release_date?.take(4),
+            )
+        }
+        val displayName = state.boxSets.firstOrNull { it.jellyfinId == resolvedBoxSetId }?.name
+            ?: collection.name
+            ?: "Kolekce"
+        _uiState.update {
+            it.copy(
+                matchingBoxSetId = resolvedBoxSetId,
+                mergedCollection = MediaCollection(name = displayName, parts = parts),
             )
         }
     }
