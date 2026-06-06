@@ -22,6 +22,7 @@ dependencies {
     implementation(project(":data:data-trakt"))
     implementation(project(":data:data-tmdb"))
     implementation(project(":data:data-jellyfin"))
+    implementation(libs.jellyfin.sdk)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
