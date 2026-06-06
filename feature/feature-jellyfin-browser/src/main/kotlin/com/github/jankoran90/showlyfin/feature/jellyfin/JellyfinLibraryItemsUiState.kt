@@ -31,4 +31,5 @@ data class JellyfinLibraryItemsUiState(
     val error: String? = null,
     val sort: JellyfinSort = JellyfinSort.NAME,
     val typeFilter: JellyfinTypeFilter = JellyfinTypeFilter.ALL,
+    val isBoxSetContext: Boolean = false,
 )

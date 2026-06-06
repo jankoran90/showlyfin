@@ -68,10 +68,38 @@ private sealed interface Destination {
     data class RemuxPicker(val library: String, val folder: String) : Destination
     data class RemuxProgress(val jobId: String, val folder: String) : Destination
     data object RemuxHistory : Destination
-    data class JellyfinLibrary(val libraryId: String, val libraryName: String) : Destination
-    data class JellyfinDetail(val itemId: String, val libraryId: String, val libraryName: String) : Destination
-    data class JellyfinPlayback(val itemId: String, val libraryId: String, val libraryName: String) : Destination
+    data class JellyfinLibrary(
+        val libraryId: String,
+        val libraryName: String,
+        val collectionType: String? = null,
+        val parentItemType: String? = null,
+        val ancestors: List<JellyfinLibraryRef> = emptyList(),
+    ) : Destination
+    data class JellyfinDetail(val itemId: String, val parent: JellyfinLibrary) : Destination
+    data class JellyfinPlayback(val itemId: String, val parent: JellyfinLibrary) : Destination
 }
+
+private data class JellyfinLibraryRef(
+    val libraryId: String,
+    val libraryName: String,
+    val collectionType: String?,
+    val parentItemType: String?,
+)
+
+private fun Destination.JellyfinLibrary.toRef() = JellyfinLibraryRef(
+    libraryId = libraryId,
+    libraryName = libraryName,
+    collectionType = collectionType,
+    parentItemType = parentItemType,
+)
+
+private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>) = Destination.JellyfinLibrary(
+    libraryId = libraryId,
+    libraryName = libraryName,
+    collectionType = collectionType,
+    parentItemType = parentItemType,
+    ancestors = ancestors,
+)
 
 private val bottomTabs = listOf(
     Destination.Discover, Destination.Watchlist, Destination.Jellyfin, Destination.Uploader, Destination.Settings,
@@ -145,9 +173,16 @@ fun ShowlyfinPhoneApp() {
                 is Destination.RemuxPicker -> Destination.LibraryBrowser
                 is Destination.RemuxProgress -> Destination.LibraryBrowser
                 is Destination.RemuxHistory -> Destination.Uploader
-                is Destination.JellyfinLibrary -> Destination.Jellyfin
-                is Destination.JellyfinDetail -> Destination.JellyfinLibrary(current.libraryId, current.libraryName)
-                is Destination.JellyfinPlayback -> Destination.JellyfinDetail(current.itemId, current.libraryId, current.libraryName)
+                is Destination.JellyfinLibrary -> {
+                    val ancestors = current.ancestors
+                    if (ancestors.isEmpty()) {
+                        Destination.Jellyfin
+                    } else {
+                        ancestors.last().toDestination(ancestors.dropLast(1))
+                    }
+                }
+                is Destination.JellyfinDetail -> current.parent
+                is Destination.JellyfinPlayback -> Destination.JellyfinDetail(current.itemId, current.parent)
                 else -> bottomTab
             }
         }
@@ -202,32 +237,53 @@ fun ShowlyfinPhoneApp() {
                     modifier = Modifier.fillMaxSize().padding(paddingValues),
                 )
                 is Destination.Jellyfin -> JellyfinBrowserScreen(
-                    onLibraryClick = { libraryId, libraryName ->
-                        currentDestination = Destination.JellyfinLibrary(libraryId, libraryName)
+                    onLibraryClick = { libraryId, libraryName, collectionType ->
+                        currentDestination = Destination.JellyfinLibrary(
+                            libraryId = libraryId,
+                            libraryName = libraryName,
+                            collectionType = collectionType,
+                        )
                     },
                     modifier = Modifier.fillMaxSize().padding(paddingValues),
                 )
                 is Destination.JellyfinLibrary -> JellyfinLibraryItemsScreen(
                     libraryId = dest.libraryId,
                     libraryName = dest.libraryName,
-                    onBack = { currentDestination = Destination.Jellyfin },
+                    collectionType = dest.collectionType,
+                    parentItemType = dest.parentItemType,
+                    onBack = {
+                        currentDestination = if (dest.ancestors.isEmpty()) {
+                            Destination.Jellyfin
+                        } else {
+                            dest.ancestors.last().toDestination(dest.ancestors.dropLast(1))
+                        }
+                    },
                     onItemPlay = { itemId ->
-                        currentDestination = Destination.JellyfinDetail(itemId, dest.libraryId, dest.libraryName)
+                        currentDestination = Destination.JellyfinDetail(itemId, dest)
+                    },
+                    onItemDrillIn = { itemId, itemName, itemType ->
+                        currentDestination = Destination.JellyfinLibrary(
+                            libraryId = itemId,
+                            libraryName = itemName,
+                            collectionType = null,
+                            parentItemType = itemType,
+                            ancestors = dest.ancestors + dest.toRef(),
+                        )
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.JellyfinDetail -> JellyfinDetailScreen(
                     itemId = dest.itemId,
-                    onBack = { currentDestination = Destination.JellyfinLibrary(dest.libraryId, dest.libraryName) },
+                    onBack = { currentDestination = dest.parent },
                     onPlay = { itemId ->
-                        currentDestination = Destination.JellyfinPlayback(itemId, dest.libraryId, dest.libraryName)
+                        currentDestination = Destination.JellyfinPlayback(itemId, dest.parent)
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.JellyfinPlayback -> PlaybackScreen(
                     itemId = dest.itemId,
                     onBack = {
-                        currentDestination = Destination.JellyfinDetail(dest.itemId, dest.libraryId, dest.libraryName)
+                        currentDestination = Destination.JellyfinDetail(dest.itemId, dest.parent)
                     },
                 )
                 is Destination.Uploader -> UploaderScreen(

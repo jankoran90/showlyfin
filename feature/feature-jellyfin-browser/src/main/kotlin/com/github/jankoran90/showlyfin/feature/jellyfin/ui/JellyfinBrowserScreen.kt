@@ -48,7 +48,7 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinLibrary
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JellyfinBrowserScreen(
-    onLibraryClick: (libraryId: String, libraryName: String) -> Unit,
+    onLibraryClick: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: JellyfinBrowserViewModel = hiltViewModel(),
 ) {
@@ -94,7 +94,7 @@ fun JellyfinBrowserScreen(
                 items(uiState.libraries, key = { it.id }) { library ->
                     LibraryCard(
                         library = library,
-                        onClick = { onLibraryClick(library.id, library.name) },
+                        onClick = { onLibraryClick(library.id, library.name, library.collectionType) },
                     )
                 }
             }

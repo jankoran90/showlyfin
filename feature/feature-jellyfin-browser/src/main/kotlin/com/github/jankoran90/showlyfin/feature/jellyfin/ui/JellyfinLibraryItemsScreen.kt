@@ -59,13 +59,16 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinTypeFilter
 fun JellyfinLibraryItemsScreen(
     libraryId: String,
     libraryName: String,
+    collectionType: String?,
+    parentItemType: String?,
     onBack: () -> Unit,
     onItemPlay: (itemId: String) -> Unit,
+    onItemDrillIn: (itemId: String, itemName: String, itemType: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: JellyfinLibraryItemsViewModel = hiltViewModel(),
 ) {
-    LaunchedEffect(libraryId) {
-        viewModel.load(libraryId, libraryName)
+    LaunchedEffect(libraryId, collectionType, parentItemType) {
+        viewModel.load(libraryId, libraryName, collectionType, parentItemType)
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -92,6 +95,7 @@ fun JellyfinLibraryItemsScreen(
             JellyfinChipsRow(
                 sort = state.sort,
                 typeFilter = state.typeFilter,
+                showTypeFilter = !state.isBoxSetContext,
                 onSortSelected = { viewModel.selectSort(it) },
                 onTypeSelected = { viewModel.selectTypeFilter(it) },
             )
@@ -115,7 +119,18 @@ fun JellyfinLibraryItemsScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         items(state.items, key = { it.id }) { item ->
-                            JellyfinItemCard(item = item, onClick = { onItemPlay(item.id) })
+                            JellyfinItemCard(
+                                item = item,
+                                onClick = {
+                                    val isFolderLike = item.isFolder ||
+                                        item.type.equals("BOX_SET", ignoreCase = true)
+                                    if (isFolderLike) {
+                                        onItemDrillIn(item.id, item.name, item.type)
+                                    } else {
+                                        onItemPlay(item.id)
+                                    }
+                                },
+                            )
                         }
                     }
                 }
@@ -128,6 +143,7 @@ fun JellyfinLibraryItemsScreen(
 private fun JellyfinChipsRow(
     sort: JellyfinSort,
     typeFilter: JellyfinTypeFilter,
+    showTypeFilter: Boolean,
     onSortSelected: (JellyfinSort) -> Unit,
     onTypeSelected: (JellyfinTypeFilter) -> Unit,
 ) {
@@ -158,12 +174,14 @@ private fun JellyfinChipsRow(
                 }
             }
         }
-        items(JellyfinTypeFilter.entries.toList()) { entry ->
-            FilterChip(
-                selected = typeFilter == entry,
-                onClick = { onTypeSelected(entry) },
-                label = { Text(entry.label) },
-            )
+        if (showTypeFilter) {
+            items(JellyfinTypeFilter.entries.toList()) { entry ->
+                FilterChip(
+                    selected = typeFilter == entry,
+                    onClick = { onTypeSelected(entry) },
+                    label = { Text(entry.label) },
+                )
+            }
         }
     }
 }

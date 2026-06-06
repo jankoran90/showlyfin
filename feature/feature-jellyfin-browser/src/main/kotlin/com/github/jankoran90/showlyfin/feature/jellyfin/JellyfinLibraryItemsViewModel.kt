@@ -35,11 +35,30 @@ class JellyfinLibraryItemsViewModel @Inject constructor(
 
     private var currentLibraryId: String = ""
     private var currentLibraryName: String = ""
+    private var currentCollectionType: String? = null
+    private var currentParentItemType: String? = null
 
-    fun load(libraryId: String, libraryName: String) {
+    fun load(
+        libraryId: String,
+        libraryName: String,
+        collectionType: String? = null,
+        parentItemType: String? = null,
+    ) {
         currentLibraryId = libraryId
         currentLibraryName = libraryName
-        _state.update { it.copy(libraryName = libraryName, isLoading = true, error = null) }
+        currentCollectionType = collectionType
+        currentParentItemType = parentItemType
+        val isBoxSetContext =
+            parentItemType.equals("BOX_SET", ignoreCase = true) ||
+                collectionType.equals("BOXSETS", ignoreCase = true)
+        _state.update {
+            it.copy(
+                libraryName = libraryName,
+                isLoading = true,
+                error = null,
+                isBoxSetContext = isBoxSetContext,
+            )
+        }
         reload()
     }
 
@@ -81,16 +100,23 @@ class JellyfinLibraryItemsViewModel @Inject constructor(
                     JellyfinSort.RATING -> ItemSortBy.COMMUNITY_RATING to SortOrder.DESCENDING
                     JellyfinSort.RANDOM -> ItemSortBy.RANDOM to SortOrder.ASCENDING
                 }
-                val typeKinds = when (_state.value.typeFilter) {
-                    JellyfinTypeFilter.ALL -> listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES)
-                    JellyfinTypeFilter.MOVIE -> listOf(BaseItemKind.MOVIE)
-                    JellyfinTypeFilter.SERIES -> listOf(BaseItemKind.SERIES)
+                val isBoxSetParent = currentParentItemType.equals("BOX_SET", ignoreCase = true)
+                val isBoxSetsLibrary = currentCollectionType.equals("BOXSETS", ignoreCase = true)
+                val typeKinds: List<BaseItemKind> = when {
+                    isBoxSetParent -> listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.EPISODE)
+                    isBoxSetsLibrary -> listOf(BaseItemKind.BOX_SET)
+                    else -> when (_state.value.typeFilter) {
+                        JellyfinTypeFilter.ALL -> listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES)
+                        JellyfinTypeFilter.MOVIE -> listOf(BaseItemKind.MOVIE)
+                        JellyfinTypeFilter.SERIES -> listOf(BaseItemKind.SERIES)
+                    }
                 }
+                val useRecursive = !(isBoxSetParent || isBoxSetsLibrary)
                 val result = apiClient.itemsApi.getItems(
                     userId = userUuid,
                     parentId = parentUuid,
                     includeItemTypes = typeKinds,
-                    recursive = true,
+                    recursive = useRecursive,
                     sortBy = listOf(sortBy),
                     sortOrder = listOf(sortOrder),
                     fields = listOf(ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
