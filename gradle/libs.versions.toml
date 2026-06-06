@@ -24,6 +24,7 @@ jellyfinSdk = "1.7.1"
 desugar = "2.1.5"
 coroutines = "1.11.0"
 jsoup = "1.18.3"
+work = "2.10.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -84,6 +85,8 @@ jellyfin-sdk = { group = "org.jellyfin.sdk", name = "jellyfin-core", version.ref
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
 
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

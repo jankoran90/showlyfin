@@ -94,7 +94,7 @@ class JellyfinLibraryService @Inject constructor(
     }
 }
 
-internal fun normalizeBoxSetName(name: String): String =
+fun normalizeBoxSetName(name: String): String =
     name.lowercase().filter { it.isLetterOrDigit() }
 
 data class BoxSetInfo(

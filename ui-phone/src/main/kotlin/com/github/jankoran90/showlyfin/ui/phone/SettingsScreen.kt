@@ -22,6 +22,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +33,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.network.Config
+import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
+import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
@@ -179,9 +187,61 @@ fun SettingsScreen(
             }
         }
 
+        Spacer(Modifier.height(16.dp))
+        UpdateSection()
+
         uiState.error?.let {
             Spacer(Modifier.height(8.dp))
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun UpdateSection() {
+    val launcher = LocalUpdateLauncher.current
+    var isChecking by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf<String?>(null) }
+    val lastCheck = launcher.lastCheckAt()
+    val lastText = if (lastCheck > 0L) {
+        SimpleDateFormat("d.M.yyyy HH:mm", Locale("cs", "CZ")).format(Date(lastCheck))
+    } else "—"
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Aktualizace", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Poslední kontrola: $lastText",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = {
+                    isChecking = true
+                    statusText = "Kontroluji…"
+                    launcher.checkNow { result ->
+                        isChecking = false
+                        statusText = when (result) {
+                            is UpdateCheckResult.Available -> "Nová verze ${result.tagName} — dialog otevřen"
+                            UpdateCheckResult.UpToDate -> "Máte nejnovější verzi"
+                            UpdateCheckResult.Failed -> "Kontrola selhala (zkontrolujte připojení)"
+                        }
+                    }
+                },
+                enabled = !isChecking,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (isChecking) "Kontroluji…" else "Zkontrolovat aktualizace")
+            }
+            statusText?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+            }
         }
     }
 }
