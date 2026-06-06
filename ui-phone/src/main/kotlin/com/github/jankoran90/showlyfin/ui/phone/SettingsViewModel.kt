@@ -96,6 +96,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { profileRepository.delete(profile) }
     }
 
+    fun updateProfileAgeRating(profileId: Long, rating: AgeRating?) {
+        viewModelScope.launch {
+            profileRepository.updateMaxAgeRating(profileId, rating?.name)
+        }
+    }
+
     private fun refreshJellyfinState() {
         val url = prefs.getString(KEY_URL, "") ?: ""
         val token = prefs.getString(KEY_TOKEN, "") ?: ""

@@ -1,10 +1,15 @@
 package com.github.jankoran90.showlyfin.data.jellyfin
 
 import android.content.SharedPreferences
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.model.UUID
@@ -21,10 +26,13 @@ data class UserProfile(
 @Singleton
 class ParentalControlsRepository @Inject constructor(
     private val apiClient: ApiClient,
+    private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
     private val _profile = MutableStateFlow(UserProfile(null, AgeRating.UNRESTRICTED, false))
     val profile: StateFlow<UserProfile> = _profile.asStateFlow()
+
+    private val scope = CoroutineScope(SupervisorJob())
 
     companion object {
         private const val KEY_USER_ID = "jellyfin_user_id"
@@ -35,6 +43,12 @@ class ParentalControlsRepository @Inject constructor(
 
     init {
         loadFromPrefs()
+        profileRepository.activeProfile
+            .onEach { active ->
+                val override = active?.maxAgeRating?.let { runCatching { AgeRating.valueOf(it) }.getOrNull() }
+                applyProfileOverride(override, isAdmin = active?.isAdmin == true)
+            }
+            .launchIn(scope)
     }
 
     private fun loadFromPrefs() {
@@ -46,6 +60,20 @@ class ParentalControlsRepository @Inject constructor(
         val ageRating = AgeRating.fromJellyfinMaxParentalRating(maxRating)
         val isLocked = maxRating != null && !isAdmin
         _profile.value = UserProfile(info, ageRating, isLocked)
+    }
+
+    private fun applyProfileOverride(override: AgeRating?, isAdmin: Boolean) {
+        val current = _profile.value
+        val info = current.userInfo
+        val jellyfinRating = AgeRating.fromJellyfinMaxParentalRating(info?.maxParentalRating)
+        val effective = pickStricter(override, jellyfinRating)
+        val isLocked = (override != null || info?.maxParentalRating != null) && !isAdmin
+        _profile.value = current.copy(effectiveAgeRating = effective, isLocked = isLocked)
+    }
+
+    private fun pickStricter(a: AgeRating?, b: AgeRating): AgeRating {
+        if (a == null) return b
+        return if (a.maxParentalRatingThreshold <= b.maxParentalRatingThreshold) a else b
     }
 
     suspend fun refreshFromJellyfin(userId: String) {

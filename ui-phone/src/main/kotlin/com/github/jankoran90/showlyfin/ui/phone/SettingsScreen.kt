@@ -198,6 +198,16 @@ fun SettingsScreen(
             onSetDefault = { viewModel.setDefaultProfile(it) },
             onDelete = { viewModel.deleteProfile(it) },
         )
+        val activeProfile = uiState.profiles.firstOrNull { it.id == uiState.activeProfileId }
+        if (activeProfile?.isAdmin == true && uiState.profiles.size > 1) {
+            Spacer(Modifier.height(16.dp))
+            AdminRestrictionsSection(
+                profiles = uiState.profiles.filter { it.id != activeProfile.id },
+                onUpdateAgeRating = { profileId, rating ->
+                    viewModel.updateProfileAgeRating(profileId, rating)
+                },
+            )
+        }
         Spacer(Modifier.height(16.dp))
         UpdateSection()
         Spacer(Modifier.height(16.dp))
@@ -337,6 +347,87 @@ private fun ProfilesSection(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminRestrictionsSection(
+    profiles: List<ProfileEntity>,
+    onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                "Restrikce profilů (Admin)",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Nastav věkový limit pro každý profil. Hranice se ihned aplikuje napříč aplikací.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(12.dp))
+            profiles.forEach { profile ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Text(
+                        text = profile.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    AgeRatingDropdown(
+                        current = profile.maxAgeRating?.let {
+                            runCatching { com.github.jankoran90.showlyfin.core.domain.AgeRating.valueOf(it) }.getOrNull()
+                        },
+                        onSelect = { onUpdateAgeRating(profile.id, it) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgeRatingDropdown(
+    current: com.github.jankoran90.showlyfin.core.domain.AgeRating?,
+    onSelect: (com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val ratings = com.github.jankoran90.showlyfin.core.domain.AgeRating.entries
+    val label = current?.displayName ?: "Bez omezení (Jellyfin default)"
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(label)
+        }
+        androidx.compose.material3.DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Bez omezení (Jellyfin default)") },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                },
+            )
+            ratings.forEach { rating ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(rating.displayName) },
+                    onClick = {
+                        onSelect(rating)
+                        expanded = false
+                    },
+                )
             }
         }
     }

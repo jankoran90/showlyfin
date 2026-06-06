@@ -45,6 +45,14 @@ class ProfileRepository @Inject constructor(
         dao.setDefault(profileId)
     }
 
+    suspend fun updateMaxAgeRating(profileId: Long, rating: String?) {
+        val profile = dao.getById(profileId) ?: return
+        dao.update(profile.copy(maxAgeRating = rating))
+        if (_activeProfile.value?.id == profileId) {
+            _activeProfile.value = dao.getById(profileId)
+        }
+    }
+
     suspend fun getDefault(): ProfileEntity? = dao.getDefault()
 
     suspend fun setActive(profileId: Long) {
