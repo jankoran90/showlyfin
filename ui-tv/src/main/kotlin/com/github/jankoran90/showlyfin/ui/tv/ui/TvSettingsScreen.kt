@@ -38,6 +38,13 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
+import com.github.jankoran90.showlyfin.data.trakt.TraktDeviceAuthManager
+import com.github.jankoran90.showlyfin.data.trakt.TraktDevicePollResult
+import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
+import com.github.jankoran90.showlyfin.ui.tv.TvCardSize
+import com.github.jankoran90.showlyfin.ui.tv.TvDisplayPrefs
+import com.github.jankoran90.showlyfin.ui.tv.TvLibraryRef
+import com.github.jankoran90.showlyfin.ui.tv.TvPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +54,11 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
+import org.jellyfin.sdk.model.ClientInfo
+import org.jellyfin.sdk.model.DeviceInfo
+import org.jellyfin.sdk.model.UUID
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -54,25 +66,118 @@ data class TvSettingsUiState(
     val serverUrl: String = "",
     val profiles: List<ProfileEntity> = emptyList(),
     val activeProfileId: Long? = null,
+    val libraries: List<TvLibraryRef> = emptyList(),
+    val traktLoggedIn: Boolean = false,
+    val traktUserCode: String? = null,
+    val traktVerificationUrl: String? = null,
+    val traktStatus: String? = null,
 )
 
 @HiltViewModel
 class TvSettingsViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
+    private val apiClient: ApiClient,
+    private val clientInfo: ClientInfo,
+    private val deviceInfo: DeviceInfo,
+    private val tvPreferences: TvPreferences,
+    private val traktDeviceAuth: TraktDeviceAuthManager,
+    private val tokenProvider: TokenProvider,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TvSettingsUiState())
     val state: StateFlow<TvSettingsUiState> = _state.asStateFlow()
 
+    val displayPrefs: StateFlow<TvDisplayPrefs> = tvPreferences.state
+
     init {
-        _state.update { it.copy(serverUrl = prefs.getString("jellyfin_server_url", "") ?: "") }
+        _state.update {
+            it.copy(
+                serverUrl = prefs.getString("jellyfin_server_url", "") ?: "",
+                traktLoggedIn = tokenProvider.getToken() != null,
+            )
+        }
         profileRepository.observeAll()
             .combine(profileRepository.activeProfile) { profiles, active -> profiles to active }
             .onEach { (profiles, active) ->
                 _state.update { it.copy(profiles = profiles, activeProfileId = active?.id) }
             }
             .launchIn(viewModelScope)
+        loadLibraries()
+    }
+
+    private fun loadLibraries() {
+        viewModelScope.launch {
+            val serverUrl = prefs.getString("jellyfin_server_url", "") ?: ""
+            val token = prefs.getString("jellyfin_token", "") ?: ""
+            val userId = prefs.getString("jellyfin_user_id", "") ?: ""
+            if (serverUrl.isBlank() || token.isBlank() || userId.isBlank()) return@launch
+            runCatching {
+                apiClient.update(
+                    baseUrl = serverUrl,
+                    accessToken = token,
+                    clientInfo = clientInfo,
+                    deviceInfo = deviceInfo,
+                )
+                apiClient.userViewsApi.getUserViews(userId = UUID.fromString(userId))
+                    .content.items
+                    .map {
+                        TvLibraryRef(
+                            id = it.id.toString(),
+                            name = it.name ?: "",
+                            collectionType = it.collectionType?.name,
+                        )
+                    }
+            }.getOrNull()?.let { libs ->
+                _state.update { it.copy(libraries = libs) }
+            }
+        }
+    }
+
+    fun setCardSize(size: TvCardSize) = tvPreferences.setCardSize(size)
+    fun setShowNextUp(value: Boolean) = tvPreferences.setShowNextUp(value)
+    fun setShowRecentlyAdded(value: Boolean) = tvPreferences.setShowRecentlyAdded(value)
+    fun toggleLibrary(libraryId: String) = tvPreferences.toggleLibrary(libraryId)
+    fun isLibraryEnabled(libraryId: String): Boolean = tvPreferences.isLibraryEnabled(libraryId)
+
+    fun startTraktLogin() {
+        if (_state.value.traktUserCode != null) return
+        viewModelScope.launch {
+            _state.update { it.copy(traktStatus = "Získávám kód…") }
+            val code = traktDeviceAuth.requestCode()
+            if (code == null) {
+                _state.update { it.copy(traktStatus = "Nepodařilo se získat kód, zkus znovu") }
+                return@launch
+            }
+            _state.update {
+                it.copy(
+                    traktUserCode = code.userCode,
+                    traktVerificationUrl = code.verificationUrl,
+                    traktStatus = "Otevři ${code.verificationUrl} a zadej kód",
+                )
+            }
+            when (val result = traktDeviceAuth.poll(code)) {
+                is TraktDevicePollResult.Success -> _state.update {
+                    it.copy(
+                        traktLoggedIn = true,
+                        traktUserCode = null,
+                        traktVerificationUrl = null,
+                        traktStatus = "Přihlášeno ✓",
+                    )
+                }
+                is TraktDevicePollResult.Expired -> _state.update {
+                    it.copy(traktUserCode = null, traktVerificationUrl = null, traktStatus = "Kód vypršel, zkus znovu")
+                }
+                is TraktDevicePollResult.Failed -> _state.update {
+                    it.copy(traktUserCode = null, traktVerificationUrl = null, traktStatus = result.message)
+                }
+            }
+        }
+    }
+
+    fun logoutTrakt() {
+        runCatching { tokenProvider.revokeToken() }
+        _state.update { it.copy(traktLoggedIn = false, traktUserCode = null, traktStatus = null) }
     }
 
     fun switchProfile(profileId: Long) {
@@ -114,6 +219,7 @@ fun TvSettingsScreen(
     viewModel: TvSettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val display by viewModel.displayPrefs.collectAsStateWithLifecycle()
     val activeProfile = state.profiles.firstOrNull { it.id == state.activeProfileId }
     val updateLauncher = LocalUpdateLauncher.current
     val context = LocalContext.current
@@ -230,6 +336,79 @@ fun TvSettingsScreen(
                     Spacer(Modifier.height(8.dp))
                 }
             }
+
+            Spacer(Modifier.height(16.dp))
+            Text(text = "Zobrazení", color = Color.White, style = MaterialTheme.typography.titleLarge)
+
+            Text("Velikost karet", color = Color.White.copy(alpha = 0.85f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvCardSize.entries.forEach { size ->
+                    val selected = display.cardSize == size
+                    Button(onClick = { viewModel.setCardSize(size) }) {
+                        Text(if (selected) "✓ ${size.displayName}" else size.displayName)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { viewModel.setShowRecentlyAdded(!display.showRecentlyAdded) }) {
+                    Text(if (display.showRecentlyAdded) "✓ Nedávno přidané" else "Nedávno přidané")
+                }
+                Button(onClick = { viewModel.setShowNextUp(!display.showNextUp) }) {
+                    Text(if (display.showNextUp) "✓ Pokračovat (Next Up)" else "Pokračovat (Next Up)")
+                }
+            }
+
+            if (state.libraries.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Knihovny na domovské obrazovce",
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+                Text(
+                    "Vyber které Jellyfin knihovny se zobrazí jako řady. (Žádná vybraná = všechny.)",
+                    color = Color.White.copy(alpha = 0.55f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                state.libraries.forEach { lib ->
+                    val enabled = display.enabledLibraryIds.isEmpty() || lib.id in display.enabledLibraryIds
+                    Button(onClick = { viewModel.toggleLibrary(lib.id) }) {
+                        Text(if (enabled) "✓ ${lib.name}" else lib.name)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(text = "Trakt", color = Color.White, style = MaterialTheme.typography.titleLarge)
+            if (state.traktLoggedIn) {
+                Text("Přihlášeno ✓", color = MaterialTheme.colorScheme.primary)
+                Button(onClick = { viewModel.logoutTrakt() }) { Text("Odhlásit Trakt") }
+            } else {
+                Text(
+                    "Přihlas se přes Trakt pro Watchlist, Doporučené a synchronizaci zhlédnutého.",
+                    color = Color.White.copy(alpha = 0.65f),
+                )
+                state.traktUserCode?.let { code ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Otevři ${state.traktVerificationUrl ?: "trakt.tv/activate"} a zadej kód:",
+                        color = Color.White.copy(alpha = 0.85f),
+                    )
+                    Text(
+                        code,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.displaySmall,
+                    )
+                }
+                Button(
+                    onClick = { viewModel.startTraktLogin() },
+                    enabled = state.traktUserCode == null,
+                ) {
+                    Text(if (state.traktUserCode == null) "Přihlásit přes Trakt" else "Čekám na potvrzení…")
+                }
+            }
+            state.traktStatus?.let { Text(it, color = Color.White.copy(alpha = 0.8f)) }
 
             Spacer(Modifier.height(16.dp))
             Text(text = "Aktualizace", color = Color.White, style = MaterialTheme.typography.titleLarge)

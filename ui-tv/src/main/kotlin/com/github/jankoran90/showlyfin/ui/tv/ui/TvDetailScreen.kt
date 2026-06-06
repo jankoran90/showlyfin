@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.tv.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,6 +40,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -49,6 +53,7 @@ fun TvDetailScreen(
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) {
         viewModel.load(item)
@@ -110,6 +115,43 @@ fun TvDetailScreen(
                 uiState.ownedJellyfinId?.let { jfId ->
                     Button(onClick = { onPlayJellyfin?.invoke(jfId) }, modifier = Modifier.height(56.dp)) {
                         Text("Přehrát z Jellyfin")
+                    }
+                }
+                val streamId = item.imdbId ?: item.tmdbId?.toString()
+                if (streamId != null) {
+                    Button(
+                        onClick = {
+                            val mt = if (item.type == MediaType.MOVIE) "movie" else "series"
+                            val open = runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse("stremio:///detail/$mt/$streamId")),
+                                )
+                            }.isSuccess
+                            if (!open) {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.stremio.com/downloads")),
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.height(56.dp),
+                    ) {
+                        Text("Stream přes Stremio")
+                    }
+                }
+                if (uiState.isTraktLoggedIn) {
+                    Button(
+                        onClick = { viewModel.toggleWatchlist() },
+                        modifier = Modifier.height(56.dp),
+                    ) {
+                        Text(
+                            when {
+                                uiState.isTogglingWatchlist -> "…"
+                                uiState.isInWatchlist -> "✓ Ve watchlistu"
+                                else -> "+ Watchlist"
+                            },
+                        )
                     }
                 }
                 Button(onClick = onBack, modifier = Modifier.height(56.dp)) {

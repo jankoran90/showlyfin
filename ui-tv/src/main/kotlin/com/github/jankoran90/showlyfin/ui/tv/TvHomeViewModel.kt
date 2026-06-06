@@ -18,7 +18,9 @@ import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.sessionApi
+import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.api.sockets.subscribe
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
@@ -37,6 +39,7 @@ class TvHomeViewModel @Inject constructor(
     private val apiClient: ApiClient,
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
+    private val tvPreferences: TvPreferences,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -48,7 +51,17 @@ class TvHomeViewModel @Inject constructor(
 
     private var socketSetup = false
 
+    private var lastRowPrefsKey: String? = null
+
     init {
+        tvPreferences.state
+            .onEach { p ->
+                _state.update { it.copy(cardSize = p.cardSize) }
+                val key = "${p.showNextUp}|${p.showRecentlyAdded}|${p.enabledLibraryIds.sorted()}"
+                if (lastRowPrefsKey != null && lastRowPrefsKey != key) loadItems()
+                lastRowPrefsKey = key
+            }
+            .launchIn(viewModelScope)
         loadItems()
     }
 
@@ -81,13 +94,16 @@ class TvHomeViewModel @Inject constructor(
                 val userUuid = UUID.fromString(userId)
                 val rows = mutableListOf<TvHomeRow>()
                 val filter = _state.value.filter
+                val display = tvPreferences.state.value
+                val fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO)
 
+                // Resume (Continue Watching) — only on unfiltered Home
                 if (filter == null) {
                     runCatching {
                         apiClient.itemsApi.getResumeItems(
                             userId = userUuid,
                             limit = 20,
-                            fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
+                            fields = fields,
                             mediaTypes = listOf(MediaType.VIDEO),
                             enableTotalRecordCount = false,
                         ).content.items
@@ -96,29 +112,44 @@ class TvHomeViewModel @Inject constructor(
                     }
                 }
 
-                if (filter == null || filter == BaseItemKind.MOVIE) {
+                // Next Up (series) — toggle controlled
+                if (display.showNextUp && (filter == null || filter == BaseItemKind.SERIES)) {
                     runCatching {
-                        apiClient.userLibraryApi.getLatestMedia(
+                        apiClient.tvShowsApi.getNextUp(
                             userId = userUuid,
-                            includeItemTypes = listOf(BaseItemKind.MOVIE),
-                            fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
                             limit = 20,
-                        ).content
+                            fields = fields,
+                            enableTotalRecordCount = false,
+                        ).content.items
                     }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                        rows.add(TvHomeRow("Nejnovější filmy", items.map { it.toTvItem(serverUrl, token) }))
+                        rows.add(TvHomeRow("Pokračovat v seriálech", items.map { it.toTvItem(serverUrl, token) }))
                     }
                 }
 
-                if (filter == null || filter == BaseItemKind.SERIES) {
-                    runCatching {
-                        apiClient.userLibraryApi.getLatestMedia(
-                            userId = userUuid,
-                            includeItemTypes = listOf(BaseItemKind.SERIES),
-                            fields = listOf(ItemFields.OVERVIEW, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
-                            limit = 20,
-                        ).content
-                    }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
-                        rows.add(TvHomeRow("Nejnovější seriály", items.map { it.toTvItem(serverUrl, token) }))
+                // Per-library "Recently added" rows — dynamic, respects enabled libraries + filter
+                if (display.showRecentlyAdded) {
+                    val views = runCatching {
+                        apiClient.userViewsApi.getUserViews(userId = userUuid).content.items
+                    }.getOrNull().orEmpty()
+                    for (view in views) {
+                        val viewId = view.id.toString()
+                        if (!tvPreferences.isLibraryEnabled(viewId)) continue
+                        val ct = view.collectionType?.name?.lowercase()
+                        // skip non-video libraries (music, books, photos)
+                        if (ct != null && ct !in VIDEO_COLLECTION_TYPES) continue
+                        // nav-drawer filter: Movies/Series narrows to matching libraries
+                        if (filter == BaseItemKind.MOVIE && ct != null && ct != "movies" && ct != "boxsets") continue
+                        if (filter == BaseItemKind.SERIES && ct != null && ct != "tvshows") continue
+                        runCatching {
+                            apiClient.userLibraryApi.getLatestMedia(
+                                userId = userUuid,
+                                parentId = view.id,
+                                fields = fields,
+                                limit = 20,
+                            ).content
+                        }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { items ->
+                            rows.add(TvHomeRow("Nejnovější: ${view.name}", items.map { it.toTvItem(serverUrl, token) }))
+                        }
                     }
                 }
 
@@ -156,6 +187,8 @@ class TvHomeViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 }
+
+private val VIDEO_COLLECTION_TYPES = setOf("movies", "tvshows", "boxsets", "homevideos", "mixed")
 
 private fun BaseItemDto.toTvItem(serverUrl: String, token: String) = TvJellyfinItem(
     id = id.toString(),

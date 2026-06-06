@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,7 +38,12 @@ import com.github.jankoran90.showlyfin.core.domain.MediaItem
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun TvDiscoverCard(item: MediaItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun TvDiscoverCard(
+    item: MediaItem,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    progress: Float? = null,
+) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (focused) 1.08f else 1.0f,
@@ -91,6 +97,17 @@ fun TvDiscoverCard(item: MediaItem, onClick: () -> Unit, modifier: Modifier = Mo
                     .align(Alignment.BottomStart)
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             )
+            if (progress != null && progress > 0f) {
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .align(Alignment.BottomStart),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = Color.White.copy(alpha = 0.2f),
+                )
+            }
         }
     }
 }

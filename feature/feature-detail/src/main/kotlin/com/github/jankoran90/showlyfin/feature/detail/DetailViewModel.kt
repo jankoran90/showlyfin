@@ -13,6 +13,10 @@ import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
 import com.github.jankoran90.showlyfin.data.jellyfin.normalizeBoxSetName
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection
+import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
+import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportItem
+import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportRequest
+import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -31,6 +35,8 @@ class DetailViewModel @Inject constructor(
     private val csfdScraper: CsfdScraper,
     private val csfdRepository: CsfdRepository,
     private val jellyfinLibraryService: JellyfinLibraryService,
+    private val authorizedTrakt: AuthorizedTraktRemoteDataSource,
+    private val tokenProvider: TokenProvider,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -62,10 +68,14 @@ class DetailViewModel @Inject constructor(
                 ownedJellyfinId = null,
                 matchingBoxSetId = null,
                 mergedCollection = null,
+                isTraktLoggedIn = tokenProvider.getToken() != null,
+                isInWatchlist = false,
+                isTogglingWatchlist = false,
                 error = null,
             )
         }
         viewModelScope.launch { loadJellyfinOwned(item) }
+        viewModelScope.launch { loadWatchlistMembership(item) }
         viewModelScope.launch {
             try {
                 val tmdbId = item.tmdbId
@@ -123,6 +133,46 @@ class DetailViewModel @Inject constructor(
                 }
             } catch (e: Throwable) {
                 _uiState.update { it.copy(isLoading = false, isCsfdLoading = false, error = e.message) }
+            }
+        }
+    }
+
+    private suspend fun loadWatchlistMembership(item: MediaItem) {
+        if (tokenProvider.getToken() == null || item.traktId == 0L) return
+        runCatching {
+            val list = if (item.type == MediaType.MOVIE) {
+                authorizedTrakt.fetchSyncMoviesWatchlist()
+            } else {
+                authorizedTrakt.fetchSyncShowsWatchlist()
+            }
+            list.any { it.getTraktId() == item.traktId }
+        }.getOrNull()?.let { inWl ->
+            _uiState.update { it.copy(isInWatchlist = inWl) }
+        }
+    }
+
+    fun toggleWatchlist() {
+        val item = _uiState.value.item ?: return
+        if (tokenProvider.getToken() == null || item.traktId == 0L) return
+        if (_uiState.value.isTogglingWatchlist) return
+        val currentlyIn = _uiState.value.isInWatchlist
+        _uiState.update { it.copy(isTogglingWatchlist = true) }
+        viewModelScope.launch {
+            val exportItem = SyncExportItem.create(item.traktId)
+            val request = if (item.type == MediaType.MOVIE) {
+                SyncExportRequest(movies = listOf(exportItem))
+            } else {
+                SyncExportRequest(shows = listOf(exportItem))
+            }
+            val ok = runCatching {
+                if (currentlyIn) authorizedTrakt.postDeleteWatchlist(request)
+                else authorizedTrakt.postSyncWatchlist(request)
+            }.isSuccess
+            _uiState.update {
+                it.copy(
+                    isTogglingWatchlist = false,
+                    isInWatchlist = if (ok) !currentlyIn else currentlyIn,
+                )
             }
         }
     }

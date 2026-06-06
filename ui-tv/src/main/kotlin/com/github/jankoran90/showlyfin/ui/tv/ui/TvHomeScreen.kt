@@ -30,6 +30,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.jankoran90.showlyfin.ui.tv.TvCardSize
 import com.github.jankoran90.showlyfin.ui.tv.TvHomeRow
 import com.github.jankoran90.showlyfin.ui.tv.TvHomeViewModel
 
@@ -104,6 +105,7 @@ fun TvHomeScreen(
                         TvContentRow(
                             row = row,
                             onItemClick = onItemClick,
+                            cardSize = state.cardSize,
                             firstItemFocusRequester = if (index == 0) firstRowFocus else null,
                         )
                     }
@@ -118,6 +120,7 @@ fun TvHomeScreen(
 private fun TvContentRow(
     row: TvHomeRow,
     onItemClick: (String) -> Unit,
+    cardSize: TvCardSize,
     firstItemFocusRequester: FocusRequester? = null,
 ) {
     Column {
@@ -137,6 +140,7 @@ private fun TvContentRow(
                 TvItemCard(
                     item = item,
                     onClick = { onItemClick(item.id) },
+                    cardSize = cardSize,
                     modifier = if (isFirst) Modifier.focusRequester(firstItemFocusRequester!!) else Modifier,
                 )
             }

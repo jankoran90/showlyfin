@@ -41,6 +41,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.ui.tv.TvCardSize
 import com.github.jankoran90.showlyfin.ui.tv.TvJellyfinItem
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -50,6 +51,7 @@ fun TvItemCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     inLibrary: Boolean = true,
+    cardSize: TvCardSize = TvCardSize.MEDIUM,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -69,7 +71,7 @@ fun TvItemCard(
     Card(
         onClick = onClick,
         modifier = modifier
-            .width(160.dp)
+            .width(cardSize.widthDp.dp)
             .aspectRatio(2f / 3f)
             .scale(scale)
             .shadow(elevation = elevation, shape = RoundedCornerShape(12.dp), clip = false)

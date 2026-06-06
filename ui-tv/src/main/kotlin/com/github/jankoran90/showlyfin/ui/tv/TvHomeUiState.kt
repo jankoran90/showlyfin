@@ -17,10 +17,17 @@ data class TvHomeRow(
 
 data class PlayMessageEvent(val itemId: String, val positionMs: Long)
 
+data class TvLibraryRef(
+    val id: String,
+    val name: String,
+    val collectionType: String? = null,
+)
+
 data class TvHomeUiState(
     val isLoading: Boolean = true,
     val rows: List<TvHomeRow> = emptyList(),
     val error: String? = null,
     val isNotConfigured: Boolean = false,
     val filter: BaseItemKind? = null,
+    val cardSize: TvCardSize = TvCardSize.MEDIUM,
 )

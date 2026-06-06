@@ -1,17 +1,21 @@
 package com.github.jankoran90.showlyfin.ui.tv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +29,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistSort
+import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistTab
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -37,55 +43,70 @@ fun TvWatchlistScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Box(modifier.fillMaxSize().background(Color(0xFF07071A))) {
-        when {
-            uiState.isLoading && uiState.items.isEmpty() -> CircularProgressIndicator(
+        Column(Modifier.fillMaxSize()) {
+            Text(
+                "Watchlist",
                 color = Color.White,
-                modifier = Modifier.align(Alignment.Center),
+                style = MaterialTheme.typography.displaySmall,
+                modifier = Modifier.padding(start = 64.dp, end = 64.dp, top = 32.dp),
             )
-            !uiState.isLoggedIn -> Text(
-                text = "Pro Watchlist se přihlas přes Trakt v Nastavení",
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.align(Alignment.Center),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            uiState.items.isEmpty() -> Text(
-                text = "Watchlist je prázdný",
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.align(Alignment.Center),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            else -> {
-                LazyColumn(
-                    contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
-                    verticalArrangement = Arrangement.spacedBy(28.dp),
-                ) {
-                    item {
-                        Column(Modifier.padding(start = 64.dp, end = 64.dp)) {
-                            Text("Watchlist", color = Color.White, style = MaterialTheme.typography.displaySmall)
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "${uiState.items.size} položek z Trakt",
-                                color = Color.White.copy(alpha = 0.6f),
-                                style = MaterialTheme.typography.bodyLarge,
+            Spacer(Modifier.height(12.dp))
+
+            // Tabs
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 64.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TvChip("Filmy", uiState.activeTab == WatchlistTab.MOVIES) {
+                    viewModel.selectTab(WatchlistTab.MOVIES)
+                }
+                TvChip("Seriály", uiState.activeTab == WatchlistTab.SHOWS) {
+                    viewModel.selectTab(WatchlistTab.SHOWS)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+
+            // Sort
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 64.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                WatchlistSort.entries.forEach { sort ->
+                    TvChip(sort.label, uiState.sort == sort) { viewModel.selectSort(sort) }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+
+            Box(Modifier.fillMaxSize()) {
+                when {
+                    uiState.isLoading && uiState.items.isEmpty() -> CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                    !uiState.isLoggedIn -> Text(
+                        text = "Pro Watchlist se přihlas přes Trakt v Nastavení",
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.align(Alignment.Center),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    uiState.items.isEmpty() -> Text(
+                        text = "Watchlist je prázdný",
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.align(Alignment.Center),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(6),
+                        contentPadding = PaddingValues(start = 64.dp, end = 64.dp, bottom = 48.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
+                            TvDiscoverCard(
+                                item = item,
+                                onClick = { onItemClick(item) },
+                                progress = uiState.progressMap[item.traktId]?.fraction,
                             )
-                        }
-                    }
-                    item {
-                        Column {
-                            Text(
-                                text = "Vše",
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(horizontal = 48.dp, vertical = 8.dp),
-                            )
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 48.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
-                                    TvDiscoverCard(item = item, onClick = { onItemClick(item) })
-                                }
-                            }
                         }
                     }
                 }

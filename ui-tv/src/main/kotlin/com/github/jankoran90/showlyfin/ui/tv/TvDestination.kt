@@ -10,6 +10,14 @@ sealed class TvDestination {
     object Settings : TvDestination()
     object Discover : TvDestination()
     object Watchlist : TvDestination()
+    object JellyfinBrowse : TvDestination()
+    data class JellyfinLibrary(
+        val libraryId: String,
+        val libraryName: String,
+        val collectionType: String? = null,
+        val parentItemType: String? = null,
+        val parent: TvDestination = JellyfinBrowse,
+    ) : TvDestination()
     data class Detail(val item: MediaItem) : TvDestination()
     data class Playback(val itemId: String, val positionMs: Long = 0L) : TvDestination()
 }

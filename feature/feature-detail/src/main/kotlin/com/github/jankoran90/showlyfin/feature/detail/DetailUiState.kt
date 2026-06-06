@@ -42,4 +42,7 @@ data class DetailUiState(
     val boxSetByNormalizedName: Map<String, String> = emptyMap(),
     val matchingBoxSetId: String? = null,
     val mergedCollection: MediaCollection? = null,
+    val isTraktLoggedIn: Boolean = false,
+    val isInWatchlist: Boolean = false,
+    val isTogglingWatchlist: Boolean = false,
 )
