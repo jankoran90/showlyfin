@@ -321,9 +321,10 @@ class DetailViewModel @Inject constructor(
             // RD-first režim (DebridSearch) z prefs: off | hash (server-side v /streams) | search | both.
             val rdMode = runCatching { uploaderDs.getStreamFilter(uploaderBaseUrl, uploaderCookie).rdFirstMode }.getOrDefault("both")
             // DebridSearch dle názvu (search/both) — prohledá RD účet i mimo addon výsledky, paralelně.
-            val savedDeferred = if (rdMode == "search" || rdMode == "both") {
-                async { runCatching { uploaderDs.rdSearch(uploaderBaseUrl, uploaderCookie, item.title, item.year) }.getOrDefault(emptyList()) }
-            } else null
+            val savedDeferred: kotlinx.coroutines.Deferred<List<UploaderStream>>? =
+                if (rdMode == "search" || rdMode == "both") {
+                    async { runCatching { uploaderDs.rdSearch(uploaderBaseUrl, uploaderCookie, item.title, item.year) }.getOrDefault(emptyList()) }
+                } else null
             // Backend vrací už seřazené (rdSaved → cached → CZ/SK → fallbackOrder) a ořezané dle prefs.
             runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, strict = strict) }
                 .onSuccess { list ->
