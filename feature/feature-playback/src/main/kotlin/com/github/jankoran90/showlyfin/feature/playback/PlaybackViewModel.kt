@@ -75,14 +75,32 @@ class PlaybackViewModel @Inject constructor(
             }
             _state.update { it.copy(subtitlesLoading = false, subtitleCandidates = resp.subtitles) }
             timber.log.Timber.i("[Titulky] ${resp.subtitles.size} CZ kandidátů, best=${resp.best}")
-            if (resp.subtitles.isNotEmpty()) {
-                selectSubtitle(if (resp.best in resp.subtitles.indices) resp.best else 0)
+            if (resp.subtitles.isEmpty()) return@launch
+
+            // Per-source: aplikuj uložený offset (před výběrem, ať se .srt zapíše s ním) + vyber uloženou stopu.
+            val key = sourceKey(q)
+            val storedOffset = loadSourceOffset(key)
+            if (storedOffset != _state.value.subtitleStyle.offsetMs) {
+                _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = storedOffset)) }
+            }
+            when (val storedId = loadSourceSelectedId(key)) {
+                "OFF" -> selectSubtitle(-1, persist = false)
+                null -> selectSubtitle(if (resp.best in resp.subtitles.indices) resp.best else 0, persist = false)
+                else -> {
+                    val idx = resp.subtitles.indexOfFirst { it.id == storedId }
+                    selectSubtitle(if (idx >= 0) idx else (resp.best.takeIf { it in resp.subtitles.indices } ?: 0), persist = false)
+                }
             }
         }
     }
 
-    /** Vybere titulkovou stopu (index do subtitleCandidates), -1 = vypnout. */
-    fun selectSubtitle(index: Int) {
+    /** Vybere titulkovou stopu (index do subtitleCandidates), -1 = vypnout. persist=false při auto-výběru z paměti. */
+    fun selectSubtitle(index: Int, persist: Boolean = true) {
+        if (persist) query?.let { q ->
+            val key = sourceKey(q)
+            if (index < 0) saveSourceSelectedId(key, "OFF")
+            else _state.value.subtitleCandidates.getOrNull(index)?.let { saveSourceSelectedId(key, it.id) }
+        }
         if (index < 0) {
             rawSrt = null
             _state.update { it.copy(selectedSubtitleIndex = -1, subtitleFileUri = null, subtitleRuntimeOk = "-") }
@@ -118,10 +136,11 @@ class PlaybackViewModel @Inject constructor(
     fun setColor(argb: Int) = updateStyle { it.copy(colorArgb = argb) }
     fun setBottomPadding(fraction: Float) = updateStyle { it.copy(bottomPaddingFraction = fraction.coerceIn(0.0f, 0.4f)) }
 
-    /** Posun synchronizace. delta v ms (+ = titulky později, − = dříve). Přepíše .srt a obnoví URI. */
+    /** Posun synchronizace. delta v ms (+ = titulky později, − = dříve). Přepíše .srt a obnoví URI. Per-source. */
     fun nudgeOffset(deltaMs: Long) {
         val newOffset = _state.value.subtitleStyle.offsetMs + deltaMs
-        updateStyle { it.copy(offsetMs = newOffset) }
+        _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = newOffset)) }
+        query?.let { saveSourceOffset(sourceKey(it), newOffset) }
         rawSrt?.let { bytes ->
             val uri = writeSrt(bytes, newOffset)
             _state.update { it.copy(subtitleFileUri = uri) }
@@ -134,11 +153,12 @@ class PlaybackViewModel @Inject constructor(
         saveStyle(s)
     }
 
+    // Globální styl (velikost/barva/pozice) — offset NE, ten je per-source (viz níže).
     private fun loadStyle() = SubtitleStyle(
         fontScale = prefs.getFloat("sub_font_scale", 1.0f),
         colorArgb = prefs.getInt("sub_color_argb", 0xFFFFBF00.toInt()),
         bottomPaddingFraction = prefs.getFloat("sub_bottom_pad", 0.08f),
-        offsetMs = prefs.getLong("sub_offset_ms", 0L),
+        offsetMs = 0L,
     )
 
     private fun saveStyle(s: SubtitleStyle) {
@@ -146,14 +166,30 @@ class PlaybackViewModel @Inject constructor(
             .putFloat("sub_font_scale", s.fontScale)
             .putInt("sub_color_argb", s.colorArgb)
             .putFloat("sub_bottom_pad", s.bottomPaddingFraction)
-            .putLong("sub_offset_ms", s.offsetMs)
             .apply()
     }
 
-    /** Zapíše .srt do cache (s aplikovaným offsetem) a vrátí file:// URI. */
+    // ── Per-source paměť (offset + vybraná stopa) ────────────────────────────
+    // Klíč zdroje = imdb (+ s/e u seriálů). Pamatuje se zpoždění a vybraná stopa
+    // jen pro konkrétní film/epizodu; nový zdroj startuje s defaultem (best + 0 s).
+    private fun sourceKey(q: SubtitleQuery): String {
+        val se = if (q.season != null && q.episode != null) "_s${q.season}e${q.episode}" else ""
+        return "${q.imdb}$se"
+    }
+    private fun loadSourceOffset(key: String): Long = prefs.getLong("sub_off_$key", 0L)
+    private fun saveSourceOffset(key: String, ms: Long) = prefs.edit().putLong("sub_off_$key", ms).apply()
+    private fun loadSourceSelectedId(key: String): String? = prefs.getString("sub_sel_$key", null)
+    private fun saveSourceSelectedId(key: String, id: String) = prefs.edit().putString("sub_sel_$key", id).apply()
+
+    private var srtSeq = 0
+
+    /** Zapíše .srt do cache (s aplikovaným offsetem) a vrátí file:// URI.
+     *  Unikátní název per zápis → změna URI donutí ExoPlayer re-prepare (jinak stejná cesta =
+     *  LaunchedEffect klíč se nezmění → posun/přepnutí stopy by se neprojevily). */
     private fun writeSrt(bytes: ByteArray, offsetMs: Long): String {
         val dir = File(appContext.cacheDir, "subtitles").apply { mkdirs() }
-        val out = File(dir, "current.srt")
+        dir.listFiles()?.forEach { it.delete() }
+        val out = File(dir, "sub_${srtSeq++}.srt")
         val data = if (offsetMs == 0L) bytes else shiftSrt(bytes, offsetMs).toByteArray(Charsets.UTF_8)
         out.writeBytes(data)
         return android.net.Uri.fromFile(out).toString()

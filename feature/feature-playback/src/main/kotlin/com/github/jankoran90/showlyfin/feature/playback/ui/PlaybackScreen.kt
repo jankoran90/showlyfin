@@ -4,20 +4,24 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,19 +31,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,6 +94,17 @@ private fun Context.findActivity(): Activity? {
         ctx = ctx.baseContext
     }
     return null
+}
+
+/** Aktuální jas okna jako 0..1; pokud okno jas neřídí (−1), spadne na systémový jas. */
+private fun currentBrightness(activity: Activity?, context: Context): Float {
+    val cur = activity?.window?.attributes?.screenBrightness ?: -1f
+    if (cur in 0f..1f) return cur
+    return try {
+        Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f
+    } catch (e: Exception) {
+        0.5f
+    }
 }
 
 private fun fmtTime(ms: Long): String {
@@ -156,8 +175,8 @@ fun PlaybackScreen(
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setLoadControl(loadControl)
-            .setSeekBackIncrementMs(30_000)
-            .setSeekForwardIncrementMs(30_000)
+            .setSeekBackIncrementMs(5_000)
+            .setSeekForwardIncrementMs(5_000)
             .build().apply {
                 trackSelectionParameters = trackSelectionParameters.buildUpon()
                     .setPreferredTextLanguage("cs")
@@ -174,6 +193,17 @@ fun PlaybackScreen(
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var subtitleViewRef by remember { mutableStateOf<SubtitleView?>(null) }
     val focusRequester = remember { FocusRequester() }
+
+    // Seekbar (ruční přesouvání) + gesta jas/hlasitost
+    var scrubbing by remember { mutableStateOf(false) }
+    var scrubValue by remember { mutableFloatStateOf(0f) }
+    var gestureIndicator by remember { mutableStateOf<String?>(null) }
+    val activity = remember(context) { context.findActivity() }
+    val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
+    // Čteme aktuální hodnoty uvnitř gesture detektoru bez restartu pointerInput.
+    val controlsVisibleNow = rememberUpdatedState(controlsVisible)
+    val menuOpenNow = rememberUpdatedState(showSubtitleMenu)
 
     DisposableEffect(Unit) {
         view.keepScreenOn = true
@@ -257,6 +287,10 @@ fun PlaybackScreen(
             controlsVisible = false
         }
     }
+    // skryj gesture indikátor (jas/hlasitost) krátce po poslední změně
+    LaunchedEffect(gestureIndicator) {
+        if (gestureIndicator != null) { delay(800); gestureIndicator = null }
+    }
     LaunchedEffect(resumeDecided) {
         if (resumeDecided) runCatching { focusRequester.requestFocus() }
     }
@@ -269,21 +303,68 @@ fun PlaybackScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            // Telefon: tap-zóny — levá třetina = −30 s, pravá = +30 s, střed = play/pause.
-            // Jakákoli akce zobrazí ovládací lištu (auto-hide ji po chvíli skryje).
-            .pointerInput(showSubtitleMenu) {
-                detectTapGestures { offset ->
-                    if (showSubtitleMenu) {
-                        showSubtitleMenu = false
-                        return@detectTapGestures
+            // Telefon gesta:
+            //  • skryté ovládání → první dotek JEN zobrazí prvky (akce/gesta až když jsou viditelné)
+            //  • tap: levá ⅓ = −5 s, pravá ⅓ = +5 s, střed = play/pause
+            //  • vertikální swipe: levá ½ = jas (přebíjí systémový), pravá ½ = hlasitost
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = true)
+                    val startX = down.position.x
+                    val w = size.width.toFloat()
+                    val h = size.height.toFloat()
+                    val slop = viewConfiguration.touchSlop
+                    val visibleAtStart = controlsVisibleNow.value
+                    val menuAtStart = menuOpenNow.value
+                    var moved = false
+                    var vertical = false
+                    var startBrightness = 0f
+                    var startVolume = 0
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            if (!moved) {
+                                when {
+                                    menuAtStart -> showSubtitleMenu = false
+                                    !visibleAtStart -> controlsVisible = true   // první dotek jen odhalí
+                                    startX < w / 3f -> { exoPlayer.seekBack(); controlsVisible = true }
+                                    startX > w / 3f * 2f -> { exoPlayer.seekForward(); controlsVisible = true }
+                                    else -> { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play(); controlsVisible = true }
+                                }
+                            }
+                            break
+                        }
+                        // při skrytém ovládání / otevřeném panelu žádná gesta (jen tap na release výše)
+                        if (menuAtStart || !visibleAtStart) continue
+                        val dx = change.position.x - startX
+                        val dy = change.position.y - down.position.y
+                        if (!moved && (kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop)) {
+                            moved = true
+                            vertical = kotlin.math.abs(dy) > kotlin.math.abs(dx)
+                            if (vertical) {
+                                if (startX < w / 2f) startBrightness = currentBrightness(activity, context)
+                                else startVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                            }
+                        }
+                        if (moved && vertical) {
+                            change.consume()
+                            val frac = (down.position.y - change.position.y) / h   // nahoru = +
+                            if (startX < w / 2f) {
+                                val nb = (startBrightness + frac).coerceIn(0.01f, 1f)
+                                activity?.let {
+                                    val lp = it.window.attributes
+                                    lp.screenBrightness = nb
+                                    it.window.attributes = lp
+                                }
+                                gestureIndicator = "☀ ${(nb * 100).toInt()} %"
+                            } else {
+                                val nv = (startVolume + frac * maxVolume).toInt().coerceIn(0, maxVolume)
+                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nv, 0)
+                                gestureIndicator = "🔊 ${nv * 100 / maxVolume} %"
+                            }
+                        }
                     }
-                    val third = size.width / 3f
-                    when {
-                        offset.x < third -> exoPlayer.seekBack()
-                        offset.x > third * 2f -> exoPlayer.seekForward()
-                        else -> if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
-                    }
-                    controlsVisible = true
                 }
             },
     ) {
@@ -409,20 +490,30 @@ fun PlaybackScreen(
                                 .background(Color.Black.copy(alpha = 0.5f))
                                 .padding(horizontal = 24.dp, vertical = 16.dp),
                         ) {
-                            LinearProgressIndicator(
-                                progress = { if (duration > 0) (position.toFloat() / duration) else 0f },
-                                modifier = Modifier.fillMaxWidth().height(4.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = Color.White.copy(alpha = 0.3f),
+                            Slider(
+                                value = if (scrubbing) scrubValue
+                                else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(0f)),
+                                onValueChange = { scrubbing = true; scrubValue = it; controlsVisible = true },
+                                onValueChangeFinished = {
+                                    exoPlayer.seekTo(scrubValue.toLong())
+                                    position = scrubValue.toLong()
+                                    scrubbing = false
+                                },
+                                valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
                             )
-                            Spacer(Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    "${if (isPlaying) "▶" else "⏸"}  ${fmtTime(position)} / ${fmtTime(duration)}",
+                                    "${if (isPlaying) "▶" else "⏸"}  ${fmtTime(if (scrubbing) scrubValue.toLong() else position)} / ${fmtTime(duration)}",
                                     color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
@@ -466,6 +557,19 @@ fun PlaybackScreen(
                             modifier = Modifier.align(Alignment.CenterEnd),
                         )
                     }
+
+                    // Overlay indikátor jasu / hlasitosti během vertikálního swipe
+                    gestureIndicator?.let { txt ->
+                        Text(
+                            text = txt,
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                        )
+                    }
                 }
             }
         }
@@ -501,9 +605,11 @@ private fun SubtitleSettingsPanel(
 ) {
     Column(
         modifier = modifier
+            .fillMaxHeight()
             .width(360.dp)
-            .padding(16.dp)
+            .padding(vertical = 12.dp, horizontal = 16.dp)
             .background(Color.Black.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
         Row(
@@ -593,7 +699,7 @@ private fun SubtitleRow(label: String, sub: String = "", selected: Boolean, onCl
         Text(if (selected) "●" else "○", color = if (selected) Color(0xFFFFBF00) else Color.White.copy(alpha = 0.5f))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(label, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+            Text(label, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 3)
             if (sub.isNotBlank()) Text(sub, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
         }
     }
