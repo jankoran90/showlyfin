@@ -13,11 +13,19 @@ data class PlaybackUiState(
     val subtitlesLoading: Boolean = false,
     val subtitleCandidates: List<SubtitleCandidate> = emptyList(),
     val selectedSubtitleIndex: Int = -1,         // -1 = vypnuto
-    val subtitleFileUri: String? = null,         // file:// aktuálního .srt (po offsetu)
+    val subtitleCues: List<SubtitleCue> = emptyList(), // naparsované cue aktuální stopy (renderujeme sami)
     val subtitleRuntimeOk: String = "-",         // "1"/"0"/"-" — sedí délka na film
     val subtitleError: String? = null,
     // ── Styl / nastavení titulků (persistované) ──────────────────────────────
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+)
+
+/** Jeden titulkový blok (.srt) — renderujeme vlastním overlayem, takže posun/přepnutí stopy
+ *  je okamžité bez re-prepare ExoPlayeru (žádný rebuffer videa). */
+data class SubtitleCue(
+    val startMs: Long,
+    val endMs: Long,
+    val text: String,
 )
 
 /** Vzhled + synchronizace titulků. Persistováno v prefs. */

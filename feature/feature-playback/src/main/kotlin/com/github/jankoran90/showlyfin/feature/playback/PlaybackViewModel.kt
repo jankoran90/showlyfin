@@ -21,7 +21,6 @@ import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -42,7 +41,6 @@ class PlaybackViewModel @Inject constructor(
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     private var query: SubtitleQuery? = null
-    private var rawSrt: ByteArray? = null     // .srt aktuální stopy (bez offsetu) pro rychlé re-shift
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
     fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null) {
@@ -102,8 +100,7 @@ class PlaybackViewModel @Inject constructor(
             else _state.value.subtitleCandidates.getOrNull(index)?.let { saveSourceSelectedId(key, it.id) }
         }
         if (index < 0) {
-            rawSrt = null
-            _state.update { it.copy(selectedSubtitleIndex = -1, subtitleFileUri = null, subtitleRuntimeOk = "-") }
+            _state.update { it.copy(selectedSubtitleIndex = -1, subtitleCues = emptyList(), subtitleRuntimeOk = "-") }
             return
         }
         val cand = _state.value.subtitleCandidates.getOrNull(index) ?: return
@@ -120,14 +117,14 @@ class PlaybackViewModel @Inject constructor(
                 _state.update { it.copy(subtitlesLoading = false, subtitleError = e.message ?: "Stažení titulků selhalo") }
                 return@launch
             }
-            rawSrt = dl.bytes
-            val uri = writeSrt(dl.bytes, _state.value.subtitleStyle.offsetMs)
+            val cues = parseSrt(dl.bytes)
             _state.update {
                 it.copy(
                     subtitlesLoading = false, selectedSubtitleIndex = index,
-                    subtitleFileUri = uri, subtitleRuntimeOk = dl.runtimeOk,
+                    subtitleCues = cues, subtitleRuntimeOk = dl.runtimeOk,
                 )
             }
+            timber.log.Timber.i("[Titulky] stopa '${cand.release.ifBlank { cand.title }}' → ${cues.size} cue")
         }
     }
 
@@ -136,15 +133,12 @@ class PlaybackViewModel @Inject constructor(
     fun setColor(argb: Int) = updateStyle { it.copy(colorArgb = argb) }
     fun setBottomPadding(fraction: Float) = updateStyle { it.copy(bottomPaddingFraction = fraction.coerceIn(0.0f, 0.4f)) }
 
-    /** Posun synchronizace. delta v ms (+ = titulky později, − = dříve). Přepíše .srt a obnoví URI. Per-source. */
+    /** Posun synchronizace. delta v ms (+ = titulky později, − = dříve). Per-source.
+     *  Okamžitý — render aplikuje offset live, žádné přepisování .srt ani re-prepare videa. */
     fun nudgeOffset(deltaMs: Long) {
         val newOffset = _state.value.subtitleStyle.offsetMs + deltaMs
         _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = newOffset)) }
         query?.let { saveSourceOffset(sourceKey(it), newOffset) }
-        rawSrt?.let { bytes ->
-            val uri = writeSrt(bytes, newOffset)
-            _state.update { it.copy(subtitleFileUri = uri) }
-        }
     }
 
     private fun updateStyle(transform: (SubtitleStyle) -> SubtitleStyle) {
@@ -181,35 +175,29 @@ class PlaybackViewModel @Inject constructor(
     private fun loadSourceSelectedId(key: String): String? = prefs.getString("sub_sel_$key", null)
     private fun saveSourceSelectedId(key: String, id: String) = prefs.edit().putString("sub_sel_$key", id).apply()
 
-    private var srtSeq = 0
+    private val cueTimeRegex = Regex(
+        """(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})""",
+    )
+    private val tagRegex = Regex("<[^>]+>")
+    private val assPosRegex = Regex("""\{[^}]*}""")
 
-    /** Zapíše .srt do cache (s aplikovaným offsetem) a vrátí file:// URI.
-     *  Unikátní název per zápis → změna URI donutí ExoPlayer re-prepare (jinak stejná cesta =
-     *  LaunchedEffect klíč se nezmění → posun/přepnutí stopy by se neprojevily). */
-    private fun writeSrt(bytes: ByteArray, offsetMs: Long): String {
-        val dir = File(appContext.cacheDir, "subtitles").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val out = File(dir, "sub_${srtSeq++}.srt")
-        val data = if (offsetMs == 0L) bytes else shiftSrt(bytes, offsetMs).toByteArray(Charsets.UTF_8)
-        out.writeBytes(data)
-        return android.net.Uri.fromFile(out).toString()
-    }
-
-    private val tsRegex = Regex("""(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})""")
-
-    /** Posune všechny timestampy v .srt o offsetMs (clamp ≥ 0). */
-    private fun shiftSrt(bytes: ByteArray, offsetMs: Long): String {
-        val text = bytes.toString(Charsets.UTF_8)
-        return tsRegex.replace(text) { m ->
-            val (h, mm, s, ms) = m.destructured
-            var total = h.toLong() * 3600000 + mm.toLong() * 60000 + s.toLong() * 1000 + ms.padEnd(3, '0').take(3).toLong()
-            total = (total + offsetMs).coerceAtLeast(0)
-            val hh = total / 3600000
-            val mi = (total % 3600000) / 60000
-            val se = (total % 60000) / 1000
-            val mss = total % 1000
-            "%02d:%02d:%02d,%03d".format(hh, mi, se, mss)
+    /** Naparsuje .srt (UTF-8) na seznam cue. Offset se NEzapéká — aplikuje se až při renderu. */
+    private fun parseSrt(bytes: ByteArray): List<SubtitleCue> {
+        val text = bytes.toString(Charsets.UTF_8).replace("\r\n", "\n").replace("\r", "\n")
+        val cues = ArrayList<SubtitleCue>()
+        for (block in text.split(Regex("\n[ \t]*\n"))) {
+            val lines = block.trim('\n', ' ', '\t').split("\n")
+            val tIdx = lines.indexOfFirst { it.contains("-->") }
+            if (tIdx < 0) continue
+            val m = cueTimeRegex.find(lines[tIdx]) ?: continue
+            val (h1, m1, s1, ms1, h2, m2, s2, ms2) = m.destructured
+            val start = h1.toLong() * 3600000 + m1.toLong() * 60000 + s1.toLong() * 1000 + ms1.padEnd(3, '0').take(3).toLong()
+            val end = h2.toLong() * 3600000 + m2.toLong() * 60000 + s2.toLong() * 1000 + ms2.padEnd(3, '0').take(3).toLong()
+            val content = lines.drop(tIdx + 1).joinToString("\n")
+                .replace(tagRegex, "").replace(assPosRegex, "").trim()
+            if (content.isNotEmpty()) cues.add(SubtitleCue(start, end, content))
         }
+        return cues
     }
 
     fun load(itemId: String, positionMs: Long) {

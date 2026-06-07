@@ -54,24 +54,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
@@ -79,9 +83,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
-import androidx.media3.ui.SubtitleView
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
@@ -126,19 +128,10 @@ private val SUBTITLE_COLORS = listOf(
     0xFFFFFFFF.toInt(), // white
 )
 
-@OptIn(UnstableApi::class)
-private fun buildMediaItem(url: String, subUri: String?): MediaItem {
-    val b = MediaItem.Builder().setUri(url)
-    if (!subUri.isNullOrBlank()) {
-        val sub = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUri))
-            .setMimeType(MimeTypes.APPLICATION_SUBRIP)
-            .setLanguage("cs")
-            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-            .build()
-        b.setSubtitleConfigurations(listOf(sub))
-    }
-    return b.build()
-}
+// Titulky NErenderuje ExoPlayer — kreslíme je vlastním overlayem (viz SubtitleOverlay),
+// aby šel posun/přepnutí stopy aplikovat okamžitě bez re-prepare videa (žádný rebuffer).
+private fun buildMediaItem(url: String): MediaItem =
+    MediaItem.Builder().setUri(url).build()
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -191,7 +184,7 @@ fun PlaybackScreen(
     var resumeDecided by remember { mutableStateOf(false) }
     var playerError by remember { mutableStateOf<String?>(null) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
-    var subtitleViewRef by remember { mutableStateOf<SubtitleView?>(null) }
+    var currentSubtitle by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
 
     // Seekbar (ruční přesouvání) + gesta jas/hlasitost
@@ -242,33 +235,17 @@ fun PlaybackScreen(
         }
     }
 
-    // Initial media prepare (subtitle included if už dostupný)
+    // Media prepare — jen video. Titulky kreslíme sami (overlay), takže se MediaItem
+    // už nikdy nepřestavuje kvůli titulkům (žádný rebuffer při posunu / přepnutí stopy).
     LaunchedEffect(state.streamUrl) {
         val url = state.streamUrl ?: return@LaunchedEffect
         timber.log.Timber.i("[Playback] setMediaItem external=${externalUrl != null} url=${url.take(90)}")
-        exoPlayer.setMediaItem(buildMediaItem(url, state.subtitleFileUri))
+        exoPlayer.setMediaItem(buildMediaItem(url))
         exoPlayer.prepare()
         if (state.resumePositionMs <= 0L) {
             resumeDecided = true
             exoPlayer.playWhenReady = true
         }
-    }
-
-    // Titulky se změnily (jiná stopa / offset) PO inicializaci → přestav MediaItem, zachovej pozici.
-    LaunchedEffect(state.subtitleFileUri) {
-        if (!resumeDecided) return@LaunchedEffect
-        val url = state.streamUrl ?: return@LaunchedEffect
-        val pos = exoPlayer.currentPosition
-        val wasPlaying = exoPlayer.playWhenReady
-        exoPlayer.setMediaItem(buildMediaItem(url, state.subtitleFileUri))
-        exoPlayer.prepare()
-        exoPlayer.seekTo(pos)
-        exoPlayer.playWhenReady = wasPlaying
-    }
-
-    // Aplikace stylu titulků na SubtitleView
-    LaunchedEffect(state.subtitleStyle, subtitleViewRef) {
-        subtitleViewRef?.applyStyle(state.subtitleStyle)
     }
 
     // position/duration poll
@@ -278,6 +255,20 @@ fun PlaybackScreen(
             position = exoPlayer.currentPosition
             duration = exoPlayer.duration.coerceAtLeast(0L)
             delay(500)
+        }
+    }
+    // Aktivní titulek — vlastní render. Offset se aplikuje live (t = pozice − offset).
+    LaunchedEffect(resumeDecided) {
+        if (!resumeDecided) return@LaunchedEffect
+        while (true) {
+            val s = viewModel.state.value
+            currentSubtitle = if (s.selectedSubtitleIndex >= 0 && s.subtitleCues.isNotEmpty()) {
+                val t = exoPlayer.currentPosition - s.subtitleStyle.offsetMs
+                s.subtitleCues.firstOrNull { t in it.startMs..it.endMs }?.text
+            } else {
+                null
+            }
+            delay(100)
         }
     }
     // auto-hide controls (ne když je otevřený panel titulků)
@@ -388,12 +379,15 @@ fun PlaybackScreen(
                             player = exoPlayer
                             useController = false
                             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                            subtitleViewRef = subtitleView
-                            subtitleView?.applyStyle(state.subtitleStyle)
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+
+                // Vlastní titulkový overlay (nad videem, pod ovládáním) — render řízen poll smyčkou výše.
+                currentSubtitle?.let { sub ->
+                    SubtitleOverlay(text = sub, style = state.subtitleStyle)
+                }
 
                 playerError?.let { err ->
                     Column(
@@ -576,20 +570,40 @@ fun PlaybackScreen(
     }
 }
 
-@OptIn(UnstableApi::class)
-private fun SubtitleView.applyStyle(style: SubtitleStyle) {
-    setStyle(
-        CaptionStyleCompat(
-            style.colorArgb,
-            0x00000000,                       // pozadí průhledné
-            0x00000000,                       // okno průhledné
-            CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-            0xFF000000.toInt(),               // černý obrys pro čitelnost
-            null,
-        ),
-    )
-    setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * style.fontScale)
-    setBottomPaddingFraction(style.bottomPaddingFraction)
+/** Vlastní render aktuálního titulku — dole na střed, černý obrys pro čitelnost. */
+@Composable
+private fun SubtitleOverlay(text: String, style: SubtitleStyle, modifier: Modifier = Modifier) {
+    val screenH = LocalConfiguration.current.screenHeightDp
+    val fontSize = (22 * style.fontScale).sp
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(bottom = (style.bottomPaddingFraction * screenH).dp),
+    ) {
+        val textMod = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+        // obrys
+        Text(
+            text = text,
+            modifier = textMod,
+            color = Color.Black,
+            fontSize = fontSize,
+            lineHeight = fontSize * 1.25f,
+            textAlign = TextAlign.Center,
+            style = TextStyle(drawStyle = Stroke(width = 8f, join = StrokeJoin.Round)),
+        )
+        // výplň barvou stylu
+        Text(
+            text = text,
+            modifier = textMod,
+            color = Color(style.colorArgb),
+            fontSize = fontSize,
+            lineHeight = fontSize * 1.25f,
+            textAlign = TextAlign.Center,
+        )
+    }
 }
 
 @Composable
