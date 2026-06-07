@@ -70,6 +70,20 @@ import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 
+/** Heuristika „text je v češtině" — přítomnost znaku z české abecedy s diakritikou.
+ *  Použito pro fallback popisu/názvu na ČSFD, když TMDB vrátí prázdný/cizojazyčný text. */
+private fun looksCzech(t: String?): Boolean =
+    !t.isNullOrBlank() && t.any { it in "áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ" }
+
+/** Český zobrazovaný název: český TMDB → ČSFD → (jakýkoliv cs/ČSFD) → originál.
+ *  Stejný fallback princip jako u popisu (TMDB chybí / neplatný / cizojazyčný → ČSFD). */
+private fun czechDisplayTitle(tmdbCzTitle: String?, csfdTitle: String?, original: String): String =
+    tmdbCzTitle?.takeIf { looksCzech(it) }
+        ?: csfdTitle?.takeIf { looksCzech(it) }
+        ?: tmdbCzTitle?.takeIf { it.isNotBlank() }
+        ?: csfdTitle?.takeIf { it.isNotBlank() }
+        ?: original
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DetailScreen(
@@ -90,6 +104,7 @@ fun DetailScreen(
     LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) { viewModel.load(item) }
 
     val displayItem = uiState.item ?: item
+    val displayTitle = czechDisplayTitle(uiState.tmdbCzTitle, uiState.csfdTitle, displayItem.title)
     var showReviewsSheet by remember { mutableStateOf(false) }
 
     // Stremio stream resolved → přehraj externí URL
@@ -163,7 +178,7 @@ fun DetailScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(displayItem.title, maxLines = 1) },
+                title = { Text(displayTitle, maxLines = 1) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
@@ -238,7 +253,7 @@ fun DetailScreen(
 
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = displayItem.title,
+                        text = displayTitle,
                         style = MaterialTheme.typography.titleLarge,
                     )
                     Spacer(Modifier.height(4.dp))
@@ -271,42 +286,29 @@ fun DetailScreen(
             val tmdbCz = uiState.tmdbCzOverview
             val csfdPlot = uiState.csfdPlot
 
-            val primaryPlot = tmdbCz?.takeIf { it.isNotBlank() }
-                ?: csfdPlot?.takeIf { it.isNotBlank() }
-                ?: tmdbOverview?.takeIf { it.isNotBlank() }
-            val primarySource = when {
-                tmdbCz?.isNotBlank() == true -> "TMDB CZ"
-                csfdPlot?.isNotBlank() == true -> "ČSFD"
-                else -> null
+            // ČSFD popis = ČISTÝ FALLBACK. Použije se jen když český TMDB popis chybí, je prázdný
+            // nebo není v češtině (TMDB u `cs` občas vrátí cizojazyčný text). Vždy JEDEN popis.
+            val czechTmdb = tmdbCz?.takeIf { looksCzech(it) }
+            val plot: String?
+            val plotSource: String?
+            when {
+                czechTmdb != null -> { plot = czechTmdb; plotSource = null }
+                !csfdPlot.isNullOrBlank() -> { plot = csfdPlot; plotSource = "ČSFD" }
+                !tmdbCz.isNullOrBlank() -> { plot = tmdbCz; plotSource = null }
+                else -> { plot = tmdbOverview?.takeIf { it.isNotBlank() }; plotSource = null }
             }
 
-            if (!primaryPlot.isNullOrBlank()) {
-                if (primarySource != null) {
+            if (!plot.isNullOrBlank()) {
+                if (plotSource != null) {
                     Text(
-                        text = "Popis ($primarySource)",
+                        text = "Popis ($plotSource)",
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     Spacer(Modifier.height(4.dp))
                 }
                 Text(
-                    text = primaryPlot,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(Modifier.height(12.dp))
-            }
-
-            val showCsfdSeparately = !csfdPlot.isNullOrBlank() && tmdbCz?.isNotBlank() == true && csfdPlot != tmdbCz
-            if (showCsfdSeparately) {
-                Text(
-                    text = "Popis (ČSFD)",
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = csfdPlot!!,
+                    text = plot,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
