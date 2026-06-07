@@ -25,6 +25,7 @@ dependencies {
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-uploader"))
     implementation(libs.jellyfin.sdk)
+    implementation(libs.timber)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
