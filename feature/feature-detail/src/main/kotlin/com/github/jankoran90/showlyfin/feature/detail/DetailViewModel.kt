@@ -127,7 +127,13 @@ class DetailViewModel @Inject constructor(
                                     movieDetails = details,
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
-                                    item = item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path),
+                                    // Backfill IMDB z TMDB → Stremio/Sdílej fungují i u filmů z knihovny
+                                    // matchnutých jen přes TMDB (např. arthouse bez imdb v Jellyfinu).
+                                    item = item.copy(
+                                        imdbId = item.imdbId ?: details?.imdb_id?.takeIf { id -> id.isNotBlank() },
+                                        posterPath = details?.poster_path,
+                                        backdropPath = details?.backdrop_path,
+                                    ),
                                     isLoading = false,
                                 )
                             }
