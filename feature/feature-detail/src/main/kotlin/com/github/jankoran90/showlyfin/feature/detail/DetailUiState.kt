@@ -92,4 +92,6 @@ data class DetailUiState(
     val showCollections: Boolean = true,
     val showDirector: Boolean = true,
     val showStudio: Boolean = true,
+    // Počet řádků popisu ve sbaleném stavu (Nastavení). 0 = bez omezení.
+    val plotCollapsedLines: Int = 5,
 )

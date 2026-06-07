@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +32,14 @@ import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
 
 private val CsfdRed = Color(0xFFBA0305)
+
+// ── AMOLED dark amber paleta pro sheet recenzí (vysoký kontrast na černé) ──
+private val AmoledBg = Color(0xFF000000)            // pravá černá (AMOLED)
+private val AmoledCard = Color(0xFF161310)          // tmavá karta s nádechem amber
+private val Amber = Color(0xFFFFB74D)               // amber akcent (nadpis, hvězdy, jméno)
+private val AmberText = Color(0xFFF2E8D5)           // teplý světlý text (popis recenze)
+private val AmberDim = Color(0xFFB9A88C)            // ztlumený (datum)
+private val StarEmpty = Color(0xFF5A5346)           // prázdná hvězda (čitelná na černé)
 
 @Composable
 fun CsfdRatingBadge(rating: Int, modifier: Modifier = Modifier, big: Boolean = false) {
@@ -61,7 +68,12 @@ fun CsfdRatingBadge(rating: Int, modifier: Modifier = Modifier, big: Boolean = f
 
 /** Hvězdičky 0–5 z ČSFD ratingu uživatele (0–100 %, stars = rating/20). */
 @Composable
-private fun CsfdStars(rating: Int?, modifier: Modifier = Modifier) {
+private fun CsfdStars(
+    rating: Int?,
+    modifier: Modifier = Modifier,
+    filled: Color = CsfdRed,
+    empty: Color = StarEmpty,
+) {
     if (rating == null) return
     val stars = (rating / 20).coerceIn(0, 5)
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -69,66 +81,77 @@ private fun CsfdStars(rating: Int?, modifier: Modifier = Modifier) {
             Icon(
                 imageVector = if (i < stars) Icons.Default.Star else Icons.Default.StarBorder,
                 contentDescription = null,
-                tint = if (i < stars) CsfdRed else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (i < stars) filled else empty,
                 modifier = Modifier.size(16.dp),
             )
         }
     }
 }
 
+/** Karta recenze v AMOLED dark amber vzhledu (vysoký kontrast). */
 @Composable
-fun CsfdReviewCard(review: CsfdReviewRaw, modifier: Modifier = Modifier) {
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = review.username,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                CsfdStars(rating = review.rating)
-            }
-            if (review.date.isNotBlank()) {
-                Text(
-                    text = review.date,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(6.dp))
+private fun CsfdReviewCardAmoled(review: CsfdReviewRaw, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(AmoledCard, RoundedCornerShape(10.dp))
+            .padding(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = review.text,
-                style = MaterialTheme.typography.bodySmall,
+                text = review.username,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Amber,
             )
+            CsfdStars(rating = review.rating, filled = Amber)
         }
+        if (review.date.isNotBlank()) {
+            Text(text = review.date, style = MaterialTheme.typography.labelSmall, color = AmberDim)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(text = review.text, style = MaterialTheme.typography.bodySmall, color = AmberText)
     }
 }
 
-/** Bottom sheet se všemi (~20) ČSFD recenzemi + hvězdičkami uživatele. */
+/** Bottom sheet se všemi (~20) ČSFD recenzemi — AMOLED dark amber. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CsfdReviewsBottomSheet(
     reviews: List<CsfdReviewRaw>,
+    title: String,
+    year: Int?,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, modifier = modifier) {
+    val heading = buildString {
+        append("ČSFD recenze")
+        if (title.isNotBlank()) append(" · $title")
+        year?.let { append(" ($it)") }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AmoledBg,
+        modifier = modifier,
+    ) {
         Text(
-            text = "ČSFD recenze (${reviews.size})",
+            text = heading,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
+            color = Amber,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
         )
         LazyColumn(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(reviews) { review -> CsfdReviewCard(review = review) }
+            items(reviews) { review -> CsfdReviewCardAmoled(review = review) }
         }
     }
 }

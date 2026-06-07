@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
@@ -106,6 +108,8 @@ fun DetailScreen(
     val displayItem = uiState.item ?: item
     val displayTitle = czechDisplayTitle(uiState.tmdbCzTitle, uiState.csfdTitle, displayItem.title)
     var showReviewsSheet by remember { mutableStateOf(false) }
+    var plotExpanded by remember { mutableStateOf(false) }
+    var plotOverflow by remember { mutableStateOf(false) }
 
     // Stremio stream resolved → přehraj externí URL
     LaunchedEffect(uiState.pendingPlaybackUrl) {
@@ -170,6 +174,8 @@ fun DetailScreen(
     if (showReviewsSheet) {
         CsfdReviewsBottomSheet(
             reviews = uiState.csfdReviews,
+            title = displayTitle,
+            year = displayItem.year,
             onDismiss = { showReviewsSheet = false },
         )
     }
@@ -280,8 +286,26 @@ fun DetailScreen(
                 }
             }
 
+            // ── Žánrové odznáčky (pod rokem + hodnocením ČSFD) ──
+            val genres = uiState.movieDetails?.genres?.map { it.name }
+                ?: uiState.showDetails?.genres?.map { it.name }
+                ?: displayItem.genres
+            if (!genres.isNullOrEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                FlowRow(
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    genres.forEach { genre ->
+                        AssistChip(onClick = {}, label = { Text(genre, style = MaterialTheme.typography.labelSmall) })
+                    }
+                }
+            }
+
             Spacer(Modifier.height(16.dp))
 
+            // ── Popis (JEDEN, fallback) — sbalený na N řádků + šipka rozbalit/sbalit ──
             val tmdbOverview = uiState.movieDetails?.overview ?: uiState.showDetails?.overview ?: displayItem.overview
             val tmdbCz = uiState.tmdbCzOverview
             val csfdPlot = uiState.csfdPlot
@@ -307,30 +331,40 @@ fun DetailScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                 }
+                val collapsedLines = uiState.plotCollapsedLines
+                val limitActive = collapsedLines > 0 && !plotExpanded
                 Text(
                     text = plot,
                     style = MaterialTheme.typography.bodyMedium,
+                    maxLines = if (limitActive) collapsedLines else Int.MAX_VALUE,
+                    overflow = if (limitActive) TextOverflow.Ellipsis else TextOverflow.Clip,
+                    onTextLayout = { if (limitActive) plotOverflow = it.hasVisualOverflow },
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
+                if (plotOverflow || plotExpanded) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        IconButton(onClick = { plotExpanded = !plotExpanded }) {
+                            Icon(
+                                imageVector = if (plotExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (plotExpanded) "Sbalit popis" else "Zobrazit celý popis",
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
             }
 
-            val genres = uiState.movieDetails?.genres?.map { it.name }
-                ?: uiState.showDetails?.genres?.map { it.name }
-                ?: displayItem.genres
-            if (!genres.isNullOrEmpty()) {
-                FlowRow(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    genres.forEach { genre ->
-                        AssistChip(onClick = {}, label = { Text(genre, style = MaterialTheme.typography.labelSmall) })
+            // ── ČSFD recenze (vystředěný button pod plot, nad akčními tlačítky) ──
+            if (uiState.csfdReviews.isNotEmpty()) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    OutlinedButton(onClick = { showReviewsSheet = true }) {
+                        Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                        Text("ČSFD recenze (${uiState.csfdReviews.size})")
                     }
                 }
+                Spacer(Modifier.height(8.dp))
             }
 
-            Spacer(Modifier.height(8.dp))
             DetailActionRow(
                 inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
                 onPlayNaTv = onNaTv?.let { cb -> { cb(displayItem, uiState.ownedJellyfinId) } },
@@ -383,17 +417,6 @@ fun DetailScreen(
                         excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
                         onPartClick = { part -> onCollectionPartClick?.invoke(part) },
                     )
-                }
-            }
-
-            if (uiState.csfdReviews.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { showReviewsSheet = true },
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                ) {
-                    Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                    Text("ČSFD recenze (${uiState.csfdReviews.size})")
                 }
             }
 

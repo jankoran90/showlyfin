@@ -113,6 +113,7 @@ class DetailViewModel @Inject constructor(
                 showCollections = prefs.getBoolean("detail_show_collections", true),
                 showDirector = prefs.getBoolean("detail_show_director", true),
                 showStudio = prefs.getBoolean("detail_show_studio", true),
+                plotCollapsedLines = prefs.getInt("detail_plot_lines", 5),
                 error = null,
             )
         }

@@ -260,6 +260,7 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailModeSection(
     viewModel: DetailPrefsViewModel = hiltViewModel(),
@@ -295,6 +296,18 @@ private fun DetailModeSection(
                 DetailSectionCheckRow("Kolekce", s.showCollections) { viewModel.setCollections(it) }
                 DetailSectionCheckRow("Od stejného režiséra", s.showDirector) { viewModel.setDirector(it) }
                 DetailSectionCheckRow("Od stejného studia", s.showStudio) { viewModel.setStudio(it) }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text("Popis – řádků ve sbaleném stavu:", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+            Spacer(Modifier.height(4.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DetailPrefsViewModel.PLOT_LINE_OPTIONS.forEach { n ->
+                    FilterChip(
+                        selected = s.plotLines == n,
+                        onClick = { viewModel.setPlotLines(n) },
+                        label = { Text(if (n == 0) "Vše" else "$n") },
+                    )
+                }
             }
         }
     }
