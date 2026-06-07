@@ -10,6 +10,17 @@ import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbMovieDetails
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbShowDetails
 
+/** Stav nahrávání necachovaného torrentu na RealDebrid (Fáze F). */
+data class RdDownloadState(
+    val torrentId: String = "",
+    val fileIdx: Int = 0,
+    val status: String = "magnet_conversion",
+    val progress: Double = 0.0,       // 0–100
+    val speedBytesPerSec: Long = 0,
+    val seeders: Int = 0,
+    val title: String = "",
+)
+
 data class DetailArgs(
     val traktId: Long,
     val tmdbId: Long?,
@@ -65,6 +76,8 @@ data class DetailUiState(
     val pendingPlaybackUrl: String? = null,
     val pendingPlaybackTitle: String = "",
     val requestStremioFallback: Boolean = false,
+    // RD caching progress (Fáze F) — necachovaný torrent se nahrává na RealDebrid
+    val rdDownload: RdDownloadState? = null,
     // Bottom sections (universal — in-library i mimo)
     val directorName: String? = null,
     val directorMovies: MediaCollection? = null,

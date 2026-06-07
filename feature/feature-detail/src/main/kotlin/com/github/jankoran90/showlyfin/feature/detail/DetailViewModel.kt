@@ -21,12 +21,15 @@ import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderCaptureRequest
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.UUID
 import javax.inject.Inject
@@ -49,6 +52,8 @@ class DetailViewModel @Inject constructor(
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+
+    private var rdPollJob: Job? = null
 
     fun load(item: MediaItem) {
         val current = _uiState.value.item
@@ -327,32 +332,89 @@ class DetailViewModel @Inject constructor(
 
     /** Klik na konkrétní stream → přímé url / RD resolve → předá URL navigaci k přehrání. */
     fun playStream(stream: UploaderStream) {
-        if (_uiState.value.isResolvingStream) return
+        if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
         val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: _uiState.value.item?.title.orEmpty()
-        // 1) přímá url (Ready (RD)) → hraj rovnou. 2) Comet (cometPath) → backend resolve na RD direct.
-        // 3) infoHash → RD resolve. addon-proxy odkazy (url bez RD) jsou IP/čas-vázané → až jako url-fallback.
         val direct = stream.url
         val cometPath = stream.cometPath
         val infoHash = stream.infoHash
+        // 1) přímá url (Ready (RD)) → hraj rovnou.
         if (!direct.isNullOrBlank()) {
             timber.log.Timber.i("[Stremio] play direct url addon=${stream.addon}")
             _uiState.update { it.copy(showStreamPicker = false, pendingPlaybackUrl = direct, pendingPlaybackTitle = title) }
             return
         }
-        if (cometPath.isNullOrBlank() && infoHash.isNullOrBlank()) {
-            _uiState.update { it.copy(streamError = "Stream nemá URL, cometPath ani infoHash.") }
+        // 2) cached Comet (rdReady) → rychlý resolve na RD direct (302) bez progress baru.
+        if (!cometPath.isNullOrBlank() && stream.quality.rdReady) {
+            _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
+            viewModelScope.launch {
+                runCatching { uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, cometPath) }
+                    .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
+                    .onFailure { e -> timber.log.Timber.w(e, "[Stremio] comet resolve FAILED"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
+            }
             return
         }
-        _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
-        viewModelScope.launch {
-            runCatching {
-                if (!cometPath.isNullOrBlank()) uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, cometPath)
-                else uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash!!, stream.fileIdx)
-            }
-                .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
-                .onFailure { e -> timber.log.Timber.w(e, "[Stremio] resolve FAILED comet=${!cometPath.isNullOrBlank()} infoHash=$infoHash"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
+        // 3) necachovaný torrent (infoHash / uncached Comet) → async add na RD + progress bar (Fáze F).
+        if (!cometPath.isNullOrBlank() || !infoHash.isNullOrBlank()) {
+            startRdDownload(stream, title)
+            return
         }
+        _uiState.update { it.copy(streamError = "Stream nemá URL, cometPath ani infoHash.") }
+    }
+
+    /** Necachovaný torrent: přidá na RD a pollí progress, dokud se nestáhne → pak přehraje (Fáze F). */
+    private fun startRdDownload(stream: UploaderStream, title: String) {
+        rdPollJob?.cancel()
+        _uiState.update {
+            it.copy(
+                showStreamPicker = false,
+                streamError = null,
+                rdDownload = RdDownloadState(fileIdx = stream.fileIdx, title = title),
+            )
+        }
+        rdPollJob = viewModelScope.launch {
+            val add = runCatching {
+                uploaderDs.rdAdd(uploaderBaseUrl, uploaderCookie, stream.infoHash, stream.fileIdx, stream.cometPath)
+            }.getOrElse { e ->
+                timber.log.Timber.w(e, "[RD] add FAILED infoHash=${stream.infoHash} comet=${!stream.cometPath.isNullOrBlank()}")
+                _uiState.update { it.copy(rdDownload = null, streamError = e.message ?: "RD: přidání torrentu selhalo", requestStremioFallback = true) }
+                return@launch
+            }
+            if (add.error != null || add.torrentId.isBlank()) {
+                _uiState.update { it.copy(rdDownload = null, streamError = add.error ?: "RD nevrátil torrent_id") }
+                return@launch
+            }
+            val fIdx = add.fileIdx
+            timber.log.Timber.i("[RD] add ok torrent=${add.torrentId} status=${add.status} fileIdx=$fIdx")
+            _uiState.update { it.copy(rdDownload = it.rdDownload?.copy(torrentId = add.torrentId, status = add.status, progress = add.progress)) }
+            while (isActive) {
+                val p = try {
+                    uploaderDs.rdProgress(uploaderBaseUrl, uploaderCookie, add.torrentId, fIdx)
+                } catch (e: Exception) {
+                    timber.log.Timber.w(e, "[RD] progress transient fail — retry"); delay(3000); null
+                }
+                if (p == null) continue
+                if (p.error != null) {
+                    _uiState.update { it.copy(rdDownload = null, streamError = p.error) }
+                    return@launch
+                }
+                _uiState.update {
+                    it.copy(rdDownload = it.rdDownload?.copy(status = p.status, progress = p.progress, speedBytesPerSec = p.speed, seeders = p.seeders))
+                }
+                if (p.status == "downloaded" && !p.url.isNullOrBlank()) {
+                    timber.log.Timber.i("[RD] downloaded → play torrent=${add.torrentId}")
+                    _uiState.update { it.copy(rdDownload = null, pendingPlaybackUrl = p.url, pendingPlaybackTitle = title) }
+                    return@launch
+                }
+                delay(2500)
+            }
+        }
+    }
+
+    fun cancelRdDownload() {
+        rdPollJob?.cancel()
+        rdPollJob = null
+        _uiState.update { it.copy(rdDownload = null) }
     }
 
     fun consumePlayback() = _uiState.update { it.copy(pendingPlaybackUrl = null, pendingPlaybackTitle = "") }

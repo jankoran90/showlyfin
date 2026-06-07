@@ -24,12 +24,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStreamQuality
+import com.github.jankoran90.showlyfin.feature.detail.RdDownloadState
 
 private fun tvQualityBadge(q: UploaderStreamQuality): String = buildList {
     q.resolution?.let { add(it) }
@@ -118,6 +120,41 @@ fun TvStreamPicker(
             Spacer(Modifier.height(12.dp))
             Text("Připravuji stream z RealDebrid…", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
         }
+    }
+}
+
+/** Overlay s průběhem nahrávání necachovaného torrentu na RealDebrid (Fáze F, TV). */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun TvRdDownloadOverlay(state: RdDownloadState, onCancel: () -> Unit) {
+    val isDownloading = state.status == "downloading"
+    val pct = (state.progress / 100.0).toFloat().coerceIn(0f, 1f)
+    val mbps = state.speedBytesPerSec / 1_000_000.0
+    val label = when (state.status) {
+        "magnet_conversion", "waiting_files_selection" -> "Příprava torrentu…"
+        "queued" -> "Ve frontě na RealDebrid…"
+        "downloading" -> "Stahuje se na RealDebrid…"
+        "compressing", "uploading" -> "Dokončuje se…"
+        "downloaded" -> "Hotovo, spouštím přehrávání…"
+        else -> "Připravuji stream…"
+    }
+    TvOverlayPanel("RealDebrid", onCancel) {
+        Text(label, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        if (isDownloading && state.progress > 0.0) {
+            LinearProgressIndicator(progress = { pct }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            val detail = buildList {
+                add("%.0f %%".format(state.progress))
+                if (mbps > 0.0) add("%.1f MB/s".format(mbps))
+                if (state.seeders > 0) add("${state.seeders} seedů")
+            }.joinToString("  ·  ")
+            Text(detail, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+        } else {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        Spacer(Modifier.height(20.dp))
+        TvMenuRow("Zrušit", "Přerušit nahrávání a zavřít", onCancel)
     }
 }
 

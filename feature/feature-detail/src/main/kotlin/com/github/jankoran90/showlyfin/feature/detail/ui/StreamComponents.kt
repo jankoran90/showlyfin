@@ -18,15 +18,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.github.jankoran90.showlyfin.feature.detail.RdDownloadState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -161,6 +165,49 @@ internal fun StreamPickerSheet(
         }
         Spacer(Modifier.height(16.dp))
     }
+}
+
+/** CZ popisek stavu RD torrentu (Fáze F). */
+internal fun rdStatusLabel(status: String): String = when (status) {
+    "magnet_conversion", "waiting_files_selection" -> "Příprava torrentu…"
+    "queued" -> "Ve frontě na RealDebrid…"
+    "downloading" -> "Stahuje se na RealDebrid…"
+    "compressing", "uploading" -> "Dokončuje se…"
+    "downloaded" -> "Hotovo, spouštím přehrávání…"
+    else -> "Připravuji stream…"
+}
+
+/** Dialog s průběhem nahrávání necachovaného torrentu na RealDebrid (Fáze F). */
+@Composable
+internal fun RdDownloadDialog(state: RdDownloadState, onCancel: () -> Unit) {
+    val isDownloading = state.status == "downloading"
+    val pct = (state.progress / 100.0).toFloat().coerceIn(0f, 1f)
+    val mbps = state.speedBytesPerSec / 1_000_000.0
+    AlertDialog(
+        onDismissRequest = { /* nezavírat omylem — jen tlačítkem */ },
+        title = { Text("RealDebrid") },
+        text = {
+            Column {
+                Text(rdStatusLabel(state.status), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                if (isDownloading && state.progress > 0.0) {
+                    LinearProgressIndicator(progress = { pct }, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    val detail = buildList {
+                        add("%.0f %%".format(state.progress))
+                        if (mbps > 0.0) add("%.1f MB/s".format(mbps))
+                        if (state.seeders > 0) add("${state.seeders} seedů")
+                    }.joinToString("  ·  ")
+                    Text(detail, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onCancel) { Text("Zrušit") }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

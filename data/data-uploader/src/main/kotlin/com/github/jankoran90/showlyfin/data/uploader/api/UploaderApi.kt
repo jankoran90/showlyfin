@@ -36,6 +36,18 @@ internal class UploaderApi(
         return resp.url ?: throw IllegalStateException(resp.error ?: "RD resolve nevrátil URL")
     }
 
+    override suspend fun rdAdd(baseUrl: String, sessionCookie: String, infoHash: String?, fileIdx: Int, cometPath: String?): UploaderRdAddResponse {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.rdAdd("$base/api/stremio/rd/add", cookie, UploaderRdAddRequest(infoHash = infoHash, fileIdx = fileIdx, cometPath = cometPath))
+    }
+
+    override suspend fun rdProgress(baseUrl: String, sessionCookie: String, torrentId: String, fileIdx: Int): UploaderRdProgressResponse {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.rdProgress("$base/api/stremio/rd/progress/$torrentId?fileIdx=$fileIdx", cookie)
+    }
+
     override suspend fun getStreamFilter(baseUrl: String, sessionCookie: String): StreamFilterPrefs {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

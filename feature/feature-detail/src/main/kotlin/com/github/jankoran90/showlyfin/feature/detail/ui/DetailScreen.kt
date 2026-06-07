@@ -109,6 +109,9 @@ fun DetailScreen(
         }
     }
 
+    uiState.rdDownload?.let { rd ->
+        RdDownloadDialog(state = rd, onCancel = { viewModel.cancelRdDownload() })
+    }
     if (uiState.showStreamPicker) {
         StreamPickerSheet(
             streams = uiState.streams,

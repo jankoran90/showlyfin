@@ -255,6 +255,9 @@ fun TvDetailScreen(
         }
 
         // Overlay pickery (Stremio / Stáhnout / Sdílej.cz)
+        uiState.rdDownload?.let { rd ->
+            TvRdDownloadOverlay(state = rd, onCancel = { viewModel.cancelRdDownload() })
+        }
         if (uiState.showStreamPicker) {
             TvStreamPicker(
                 streams = uiState.streams,

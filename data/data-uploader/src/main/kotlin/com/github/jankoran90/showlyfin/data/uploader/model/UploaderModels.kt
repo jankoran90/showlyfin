@@ -49,6 +49,33 @@ data class UploaderResolveResponse(
     val error: String? = null,
 )
 
+// ── RD caching progress (Fáze F) — async add + poll pro NEcachované torrenty ───
+
+data class UploaderRdAddRequest(
+    @SerializedName("infoHash") val infoHash: String? = null,
+    @SerializedName("fileIdx") val fileIdx: Int = 0,
+    @SerializedName("cometPath") val cometPath: String? = null,
+)
+
+data class UploaderRdAddResponse(
+    @SerializedName("torrent_id") val torrentId: String = "",
+    val status: String = "",
+    val progress: Double = 0.0,
+    @SerializedName("file_idx") val fileIdx: Int = 0,
+    val error: String? = null,
+)
+
+data class UploaderRdProgressResponse(
+    @SerializedName("torrent_id") val torrentId: String = "",
+    val status: String = "",
+    val progress: Double = 0.0,
+    val speed: Long = 0,
+    val seeders: Int = 0,
+    val filename: String = "",
+    val url: String? = null,
+    val error: String? = null,
+)
+
 // ── Stremio / Comet stream filter (Nastavení) ─────────────────────────────────
 
 data class StreamSizeRange(val min: Double = 2.0, val max: Double = 8.0)
