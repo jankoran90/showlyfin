@@ -142,6 +142,9 @@ fun PlaybackScreen(
     externalTitle: String = "",
     subtitleQuery: SubtitleQuery? = null,
     onBack: () -> Unit,
+    // CASCADE Fáze 4: externí stream (Stremio/RD) selhal v ExoPlayeru → zkus dalšího kandidáta
+    // místo zobrazení chyby. Volá se jen u externalUrl (Jellyfin přehrávání kandidáty nemá).
+    onPlaybackFailed: ((String) -> Unit)? = null,
     viewModel: PlaybackViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(itemId, externalUrl) {
@@ -183,6 +186,8 @@ fun PlaybackScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var resumeDecided by remember { mutableStateOf(false) }
     var playerError by remember { mutableStateOf<String?>(null) }
+    // CASCADE Fáze 4: hlásíme selhání externího streamu jen jednou (onPlayerError může přijít víckrát).
+    var failureReported by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var currentSubtitle by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
@@ -204,7 +209,13 @@ fun PlaybackScreen(
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 timber.log.Timber.e(error, "[Playback] ExoPlayer error code=${error.errorCodeName} cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}")
-                playerError = error.errorCodeName
+                // CASCADE Fáze 4: u externího streamu zkus dalšího kandidáta (auto-advance) místo chyby.
+                if (externalUrl != null && onPlaybackFailed != null && !failureReported) {
+                    failureReported = true
+                    onPlaybackFailed(error.errorCodeName)
+                } else {
+                    playerError = error.errorCodeName
+                }
             }
         }
         exoPlayer.addListener(listener)

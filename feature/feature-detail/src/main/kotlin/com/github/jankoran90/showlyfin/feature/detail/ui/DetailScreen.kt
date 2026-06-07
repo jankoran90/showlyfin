@@ -110,6 +110,13 @@ fun DetailScreen(
             viewModel.consumeCaptureMessage()
         }
     }
+    // CASCADE Fáze 4: auto-advance po chybě přehrávání → krátká info hláška
+    LaunchedEffect(uiState.autoAdvanceInfo) {
+        uiState.autoAdvanceInfo?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.consumeAutoAdvanceInfo()
+        }
+    }
 
     uiState.rdDownload?.let { rd ->
         RdDownloadDialog(state = rd, onCancel = { viewModel.cancelRdDownload() })

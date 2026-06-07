@@ -29,6 +29,8 @@ sealed class TvDestination {
         val externalUrl: String? = null,
         val title: String = "",
         val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null,
+        // CASCADE Fáze 4: u externího streamu odkaz na Detail (drží candidate list) pro auto-advance po chybě
+        val parent: TvDestination? = null,
     ) : TvDestination()
     data class SmartDetect(val item: MediaItem) : TvDestination()
 }

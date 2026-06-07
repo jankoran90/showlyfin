@@ -55,6 +55,10 @@ class DetailViewModel @Inject constructor(
 
     private var rdPollJob: Job? = null
 
+    // CASCADE Fáze 4: poslední přehrávaný stream z pickeru → po chybě přehrávání víme,
+    // odkud v seznamu `streams` pokračovat dalším kandidátem (v UŽIVATELOVĚ pořadí, bez přeřazování).
+    private var lastPlayedStream: UploaderStream? = null
+
     fun load(item: MediaItem) {
         val current = _uiState.value.item
         if (current != null) {
@@ -62,6 +66,7 @@ class DetailViewModel @Inject constructor(
             val sameTmdb = current.tmdbId != null && item.tmdbId != null && current.tmdbId == item.tmdbId
             if (sameTrakt || sameTmdb) return
         }
+        lastPlayedStream = null
         _uiState.update {
             it.copy(
                 item = item,
@@ -365,6 +370,7 @@ class DetailViewModel @Inject constructor(
     /** Klik na konkrétní stream → přímé url / RD resolve → předá URL navigaci k přehrání. */
     fun playStream(stream: UploaderStream) {
         if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
+        lastPlayedStream = stream   // CASCADE Fáze 4: zapamatuj pro případný auto-advance po chybě přehrávání
         val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: _uiState.value.item?.title.orEmpty()
         // CZ titulky query (Fáze E): orig+cz název, rok, runtime, release+fps zvoleného streamu.
@@ -487,6 +493,42 @@ class DetailViewModel @Inject constructor(
 
     fun consumePlayback() = _uiState.update { it.copy(pendingPlaybackUrl = null, pendingPlaybackTitle = "", pendingSubtitleQuery = null) }
     fun consumeStremioFallback() = _uiState.update { it.copy(requestStremioFallback = false) }
+    fun consumeAutoAdvanceInfo() = _uiState.update { it.copy(autoAdvanceInfo = null) }
+
+    /**
+     * CASCADE Fáze 4 — auto-advance po chybě přehrávání v ExoPlayeru.
+     * Když zdroj nejde přehrát (vadný kontejner/kodek, ne DMCA), zkus DALŠÍ probnutý zdroj
+     * v UŽIVATELOVĚ pořadí (`streams` je už seřazený dle jeho `fallbackOrder` — NEPŘEŘAZUJEME!).
+     * Po vyčerpání kandidátů spadni na Stremio (původní chování).
+     */
+    fun onPlaybackFailed(errorCode: String) {
+        val list = _uiState.value.streams
+        val prev = lastPlayedStream
+        val curIdx = if (prev != null) list.indexOf(prev) else -1
+        // Další OKAMŽITĚ hratelný kandidát v UŽIVATELOVĚ pořadí (direct url / cached RD).
+        // Pure-downloadable přeskakujeme — auto-retry nemá tiše spustit vícеminutový RD download.
+        val nextIdx = ((curIdx + 1) until list.size).firstOrNull { i ->
+            val s = list[i]
+            !s.url.isNullOrBlank() || s.quality.rdReady || s.quality.rdSaved
+        } ?: -1
+        if (nextIdx >= 0) {
+            val next = list[nextIdx]
+            timber.log.Timber.i("[CASCADE] auto-advance po chybě přehrávání code=$errorCode → zdroj ${nextIdx + 1}/${list.size} '${next.name ?: next.description}'")
+            _uiState.update {
+                it.copy(
+                    isResolvingStream = false,
+                    rdDownload = null,
+                    streamError = null,
+                    requestStremioFallback = false,
+                    autoAdvanceInfo = "Zdroj nešel přehrát, zkouším další (${nextIdx + 1}/${list.size})…",
+                )
+            }
+            playStream(next)
+        } else {
+            timber.log.Timber.w("[CASCADE] auto-advance: žádný další hratelný zdroj (z idx=$curIdx/${list.size}) code=$errorCode → Stremio fallback")
+            _uiState.update { it.copy(isResolvingStream = false, rdDownload = null, requestStremioFallback = true) }
+        }
+    }
 
     // ── Stáhnout menu (Sdílej.cz + Smart Remux) ────────────────────────────────
 

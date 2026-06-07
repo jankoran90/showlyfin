@@ -48,6 +48,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
+import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
@@ -385,13 +386,22 @@ fun ShowlyfinPhoneApp() {
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                is Destination.Player -> PlaybackScreen(
-                    itemId = dest.itemId ?: "",
-                    externalUrl = dest.externalUrl,
-                    externalTitle = dest.title,
-                    subtitleQuery = dest.subtitleQuery,
-                    onBack = { currentDestination = dest.parent },
-                )
+                is Destination.Player -> {
+                    // CASCADE Fáze 4: stejná (Activity-scoped) instance DetailViewModelu jako na Detailu —
+                    // drží candidate list `streams`; po chybě přehrávání spustíme dalšího kandidáta.
+                    val detailVm: DetailViewModel = hiltViewModel()
+                    PlaybackScreen(
+                        itemId = dest.itemId ?: "",
+                        externalUrl = dest.externalUrl,
+                        externalTitle = dest.title,
+                        subtitleQuery = dest.subtitleQuery,
+                        onBack = { currentDestination = dest.parent },
+                        onPlaybackFailed = { code ->
+                            currentDestination = dest.parent   // pop na Detail, kde žije candidate list
+                            detailVm.onPlaybackFailed(code)
+                        },
+                    )
+                }
                 is Destination.SmartDetect -> SmartDetectScreen(
                     imdbId = dest.imdbId,
                     title = dest.title,

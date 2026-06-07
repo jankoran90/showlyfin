@@ -29,6 +29,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfileGateViewModel
+import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.SmartDetectScreen
 import com.github.jankoran90.showlyfin.ui.tv.setup.TvProfilePickerScreen
@@ -205,14 +206,25 @@ fun ShowlyfinTvApp(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-            is TvDestination.Playback -> PlaybackScreen(
-                itemId = dest.itemId,
-                positionMs = dest.positionMs,
-                externalUrl = dest.externalUrl,
-                externalTitle = dest.title,
-                subtitleQuery = dest.subtitleQuery,
-                onBack = { currentDestination = TvDestination.Home },
-            )
+            is TvDestination.Playback -> {
+                // CASCADE Fáze 4: stejná (Activity-scoped) instance DetailViewModelu jako na Detailu —
+                // po chybě přehrávání externího streamu spustíme dalšího kandidáta z candidate listu.
+                val detailVm: DetailViewModel = hiltViewModel()
+                PlaybackScreen(
+                    itemId = dest.itemId,
+                    positionMs = dest.positionMs,
+                    externalUrl = dest.externalUrl,
+                    externalTitle = dest.title,
+                    subtitleQuery = dest.subtitleQuery,
+                    onBack = { currentDestination = TvDestination.Home },
+                    onPlaybackFailed = dest.parent?.let { parent ->
+                        { code: String ->
+                            currentDestination = parent   // pop na Detail, kde žije candidate list
+                            detailVm.onPlaybackFailed(code)
+                        }
+                    },
+                )
+            }
             else -> TvNavDrawer(
                 entries = entries,
                 moveMode = moveMode,
@@ -289,7 +301,7 @@ fun ShowlyfinTvApp(
                         item = dest.item,
                         onPlayJellyfin = { itemId -> currentDestination = TvDestination.Playback(itemId = itemId) },
                         onBack = { currentDestination = TvDestination.Discover },
-                        onPlayStreamUrl = { url, title, subQuery -> currentDestination = TvDestination.Playback(externalUrl = url, title = title, subtitleQuery = subQuery) },
+                        onPlayStreamUrl = { url, title, subQuery -> currentDestination = TvDestination.Playback(externalUrl = url, title = title, subtitleQuery = subQuery, parent = dest) },
                         onSmartDetect = { mediaItem -> currentDestination = TvDestination.SmartDetect(mediaItem) },
                         onPartClick = { part ->
                             val jfId = part.jellyfinId

@@ -78,6 +78,8 @@ data class DetailUiState(
     val pendingPlaybackTitle: String = "",
     val pendingSubtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null,
     val requestStremioFallback: Boolean = false,
+    // CASCADE Fáze 4: krátká info hláška při auto-advance po chybě přehrávání ("zkouším další zdroj…")
+    val autoAdvanceInfo: String? = null,
     // RD caching progress (Fáze F) — necachovaný torrent se nahrává na RealDebrid
     val rdDownload: RdDownloadState? = null,
     // Bottom sections (universal — in-library i mimo)
