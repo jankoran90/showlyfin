@@ -59,7 +59,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -218,12 +217,12 @@ fun DetailScreen(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 if (backdropUrl != null) {
+                    // Bez parallax posunu — obrázek i gradient overlay scrollují jako jeden celek,
+                    // takže se spodní fade vždy kryje s obrázkem (dřív parallax rozjížděl overlay nad obrázek).
                     AsyncImage(
                         model = backdropUrl,
                         contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { translationY = scrollState.value * 0.45f },
+                        modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
                     Box(
