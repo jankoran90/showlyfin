@@ -55,7 +55,7 @@ fun TvDetailScreen(
     item: MediaItem,
     onPlayJellyfin: ((String) -> Unit)?,
     onBack: () -> Unit,
-    onPlayStreamUrl: ((String, String) -> Unit)? = null,
+    onPlayStreamUrl: ((String, String, com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery?) -> Unit)? = null,
     onSmartDetect: ((MediaItem) -> Unit)? = null,
     onPartClick: ((com.github.jankoran90.showlyfin.core.ui.CollectionPart) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -70,7 +70,7 @@ fun TvDetailScreen(
 
     LaunchedEffect(uiState.pendingPlaybackUrl) {
         val url = uiState.pendingPlaybackUrl ?: return@LaunchedEffect
-        onPlayStreamUrl?.invoke(url, uiState.pendingPlaybackTitle)
+        onPlayStreamUrl?.invoke(url, uiState.pendingPlaybackTitle, uiState.pendingSubtitleQuery)
         viewModel.consumePlayback()
     }
     LaunchedEffect(uiState.requestStremioFallback) {

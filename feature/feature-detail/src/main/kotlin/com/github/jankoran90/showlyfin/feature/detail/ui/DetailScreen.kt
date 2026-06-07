@@ -77,7 +77,7 @@ fun DetailScreen(
     onShare: ((MediaItem) -> Unit)? = null,
     onCollectionPartClick: ((CollectionPart) -> Unit)? = null,
     onPlayJellyfin: ((String) -> Unit)? = null,
-    onPlayStreamUrl: ((String, String) -> Unit)? = null,
+    onPlayStreamUrl: ((String, String, com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery?) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -91,7 +91,7 @@ fun DetailScreen(
     // Stremio stream resolved → přehraj externí URL
     LaunchedEffect(uiState.pendingPlaybackUrl) {
         val url = uiState.pendingPlaybackUrl ?: return@LaunchedEffect
-        onPlayStreamUrl?.invoke(url, uiState.pendingPlaybackTitle)
+        onPlayStreamUrl?.invoke(url, uiState.pendingPlaybackTitle, uiState.pendingSubtitleQuery)
         viewModel.consumePlayback()
     }
     // RD resolve selhal → fallback do Stremio app

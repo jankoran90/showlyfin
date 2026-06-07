@@ -75,6 +75,7 @@ data class DetailUiState(
     val captureMessage: String? = null,
     val pendingPlaybackUrl: String? = null,
     val pendingPlaybackTitle: String = "",
+    val pendingSubtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null,
     val requestStremioFallback: Boolean = false,
     // RD caching progress (Fáze F) — necachovaný torrent se nahrává na RealDebrid
     val rdDownload: RdDownloadState? = null,

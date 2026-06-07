@@ -387,3 +387,42 @@ data class FixAudioDelayJob(
     val id: String = "", val status: String = "", val pct: Double = 0.0, val error: String? = null,
     @SerializedName("backup_path") val backupPath: String? = null, @SerializedName("offset_s") val offsetS: Double = 0.0,
 )
+
+// ── Titulky.com CZ titulky (Plan QUASAR Fáze E) ───────────────────────────────
+
+data class SubtitleCandidate(
+    @SerializedName("id") val id: String = "",
+    @SerializedName("title") val title: String = "",
+    @SerializedName("release") val release: String = "",
+    @SerializedName("fps") val fps: Double = 0.0,
+    @SerializedName("year") val year: Int = 0,
+    @SerializedName("lang") val lang: String = "cs",
+    @SerializedName("imdbMatch") val imdbMatch: Boolean = false,
+    @SerializedName("downloads") val downloads: Int = 0,
+    @SerializedName("score") val score: Double = 0.0,
+)
+
+data class SubtitlesResponse(
+    @SerializedName("subtitles") val subtitles: List<SubtitleCandidate> = emptyList(),
+    @SerializedName("best") val best: Int = -1,
+)
+
+/** Stažený .srt (UTF-8) + ověření délky proti filmu (z hlaviček backendu). Ne-síťový holder. */
+data class SubtitleDownload(
+    val bytes: ByteArray,
+    val lastTsSec: Int = 0,
+    val runtimeOk: String = "-",   // "1" sedí / "0" nesedí / "-" neznámo
+)
+
+/** Parametry hledání CZ titulků (titulky.com). In-memory přenos Detail → Playback. */
+data class SubtitleQuery(
+    val imdb: String,
+    val title: String,          // český název (preferovaný pro hledání)
+    val origTitle: String,      // originální/anglický název
+    val year: Int? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val release: String? = null, // release zvoleného streamu (pro match)
+    val fps: Double? = null,
+    val runtime: Int? = null,
+)

@@ -337,4 +337,46 @@ internal class UploaderApi(
         val ids = java.net.URLEncoder.encode(imdbIds.joinToString(","), "UTF-8")
         return service.checkLibraryPresence("$base/api/library/check?imdb_ids=$ids", cookie)
     }
+
+    private fun enc(s: String): String = java.net.URLEncoder.encode(s, "UTF-8")
+
+    override suspend fun getSubtitles(
+        baseUrl: String, sessionCookie: String, imdbId: String,
+        title: String, origTitle: String, year: Int?,
+        season: Int?, episode: Int?, release: String?, fps: Double?,
+    ): SubtitlesResponse {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val params = buildList {
+            add("lang=cs")
+            if (title.isNotBlank()) add("title=${enc(title)}")
+            if (origTitle.isNotBlank()) add("origTitle=${enc(origTitle)}")
+            if (year != null) add("year=$year")
+            if (season != null && episode != null) { add("season=$season"); add("episode=$episode") }
+            if (!release.isNullOrBlank()) add("release=${enc(release)}")
+            if (fps != null && fps > 0.0) add("fps=$fps")
+        }
+        val url = "$base/api/subtitles/$imdbId?" + params.joinToString("&")
+        return service.getSubtitles(url, cookie)
+    }
+
+    override suspend fun downloadSubtitle(
+        baseUrl: String, sessionCookie: String, titulkyId: String,
+        season: Int?, episode: Int?, runtime: Int?,
+    ): SubtitleDownload {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val params = buildList {
+            if (season != null && episode != null) { add("season=$season"); add("episode=$episode") }
+            if (runtime != null && runtime > 0) add("runtime=$runtime")
+        }
+        var url = "$base/api/subtitles/download/$titulkyId"
+        if (params.isNotEmpty()) url += "?" + params.joinToString("&")
+        val resp = service.downloadSubtitle(url, cookie)
+        if (!resp.isSuccessful) throw HttpException(resp)
+        val body = resp.body() ?: throw IllegalStateException("Stažení titulků nevrátilo data")
+        val lastTs = resp.headers()["X-Sub-LastTs"]?.toIntOrNull() ?: 0
+        val runtimeOk = resp.headers()["X-Sub-RuntimeOk"] ?: "-"
+        return SubtitleDownload(bytes = body.bytes(), lastTsSec = lastTs, runtimeOk = runtimeOk)
+    }
 }

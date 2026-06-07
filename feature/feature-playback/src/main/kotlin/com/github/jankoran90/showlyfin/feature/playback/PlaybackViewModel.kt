@@ -1,9 +1,13 @@
 package com.github.jankoran90.showlyfin.feature.playback
 
+import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +21,7 @@ import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -26,24 +31,153 @@ class PlaybackViewModel @Inject constructor(
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val uploaderDs: UploaderRemoteDataSource,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(PlaybackUiState())
+    private val _state = MutableStateFlow(PlaybackUiState(subtitleStyle = loadStyle()))
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
+    private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+
+    private var query: SubtitleQuery? = null
+    private var rawSrt: ByteArray? = null     // .srt aktuální stopy (bez offsetu) pro rychlé re-shift
+
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
-    fun loadExternal(url: String, title: String) {
-        _state.value = PlaybackUiState(
-            isLoading = false,
-            title = title,
-            streamUrl = url,
-            positionMs = 0L,
-            resumePositionMs = 0L,
-        )
+    fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null) {
+        _state.update {
+            it.copy(
+                isLoading = false, title = title, streamUrl = url,
+                positionMs = 0L, resumePositionMs = 0L,
+            )
+        }
+        if (subtitleQuery != null && subtitleQuery.imdb.isNotBlank() && uploaderBaseUrl.isNotBlank()) {
+            query = subtitleQuery
+            loadSubtitles()
+        }
+    }
+
+    private fun loadSubtitles() {
+        val q = query ?: return
+        _state.update { it.copy(subtitlesLoading = true, subtitleError = null) }
+        viewModelScope.launch {
+            val resp = runCatching {
+                uploaderDs.getSubtitles(
+                    uploaderBaseUrl, uploaderCookie, q.imdb,
+                    title = q.title, origTitle = q.origTitle, year = q.year,
+                    season = q.season, episode = q.episode, release = q.release, fps = q.fps,
+                )
+            }.getOrElse { e ->
+                timber.log.Timber.w(e, "[Titulky] getSubtitles selhalo imdb=${q.imdb}")
+                _state.update { it.copy(subtitlesLoading = false, subtitleError = e.message ?: "Titulky nedostupné") }
+                return@launch
+            }
+            _state.update { it.copy(subtitlesLoading = false, subtitleCandidates = resp.subtitles) }
+            timber.log.Timber.i("[Titulky] ${resp.subtitles.size} CZ kandidátů, best=${resp.best}")
+            if (resp.subtitles.isNotEmpty()) {
+                selectSubtitle(if (resp.best in resp.subtitles.indices) resp.best else 0)
+            }
+        }
+    }
+
+    /** Vybere titulkovou stopu (index do subtitleCandidates), -1 = vypnout. */
+    fun selectSubtitle(index: Int) {
+        if (index < 0) {
+            rawSrt = null
+            _state.update { it.copy(selectedSubtitleIndex = -1, subtitleFileUri = null, subtitleRuntimeOk = "-") }
+            return
+        }
+        val cand = _state.value.subtitleCandidates.getOrNull(index) ?: return
+        val q = query
+        _state.update { it.copy(subtitlesLoading = true, subtitleError = null) }
+        viewModelScope.launch {
+            val dl = runCatching {
+                uploaderDs.downloadSubtitle(
+                    uploaderBaseUrl, uploaderCookie, cand.id,
+                    season = q?.season, episode = q?.episode, runtime = q?.runtime,
+                )
+            }.getOrElse { e ->
+                timber.log.Timber.w(e, "[Titulky] download selhal id=${cand.id}")
+                _state.update { it.copy(subtitlesLoading = false, subtitleError = e.message ?: "Stažení titulků selhalo") }
+                return@launch
+            }
+            rawSrt = dl.bytes
+            val uri = writeSrt(dl.bytes, _state.value.subtitleStyle.offsetMs)
+            _state.update {
+                it.copy(
+                    subtitlesLoading = false, selectedSubtitleIndex = index,
+                    subtitleFileUri = uri, subtitleRuntimeOk = dl.runtimeOk,
+                )
+            }
+        }
+    }
+
+    // ── Styl titulků ─────────────────────────────────────────────────────────
+    fun setFontScale(scale: Float) = updateStyle { it.copy(fontScale = scale.coerceIn(0.6f, 2.0f)) }
+    fun setColor(argb: Int) = updateStyle { it.copy(colorArgb = argb) }
+    fun setBottomPadding(fraction: Float) = updateStyle { it.copy(bottomPaddingFraction = fraction.coerceIn(0.0f, 0.4f)) }
+
+    /** Posun synchronizace. delta v ms (+ = titulky později, − = dříve). Přepíše .srt a obnoví URI. */
+    fun nudgeOffset(deltaMs: Long) {
+        val newOffset = _state.value.subtitleStyle.offsetMs + deltaMs
+        updateStyle { it.copy(offsetMs = newOffset) }
+        rawSrt?.let { bytes ->
+            val uri = writeSrt(bytes, newOffset)
+            _state.update { it.copy(subtitleFileUri = uri) }
+        }
+    }
+
+    private fun updateStyle(transform: (SubtitleStyle) -> SubtitleStyle) {
+        val s = transform(_state.value.subtitleStyle)
+        _state.update { it.copy(subtitleStyle = s) }
+        saveStyle(s)
+    }
+
+    private fun loadStyle() = SubtitleStyle(
+        fontScale = prefs.getFloat("sub_font_scale", 1.0f),
+        colorArgb = prefs.getInt("sub_color_argb", 0xFFFFBF00.toInt()),
+        bottomPaddingFraction = prefs.getFloat("sub_bottom_pad", 0.08f),
+        offsetMs = prefs.getLong("sub_offset_ms", 0L),
+    )
+
+    private fun saveStyle(s: SubtitleStyle) {
+        prefs.edit()
+            .putFloat("sub_font_scale", s.fontScale)
+            .putInt("sub_color_argb", s.colorArgb)
+            .putFloat("sub_bottom_pad", s.bottomPaddingFraction)
+            .putLong("sub_offset_ms", s.offsetMs)
+            .apply()
+    }
+
+    /** Zapíše .srt do cache (s aplikovaným offsetem) a vrátí file:// URI. */
+    private fun writeSrt(bytes: ByteArray, offsetMs: Long): String {
+        val dir = File(appContext.cacheDir, "subtitles").apply { mkdirs() }
+        val out = File(dir, "current.srt")
+        val data = if (offsetMs == 0L) bytes else shiftSrt(bytes, offsetMs).toByteArray(Charsets.UTF_8)
+        out.writeBytes(data)
+        return android.net.Uri.fromFile(out).toString()
+    }
+
+    private val tsRegex = Regex("""(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})""")
+
+    /** Posune všechny timestampy v .srt o offsetMs (clamp ≥ 0). */
+    private fun shiftSrt(bytes: ByteArray, offsetMs: Long): String {
+        val text = bytes.toString(Charsets.UTF_8)
+        return tsRegex.replace(text) { m ->
+            val (h, mm, s, ms) = m.destructured
+            var total = h.toLong() * 3600000 + mm.toLong() * 60000 + s.toLong() * 1000 + ms.padEnd(3, '0').take(3).toLong()
+            total = (total + offsetMs).coerceAtLeast(0)
+            val hh = total / 3600000
+            val mi = (total % 3600000) / 60000
+            val se = (total % 60000) / 1000
+            val mss = total % 1000
+            "%02d:%02d:%02d,%03d".format(hh, mi, se, mss)
+        }
     }
 
     fun load(itemId: String, positionMs: Long) {
-        _state.value = PlaybackUiState(isLoading = true)
+        _state.update { it.copy(isLoading = true) }
         viewModelScope.launch {
             val serverUrl = prefs.getString("jellyfin_server_url", "") ?: ""
             val token = prefs.getString("jellyfin_token", "") ?: ""

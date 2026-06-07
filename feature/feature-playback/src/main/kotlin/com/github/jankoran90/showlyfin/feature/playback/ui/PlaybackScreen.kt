@@ -5,7 +5,11 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,12 +19,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -39,23 +48,28 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
-import com.github.jankoran90.showlyfin.feature.playback.PlaybackCache
+import androidx.media3.ui.SubtitleView
+import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
+import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
 import kotlinx.coroutines.delay
 
 private fun fmtTime(ms: Long): String {
@@ -67,6 +81,30 @@ private fun fmtTime(ms: Long): String {
     return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }
 
+// Paleta barev titulků — preferované jantarové/žluté odstíny + bílá.
+private val SUBTITLE_COLORS = listOf(
+    0xFFFFBF00.toInt(), // amber
+    0xFFFFC107.toInt(), // gold
+    0xFFFFD54F.toInt(), // light amber
+    0xFFFFEB3B.toInt(), // yellow
+    0xFFFFF176.toInt(), // light yellow
+    0xFFFFFFFF.toInt(), // white
+)
+
+@OptIn(UnstableApi::class)
+private fun buildMediaItem(url: String, subUri: String?): MediaItem {
+    val b = MediaItem.Builder().setUri(url)
+    if (!subUri.isNullOrBlank()) {
+        val sub = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUri))
+            .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+            .setLanguage("cs")
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+        b.setSubtitleConfigurations(listOf(sub))
+    }
+    return b.build()
+}
+
 @OptIn(UnstableApi::class)
 @Composable
 fun PlaybackScreen(
@@ -74,11 +112,12 @@ fun PlaybackScreen(
     positionMs: Long = 0L,
     externalUrl: String? = null,
     externalTitle: String = "",
+    subtitleQuery: SubtitleQuery? = null,
     onBack: () -> Unit,
     viewModel: PlaybackViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(itemId, externalUrl) {
-        if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle)
+        if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery)
         else viewModel.load(itemId, positionMs)
     }
 
@@ -87,16 +126,11 @@ fun PlaybackScreen(
     val view = LocalView.current
 
     val exoPlayer = remember {
-        // Disk-backed cache + generous buffer → smooth streaming over jittery links (RD/Jellyfin).
         val upstream = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(30_000)
             .setReadTimeoutMs(30_000)
-            // Addon/debrid servery (AIOStreams apod.) bez browser UA často vrátí HTML/redirect
-            // místo videa → ExoPlayer pak hlásí ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
             .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
-        // Disk CacheDataSource odstraněn — způsoboval ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE
-        // u velkých souborů (3GB mkv). Velký in-memory buffer níže pokrývá jitter (RD/Jellyfin).
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(60_000, 300_000, 5_000, 10_000)
             .build()
@@ -105,7 +139,11 @@ fun PlaybackScreen(
             .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
-            .build()
+            .build().apply {
+                trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .setPreferredTextLanguage("cs")
+                    .build()
+            }
     }
 
     var isPlaying by remember { mutableStateOf(true) }
@@ -114,6 +152,8 @@ fun PlaybackScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var resumeDecided by remember { mutableStateOf(false) }
     var playerError by remember { mutableStateOf<String?>(null) }
+    var showSubtitleMenu by remember { mutableStateOf(false) }
+    var subtitleViewRef by remember { mutableStateOf<SubtitleView?>(null) }
     val focusRequester = remember { FocusRequester() }
 
     DisposableEffect(Unit) {
@@ -133,15 +173,33 @@ fun PlaybackScreen(
         }
     }
 
+    // Initial media prepare (subtitle included if už dostupný)
     LaunchedEffect(state.streamUrl) {
         val url = state.streamUrl ?: return@LaunchedEffect
         timber.log.Timber.i("[Playback] setMediaItem external=${externalUrl != null} url=${url.take(90)}")
-        exoPlayer.setMediaItem(MediaItem.fromUri(url))
+        exoPlayer.setMediaItem(buildMediaItem(url, state.subtitleFileUri))
         exoPlayer.prepare()
         if (state.resumePositionMs <= 0L) {
             resumeDecided = true
             exoPlayer.playWhenReady = true
         }
+    }
+
+    // Titulky se změnily (jiná stopa / offset) PO inicializaci → přestav MediaItem, zachovej pozici.
+    LaunchedEffect(state.subtitleFileUri) {
+        if (!resumeDecided) return@LaunchedEffect
+        val url = state.streamUrl ?: return@LaunchedEffect
+        val pos = exoPlayer.currentPosition
+        val wasPlaying = exoPlayer.playWhenReady
+        exoPlayer.setMediaItem(buildMediaItem(url, state.subtitleFileUri))
+        exoPlayer.prepare()
+        exoPlayer.seekTo(pos)
+        exoPlayer.playWhenReady = wasPlaying
+    }
+
+    // Aplikace stylu titulků na SubtitleView
+    LaunchedEffect(state.subtitleStyle, subtitleViewRef) {
+        subtitleViewRef?.applyStyle(state.subtitleStyle)
     }
 
     // position/duration poll
@@ -153,21 +211,33 @@ fun PlaybackScreen(
             delay(500)
         }
     }
-    // auto-hide controls
-    LaunchedEffect(controlsVisible, isPlaying) {
-        if (controlsVisible && isPlaying) {
+    // auto-hide controls (ne když je otevřený panel titulků)
+    LaunchedEffect(controlsVisible, isPlaying, showSubtitleMenu) {
+        if (controlsVisible && isPlaying && !showSubtitleMenu) {
             delay(4000)
             controlsVisible = false
         }
     }
-    // grab focus for D-pad once playing
     LaunchedEffect(resumeDecided) {
         if (resumeDecided) runCatching { focusRequester.requestFocus() }
     }
 
-    BackHandler(onBack = onBack)
+    BackHandler {
+        if (showSubtitleMenu) showSubtitleMenu = false else onBack()
+    }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            // Telefon: tap kdekoli přepne ovládací lištu.
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = {
+                    if (showSubtitleMenu) showSubtitleMenu = false
+                    else controlsVisible = !controlsVisible
+                })
+            },
+    ) {
         when {
             state.isLoading -> CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center),
@@ -188,6 +258,8 @@ fun PlaybackScreen(
                             player = exoPlayer
                             useController = false
                             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                            subtitleViewRef = subtitleView
+                            subtitleView?.applyStyle(state.subtitleStyle)
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -201,17 +273,9 @@ fun PlaybackScreen(
                             .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text(
-                            "Tento stream nejde přehrát v aplikaci",
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
+                        Text("Tento stream nejde přehrát v aplikaci", color = Color.White, style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            err,
-                            color = Color.White.copy(alpha = 0.6f),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        Text(err, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.height(16.dp))
                         if (externalUrl != null) {
                             Button(onClick = {
@@ -230,7 +294,6 @@ fun PlaybackScreen(
                 }
 
                 if (!resumeDecided && state.resumePositionMs > 0L) {
-                    // Resume vs start-over chooser
                     Column(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -256,7 +319,7 @@ fun PlaybackScreen(
                         }
                     }
                 } else {
-                    // D-pad capture layer
+                    // D-pad capture layer (TV)
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -265,26 +328,19 @@ fun PlaybackScreen(
                             .onKeyEvent { ev ->
                                 if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
                                 when (ev.key) {
-                                    Key.DirectionLeft -> {
-                                        exoPlayer.seekBack(); controlsVisible = true; true
-                                    }
-                                    Key.DirectionRight -> {
-                                        exoPlayer.seekForward(); controlsVisible = true; true
-                                    }
+                                    Key.DirectionLeft -> { exoPlayer.seekBack(); controlsVisible = true; true }
+                                    Key.DirectionRight -> { exoPlayer.seekForward(); controlsVisible = true; true }
                                     Key.DirectionCenter, Key.Enter, Key.Spacebar -> {
                                         if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                                         controlsVisible = true; true
                                     }
-                                    Key.DirectionUp, Key.DirectionDown -> {
-                                        controlsVisible = true; true
-                                    }
+                                    Key.DirectionUp, Key.DirectionDown -> { controlsVisible = true; true }
                                     else -> false
                                 }
                             },
                     )
 
                     if (controlsVisible) {
-                        // Title (hides with controls)
                         if (state.title.isNotBlank()) {
                             Text(
                                 text = state.title,
@@ -297,7 +353,6 @@ fun PlaybackScreen(
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                         }
-                        // Bottom bar: progress + time + state
                         Column(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
@@ -315,22 +370,198 @@ fun PlaybackScreen(
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
                                     "${if (isPlaying) "▶" else "⏸"}  ${fmtTime(position)} / ${fmtTime(duration)}",
                                     color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
-                                Text(
-                                    "◀ ▶ převíjení · OK pauza",
-                                    color = Color.White.copy(alpha = 0.6f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
+                                // CC ikona titulků
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (state.subtitlesLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp,
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                    }
+                                    Text(
+                                        text = "CC",
+                                        color = if (state.selectedSubtitleIndex >= 0) Color(state.subtitleStyle.colorArgb) else Color.White.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier
+                                            .border(
+                                                1.dp,
+                                                if (state.selectedSubtitleIndex >= 0) Color(state.subtitleStyle.colorArgb) else Color.White.copy(alpha = 0.5f),
+                                                RoundedCornerShape(4.dp),
+                                            )
+                                            .clickable { showSubtitleMenu = true; controlsVisible = true }
+                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
                             }
                         }
                     }
+
+                    if (showSubtitleMenu) {
+                        SubtitleSettingsPanel(
+                            state = state,
+                            onSelect = { viewModel.selectSubtitle(it) },
+                            onFontScale = { viewModel.setFontScale(it) },
+                            onColor = { viewModel.setColor(it) },
+                            onPosition = { viewModel.setBottomPadding(it) },
+                            onNudge = { viewModel.nudgeOffset(it) },
+                            onClose = { showSubtitleMenu = false },
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@OptIn(UnstableApi::class)
+private fun SubtitleView.applyStyle(style: SubtitleStyle) {
+    setStyle(
+        CaptionStyleCompat(
+            style.colorArgb,
+            0x00000000,                       // pozadí průhledné
+            0x00000000,                       // okno průhledné
+            CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+            0xFF000000.toInt(),               // černý obrys pro čitelnost
+            null,
+        ),
+    )
+    setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * style.fontScale)
+    setBottomPaddingFraction(style.bottomPaddingFraction)
+}
+
+@Composable
+private fun SubtitleSettingsPanel(
+    state: com.github.jankoran90.showlyfin.feature.playback.PlaybackUiState,
+    onSelect: (Int) -> Unit,
+    onFontScale: (Float) -> Unit,
+    onColor: (Int) -> Unit,
+    onPosition: (Float) -> Unit,
+    onNudge: (Long) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .width(360.dp)
+            .padding(16.dp)
+            .background(Color.Black.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
+            .padding(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Titulky", color = Color.White, style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = onClose) { Text("Hotovo") }
+        }
+
+        // Stopa
+        Text("Stopa (CZ)", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
+        SubtitleRow(
+            label = "Vypnuto",
+            selected = state.selectedSubtitleIndex < 0,
+            onClick = { onSelect(-1) },
+        )
+        state.subtitleCandidates.forEachIndexed { i, c ->
+            val rel = c.release.ifBlank { c.title }
+            val meta = buildString {
+                if (c.imdbMatch) append("✓ ")
+                if (c.fps > 0) append("${c.fps} fps · ")
+                append("${c.downloads}×")
+            }
+            SubtitleRow(
+                label = rel,
+                sub = meta,
+                selected = state.selectedSubtitleIndex == i,
+                onClick = { onSelect(i) },
+            )
+        }
+        if (state.subtitleRuntimeOk == "0" && state.selectedSubtitleIndex >= 0) {
+            Text(
+                "⚠ Délka titulků nesedí na film — zkus jinou stopu nebo posun.",
+                color = Color(0xFFFFB74D), style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        // Velikost
+        StepperRow("Velikost", "${(state.subtitleStyle.fontScale * 100).toInt()} %",
+            onMinus = { onFontScale(state.subtitleStyle.fontScale - 0.1f) },
+            onPlus = { onFontScale(state.subtitleStyle.fontScale + 0.1f) })
+
+        // Pozice (výška odspodu)
+        StepperRow("Pozice", "${(state.subtitleStyle.bottomPaddingFraction * 100).toInt()} %",
+            onMinus = { onPosition(state.subtitleStyle.bottomPaddingFraction - 0.04f) },
+            onPlus = { onPosition(state.subtitleStyle.bottomPaddingFraction + 0.04f) })
+
+        // Posun (synchronizace)
+        StepperRow("Posun", "%+.1f s".format(state.subtitleStyle.offsetMs / 1000.0),
+            onMinus = { onNudge(-500L) },
+            onPlus = { onNudge(500L) })
+
+        Spacer(Modifier.height(12.dp))
+        // Barva
+        Text("Barva", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SUBTITLE_COLORS.forEach { argb ->
+                val sel = state.subtitleStyle.colorArgb == argb
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(Color(argb), CircleShape)
+                        .border(if (sel) 3.dp else 1.dp, if (sel) Color.White else Color.White.copy(alpha = 0.3f), CircleShape)
+                        .clickable { onColor(argb) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubtitleRow(label: String, sub: String = "", selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (selected) "●" else "○", color = if (selected) Color(0xFFFFBF00) else Color.White.copy(alpha = 0.5f))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+            if (sub.isNotBlank()) Text(sub, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun StepperRow(label: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onMinus) { Text("−", color = Color.White, style = MaterialTheme.typography.titleLarge) }
+            Text(value, color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            TextButton(onClick = onPlus) { Text("+", color = Color.White, style = MaterialTheme.typography.titleLarge) }
         }
     }
 }

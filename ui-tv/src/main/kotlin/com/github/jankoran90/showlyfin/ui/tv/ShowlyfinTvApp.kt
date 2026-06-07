@@ -210,6 +210,7 @@ fun ShowlyfinTvApp(
                 positionMs = dest.positionMs,
                 externalUrl = dest.externalUrl,
                 externalTitle = dest.title,
+                subtitleQuery = dest.subtitleQuery,
                 onBack = { currentDestination = TvDestination.Home },
             )
             else -> TvNavDrawer(
@@ -288,7 +289,7 @@ fun ShowlyfinTvApp(
                         item = dest.item,
                         onPlayJellyfin = { itemId -> currentDestination = TvDestination.Playback(itemId = itemId) },
                         onBack = { currentDestination = TvDestination.Discover },
-                        onPlayStreamUrl = { url, title -> currentDestination = TvDestination.Playback(externalUrl = url, title = title) },
+                        onPlayStreamUrl = { url, title, subQuery -> currentDestination = TvDestination.Playback(externalUrl = url, title = title, subtitleQuery = subQuery) },
                         onSmartDetect = { mediaItem -> currentDestination = TvDestination.SmartDetect(mediaItem) },
                         onPartClick = { part ->
                             val jfId = part.jellyfinId

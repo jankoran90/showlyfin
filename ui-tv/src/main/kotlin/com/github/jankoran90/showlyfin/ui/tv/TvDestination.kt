@@ -28,6 +28,7 @@ sealed class TvDestination {
         val positionMs: Long = 0L,
         val externalUrl: String? = null,
         val title: String = "",
+        val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null,
     ) : TvDestination()
     data class SmartDetect(val item: MediaItem) : TvDestination()
 }

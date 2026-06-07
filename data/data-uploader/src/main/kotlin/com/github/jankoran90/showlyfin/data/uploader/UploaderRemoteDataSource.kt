@@ -69,4 +69,15 @@ interface UploaderRemoteDataSource {
 
     // Library presence
     suspend fun checkLibraryPresence(baseUrl: String, sessionCookie: String, imdbIds: List<String>): Map<String, Boolean>
+
+    // Titulky.com CZ titulky (Fáze E)
+    suspend fun getSubtitles(
+        baseUrl: String, sessionCookie: String, imdbId: String,
+        title: String, origTitle: String, year: Int?,
+        season: Int? = null, episode: Int? = null, release: String? = null, fps: Double? = null,
+    ): SubtitlesResponse
+    suspend fun downloadSubtitle(
+        baseUrl: String, sessionCookie: String, titulkyId: String,
+        season: Int? = null, episode: Int? = null, runtime: Int? = null,
+    ): SubtitleDownload
 }

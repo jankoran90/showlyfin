@@ -18,6 +18,10 @@ interface UploaderService {
     @POST suspend fun capture(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderCaptureRequest): UploaderCaptureResponse
     @POST suspend fun login(@Url url: String, @Body request: UploaderLoginRequest): Response<ResponseBody>
 
+    // Titulky.com CZ titulky (Fáze E)
+    @GET suspend fun getSubtitles(@Url url: String, @Header("Cookie") cookie: String): SubtitlesResponse
+    @GET @Streaming suspend fun downloadSubtitle(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+
     // TMM Pipeline
     @GET suspend fun getTmmSession(@Url url: String, @Header("Cookie") cookie: String): TmmSession
     @POST suspend fun tmmSearch(@Url url: String, @Header("Cookie") cookie: String, @Body request: TmmSearchRequest): TmmSearchResponse
