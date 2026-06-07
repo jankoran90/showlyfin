@@ -12,6 +12,8 @@ import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.TraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.model.RdMatchItem
 import com.github.jankoran90.showlyfin.feature.discover.mapper.toMediaItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -39,13 +41,18 @@ class DiscoverViewModel @Inject constructor(
     private val jellyfinLibraryService: JellyfinLibraryService,
     private val parentalControlsRepository: ParentalControlsRepository,
     private val tokenProvider: TokenProvider,
+    private val uploaderDs: UploaderRemoteDataSource,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DiscoverUiState())
     val uiState: StateFlow<DiscoverUiState> = _uiState.asStateFlow()
 
+    private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+
     private var searchJob: Job? = null
+    private var rdMatchJob: Job? = null
 
     init {
         _uiState.update { it.copy(isTraktLoggedIn = tokenProvider.getToken() != null) }
@@ -111,6 +118,43 @@ class DiscoverViewModel @Inject constructor(
         reapplyFilters()
     }
 
+    /** Toggle filtru „jen co je na RD" (Fáze F++). Při zapnutí dopočítá card-level match přes uploader. */
+    fun toggleRdOnly() {
+        val newValue = !_uiState.value.rdOnly
+        _uiState.update { it.copy(rdOnly = newValue) }
+        if (newValue) computeRdMatch() else reapplyFilters()
+    }
+
+    private fun computeRdMatch() {
+        if (uploaderBaseUrl.isBlank()) {
+            _uiState.update { it.copy(rdOnly = false, error = "Uploader není nastaven — filtr „Na RD" nelze použít.") }
+            return
+        }
+        rdMatchJob?.cancel()
+        rdMatchJob = viewModelScope.launch {
+            _uiState.update { it.copy(rdMatchLoading = true) }
+            // distinct tituly napříč discover + search (title+year, card-level)
+            val source = (_uiState.value.rawItems + _uiState.value.rawSearchResults)
+                .distinctBy { it.traktId }
+            val matched = runCatching {
+                val indices = uploaderDs.rdMatch(
+                    uploaderBaseUrl, uploaderCookie,
+                    source.map { RdMatchItem(it.title, it.year) },
+                )
+                indices.mapNotNull { source.getOrNull(it)?.traktId }.toSet()
+            }.getOrElse {
+                Timber.w(it, "[Discover] rdMatch failed")
+                emptySet()
+            }
+            Timber.i("[Discover] rdMatch: ${matched.size}/${source.size} na RD")
+            _uiState.update {
+                val items = applyFilters(it.rawItems, it.filters, it.copy(rdMatchedTraktIds = matched))
+                val search = applyFilters(it.rawSearchResults, it.filters, it.copy(rdMatchedTraktIds = matched))
+                it.copy(rdMatchedTraktIds = matched, rdMatchLoading = false, items = items, searchResults = search)
+            }
+        }
+    }
+
     private fun reapplyFilters() {
         val state = _uiState.value
         val filteredItems = applyFilters(state.rawItems, state.filters, state)
@@ -146,6 +190,9 @@ class DiscoverViewModel @Inject constructor(
         }
         if (filters.hideWatched && state.watchedTraktIds.isNotEmpty()) {
             result = result.filter { item -> !state.watchedTraktIds.contains(item.traktId) }
+        }
+        if (state.rdOnly) {
+            result = result.filter { item -> state.rdMatchedTraktIds.contains(item.traktId) }
         }
         val effectiveAgeRating = state.sessionAgeOverride ?: state.parentalLockedAgeRating
         effectiveAgeRating?.let { rating ->
@@ -313,6 +360,7 @@ class DiscoverViewModel @Inject constructor(
                     isSearching = false,
                 )
             }
+            if (_uiState.value.rdOnly) computeRdMatch()
         } catch (e: Throwable) {
             _uiState.update { it.copy(isSearching = false, error = e.message ?: "Chyba vyhledávání") }
         }
@@ -392,6 +440,7 @@ class DiscoverViewModel @Inject constructor(
                         isLoading = false,
                     )
                 }
+                if (_uiState.value.rdOnly) computeRdMatch()
             } catch (e: Throwable) {
                 _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba načítání") }
             }

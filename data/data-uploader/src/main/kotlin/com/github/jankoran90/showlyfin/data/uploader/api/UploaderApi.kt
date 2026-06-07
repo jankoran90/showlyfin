@@ -58,6 +58,12 @@ internal class UploaderApi(
         return service.rdSearch("$base/api/stremio/rd/search$q", cookie).streams
     }
 
+    override suspend fun rdMatch(baseUrl: String, sessionCookie: String, items: List<RdMatchItem>): List<Int> {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.rdMatch("$base/api/stremio/rd/match", cookie, RdMatchRequest(items)).matched
+    }
+
     override suspend fun getStreamFilter(baseUrl: String, sessionCookie: String): StreamFilterPrefs {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

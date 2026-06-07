@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -202,6 +203,7 @@ fun DiscoverScreen(
                                 viewModel.selectFilter(filter)
                             }
                         },
+                        onRdOnlyToggle = { viewModel.toggleRdOnly() },
                     )
                 }
             }
@@ -297,6 +299,7 @@ private fun DiscoverFilterRow(
     onGenresClear: () -> Unit,
     onAgeSelect: (AgeRating?) -> Unit,
     onFilterChipSelect: (DiscoverFilter) -> Unit,
+    onRdOnlyToggle: () -> Unit,
 ) {
     val activeAge = uiState.sessionAgeOverride ?: uiState.parentalLockedAgeRating
     LazyRow(
@@ -415,6 +418,21 @@ private fun DiscoverFilterRow(
                     }
                 }
             }
+        }
+        item {
+            FilterChip(
+                selected = uiState.rdOnly,
+                onClick = onRdOnlyToggle,
+                label = { Text("💾 Na RD") },
+                leadingIcon = if (uiState.rdMatchLoading) {
+                    {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                } else null,
+            )
         }
         items(DiscoverFilter.entries) { filter ->
             FilterChip(

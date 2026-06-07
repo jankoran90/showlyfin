@@ -77,6 +77,21 @@ data class UploaderRdProgressResponse(
     val error: String? = null,
 )
 
+// ── RD card-level match (Fáze F++) — filtr „jen co je na RD" v Objevit/Chci vidět ─
+
+data class RdMatchItem(
+    val title: String,
+    val year: Int? = null,
+)
+
+data class RdMatchRequest(
+    val items: List<RdMatchItem> = emptyList(),
+)
+
+data class RdMatchResponse(
+    val matched: List<Int> = emptyList(),
+)
+
 // ── Stremio / Comet stream filter (Nastavení) ─────────────────────────────────
 
 data class StreamSizeRange(val min: Double = 2.0, val max: Double = 8.0)

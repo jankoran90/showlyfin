@@ -10,6 +10,8 @@ import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.model.RdMatchItem
 import org.jellyfin.sdk.model.UUID
 import javax.inject.Named
 import com.github.jankoran90.showlyfin.feature.watchlist.mapper.toMovieMediaItem
@@ -35,11 +37,16 @@ class WatchlistViewModel @Inject constructor(
     private val tokenProvider: TokenProvider,
     private val parentalControlsRepository: ParentalControlsRepository,
     private val jellyfinLibraryService: JellyfinLibraryService,
+    private val uploaderDs: UploaderRemoteDataSource,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _rawItems = MutableStateFlow<List<MediaItem>>(emptyList())
     private var lockedRating: AgeRating? = null
+    private var rdMatchJob: kotlinx.coroutines.Job? = null
+
+    private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     private val _uiState = MutableStateFlow(WatchlistUiState())
     val uiState: StateFlow<WatchlistUiState> = _uiState.asStateFlow()
@@ -109,6 +116,40 @@ class WatchlistViewModel @Inject constructor(
         reapply()
     }
 
+    /** Toggle filtru „jen co je na RD" (Fáze F++). Při zapnutí dopočítá card-level match přes uploader. */
+    fun toggleRdOnly() {
+        val newValue = !_uiState.value.rdOnly
+        _uiState.update { it.copy(rdOnly = newValue) }
+        if (newValue) computeRdMatch() else reapply()
+    }
+
+    private fun computeRdMatch() {
+        if (uploaderBaseUrl.isBlank()) {
+            _uiState.update { it.copy(rdOnly = false, error = "Uploader není nastaven — filtr „Na RD" nelze použít.") }
+            return
+        }
+        rdMatchJob?.cancel()
+        rdMatchJob = viewModelScope.launch {
+            _uiState.update { it.copy(rdMatchLoading = true) }
+            val source = _rawItems.value.distinctBy { it.traktId }
+            val matched = runCatching {
+                val indices = uploaderDs.rdMatch(
+                    uploaderBaseUrl, uploaderCookie,
+                    source.map { RdMatchItem(it.title, it.year) },
+                )
+                indices.mapNotNull { source.getOrNull(it)?.traktId }.toSet()
+            }.getOrElse {
+                Timber.w(it, "[Watchlist] rdMatch failed")
+                emptySet()
+            }
+            Timber.i("[Watchlist] rdMatch: ${matched.size}/${source.size} na RD")
+            _uiState.update {
+                it.copy(rdMatchedTraktIds = matched, rdMatchLoading = false)
+            }
+            reapply()
+        }
+    }
+
     fun refresh() {
         if (_uiState.value.isLoggedIn) load(_uiState.value.activeTab)
     }
@@ -167,6 +208,8 @@ class WatchlistViewModel @Inject constructor(
                     )
                 }
 
+                if (_uiState.value.rdOnly) computeRdMatch()
+
                 if (tab == WatchlistTab.SHOWS) {
                     loadProgress()
                 }
@@ -217,6 +260,10 @@ class WatchlistViewModel @Inject constructor(
         var result = applyLock(items)
         if (!genre.isNullOrBlank()) {
             result = result.filter { it.genres.orEmpty().any { g -> g.equals(genre, ignoreCase = true) } }
+        }
+        val state = _uiState.value
+        if (state.rdOnly) {
+            result = result.filter { state.rdMatchedTraktIds.contains(it.traktId) }
         }
         result = when (sort) {
             WatchlistSort.DEFAULT -> result

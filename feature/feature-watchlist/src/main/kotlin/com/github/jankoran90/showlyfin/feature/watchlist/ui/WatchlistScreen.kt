@@ -66,13 +66,16 @@ fun WatchlistScreen(
             }
         }
 
-        if (uiState.isLoggedIn && (uiState.items.isNotEmpty() || uiState.genreFilter != null)) {
+        if (uiState.isLoggedIn && (uiState.items.isNotEmpty() || uiState.genreFilter != null || uiState.rdOnly)) {
             WatchlistChips(
                 sort = uiState.sort,
                 genreFilter = uiState.genreFilter,
                 availableGenres = uiState.availableGenres,
+                rdOnly = uiState.rdOnly,
+                rdMatchLoading = uiState.rdMatchLoading,
                 onSortSelected = { viewModel.selectSort(it) },
                 onGenreSelected = { viewModel.selectGenre(it) },
+                onRdOnlyToggle = { viewModel.toggleRdOnly() },
             )
         }
 
@@ -176,8 +179,11 @@ private fun WatchlistChips(
     sort: WatchlistSort,
     genreFilter: String?,
     availableGenres: List<String>,
+    rdOnly: Boolean,
+    rdMatchLoading: Boolean,
     onSortSelected: (WatchlistSort) -> Unit,
     onGenreSelected: (String?) -> Unit,
+    onRdOnlyToggle: () -> Unit,
 ) {
     var sortMenuOpen by remember { mutableStateOf(false) }
     LazyRow(
@@ -185,6 +191,21 @@ private fun WatchlistChips(
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item {
+            FilterChip(
+                selected = rdOnly,
+                onClick = onRdOnlyToggle,
+                label = { Text("💾 Na RD") },
+                leadingIcon = if (rdMatchLoading) {
+                    {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                } else null,
+            )
+        }
         item {
             Box {
                 FilterChip(

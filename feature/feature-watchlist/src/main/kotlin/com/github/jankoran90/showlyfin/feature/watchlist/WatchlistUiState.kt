@@ -35,4 +35,7 @@ data class WatchlistUiState(
     val watchedImdbIds: Set<String> = emptySet(),
     val watchedTmdbIds: Set<Long> = emptySet(),
     val watchedTraktIds: Set<Long> = emptySet(),
+    val rdOnly: Boolean = false,
+    val rdMatchedTraktIds: Set<Long> = emptySet(),
+    val rdMatchLoading: Boolean = false,
 )
