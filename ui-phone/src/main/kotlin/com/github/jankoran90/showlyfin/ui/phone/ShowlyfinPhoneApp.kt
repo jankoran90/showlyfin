@@ -49,6 +49,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
+import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinLibraryItemsScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
@@ -90,6 +91,7 @@ private sealed interface Destination {
         val ancestors: List<JellyfinLibraryRef> = emptyList(),
     ) : Destination
     data class JellyfinDetail(val itemId: String, val parent: Destination) : Destination
+    data class EpisodePicker(val seriesId: String, val seriesName: String, val parent: Destination) : Destination
     data class JellyfinPlayback(val itemId: String, val parent: JellyfinDetail) : Destination
     data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination) : Destination
 }
@@ -268,6 +270,7 @@ fun ShowlyfinPhoneApp() {
                     }
                 }
                 is Destination.JellyfinDetail -> current.parent
+                is Destination.EpisodePicker -> current.parent
                 is Destination.JellyfinPlayback -> current.parent
                 is Destination.Player -> current.parent
                 is Destination.Detail -> current.parent
@@ -348,7 +351,19 @@ fun ShowlyfinPhoneApp() {
                     onPlay = { itemId ->
                         currentDestination = Destination.JellyfinPlayback(itemId, dest)
                     },
+                    onOpenEpisodes = { seriesId, name ->
+                        currentDestination = Destination.EpisodePicker(seriesId, name, dest)
+                    },
                     onCollectionPartClick = onCollectionPartClick,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.EpisodePicker -> EpisodePickerScreen(
+                    seriesId = dest.seriesId,
+                    seriesName = dest.seriesName,
+                    onBack = { currentDestination = dest.parent },
+                    onPlayEpisode = { epId ->
+                        currentDestination = Destination.Player(itemId = epId, externalUrl = null, title = dest.seriesName, parent = dest)
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.JellyfinPlayback -> PlaybackScreen(
@@ -383,7 +398,11 @@ fun ShowlyfinPhoneApp() {
                     onShare = onShareItem,
                     onCollectionPartClick = onCollectionPartClick,
                     onPlayJellyfin = { jfId ->
-                        currentDestination = Destination.Player(itemId = jfId, externalUrl = null, title = dest.item.title, parent = dest)
+                        currentDestination = if (dest.item.type == MediaType.SHOW) {
+                            Destination.EpisodePicker(jfId, dest.item.title, dest)
+                        } else {
+                            Destination.Player(itemId = jfId, externalUrl = null, title = dest.item.title, parent = dest)
+                        }
                     },
                     onPlayStreamUrl = { url, title ->
                         currentDestination = Destination.Player(itemId = null, externalUrl = url, title = title, parent = dest)

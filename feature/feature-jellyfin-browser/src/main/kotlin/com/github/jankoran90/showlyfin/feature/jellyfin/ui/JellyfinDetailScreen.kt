@@ -52,6 +52,7 @@ fun JellyfinDetailScreen(
     itemId: String,
     onBack: () -> Unit,
     onPlay: (itemId: String) -> Unit,
+    onOpenEpisodes: ((seriesId: String, name: String) -> Unit)? = null,
     onCollectionPartClick: ((CollectionPart) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: JellyfinDetailViewModel = hiltViewModel(),
@@ -145,12 +146,16 @@ fun JellyfinDetailScreen(
                     }
 
                     Spacer(Modifier.height(8.dp))
+                    val isSeries = detail.type.equals("SERIES", ignoreCase = true)
                     Button(
-                        onClick = { onPlay(detail.id) },
+                        onClick = {
+                            if (isSeries && onOpenEpisodes != null) onOpenEpisodes(detail.id, detail.name)
+                            else onPlay(detail.id)
+                        },
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                        Text("Přehrát")
+                        Text(if (isSeries) "Epizody" else "Přehrát")
                     }
                     Spacer(Modifier.height(12.dp))
 
