@@ -1,5 +1,8 @@
 package com.github.jankoran90.showlyfin.feature.playback.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -53,6 +56,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
@@ -60,6 +66,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -71,6 +78,15 @@ import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
 import kotlinx.coroutines.delay
+
+private fun Context.findActivity(): Activity? {
+    var ctx: Context = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
 
 private fun fmtTime(ms: Long): String {
     if (ms <= 0) return "0:00"
@@ -131,14 +147,17 @@ fun PlaybackScreen(
             .setConnectTimeoutMs(30_000)
             .setReadTimeoutMs(30_000)
             .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+        // DefaultDataSource umí file:// (sideload .srt z cacheDir) i http(s) (video přes naši UA factory).
+        // Bez tohoto by se titulkový file:// načítal HTTP factory → selhal → titulky se nezobrazí.
+        val dataSourceFactory = DefaultDataSource.Factory(context, upstream)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(60_000, 300_000, 5_000, 10_000)
             .build()
         ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(upstream))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setLoadControl(loadControl)
-            .setSeekBackIncrementMs(10_000)
-            .setSeekForwardIncrementMs(10_000)
+            .setSeekBackIncrementMs(30_000)
+            .setSeekForwardIncrementMs(30_000)
             .build().apply {
                 trackSelectionParameters = trackSelectionParameters.buildUpon()
                     .setPreferredTextLanguage("cs")
@@ -170,6 +189,26 @@ fun PlaybackScreen(
             view.keepScreenOn = false
             exoPlayer.removeListener(listener)
             exoPlayer.release()
+        }
+    }
+
+    // Immersive fullscreen: skryj status bar (nahoře) i navigační/gesture lištu (dole) po celou dobu
+    // přehrávání, swipem od kraje se dočasně ukážou. Při odchodu obnov.
+    DisposableEffect(Unit) {
+        val window = context.findActivity()?.window
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            val controller = WindowInsetsControllerCompat(window, view)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        onDispose {
+            if (window != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                WindowInsetsControllerCompat(window, view)
+                    .show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -230,12 +269,22 @@ fun PlaybackScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            // Telefon: tap kdekoli přepne ovládací lištu.
-            .pointerInput(Unit) {
-                detectTapGestures(onTap = {
-                    if (showSubtitleMenu) showSubtitleMenu = false
-                    else controlsVisible = !controlsVisible
-                })
+            // Telefon: tap-zóny — levá třetina = −30 s, pravá = +30 s, střed = play/pause.
+            // Jakákoli akce zobrazí ovládací lištu (auto-hide ji po chvíli skryje).
+            .pointerInput(showSubtitleMenu) {
+                detectTapGestures { offset ->
+                    if (showSubtitleMenu) {
+                        showSubtitleMenu = false
+                        return@detectTapGestures
+                    }
+                    val third = size.width / 3f
+                    when {
+                        offset.x < third -> exoPlayer.seekBack()
+                        offset.x > third * 2f -> exoPlayer.seekForward()
+                        else -> if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                    }
+                    controlsVisible = true
+                }
             },
     ) {
         when {
