@@ -179,7 +179,9 @@ class PlaybackViewModel @Inject constructor(
         """(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})""",
     )
     private val tagRegex = Regex("<[^>]+>")
-    private val assPosRegex = Regex("""\{[^}]*}""")
+    // Pozn.: závěrečná } MUSÍ být escapovaná — ICU regex engine (Android) jinak hodí
+    // PatternSyntaxException při kompilaci → pád PlaybackViewModel.<init> (crash při každém přehrání).
+    private val assPosRegex = Regex("""\{[^}]*\}""")
 
     /** Naparsuje .srt (UTF-8) na seznam cue. Offset se NEzapéká — aplikuje se až při renderu. */
     private fun parseSrt(bytes: ByteArray): List<SubtitleCue> {
