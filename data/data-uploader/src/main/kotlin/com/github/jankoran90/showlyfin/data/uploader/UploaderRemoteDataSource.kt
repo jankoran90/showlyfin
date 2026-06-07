@@ -4,8 +4,8 @@ import com.github.jankoran90.showlyfin.data.uploader.model.*
 
 interface UploaderRemoteDataSource {
     suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int? = null, episode: Int? = null, strict: Boolean? = null): List<UploaderStream>
-    suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int = 0): String
-    suspend fun resolveCometStream(baseUrl: String, sessionCookie: String, cometPath: String): String
+    suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int = 0, ctx: UploaderResolveContext? = null): String
+    suspend fun resolveCometStream(baseUrl: String, sessionCookie: String, cometPath: String, ctx: UploaderResolveContext? = null): String
     suspend fun rdAdd(baseUrl: String, sessionCookie: String, infoHash: String?, fileIdx: Int, cometPath: String?): UploaderRdAddResponse
     suspend fun rdProgress(baseUrl: String, sessionCookie: String, torrentId: String, fileIdx: Int): UploaderRdProgressResponse
     suspend fun rdSearch(baseUrl: String, sessionCookie: String, title: String, year: Int?): List<UploaderStream>

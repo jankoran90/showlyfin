@@ -22,17 +22,26 @@ internal class UploaderApi(
         return service.getStreams(url, cookie).streams
     }
 
-    override suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int): String {
+    private fun UploaderResolveContext?.toQuality(): UploaderResolveQuality? =
+        this?.let { if (it.resolution == null && it.sizeGB == null) null else UploaderResolveQuality(it.resolution, it.sizeGB) }
+
+    override suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int, ctx: UploaderResolveContext?): String {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(infoHash = infoHash, fileIdx = fileIdx))
+        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(
+            infoHash = infoHash, fileIdx = fileIdx,
+            imdb = ctx?.imdb, mediaType = ctx?.mediaType, season = ctx?.season, episode = ctx?.episode, quality = ctx.toQuality(),
+        ))
         return resp.url ?: throw IllegalStateException(resp.error ?: "RD resolve nevrátil URL")
     }
 
-    override suspend fun resolveCometStream(baseUrl: String, sessionCookie: String, cometPath: String): String {
+    override suspend fun resolveCometStream(baseUrl: String, sessionCookie: String, cometPath: String, ctx: UploaderResolveContext?): String {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(cometPath = cometPath))
+        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(
+            cometPath = cometPath,
+            imdb = ctx?.imdb, mediaType = ctx?.mediaType, season = ctx?.season, episode = ctx?.episode, quality = ctx.toQuality(),
+        ))
         return resp.url ?: throw IllegalStateException(resp.error ?: "RD resolve nevrátil URL")
     }
 

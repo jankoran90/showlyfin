@@ -43,11 +43,36 @@ data class UploaderResolveRequest(
     @SerializedName("infoHash") val infoHash: String? = null,
     @SerializedName("fileIdx") val fileIdx: Int = 0,
     @SerializedName("cometPath") val cometPath: String? = null,
+    // Plan CASCADE: fallback kontext — když primární zdroj selže (DMCA/451), backend zkusí
+    // dalšího cached kandidáta stejné kvality a nejbližší velikosti.
+    val imdb: String? = null,
+    val mediaType: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val quality: UploaderResolveQuality? = null,
+)
+
+/** Kvalita vybraného streamu pro CASCADE fallback (preferuj stejné rozlišení + nejbližší velikost). */
+data class UploaderResolveQuality(
+    val resolution: String? = null,
+    @SerializedName("sizeGB") val sizeGB: Double? = null,
+)
+
+/** Volitelný kontext, který appka přibalí k resolve pro auto-fallback (Plan CASCADE). */
+data class UploaderResolveContext(
+    val imdb: String? = null,
+    val mediaType: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val resolution: String? = null,
+    val sizeGB: Double? = null,
 )
 
 data class UploaderResolveResponse(
     val url: String? = null,
     val error: String? = null,
+    val fallback: Boolean? = null,
+    @SerializedName("fallbackName") val fallbackName: String? = null,
 )
 
 // ── RD caching progress (Fáze F) — async add + poll pro NEcachované torrenty ───

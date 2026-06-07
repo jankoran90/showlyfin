@@ -369,6 +369,16 @@ class DetailViewModel @Inject constructor(
         val direct = stream.url
         val cometPath = stream.cometPath
         val infoHash = stream.infoHash
+        // Plan CASCADE: fallback kontext — když vybraný RD zdroj je DMCA-blokovaný, backend
+        // sám zkusí dalšího cached kandidáta STEJNÉ kvality a nejbližší velikosti (místo Stremio skoku).
+        val resolveCtx = st.item?.let { item ->
+            com.github.jankoran90.showlyfin.data.uploader.model.UploaderResolveContext(
+                imdb = item.imdbId,
+                mediaType = mediaTypeStr(item),
+                resolution = stream.quality.resolution,
+                sizeGB = stream.quality.sizeGB,
+            )
+        }
         // 1) přímá url (Ready (RD)) → hraj rovnou.
         if (!direct.isNullOrBlank()) {
             timber.log.Timber.i("[Stremio] play direct url addon=${stream.addon}")
@@ -379,7 +389,7 @@ class DetailViewModel @Inject constructor(
         if (!cometPath.isNullOrBlank() && stream.quality.rdReady) {
             _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
             viewModelScope.launch {
-                runCatching { uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, cometPath) }
+                runCatching { uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, cometPath, resolveCtx) }
                     .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
                     .onFailure { e -> timber.log.Timber.w(e, "[Stremio] comet resolve FAILED"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
             }
@@ -389,7 +399,7 @@ class DetailViewModel @Inject constructor(
         if (!infoHash.isNullOrBlank() && (stream.quality.rdSaved || stream.quality.rdReady)) {
             _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
             viewModelScope.launch {
-                runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, stream.fileIdx) }
+                runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, stream.fileIdx, resolveCtx) }
                     .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
                     .onFailure { e -> timber.log.Timber.w(e, "[Stremio] saved resolve FAILED infoHash=$infoHash"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
             }
