@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.playback.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
@@ -90,6 +92,9 @@ fun PlaybackScreen(
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(30_000)
             .setReadTimeoutMs(30_000)
+            // Addon/debrid servery (AIOStreams apod.) bez browser UA často vrátí HTML/redirect
+            // místo videa → ExoPlayer pak hlásí ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
         val cacheFactory = CacheDataSource.Factory()
             .setCache(PlaybackCache.get(context))
             .setUpstreamDataSourceFactory(upstream)
@@ -110,6 +115,7 @@ fun PlaybackScreen(
     var duration by remember { mutableLongStateOf(0L) }
     var controlsVisible by remember { mutableStateOf(true) }
     var resumeDecided by remember { mutableStateOf(false) }
+    var playerError by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
 
     DisposableEffect(Unit) {
@@ -118,6 +124,7 @@ fun PlaybackScreen(
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 timber.log.Timber.e(error, "[Playback] ExoPlayer error code=${error.errorCodeName} cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}")
+                playerError = error.errorCodeName
             }
         }
         exoPlayer.addListener(listener)
@@ -187,6 +194,42 @@ fun PlaybackScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+
+                playerError?.let { err ->
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .background(Color.Black.copy(alpha = 0.85f), RoundedCornerShape(12.dp))
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            "Tento stream nejde přehrát v aplikaci",
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            err,
+                            color = Color.White.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        if (externalUrl != null) {
+                            Button(onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl)).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        },
+                                    )
+                                }
+                            }) { Text("Otevřít v jiné aplikaci") }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        Button(onClick = onBack) { Text("Zpět") }
+                    }
+                }
 
                 if (!resumeDecided && state.resumePositionMs > 0L) {
                     // Resume vs start-over chooser
