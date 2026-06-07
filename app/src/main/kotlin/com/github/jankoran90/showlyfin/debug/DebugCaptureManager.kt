@@ -97,7 +97,15 @@ object DebugCaptureManager {
     private fun dumpLog(context: Context, timestamp: String): File {
         val dir = File(context.cacheDir, "logs").apply { mkdirs() }
         val file = File(dir, "log-$timestamp.txt")
-        file.writeText(BufferTree.INSTANCE.formatLog())
+        val crashFile = File(context.filesDir, "last_crash.txt")
+        val crashText = if (crashFile.exists()) {
+            "===== POSLEDNÍ ULOŽENÝ PÁD (last_crash.txt) =====\n" +
+                runCatching { crashFile.readText() }.getOrDefault("(nečitelné)") +
+                "\n===== KONEC PÁDU =====\n\n"
+        } else {
+            ""
+        }
+        file.writeText(crashText + BufferTree.INSTANCE.formatLog())
         return file
     }
 

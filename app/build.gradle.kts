@@ -26,8 +26,8 @@ android {
         applicationId = "com.github.jankoran90.showlyfin"
         minSdk = 23
         targetSdk = 36
-        versionCode = 54
-        versionName = "1.8.2"
+        versionCode = 55
+        versionName = "1.8.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

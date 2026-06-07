@@ -34,6 +34,7 @@ class SmartDetectViewModel @Inject constructor(
 
     fun loadStreams(mediaType: String, imdbId: String, title: String, titleCs: String, year: Int?) {
         viewModelScope.launch {
+            Timber.i("[SmartRemux] loadStreams type=$mediaType imdb=$imdbId baseUrlSet=${baseUrl.isNotBlank()} cookieSet=${cookie.isNotBlank()} title='$title'")
             _uiState.value = SmartDetectUiState(phase = SmartDetectPhase.LOADING)
             try {
                 val videoDeferred = async { uploaderDs.getStreams(baseUrl, cookie, mediaType, imdbId) }

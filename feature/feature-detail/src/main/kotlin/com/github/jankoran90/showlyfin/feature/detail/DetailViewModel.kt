@@ -283,14 +283,15 @@ class DetailViewModel @Inject constructor(
         val item = _uiState.value.item ?: return
         val imdb = item.imdbId
         if (imdb.isNullOrBlank() || uploaderBaseUrl.isBlank()) {
+            timber.log.Timber.w("[Stremio] picker blocked: imdbBlank=${imdb.isNullOrBlank()} baseUrlBlank=${uploaderBaseUrl.isBlank()} tmdb=${item.tmdbId} title='${item.title}'")
             _uiState.update { it.copy(showStreamPicker = true, streamError = "Uploader není nastaven nebo film nemá IMDB ID.") }
             return
         }
         _uiState.update { it.copy(showStreamPicker = true, isLoadingStreams = true, streamError = null, streams = emptyList()) }
         viewModelScope.launch {
             runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb) }
-                .onSuccess { list -> _uiState.update { it.copy(isLoadingStreams = false, streams = list, streamError = if (list.isEmpty()) "Žádné streamy nenalezeny." else null) } }
-                .onFailure { e -> _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") } }
+                .onSuccess { list -> timber.log.Timber.i("[Stremio] streams=${list.size} imdb=$imdb"); _uiState.update { it.copy(isLoadingStreams = false, streams = list, streamError = if (list.isEmpty()) "Žádné streamy nenalezeny." else null) } }
+                .onFailure { e -> timber.log.Timber.w(e, "[Stremio] getStreams FAILED imdb=$imdb url=$uploaderBaseUrl"); _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") } }
         }
     }
 
@@ -315,7 +316,7 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, stream.fileIdx) }
                 .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
-                .onFailure { e -> _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
+                .onFailure { e -> timber.log.Timber.w(e, "[Stremio] resolveStream FAILED infoHash=$infoHash fileIdx=${stream.fileIdx}"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
         }
     }
 
@@ -332,6 +333,7 @@ class DetailViewModel @Inject constructor(
         val item = _uiState.value.item ?: return
         val imdb = item.imdbId
         if (imdb.isNullOrBlank() || uploaderBaseUrl.isBlank()) {
+            timber.log.Timber.w("[Sdilej] picker blocked: imdbBlank=${imdb.isNullOrBlank()} baseUrlBlank=${uploaderBaseUrl.isBlank()} tmdb=${item.tmdbId} title='${item.title}'")
             _uiState.update { it.copy(showDownloadMenu = false, showSdilejPicker = true, sdilejError = "Uploader není nastaven nebo film nemá IMDB ID.") }
             return
         }
@@ -339,8 +341,8 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(showDownloadMenu = false, showSdilejPicker = true, isLoadingSdilej = true, sdilejError = null, sdilejStreams = emptyList()) }
         viewModelScope.launch {
             runCatching { uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, item.title, titleCs, item.year) }
-                .onSuccess { list -> _uiState.update { it.copy(isLoadingSdilej = false, sdilejStreams = list, sdilejError = if (list.isEmpty()) "Na Sdílej.cz nic nenalezeno." else null) } }
-                .onFailure { e -> _uiState.update { it.copy(isLoadingSdilej = false, sdilejError = e.message ?: "Chyba Sdílej.cz") } }
+                .onSuccess { list -> timber.log.Timber.i("[Sdilej] streams=${list.size} imdb=$imdb"); _uiState.update { it.copy(isLoadingSdilej = false, sdilejStreams = list, sdilejError = if (list.isEmpty()) "Na Sdílej.cz nic nenalezeno." else null) } }
+                .onFailure { e -> timber.log.Timber.w(e, "[Sdilej] getSdillejStreams FAILED imdb=$imdb url=$uploaderBaseUrl"); _uiState.update { it.copy(isLoadingSdilej = false, sdilejError = e.message ?: "Chyba Sdílej.cz") } }
         }
     }
 
@@ -357,8 +359,8 @@ class DetailViewModel @Inject constructor(
                     UploaderCaptureRequest(stream, imdb, item.title, item.year, mediaTypeStr(item), tmm = true),
                 )
             }
-                .onSuccess { _uiState.update { it.copy(showSdilejPicker = false, captureMessage = "Staženo do fronty — dokonči v Uploaderu.") } }
-                .onFailure { e -> _uiState.update { it.copy(sdilejError = e.message ?: "Chyba stažení") } }
+                .onSuccess { timber.log.Timber.i("[Sdilej] capture OK imdb=$imdb"); _uiState.update { it.copy(showSdilejPicker = false, captureMessage = "Staženo do fronty — dokonči v Uploaderu.") } }
+                .onFailure { e -> timber.log.Timber.w(e, "[Sdilej] capture FAILED imdb=$imdb url=$uploaderBaseUrl"); _uiState.update { it.copy(sdilejError = e.message ?: "Chyba stažení") } }
         }
     }
 

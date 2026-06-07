@@ -5,6 +5,12 @@ import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.debug.BufferTree
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
+import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @HiltAndroidApp
 class ShowlyfinApp : Application() {
@@ -12,10 +18,30 @@ class ShowlyfinApp : Application() {
         super.onCreate()
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         Timber.plant(BufferTree.INSTANCE)
+        installCrashHandler()
         Config.initialize(
             traktClientId = BuildConfig.TRAKT_CLIENT_ID,
             traktClientSecret = BuildConfig.TRAKT_CLIENT_SECRET,
             tmdbApiKey = BuildConfig.TMDB_API_KEY,
         )
+    }
+
+    /**
+     * Zapíše stacktrace neodchyceného pádu do filesDir/last_crash.txt (přežije smrt procesu).
+     * Při dalším spuštění ho debug snapshot přiloží do logu → pád je diagnostikovatelný.
+     */
+    private fun installCrashHandler() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                Timber.e(throwable, "Uncaught crash on thread '${thread.name}'")
+                val sw = StringWriter()
+                throwable.printStackTrace(PrintWriter(sw))
+                val ts = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                val header = "=== CRASH $ts (v${BuildConfig.VERSION_NAME} / build ${BuildConfig.VERSION_CODE}) thread=${thread.name} ===\n"
+                File(filesDir, "last_crash.txt").writeText(header + sw.toString())
+            }
+            previous?.uncaughtException(thread, throwable)
+        }
     }
 }
