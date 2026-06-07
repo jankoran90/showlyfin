@@ -10,6 +10,7 @@ interface UploaderRemoteDataSource {
     suspend fun rdProgress(baseUrl: String, sessionCookie: String, torrentId: String, fileIdx: Int): UploaderRdProgressResponse
     suspend fun rdSearch(baseUrl: String, sessionCookie: String, title: String, year: Int?): List<UploaderStream>
     suspend fun rdMatch(baseUrl: String, sessionCookie: String, items: List<RdMatchItem>): List<Int>
+    suspend fun getRdLibrary(baseUrl: String, sessionCookie: String): RdLibraryResponse
     suspend fun getStreamFilter(baseUrl: String, sessionCookie: String): StreamFilterPrefs
     suspend fun putStreamFilter(baseUrl: String, sessionCookie: String, prefs: StreamFilterPrefs)
     suspend fun capture(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse

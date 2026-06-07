@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -26,17 +27,19 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,7 +77,6 @@ fun DetailScreen(
     onSmartDetect: ((MediaItem) -> Unit)? = null,
     onNaTv: ((MediaItem, jellyfinId: String?) -> Unit)? = null,
     onStremio: ((MediaItem) -> Unit)? = null,
-    onShare: ((MediaItem) -> Unit)? = null,
     onCollectionPartClick: ((CollectionPart) -> Unit)? = null,
     onPlayJellyfin: ((String) -> Unit)? = null,
     onPlayStreamUrl: ((String, String, com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery?) -> Unit)? = null,
@@ -313,14 +315,15 @@ fun DetailScreen(
 
             Spacer(Modifier.height(8.dp))
             DetailActionRow(
-                item = displayItem,
                 inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
                 csfdId = uiState.csfdId,
                 onPlayNaTv = onNaTv?.let { cb -> { cb(displayItem, uiState.ownedJellyfinId) } },
                 onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
                 onStream = { viewModel.openStreamPicker() },
                 onDownload = { viewModel.openDownloadMenu() },
-                onShare = onShare,
+                inWatchlist = uiState.isInWatchlist,
+                isTogglingWatchlist = uiState.isTogglingWatchlist,
+                onWatchlist = { viewModel.toggleWatchlist() },
                 onCsfd = uiState.csfdId?.let { id -> { openCsfd(context, id) } },
             )
 
@@ -385,14 +388,15 @@ private fun openCsfd(context: android.content.Context, csfdId: Long) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailActionRow(
-    item: MediaItem,
     inLibrary: Boolean,
     csfdId: Long?,
     onPlayNaTv: (() -> Unit)?,
     onPlayHere: (() -> Unit)?,
     onStream: () -> Unit,
     onDownload: () -> Unit,
-    onShare: ((MediaItem) -> Unit)?,
+    inWatchlist: Boolean,
+    isTogglingWatchlist: Boolean,
+    onWatchlist: () -> Unit,
     onCsfd: (() -> Unit)?,
 ) {
     FlowRow(
@@ -429,13 +433,22 @@ private fun DetailActionRow(
                 leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             )
         }
-        if (onShare != null) {
-            AssistChip(
-                onClick = { onShare(item) },
-                label = { Text("Sdílet") },
-                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-            )
-        }
+        FilterChip(
+            selected = inWatchlist,
+            onClick = onWatchlist,
+            enabled = !isTogglingWatchlist,
+            label = { Text(if (inWatchlist) "V seznamu" else "Chci vidět") },
+            leadingIcon = {
+                if (isTogglingWatchlist) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(
+                        if (inWatchlist) Icons.Default.Check else Icons.Default.Add,
+                        contentDescription = null,
+                    )
+                }
+            },
+        )
         if (csfdId != null && onCsfd != null) {
             AssistChip(
                 onClick = onCsfd,

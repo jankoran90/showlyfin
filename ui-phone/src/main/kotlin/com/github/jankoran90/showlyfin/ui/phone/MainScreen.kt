@@ -14,15 +14,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
+import com.github.jankoran90.showlyfin.feature.discover.ui.RdLibraryScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.LibraryRowsScreen
 import com.github.jankoran90.showlyfin.feature.watchlist.ui.WatchlistScreen
 import kotlinx.coroutines.launch
 
-private val mainTabs = listOf("Knihovna", "Chci vidět", "Objevit")
+private val mainTabs = listOf("Knihovna", "Chci vidět", "Objevit", "Na RD")
 
 /**
- * Sekce „Hlavní" — 3 horizontálně swipovatelné podsekce: Knihovna (Trakt pohled na Jellyfin),
- * Chci vidět (Watchlist), Objevit (Discover).
+ * Sekce „Hlavní" — 4 horizontálně swipovatelné podsekce: Knihovna (Trakt pohled na Jellyfin),
+ * Chci vidět (Watchlist), Objevit (Discover), Na RD (filmy uložené na RealDebrid).
  *
  * @param onTraktItemClick otevři bohatý Trakt/TMDB detail
  * @param onJellyfinItemClick otevři Jellyfin kartu (fallback pro položky bez TMDB matche)
@@ -70,10 +71,14 @@ fun MainScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                else -> DiscoverScreen(
+                2 -> DiscoverScreen(
                     onItemClick = { item, jellyfinId ->
                         if (jellyfinId != null) onJellyfinItemClick(jellyfinId) else onTraktItemClick(item)
                     },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                else -> RdLibraryScreen(
+                    onItemClick = onTraktItemClick,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

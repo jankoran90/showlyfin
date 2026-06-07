@@ -166,29 +166,6 @@ fun ShowlyfinPhoneApp() {
             }
         }
 
-        val onShareItem: (MediaItem) -> Unit = { item ->
-            val slug = item.title.lowercase()
-                .replace(Regex("[^a-z0-9 ]"), "")
-                .trim()
-                .replace(Regex("\\s+"), "-")
-            val mediaPath = if (item.type == MediaType.MOVIE) "movies" else "shows"
-            val url = "https://trakt.tv/$mediaPath/$slug"
-            val text = buildString {
-                append(item.title)
-                item.year?.let { append(" ($it)") }
-                append('\n')
-                append(url)
-            }
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, text)
-                putExtra(Intent.EXTRA_SUBJECT, item.title)
-            }
-            context.startActivity(Intent.createChooser(intent, "Sdílet").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
-        }
-
         val onCollectionPartClick: (CollectionPart) -> Unit = { part ->
             val jfId = part.jellyfinId
             val tmdb = part.tmdbId
@@ -395,7 +372,6 @@ fun ShowlyfinPhoneApp() {
                     },
                     onNaTv = { item, jfId -> naTvCoordinator.playOnTv(item, jfId) },
                     onStremio = onStremioItem,
-                    onShare = onShareItem,
                     onCollectionPartClick = onCollectionPartClick,
                     onPlayJellyfin = { jfId ->
                         currentDestination = if (dest.item.type == MediaType.SHOW) {

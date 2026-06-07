@@ -92,6 +92,22 @@ data class RdMatchResponse(
     val matched: List<Int> = emptyList(),
 )
 
+// ── Sekce „Na RD" (Fáze D) — uložené filmy na RD účtu, TMDB-matchnuté ──────────
+
+data class RdLibraryItem(
+    @SerializedName("tmdb_id") val tmdbId: Int? = null,
+    @SerializedName("imdb_id") val imdbId: String? = null,
+    val title: String = "",
+    val year: Int? = null,
+    @SerializedName("poster_path") val posterPath: String? = null,
+    val type: String = "movie",
+)
+
+data class RdLibraryResponse(
+    val items: List<RdLibraryItem> = emptyList(),
+    val unmatched: List<String> = emptyList(),
+)
+
 // ── Stremio / Comet stream filter (Nastavení) ─────────────────────────────────
 
 data class StreamSizeRange(val min: Double = 2.0, val max: Double = 8.0)
