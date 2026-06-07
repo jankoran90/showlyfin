@@ -116,6 +116,9 @@ fun PlaybackScreen(
         view.keepScreenOn = true
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                timber.log.Timber.e(error, "[Playback] ExoPlayer error code=${error.errorCodeName} cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}")
+            }
         }
         exoPlayer.addListener(listener)
         onDispose {
@@ -127,6 +130,7 @@ fun PlaybackScreen(
 
     LaunchedEffect(state.streamUrl) {
         val url = state.streamUrl ?: return@LaunchedEffect
+        timber.log.Timber.i("[Playback] setMediaItem external=${externalUrl != null} url=${url.take(90)}")
         exoPlayer.setMediaItem(MediaItem.fromUri(url))
         exoPlayer.prepare()
         if (state.resumePositionMs <= 0L) {

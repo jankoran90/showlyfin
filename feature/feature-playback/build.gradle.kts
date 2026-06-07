@@ -19,6 +19,7 @@ android {
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":data:data-jellyfin"))
+    implementation(libs.timber)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
