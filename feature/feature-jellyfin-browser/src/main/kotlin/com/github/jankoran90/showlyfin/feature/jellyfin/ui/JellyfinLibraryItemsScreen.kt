@@ -55,6 +55,8 @@ import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadge
 import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadgeSpacer
 import com.github.jankoran90.showlyfin.core.ui.WatchedBadge
 import com.github.jankoran90.showlyfin.core.ui.WatchedTitleBadge
+import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinItem
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinLibraryItemsViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinSort
@@ -70,6 +72,7 @@ fun JellyfinLibraryItemsScreen(
     onBack: () -> Unit,
     onItemPlay: (itemId: String) -> Unit,
     onItemDrillIn: (itemId: String, itemName: String, itemType: String) -> Unit,
+    onItemOpenRich: ((MediaItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: JellyfinLibraryItemsViewModel = hiltViewModel(),
 ) {
@@ -130,10 +133,12 @@ fun JellyfinLibraryItemsScreen(
                                 onClick = {
                                     val isFolderLike = item.isFolder ||
                                         item.type.equals("BOX_SET", ignoreCase = true)
-                                    if (isFolderLike) {
-                                        onItemDrillIn(item.id, item.name, item.type)
-                                    } else {
-                                        onItemPlay(item.id)
+                                    when {
+                                        isFolderLike -> onItemDrillIn(item.id, item.name, item.type)
+                                        // Bohatý režim + TMDB match → otevři bohatý Trakt/TMDB detail
+                                        state.detailRich && item.tmdbId != null && onItemOpenRich != null ->
+                                            onItemOpenRich(item.toStubMediaItem())
+                                        else -> onItemPlay(item.id)
                                     }
                                 },
                                 watched = item.watched,
@@ -192,6 +197,21 @@ private fun JellyfinChipsRow(
         }
     }
 }
+
+/** Stub MediaItem z Jellyfin položky — bohatý detail si zbytek dotáhne z TMDB dle tmdbId. */
+private fun JellyfinItem.toStubMediaItem() = MediaItem(
+    traktId = 0L,
+    tmdbId = tmdbId,
+    imdbId = imdbId,
+    title = name,
+    year = year,
+    overview = null,
+    rating = null,
+    genres = null,
+    type = if (type.equals("SERIES", ignoreCase = true)) MediaType.SHOW else MediaType.MOVIE,
+    posterPath = null,
+    backdropPath = null,
+)
 
 @Composable
 private fun JellyfinItemCard(

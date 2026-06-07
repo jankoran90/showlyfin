@@ -17,8 +17,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -198,6 +200,8 @@ fun SettingsScreen(
         Spacer(Modifier.height(16.dp))
         UploaderSection()
         Spacer(Modifier.height(16.dp))
+        DetailModeSection()
+        Spacer(Modifier.height(16.dp))
         ProfilesSection(
             profiles = uiState.profiles,
             activeProfileId = uiState.activeProfileId,
@@ -225,6 +229,54 @@ fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
+    }
+}
+
+@Composable
+private fun DetailModeSection(
+    viewModel: DetailPrefsViewModel = hiltViewModel(),
+) {
+    val s by viewModel.state.collectAsStateWithLifecycle()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Detail z knihovny", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Jak otevřít detail filmu/seriálu z knihovny. Objevit a Watchlist mají vždy bohatý detail.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Bohatý detail", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    Text(
+                        text = if (s.rich) "kolekce, režisér, studio, obsazení, ČSFD" else "jen obrázek, popis, kolekce a Přehrát",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = s.rich, onCheckedChange = { viewModel.setRich(it) })
+            }
+            if (s.rich) {
+                Spacer(Modifier.height(8.dp))
+                Text("Zobrazit sekce:", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+                DetailSectionCheckRow("Kolekce", s.showCollections) { viewModel.setCollections(it) }
+                DetailSectionCheckRow("Od stejného režiséra", s.showDirector) { viewModel.setDirector(it) }
+                DetailSectionCheckRow("Od stejného studia", s.showStudio) { viewModel.setStudio(it) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSectionCheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.White)
     }
 }
 

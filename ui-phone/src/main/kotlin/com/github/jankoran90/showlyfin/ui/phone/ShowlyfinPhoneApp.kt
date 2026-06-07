@@ -328,6 +328,9 @@ fun ShowlyfinPhoneApp() {
                     onItemPlay = { itemId ->
                         currentDestination = Destination.JellyfinDetail(itemId, dest)
                     },
+                    onItemOpenRich = { media ->
+                        currentDestination = Destination.Detail(media, parent = dest)
+                    },
                     onItemDrillIn = { itemId, itemName, itemType ->
                         currentDestination = Destination.JellyfinLibrary(
                             libraryId = itemId,

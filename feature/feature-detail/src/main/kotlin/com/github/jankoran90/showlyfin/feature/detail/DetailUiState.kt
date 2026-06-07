@@ -69,4 +69,8 @@ data class DetailUiState(
     val directorMovies: MediaCollection? = null,
     val studioName: String? = null,
     val studioMovies: MediaCollection? = null,
+    // Volitelné sekce (Nastavení → Detail z knihovny)
+    val showCollections: Boolean = true,
+    val showDirector: Boolean = true,
+    val showStudio: Boolean = true,
 )

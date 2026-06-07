@@ -99,6 +99,9 @@ class DetailViewModel @Inject constructor(
                 directorMovies = null,
                 studioName = null,
                 studioMovies = null,
+                showCollections = prefs.getBoolean("detail_show_collections", true),
+                showDirector = prefs.getBoolean("detail_show_director", true),
+                showStudio = prefs.getBoolean("detail_show_studio", true),
                 error = null,
             )
         }

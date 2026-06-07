@@ -47,6 +47,9 @@ class LibraryRowsViewModel @Inject constructor(
     private val _state = MutableStateFlow(LibraryRowsUiState())
     val state: StateFlow<LibraryRowsUiState> = _state.asStateFlow()
 
+    // Nastavení → Detail z knihovny: bohatý (Trakt detail) vs jednoduchý (Jellyfin karta).
+    private val detailRich get() = prefs.getBoolean("detail_mode_rich", true)
+
     fun load() {
         viewModelScope.launch {
             val serverUrl = prefs.getString("jellyfin_server_url", "") ?: ""
@@ -133,7 +136,8 @@ class LibraryRowsViewModel @Inject constructor(
         val isShow = type == BaseItemKind.SERIES
         val tmdbId = providerIds?.get("Tmdb")?.toLongOrNull()
         val imdbId = providerIds?.get("Imdb")?.takeIf { it.isNotBlank() }
-        val media: MediaItem? = when {
+        // Jednoduchý režim → mediaItem=null → klik otevře jednoduchou Jellyfin kartu.
+        val media: MediaItem? = if (!detailRich) null else when {
             tmdbId != null -> stub(tmdbId, imdbId, itemName, itemYear, isShow)
             itemYear != null -> searchMatch(itemName, imdbId, itemYear, isShow)
             else -> null

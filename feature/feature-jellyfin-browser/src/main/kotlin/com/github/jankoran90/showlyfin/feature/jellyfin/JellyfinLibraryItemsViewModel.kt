@@ -61,6 +61,7 @@ class JellyfinLibraryItemsViewModel @Inject constructor(
                 error = null,
                 isBoxSetContext = isBoxSetContext,
                 sort = savedSort,
+                detailRich = prefs.getBoolean("detail_mode_rich", true),
             )
         }
         reload()

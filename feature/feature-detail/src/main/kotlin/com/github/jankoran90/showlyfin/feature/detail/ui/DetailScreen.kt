@@ -335,26 +335,32 @@ fun DetailScreen(
                     },
                 )
             }
-            mergedCollection?.let { coll ->
-                CollectionSection(
-                    collection = coll,
-                    excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
-                    onPartClick = { part -> onCollectionPartClick?.invoke(part) },
-                )
+            if (uiState.showCollections) {
+                mergedCollection?.let { coll ->
+                    CollectionSection(
+                        collection = coll,
+                        excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                        onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                    )
+                }
             }
-            uiState.directorMovies?.let { coll ->
-                CollectionSection(
-                    collection = coll,
-                    excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
-                    onPartClick = { part -> onCollectionPartClick?.invoke(part) },
-                )
+            if (uiState.showDirector) {
+                uiState.directorMovies?.let { coll ->
+                    CollectionSection(
+                        collection = coll,
+                        excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                        onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                    )
+                }
             }
-            uiState.studioMovies?.let { coll ->
-                CollectionSection(
-                    collection = coll,
-                    excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
-                    onPartClick = { part -> onCollectionPartClick?.invoke(part) },
-                )
+            if (uiState.showStudio) {
+                uiState.studioMovies?.let { coll ->
+                    CollectionSection(
+                        collection = coll,
+                        excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                        onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                    )
+                }
             }
 
             CsfdReviewsSection(reviews = uiState.csfdReviews)
