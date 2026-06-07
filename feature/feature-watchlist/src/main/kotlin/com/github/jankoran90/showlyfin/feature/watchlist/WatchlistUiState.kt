@@ -27,6 +27,7 @@ data class WatchlistUiState(
     val isLoggedIn: Boolean = false,
     val progressMap: Map<Long, WatchProgress> = emptyMap(),
     val sort: WatchlistSort = WatchlistSort.DEFAULT,
+    val searchQuery: String = "",
     val genreFilter: String? = null,
     val availableGenres: List<String> = emptyList(),
     val ownedImdbIds: Set<String> = emptySet(),

@@ -40,6 +40,10 @@ data class DetailUiState(
     val csfdPlot: String? = null,
     val csfdReviews: List<CsfdReviewRaw> = emptyList(),
     val isCsfdLoading: Boolean = false,
+    // ČSFD galerie fotek (F3) — lazy load po kliku na fanart / button Galerie.
+    val csfdGallery: List<String> = emptyList(),
+    val isGalleryLoading: Boolean = false,
+    val showGallery: Boolean = false,
     val tmdbCzOverview: String? = null,
     val tmdbCzTitle: String? = null,
     val collection: TmdbCollection? = null,

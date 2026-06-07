@@ -7,18 +7,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -27,8 +33,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
 
 private val CsfdRed = Color(0xFFBA0305)
@@ -115,6 +125,57 @@ private fun CsfdReviewCardAmoled(review: CsfdReviewRaw, modifier: Modifier = Mod
         }
         Spacer(Modifier.height(6.dp))
         Text(text = review.text, style = MaterialTheme.typography.bodySmall, color = AmberText)
+    }
+}
+
+/** Fullscreen ČSFD galerie fotek — swipovatelný HorizontalPager (F3). */
+@Composable
+fun CsfdGalleryDialog(
+    urls: List<String>,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = modifier.fillMaxSize().background(AmoledBg),
+            contentAlignment = Alignment.Center,
+        ) {
+            when {
+                isLoading -> CircularProgressIndicator(color = Amber)
+                urls.isEmpty() -> Text("Galerie není k dispozici", color = AmberText)
+                else -> {
+                    val pagerState = rememberPagerState(pageCount = { urls.size })
+                    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                        AsyncImage(
+                            model = urls[page],
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
+                    Text(
+                        text = "${pagerState.currentPage + 1} / ${urls.size}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 28.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                    )
+                }
+            }
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Zavřít", tint = Color.White)
+            }
+        }
     }
 }
 

@@ -149,6 +149,8 @@ data class CsfdReviewItem(
     val date: String = "",
 )
 data class CsfdReviewsResponse(val reviews: List<CsfdReviewItem> = emptyList())
+/** Odpověď /api/csfd/gallery — URL fotek z galerie ČSFD (stránkované na backendu). */
+data class CsfdGalleryResponse(val urls: List<String> = emptyList())
 
 // ── Stremio / Comet stream filter (Nastavení) ─────────────────────────────────
 

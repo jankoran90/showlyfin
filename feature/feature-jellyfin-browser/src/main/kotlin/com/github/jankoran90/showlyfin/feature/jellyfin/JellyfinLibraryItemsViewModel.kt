@@ -73,6 +73,11 @@ class JellyfinLibraryItemsViewModel @Inject constructor(
         reload()
     }
 
+    /** Lokální hledání v knihovně podle názvu (diakritika/velikost-insensitive). */
+    fun setSearchQuery(query: String) {
+        _state.update { it.copy(searchQuery = query) }
+    }
+
     fun selectTypeFilter(filter: JellyfinTypeFilter) {
         _state.update { it.copy(typeFilter = filter, isLoading = true) }
         reload()

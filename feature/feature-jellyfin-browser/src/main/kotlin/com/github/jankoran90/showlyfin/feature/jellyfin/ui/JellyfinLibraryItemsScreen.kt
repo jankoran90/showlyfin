@@ -1,5 +1,11 @@
 package com.github.jankoran90.showlyfin.feature.jellyfin.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,9 +22,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -55,8 +65,10 @@ import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadge
 import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadgeSpacer
 import com.github.jankoran90.showlyfin.core.ui.WatchedBadge
 import com.github.jankoran90.showlyfin.core.ui.WatchedTitleBadge
+import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.domain.matchesQuery
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinItem
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinLibraryItemsViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinSort
@@ -80,6 +92,7 @@ fun JellyfinLibraryItemsScreen(
         viewModel.load(libraryId, libraryName, collectionType, parentItemType)
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val gridState = rememberLazyGridState()
 
     Scaffold(
         modifier = modifier,
@@ -101,13 +114,47 @@ fun JellyfinLibraryItemsScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            JellyfinChipsRow(
-                sort = state.sort,
-                typeFilter = state.typeFilter,
-                showTypeFilter = !state.isBoxSetContext,
-                onSortSelected = { viewModel.selectSort(it) },
-                onTypeSelected = { viewModel.selectTypeFilter(it) },
+            // Hlavička (řazení/typ + hledání) se skrývá při scrollu dolů — konzistentně s Objevit/Chci vidět.
+            val headerVisible by rememberScrollHeaderVisibility(
+                { gridState.firstVisibleItemIndex },
+                { gridState.firstVisibleItemScrollOffset },
             )
+            AnimatedVisibility(
+                visible = headerVisible,
+                enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+                exit = fadeOut(tween(140)) + shrinkVertically(tween(140)),
+            ) {
+                Column {
+                    JellyfinChipsRow(
+                        sort = state.sort,
+                        typeFilter = state.typeFilter,
+                        showTypeFilter = !state.isBoxSetContext,
+                        onSortSelected = { viewModel.selectSort(it) },
+                        onTypeSelected = { viewModel.selectTypeFilter(it) },
+                    )
+                    if (state.items.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = state.searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            placeholder = { Text("Hledat v knihovně…") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (state.searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Vymazat")
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                        )
+                    }
+                }
+            }
+            val visibleItems = if (state.searchQuery.isBlank()) state.items
+                else state.items.filter { matchesQuery(state.searchQuery, it.name) }
             Box(Modifier.fillMaxSize()) {
                 when {
                     state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -121,13 +168,19 @@ fun JellyfinLibraryItemsScreen(
                         color = Color.White.copy(alpha = 0.6f),
                         modifier = Modifier.align(Alignment.Center),
                     )
+                    visibleItems.isEmpty() -> Text(
+                        text = "Nic nenalezeno pro „${state.searchQuery}\"",
+                        color = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    )
                     else -> LazyVerticalGrid(
+                        state = gridState,
                         columns = GridCells.Adaptive(minSize = 120.dp),
                         contentPadding = PaddingValues(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(state.items, key = { it.id }) { item ->
+                        items(visibleItems, key = { it.id }) { item ->
                             JellyfinItemCard(
                                 item = item,
                                 onClick = {

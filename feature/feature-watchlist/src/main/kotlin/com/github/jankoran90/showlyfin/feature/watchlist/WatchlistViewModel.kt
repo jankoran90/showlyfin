@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.matchesQuery
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
@@ -113,6 +114,12 @@ class WatchlistViewModel @Inject constructor(
 
     fun selectGenre(genre: String?) {
         _uiState.update { it.copy(genreFilter = genre) }
+        reapply()
+    }
+
+    /** Lokální hledání ve watchlistu podle českého i originálního názvu (diakritika/velikost-insensitive). */
+    fun setSearchQuery(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
         reapply()
     }
 
@@ -264,6 +271,10 @@ class WatchlistViewModel @Inject constructor(
         val state = _uiState.value
         if (state.rdOnly) {
             result = result.filter { state.rdMatchedTraktIds.contains(it.traktId) }
+        }
+        val query = state.searchQuery
+        if (query.isNotBlank()) {
+            result = result.filter { it.matchesQuery(query) }
         }
         result = when (sort) {
             WatchlistSort.DEFAULT -> result

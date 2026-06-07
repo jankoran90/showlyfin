@@ -33,6 +33,7 @@ data class JellyfinLibraryItemsUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val sort: JellyfinSort = JellyfinSort.NAME,
+    val searchQuery: String = "",
     val typeFilter: JellyfinTypeFilter = JellyfinTypeFilter.ALL,
     val isBoxSetContext: Boolean = false,
     val detailRich: Boolean = true,

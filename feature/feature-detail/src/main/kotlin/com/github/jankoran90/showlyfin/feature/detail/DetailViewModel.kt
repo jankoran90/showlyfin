@@ -81,6 +81,9 @@ class DetailViewModel @Inject constructor(
                 csfdRating = null,
                 csfdPlot = null,
                 csfdReviews = emptyList(),
+                csfdGallery = emptyList(),
+                isGalleryLoading = false,
+                showGallery = false,
                 collection = null,
                 isOwnedInLibrary = false,
                 ownedJellyfinId = null,
@@ -715,6 +718,26 @@ class DetailViewModel @Inject constructor(
         val rating = runCatching { csfdScraper.scrapeRating(csfdId) }.getOrNull()
         return CsfdPlotResponse(plot = plot, rating = rating, title = null)
     }
+
+    // ── ČSFD galerie (F3) — lazy: načte se až po kliku na fanart / button Galerie ──
+    /** Otevře galerii; při prvním otevření lazy načte URL fotek z backendu. */
+    fun openGallery() {
+        if (_uiState.value.showGallery) return
+        _uiState.update { it.copy(showGallery = true) }
+        if (_uiState.value.csfdGallery.isNotEmpty() || _uiState.value.isGalleryLoading) return
+        val csfdId = _uiState.value.csfdId ?: return
+        if (uploaderBaseUrl.isBlank()) return
+        _uiState.update { it.copy(isGalleryLoading = true) }
+        viewModelScope.launch {
+            val urls = runCatching { uploaderDs.getCsfdGallery(uploaderBaseUrl, uploaderCookie, csfdId) }
+                .onFailure { timber.log.Timber.w(it, "[CSFD] gallery FAILED csfdId=$csfdId") }
+                .getOrDefault(emptyList())
+            timber.log.Timber.i("[CSFD] gallery csfdId=$csfdId → ${urls.size} fotek")
+            _uiState.update { it.copy(isGalleryLoading = false, csfdGallery = urls) }
+        }
+    }
+
+    fun dismissGallery() = _uiState.update { it.copy(showGallery = false) }
 
     private suspend fun fetchCsfdReviews(csfdId: Long): List<com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw> {
         if (uploaderBaseUrl.isNotBlank()) {

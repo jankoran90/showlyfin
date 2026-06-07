@@ -87,4 +87,5 @@ interface UploaderRemoteDataSource {
     // ČSFD popis + recenze přes backend (server zvládá Anubis anti-bot; csfdId se páruje on-device přes Wikidata)
     suspend fun getCsfdPlot(baseUrl: String, sessionCookie: String, csfdId: Long): CsfdPlotResponse
     suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem>
+    suspend fun getCsfdGallery(baseUrl: String, sessionCookie: String, csfdId: Long): List<String>
 }

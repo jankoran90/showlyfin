@@ -87,6 +87,12 @@ internal class UploaderApi(
         return service.getCsfdReviews("$base/api/csfd/reviews?csfd_id=$csfdId", cookie).reviews
     }
 
+    override suspend fun getCsfdGallery(baseUrl: String, sessionCookie: String, csfdId: Long): List<String> {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.getCsfdGallery("$base/api/csfd/gallery?csfd_id=$csfdId", cookie).urls
+    }
+
     override suspend fun rdMatch(baseUrl: String, sessionCookie: String, items: List<RdMatchItem>): List<Int> {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

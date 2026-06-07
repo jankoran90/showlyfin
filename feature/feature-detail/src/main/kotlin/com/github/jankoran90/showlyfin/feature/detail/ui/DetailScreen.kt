@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
@@ -60,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -178,6 +181,13 @@ fun DetailScreen(
             onDismiss = { showReviewsSheet = false },
         )
     }
+    if (uiState.showGallery) {
+        CsfdGalleryDialog(
+            urls = uiState.csfdGallery,
+            isLoading = uiState.isGalleryLoading,
+            onDismiss = { viewModel.dismissGallery() },
+        )
+    }
 
     Scaffold(
         modifier = modifier,
@@ -209,99 +219,113 @@ fun DetailScreen(
                 .padding(paddingValues)
                 .verticalScroll(scrollState),
         ) {
+            // ── HERO: fanart s cover posterem + názvem + rokem + ČSFD% zarovnanými dolů do stínu ──
+            // Klik na fanart (i poster/info) → fullscreen ČSFD galerie (F3, lazy load).
             val backdropUrl = displayItem.backdropUrl()
+            val posterUrl = displayItem.posterUrl()
+            val hasGallery = uiState.csfdId != null && uiState.uploaderConfigured
+            // Žánry — zobrazují se v hero sloupci pod rokem, vedle cover artu (max 3 v řadě).
+            val genres = uiState.movieDetails?.genres?.map { it.name }
+                ?: uiState.showDetails?.genres?.map { it.name }
+                ?: displayItem.genres
+            // Výška se přizpůsobí obsahu (min 200dp) — fanart kreslíme na pozadí přes matchParentSize,
+            // takže delší název / víc žánrů nikdy neořízne hero info.
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .heightIn(min = 200.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .then(if (hasGallery) Modifier.clickable { viewModel.openGallery() } else Modifier),
             ) {
                 if (backdropUrl != null) {
-                    // Bez parallax posunu — obrázek i gradient overlay scrollují jako jeden celek,
-                    // takže se spodní fade vždy kryje s obrázkem (dřív parallax rozjížděl overlay nad obrázek).
                     AsyncImage(
                         model = backdropUrl,
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.matchParentSize(),
                         contentScale = ContentScale.Crop,
                     )
-                    Box(
-                        Modifier.fillMaxSize()
-                            .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.background)))
-                    )
                 }
-            }
-
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                val posterUrl = displayItem.posterUrl()
-                if (posterUrl != null) {
-                    Box(
-                        Modifier
-                            .width(100.dp)
-                            .aspectRatio(2f / 3f)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    ) {
-                        AsyncImage(
-                            model = posterUrl,
-                            contentDescription = displayItem.title,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
+                // Silný spodní scrim → text i poster čitelné i na světlém fanartu; plynule přejde do pozadí.
+                Box(
+                    Modifier.matchParentSize().background(
+                        Brush.verticalGradient(
+                            0.0f to Color.Transparent,
+                            0.35f to Color.Transparent,
+                            0.7f to MaterialTheme.colorScheme.background.copy(alpha = 0.6f),
+                            1.0f to MaterialTheme.colorScheme.background,
                         )
-                    }
-                }
-
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = displayTitle,
-                        style = MaterialTheme.typography.titleLarge,
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        displayItem.year?.let {
-                            Text("$it", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                )
+                Row(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    if (posterUrl != null) {
+                        Box(
+                            Modifier
+                                .width(96.dp)
+                                .aspectRatio(2f / 3f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        ) {
+                            AsyncImage(
+                                model = posterUrl,
+                                contentDescription = displayItem.title,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
                         }
-                        // ČSFD hodnocení v % (místo TMDB); fallback na hvězdičkové hodnocení, když ČSFD chybí
-                        val csfdRating = uiState.csfdRating
-                        if (csfdRating != null) {
-                            CsfdRatingBadge(rating = csfdRating, big = true)
-                        } else {
-                            displayItem.rating?.let { rating ->
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
-                                    Text("%.1f".format(rating), style = MaterialTheme.typography.titleMedium)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = displayTitle,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            displayItem.year?.let {
+                                Text("$it", style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.85f))
+                            }
+                            // ČSFD hodnocení v % (místo TMDB); fallback na hvězdičkové hodnocení, když ČSFD chybí
+                            val csfdRating = uiState.csfdRating
+                            if (csfdRating != null) {
+                                CsfdRatingBadge(rating = csfdRating, big = true)
+                            } else {
+                                displayItem.rating?.let { rating ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
+                                        Text("%.1f".format(rating), style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                    }
+                                }
+                            }
+                        }
+                        // ── Žánrové štítky pod rokem, vedle cover artu — max 3 vedle sebe, zbytek na další řádek ──
+                        if (!genres.isNullOrEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                maxItemsInEachRow = 3,
+                            ) {
+                                genres.forEach { genre ->
+                                    AssistChip(onClick = {}, label = { Text(genre, style = MaterialTheme.typography.labelSmall) })
                                 }
                             }
                         }
                     }
                 }
             }
-
-            // ── Žánrové odznáčky (pod rokem + hodnocením ČSFD) ──
-            val genres = uiState.movieDetails?.genres?.map { it.name }
-                ?: uiState.showDetails?.genres?.map { it.name }
-                ?: displayItem.genres
-            if (!genres.isNullOrEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                FlowRow(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    genres.forEach { genre ->
-                        AssistChip(onClick = {}, label = { Text(genre, style = MaterialTheme.typography.labelSmall) })
-                    }
-                }
-            }
-
             Spacer(Modifier.height(16.dp))
 
             // ── Popis (JEDEN, fallback) — sbalený na N řádků + šipka rozbalit/sbalit ──
@@ -353,12 +377,22 @@ fun DetailScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
-            // ── ČSFD recenze (vystředěný button pod plot, nad akčními tlačítky) ──
-            if (uiState.csfdReviews.isNotEmpty()) {
+            // ── ČSFD akce (galerie + recenze) — vystředěné pod plot, nad akčními tlačítky ──
+            if (hasGallery || uiState.csfdReviews.isNotEmpty()) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    OutlinedButton(onClick = { showReviewsSheet = true }) {
-                        Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                        Text("ČSFD recenze (${uiState.csfdReviews.size})")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (hasGallery) {
+                            OutlinedButton(onClick = { viewModel.openGallery() }) {
+                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                                Text("Galerie")
+                            }
+                        }
+                        if (uiState.csfdReviews.isNotEmpty()) {
+                            OutlinedButton(onClick = { showReviewsSheet = true }) {
+                                Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                                Text("ČSFD recenze (${uiState.csfdReviews.size})")
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

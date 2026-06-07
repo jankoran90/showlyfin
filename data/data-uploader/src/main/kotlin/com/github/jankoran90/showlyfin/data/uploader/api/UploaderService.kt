@@ -26,6 +26,7 @@ interface UploaderService {
     // ČSFD popis + recenze (scrape na backendu, server zvládá Anubis)
     @GET suspend fun getCsfdPlot(@Url url: String, @Header("Cookie") cookie: String): CsfdPlotResponse
     @GET suspend fun getCsfdReviews(@Url url: String, @Header("Cookie") cookie: String): CsfdReviewsResponse
+    @GET suspend fun getCsfdGallery(@Url url: String, @Header("Cookie") cookie: String): CsfdGalleryResponse
 
     // TMM Pipeline
     @GET suspend fun getTmmSession(@Url url: String, @Header("Cookie") cookie: String): TmmSession

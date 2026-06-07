@@ -1,5 +1,11 @@
 package com.github.jankoran90.showlyfin.feature.watchlist.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,13 +24,17 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -42,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistSort
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistTab
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistViewModel
@@ -56,27 +67,60 @@ fun WatchlistScreen(
     val gridState = rememberLazyGridState()
 
     Column(modifier = modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = uiState.activeTab.ordinal) {
-            WatchlistTab.entries.forEach { tab ->
-                Tab(
-                    selected = uiState.activeTab == tab,
-                    onClick = { viewModel.selectTab(tab) },
-                    text = { Text(if (tab == WatchlistTab.MOVIES) "Filmy" else "Seriály") },
-                )
-            }
-        }
+        // Hlavička (Filmy/Seriály + hledání + filtry) se skrývá při scrollu dolů — stejně jako v Objevit.
+        val headerVisible by rememberScrollHeaderVisibility(
+            { gridState.firstVisibleItemIndex },
+            { gridState.firstVisibleItemScrollOffset },
+        )
+        AnimatedVisibility(
+            visible = headerVisible,
+            enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+            exit = fadeOut(tween(140)) + shrinkVertically(tween(140)),
+        ) {
+            Column {
+                TabRow(selectedTabIndex = uiState.activeTab.ordinal) {
+                    WatchlistTab.entries.forEach { tab ->
+                        Tab(
+                            selected = uiState.activeTab == tab,
+                            onClick = { viewModel.selectTab(tab) },
+                            text = { Text(if (tab == WatchlistTab.MOVIES) "Filmy" else "Seriály") },
+                        )
+                    }
+                }
 
-        if (uiState.isLoggedIn && (uiState.items.isNotEmpty() || uiState.genreFilter != null || uiState.rdOnly)) {
-            WatchlistChips(
-                sort = uiState.sort,
-                genreFilter = uiState.genreFilter,
-                availableGenres = uiState.availableGenres,
-                rdOnly = uiState.rdOnly,
-                rdMatchLoading = uiState.rdMatchLoading,
-                onSortSelected = { viewModel.selectSort(it) },
-                onGenreSelected = { viewModel.selectGenre(it) },
-                onRdOnlyToggle = { viewModel.toggleRdOnly() },
-            )
+                if (uiState.isLoggedIn) {
+                    OutlinedTextField(
+                        value = uiState.searchQuery,
+                        onValueChange = { viewModel.setSearchQuery(it) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        placeholder = { Text("Hledat (česky i originál)…") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (uiState.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Vymazat")
+                                }
+                            }
+                        },
+                        singleLine = true,
+                    )
+                }
+
+                if (uiState.isLoggedIn && (uiState.items.isNotEmpty() || uiState.genreFilter != null || uiState.rdOnly)) {
+                    WatchlistChips(
+                        sort = uiState.sort,
+                        genreFilter = uiState.genreFilter,
+                        availableGenres = uiState.availableGenres,
+                        rdOnly = uiState.rdOnly,
+                        rdMatchLoading = uiState.rdMatchLoading,
+                        onSortSelected = { viewModel.selectSort(it) },
+                        onGenreSelected = { viewModel.selectGenre(it) },
+                        onRdOnlyToggle = { viewModel.toggleRdOnly() },
+                    )
+                }
+            }
         }
 
         when {
@@ -94,7 +138,7 @@ fun WatchlistScreen(
                     CircularProgressIndicator()
                 }
             }
-            uiState.items.isEmpty() && uiState.genreFilter == null -> {
+            uiState.items.isEmpty() && uiState.genreFilter == null && uiState.searchQuery.isBlank() -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -123,10 +167,15 @@ fun WatchlistScreen(
                     }
                 }
             }
-            uiState.items.isEmpty() && uiState.genreFilter != null -> {
+            uiState.items.isEmpty() -> {
+                val msg = if (uiState.searchQuery.isNotBlank()) {
+                    "Nic nenalezeno pro „${uiState.searchQuery}\""
+                } else {
+                    "Žádné položky pro filtr „${uiState.genreFilter}\""
+                }
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "Žádné položky pro filtr „${uiState.genreFilter}\"",
+                        text = msg,
                         modifier = Modifier.padding(24.dp),
                         textAlign = TextAlign.Center,
                     )
