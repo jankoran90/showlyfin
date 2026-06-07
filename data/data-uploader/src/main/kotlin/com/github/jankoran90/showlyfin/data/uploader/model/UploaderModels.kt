@@ -135,8 +135,12 @@ data class RdLibraryResponse(
 
 // ── ČSFD (scrape na BACKENDU — server zvládá Anubis anti-bot, zařízení ne kvůli ──
 //     cookie-propagation bugu po pass-challenge) ───────────────────────────────────
-/** Odpověď /api/csfd/plot — český popis filmu z ČSFD. */
-data class CsfdPlotResponse(val plot: String? = null)
+/** Odpověď /api/csfd/plot — český popis + hodnocení (0–100 %) + český název z ČSFD. */
+data class CsfdPlotResponse(
+    val plot: String? = null,
+    val rating: Int? = null,
+    val title: String? = null,
+)
 /** Jedna ČSFD recenze (/api/csfd/reviews). rating je 0–100 % (stars×20). */
 data class CsfdReviewItem(
     val username: String = "",

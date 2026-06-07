@@ -22,8 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -31,7 +29,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
@@ -43,6 +40,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -50,6 +48,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -89,6 +90,7 @@ fun DetailScreen(
     LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) { viewModel.load(item) }
 
     val displayItem = uiState.item ?: item
+    var showReviewsSheet by remember { mutableStateOf(false) }
 
     // Stremio stream resolved → přehraj externí URL
     LaunchedEffect(uiState.pendingPlaybackUrl) {
@@ -148,6 +150,12 @@ fun DetailScreen(
             error = uiState.sdilejError,
             onCapture = { viewModel.captureSdilej(it) },
             onDismiss = { viewModel.dismissSdilejPicker() },
+        )
+    }
+    if (showReviewsSheet) {
+        CsfdReviewsBottomSheet(
+            reviews = uiState.csfdReviews,
+            onDismiss = { showReviewsSheet = false },
         )
     }
 
@@ -239,21 +247,20 @@ fun DetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         displayItem.year?.let {
-                            Text("$it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("$it", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        displayItem.rating?.let { rating ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
-                                Text("%.1f".format(rating * 10f / 10f), style = MaterialTheme.typography.bodyMedium)
+                        // ČSFD hodnocení v % (místo TMDB); fallback na hvězdičkové hodnocení, když ČSFD chybí
+                        val csfdRating = uiState.csfdRating
+                        if (csfdRating != null) {
+                            CsfdRatingBadge(rating = csfdRating, big = true)
+                        } else {
+                            displayItem.rating?.let { rating ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
+                                    Text("%.1f".format(rating), style = MaterialTheme.typography.titleMedium)
+                                }
                             }
                         }
-                        uiState.csfdRating?.let { rating ->
-                            CsfdRatingBadge(rating = rating)
-                        }
-                    }
-                    val tmdbRating = uiState.movieDetails?.vote_average ?: uiState.showDetails?.vote_average
-                    tmdbRating?.let {
-                        Text("TMDB: %.1f".format(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -324,7 +331,6 @@ fun DetailScreen(
             Spacer(Modifier.height(8.dp))
             DetailActionRow(
                 inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
-                csfdId = uiState.csfdId,
                 onPlayNaTv = onNaTv?.let { cb -> { cb(displayItem, uiState.ownedJellyfinId) } },
                 onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
                 onStream = { viewModel.openStreamPicker() },
@@ -332,7 +338,6 @@ fun DetailScreen(
                 inWatchlist = uiState.isInWatchlist,
                 isTogglingWatchlist = uiState.isTogglingWatchlist,
                 onWatchlist = { viewModel.toggleWatchlist() },
-                onCsfd = uiState.csfdId?.let { id -> { openCsfd(context, id) } },
             )
 
             val mergedCollection = uiState.mergedCollection ?: uiState.collection?.let { coll ->
@@ -379,17 +384,19 @@ fun DetailScreen(
                 }
             }
 
-            CsfdReviewsSection(reviews = uiState.csfdReviews)
+            if (uiState.csfdReviews.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showReviewsSheet = true },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                    Text("ČSFD recenze (${uiState.csfdReviews.size})")
+                }
+            }
 
             Spacer(Modifier.height(24.dp))
         }
-    }
-}
-
-private fun openCsfd(context: android.content.Context, csfdId: Long) {
-    val uri = Uri.parse("https://www.csfd.cz/film/$csfdId/")
-    runCatching {
-        context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
     }
 }
 
@@ -397,7 +404,6 @@ private fun openCsfd(context: android.content.Context, csfdId: Long) {
 @Composable
 private fun DetailActionRow(
     inLibrary: Boolean,
-    csfdId: Long?,
     onPlayNaTv: (() -> Unit)?,
     onPlayHere: (() -> Unit)?,
     onStream: () -> Unit,
@@ -405,7 +411,6 @@ private fun DetailActionRow(
     inWatchlist: Boolean,
     isTogglingWatchlist: Boolean,
     onWatchlist: () -> Unit,
-    onCsfd: (() -> Unit)?,
 ) {
     FlowRow(
         modifier = Modifier
@@ -457,13 +462,6 @@ private fun DetailActionRow(
                 }
             },
         )
-        if (csfdId != null && onCsfd != null) {
-            AssistChip(
-                onClick = onCsfd,
-                label = { Text("ČSFD") },
-                leadingIcon = { Icon(Icons.Default.OpenInNew, contentDescription = null) },
-            )
-        }
     }
     Spacer(Modifier.height(8.dp))
 }

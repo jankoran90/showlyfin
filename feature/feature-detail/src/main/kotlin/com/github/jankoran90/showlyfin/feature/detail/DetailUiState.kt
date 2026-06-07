@@ -36,6 +36,7 @@ data class DetailUiState(
     val error: String? = null,
     val csfdId: Long? = null,
     val csfdRating: Int? = null,
+    val csfdTitle: String? = null,
     val csfdPlot: String? = null,
     val csfdReviews: List<CsfdReviewRaw> = emptyList(),
     val isCsfdLoading: Boolean = false,

@@ -18,6 +18,7 @@ import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportItem
 import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportRequest
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.model.CsfdPlotResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderCaptureRequest
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -681,13 +682,14 @@ class DetailViewModel @Inject constructor(
             }
             _uiState.update { it.copy(csfdId = csfdId) }
             coroutineScope {
-                val plotDeferred = async { fetchCsfdPlot(csfdId) }
-                val ratingDeferred = async { csfdScraper.scrapeRating(csfdId) }
-                val reviewsDeferred = async { fetchCsfdReviews(csfdId).take(3) }
+                val infoDeferred = async { fetchCsfdInfo(csfdId) }
+                val reviewsDeferred = async { fetchCsfdReviews(csfdId).take(20) }
+                val info = infoDeferred.await()
                 _uiState.update {
                     it.copy(
-                        csfdPlot = plotDeferred.await(),
-                        csfdRating = ratingDeferred.await(),
+                        csfdPlot = info.plot,
+                        csfdRating = info.rating,
+                        csfdTitle = info.title,
                         csfdReviews = reviewsDeferred.await(),
                         isCsfdLoading = false,
                     )
@@ -700,12 +702,17 @@ class DetailViewModel @Inject constructor(
 
     // ČSFD popis/recenze: PRIMÁRNĚ přes backend (server zvládá Anubis; on-device scrape padá kvůli
     // cookie-propagation bugu po pass-challenge). On-device scraper jen jako fallback, když uploader není nastaven.
-    private suspend fun fetchCsfdPlot(csfdId: Long): String? {
+    // Vrací popis + hodnocení (0–100 %) + český název. Backend primárně (rating přes
+    // `.film-rating-average`; on-device scrapeRating padá kvůli cookie bugu). On-device fallback
+    // jen když uploader není nastaven.
+    private suspend fun fetchCsfdInfo(csfdId: Long): CsfdPlotResponse {
         if (uploaderBaseUrl.isNotBlank()) {
             runCatching { uploaderDs.getCsfdPlot(uploaderBaseUrl, uploaderCookie, csfdId) }
-                .getOrNull()?.takeIf { it.isNotBlank() }?.let { return it }
+                .getOrNull()?.takeIf { !it.plot.isNullOrBlank() || it.rating != null }?.let { return it }
         }
-        return runCatching { csfdRepository.getCzechPlot(csfdId) }.getOrNull()
+        val plot = runCatching { csfdRepository.getCzechPlot(csfdId) }.getOrNull()
+        val rating = runCatching { csfdScraper.scrapeRating(csfdId) }.getOrNull()
+        return CsfdPlotResponse(plot = plot, rating = rating, title = null)
     }
 
     private suspend fun fetchCsfdReviews(csfdId: Long): List<com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw> {

@@ -166,16 +166,6 @@ fun TvDetailScreen(
                         )
                     }
                 }
-                uiState.csfdId?.let { csfdId ->
-                    Button(
-                        onClick = {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.csfd.cz/film/$csfdId/")))
-                            }
-                        },
-                        modifier = Modifier.height(56.dp),
-                    ) { Text("ČSFD") }
-                }
                 Button(onClick = onBack, modifier = Modifier.height(56.dp)) {
                     Text("Zpět")
                 }
