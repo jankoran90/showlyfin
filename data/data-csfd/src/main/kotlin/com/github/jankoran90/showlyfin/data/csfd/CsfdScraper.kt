@@ -82,10 +82,13 @@ class CsfdScraper @Inject constructor() {
 
     suspend fun scrapePlot(csfdId: Long): String? = withContext(Dispatchers.IO) {
         try {
-            val html = fetchWithAnubis("$BASE_URL/film/$csfdId/") ?: return@withContext null
+            val html = fetchWithAnubis("$BASE_URL/film/$csfdId/")
+            if (html == null) { Timber.w("[CsfdScraper] scrapePlot $csfdId: fetchWithAnubis=null"); return@withContext null }
             val doc = Jsoup.parse(html, BASE_URL)
             val plotEl = doc.selectFirst(".plot-full") ?: doc.selectFirst(".plot-preview")
-            plotEl?.select("p")?.text()?.trim()?.takeIf { it.isNotBlank() }
+            val plot = plotEl?.select("p")?.text()?.trim()?.takeIf { it.isNotBlank() }
+            Timber.d("[CsfdScraper] scrapePlot $csfdId: html=${html.length}ch anubis=${html.contains("anubis_challenge")} plotEl=${plotEl != null} plot=${plot?.take(50)}")
+            plot
         } catch (e: Exception) {
             Timber.w(e, "[CsfdScraper] scrapePlot failed for csfdId=$csfdId")
             null
@@ -147,22 +150,25 @@ class CsfdScraper @Inject constructor() {
     }
 
     private fun fetchWithAnubis(url: String): String? {
-        val html = fetchHtml(url) ?: return null
-        if (!html.contains("anubis_challenge")) return html
+        val html = fetchHtml(url) ?: run { Timber.w("[CsfdScraper] anubis: fetchHtml(1)=null $url"); return null }
+        if (!html.contains("anubis_challenge")) { Timber.d("[CsfdScraper] anubis: no challenge, ${html.length}ch $url"); return html }
 
         val match = Regex("""id="anubis_challenge"[^>]*>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
-            .find(html)?.groupValues?.get(1)?.trim() ?: return null
+            .find(html)?.groupValues?.get(1)?.trim() ?: run { Timber.w("[CsfdScraper] anubis: challenge regex MISS ${html.length}ch"); return null }
 
         val cd = JSONObject(match)
         val rules = cd.getJSONObject("rules")
         val challenge = cd.getJSONObject("challenge")
         val (hash, nonce) = solveAnubisPoW(challenge.getString("randomData"), rules.getInt("difficulty"))
+        Timber.d("[CsfdScraper] anubis: solved difficulty=${rules.getInt("difficulty")} nonce=$nonce")
         val redir = URLEncoder.encode(url.removePrefix(BASE_URL), "UTF-8")
         val passUrl = "$BASE_URL/.within.website/x/cmd/anubis/api/pass-challenge" +
             "?id=${URLEncoder.encode(challenge.getString("id"), "UTF-8")}" +
             "&response=$hash&nonce=$nonce&redir=$redir&elapsedTime=1"
         fetchHtml(passUrl)
-        return fetchHtml(url)
+        val result = fetchHtml(url)
+        Timber.d("[CsfdScraper] anubis: after pass cookies=${cookieJar.keys} result=${result?.length}ch stillChallenge=${result?.contains("anubis_challenge")}")
+        return result
     }
 
     private fun fetchHtml(url: String): String? {
@@ -180,6 +186,7 @@ class CsfdScraper @Inject constructor() {
                 }
             }
             val status = conn.responseCode
+            Timber.d("[CsfdScraper] fetchHtml HTTP $status $url")
             // Anubis challenge i pass-challenge mohou přijít s ne-2xx statusem — čteme tělo i tak
             // (error stream), ať fetchWithAnubis challenge uvidí a vyřeší.
             val stream = if (status in 200..399) conn.inputStream else conn.errorStream
