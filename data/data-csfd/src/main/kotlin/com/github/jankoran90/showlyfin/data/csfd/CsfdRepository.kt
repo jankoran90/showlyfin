@@ -46,10 +46,13 @@ class CsfdRepository @Inject constructor(
             return@withContext cached
         }
 
+        // Wikidata P2529 (ČSFD id) je autoritativní mapování → důvěřujeme bez scrape-verify.
+        // Dřívější verifyCsfdId (scrapeTitle != null) zbytečně zahazoval validní id, když scrape
+        // momentálně selhal → ČSFD popis se vůbec nenačetl. Parity s funkčním yeshowly.
         if (imdbId.isNotBlank()) {
             val wikidataId = wikidataLookupByImdb(imdbId)
             Timber.d("[CsfdRepository] wikidata(imdb=$imdbId) → csfdId=$wikidataId")
-            if (wikidataId != null && verifyCsfdId(wikidataId)) {
+            if (wikidataId != null) {
                 prefs.edit { putLong(cacheKey, wikidataId) }
                 return@withContext wikidataId
             }
@@ -58,7 +61,7 @@ class CsfdRepository @Inject constructor(
         if (tmdbId != null && tmdbId > 0) {
             val wikidataId = wikidataLookupByTmdb(tmdbId)
             Timber.d("[CsfdRepository] wikidata(tmdb=$tmdbId) → csfdId=$wikidataId")
-            if (wikidataId != null && verifyCsfdId(wikidataId)) {
+            if (wikidataId != null) {
                 prefs.edit { putLong(cacheKey, wikidataId) }
                 return@withContext wikidataId
             }
@@ -75,17 +78,6 @@ class CsfdRepository @Inject constructor(
 
         Timber.w("[CsfdRepository] getCsfdId returned null for imdbId=$imdbId, tmdbId=$tmdbId, title=$title")
         null
-    }
-
-    private suspend fun verifyCsfdId(csfdId: Long): Boolean {
-        val csfdTitle = runCatching { scraper.scrapeTitle(csfdId) }.getOrNull()
-        return if (csfdTitle != null) {
-            Timber.d("[CsfdRepository] wikidata id=$csfdId accepted (page='$csfdTitle')")
-            true
-        } else {
-            Timber.w("[CsfdRepository] wikidata id=$csfdId REJECTED (page inaccessible)")
-            false
-        }
     }
 
     suspend fun getCzechPlot(csfdId: Long): String? = withContext(Dispatchers.IO) {

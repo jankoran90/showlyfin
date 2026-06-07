@@ -2,14 +2,11 @@ package com.github.jankoran90.showlyfin.data.csfd
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Cookie
-import okhttp3.CookieJar
-import okhttp3.HttpUrl
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import timber.log.Timber
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.URLEncoder
 import java.security.MessageDigest
 import kotlin.math.abs
@@ -32,17 +29,11 @@ class CsfdScraper @Inject constructor() {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     }
 
-    private val cookieStore = mutableMapOf<String, List<Cookie>>()
-    private val client = OkHttpClient.Builder()
-        .followRedirects(true)
-        .cookieJar(object : CookieJar {
-            override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                val existing = cookieStore[url.host] ?: emptyList()
-                cookieStore[url.host] = (existing + cookies).distinctBy { it.name }
-            }
-            override fun loadForRequest(url: HttpUrl): List<Cookie> = cookieStore[url.host] ?: emptyList()
-        })
-        .build()
+    // Anubis auth cookie store (name → value). Sdílené napříč requesty jedné instance.
+    // Pozn.: scrape jede přes HttpURLConnection (ne OkHttp) — OkHttp 5.x na zařízení k ČSFD
+    // selhával (Anubis challenge fetch vracel null za ~110 ms), zatímco HttpURLConnection
+    // (stejný stack jako funkční Wikidata lookup) projde. Parity s funkčním yeshowly scrapem.
+    private val cookieJar = mutableMapOf<String, String>()
 
     suspend fun searchByTitle(title: String, year: Int): Long? = withContext(Dispatchers.IO) {
         try {
@@ -175,19 +166,38 @@ class CsfdScraper @Inject constructor() {
     }
 
     private fun fetchHtml(url: String): String? {
-        val req = Request.Builder()
-            .url(url)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept-Language", "cs-CZ,cs;q=0.9")
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-            .build()
+        var conn: HttpURLConnection? = null
         return try {
-            client.newCall(req).execute().use { resp ->
-                if (resp.isSuccessful) resp.body?.string() else null
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = true
+                connectTimeout = 15000
+                readTimeout = 15000
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Accept-Language", "cs-CZ,cs;q=0.9")
+                setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                if (cookieJar.isNotEmpty()) {
+                    setRequestProperty("Cookie", cookieJar.entries.joinToString("; ") { "${it.key}=${it.value}" })
+                }
             }
+            val status = conn.responseCode
+            // Anubis challenge i pass-challenge mohou přijít s ne-2xx statusem — čteme tělo i tak
+            // (error stream), ať fetchWithAnubis challenge uvidí a vyřeší.
+            val stream = if (status in 200..399) conn.inputStream else conn.errorStream
+            // Ulož Set-Cookie (Anubis auth cookie) pro následný re-fetch.
+            conn.headerFields.forEach { (key, values) ->
+                if (key != null && key.equals("Set-Cookie", ignoreCase = true)) {
+                    values.forEach { sc ->
+                        val pair = sc.substringBefore(";").split("=", limit = 2)
+                        if (pair.size == 2 && pair[0].isNotBlank()) cookieJar[pair[0].trim()] = pair[1].trim()
+                    }
+                }
+            }
+            stream?.bufferedReader()?.use { it.readText() }
         } catch (e: Exception) {
             Timber.w(e, "[CsfdScraper] fetchHtml failed: $url")
             null
+        } finally {
+            conn?.disconnect()
         }
     }
 
