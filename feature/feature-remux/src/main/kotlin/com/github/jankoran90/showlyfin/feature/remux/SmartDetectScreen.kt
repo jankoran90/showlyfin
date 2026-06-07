@@ -158,9 +158,9 @@ private fun ConfirmContent(
 @Composable
 private fun SourceBadge(stream: UploaderStream) {
     val (label, color) = when {
-        stream.infoHash != null && stream.quality.rdReady -> "RD ✓" to androidx.compose.ui.graphics.Color(0xFF2E7D32)
-        stream.infoHash != null -> "RD" to MaterialTheme.colorScheme.primary
-        else -> "Addon" to androidx.compose.ui.graphics.Color(0xFFB26A00)
+        stream.quality.rdReady -> "RD ✓" to androidx.compose.ui.graphics.Color(0xFF2E7D32)
+        stream.infoHash != null -> "Torrent" to androidx.compose.ui.graphics.Color(0xFF1565C0)
+        else -> "Addon" to androidx.compose.ui.graphics.Color(0xFFB23A3A)
     }
     Box(
         Modifier
