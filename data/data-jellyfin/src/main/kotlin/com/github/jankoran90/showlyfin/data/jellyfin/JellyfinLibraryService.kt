@@ -1,6 +1,9 @@
 package com.github.jankoran90.showlyfin.data.jellyfin
 
 import android.content.SharedPreferences
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.model.ClientInfo
@@ -79,6 +82,9 @@ class JellyfinLibraryService @Inject constructor(
                     skippedByPath++
                     continue
                 }
+                // Kolekce (BoxSet) se sem připletou i při includeItemTypes=MOVIE,SERIES a nesou
+                // collection-id v Tmdb → přeskoč, jejich děti zpracujeme zvlášť (viz boxSets níže).
+                if (item.type == BaseItemKind.BOX_SET) continue
                 val ids = item.providerIds
                 val jellyfinId = item.id.toString()
                 val hasImdb = ids?.get("Imdb")?.takeIf { it.isNotBlank() } != null
@@ -127,6 +133,39 @@ class JellyfinLibraryService @Inject constructor(
                     boxSetByNormalizedName.putIfAbsent(normalized, jellyfinId)
                 }
             }
+            // Rozbal kolekce na děti — filmy/seriály uvnitř mají reálná movie/show TMDB id.
+            // Bez toho položky v kolekci nemají „v knihovně" příznak (Discover/Watchlist).
+            val childItems = coroutineScope {
+                response.items.map { bs ->
+                    async {
+                        runCatching {
+                            apiClient.itemsApi.getItems(
+                                userId = userId,
+                                parentId = bs.id,
+                                includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+                                fields = listOf(ItemFields.PROVIDER_IDS),
+                            ).content.items
+                        }.getOrElse { emptyList() }
+                    }
+                }.awaitAll().flatten()
+            }
+            for (child in childItems) {
+                val cids = child.providerIds ?: continue
+                val childJfId = child.id.toString()
+                val isPlayed = child.userData?.played == true
+                if (isPlayed) watchedJellyfin.add(childJfId)
+                cids["Imdb"]?.takeIf { it.isNotBlank() }?.let {
+                    imdb.add(it)
+                    imdbToJellyfin.putIfAbsent(it, childJfId)
+                    if (isPlayed) watchedImdb.add(it)
+                }
+                cids["Tmdb"]?.toLongOrNull()?.let {
+                    tmdb.add(it)
+                    tmdbToJellyfin.putIfAbsent(it, childJfId)
+                    if (isPlayed) watchedTmdb.add(it)
+                }
+            }
+            Timber.i("[Jellyfin] boxset children harvested: ${childItems.size} → tmdb total=${tmdb.size}")
         }.onFailure { Timber.w(it, "getItems(BOX_SET) failed") }
         Timber.i("getOwnedIds DONE: imdb=${imdb.size} tmdb=${tmdb.size} boxSets=${boxSets.size}")
 

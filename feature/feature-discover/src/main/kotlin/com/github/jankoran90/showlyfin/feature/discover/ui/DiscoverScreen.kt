@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -116,9 +117,25 @@ fun DiscoverScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            AnimatedVisibility(
+                visible = isHeaderVisible,
+                enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+                exit = fadeOut(tween(140)) + shrinkVertically(tween(140)),
+            ) {
+                TabRow(selectedTabIndex = uiState.activeTab.ordinal) {
+                    DiscoverTab.entries.forEach { tab ->
+                        Tab(
+                            selected = uiState.activeTab == tab,
+                            onClick = { viewModel.selectTab(tab) },
+                            text = { Text(if (tab == DiscoverTab.MOVIES) "Filmy" else "Seriály") },
+                        )
+                    }
+                }
+            }
             AnimatedVisibility(
                 visible = isHeaderVisible,
                 enter = fadeIn(tween(180)) + expandVertically(tween(180)),
@@ -186,24 +203,6 @@ fun DiscoverScreen(
                             }
                         },
                     )
-                }
-            }
-
-            if (!isSearchMode && !searchExpanded) {
-                AnimatedVisibility(
-                    visible = isHeaderVisible,
-                    enter = fadeIn(tween(180)) + expandVertically(tween(180)),
-                    exit = fadeOut(tween(140)) + shrinkVertically(tween(140)),
-                ) {
-                    TabRow(selectedTabIndex = uiState.activeTab.ordinal) {
-                        DiscoverTab.entries.forEach { tab ->
-                            Tab(
-                                selected = uiState.activeTab == tab,
-                                onClick = { viewModel.selectTab(tab) },
-                                text = { Text(if (tab == DiscoverTab.MOVIES) "Filmy" else "Seriály") },
-                            )
-                        }
-                    }
                 }
             }
 

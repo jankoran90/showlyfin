@@ -85,24 +85,40 @@ class LibraryRowsViewModel @Inject constructor(
         userUuid: UUID,
         serverUrl: String,
         token: String,
-    ): LibraryRow {
-        val items = runCatching {
+    ): LibraryRow = coroutineScope {
+        val raw = runCatching {
             apiClient.itemsApi.getItems(
                 userId = userUuid,
                 parentId = view.id,
-                includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+                includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.BOX_SET),
                 recursive = true,
                 sortBy = listOf(ItemSortBy.DATE_CREATED),
                 sortOrder = listOf(SortOrder.DESCENDING),
                 fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
-                limit = 40,
+                limit = 60,
             ).content.items
         }.getOrElse {
             Timber.w(it, "[LibraryRows] getItems failed for '${view.name}'")
             emptyList()
         }
-        val rowItems = items.map { it.toLibraryRowItem(serverUrl, token) }
-        return LibraryRow(
+        // Jellyfin vrací kolekce (BoxSet) místo filmů uvnitř — rozbal je na děti, ať mají
+        // reálná movie/show TMDB id (kolekce sama nese collection-id → vedlo k prázdné kartě).
+        val expanded = raw.flatMap { dto ->
+            if (dto.type == BaseItemKind.BOX_SET) {
+                runCatching {
+                    apiClient.itemsApi.getItems(
+                        userId = userUuid,
+                        parentId = dto.id,
+                        includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+                        fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
+                    ).content.items
+                }.getOrElse { emptyList() }
+            } else {
+                listOf(dto)
+            }
+        }
+        val rowItems = expanded.map { it.toLibraryRowItem(serverUrl, token) }.distinctBy { it.jellyfinId }
+        LibraryRow(
             libraryId = view.id.toString(),
             libraryName = view.name ?: "Knihovna",
             collectionType = view.collectionType?.name,
@@ -163,10 +179,12 @@ class LibraryRowsViewModel @Inject constructor(
     )
 }
 
-/** Jen filmové / seriálové knihovny; RealDebrid (streamovaný zdroj) vynech. */
+/** Filmové / seriálové / smíšené knihovny (vč. None=mixed, např. „Dokumenty pro děti");
+ *  RealDebrid (streamovaný zdroj) a hudbu/knihy/kolekce vynech. */
 private fun BaseItemDto.isMediaLibrary(): Boolean {
     val ct = collectionType?.name?.uppercase()
-    if (ct != "MOVIES" && ct != "TVSHOWS") return false
+    val allowed = ct == null || ct == "MOVIES" || ct == "TVSHOWS" || ct == "MIXED"
+    if (!allowed) return false
     val n = name?.lowercase() ?: return true
     return !n.contains("realdebrid") && !n.contains("real-debrid")
 }

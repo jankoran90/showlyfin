@@ -103,7 +103,7 @@ fun MediaCard(
                 }
             }
             if (inLibrary) {
-                InLibraryBadge(modifier = Modifier.align(Alignment.TopEnd))
+                InLibraryTitleBadge(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
             }
             if (watched) {
                 WatchedBadge(modifier = Modifier.align(Alignment.TopStart))
@@ -132,10 +132,6 @@ fun MediaCard(
                         if (watched) {
                             InLibraryTitleBadgeSpacer()
                             WatchedTitleBadge()
-                        }
-                        if (inLibrary) {
-                            InLibraryTitleBadgeSpacer()
-                            InLibraryTitleBadge()
                         }
                     }
                     item.year?.let {
