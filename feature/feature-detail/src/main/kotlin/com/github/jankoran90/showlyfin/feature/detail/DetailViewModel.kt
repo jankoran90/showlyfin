@@ -299,7 +299,19 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(showStreamPicker = true, isLoadingStreams = true, streamError = null, streams = emptyList()) }
         viewModelScope.launch {
             runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb) }
-                .onSuccess { list -> timber.log.Timber.i("[Stremio] streams=${list.size} imdb=$imdb"); _uiState.update { it.copy(isLoadingStreams = false, streams = list, streamError = if (list.isEmpty()) "Žádné streamy nenalezeny." else null) } }
+                .onSuccess { raw ->
+                    // Seřaď: RD ✓ (rdReady) → Torrent (infoHash) → Addon (proxy url, nespolehlivé).
+                    // Stabilní sort zachová skóre backendu uvnitř skupin.
+                    val list = raw.sortedByDescending { s ->
+                        when {
+                            s.quality.rdReady -> 2
+                            !s.infoHash.isNullOrBlank() -> 1
+                            else -> 0
+                        }
+                    }
+                    timber.log.Timber.i("[Stremio] streams=${list.size} (rdReady=${list.count { it.quality.rdReady }} torrent=${list.count { !it.infoHash.isNullOrBlank() && !it.quality.rdReady }}) imdb=$imdb")
+                    _uiState.update { it.copy(isLoadingStreams = false, streams = list, streamError = if (list.isEmpty()) "Žádné streamy nenalezeny." else null) }
+                }
                 .onFailure { e -> timber.log.Timber.w(e, "[Stremio] getStreams FAILED imdb=$imdb url=$uploaderBaseUrl"); _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") } }
         }
     }
