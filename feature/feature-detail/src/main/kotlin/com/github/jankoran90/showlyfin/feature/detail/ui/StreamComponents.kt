@@ -127,6 +127,7 @@ internal fun StreamPickerSheet(
     onStrictChange: (Boolean) -> Unit,
     onPlay: (UploaderStream) -> Unit,
     onDismiss: () -> Unit,
+    isProbing: Boolean = false,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetHeader("Stream přes Stremio", Icons.Default.PlayArrow)
@@ -152,6 +153,20 @@ internal fun StreamPickerSheet(
                     )
                     HorizontalDivider()
                 }
+            }
+        }
+        // Plan CASCADE Fáze 3: probe běží na pozadí — testuje další zdroje na RD (mrtvé/blokované zahodí).
+        if (isProbing && !isResolving) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CircularProgressIndicator(Modifier.height(20.dp))
+                Text(
+                    if (streams.isEmpty()) "Testuji zdroje na RealDebrid…" else "Testuji další zdroje na RealDebrid…",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
         if (isResolving) {

@@ -63,6 +63,7 @@ data class DetailUiState(
     val uploaderConfigured: Boolean = false,
     val showStreamPicker: Boolean = false,
     val isLoadingStreams: Boolean = false,
+    val isProbingStreams: Boolean = false,   // Plan CASCADE Fáze 3: probe dalších zdrojů běží na pozadí
     val streams: List<com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream> = emptyList(),
     val streamError: String? = null,
     val isResolvingStream: Boolean = false,

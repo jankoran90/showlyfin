@@ -332,7 +332,24 @@ class DetailViewModel @Inject constructor(
                     val savedHashes = saved.mapNotNull { it.infoHash?.lowercase() }.toSet()
                     val combined = saved + list.filterNot { (it.infoHash?.lowercase() ?: "") in savedHashes }
                     timber.log.Timber.i("[Stremio] streams=${list.size} rdSearch=${saved.size} strict=$strict (cached=${list.count { it.quality.rdReady }} dl=${list.count { it.quality.rdDownloadable }}) imdb=$imdb")
-                    _uiState.update { it.copy(isLoadingStreams = false, streams = combined, streamError = if (combined.isEmpty()) "Žádné streamy nenalezeny." else null) }
+                    // Plan CASCADE Fáze 3: během probu ukaž JEN ověřené instant (rdSaved/rdReady),
+                    // zbytek se reálně testuje (addMagnet) → po probu nahradíme jen smysluplnými.
+                    val instantNow = combined.filter { it.quality.rdSaved || it.quality.rdReady }
+                    _uiState.update { it.copy(isLoadingStreams = false, isProbingStreams = true, streams = instantNow, streamError = null) }
+                    viewModelScope.launch {
+                        runCatching { uploaderDs.getProbedStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb) }
+                            .onSuccess { probed ->
+                                timber.log.Timber.i("[Stremio] probe → ${probed.size} smysluplných (instant=${probed.count { it.quality.rdSaved || it.quality.rdReady }} dl=${probed.count { it.quality.rdDownloadable }})")
+                                val finalList = if (probed.isNotEmpty()) probed else combined
+                                val err = if (finalList.isEmpty()) "Žádný funkční zdroj nenalezen." else null
+                                _uiState.update { it.copy(isProbingStreams = false, streams = finalList, streamError = err) }
+                            }
+                            .onFailure { e ->
+                                timber.log.Timber.w(e, "[Stremio] probe FAILED imdb=$imdb → fallback na neprobnuty seznam")
+                                val err = if (combined.isEmpty()) "Žádné streamy nenalezeny." else null
+                                _uiState.update { it.copy(isProbingStreams = false, streams = combined, streamError = err) }
+                            }
+                    }
                 }
                 .onFailure { e ->
                     timber.log.Timber.w(e, "[Stremio] getStreams FAILED imdb=$imdb url=$uploaderBaseUrl")

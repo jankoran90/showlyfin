@@ -266,6 +266,7 @@ fun TvDetailScreen(
                 error = uiState.streamError,
                 onPlay = { viewModel.playStream(it) },
                 onDismiss = { viewModel.dismissStreamPicker() },
+                isProbing = uiState.isProbingStreams,
             )
         }
         if (uiState.showDownloadMenu) {

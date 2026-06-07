@@ -110,16 +110,25 @@ fun TvStreamPicker(
     error: String?,
     onPlay: (UploaderStream) -> Unit,
     onDismiss: () -> Unit,
+    isProbing: Boolean = false,
 ) {
     TvOverlayPanel("Stream přes Stremio", onDismiss) {
         when {
             isLoading -> TvCenter { CircularProgressIndicator() }
             error != null && streams.isEmpty() -> Text(error, color = Color.White.copy(alpha = 0.7f))
             else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
-                items(streams, key = { it.infoHash ?: it.url ?: it.name.orEmpty() }) { s ->
+                items(streams, key = { it.cometPath ?: it.infoHash ?: it.url ?: it.name.orEmpty() }) { s ->
                     TvStreamRow(s, "▶ Přehrát") { if (!isResolving) onPlay(s) }
                 }
             }
+        }
+        // Plan CASCADE Fáze 3: probe dalších zdrojů běží na pozadí.
+        if (isProbing && !isResolving) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                if (streams.isEmpty()) "Testuji zdroje na RealDebrid…" else "Testuji další zdroje na RealDebrid…",
+                color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium,
+            )
         }
         if (isResolving) {
             Spacer(Modifier.height(12.dp))

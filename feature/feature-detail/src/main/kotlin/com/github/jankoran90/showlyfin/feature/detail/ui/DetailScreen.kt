@@ -124,6 +124,7 @@ fun DetailScreen(
             onStrictChange = { viewModel.setStreamStrict(it) },
             onPlay = { viewModel.playStream(it) },
             onDismiss = { viewModel.dismissStreamPicker() },
+            isProbing = uiState.isProbingStreams,
         )
     }
     if (uiState.showDownloadMenu) {

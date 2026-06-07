@@ -25,6 +25,14 @@ internal class UploaderApi(
     private fun UploaderResolveContext?.toQuality(): UploaderResolveQuality? =
         this?.let { if (it.resolution == null && it.sizeGB == null) null else UploaderResolveQuality(it.resolution, it.sizeGB) }
 
+    override suspend fun getProbedStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int?, episode: Int?): List<UploaderStream> {
+        val base = baseUrl.trimEnd('/')
+        var url = "$base/api/stremio/streams_probe/$mediaType/$imdbId"
+        if (season != null && episode != null) url += "?season=$season&episode=$episode"
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.getStreams(url, cookie).streams
+    }
+
     override suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int, ctx: UploaderResolveContext?): String {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
