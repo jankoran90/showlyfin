@@ -1,7 +1,9 @@
 package com.github.jankoran90.showlyfin.data.uploader.di
 
+import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.api.UploaderApi
+import com.github.jankoran90.showlyfin.data.uploader.api.UploaderAuthInterceptor
 import com.github.jankoran90.showlyfin.data.uploader.api.UploaderService
 import com.google.gson.Gson
 import dagger.Module
@@ -9,7 +11,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Named
@@ -24,12 +25,18 @@ object UploaderModule {
     @Named("retrofitUploader")
     fun providesUploaderRetrofit(
         @Named("okHttpBase") okHttpBase: OkHttpClient,
+        @Named("traktPreferences") prefs: SharedPreferences,
         gson: Gson,
-    ): Retrofit = Retrofit.Builder()
-        .baseUrl("http://localhost/")
-        .client(okHttpBase)
-        .addConverterFactory(GsonConverterFactory.create(gson))
-        .build()
+    ): Retrofit {
+        val client = okHttpBase.newBuilder()
+            .addInterceptor(UploaderAuthInterceptor(prefs))
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("http://localhost/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+    }
 
     @Provides
     @Singleton

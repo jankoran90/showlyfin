@@ -37,8 +37,9 @@ class SmartDetectViewModel @Inject constructor(
             Timber.i("[SmartRemux] loadStreams type=$mediaType imdb=$imdbId baseUrlSet=${baseUrl.isNotBlank()} cookieSet=${cookie.isNotBlank()} title='$title'")
             _uiState.value = SmartDetectUiState(phase = SmartDetectPhase.LOADING)
             try {
-                val videoDeferred = async { uploaderDs.getStreams(baseUrl, cookie, mediaType, imdbId) }
-                val audioDeferred = async { uploaderDs.getSdillejStreams(baseUrl, cookie, mediaType, imdbId, title, titleCs, year) }
+                // runCatching uvnitř async → výjimka (např. 401) neunikne mimo try/catch a neshodí appku.
+                val videoDeferred = async { runCatching { uploaderDs.getStreams(baseUrl, cookie, mediaType, imdbId) }.getOrElse { Timber.w(it, "[SmartRemux] video streams failed"); emptyList() } }
+                val audioDeferred = async { runCatching { uploaderDs.getSdillejStreams(baseUrl, cookie, mediaType, imdbId, title, titleCs, year) }.getOrElse { Timber.w(it, "[SmartRemux] audio streams failed"); emptyList() } }
                 val videoStreams = videoDeferred.await()
                 val audioStreams = audioDeferred.await()
 
@@ -79,17 +80,23 @@ class SmartDetectViewModel @Inject constructor(
             _uiState.value = state.copy(phase = SmartDetectPhase.PROGRESS)
             try {
                 val videoCapture = async {
-                    uploaderDs.capture(baseUrl, cookie, UploaderCaptureRequest(video, imdbId, title, year, mediaType, tmm = true))
+                    runCatching {
+                        uploaderDs.capture(baseUrl, cookie, UploaderCaptureRequest(video, imdbId, title, year, mediaType, tmm = true))
+                    }.getOrElse { Timber.w(it, "[SmartRemux] video capture failed"); null }
                 }
                 val audioCapture = async {
-                    if (audio.url?.startsWith("sdilej://") == true) {
-                        uploaderDs.captureSdillej(baseUrl, cookie, UploaderCaptureRequest(audio, imdbId, title, year, mediaType, tmm = false))
-                    } else {
-                        uploaderDs.capture(baseUrl, cookie, UploaderCaptureRequest(audio, imdbId, title, year, mediaType, tmm = false))
-                    }
+                    runCatching {
+                        if (audio.url?.startsWith("sdilej://") == true) {
+                            uploaderDs.captureSdillej(baseUrl, cookie, UploaderCaptureRequest(audio, imdbId, title, year, mediaType, tmm = false))
+                        } else {
+                            uploaderDs.capture(baseUrl, cookie, UploaderCaptureRequest(audio, imdbId, title, year, mediaType, tmm = false))
+                        }
+                    }.getOrElse { Timber.w(it, "[SmartRemux] audio capture failed"); null }
                 }
                 val videoResult = videoCapture.await()
+                    ?: throw IllegalStateException("Video capture selhalo (uploader nedostupný / 401?)")
                 val audioResult = audioCapture.await()
+                    ?: throw IllegalStateException("Audio capture selhalo (uploader nedostupný / 401?)")
                 _uiState.value = _uiState.value.copy(
                     capturedVideoFileId = videoResult.fileId,
                     capturedAudioFileId = audioResult.fileId,

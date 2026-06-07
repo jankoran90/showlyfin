@@ -38,6 +38,7 @@ class UploaderViewModel @Inject constructor(
         const val PREF_TMM_SESSION_ID = "uploader_tmm_session_id"
         private const val PREF_UPLOADER_URL = "uploader_base_url"
         private const val PREF_UPLOADER_COOKIE = "uploader_session_cookie"
+        private const val PREF_UPLOADER_PASSWORD = "uploader_password"
     }
 
     private val _uiState = MutableStateFlow(UploaderUiState())
@@ -62,7 +63,11 @@ class UploaderViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             runCatching { uploaderDs.login(baseUrl, password) }
                 .onSuccess { sessionCookie ->
-                    prefs.edit().putString(PREF_UPLOADER_COOKIE, sessionCookie).apply()
+                    // Ulož cookie i heslo → interceptor umí auto-relogin po expiraci (401).
+                    prefs.edit()
+                        .putString(PREF_UPLOADER_COOKIE, sessionCookie)
+                        .putString(PREF_UPLOADER_PASSWORD, password)
+                        .apply()
                     _uiState.update { it.copy(isLoading = false, isNotConfigured = false) }
                     checkConfiguration()
                 }
