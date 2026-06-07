@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,8 +49,6 @@ import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
-import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
-import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinBrowserScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinLibraryItemsScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
@@ -65,7 +61,6 @@ import com.github.jankoran90.showlyfin.feature.uploader.LibraryDetailScreen
 import com.github.jankoran90.showlyfin.feature.uploader.MoveStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.ReviewStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderScreen
-import com.github.jankoran90.showlyfin.feature.watchlist.ui.WatchlistScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfileGateViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfilePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ServerSetupScreen
@@ -73,9 +68,7 @@ import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
 
 private sealed interface Destination {
     // Bottom tabs
-    data object Discover : Destination
-    data object Watchlist : Destination
-    data object Jellyfin : Destination
+    data object Hlavni : Destination
     data object Uploader : Destination
     data object Settings : Destination
 
@@ -124,7 +117,7 @@ private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>
 )
 
 private val bottomTabs = listOf(
-    Destination.Discover, Destination.Watchlist, Destination.Jellyfin, Destination.Uploader, Destination.Settings,
+    Destination.Hlavni, Destination.Uploader, Destination.Settings,
 )
 
 @Composable
@@ -159,8 +152,8 @@ fun ShowlyfinPhoneApp() {
             return@ShowlyfinPhoneTheme
         }
 
-        var currentDestination by remember { mutableStateOf<Destination>(Destination.Discover) }
-        var bottomTab by remember { mutableStateOf<Destination>(Destination.Discover) }
+        var currentDestination by remember { mutableStateOf<Destination>(Destination.Hlavni) }
+        var bottomTab by remember { mutableStateOf<Destination>(Destination.Hlavni) }
         val context = LocalContext.current
         val naTvCoordinator: NaTvCoordinator = hiltViewModel()
         val snackbarHostState = remember { SnackbarHostState() }
@@ -269,7 +262,7 @@ fun ShowlyfinPhoneApp() {
                 is Destination.JellyfinLibrary -> {
                     val ancestors = current.ancestors
                     if (ancestors.isEmpty()) {
-                        Destination.Jellyfin
+                        Destination.Hlavni
                     } else {
                         ancestors.last().toDestination(ancestors.dropLast(1))
                     }
@@ -301,30 +294,16 @@ fun ShowlyfinPhoneApp() {
                     .padding(bottom = effectiveBottomDp)
                 ) {
             when (val dest = currentDestination) {
-                is Destination.Discover -> DiscoverScreen(
-                    onItemClick = { item, jellyfinId ->
-                        bottomTab = Destination.Discover
-                        currentDestination = if (jellyfinId != null) {
-                            Destination.JellyfinDetail(jellyfinId, parent = Destination.Discover)
-                        } else {
-                            Destination.Detail(item)
-                        }
+                is Destination.Hlavni -> MainScreen(
+                    onTraktItemClick = { item ->
+                        bottomTab = Destination.Hlavni
+                        currentDestination = Destination.Detail(item)
                     },
-                    modifier = Modifier.fillMaxSize(),
-                )
-                is Destination.Watchlist -> WatchlistScreen(
-                    onItemClick = { item, jellyfinId ->
-                        bottomTab = Destination.Watchlist
-                        currentDestination = if (jellyfinId != null) {
-                            Destination.JellyfinDetail(jellyfinId, parent = Destination.Watchlist)
-                        } else {
-                            Destination.Detail(item)
-                        }
+                    onJellyfinItemClick = { jellyfinId ->
+                        bottomTab = Destination.Hlavni
+                        currentDestination = Destination.JellyfinDetail(jellyfinId, parent = Destination.Hlavni)
                     },
-                    modifier = Modifier.fillMaxSize(),
-                )
-                is Destination.Jellyfin -> JellyfinBrowserScreen(
-                    onLibraryClick = { libraryId, libraryName, collectionType ->
+                    onOpenLibrary = { libraryId, libraryName, collectionType ->
                         currentDestination = Destination.JellyfinLibrary(
                             libraryId = libraryId,
                             libraryName = libraryName,
@@ -340,7 +319,7 @@ fun ShowlyfinPhoneApp() {
                     parentItemType = dest.parentItemType,
                     onBack = {
                         currentDestination = if (dest.ancestors.isEmpty()) {
-                            Destination.Jellyfin
+                            Destination.Hlavni
                         } else {
                             dest.ancestors.last().toDestination(dest.ancestors.dropLast(1))
                         }
@@ -478,22 +457,10 @@ fun ShowlyfinPhoneApp() {
                     ) {
                         NavigationBar(containerColor = Color(0xFF1A1A2E)) {
                             NavigationBarItem(
-                                selected = bottomTab is Destination.Discover,
-                                onClick = { bottomTab = Destination.Discover; currentDestination = Destination.Discover },
-                                icon = { Icon(Icons.Default.Explore, contentDescription = null) },
-                                label = { Text("Discover") },
-                            )
-                            NavigationBarItem(
-                                selected = bottomTab is Destination.Watchlist,
-                                onClick = { bottomTab = Destination.Watchlist; currentDestination = Destination.Watchlist },
-                                icon = { Icon(Icons.Default.Bookmarks, contentDescription = null) },
-                                label = { Text("Watchlist") },
-                            )
-                            NavigationBarItem(
-                                selected = bottomTab is Destination.Jellyfin,
-                                onClick = { bottomTab = Destination.Jellyfin; currentDestination = Destination.Jellyfin },
-                                icon = { Icon(Icons.Default.Tv, contentDescription = null) },
-                                label = { Text("Jellyfin") },
+                                selected = bottomTab is Destination.Hlavni,
+                                onClick = { bottomTab = Destination.Hlavni; currentDestination = Destination.Hlavni },
+                                icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                                label = { Text("Hlavní") },
                             )
                             NavigationBarItem(
                                 selected = bottomTab is Destination.Uploader,

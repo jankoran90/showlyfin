@@ -124,7 +124,7 @@ class JellyfinLibraryItemsViewModel @Inject constructor(
                     recursive = useRecursive,
                     sortBy = listOf(sortBy),
                     sortOrder = listOf(sortOrder),
-                    fields = listOf(ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
+                    fields = listOf(ItemFields.PRIMARY_IMAGE_ASPECT_RATIO, ItemFields.PROVIDER_IDS),
                     limit = 200,
                 ).content
                 val items = result.items.map { it.toJellyfinItem(serverUrl, token) }
@@ -145,4 +145,6 @@ private fun BaseItemDto.toJellyfinItem(serverUrl: String, token: String) = Jelly
     isFolder = isFolder == true,
     progressPct = userData?.playedPercentage?.toInt(),
     watched = userData?.played == true,
+    tmdbId = providerIds?.get("Tmdb")?.toLongOrNull(),
+    imdbId = providerIds?.get("Imdb")?.takeIf { it.isNotBlank() },
 )
