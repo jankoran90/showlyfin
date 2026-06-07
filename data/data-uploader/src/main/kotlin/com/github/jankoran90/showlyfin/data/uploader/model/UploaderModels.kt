@@ -133,6 +133,19 @@ data class RdLibraryResponse(
     val unmatched: List<String> = emptyList(),
 )
 
+// ── ČSFD (scrape na BACKENDU — server zvládá Anubis anti-bot, zařízení ne kvůli ──
+//     cookie-propagation bugu po pass-challenge) ───────────────────────────────────
+/** Odpověď /api/csfd/plot — český popis filmu z ČSFD. */
+data class CsfdPlotResponse(val plot: String? = null)
+/** Jedna ČSFD recenze (/api/csfd/reviews). rating je 0–100 % (stars×20). */
+data class CsfdReviewItem(
+    val username: String = "",
+    val rating: Int? = null,
+    val text: String = "",
+    val date: String = "",
+)
+data class CsfdReviewsResponse(val reviews: List<CsfdReviewItem> = emptyList())
+
 // ── Stremio / Comet stream filter (Nastavení) ─────────────────────────────────
 
 data class StreamSizeRange(val min: Double = 2.0, val max: Double = 8.0)

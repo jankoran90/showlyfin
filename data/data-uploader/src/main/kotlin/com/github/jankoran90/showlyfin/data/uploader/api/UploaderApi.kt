@@ -75,6 +75,18 @@ internal class UploaderApi(
         return service.rdSearch("$base/api/stremio/rd/search$q", cookie).streams
     }
 
+    override suspend fun getCsfdPlot(baseUrl: String, sessionCookie: String, csfdId: Long): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.getCsfdPlot("$base/api/csfd/plot?csfd_id=$csfdId", cookie).plot
+    }
+
+    override suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem> {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.getCsfdReviews("$base/api/csfd/reviews?csfd_id=$csfdId", cookie).reviews
+    }
+
     override suspend fun rdMatch(baseUrl: String, sessionCookie: String, items: List<RdMatchItem>): List<Int> {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

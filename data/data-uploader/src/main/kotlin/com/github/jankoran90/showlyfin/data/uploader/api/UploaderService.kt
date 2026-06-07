@@ -23,6 +23,10 @@ interface UploaderService {
     @GET suspend fun getSubtitles(@Url url: String, @Header("Cookie") cookie: String): SubtitlesResponse
     @GET @Streaming suspend fun downloadSubtitle(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
 
+    // ČSFD popis + recenze (scrape na backendu, server zvládá Anubis)
+    @GET suspend fun getCsfdPlot(@Url url: String, @Header("Cookie") cookie: String): CsfdPlotResponse
+    @GET suspend fun getCsfdReviews(@Url url: String, @Header("Cookie") cookie: String): CsfdReviewsResponse
+
     // TMM Pipeline
     @GET suspend fun getTmmSession(@Url url: String, @Header("Cookie") cookie: String): TmmSession
     @POST suspend fun tmmSearch(@Url url: String, @Header("Cookie") cookie: String, @Body request: TmmSearchRequest): TmmSearchResponse

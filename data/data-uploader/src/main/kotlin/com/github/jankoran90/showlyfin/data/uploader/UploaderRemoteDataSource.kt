@@ -83,4 +83,8 @@ interface UploaderRemoteDataSource {
         baseUrl: String, sessionCookie: String, titulkyId: String,
         season: Int? = null, episode: Int? = null, runtime: Int? = null,
     ): SubtitleDownload
+
+    // ČSFD popis + recenze přes backend (server zvládá Anubis anti-bot; csfdId se páruje on-device přes Wikidata)
+    suspend fun getCsfdPlot(baseUrl: String, sessionCookie: String, csfdId: Long): String?
+    suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem>
 }

@@ -681,9 +681,9 @@ class DetailViewModel @Inject constructor(
             }
             _uiState.update { it.copy(csfdId = csfdId) }
             coroutineScope {
-                val plotDeferred = async { csfdRepository.getCzechPlot(csfdId) }
+                val plotDeferred = async { fetchCsfdPlot(csfdId) }
                 val ratingDeferred = async { csfdScraper.scrapeRating(csfdId) }
-                val reviewsDeferred = async { csfdScraper.scrapeReviews(csfdId).take(3) }
+                val reviewsDeferred = async { fetchCsfdReviews(csfdId).take(3) }
                 _uiState.update {
                     it.copy(
                         csfdPlot = plotDeferred.await(),
@@ -696,5 +696,24 @@ class DetailViewModel @Inject constructor(
         } catch (e: Throwable) {
             _uiState.update { it.copy(isCsfdLoading = false) }
         }
+    }
+
+    // ČSFD popis/recenze: PRIMÁRNĚ přes backend (server zvládá Anubis; on-device scrape padá kvůli
+    // cookie-propagation bugu po pass-challenge). On-device scraper jen jako fallback, když uploader není nastaven.
+    private suspend fun fetchCsfdPlot(csfdId: Long): String? {
+        if (uploaderBaseUrl.isNotBlank()) {
+            runCatching { uploaderDs.getCsfdPlot(uploaderBaseUrl, uploaderCookie, csfdId) }
+                .getOrNull()?.takeIf { it.isNotBlank() }?.let { return it }
+        }
+        return runCatching { csfdRepository.getCzechPlot(csfdId) }.getOrNull()
+    }
+
+    private suspend fun fetchCsfdReviews(csfdId: Long): List<com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw> {
+        if (uploaderBaseUrl.isNotBlank()) {
+            runCatching { uploaderDs.getCsfdReviews(uploaderBaseUrl, uploaderCookie, csfdId) }
+                .getOrNull()?.takeIf { it.isNotEmpty() }
+                ?.let { list -> return list.map { com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw(it.username, it.rating, it.text, it.date) } }
+        }
+        return runCatching { csfdScraper.scrapeReviews(csfdId) }.getOrDefault(emptyList())
     }
 }

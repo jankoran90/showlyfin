@@ -33,6 +33,11 @@ import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStreamQuality
 import com.github.jankoran90.showlyfin.feature.detail.RdDownloadState
 
+private val TV_RELEASE_HINT = Regex(
+    """(?i)(\b(1080|2160|720|480)p\b|\bx26[45]\b|\bh\.?26[45]\b|\bhevc\b|\bblu-?ray\b|\bweb-?dl\b|\bwebrip\b|\bbdrip\b|\bremux\b|\b(19|20)\d{2}\b|-[A-Za-z0-9]{2,}$)""",
+)
+private fun tvLooksLikeRelease(s: String): Boolean = s.isNotBlank() && TV_RELEASE_HINT.containsMatchIn(s)
+
 private fun tvQualityBadge(q: UploaderStreamQuality): String = buildList {
     q.resolution?.let { add(it) }
     q.videoCodec?.let { add(it) }
@@ -84,11 +89,20 @@ private fun TvStreamRow(stream: UploaderStream, action: String, onClick: () -> U
                     stream.quality.rdReady -> "RD ✓ "
                     else -> ""
                 }
+                // Release filename viditelně (Comet → description, rdSearch → name) — viz phone picker.
+                val nameText = stream.name?.replace("\n", " ")?.trim().orEmpty()
+                val descText = stream.description?.replace("\n", " ")?.trim().orEmpty()
+                val releaseText = when {
+                    tvLooksLikeRelease(descText) -> descText
+                    tvLooksLikeRelease(nameText) -> nameText
+                    nameText.isNotBlank() -> nameText
+                    else -> descText
+                }.ifBlank { "Stream" }
                 Text(
-                    prefix + stream.name?.replace("\n", " ")?.trim().orEmpty().ifBlank { "Stream" },
+                    prefix + releaseText,
                     color = Color.White,
                     style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val badge = tvQualityBadge(stream.quality)

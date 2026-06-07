@@ -40,6 +40,12 @@ import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStreamQuality
 
+// Vypadá řetězec jako release filename? (rozlišení / rok / kodek / zdroj / release grupa -XXX)
+private val RELEASE_HINT = Regex(
+    """(?i)(\b(1080|2160|720|480)p\b|\bx26[45]\b|\bh\.?26[45]\b|\bhevc\b|\bblu-?ray\b|\bweb-?dl\b|\bwebrip\b|\bbdrip\b|\bremux\b|\b(19|20)\d{2}\b|-[A-Za-z0-9]{2,}$)""",
+)
+internal fun looksLikeRelease(s: String): Boolean = s.isNotBlank() && RELEASE_HINT.containsMatchIn(s)
+
 internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
     q.resolution?.let { add(it) }
     q.videoCodec?.let { add(if (q.hdr) "$it HDR" else it) }
@@ -92,12 +98,37 @@ internal fun StreamRow(
     ) {
         if (showSourceBadge) SourceBadge(stream)
         Column(Modifier.weight(1f)) {
+            // Release filename viditelně — u Comet zdrojů je v `description` (behaviorHints.filename),
+            // u rdSearch/saved v `name`. Bereme to, co vypadá jako release (rozlišení/rok/grupa),
+            // ať uživatel pozná konkrétní release (důležité i pro párování titulků).
+            val nameText = stream.name?.replace("\n", " ")?.trim().orEmpty()
+            val descText = stream.description?.replace("\n", " ")?.trim().orEmpty()
+            val releaseText = when {
+                looksLikeRelease(descText) -> descText
+                looksLikeRelease(nameText) -> nameText
+                nameText.isNotBlank() -> nameText
+                else -> descText
+            }.ifBlank { "Stream" }
             Text(
-                text = stream.name?.replace("\n", " ")?.trim().orEmpty().ifBlank { "Stream" },
+                text = releaseText,
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            // Druhotná informace (to z name/description, co není release filename) — když přidává hodnotu.
+            val secondary = listOf(nameText, descText)
+                .firstOrNull { it.isNotBlank() && it != releaseText }
+                ?.takeIf { it.length <= 80 }
+            if (secondary != null) {
+                Text(
+                    text = secondary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             val badge = qualityBadge(stream.quality)
             if (badge.isNotBlank()) {
                 Text(
