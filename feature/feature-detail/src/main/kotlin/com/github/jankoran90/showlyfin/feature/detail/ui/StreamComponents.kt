@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,9 +45,35 @@ internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
     q.csfdPct?.let { add("ČSFD $it%") }
 }.joinToString(" · ")
 
+/**
+ * Označení zdroje streamu (jen Stremio picker):
+ * RD ✓ = na RealDebrid připravené (přehraje se hned), RD = přes RealDebrid (chvíli se připraví),
+ * Addon = addon-proxy odkaz (aiostreams apod.) — nespolehlivý, často „Invalid link".
+ */
+@Composable
+private fun SourceBadge(stream: UploaderStream) {
+    val (label, color) = when {
+        stream.infoHash != null && stream.quality.rdReady -> "RD ✓" to Color(0xFF2E7D32)
+        stream.infoHash != null -> "RD" to MaterialTheme.colorScheme.primary
+        else -> "Addon" to Color(0xFFB26A00)
+    }
+    Box(
+        Modifier
+            .background(color, RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun StreamRow(stream: UploaderStream, trailingIcon: @Composable () -> Unit, onClick: () -> Unit) {
+internal fun StreamRow(
+    stream: UploaderStream,
+    trailingIcon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    showSourceBadge: Boolean = false,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -55,6 +82,7 @@ internal fun StreamRow(stream: UploaderStream, trailingIcon: @Composable () -> U
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (showSourceBadge) SourceBadge(stream)
         Column(Modifier.weight(1f)) {
             Text(
                 text = stream.name?.replace("\n", " ")?.trim().orEmpty().ifBlank { "Stream" },
@@ -101,6 +129,7 @@ internal fun StreamPickerSheet(
                         stream = s,
                         trailingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát") },
                         onClick = { if (!isResolving) onPlay(s) },
+                        showSourceBadge = true,
                     )
                     HorizontalDivider()
                 }

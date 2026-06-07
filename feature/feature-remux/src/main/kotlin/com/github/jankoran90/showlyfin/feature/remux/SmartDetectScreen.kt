@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.remux
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -155,6 +156,23 @@ private fun ConfirmContent(
 }
 
 @Composable
+private fun SourceBadge(stream: UploaderStream) {
+    val (label, color) = when {
+        stream.infoHash != null && stream.quality.rdReady -> "RD ✓" to androidx.compose.ui.graphics.Color(0xFF2E7D32)
+        stream.infoHash != null -> "RD" to MaterialTheme.colorScheme.primary
+        else -> "Addon" to androidx.compose.ui.graphics.Color(0xFFB26A00)
+    }
+    Box(
+        Modifier
+            .padding(end = 6.dp)
+            .background(color, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.White)
+    }
+}
+
+@Composable
 private fun StreamRow(stream: UploaderStream, selected: Boolean, onClick: (() -> Unit)? = null) {
     val label = buildString {
         stream.name?.let { append(it) }
@@ -170,6 +188,7 @@ private fun StreamRow(stream: UploaderStream, selected: Boolean, onClick: (() ->
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        SourceBadge(stream)
         Text(
             label,
             style = MaterialTheme.typography.bodySmall,
