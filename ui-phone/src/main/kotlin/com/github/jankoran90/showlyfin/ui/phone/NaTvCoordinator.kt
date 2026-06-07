@@ -21,7 +21,7 @@ class NaTvCoordinator @Inject constructor(
     private val _messages = Channel<String>(capacity = Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
 
-    fun playOnTv(item: MediaItem) {
+    fun playOnTv(item: MediaItem, knownJellyfinId: String? = null) {
         viewModelScope.launch {
             val url = prefs.getString("jellyfin_server_url", "") ?: ""
             val token = prefs.getString("jellyfin_token", "") ?: ""
@@ -29,7 +29,10 @@ class NaTvCoordinator @Inject constructor(
                 _messages.send("Jellyfin není nastaven")
                 return@launch
             }
-            val itemId = naTvService.findJellyfinItemId(url, token, item.imdbId, item.tmdbId)
+            // Preferuj už vyřešené Jellyfin id z detailu (pokrývá filmy v kolekcích,
+            // kde findJellyfinItemId přes recursive dotaz vrací BoxSet a film nenajde).
+            val itemId = knownJellyfinId
+                ?: naTvService.findJellyfinItemId(url, token, item.imdbId, item.tmdbId)
             if (itemId == null) {
                 _messages.send("Film není v Jellyfin knihovně")
                 return@launch

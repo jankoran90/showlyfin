@@ -73,7 +73,7 @@ private sealed interface Destination {
     data object Settings : Destination
 
     // Sub-screens
-    data class Detail(val item: MediaItem) : Destination
+    data class Detail(val item: MediaItem, val parent: Destination) : Destination
     data class SmartDetect(val imdbId: String, val title: String, val titleCs: String, val year: Int?, val mediaType: String) : Destination
     data class ReviewStep(val sid: String, val fid: String, val filename: String) : Destination
     data class MoveStep(val sid: String) : Destination
@@ -210,7 +210,7 @@ fun ShowlyfinPhoneApp() {
                     posterPath = null,
                     backdropPath = null,
                 )
-                currentDestination = Destination.Detail(stub)
+                currentDestination = Destination.Detail(stub, parent = currentDestination)
             }
         }
 
@@ -270,6 +270,7 @@ fun ShowlyfinPhoneApp() {
                 is Destination.JellyfinDetail -> current.parent
                 is Destination.JellyfinPlayback -> current.parent
                 is Destination.Player -> current.parent
+                is Destination.Detail -> current.parent
                 else -> bottomTab
             }
         }
@@ -297,7 +298,7 @@ fun ShowlyfinPhoneApp() {
                 is Destination.Hlavni -> MainScreen(
                     onTraktItemClick = { item ->
                         bottomTab = Destination.Hlavni
-                        currentDestination = Destination.Detail(item)
+                        currentDestination = Destination.Detail(item, parent = Destination.Hlavni)
                     },
                     onJellyfinItemClick = { jellyfinId ->
                         bottomTab = Destination.Hlavni
@@ -364,7 +365,7 @@ fun ShowlyfinPhoneApp() {
                 )
                 is Destination.Detail -> DetailScreen(
                     item = dest.item,
-                    onBack = { currentDestination = bottomTab },
+                    onBack = { currentDestination = dest.parent },
                     onSmartDetect = { item ->
                         currentDestination = Destination.SmartDetect(
                             imdbId = item.imdbId ?: "",
@@ -374,7 +375,7 @@ fun ShowlyfinPhoneApp() {
                             mediaType = item.type.name.lowercase(),
                         )
                     },
-                    onNaTv = { item -> naTvCoordinator.playOnTv(item) },
+                    onNaTv = { item, jfId -> naTvCoordinator.playOnTv(item, jfId) },
                     onStremio = onStremioItem,
                     onShare = onShareItem,
                     onCollectionPartClick = onCollectionPartClick,
