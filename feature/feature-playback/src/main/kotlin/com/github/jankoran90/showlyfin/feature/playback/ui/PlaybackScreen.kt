@@ -95,15 +95,13 @@ fun PlaybackScreen(
             // Addon/debrid servery (AIOStreams apod.) bez browser UA často vrátí HTML/redirect
             // místo videa → ExoPlayer pak hlásí ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
             .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
-        val cacheFactory = CacheDataSource.Factory()
-            .setCache(PlaybackCache.get(context))
-            .setUpstreamDataSourceFactory(upstream)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        // Disk CacheDataSource odstraněn — způsoboval ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE
+        // u velkých souborů (3GB mkv). Velký in-memory buffer níže pokrývá jitter (RD/Jellyfin).
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(60_000, 300_000, 5_000, 10_000)
             .build()
         ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(upstream))
             .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
