@@ -311,14 +311,18 @@ class DetailViewModel @Inject constructor(
         if (_uiState.value.isResolvingStream) return
         val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: _uiState.value.item?.title.orEmpty()
-        val direct = stream.url
-        if (!direct.isNullOrBlank()) {
-            _uiState.update { it.copy(showStreamPicker = false, pendingPlaybackUrl = direct, pendingPlaybackTitle = title) }
-            return
-        }
+        // Preferuj RD resolve přes infoHash (čistá přímá .mkv URL) PŘED addon URL —
+        // addon-proxy odkazy (aiostreams/elfhosted) jsou IP/čas-vázané a často vrátí
+        // "Invalid link" slate → ExoPlayer ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
         val infoHash = stream.infoHash
         if (infoHash.isNullOrBlank()) {
-            _uiState.update { it.copy(streamError = "Stream nemá URL ani infoHash.") }
+            val direct = stream.url
+            if (!direct.isNullOrBlank()) {
+                timber.log.Timber.i("[Stremio] play direct url (no infoHash) addon=${stream.addon}")
+                _uiState.update { it.copy(showStreamPicker = false, pendingPlaybackUrl = direct, pendingPlaybackTitle = title) }
+            } else {
+                _uiState.update { it.copy(streamError = "Stream nemá URL ani infoHash.") }
+            }
             return
         }
         _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
