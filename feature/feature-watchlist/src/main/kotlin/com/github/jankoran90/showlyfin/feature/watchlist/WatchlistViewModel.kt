@@ -125,7 +125,7 @@ class WatchlistViewModel @Inject constructor(
 
     private fun computeRdMatch() {
         if (uploaderBaseUrl.isBlank()) {
-            _uiState.update { it.copy(rdOnly = false, error = "Uploader není nastaven — filtr „Na RD" nelze použít.") }
+            _uiState.update { it.copy(rdOnly = false, error = "Uploader není nastaven — filtr Na RD nelze použít.") }
             return
         }
         rdMatchJob?.cancel()
