@@ -318,13 +318,27 @@ class DetailViewModel @Inject constructor(
         val strict = _uiState.value.streamStrict
         _uiState.update { it.copy(isLoadingStreams = true, streamError = null, streams = emptyList()) }
         viewModelScope.launch {
-            // Backend vrací už seřazené (cached → CZ/SK → fallbackOrder kaskáda) a ořezané dle prefs.
+            // RD-first režim (DebridSearch) z prefs: off | hash (server-side v /streams) | search | both.
+            val rdMode = runCatching { uploaderDs.getStreamFilter(uploaderBaseUrl, uploaderCookie).rdFirstMode }.getOrDefault("both")
+            // DebridSearch dle názvu (search/both) — prohledá RD účet i mimo addon výsledky, paralelně.
+            val savedDeferred = if (rdMode == "search" || rdMode == "both") {
+                async { runCatching { uploaderDs.rdSearch(uploaderBaseUrl, uploaderCookie, item.title, item.year) }.getOrDefault(emptyList()) }
+            } else null
+            // Backend vrací už seřazené (rdSaved → cached → CZ/SK → fallbackOrder) a ořezané dle prefs.
             runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, strict = strict) }
                 .onSuccess { list ->
-                    timber.log.Timber.i("[Stremio] streams=${list.size} strict=$strict (cached=${list.count { it.quality.rdReady }} dl=${list.count { it.quality.rdDownloadable }}) imdb=$imdb")
-                    _uiState.update { it.copy(isLoadingStreams = false, streams = list, streamError = if (list.isEmpty()) "Žádné streamy nenalezeny." else null) }
+                    val saved = savedDeferred?.await().orEmpty()
+                    val savedHashes = saved.mapNotNull { it.infoHash?.lowercase() }.toSet()
+                    val combined = saved + list.filterNot { (it.infoHash?.lowercase() ?: "") in savedHashes }
+                    timber.log.Timber.i("[Stremio] streams=${list.size} rdSearch=${saved.size} strict=$strict (cached=${list.count { it.quality.rdReady }} dl=${list.count { it.quality.rdDownloadable }}) imdb=$imdb")
+                    _uiState.update { it.copy(isLoadingStreams = false, streams = combined, streamError = if (combined.isEmpty()) "Žádné streamy nenalezeny." else null) }
                 }
-                .onFailure { e -> timber.log.Timber.w(e, "[Stremio] getStreams FAILED imdb=$imdb url=$uploaderBaseUrl"); _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") } }
+                .onFailure { e ->
+                    timber.log.Timber.w(e, "[Stremio] getStreams FAILED imdb=$imdb url=$uploaderBaseUrl")
+                    val saved = savedDeferred?.await().orEmpty()
+                    if (saved.isNotEmpty()) _uiState.update { it.copy(isLoadingStreams = false, streams = saved, streamError = null) }
+                    else _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") }
+                }
         }
     }
 
@@ -354,7 +368,17 @@ class DetailViewModel @Inject constructor(
             }
             return
         }
-        // 3) necachovaný torrent (infoHash / uncached Comet) → async add na RD + progress bar (Fáze F).
+        // 3) už uložené na RD (DebridSearch) / cached infoHash → rychlý resolve, bez progress baru.
+        if (!infoHash.isNullOrBlank() && (stream.quality.rdSaved || stream.quality.rdReady)) {
+            _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
+            viewModelScope.launch {
+                runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, stream.fileIdx) }
+                    .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
+                    .onFailure { e -> timber.log.Timber.w(e, "[Stremio] saved resolve FAILED infoHash=$infoHash"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
+            }
+            return
+        }
+        // 4) necachovaný torrent (infoHash / uncached Comet) → async add na RD + progress bar (Fáze F).
         if (!cometPath.isNullOrBlank() || !infoHash.isNullOrBlank()) {
             startRdDownload(stream, title)
             return

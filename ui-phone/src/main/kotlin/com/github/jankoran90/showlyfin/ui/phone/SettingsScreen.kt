@@ -751,6 +751,23 @@ private fun StremioFilterSection(
                     FilterSwitchRow("Vždy zahrnout CZ/SK", sf.guaranteeCzSk) { v -> onUpdate { it.copy(guaranteeCzSk = v) } }
                     Spacer(Modifier.height(12.dp))
 
+                    FilterLabel("RealDebrid — už uložené (DebridSearch)")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            "off" to "Vypnuto",
+                            "hash" to "Označit v nabídce",
+                            "search" to "Hledat na RD",
+                            "both" to "Obojí",
+                        ).forEach { (key, lbl) ->
+                            FilterChip(selected = sf.rdFirstMode == key, onClick = { onUpdate { it.copy(rdFirstMode = key) } }, label = { Text(lbl) })
+                        }
+                    }
+                    Text(
+                        "Co už máš na RealDebrid → ukáže se nahoře jako 💾 a přehraje hned (i při opakovaném sledování).",
+                        style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.55f),
+                    )
+                    Spacer(Modifier.height(12.dp))
+
                     Text("Přesné filtry (jen v režimu Přesné)", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
                     Spacer(Modifier.height(8.dp))
                     MultiChipRow("Kodek", listOf("HEVC", "AV1", "AVC"), sf.videoCodecs) { v -> onUpdate { it.copy(videoCodecs = toggleIn(it.videoCodecs, v)) } }

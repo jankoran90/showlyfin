@@ -58,6 +58,7 @@ internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
 @Composable
 private fun SourceBadge(stream: UploaderStream) {
     val (label, color) = when {
+        stream.quality.rdSaved -> "💾 RD" to Color(0xFF6A1B9A)         // už uložené na RD (DebridSearch) — hraje hned
         stream.quality.rdReady -> "RD ✓" to Color(0xFF2E7D32)          // cached — hraje hned
         stream.quality.rdDownloadable -> "RD ⬇" to Color(0xFFE08915)   // necachované — RD stáhne
         !stream.cometPath.isNullOrBlank() -> "RD" to Color(0xFF2E7D32)

@@ -8,6 +8,7 @@ interface UploaderRemoteDataSource {
     suspend fun resolveCometStream(baseUrl: String, sessionCookie: String, cometPath: String): String
     suspend fun rdAdd(baseUrl: String, sessionCookie: String, infoHash: String?, fileIdx: Int, cometPath: String?): UploaderRdAddResponse
     suspend fun rdProgress(baseUrl: String, sessionCookie: String, torrentId: String, fileIdx: Int): UploaderRdProgressResponse
+    suspend fun rdSearch(baseUrl: String, sessionCookie: String, title: String, year: Int?): List<UploaderStream>
     suspend fun getStreamFilter(baseUrl: String, sessionCookie: String): StreamFilterPrefs
     suspend fun putStreamFilter(baseUrl: String, sessionCookie: String, prefs: StreamFilterPrefs)
     suspend fun capture(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse

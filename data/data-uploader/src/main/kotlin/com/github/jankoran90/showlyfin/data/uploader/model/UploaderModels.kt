@@ -14,6 +14,7 @@ data class UploaderStreamQuality(
     val score: Int = 0,
     @SerializedName("rdReady") val rdReady: Boolean = false,
     @SerializedName("rdDownloadable") val rdDownloadable: Boolean = false,
+    @SerializedName("rdSaved") val rdSaved: Boolean = false,   // už uložené na RD (DebridSearch)
     val hdr: Boolean = false,
     @SerializedName("csfdPct") val csfdPct: Int? = null,
     val seeders: Int? = null,
@@ -93,6 +94,7 @@ data class StreamFilterPrefs(
     val strict: Boolean = true,
     val fallbackOrder: List<String> = listOf("cached", "czsk", "res4k", "sizeSweet", "hevcSdr"),
     val sizeSweetSpot: StreamSizeRange = StreamSizeRange(),
+    val rdFirstMode: String = "both",   // RD-first / DebridSearch: off | hash | search | both
 )
 
 data class UploaderCaptureRequest(

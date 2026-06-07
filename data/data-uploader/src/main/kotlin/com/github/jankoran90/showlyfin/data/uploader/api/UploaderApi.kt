@@ -48,6 +48,16 @@ internal class UploaderApi(
         return service.rdProgress("$base/api/stremio/rd/progress/$torrentId?fileIdx=$fileIdx", cookie)
     }
 
+    override suspend fun rdSearch(baseUrl: String, sessionCookie: String, title: String, year: Int?): List<UploaderStream> {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val q = buildString {
+            append("?title=${java.net.URLEncoder.encode(title, "UTF-8")}")
+            if (year != null) append("&year=$year")
+        }
+        return service.rdSearch("$base/api/stremio/rd/search$q", cookie).streams
+    }
+
     override suspend fun getStreamFilter(baseUrl: String, sessionCookie: String): StreamFilterPrefs {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

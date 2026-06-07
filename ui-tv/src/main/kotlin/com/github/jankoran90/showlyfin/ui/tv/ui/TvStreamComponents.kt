@@ -79,8 +79,13 @@ private fun TvStreamRow(stream: UploaderStream, action: String, onClick: () -> U
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(Modifier.weight(1f)) {
+                val prefix = when {
+                    stream.quality.rdSaved -> "💾 "
+                    stream.quality.rdReady -> "RD ✓ "
+                    else -> ""
+                }
                 Text(
-                    stream.name?.replace("\n", " ")?.trim().orEmpty().ifBlank { "Stream" },
+                    prefix + stream.name?.replace("\n", " ")?.trim().orEmpty().ifBlank { "Stream" },
                     color = Color.White,
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
