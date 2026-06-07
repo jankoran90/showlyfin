@@ -115,6 +115,8 @@ fun DetailScreen(
             isLoading = uiState.isLoadingStreams,
             isResolving = uiState.isResolvingStream,
             error = uiState.streamError,
+            strict = uiState.streamStrict,
+            onStrictChange = { viewModel.setStreamStrict(it) },
             onPlay = { viewModel.playStream(it) },
             onDismiss = { viewModel.dismissStreamPicker() },
         )

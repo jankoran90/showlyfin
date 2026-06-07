@@ -8,6 +8,8 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.model.StreamFilterPrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +33,12 @@ data class SettingsUiState(
     val maxParentalRating: Int? = null,
     val profiles: List<ProfileEntity> = emptyList(),
     val activeProfileId: Long? = null,
+    // Stremio / Comet filtr výsledků
+    val streamFilter: StreamFilterPrefs? = null,
+    val streamFilterLoading: Boolean = false,
+    val streamFilterError: String? = null,
+    // Živé logování (Debug)
+    val liveLogging: Boolean = false,
 )
 
 @HiltViewModel
@@ -38,6 +46,7 @@ class SettingsViewModel @Inject constructor(
     private val traktAuthManager: TraktAuthManager,
     private val parentalControlsRepository: ParentalControlsRepository,
     private val profileRepository: ProfileRepository,
+    private val uploaderDs: UploaderRemoteDataSource,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -45,7 +54,11 @@ class SettingsViewModel @Inject constructor(
         private const val KEY_URL = "jellyfin_server_url"
         private const val KEY_TOKEN = "jellyfin_token"
         private const val KEY_USER_ID = "jellyfin_user_id"
+        const val KEY_LIVE_LOGGING = "live_logging_enabled"
     }
+
+    private val uploaderBase get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -82,6 +95,54 @@ class SettingsViewModel @Inject constructor(
         profileRepository.activeProfile
             .onEach { active -> _uiState.update { it.copy(activeProfileId = active?.id) } }
             .launchIn(viewModelScope)
+        _uiState.update { it.copy(liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false)) }
+        loadStreamFilter()
+    }
+
+    // ── Stremio / Comet filtr ─────────────────────────────────────────────────
+
+    fun loadStreamFilter() {
+        if (uploaderBase.isBlank()) return
+        _uiState.update { it.copy(streamFilterLoading = true, streamFilterError = null) }
+        viewModelScope.launch {
+            runCatching { uploaderDs.getStreamFilter(uploaderBase, uploaderCookie) }
+                .onSuccess { sf -> _uiState.update { it.copy(streamFilter = sf, streamFilterLoading = false) } }
+                .onFailure { e -> _uiState.update { it.copy(streamFilterLoading = false, streamFilterError = e.message) } }
+        }
+    }
+
+    /** Lokálně updatuje + uloží na backend (merge-safe endpoint). */
+    fun updateStreamFilter(transform: (StreamFilterPrefs) -> StreamFilterPrefs) {
+        val current = _uiState.value.streamFilter ?: return
+        val updated = transform(current)
+        _uiState.update { it.copy(streamFilter = updated) }
+        if (uploaderBase.isBlank()) return
+        viewModelScope.launch {
+            runCatching { uploaderDs.putStreamFilter(uploaderBase, uploaderCookie, updated) }
+                .onFailure { e -> _uiState.update { it.copy(streamFilterError = e.message) } }
+        }
+    }
+
+    /** Posun položky ve fallbackOrder (dir = -1 nahoru, +1 dolů). */
+    fun moveFallback(index: Int, dir: Int) {
+        val sf = _uiState.value.streamFilter ?: return
+        val list = sf.fallbackOrder.toMutableList()
+        val target = index + dir
+        if (index !in list.indices || target !in list.indices) return
+        val tmp = list[index]; list[index] = list[target]; list[target] = tmp
+        updateStreamFilter { it.copy(fallbackOrder = list) }
+    }
+
+    fun toggleFallback(key: String, enabled: Boolean) {
+        val sf = _uiState.value.streamFilter ?: return
+        val list = sf.fallbackOrder.toMutableList()
+        if (enabled) { if (key !in list) list.add(key) } else list.remove(key)
+        updateStreamFilter { it.copy(fallbackOrder = list) }
+    }
+
+    fun setLiveLogging(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_LIVE_LOGGING, enabled).apply()
+        _uiState.update { it.copy(liveLogging = enabled) }
     }
 
     fun switchProfile(profileId: Long) {

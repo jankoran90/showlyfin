@@ -13,6 +13,8 @@ data class UploaderStreamQuality(
     @SerializedName("bitrateMbps") val bitrateMbps: Double? = null,
     val score: Int = 0,
     @SerializedName("rdReady") val rdReady: Boolean = false,
+    @SerializedName("rdDownloadable") val rdDownloadable: Boolean = false,
+    val hdr: Boolean = false,
     @SerializedName("csfdPct") val csfdPct: Int? = null,
     val seeders: Int? = null,
     val fps: Double? = null,
@@ -25,6 +27,7 @@ data class UploaderStream(
     val url: String? = null,
     @SerializedName("infoHash") val infoHash: String? = null,
     @SerializedName("fileIdx") val fileIdx: Int = 0,
+    @SerializedName("cometPath") val cometPath: String? = null,
     val addon: String? = null,
     val quality: UploaderStreamQuality = UploaderStreamQuality(),
     val fps: Double? = null,
@@ -36,13 +39,33 @@ data class UploaderStreamsResponse(
 )
 
 data class UploaderResolveRequest(
-    @SerializedName("infoHash") val infoHash: String,
+    @SerializedName("infoHash") val infoHash: String? = null,
     @SerializedName("fileIdx") val fileIdx: Int = 0,
+    @SerializedName("cometPath") val cometPath: String? = null,
 )
 
 data class UploaderResolveResponse(
     val url: String? = null,
     val error: String? = null,
+)
+
+// ── Stremio / Comet stream filter (Nastavení) ─────────────────────────────────
+
+data class StreamSizeRange(val min: Double = 2.0, val max: Double = 8.0)
+
+data class StreamFilterPrefs(
+    val allowedResolutions: List<String> = listOf("4K", "1080p"),
+    val videoCodecs: List<String> = emptyList(),
+    val audioFormats: List<String> = emptyList(),
+    val channels: List<String> = emptyList(),
+    val audioLanguages: List<String> = emptyList(),
+    val minSizeGB: Double = 1.0,
+    val maxSizeGB: Double = 20.0,
+    val maxResults: Int = 20,
+    val guaranteeCzSk: Boolean = true,
+    val strict: Boolean = true,
+    val fallbackOrder: List<String> = listOf("cached", "czsk", "res4k", "sizeSweet", "hevcSdr"),
+    val sizeSweetSpot: StreamSizeRange = StreamSizeRange(),
 )
 
 data class UploaderCaptureRequest(

@@ -296,20 +296,27 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(showStreamPicker = true, streamError = "Uploader není nastaven nebo film nemá IMDB ID.") }
             return
         }
-        _uiState.update { it.copy(showStreamPicker = true, isLoadingStreams = true, streamError = null, streams = emptyList()) }
+        _uiState.update { it.copy(showStreamPicker = true) }
+        loadStreams()
+    }
+
+    /** Přepínač „Přesné hledání / Vše" v pickeru — znovu načte streamy. */
+    fun setStreamStrict(strict: Boolean) {
+        if (_uiState.value.streamStrict == strict) return
+        _uiState.update { it.copy(streamStrict = strict) }
+        loadStreams()
+    }
+
+    private fun loadStreams() {
+        val item = _uiState.value.item ?: return
+        val imdb = item.imdbId ?: return
+        val strict = _uiState.value.streamStrict
+        _uiState.update { it.copy(isLoadingStreams = true, streamError = null, streams = emptyList()) }
         viewModelScope.launch {
-            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb) }
-                .onSuccess { raw ->
-                    // Seřaď: RD ✓ (rdReady) → Torrent (infoHash) → Addon (proxy url, nespolehlivé).
-                    // Stabilní sort zachová skóre backendu uvnitř skupin.
-                    val list = raw.sortedByDescending { s ->
-                        when {
-                            s.quality.rdReady -> 2
-                            !s.infoHash.isNullOrBlank() -> 1
-                            else -> 0
-                        }
-                    }
-                    timber.log.Timber.i("[Stremio] streams=${list.size} (rdReady=${list.count { it.quality.rdReady }} torrent=${list.count { !it.infoHash.isNullOrBlank() && !it.quality.rdReady }}) imdb=$imdb")
+            // Backend vrací už seřazené (cached → CZ/SK → fallbackOrder kaskáda) a ořezané dle prefs.
+            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, strict = strict) }
+                .onSuccess { list ->
+                    timber.log.Timber.i("[Stremio] streams=${list.size} strict=$strict (cached=${list.count { it.quality.rdReady }} dl=${list.count { it.quality.rdDownloadable }}) imdb=$imdb")
                     _uiState.update { it.copy(isLoadingStreams = false, streams = list, streamError = if (list.isEmpty()) "Žádné streamy nenalezeny." else null) }
                 }
                 .onFailure { e -> timber.log.Timber.w(e, "[Stremio] getStreams FAILED imdb=$imdb url=$uploaderBaseUrl"); _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") } }
@@ -323,25 +330,28 @@ class DetailViewModel @Inject constructor(
         if (_uiState.value.isResolvingStream) return
         val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: _uiState.value.item?.title.orEmpty()
-        // Preferuj RD resolve přes infoHash (čistá přímá .mkv URL) PŘED addon URL —
-        // addon-proxy odkazy (aiostreams/elfhosted) jsou IP/čas-vázané a často vrátí
-        // "Invalid link" slate → ExoPlayer ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
+        // 1) přímá url (Ready (RD)) → hraj rovnou. 2) Comet (cometPath) → backend resolve na RD direct.
+        // 3) infoHash → RD resolve. addon-proxy odkazy (url bez RD) jsou IP/čas-vázané → až jako url-fallback.
+        val direct = stream.url
+        val cometPath = stream.cometPath
         val infoHash = stream.infoHash
-        if (infoHash.isNullOrBlank()) {
-            val direct = stream.url
-            if (!direct.isNullOrBlank()) {
-                timber.log.Timber.i("[Stremio] play direct url (no infoHash) addon=${stream.addon}")
-                _uiState.update { it.copy(showStreamPicker = false, pendingPlaybackUrl = direct, pendingPlaybackTitle = title) }
-            } else {
-                _uiState.update { it.copy(streamError = "Stream nemá URL ani infoHash.") }
-            }
+        if (!direct.isNullOrBlank()) {
+            timber.log.Timber.i("[Stremio] play direct url addon=${stream.addon}")
+            _uiState.update { it.copy(showStreamPicker = false, pendingPlaybackUrl = direct, pendingPlaybackTitle = title) }
+            return
+        }
+        if (cometPath.isNullOrBlank() && infoHash.isNullOrBlank()) {
+            _uiState.update { it.copy(streamError = "Stream nemá URL, cometPath ani infoHash.") }
             return
         }
         _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
         viewModelScope.launch {
-            runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, stream.fileIdx) }
+            runCatching {
+                if (!cometPath.isNullOrBlank()) uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, cometPath)
+                else uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash!!, stream.fileIdx)
+            }
                 .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
-                .onFailure { e -> timber.log.Timber.w(e, "[Stremio] resolveStream FAILED infoHash=$infoHash fileIdx=${stream.fileIdx}"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
+                .onFailure { e -> timber.log.Timber.w(e, "[Stremio] resolve FAILED comet=${!cometPath.isNullOrBlank()} infoHash=$infoHash"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
         }
     }
 

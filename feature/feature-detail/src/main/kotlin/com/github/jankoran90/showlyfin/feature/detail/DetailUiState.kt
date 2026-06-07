@@ -55,6 +55,7 @@ data class DetailUiState(
     val streams: List<com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream> = emptyList(),
     val streamError: String? = null,
     val isResolvingStream: Boolean = false,
+    val streamStrict: Boolean = true,   // "Přesné hledání" vs "Vše" (per-search)
     val showDownloadMenu: Boolean = false,
     val showSdilejPicker: Boolean = false,
     val isLoadingSdilej: Boolean = false,

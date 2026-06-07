@@ -1,8 +1,10 @@
 package com.github.jankoran90.showlyfin
 
 import android.app.Application
+import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.debug.BufferTree
+import com.github.jankoran90.showlyfin.debug.DebugCaptureManager
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
 import java.io.File
@@ -19,11 +21,27 @@ class ShowlyfinApp : Application() {
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         Timber.plant(BufferTree.INSTANCE)
         installCrashHandler()
+        setupLiveLogging()
         Config.initialize(
             traktClientId = BuildConfig.TRAKT_CLIENT_ID,
             traktClientSecret = BuildConfig.TRAKT_CLIENT_SECRET,
             tmdbApiKey = BuildConfig.TMDB_API_KEY,
         )
+    }
+
+    private var liveLogListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+
+    /** Toggle „Živé logování" v Nastavení → periodický upload log bufferu na server. */
+    private fun setupLiveLogging() {
+        val prefs = getSharedPreferences("trakt_prefs", MODE_PRIVATE)
+        val verInfo = "=== LIVE v${BuildConfig.VERSION_NAME} build ${BuildConfig.VERSION_CODE} ==="
+        DebugCaptureManager.setLiveLogging(verInfo, prefs.getBoolean("live_logging_enabled", false))
+        liveLogListener = SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
+            if (key == "live_logging_enabled") {
+                DebugCaptureManager.setLiveLogging(verInfo, p.getBoolean("live_logging_enabled", false))
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(liveLogListener)
     }
 
     /**

@@ -37,7 +37,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStreamQuality
 
 internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
     q.resolution?.let { add(it) }
-    q.videoCodec?.let { add(it) }
+    q.videoCodec?.let { add(if (q.hdr) "$it HDR" else it) }
     q.audioLanguage?.let { add(it) }
     q.audioFormat?.let { add(it) }
     q.channels?.let { add(it) }
@@ -53,7 +53,9 @@ internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
 @Composable
 private fun SourceBadge(stream: UploaderStream) {
     val (label, color) = when {
-        stream.quality.rdReady -> "RD ✓" to Color(0xFF2E7D32)
+        stream.quality.rdReady -> "RD ✓" to Color(0xFF2E7D32)          // cached — hraje hned
+        stream.quality.rdDownloadable -> "RD ⬇" to Color(0xFFE08915)   // necachované — RD stáhne
+        !stream.cometPath.isNullOrBlank() -> "RD" to Color(0xFF2E7D32)
         stream.infoHash != null -> "Torrent" to Color(0xFF1565C0)
         else -> "Addon" to Color(0xFFB23A3A)
     }
@@ -115,16 +117,27 @@ internal fun StreamPickerSheet(
     isLoading: Boolean,
     isResolving: Boolean,
     error: String?,
+    strict: Boolean,
+    onStrictChange: (Boolean) -> Unit,
     onPlay: (UploaderStream) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetHeader("Stream přes Stremio", Icons.Default.PlayArrow)
+        // Přepínač Přesné / Vše (per-search) — „Vše" pro málo dostupné filmy (víc výsledků).
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilterChip(selected = strict, onClick = { onStrictChange(true) }, label = { Text("Přesné") })
+            FilterChip(selected = !strict, onClick = { onStrictChange(false) }, label = { Text("Vše") })
+        }
         when {
             isLoading -> SheetCenter { CircularProgressIndicator() }
             error != null && streams.isEmpty() -> SheetMessage(error)
             else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
-                items(streams, key = { it.infoHash ?: it.url ?: it.name.orEmpty() }) { s ->
+                items(streams, key = { it.cometPath ?: it.infoHash ?: it.url ?: it.name.orEmpty() }) { s ->
                     StreamRow(
                         stream = s,
                         trailingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát") },

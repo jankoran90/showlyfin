@@ -10,10 +10,14 @@ internal class UploaderApi(
     private val service: UploaderService,
 ) : UploaderRemoteDataSource {
 
-    override suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int?, episode: Int?): List<UploaderStream> {
+    override suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int?, episode: Int?, strict: Boolean?): List<UploaderStream> {
         val base = baseUrl.trimEnd('/')
         var url = "$base/api/stremio/streams/$mediaType/$imdbId"
-        if (season != null && episode != null) url += "?season=$season&episode=$episode"
+        val params = buildList {
+            if (season != null && episode != null) { add("season=$season"); add("episode=$episode") }
+            if (strict != null) add("strict=$strict")
+        }
+        if (params.isNotEmpty()) url += "?" + params.joinToString("&")
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
         return service.getStreams(url, cookie).streams
     }
@@ -21,8 +25,27 @@ internal class UploaderApi(
     override suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int): String {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(infoHash, fileIdx))
+        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(infoHash = infoHash, fileIdx = fileIdx))
         return resp.url ?: throw IllegalStateException(resp.error ?: "RD resolve nevrátil URL")
+    }
+
+    override suspend fun resolveCometStream(baseUrl: String, sessionCookie: String, cometPath: String): String {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(cometPath = cometPath))
+        return resp.url ?: throw IllegalStateException(resp.error ?: "RD resolve nevrátil URL")
+    }
+
+    override suspend fun getStreamFilter(baseUrl: String, sessionCookie: String): StreamFilterPrefs {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.getStreamFilter("$base/api/stremio/prefs/stream-filter", cookie)
+    }
+
+    override suspend fun putStreamFilter(baseUrl: String, sessionCookie: String, prefs: StreamFilterPrefs) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        service.putStreamFilter("$base/api/stremio/prefs/stream-filter", cookie, prefs)
     }
 
     override suspend fun capture(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse {

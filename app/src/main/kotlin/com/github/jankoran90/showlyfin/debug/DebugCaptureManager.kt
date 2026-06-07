@@ -11,7 +11,13 @@ import android.view.PixelCopy
 import androidx.core.view.drawToBitmap
 import com.github.jankoran90.showlyfin.BuildConfig
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -28,6 +34,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 private const val UPLOAD_URL = "https://voice.jankoran.cz/debug/showlyfin"
+private const val LIVE_URL = "https://voice.jankoran.cz/debug/showlyfin/live"
 
 object DebugCaptureManager {
 
@@ -35,6 +42,34 @@ object DebugCaptureManager {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
+
+    // ── Živé logování — periodicky posílá log buffer na server (toggle v Nastavení) ──
+    private val liveScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var liveJob: Job? = null
+
+    fun setLiveLogging(versionInfo: String, enabled: Boolean) {
+        if (enabled) {
+            if (liveJob?.isActive == true) return
+            liveJob = liveScope.launch {
+                while (isActive) {
+                    runCatching { postLive(versionInfo) }.onFailure { Timber.w(it, "live log post failed") }
+                    delay(8000)
+                }
+            }
+            Timber.i("[live-log] zapnuto")
+        } else {
+            liveJob?.cancel()
+            liveJob = null
+            Timber.i("[live-log] vypnuto")
+        }
+    }
+
+    private fun postLive(versionInfo: String) {
+        val text = versionInfo + "\n" + BufferTree.INSTANCE.formatLog()
+        val body = text.toRequestBody("text/plain; charset=utf-8".toMediaType())
+        val req = Request.Builder().url(LIVE_URL).post(body).build()
+        client.newCall(req).execute().use { /* ignore body */ }
+    }
 
     suspend fun captureAndUpload(activity: Activity): Boolean = withContext(Dispatchers.IO) {
         val ctx = activity.applicationContext
