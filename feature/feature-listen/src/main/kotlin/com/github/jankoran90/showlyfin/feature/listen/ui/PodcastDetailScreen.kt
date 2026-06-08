@@ -8,6 +8,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,16 +27,20 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,6 +90,13 @@ fun PodcastDetailScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val queue by viewModel.queue.collectAsStateWithLifecycle()
     val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
+    val playerState by viewModel.playerState.collectAsStateWithLifecycle()
+    val playingEpisodeId = playerState.currentEpisodeId?.takeIf { playerState.isActive }
+    val quickAction = viewModel.episodeQuickAction
+    val deviceAutoDownloadOn by viewModel.deviceAutoDownloadOn.collectAsStateWithLifecycle()
+    val deviceAutoDownloadSelective = viewModel.deviceAutoDownloadSelective
+    val serverAutoDownloadOn by viewModel.serverAutoDownloadOn.collectAsStateWithLifecycle()
+    val serverAutoDownloadBusy by viewModel.serverAutoDownloadBusy.collectAsStateWithLifecycle()
     LaunchedEffect(itemId) { viewModel.load(itemId) }
 
     var actionEpisode by remember { mutableStateOf<PodcastEpisode?>(null) }
@@ -128,11 +141,21 @@ fun PodcastDetailScreen(
                     detail = state.detail!!,
                     queueSize = queue.size,
                     downloadStates = downloadStates,
+                    playingEpisodeId = playingEpisodeId,
+                    quickAction = quickAction,
+                    deviceAutoDownloadSelective = deviceAutoDownloadSelective,
+                    deviceAutoDownloadOn = deviceAutoDownloadOn,
+                    onToggleDeviceAutoDownload = { viewModel.toggleDeviceAutoDownload() },
+                    serverAutoDownloadOn = serverAutoDownloadOn,
+                    serverAutoDownloadBusy = serverAutoDownloadBusy,
+                    onToggleServerAutoDownload = { viewModel.toggleServerAutoDownload() },
                     onPlay = { ep -> onPlayEpisode(itemId, ep.id, false, null) },
                     onLongPress = { ep -> actionEpisode = ep },
                     onOpenQueue = { showQueue = true },
                     onDownload = { ep -> viewModel.downloadEpisode(ep) },
                     onCancelDownload = { ep -> viewModel.cancelDownload(ep.id) },
+                    onEnqueueEnd = { ep -> viewModel.enqueue(ep, atFront = false) },
+                    onEnqueueNext = { ep -> viewModel.enqueue(ep, atFront = true) },
                     modifier = Modifier.fillMaxSize().padding(pad),
                 )
             }
@@ -159,6 +182,7 @@ fun PodcastDetailScreen(
     if (showQueue) {
         QueueSheet(
             queue = queue,
+            playingEpisodeId = playingEpisodeId,
             onDismiss = { showQueue = false },
             onRemove = { viewModel.removeFromQueue(it) },
             onClear = { viewModel.clearQueue(); showQueue = false },
@@ -166,17 +190,27 @@ fun PodcastDetailScreen(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun DetailContent(
     detail: PodcastDetail,
     queueSize: Int,
     downloadStates: Map<String, DownloadState>,
+    playingEpisodeId: String?,
+    quickAction: Int,
+    deviceAutoDownloadSelective: Boolean,
+    deviceAutoDownloadOn: Boolean,
+    onToggleDeviceAutoDownload: () -> Unit,
+    serverAutoDownloadOn: Boolean,
+    serverAutoDownloadBusy: Boolean,
+    onToggleServerAutoDownload: () -> Unit,
     onPlay: (PodcastEpisode) -> Unit,
     onLongPress: (PodcastEpisode) -> Unit,
     onOpenQueue: () -> Unit,
     onDownload: (PodcastEpisode) -> Unit,
     onCancelDownload: (PodcastEpisode) -> Unit,
+    onEnqueueEnd: (PodcastEpisode) -> Unit,
+    onEnqueueNext: (PodcastEpisode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val podcast = detail.podcast
@@ -222,6 +256,29 @@ private fun DetailContent(
             }
         }
 
+        // Auto-download přepínače: na ABS server (ABS-nativní) + do telefonu (jen když je device scope=vybrané).
+        item {
+            FlowRow(
+                Modifier.fillMaxWidth().padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = serverAutoDownloadOn,
+                    onClick = { if (!serverAutoDownloadBusy) onToggleServerAutoDownload() },
+                    label = { Text("Auto na server") },
+                    leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                )
+                if (deviceAutoDownloadSelective) {
+                    FilterChip(
+                        selected = deviceAutoDownloadOn,
+                        onClick = onToggleDeviceAutoDownload,
+                        label = { Text("Auto do telefonu") },
+                        leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    )
+                }
+            }
+        }
+
         detail.description?.let { desc ->
             item {
                 Text(
@@ -249,9 +306,13 @@ private fun DetailContent(
         items(detail.episodes, key = { it.id }) { ep ->
             EpisodeRow(
                 ep,
+                isCurrent = ep.id == playingEpisodeId,
                 downloadState = downloadStates[ep.id] ?: DownloadState(),
+                quickAction = quickAction,
                 onDownload = { onDownload(ep) },
                 onCancelDownload = { onCancelDownload(ep) },
+                onEnqueueEnd = { onEnqueueEnd(ep) },
+                onEnqueueNext = { onEnqueueNext(ep) },
                 modifier = Modifier.combinedClickable(
                     onClick = { onPlay(ep) },
                     onLongClick = { onLongPress(ep) },
@@ -265,27 +326,37 @@ private fun DetailContent(
 @Composable
 private fun EpisodeRow(
     ep: PodcastEpisode,
+    isCurrent: Boolean,
     downloadState: DownloadState,
+    quickAction: Int,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
+    onEnqueueEnd: () -> Unit,
+    onEnqueueNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val canResume = ep.currentTimeSec > 1.0 && !ep.isFinished
+    val accent = MaterialTheme.colorScheme.primary
     Row(
         modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
+            .background(if (isCurrent) accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+            .padding(vertical = 12.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
+                .background(accent),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (ep.isFinished) Icons.Default.CheckCircle else Icons.Default.PlayArrow,
+                when {
+                    isCurrent -> Icons.Default.GraphicEq
+                    ep.isFinished -> Icons.Default.CheckCircle
+                    else -> Icons.Default.PlayArrow
+                },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.size(22.dp),
@@ -295,7 +366,7 @@ private fun EpisodeRow(
             Text(
                 text = ep.title,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = if (isCurrent) accent else MaterialTheme.colorScheme.onBackground,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -324,12 +395,20 @@ private fun EpisodeRow(
                 )
             }
         }
-        DownloadControl(
-            state = downloadState,
-            onDownload = onDownload,
-            onCancel = onCancelDownload,
-            modifier = Modifier.padding(start = 8.dp),
-        )
+        // Trailing rychlá akce dle nastavení (default = přidat do fronty na konec).
+        val trailingMod = Modifier.padding(start = 8.dp)
+        if (downloadState.status == DownloadStatus.DOWNLOADED || downloadState.status == DownloadStatus.DOWNLOADING) {
+            // Probíhá/staženo → vždy ukaž stav stahování (jinak by uživatel neviděl progres).
+            DownloadControl(state = downloadState, onDownload = onDownload, onCancel = onCancelDownload, modifier = trailingMod)
+        } else when (quickAction) {
+            1 -> IconButton(onClick = onEnqueueNext, modifier = trailingMod) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = "Přidat do fronty (další)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            2 -> DownloadControl(state = downloadState, onDownload = onDownload, onCancel = onCancelDownload, modifier = trailingMod)
+            else -> IconButton(onClick = onEnqueueEnd, modifier = trailingMod) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Přidat do fronty (na konec)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
@@ -420,6 +499,7 @@ private fun EpisodeActionSheet(
 @Composable
 private fun QueueSheet(
     queue: List<QueuedEpisode>,
+    playingEpisodeId: String?,
     onDismiss: () -> Unit,
     onRemove: (String) -> Unit,
     onClear: () -> Unit,
@@ -450,14 +530,22 @@ private fun QueueSheet(
         } else {
             LazyColumn {
                 items(queue, key = { it.episodeId }) { q ->
+                    val isCur = q.episodeId == playingEpisodeId
+                    val accent = MaterialTheme.colorScheme.primary
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .background(if (isCur) accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        if (isCur) {
+                            Icon(Icons.Default.GraphicEq, contentDescription = "Hraje", tint = accent, modifier = Modifier.size(18.dp).padding(end = 8.dp))
+                        }
                         Text(
                             q.title,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = if (isCur) accent else MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),

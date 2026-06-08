@@ -59,10 +59,14 @@ data class AbsMedia(
     val numChapters: Int? = null,
     val numTracks: Int? = null,
     val numEpisodes: Int? = null,            // podcast: počet epizod
+    val autoDownloadEpisodes: Boolean? = null, // podcast: ABS server auto-download nových epizod
     val chapters: List<AbsChapter>? = null,
     val tracks: List<AbsAudioTrack>? = null,
     val episodes: List<AbsPodcastEpisode>? = null, // podcast: epizody (expanded)
 )
+
+/** Tělo PATCH /api/items/{id}/media — zapnutí/vypnutí ABS server auto-downloadu epizod. */
+data class AbsMediaUpdate(val autoDownloadEpisodes: Boolean)
 
 data class AbsMetadata(
     val title: String? = null,

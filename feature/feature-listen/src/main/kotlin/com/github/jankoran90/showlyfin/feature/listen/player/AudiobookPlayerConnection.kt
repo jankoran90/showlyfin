@@ -10,10 +10,14 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
 import com.github.jankoran90.showlyfin.feature.listen.service.AudiobookPlayerService
+import org.json.JSONArray
+import org.json.JSONObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +42,8 @@ import javax.inject.Singleton
 class AudiobookPlayerConnection @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val repo: AbsRepository,
+    private val prefs: AbsPreferences,
+    private val downloads: EpisodeDownloadManager,
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -53,12 +59,48 @@ class AudiobookPlayerConnection @Inject constructor(
     val chapters = _chapters.asStateFlow()
 
     /** Fronta podcastových epizod. */
-    private val _queue = MutableStateFlow<List<QueuedEpisode>>(emptyList())
+    private val _queue = MutableStateFlow<List<QueuedEpisode>>(loadPersistedQueue())
     val queue = _queue.asStateFlow()
 
     /** Aktuálně hraná podcast epizoda (null = audiokniha → bez fronty/auto-mark). */
     private var currentEpisode: QueuedEpisode? = null
     private var advancing = false
+
+    /** Sleep „do konce kapitoly/epizody": cílový čas kapitoly (book ms) nebo -1 = do konce epizody. */
+    private var sleepEndChapterMs: Long? = null
+    private var sleepEndOfEpisode = false
+
+    private fun loadPersistedQueue(): List<QueuedEpisode> {
+        if (!prefs.persistQueue) return emptyList()
+        val json = prefs.queueJson.ifBlank { return emptyList() }
+        return runCatching {
+            val arr = JSONArray(json)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                QueuedEpisode(
+                    itemId = o.getString("itemId"),
+                    episodeId = o.getString("episodeId"),
+                    title = o.optString("title"),
+                    coverUrl = if (o.isNull("coverUrl")) null else o.optString("coverUrl"),
+                )
+            }
+        }.getOrElse { emptyList() }
+    }
+
+    private fun persistQueue() {
+        if (!prefs.persistQueue) { prefs.queueJson = ""; return }
+        val arr = JSONArray()
+        _queue.value.forEach { q ->
+            arr.put(
+                JSONObject()
+                    .put("itemId", q.itemId)
+                    .put("episodeId", q.episodeId)
+                    .put("title", q.title)
+                    .put("coverUrl", q.coverUrl ?: JSONObject.NULL),
+            )
+        }
+        prefs.queueJson = arr.toString()
+    }
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -103,6 +145,16 @@ class AudiobookPlayerConnection @Inject constructor(
         val currentChapter = _chapters.value.firstOrNull { posSec >= it.startSec && posSec < it.endSec }
         val bookDurationMs = (c.currentMediaItem?.mediaMetadata?.extras
             ?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0).let { (it * 1000).toLong() }
+
+        // Sleep „do konce kapitoly" — pauzni, jakmile pozice překročí konec cílové kapitoly.
+        sleepEndChapterMs?.let { target ->
+            if (pos >= target && c.isPlaying) {
+                c.pause()
+                sleepEndChapterMs = null
+                _state.update { it.copy(sleepAtEnd = false) }
+            }
+        }
+
         _state.update {
             it.copy(
                 isActive = c.mediaItemCount > 0,
@@ -116,22 +168,48 @@ class AudiobookPlayerConnection @Inject constructor(
                 speed = c.playbackParameters.speed,
                 currentChapterTitle = currentChapter?.title,
                 currentChapterIndex = currentChapter?.index,
+                skipSeconds = prefs.skipSeconds,
+                showRemainingTime = prefs.showRemainingTime,
+                showSpeedButton = prefs.showSpeedButton,
+                showSleepButton = prefs.showSleepButton,
+                queueSwipeAction = prefs.queueSwipeAction,
             )
         }
     }
 
-    fun playBook(pb: AbsPlayback, fromStart: Boolean, startOverrideSec: Double? = null, episode: QueuedEpisode? = null) {
+    fun playBook(
+        pb: AbsPlayback,
+        fromStart: Boolean,
+        startOverrideSec: Double? = null,
+        episode: QueuedEpisode? = null,
+        itemId: String? = null,
+    ) {
         currentEpisode = episode
-        // epizodu spuštěnou napřímo odstraň z fronty (ať nehraje dvakrát)
-        if (episode != null) _queue.update { q -> q.filterNot { it.episodeId == episode.episodeId } }
+        // Podcast epizoda zůstává ve frontě (highlight „hraje") — manuální přeskok ji NEodebírá,
+        // odejde až přirozeným dohráním. Když ve frontě ještě není (spuštěná z detailu), přidej ji nahoru.
+        if (episode != null && _queue.value.none { it.episodeId == episode.episodeId }) {
+            setQueue(listOf(episode) + _queue.value)
+        }
         _chapters.value = pb.chapters
         _state.update {
             it.copy(
                 isActive = true, title = pb.title, author = pb.author, coverUrl = pb.coverUrl,
                 durationMs = (pb.durationSec * 1000).toLong(),
+                isPodcastEpisode = episode != null,
+                currentItemId = itemId ?: episode?.itemId,
+                currentEpisodeId = episode?.episodeId,
             )
         }
         withController { c ->
+            // Persist pozici ODCHÁZEJÍCÍ položky PŘED přepnutím média — jinak rychlé přepínání
+            // (klik tam/zpět) ztratí progres, protože periodický sync (15 s) ani pauza neproběhnou.
+            val outExtras = c.currentMediaItem?.mediaMetadata?.extras
+            val outSession = outExtras?.getString(AudiobookPlayerService.KEY_SESSION_ID)
+            if (!outSession.isNullOrBlank() && outSession != pb.sessionId) {
+                val outDur = outExtras.getDouble(AudiobookPlayerService.KEY_DURATION_SEC)
+                val outPos = bookPosMs(c) / 1000.0
+                scope.launch { repo.syncProgress(outSession, outPos, 0.0, outDur) }
+            }
             val artwork = pb.coverUrl?.let(Uri::parse)
             val items = pb.tracks.map { t ->
                 val extras = Bundle().apply {
@@ -154,6 +232,11 @@ class AudiobookPlayerConnection @Inject constructor(
             }
             c.setMediaItems(items)
             c.prepare()
+            // Rychlost: zapamatovaná (zvlášť kniha/podcast) nebo výchozí z nastavení.
+            val targetSpeed = if (prefs.rememberSpeed) {
+                if (episode != null) prefs.lastPodcastSpeed else prefs.lastBookSpeed
+            } else prefs.defaultSpeed
+            c.setPlaybackSpeed(targetSpeed.coerceIn(0.5f, 3.5f))
             val startBookMs = when {
                 startOverrideSec != null -> (startOverrideSec * 1000).toLong()
                 fromStart -> 0L
@@ -217,16 +300,26 @@ class AudiobookPlayerConnection @Inject constructor(
     /** Skok na konkrétní kapitolu (čas celé knihy). Pro seznam kapitol v playeru. */
     fun seekToChapter(startSec: Double) = withController { seekBook(it, (startSec * 1000).toLong()) }
 
-    fun setSpeed(speed: Float) = withController { it.setPlaybackSpeed(speed.coerceIn(0.5f, 3f)) }
+    fun setSpeed(speed: Float) = withController { c ->
+        val s = speed.coerceIn(0.5f, 3.5f)
+        c.setPlaybackSpeed(s)
+        if (prefs.rememberSpeed) {
+            if (_state.value.isPodcastEpisode) prefs.lastPodcastSpeed = s else prefs.lastBookSpeed = s
+        }
+    }
 
     /** Sleep timer v minutách; null = zrušit. */
     fun setSleepTimer(minutes: Int?) {
         sleepJob?.cancel()
         sleepJob = null
+        // minutový časovač přebíjí „do konce kapitoly/epizody"
+        sleepEndChapterMs = null
+        sleepEndOfEpisode = false
         if (minutes == null || minutes <= 0) {
-            _state.update { it.copy(sleepMinutesLeft = null) }
+            _state.update { it.copy(sleepMinutesLeft = null, sleepAtEnd = false) }
             return
         }
+        _state.update { it.copy(sleepAtEnd = false) }
         sleepJob = scope.launch {
             var left = minutes
             while (left > 0) {
@@ -239,40 +332,149 @@ class AudiobookPlayerConnection @Inject constructor(
         }
     }
 
+    /** Sleep „do konce kapitoly" (audiokniha) nebo „do konce epizody" (podcast). */
+    fun setSleepEndOfCurrent() = withController { c ->
+        sleepJob?.cancel(); sleepJob = null
+        _state.update { it.copy(sleepMinutesLeft = null) }
+        if (_state.value.isPodcastEpisode) {
+            sleepEndChapterMs = null
+            sleepEndOfEpisode = true
+        } else {
+            val posSec = bookPosMs(c) / 1000.0
+            val chapterEndSec = _chapters.value.firstOrNull { posSec >= it.startSec && posSec < it.endSec }?.endSec
+            sleepEndChapterMs = ((chapterEndSec ?: (state.value.durationMs / 1000.0)) * 1000).toLong()
+            sleepEndOfEpisode = false
+        }
+        _state.update { it.copy(sleepAtEnd = true) }
+    }
+
     // ──────────────────────────── Fronta epizod ────────────────────────────
 
-    /** Přidá epizodu do fronty. [atFront] = hned po aktuální, jinak na konec. Bez duplicit. */
+    private fun setQueue(list: List<QueuedEpisode>) {
+        _queue.value = list
+        persistQueue()
+    }
+
+    private fun currentIndex(): Int =
+        _queue.value.indexOfFirst { it.episodeId == currentEpisode?.episodeId }
+
+    /** Přidá epizodu do fronty. [atFront] = hned ZA aktuálně hranou, jinak na konec. Bez duplicit. */
     fun enqueue(episode: QueuedEpisode, atFront: Boolean) {
-        _queue.update { q ->
-            val without = q.filterNot { it.episodeId == episode.episodeId }
-            if (atFront) listOf(episode) + without else without + episode
-        }
+        val without = _queue.value.filterNot { it.episodeId == episode.episodeId }
+        if (!atFront) { setQueue(without + episode); return }
+        val curIdx = without.indexOfFirst { it.episodeId == currentEpisode?.episodeId }
+        setQueue(
+            if (curIdx >= 0) without.toMutableList().apply { add(curIdx + 1, episode) }
+            else listOf(episode) + without,
+        )
     }
 
     fun removeFromQueue(episodeId: String) {
-        _queue.update { q -> q.filterNot { it.episodeId == episodeId } }
+        setQueue(_queue.value.filterNot { it.episodeId == episodeId })
     }
 
-    fun clearQueue() { _queue.value = emptyList() }
+    fun clearQueue() = setQueue(emptyList())
+
+    /** Přesun položky ve frontě (drag reorder). */
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        val q = _queue.value.toMutableList()
+        if (fromIndex !in q.indices || toIndex !in q.indices || fromIndex == toIndex) return
+        q.add(toIndex, q.removeAt(fromIndex))
+        setQueue(q)
+    }
+
+    /** Přesun epizody na začátek fronty (swipe akce). */
+    fun moveToFront(episodeId: String) {
+        val q = _queue.value
+        val idx = q.indexOfFirst { it.episodeId == episodeId }
+        if (idx > 0) moveQueueItem(idx, 0)
+    }
+
+    /** Přehraj konkrétní epizodu z fronty hned (klik v seznamu). NEodebírá ji z fronty. */
+    fun playQueued(episode: QueuedEpisode) {
+        scope.launch {
+            runCatching { repo.startEpisodePlayback(episode.itemId, episode.episodeId) }
+                .onSuccess { pb -> playBook(pb, fromStart = false, episode = episode, itemId = episode.itemId) }
+                .onFailure { Timber.w(it, "[Listen] přehrání epizody z fronty selhalo") }
+        }
+    }
+
+    /** Přeskoč na další epizodu ve frontě za aktuální (skip ▶). No-op když žádná není. */
+    fun playNextInQueue() {
+        val q = _queue.value
+        val idx = currentIndex()
+        val next = if (idx >= 0) q.getOrNull(idx + 1) else q.firstOrNull()
+        if (next != null) playQueued(next)
+    }
+
+    /** Přeskoč na předchozí epizodu ve frontě (skip ◀). Když žádná není, skoč na začátek aktuální. */
+    fun playPrevInQueue() {
+        val q = _queue.value
+        val idx = currentIndex()
+        val prev = if (idx > 0) q.getOrNull(idx - 1) else null
+        if (prev != null) playQueued(prev) else withController { seekBook(it, 0) }
+    }
 
     /**
-     * Konec přehrávání. U podcast epizody: označ ji jako dokončenou na serveru a přehraj další
-     * z fronty (pokud je). U audioknihy ([currentEpisode] == null) neděláme nic.
+     * Konec přehrávání podcast epizody. Dle nastavení: označ dokončenou, smaž stažení, přehraj
+     * další z fronty / pokračuj dalšími epizodami podcastu. U audioknihy ([currentEpisode] == null)
+     * neděláme nic.
      */
     private fun onPlaybackEnded() {
         if (advancing) return
         val ended = currentEpisode ?: return
         advancing = true
         currentEpisode = null
-        scope.launch { repo.setEpisodeFinished(ended.itemId, ended.episodeId, true) }
-        val next = _queue.value.firstOrNull()
-        if (next == null) { advancing = false; return }
-        _queue.update { it.drop(1) }
-        scope.launch {
-            runCatching { repo.startEpisodePlayback(next.itemId, next.episodeId) }
-                .onSuccess { pb -> playBook(pb, fromStart = false, episode = next) }
-                .onFailure { Timber.w(it, "[Listen] auto-advance fronty selhal") }
-            advancing = false
+
+        if (prefs.autoMarkFinished) {
+            scope.launch { repo.setEpisodeFinished(ended.itemId, ended.episodeId, true) }
         }
+        if (prefs.deleteDownloadAfterFinish && downloads.localFile(ended.episodeId) != null) {
+            downloads.delete(ended.episodeId)
+        }
+
+        // Sleep „do konce epizody" → zastav, nepokračuj.
+        if (sleepEndOfEpisode) {
+            sleepEndOfEpisode = false
+            _state.update { it.copy(sleepAtEnd = false) }
+            advancing = false
+            return
+        }
+        // Dohraná epizoda přirozeně odejde z fronty; další = ta, co byla hned za ní.
+        val q = _queue.value
+        val endedIdx = q.indexOfFirst { it.episodeId == ended.episodeId }
+        val next = if (endedIdx >= 0) q.getOrNull(endedIdx + 1) else q.firstOrNull()
+        setQueue(q.filterNot { it.episodeId == ended.episodeId })
+
+        if (!prefs.autoAdvanceQueue) { advancing = false; return }
+
+        if (next != null) {
+            scope.launch {
+                runCatching { repo.startEpisodePlayback(next.itemId, next.episodeId) }
+                    .onSuccess { pb -> playBook(pb, fromStart = false, episode = next, itemId = next.itemId) }
+                    .onFailure { Timber.w(it, "[Listen] auto-advance fronty selhal") }
+                advancing = false
+            }
+            return
+        }
+
+        // Fronta prázdná → volitelně pokračuj další nepřehranou epizodou téhož podcastu.
+        if (prefs.continuePodcastAfterQueue) {
+            scope.launch {
+                val nextEp = runCatching {
+                    repo.getPodcastDetail(ended.itemId).episodes
+                        .firstOrNull { !it.isFinished && it.id != ended.episodeId }
+                }.getOrNull()
+                if (nextEp != null) {
+                    val q = QueuedEpisode(nextEp.itemId, nextEp.id, nextEp.title, ended.coverUrl)
+                    runCatching { repo.startEpisodePlayback(nextEp.itemId, nextEp.id) }
+                        .onSuccess { pb -> playBook(pb, fromStart = false, episode = q, itemId = nextEp.itemId) }
+                        .onFailure { Timber.w(it, "[Listen] pokračování podcastu selhalo") }
+                }
+                advancing = false
+            }
+            return
+        }
+        advancing = false
     }
 }

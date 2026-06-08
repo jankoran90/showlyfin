@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.items as columnItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -38,10 +40,13 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -82,6 +87,14 @@ fun ListenScreen(
                     "Poslech zatím není nastaven.\nPřihlas se k Audiobookshelf serveru v Nastavení → Poslech (Audiobookshelf).",
                 )
             } else {
+                val pagerState = rememberPagerState(
+                    initialPage = if (state.mode == ListenMode.PODCASTS) 1 else 0,
+                ) { 2 }
+                val scope = rememberCoroutineScope()
+                // Swipe ⇄ přepíná režim (a tím i načítání dat).
+                LaunchedEffect(pagerState.currentPage) {
+                    viewModel.setMode(if (pagerState.currentPage == 1) ListenMode.PODCASTS else ListenMode.BOOKS)
+                }
                 Column(Modifier.fillMaxSize()) {
                     SingleChoiceSegmentedButtonRow(
                         Modifier
@@ -89,24 +102,26 @@ fun ListenScreen(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
                         SegmentedButton(
-                            selected = state.mode == ListenMode.BOOKS,
-                            onClick = { viewModel.setMode(ListenMode.BOOKS) },
+                            selected = pagerState.currentPage == 0,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                         ) { Text("Audioknihy") }
                         SegmentedButton(
-                            selected = state.mode == ListenMode.PODCASTS,
-                            onClick = { viewModel.setMode(ListenMode.PODCASTS) },
+                            selected = pagerState.currentPage == 1,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                         ) { Text("Podcasty") }
                     }
 
-                    when (state.mode) {
-                        ListenMode.BOOKS -> BooksContent(state, viewModel, onOpenBook)
-                        ListenMode.PODCASTS -> PodcastsContent(
-                            state, viewModel, onOpenPodcast,
-                            downloadCount = downloads.size,
-                            onOpenDownloads = { showDownloads = true },
-                        )
+                    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                        when (page) {
+                            0 -> BooksContent(state, viewModel, onOpenBook)
+                            else -> PodcastsContent(
+                                state, viewModel, onOpenPodcast,
+                                downloadCount = downloads.size,
+                                onOpenDownloads = { showDownloads = true },
+                            )
+                        }
                     }
                 }
             }

@@ -2,8 +2,11 @@ package com.github.jankoran90.showlyfin.data.abs.download
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import androidx.core.content.edit
+import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
 import com.github.jankoran90.showlyfin.data.abs.model.AbsTrack
@@ -22,6 +25,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -46,10 +51,14 @@ import javax.inject.Singleton
 class EpisodeDownloadManager @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val repo: AbsRepository,
+    private val absPrefs: AbsPreferences,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
     private val gson: Gson,
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // Limit souběžných stahování (z nastavení; živá změna se projeví po restartu procesu).
+    private val gate by lazy { Semaphore(absPrefs.maxConcurrentDownloads.coerceIn(1, 5)) }
 
     // Vlastní klient bez callTimeout — base klient má callTimeout 60 s, což by velké stažení zabilo.
     private val client by lazy {
@@ -106,7 +115,30 @@ class EpisodeDownloadManager @Inject constructor(
         }
     }
 
+    /** Stažení epizody jen z ID (z fronty v přehrávači, kde nemáme plný [PodcastEpisode]). */
+    fun downloadByIds(itemId: String, episodeId: String, title: String, coverUrl: String?) {
+        download(
+            PodcastEpisode(
+                id = episodeId, itemId = itemId, title = title, subtitle = null, description = null,
+                publishedAt = null, durationSec = 0.0, progress = 0.0, currentTimeSec = 0.0, isFinished = false,
+            ),
+            podcastTitle = null,
+            coverUrl = coverUrl,
+        )
+    }
+
     private suspend fun doDownload(
+        episode: PodcastEpisode,
+        podcastTitle: String?,
+        coverUrl: String?,
+    ): EpisodeDownload = withContext(Dispatchers.IO) {
+        if (absPrefs.downloadWifiOnly && !isOnWifi()) {
+            error("Stahování je povolené jen přes Wi-Fi (viz Nastavení → Poslech).")
+        }
+        gate.withPermit { downloadLocked(episode, podcastTitle, coverUrl) }
+    }
+
+    private suspend fun downloadLocked(
         episode: PodcastEpisode,
         podcastTitle: String?,
         coverUrl: String?,
@@ -198,6 +230,31 @@ class EpisodeDownloadManager @Inject constructor(
             durationSec = dl.durationSec,
             chapters = emptyList(),
         )
+    }
+
+    /**
+     * Automaticky stáhne N nejnovějších nepřehraných epizod (z nastavení). Volá se při otevření
+     * podcastu. No-op když je funkce vypnutá nebo už jsou epizody stažené/stahují se.
+     */
+    fun autoDownloadNewestEpisodes(episodes: List<PodcastEpisode>, podcastTitle: String?, coverUrl: String?) {
+        val n = absPrefs.autoDownloadNewest
+        if (n <= 0) return
+        // Rozsah: 0 = všechny podcasty, 1 = jen ty na whitelistu.
+        val itemId = episodes.firstOrNull()?.itemId
+        if (absPrefs.autoDownloadScope == 1 && (itemId == null || !absPrefs.isAutoDownloadPodcast(itemId))) return
+        episodes.asSequence()
+            .filterNot { it.isFinished }
+            .sortedByDescending { it.publishedAt ?: 0L }
+            .take(n)
+            .filter { localFile(it.id) == null && jobs[it.id]?.isActive != true }
+            .forEach { download(it, podcastTitle, coverUrl) }
+    }
+
+    private fun isOnWifi(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
     }
 
     private fun setState(id: String, s: DownloadState) {

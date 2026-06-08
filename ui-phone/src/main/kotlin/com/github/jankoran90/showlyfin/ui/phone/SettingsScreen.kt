@@ -252,6 +252,10 @@ fun SettingsScreen(
                 onLogout = { viewModel.absLogout() },
                 onToggleHideFinished = { viewModel.setHideFinishedEpisodes(it) },
             )
+            if (uiState.absConfigured) {
+                Spacer(Modifier.height(12.dp))
+                ListenSettingsCard(uiState.listen, viewModel)
+            }
         }
 
         CollapsibleSettingsSection("Streamování", expanded) {
@@ -585,6 +589,167 @@ private fun AbsSection(
                     Spacer(Modifier.height(8.dp))
                     Text("Chyba: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
+            }
+        }
+    }
+}
+
+/** Nastavení poslechové sekce: přehrávač, fronta, stahování, zobrazení, sync. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ListenSettingsCard(s: ListenSettings, vm: SettingsViewModel) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            ListenGroupTitle("Přehrávání")
+            ListenChipRow(
+                title = "Velikost přeskoku ◀▶",
+                options = listOf("5 s" to 5, "10 s" to 10, "15 s" to 15, "30 s" to 30, "45 s" to 45, "60 s" to 60),
+                selected = s.skipSeconds,
+                onSelect = { vm.setSkipSeconds(it) },
+            )
+            ListenSwitchRow("Zapamatovat rychlost", "Zvlášť pro audioknihy a podcasty.", s.rememberSpeed) { vm.setRememberSpeed(it) }
+            ListenChipRow(
+                title = "Výchozí rychlost",
+                subtitle = if (s.rememberSpeed) "Použije se, dokud rychlost nezměníš v přehrávači." else null,
+                options = listOf("0,8×" to 0.8f, "1×" to 1f, "1,25×" to 1.25f, "1,5×" to 1.5f, "2×" to 2f, "3×" to 3f),
+                selected = s.defaultSpeed,
+                onSelect = { vm.setDefaultSpeed(it) },
+            )
+            ListenSwitchRow("Auto-přehrát další z fronty", "Po dokončení epizody přejít na další ve frontě.", s.autoAdvanceQueue) { vm.setAutoAdvanceQueue(it) }
+            ListenSwitchRow("Označit dokončené na konci", "Na konci epizody ji na serveru označit jako přehranou.", s.autoMarkFinished) { vm.setAutoMarkFinished(it) }
+
+            ListenGroupTitle("Fronta")
+            ListenSwitchRow("Pokračovat v podcastu", "Po vyprázdnění fronty přehrát další nepřehranou epizodu téhož podcastu.", s.continuePodcastAfterQueue) { vm.setContinuePodcastAfterQueue(it) }
+            ListenSwitchRow("Pamatovat frontu", "Fronta přežije restart aplikace.", s.persistQueue) { vm.setPersistQueue(it) }
+
+            ListenGroupTitle("Stahování do zařízení (offline)")
+            ListenInfoText("Stahování přímo do telefonu pro offline poslech (ze serveru). Auto-download na ABS server se nastavuje u konkrétního podcastu (chip „Auto na server“).")
+            ListenSwitchRow("Stahovat jen přes Wi-Fi", "Bez Wi-Fi se stažení nespustí.", s.downloadWifiOnly) { vm.setDownloadWifiOnly(it) }
+            ListenSwitchRow("Smazat po přehrání", "Stažení se po dokončení epizody automaticky smaže.", s.deleteDownloadAfterFinish) { vm.setDeleteDownloadAfterFinish(it) }
+            ListenChipRow(
+                title = "Souběžná stahování",
+                options = listOf("1" to 1, "2" to 2, "3" to 3, "4" to 4, "5" to 5),
+                selected = s.maxConcurrentDownloads,
+                onSelect = { vm.setMaxConcurrentDownloads(it) },
+            )
+            ListenChipRow(
+                title = "Auto-stáhnout nejnovější do telefonu",
+                subtitle = "Při otevření podcastu stáhnout N nejnovějších nepřehraných epizod.",
+                options = listOf("Vyp" to 0, "1" to 1, "3" to 3, "5" to 5, "10" to 10),
+                selected = s.autoDownloadNewest,
+                onSelect = { vm.setAutoDownloadNewest(it) },
+            )
+            if (s.autoDownloadNewest > 0) {
+                ListenChipRow(
+                    title = "Pro které podcasty",
+                    subtitle = "Vybrané = jen podcasty s chipem „Auto do telefonu“ v detailu.",
+                    options = listOf("Všechny" to 0, "Jen vybrané" to 1),
+                    selected = s.autoDownloadScope,
+                    onSelect = { vm.setAutoDownloadScope(it) },
+                )
+            }
+
+            ListenGroupTitle("Stahování na ABS server")
+            ListenInfoText("Auto-download nových epizod z RSS na ABS server zapneš per-podcast chipem „Auto na server“ v detailu podcastu (ABS-nativní). Plánovač a pravidla řeší ABS server.")
+
+            ListenGroupTitle("Epizody")
+            ListenChipRow(
+                title = "Počet zobrazených epizod",
+                subtitle = "Kolik epizod ukázat v detailu podcastu.",
+                options = listOf("10" to 10, "20" to 20, "50" to 50, "100" to 100, "Vše" to 0),
+                selected = s.episodeListLimit,
+                onSelect = { vm.setEpisodeListLimit(it) },
+            )
+            ListenChipRow(
+                title = "Tlačítko u epizody",
+                subtitle = "Akce trailing tlačítka v seznamu epizod.",
+                options = listOf("Fronta (konec)" to 0, "Fronta (další)" to 1, "Stáhnout" to 2),
+                selected = s.episodeQuickAction,
+                onSelect = { vm.setEpisodeQuickAction(it) },
+            )
+
+            ListenGroupTitle("Zobrazení")
+            ListenSwitchRow("Nejnovější epizody první", "Vyp = od nejstarších.", s.episodeSortNewestFirst) { vm.setEpisodeSortNewestFirst(it) }
+            ListenSwitchRow("Zbývající čas", "V přehrávači zobrazit zbývající čas místo celkové délky.", s.showRemainingTime) { vm.setShowRemainingTime(it) }
+            ListenSwitchRow("Tlačítko rychlosti", "Zobrazit ovládání rychlosti v přehrávači.", s.showSpeedButton) { vm.setShowSpeedButton(it) }
+            ListenSwitchRow("Tlačítko časovače", "Zobrazit časovač spánku v přehrávači.", s.showSleepButton) { vm.setShowSleepButton(it) }
+            ListenChipRow(
+                title = "Swipe doprava ve frontě",
+                subtitle = "Gesto doleva vždy odebere. Doprava:",
+                options = listOf("Stáhnout" to 0, "Přehrát" to 1, "Na začátek" to 2),
+                selected = s.queueSwipeAction,
+                onSelect = { vm.setQueueSwipeAction(it) },
+            )
+
+            ListenGroupTitle("Synchronizace")
+            ListenChipRow(
+                title = "Interval syncu pozice",
+                subtitle = "Jak často se ukládá pozice na ABS server.",
+                options = listOf("5 s" to 5, "10 s" to 10, "15 s" to 15, "30 s" to 30, "60 s" to 60),
+                selected = s.syncIntervalSeconds,
+                onSelect = { vm.setSyncIntervalSeconds(it) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListenGroupTitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 14.dp, bottom = 6.dp),
+    )
+}
+
+@Composable
+private fun ListenInfoText(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = Color.White.copy(alpha = 0.6f),
+        modifier = Modifier.padding(bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun ListenSwitchRow(title: String, subtitle: String?, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+            }
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> ListenChipRow(
+    title: String,
+    options: List<Pair<String, T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    subtitle: String? = null,
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+        if (subtitle != null) {
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+            options.forEach { (label, value) ->
+                FilterChip(
+                    selected = selected == value,
+                    onClick = { onSelect(value) },
+                    label = { Text(label) },
+                )
             }
         }
     }

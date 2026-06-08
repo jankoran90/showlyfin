@@ -13,4 +13,21 @@ data class PlayerState(
     val currentChapterTitle: String? = null,
     val currentChapterIndex: Int? = null,
     val sleepMinutesLeft: Int? = null,
+    /** Sleep timer „do konce kapitoly/epizody" je aktivní. */
+    val sleepAtEnd: Boolean = false,
+    /** True = hraje podcast epizoda (single track, fronta) místo audioknihy (kapitoly). */
+    val isPodcastEpisode: Boolean = false,
+    /** ABS itemId právě hrané položky (kniha/podcast) — pro highlight v detailu. */
+    val currentItemId: String? = null,
+    /** episodeId právě hrané podcast epizody — pro highlight ve frontě. */
+    val currentEpisodeId: String? = null,
+    /** Velikost přeskoku ◀▶ v sekundách (z nastavení). */
+    val skipSeconds: Int = 30,
+    /** Zobrazovat zbývající čas místo celkové délky (z nastavení). */
+    val showRemainingTime: Boolean = false,
+    /** Zobrazit tlačítko rychlosti / časovače v přehrávači (z nastavení). */
+    val showSpeedButton: Boolean = true,
+    val showSleepButton: Boolean = true,
+    /** Akce swipe doprava ve frontě: 0=stáhnout, 1=přehrát, 2=na začátek (z nastavení). */
+    val queueSwipeAction: Int = 0,
 )

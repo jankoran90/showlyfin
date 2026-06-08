@@ -5,6 +5,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsDeviceInfo
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLoginRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsMediaProgress
+import com.github.jankoran90.showlyfin.data.abs.model.AbsMediaUpdate
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsProgressUpdate
 import com.github.jankoran90.showlyfin.data.abs.model.AbsSyncRequest
@@ -230,6 +231,18 @@ class AbsRepository @Inject constructor(
             durationSec = s.duration ?: tracks.sumOf { it.durationSec },
             chapters = emptyList(),  // podcast epizoda = bez kapitol
         )
+    }
+
+    /** Stav ABS server auto-downloadu epizod podcastu (z media). */
+    suspend fun getServerAutoDownload(itemId: String): Boolean =
+        runCatching {
+            service.getItem(api("/api/items/$itemId?expanded=1"), bearer()).media?.autoDownloadEpisodes ?: false
+        }.getOrDefault(false)
+
+    /** Zapne/vypne ABS server auto-download nových epizod podcastu (PATCH media). */
+    suspend fun setServerAutoDownload(itemId: String, enabled: Boolean): Result<Unit> = runCatching {
+        val resp = service.patchMedia(api("/api/items/$itemId/media"), bearer(), AbsMediaUpdate(enabled))
+        require(resp.isSuccessful) { "HTTP ${resp.code()}" }
     }
 
     /** Označí epizodu jako přehranou/nepřehranou na serveru. */

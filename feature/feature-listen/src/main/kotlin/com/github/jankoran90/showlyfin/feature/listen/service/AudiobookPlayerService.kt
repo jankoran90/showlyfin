@@ -54,6 +54,7 @@ import javax.inject.Inject
 class AudiobookPlayerService : MediaLibraryService() {
 
     @Inject lateinit var repo: AbsRepository
+    @Inject lateinit var absPrefs: com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 
     private var session: MediaLibrarySession? = null
     private var player: ExoPlayer? = null
@@ -101,8 +102,8 @@ class AudiobookPlayerService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true)
             // Android Auto ukáže ±10 s seek tlačítka (BACK/FORWARD sloty hned vedle play/pause)
             // odvozená z těchto inkrementů.
-            .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
-            .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
+            .setSeekBackIncrementMs(absPrefs.skipSeconds * 1000L)
+            .setSeekForwardIncrementMs(absPrefs.skipSeconds * 1000L)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -576,7 +577,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         if (syncJob?.isActive == true) return
         syncJob = scope.launch {
             while (true) {
-                delay(SYNC_INTERVAL_MS)
+                delay(absPrefs.syncIntervalSeconds * 1000L)
                 syncNow()
             }
         }
@@ -598,7 +599,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         // Pozice v čase CELÉ knihy = offset aktuálního souboru + pozice v něm.
         val posSec = (trackOffsetSec + p.currentPosition / 1000.0).coerceAtLeast(0.0)
         scope.launch {
-            repo.syncProgress(sessionId, posSec, SYNC_INTERVAL_MS / 1000.0, durationSec)
+            repo.syncProgress(sessionId, posSec, absPrefs.syncIntervalSeconds.toDouble(), durationSec)
         }
     }
 
@@ -624,7 +625,5 @@ class AudiobookPlayerService : MediaLibraryService() {
         private val SPEEDS = floatArrayOf(1.0f, 1.2f, 1.5f, 1.7f, 2.0f, 0.8f)
         private val SLEEP_STEPS = intArrayOf(15, 30, 45, 60)
         private const val CONTINUE_LIMIT = 25
-        private const val SYNC_INTERVAL_MS = 15_000L
-        private const val SEEK_INCREMENT_MS = 10_000L
     }
 }

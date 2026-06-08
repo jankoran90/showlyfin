@@ -10,6 +10,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
+import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
@@ -54,6 +55,31 @@ data class SettingsUiState(
     val absLoading: Boolean = false,
     val absError: String? = null,
     val hideFinishedEpisodes: Boolean = false,
+    val listen: ListenSettings = ListenSettings(),
+)
+
+/** Nastavení poslechové sekce (přehrávač, fronta, stahování, zobrazení, sync). */
+data class ListenSettings(
+    val skipSeconds: Int = 30,
+    val rememberSpeed: Boolean = true,
+    val defaultSpeed: Float = 1f,
+    val autoAdvanceQueue: Boolean = true,
+    val autoMarkFinished: Boolean = true,
+    val continuePodcastAfterQueue: Boolean = false,
+    val persistQueue: Boolean = true,
+    val downloadWifiOnly: Boolean = false,
+    val deleteDownloadAfterFinish: Boolean = false,
+    val maxConcurrentDownloads: Int = 2,
+    val autoDownloadNewest: Int = 0,
+    val autoDownloadScope: Int = 0,
+    val episodeSortNewestFirst: Boolean = true,
+    val episodeListLimit: Int = 0,
+    val episodeQuickAction: Int = 0,
+    val showRemainingTime: Boolean = false,
+    val showSpeedButton: Boolean = true,
+    val showSleepButton: Boolean = true,
+    val queueSwipeAction: Int = 0,
+    val syncIntervalSeconds: Int = 15,
 )
 
 @HiltViewModel
@@ -63,6 +89,7 @@ class SettingsViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val uploaderDs: UploaderRemoteDataSource,
     private val absRepo: AbsRepository,
+    private val absPrefs: AbsPreferences,
     @ApplicationContext private val appContext: Context,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
@@ -125,14 +152,65 @@ class SettingsViewModel @Inject constructor(
                 absConfigured = absRepo.isConfigured,
                 absBaseUrl = absRepo.baseUrl,
                 hideFinishedEpisodes = absRepo.hideFinishedEpisodes,
+                listen = readListenSettings(),
             )
         }
+    }
+
+    private fun readListenSettings() = ListenSettings(
+        skipSeconds = absPrefs.skipSeconds,
+        rememberSpeed = absPrefs.rememberSpeed,
+        defaultSpeed = absPrefs.defaultSpeed,
+        autoAdvanceQueue = absPrefs.autoAdvanceQueue,
+        autoMarkFinished = absPrefs.autoMarkFinished,
+        continuePodcastAfterQueue = absPrefs.continuePodcastAfterQueue,
+        persistQueue = absPrefs.persistQueue,
+        downloadWifiOnly = absPrefs.downloadWifiOnly,
+        deleteDownloadAfterFinish = absPrefs.deleteDownloadAfterFinish,
+        maxConcurrentDownloads = absPrefs.maxConcurrentDownloads,
+        autoDownloadNewest = absPrefs.autoDownloadNewest,
+        autoDownloadScope = absPrefs.autoDownloadScope,
+        episodeSortNewestFirst = absPrefs.episodeSortNewestFirst,
+        episodeListLimit = absPrefs.episodeListLimit,
+        episodeQuickAction = absPrefs.episodeQuickAction,
+        showRemainingTime = absPrefs.showRemainingTime,
+        showSpeedButton = absPrefs.showSpeedButton,
+        showSleepButton = absPrefs.showSleepButton,
+        queueSwipeAction = absPrefs.queueSwipeAction,
+        syncIntervalSeconds = absPrefs.syncIntervalSeconds,
+    )
+
+    /** Zapíše změnu nastavení poslechu a obnoví uiState. */
+    private fun updateListen(mutate: AbsPreferences.() -> Unit) {
+        absPrefs.mutate()
+        _uiState.update { it.copy(listen = readListenSettings()) }
     }
 
     fun setHideFinishedEpisodes(value: Boolean) {
         absRepo.hideFinishedEpisodes = value
         _uiState.update { it.copy(hideFinishedEpisodes = value) }
     }
+
+    fun setSkipSeconds(v: Int) = updateListen { skipSeconds = v }
+    fun setRememberSpeed(v: Boolean) = updateListen { rememberSpeed = v }
+    fun setDefaultSpeed(v: Float) = updateListen { defaultSpeed = v }
+    fun setAutoAdvanceQueue(v: Boolean) = updateListen { autoAdvanceQueue = v }
+    fun setAutoMarkFinished(v: Boolean) = updateListen { autoMarkFinished = v }
+    fun setContinuePodcastAfterQueue(v: Boolean) = updateListen { continuePodcastAfterQueue = v }
+    fun setPersistQueue(v: Boolean) = updateListen { persistQueue = v }
+    fun setDownloadWifiOnly(v: Boolean) = updateListen { downloadWifiOnly = v }
+    fun setDeleteDownloadAfterFinish(v: Boolean) = updateListen { deleteDownloadAfterFinish = v }
+    fun setMaxConcurrentDownloads(v: Int) = updateListen { maxConcurrentDownloads = v }
+    fun setAutoDownloadNewest(v: Int) = updateListen { autoDownloadNewest = v }
+    fun setAutoDownloadScope(v: Int) = updateListen { autoDownloadScope = v }
+    fun setEpisodeSortNewestFirst(v: Boolean) = updateListen { episodeSortNewestFirst = v }
+    fun setEpisodeListLimit(v: Int) = updateListen { episodeListLimit = v }
+    fun setEpisodeQuickAction(v: Int) = updateListen { episodeQuickAction = v }
+    fun setShowRemainingTime(v: Boolean) = updateListen { showRemainingTime = v }
+    fun setShowSpeedButton(v: Boolean) = updateListen { showSpeedButton = v }
+    fun setShowSleepButton(v: Boolean) = updateListen { showSleepButton = v }
+    fun setQueueSwipeAction(v: Int) = updateListen { queueSwipeAction = v }
+    fun setSyncIntervalSeconds(v: Int) = updateListen { syncIntervalSeconds = v }
 
     fun absLogin(url: String, username: String, password: String) {
         _uiState.update { it.copy(absLoading = true, absError = null) }

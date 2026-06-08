@@ -27,6 +27,7 @@ class AudiobookPlayerViewModel @Inject constructor(
 
     val state = connection.state
     val chapters = connection.chapters
+    val queue = connection.queue
 
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
@@ -66,7 +67,7 @@ class AudiobookPlayerViewModel @Inject constructor(
                     val ep = if (episodeId != null) {
                         QueuedEpisode(itemId, episodeId, pb.title, pb.coverUrl)
                     } else null
-                    connection.playBook(pb, fromStart, startSec, ep)
+                    connection.playBook(pb, fromStart, startSec, ep, itemId)
                 }
                 .onFailure {
                     Timber.w(it, "[Listen] startPlayback selhal")
@@ -84,4 +85,22 @@ class AudiobookPlayerViewModel @Inject constructor(
     fun seekToChapter(startSec: Double) = connection.seekToChapter(startSec)
     fun setSpeed(speed: Float) = connection.setSpeed(speed)
     fun setSleepTimer(minutes: Int?) = connection.setSleepTimer(minutes)
+    fun setSleepEndOfCurrent() = connection.setSleepEndOfCurrent()
+
+    // ──────── Fronta (podcast epizody) ────────
+    fun playQueued(episode: QueuedEpisode) = connection.playQueued(episode)
+    fun playNextInQueue() = connection.playNextInQueue()
+    fun playPrevInQueue() = connection.playPrevInQueue()
+    fun removeFromQueue(episodeId: String) = connection.removeFromQueue(episodeId)
+    fun clearQueue() = connection.clearQueue()
+    fun moveQueueItem(from: Int, to: Int) = connection.moveQueueItem(from, to)
+    fun moveQueuedToFront(episodeId: String) = connection.moveToFront(episodeId)
+    fun downloadQueued(ep: QueuedEpisode) = downloadManager.downloadByIds(ep.itemId, ep.episodeId, ep.title, ep.coverUrl)
+
+    /** Akce swipe doprava ve frontě dle nastavení (0=stáhnout, 1=přehrát, 2=na začátek). */
+    fun onQueueSwipeAction(ep: QueuedEpisode, action: Int) = when (action) {
+        1 -> connection.playQueued(ep)
+        2 -> connection.moveToFront(ep.episodeId)
+        else -> downloadManager.downloadByIds(ep.itemId, ep.episodeId, ep.title, ep.coverUrl)
+    }
 }

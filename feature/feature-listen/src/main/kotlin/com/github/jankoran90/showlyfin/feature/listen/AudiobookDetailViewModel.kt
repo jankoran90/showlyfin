@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,10 +15,14 @@ import javax.inject.Inject
 @HiltViewModel
 class AudiobookDetailViewModel @Inject constructor(
     private val repo: AbsRepository,
+    connection: AudiobookPlayerConnection,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AudiobookDetailUiState())
     val uiState = _uiState.asStateFlow()
+
+    /** Stav přehrávače — pro zvýraznění právě hrané kapitoly v seznamu. */
+    val playerState = connection.state
 
     private var loadedId: String? = null
 

@@ -5,6 +5,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsLibraryItem
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLibraryItemsResponse
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLoginRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLoginResponse
+import com.github.jankoran90.showlyfin.data.abs.model.AbsMediaUpdate
 import com.github.jankoran90.showlyfin.data.abs.model.AbsMeResponse
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlaySession
@@ -54,4 +55,8 @@ interface AbsService {
     /** Označení epizody/položky přehráno/nepřehráno: PATCH /api/me/progress/{itemId}[/{episodeId}]. */
     @PATCH
     suspend fun patchProgress(@Url url: String, @Header("Authorization") bearer: String, @Body body: AbsProgressUpdate): Response<ResponseBody>
+
+    /** Úprava media položky (ABS server auto-download): PATCH /api/items/{itemId}/media. */
+    @PATCH
+    suspend fun patchMedia(@Url url: String, @Header("Authorization") bearer: String, @Body body: AbsMediaUpdate): Response<ResponseBody>
 }

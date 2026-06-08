@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
@@ -21,6 +22,7 @@ class PodcastDetailViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val connection: AudiobookPlayerConnection,
     private val downloadManager: EpisodeDownloadManager,
+    private val absPrefs: AbsPreferences,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PodcastDetailUiState())
@@ -29,6 +31,46 @@ class PodcastDetailViewModel @Inject constructor(
     /** Fronta epizod (sdílená s přehrávačem) — pro indikátor a správu v detailu. */
     val queue = connection.queue
 
+    /** Stav přehrávače — pro zvýraznění právě hrané epizody v seznamu. */
+    val playerState = connection.state
+
+    /** Akce trailing tlačítka u epizody (z nastavení): 0=fronta konec, 1=fronta další, 2=stáhnout. */
+    val episodeQuickAction: Int get() = absPrefs.episodeQuickAction
+
+    // ── Auto-download DO ZAŘÍZENÍ (offline na telefon) — náš EpisodeDownloadManager ──
+    /** Device auto-download je omezený na vybrané podcasty (scope==1) → ukázat per-podcast přepínač. */
+    val deviceAutoDownloadSelective: Boolean get() = absPrefs.autoDownloadScope == 1 && absPrefs.autoDownloadNewest > 0
+
+    private val _deviceAutoDownloadOn = MutableStateFlow(false)
+    val deviceAutoDownloadOn = _deviceAutoDownloadOn.asStateFlow()
+
+    fun toggleDeviceAutoDownload() {
+        val id = currentItemId ?: return
+        val newVal = !_deviceAutoDownloadOn.value
+        absPrefs.setAutoDownloadPodcast(id, newVal)
+        _deviceAutoDownloadOn.value = newVal
+    }
+
+    // ── Auto-download NA ABS SERVER (ABS-nativní, per-podcast) ──
+    private val _serverAutoDownloadOn = MutableStateFlow(false)
+    val serverAutoDownloadOn = _serverAutoDownloadOn.asStateFlow()
+    private val _serverAutoDownloadBusy = MutableStateFlow(false)
+    val serverAutoDownloadBusy = _serverAutoDownloadBusy.asStateFlow()
+
+    fun toggleServerAutoDownload() {
+        val id = currentItemId ?: return
+        val newVal = !_serverAutoDownloadOn.value
+        viewModelScope.launch {
+            _serverAutoDownloadBusy.value = true
+            repo.setServerAutoDownload(id, newVal)
+                .onSuccess { _serverAutoDownloadOn.value = newVal }
+                .onFailure { Timber.w(it, "[Listen] server auto-download PATCH selhal") }
+            _serverAutoDownloadBusy.value = false
+        }
+    }
+
+    private var currentItemId: String? = null
+
     /** Stav stažení per epizoda (badge u řádků). */
     val downloadStates = downloadManager.states
 
@@ -36,6 +78,9 @@ class PodcastDetailViewModel @Inject constructor(
     private var raw: PodcastDetail? = null
 
     fun load(itemId: String) {
+        currentItemId = itemId
+        _deviceAutoDownloadOn.value = absPrefs.isAutoDownloadPodcast(itemId)
+        viewModelScope.launch { _serverAutoDownloadOn.value = repo.getServerAutoDownload(itemId) }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             runCatching { repo.getPodcastDetail(itemId) }
@@ -44,6 +89,8 @@ class PodcastDetailViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(isLoading = false, detail = applyFilter(d), hideFinished = repo.hideFinishedEpisodes)
                     }
+                    // Auto-stáhnout N nejnovějších nepřehraných epizod (z nastavení; no-op když vyp).
+                    downloadManager.autoDownloadNewestEpisodes(d.episodes, d.podcast.title, d.podcast.coverUrl)
                 }
                 .onFailure { e ->
                     Timber.w(e, "[Listen] podcast detail selhal")
@@ -52,8 +99,14 @@ class PodcastDetailViewModel @Inject constructor(
         }
     }
 
-    private fun applyFilter(d: PodcastDetail): PodcastDetail =
-        if (repo.hideFinishedEpisodes) d.copy(episodes = d.episodes.filterNot { it.isFinished }) else d
+    private fun applyFilter(d: PodcastDetail): PodcastDetail {
+        // repo vrací epizody newest-first; pro „nejstarší první" obrátíme.
+        var eps = if (absPrefs.episodeSortNewestFirst) d.episodes else d.episodes.reversed()
+        if (repo.hideFinishedEpisodes) eps = eps.filterNot { it.isFinished }
+        val limit = absPrefs.episodeListLimit
+        if (limit > 0 && eps.size > limit) eps = eps.take(limit)
+        return d.copy(episodes = eps)
+    }
 
     /** Long-press akce: označit epizodu dokončenou/nedokončenou (server + optimisticky lokálně). */
     fun setEpisodeFinished(episode: PodcastEpisode, finished: Boolean) {

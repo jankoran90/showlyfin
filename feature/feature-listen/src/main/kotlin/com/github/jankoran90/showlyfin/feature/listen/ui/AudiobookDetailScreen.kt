@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,6 +59,9 @@ fun AudiobookDetailScreen(
     viewModel: AudiobookDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val playerState by viewModel.playerState.collectAsStateWithLifecycle()
+    val playingChapterIndex = playerState.currentChapterIndex
+        ?.takeIf { playerState.isActive && playerState.currentItemId == itemId }
     LaunchedEffect(itemId) { viewModel.load(itemId) }
 
     ListenExpressiveTheme {
@@ -89,6 +93,7 @@ fun AudiobookDetailScreen(
                 }
                 state.detail != null -> DetailContent(
                     detail = state.detail!!,
+                    playingChapterIndex = playingChapterIndex,
                     onPlay = { fromStart, startSec -> onPlay(itemId, fromStart, startSec) },
                     modifier = Modifier.fillMaxSize().padding(pad),
                 )
@@ -100,6 +105,7 @@ fun AudiobookDetailScreen(
 @Composable
 private fun DetailContent(
     detail: AudiobookDetail,
+    playingChapterIndex: Int?,
     onPlay: (fromStart: Boolean, startSec: Double?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -188,7 +194,7 @@ private fun DetailContent(
                 )
             }
             items(detail.chapters, key = { it.index }) { ch ->
-                ChapterRow(ch, onClick = { onPlay(false, ch.startSec) })
+                ChapterRow(ch, isCurrent = ch.index == playingChapterIndex, onClick = { onPlay(false, ch.startSec) })
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
             }
         }
@@ -196,24 +202,26 @@ private fun DetailContent(
 }
 
 @Composable
-private fun ChapterRow(ch: Chapter, onClick: () -> Unit) {
+private fun ChapterRow(ch: Chapter, isCurrent: Boolean, onClick: () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .background(if (isCurrent) accent.copy(alpha = 0.16f) else Color.Transparent)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Default.PlayArrow,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            if (isCurrent) Icons.Default.GraphicEq else Icons.Default.PlayArrow,
+            contentDescription = if (isCurrent) "Hraje" else null,
+            tint = accent,
             modifier = Modifier.size(18.dp).padding(end = 2.dp),
         )
         Text(
             text = ch.title,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = if (isCurrent) accent else MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(start = 6.dp),
@@ -221,7 +229,7 @@ private fun ChapterRow(ch: Chapter, onClick: () -> Unit) {
         Text(
             text = formatDuration(ch.startSec),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isCurrent) accent else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 12.dp),
         )
     }
