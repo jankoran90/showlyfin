@@ -1,36 +1,38 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.MaterialExpressiveTheme
-import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import com.github.jankoran90.showlyfin.core.domain.theme.DarkMode
-import com.github.jankoran90.showlyfin.core.domain.theme.ShowlyfinSkin
-import com.github.jankoran90.showlyfin.core.domain.theme.SkinPaletteStyle
-import com.github.jankoran90.showlyfin.core.ui.theme.rememberSkinColorScheme
+import androidx.compose.ui.graphics.Color
 
 /**
  * Téma poslechové sekce — izolovaný wrapper, jediné místo, kde se řeší vzhled „Poslechu".
  *
- * Material 3 **Expressive** (Plan PRISM Fáze 2). Sjednoceno se sdíleným skin enginem:
- * místo 13 natvrdo zadaných barev generuje MaterialKolor celé Expressive schéma z jediného
- * **amber seedu** (`0xFFFFC25C`) — zachovaný brand akcent Poslechu z ORPHEUS. Poslech drží
- * vlastní amber identitu nezávisle na uživatelově skinu (záměr — značková barva sekce).
+ * CÍL: `MaterialExpressiveTheme` (Material 3 Expressive). V aktuálním BOM (compose-bom
+ * 2026.05.01 → material3 **1.4.0**) je ale `MaterialExpressiveTheme`/`ExperimentalMaterial3ExpressiveApi`
+ * ještě **internal** (public až v material3 1.5.0-alpha). Dokud se nerozhodne o bumpu material3
+ * na alphu, běží sekce na standardním `MaterialTheme` se stejným AMOLED-dark schématem.
+ * Přepnutí na expressive = záměna `MaterialTheme(...)` za `MaterialExpressiveTheme(...)` zde.
  */
-private val ListenSkin = ShowlyfinSkin(
-    seedColor = 0xFFFFC25C,
-    style = SkinPaletteStyle.EXPRESSIVE,
-    presetId = null,
-    darkMode = DarkMode.DARK,
-    amoled = false,
-)
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ListenExpressiveTheme(content: @Composable () -> Unit) {
-    MaterialExpressiveTheme(
-        colorScheme = rememberSkinColorScheme(ListenSkin),
-        motionScheme = MotionScheme.expressive(),
-        content = content,
+    val colors = darkColorScheme(
+        primary = Color(0xFFFFC25C),
+        onPrimary = Color(0xFF3A2600),
+        primaryContainer = Color(0xFF5A4000),
+        onPrimaryContainer = Color(0xFFFFDFA8),
+        secondary = Color(0xFFD9C2A0),
+        onSecondary = Color(0xFF3A2D14),
+        tertiary = Color(0xFF9CC7FF),
+        background = Color(0xFF0D0D1A),
+        onBackground = Color(0xFFEDEDF2),
+        surface = Color(0xFF14141F),
+        onSurface = Color(0xFFEDEDF2),
+        surfaceVariant = Color(0xFF26263A),
+        onSurfaceVariant = Color(0xFFB9B9C7),
+        surfaceContainer = Color(0xFF1A1A2E),
+        surfaceContainerHigh = Color(0xFF22223A),
+        outline = Color(0xFF49495C),
     )
+    MaterialTheme(colorScheme = colors, content = content)
 }

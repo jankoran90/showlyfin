@@ -2,8 +2,6 @@ package com.github.jankoran90.showlyfin.ui.phone
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,9 +37,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -67,10 +62,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
-import com.github.jankoran90.showlyfin.core.domain.theme.DarkMode
-import com.github.jankoran90.showlyfin.core.domain.theme.ShowlyfinSkin
-import com.github.jankoran90.showlyfin.core.domain.theme.SkinPreset
-import com.github.jankoran90.showlyfin.ui.phone.theme.ThemeViewModel
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderViewModel
 import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
@@ -87,10 +78,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     isAdmin: Boolean = true,
     viewModel: SettingsViewModel = hiltViewModel(),
-    themeViewModel: ThemeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val skin by themeViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // Stav sbalení kategorií — mimo data state, default sbaleno (false). Odchod z tabu Nastavení
     // composable disposne (render přes when(dest)) → fresh mapa → vše zase sbalené (dle požadavku).
@@ -297,14 +286,6 @@ fun SettingsScreen(
         }
 
         CollapsibleSettingsSection("Vzhled", expanded) {
-            SkinSection(
-                skin = skin,
-                onDarkMode = { themeViewModel.skinController.setDarkMode(it) },
-                onDynamicColor = { themeViewModel.skinController.setDynamicColor(it) },
-                onAmoled = { themeViewModel.skinController.setAmoled(it) },
-                onPreset = { themeViewModel.skinController.setPreset(it) },
-            )
-            Spacer(Modifier.height(16.dp))
             DetailModeSection()
         }
 
@@ -997,126 +978,6 @@ private fun CollapsibleSettingsSection(
         content()
     }
     Spacer(Modifier.height(16.dp))
-}
-
-/**
- * Plan PRISM Fáze 4 — skin manager: režim, Material You, AMOLED, barevné presety.
- * Live aplikace přes [SkinController] (StateFlow → recompose celého theme wrapperu).
- * Slidery font/hustota/zaoblení a vlastní barva (color picker) přijdou ve Fázi 5/6.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SkinSection(
-    skin: ShowlyfinSkin,
-    onDarkMode: (DarkMode) -> Unit,
-    onDynamicColor: (Boolean) -> Unit,
-    onAmoled: (Boolean) -> Unit,
-    onPreset: (SkinPreset) -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text("Skin a barvy", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Vyber barevný skin nebo režim — změna se projeví okamžitě v celé aplikaci.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
-            )
-            Spacer(Modifier.height(16.dp))
-
-            // Režim světlý / tmavý / systém
-            Text("Režim", style = MaterialTheme.typography.bodyMedium, color = Color.White)
-            Spacer(Modifier.height(8.dp))
-            val modes = listOf(
-                DarkMode.LIGHT to "Světlý",
-                DarkMode.DARK to "Tmavý",
-                DarkMode.SYSTEM to "Systém",
-            )
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                modes.forEachIndexed { index, (mode, label) ->
-                    SegmentedButton(
-                        selected = skin.darkMode == mode,
-                        onClick = { onDarkMode(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index, modes.size),
-                    ) { Text(label) }
-                }
-            }
-
-            // Material You (jen API 31+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Material You", style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                        Text(
-                            "Barvy podle systémové tapety (Android 12+)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.6f),
-                        )
-                    }
-                    Switch(checked = skin.dynamicColor, onCheckedChange = onDynamicColor)
-                }
-            }
-
-            // AMOLED černá
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("AMOLED černá", style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                    Text(
-                        "Čistě černé pozadí v tmavém režimu (úspora na OLED)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = skin.amoled, onCheckedChange = onAmoled)
-            }
-
-            // Barevné presety
-            Spacer(Modifier.height(16.dp))
-            val dimmed = skin.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-            Text(
-                if (dimmed) "Barevný preset (vypni Material You pro výběr)" else "Barevný preset",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = if (dimmed) 0.4f else 1f),
-            )
-            Spacer(Modifier.height(10.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                SkinPreset.entries.forEach { preset ->
-                    val selected = !dimmed && skin.presetId == preset.id
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.width(56.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color(preset.seedColor))
-                                .then(
-                                    if (selected) Modifier.border(3.dp, Color.White, CircleShape)
-                                    else Modifier,
-                                )
-                                .clickable(enabled = !dimmed) { onPreset(preset) },
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            preset.displayName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = if (dimmed) 0.4f else 0.8f),
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
