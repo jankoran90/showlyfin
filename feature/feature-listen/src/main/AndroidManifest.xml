@@ -5,12 +5,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application>
+        <!-- Android Auto: aplikace je media app (procházení + přehrávání ABS audioknih v autě). -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <service
             android:name=".service.AudiobookPlayerService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
-                <action android:name="androidx.media3.session.MediaSessionService" />
+                <!-- media3 MediaLibraryService (in-app + Auto session) -->
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <!-- legacy MediaBrowserService = discovery pro Android Auto / Assistant -->
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
     </application>
