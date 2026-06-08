@@ -180,12 +180,15 @@ fun ShowlyfinPhoneApp() {
             }
         }
 
-        // R1: klepnutí na media notifikaci audioknihy → otevřít sekci Poslech (counter signál).
+        // R1/#3: klepnutí na media notifikaci audioknihy → otevřít rovnou fullscreen přehrávač
+        // (itemId=null = expand z běžící session, jako mini-player). Back vrací na grid Poslech.
         val openListenSignal by ListenNavSignal.openListen.collectAsStateWithLifecycle()
         LaunchedEffect(openListenSignal) {
             if (openListenSignal > 0) {
                 bottomTab = Destination.Listen
-                currentDestination = Destination.Listen
+                currentDestination = Destination.AudiobookPlayer(
+                    itemId = null, fromStart = false, parent = Destination.Listen,
+                )
             }
         }
 

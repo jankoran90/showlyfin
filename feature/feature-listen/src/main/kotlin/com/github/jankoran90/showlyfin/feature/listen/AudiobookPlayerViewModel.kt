@@ -55,6 +55,7 @@ class AudiobookPlayerViewModel @Inject constructor(
     fun seekBy(deltaMs: Long) = connection.seekBy(deltaMs)
     fun nextChapter() = connection.nextChapter()
     fun prevChapter() = connection.prevChapter()
+    fun seekToChapter(startSec: Double) = connection.seekToChapter(startSec)
     fun setSpeed(speed: Float) = connection.setSpeed(speed)
     fun setSleepTimer(minutes: Int?) = connection.setSleepTimer(minutes)
 }

@@ -30,14 +30,22 @@ data class Chapter(
     val endSec: Double,
 )
 
+/** Jeden audio soubor audioknihy (ABS vrací víc souborů poskládaných za sebou). */
+data class AbsTrack(
+    val index: Int,
+    val url: String,             // plné URL souboru (+token)
+    val startOffsetSec: Double,  // začátek tohoto souboru v čase CELÉ knihy
+    val durationSec: Double,
+)
+
 /** Výsledek otevření play session — vše potřebné pro ExoPlayer + sync. */
 data class AbsPlayback(
     val sessionId: String,
     val title: String,
     val author: String?,
     val coverUrl: String?,
-    val streamUrl: String,       // plné URL prvního audio tracku (single-file audiokniha)
-    val startPositionSec: Double,// uložená pozice ze serveru
-    val durationSec: Double,
-    val chapters: List<Chapter>,
+    val tracks: List<AbsTrack>,  // všechny soubory; přehrávač je poskládá za sebe
+    val startPositionSec: Double,// uložená pozice ze serveru (čas celé knihy)
+    val durationSec: Double,     // délka celé knihy
+    val chapters: List<Chapter>, // kapitoly v čase celé knihy
 )

@@ -115,7 +115,9 @@ class AudiobookPlayerService : MediaSessionService() {
         val extras = item.mediaMetadata.extras ?: return
         val sessionId = extras.getString(KEY_SESSION_ID) ?: return
         val durationSec = extras.getDouble(KEY_DURATION_SEC)
-        val posSec = (p.currentPosition / 1000.0).coerceAtLeast(0.0)
+        val trackOffsetSec = extras.getDouble(KEY_TRACK_OFFSET_SEC)
+        // Pozice v čase CELÉ knihy = offset aktuálního souboru + pozice v něm.
+        val posSec = (trackOffsetSec + p.currentPosition / 1000.0).coerceAtLeast(0.0)
         scope.launch {
             repo.syncProgress(sessionId, posSec, SYNC_INTERVAL_MS / 1000.0, durationSec)
         }
@@ -124,6 +126,7 @@ class AudiobookPlayerService : MediaSessionService() {
     companion object {
         const val KEY_SESSION_ID = "abs_session_id"
         const val KEY_DURATION_SEC = "abs_duration_sec"
+        const val KEY_TRACK_OFFSET_SEC = "abs_track_offset_sec"
         private const val SYNC_INTERVAL_MS = 15_000L
     }
 }

@@ -10,6 +10,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsSyncRequest
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDetail
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
+import com.github.jankoran90.showlyfin.data.abs.model.AbsTrack
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
 import timber.log.Timber
 import javax.inject.Inject
@@ -116,18 +117,28 @@ class AbsRepository @Inject constructor(
     suspend fun startPlayback(itemId: String): AbsPlayback {
         val req = AbsPlayRequest(deviceInfo = AbsDeviceInfo(deviceId = prefs.deviceId))
         val s = service.play(api("/api/items/$itemId/play"), bearer(), req)
-        val track = s.audioTracks.firstOrNull()
-            ?: error("Audiokniha nemá audio stopu.")
-        val rel = track.contentUrl ?: error("Audio stopa bez contentUrl.")
-        val streamUrl = "${prefs.baseUrl}$rel?token=${prefs.token}"
+        // ABS audioknihy bývají rozdělené na víc souborů — bereme VŠECHNY a poskládáme za sebe.
+        // currentTime, kapitoly i startOffset jsou v čase CELÉ knihy.
+        val tracks = s.audioTracks
+            .sortedBy { it.startOffset ?: it.index?.toDouble() ?: 0.0 }
+            .mapIndexedNotNull { i, t ->
+                val rel = t.contentUrl ?: return@mapIndexedNotNull null
+                AbsTrack(
+                    index = t.index ?: i,
+                    url = "${prefs.baseUrl}$rel?token=${prefs.token}",
+                    startOffsetSec = t.startOffset ?: 0.0,
+                    durationSec = t.duration ?: 0.0,
+                )
+            }
+        require(tracks.isNotEmpty()) { "Audiokniha nemá audio stopu." }
         return AbsPlayback(
             sessionId = s.id,
             title = s.displayTitle ?: "",
             author = s.displayAuthor,
             coverUrl = coverUrl(itemId),
-            streamUrl = streamUrl,
+            tracks = tracks,
             startPositionSec = s.currentTime ?: 0.0,
-            durationSec = s.duration ?: track.duration ?: 0.0,
+            durationSec = s.duration ?: tracks.sumOf { it.durationSec },
             chapters = s.chapters.map { Chapter(it.id, it.title ?: "Kapitola ${it.id + 1}", it.start, it.end) },
         )
     }

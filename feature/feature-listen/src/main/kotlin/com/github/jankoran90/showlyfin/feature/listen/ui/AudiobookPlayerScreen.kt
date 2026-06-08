@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,11 +11,16 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Pause
@@ -33,9 +39,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,10 +82,12 @@ fun AudiobookPlayerScreen(
         if (itemId != null) viewModel.open(itemId, fromStart, startSec)
     }
 
+    val chapters by viewModel.chapters.collectAsStateWithLifecycle()
     var scrubbing by remember { mutableStateOf(false) }
     var scrubMs by remember { mutableStateOf(0f) }
     var speedMenu by remember { mutableStateOf(false) }
     var sleepMenu by remember { mutableStateOf(false) }
+    var chaptersSheet by remember { mutableStateOf(false) }
 
     ListenExpressiveTheme {
         Box(
@@ -190,6 +201,13 @@ fun AudiobookPlayerScreen(
                 Spacer(Modifier.height(16.dp))
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (chapters.isNotEmpty()) {
+                        AssistChip(
+                            onClick = { chaptersSheet = true },
+                            label = { Text("Kapitoly") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        )
+                    }
                     Box {
                         AssistChip(
                             onClick = { speedMenu = true },
@@ -213,6 +231,54 @@ fun AudiobookPlayerScreen(
                                 DropdownMenuItem(text = { Text("$min min") }, onClick = { viewModel.setSleepTimer(min); sleepMenu = false })
                             }
                             DropdownMenuItem(text = { Text("Vypnout") }, onClick = { viewModel.setSleepTimer(null); sleepMenu = false })
+                        }
+                    }
+                }
+            }
+
+            if (chaptersSheet && chapters.isNotEmpty()) {
+                val listState = rememberLazyListState()
+                val currentIdx = chapters.indexOfFirst { it.index == state.currentChapterIndex }
+                LaunchedEffect(chaptersSheet, currentIdx) {
+                    if (currentIdx >= 0) {
+                        listState.scrollToItem(currentIdx)
+                        val info = listState.layoutInfo
+                        val viewportH = info.viewportEndOffset - info.viewportStartOffset
+                        val itemH = info.visibleItemsInfo.firstOrNull { it.index == currentIdx }?.size
+                            ?: info.visibleItemsInfo.firstOrNull()?.size ?: 0
+                        listState.scrollToItem(currentIdx, -((viewportH - itemH) / 2).coerceAtLeast(0))
+                    }
+                }
+                ModalBottomSheet(
+                    onDismissRequest = { chaptersSheet = false },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ) {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+                        itemsIndexed(chapters) { _, ch ->
+                            val isCurrent = ch.index == state.currentChapterIndex
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.seekToChapter(ch.startSec); chaptersSheet = false }
+                                    .background(if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent)
+                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    ch.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    fmt((ch.startSec * 1000).toLong()),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 12.dp),
+                                )
+                            }
                         }
                     }
                 }

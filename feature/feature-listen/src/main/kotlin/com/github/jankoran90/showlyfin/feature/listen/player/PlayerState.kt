@@ -11,5 +11,6 @@ data class PlayerState(
     val durationMs: Long = 0L,
     val speed: Float = 1f,
     val currentChapterTitle: String? = null,
+    val currentChapterIndex: Int? = null,
     val sleepMinutesLeft: Int? = null,
 )

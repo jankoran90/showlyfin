@@ -83,11 +83,11 @@ class AudiobookPlayerConnection @Inject constructor(
 
     private fun pushState() {
         val c = controller ?: return
-        val pos = c.currentPosition.coerceAtLeast(0L)
-        val chapterTitle = _chapters.value.firstOrNull {
-            val p = pos / 1000.0
-            p >= it.startSec && p < it.endSec
-        }?.title
+        val pos = bookPosMs(c)
+        val posSec = pos / 1000.0
+        val currentChapter = _chapters.value.firstOrNull { posSec >= it.startSec && posSec < it.endSec }
+        val bookDurationMs = (c.currentMediaItem?.mediaMetadata?.extras
+            ?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0).let { (it * 1000).toLong() }
         _state.update {
             it.copy(
                 isActive = c.mediaItemCount > 0,
@@ -97,9 +97,10 @@ class AudiobookPlayerConnection @Inject constructor(
                 author = c.mediaMetadata.artist?.toString() ?: it.author,
                 coverUrl = c.mediaMetadata.artworkUri?.toString() ?: it.coverUrl,
                 positionMs = pos,
-                durationMs = c.duration.takeIf { d -> d > 0 } ?: it.durationMs,
+                durationMs = bookDurationMs.takeIf { d -> d > 0 } ?: it.durationMs,
                 speed = c.playbackParameters.speed,
-                currentChapterTitle = chapterTitle,
+                currentChapterTitle = currentChapter?.title,
+                currentChapterIndex = currentChapter?.index,
             )
         }
     }
@@ -113,53 +114,78 @@ class AudiobookPlayerConnection @Inject constructor(
             )
         }
         withController { c ->
-            val extras = Bundle().apply {
-                putString(AudiobookPlayerService.KEY_SESSION_ID, pb.sessionId)
-                putDouble(AudiobookPlayerService.KEY_DURATION_SEC, pb.durationSec)
+            val artwork = pb.coverUrl?.let(Uri::parse)
+            val items = pb.tracks.map { t ->
+                val extras = Bundle().apply {
+                    putString(AudiobookPlayerService.KEY_SESSION_ID, pb.sessionId)
+                    putDouble(AudiobookPlayerService.KEY_DURATION_SEC, pb.durationSec)
+                    putDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC, t.startOffsetSec)
+                }
+                MediaItem.Builder()
+                    .setUri(t.url)
+                    .setMediaId("${pb.sessionId}_${t.index}")
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(pb.title)
+                            .setArtist(pb.author)
+                            .setArtworkUri(artwork)
+                            .setExtras(extras)
+                            .build(),
+                    )
+                    .build()
             }
-            val item = MediaItem.Builder()
-                .setUri(pb.streamUrl)
-                .setMediaId(pb.sessionId)
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(pb.title)
-                        .setArtist(pb.author)
-                        .setArtworkUri(pb.coverUrl?.let(Uri::parse))
-                        .setExtras(extras)
-                        .build(),
-                )
-                .build()
-            c.setMediaItem(item)
+            c.setMediaItems(items)
             c.prepare()
-            val startMs = when {
+            val startBookMs = when {
                 startOverrideSec != null -> (startOverrideSec * 1000).toLong()
                 fromStart -> 0L
                 else -> (pb.startPositionSec * 1000).toLong()
             }
-            if (startMs > 0) c.seekTo(startMs)
+            if (startBookMs > 0) seekBook(c, startBookMs)
             c.playWhenReady = true
         }
+    }
+
+    /** Pozice v čase CELÉ knihy = offset aktuálního souboru + pozice v něm. */
+    private fun bookPosMs(c: MediaController): Long {
+        val offSec = c.currentMediaItem?.mediaMetadata?.extras
+            ?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0
+        return (offSec * 1000).toLong() + c.currentPosition.coerceAtLeast(0L)
+    }
+
+    /** Skok na pozici v čase celé knihy — najde správný soubor a posun v něm. */
+    private fun seekBook(c: MediaController, bookMs: Long) {
+        val target = bookMs.coerceAtLeast(0L)
+        val count = c.mediaItemCount
+        if (count <= 1) { c.seekTo(target); return }
+        var idx = 0
+        for (i in 0 until count) {
+            val offMs = ((c.getMediaItemAt(i).mediaMetadata.extras
+                ?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0) * 1000).toLong()
+            if (offMs <= target + 1) idx = i else break
+        }
+        val idxOffMs = ((c.getMediaItemAt(idx).mediaMetadata.extras
+            ?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0) * 1000).toLong()
+        c.seekTo(idx, (target - idxOffMs).coerceAtLeast(0L))
     }
 
     fun playPause() = withController { c ->
         if (c.isPlaying) c.pause() else c.play()
     }
 
-    fun seekTo(ms: Long) = withController { it.seekTo(ms.coerceAtLeast(0L)) }
+    /** [ms] je v čase celé knihy. */
+    fun seekTo(ms: Long) = withController { seekBook(it, ms) }
 
-    fun seekBy(deltaMs: Long) = withController { c ->
-        val target = (c.currentPosition + deltaMs).coerceIn(0L, c.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
-        c.seekTo(target)
-    }
+    fun seekBy(deltaMs: Long) = withController { c -> seekBook(c, bookPosMs(c) + deltaMs) }
 
     fun nextChapter() = withController { c ->
-        val posSec = c.currentPosition / 1000.0
+        val posSec = bookPosMs(c) / 1000.0
         val next = _chapters.value.firstOrNull { it.startSec > posSec + 1.0 }
-        if (next != null) c.seekTo((next.startSec * 1000).toLong())
+        if (next != null) seekBook(c, (next.startSec * 1000).toLong())
     }
 
     fun prevChapter() = withController { c ->
-        val posSec = c.currentPosition / 1000.0
+        val posSec = bookPosMs(c) / 1000.0
         // do začátku aktuální kapitoly; pokud jsme < 3 s v ní, skoč na předchozí
         val current = _chapters.value.lastOrNull { it.startSec <= posSec }
         val target = if (current != null && posSec - current.startSec > 3.0) {
@@ -167,8 +193,11 @@ class AudiobookPlayerConnection @Inject constructor(
         } else {
             _chapters.value.lastOrNull { it.startSec < (current?.startSec ?: posSec) - 0.1 }?.startSec ?: 0.0
         }
-        c.seekTo((target * 1000).toLong())
+        seekBook(c, (target * 1000).toLong())
     }
+
+    /** Skok na konkrétní kapitolu (čas celé knihy). Pro seznam kapitol v playeru. */
+    fun seekToChapter(startSec: Double) = withController { seekBook(it, (startSec * 1000).toLong()) }
 
     fun setSpeed(speed: Float) = withController { it.setPlaybackSpeed(speed.coerceIn(0.5f, 3f)) }
 
