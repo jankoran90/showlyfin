@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -73,7 +75,7 @@ fun ServerSetupScreen(
                 user = state.selectedUser,
                 isLoading = state.isLoading,
                 error = state.error,
-                onAuthenticate = { name, pass -> viewModel.authenticate(name, pass) },
+                onAuthenticate = { name, pass, remember -> viewModel.authenticate(name, pass, remember) },
                 onBack = { viewModel.backToUsers() },
             )
             SetupStage.DONE -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -218,11 +220,12 @@ private fun PasswordStage(
     user: PublicUserInfo?,
     isLoading: Boolean,
     error: String?,
-    onAuthenticate: (String, String) -> Unit,
+    onAuthenticate: (String, String, Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     var manualName by remember { mutableStateOf(user?.name ?: "") }
     var password by remember { mutableStateOf("") }
+    var rememberPassword by remember { mutableStateOf(true) }
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -259,9 +262,21 @@ private fun PasswordStage(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = rememberPassword, onCheckedChange = { rememberPassword = it })
+            Column {
+                Text("Zapamatovat heslo", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Předvyplní přihlášení a obnoví relaci. Vypni na sdíleném zařízení.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
         Spacer(Modifier.height(16.dp))
         Button(
-            onClick = { onAuthenticate(user?.name ?: manualName, password) },
+            onClick = { onAuthenticate(user?.name ?: manualName, password, rememberPassword) },
             enabled = !isLoading,
             modifier = Modifier.fillMaxWidth(),
         ) {

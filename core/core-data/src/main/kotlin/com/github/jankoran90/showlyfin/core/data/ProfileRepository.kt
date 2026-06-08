@@ -58,6 +58,20 @@ class ProfileRepository @Inject constructor(
         prefs.edit().remove(PREF_ACTIVE_PROFILE_ID).apply()
     }
 
+    /** Přejmenování profilu (Plan PROFILES 1D). */
+    suspend fun rename(profileId: Long, newName: String) {
+        val profile = dao.getById(profileId) ?: return
+        dao.update(profile.copy(name = newName))
+        if (_activeProfile.value?.id == profileId) _activeProfile.value = dao.getById(profileId)
+    }
+
+    /** Nastaví/zruší cestu k vlastní fotce profilu (Plan PROFILES 1D). */
+    suspend fun setAvatarPath(profileId: Long, path: String?) {
+        val profile = dao.getById(profileId) ?: return
+        dao.update(profile.copy(avatarPath = path))
+        if (_activeProfile.value?.id == profileId) _activeProfile.value = dao.getById(profileId)
+    }
+
     /** Write-through editace configu profilu (admin in-app). Re-aplikuje, je-li profil aktivní. */
     suspend fun updateConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
         val profile = dao.getById(profileId) ?: return

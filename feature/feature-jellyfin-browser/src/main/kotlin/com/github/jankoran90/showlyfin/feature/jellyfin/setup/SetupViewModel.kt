@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
+import com.github.jankoran90.showlyfin.core.domain.JellyfinCreds
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,7 +111,7 @@ class SetupViewModel @Inject constructor(
         _uiState.update { SetupUiState() }
     }
 
-    fun authenticate(username: String, password: String) {
+    fun authenticate(username: String, password: String, rememberPassword: Boolean = true) {
         val serverUrl = _uiState.value.serverUrl
         if (serverUrl.isBlank()) {
             _uiState.update { it.copy(error = "Server URL chybí") }
@@ -145,16 +147,33 @@ class SetupViewModel @Inject constructor(
                 val existing = profileRepository.getAll().firstOrNull {
                     it.serverUrl == serverUrl && it.jellyfinUserId == userId
                 }
+                // Plan PROFILES 1D: do balíku ulož Jellyfin creds (heslo jen když „zapamatovat heslo").
+                // Zachovej existující config balík profilu (žánry/sekce/restrikce) — jen přepiš creds.
+                val baseConfig = ProfileConfig.fromJson(existing?.configJson)
+                val mergedConfig = baseConfig.copy(
+                    credentials = baseConfig.credentials.copy(
+                        jellyfin = JellyfinCreds(
+                            url = serverUrl,
+                            userId = userId,
+                            token = accessToken,
+                            username = authResult.user?.name ?: username,
+                            password = if (rememberPassword) password else null,
+                        ),
+                    ),
+                )
                 val profile = ProfileEntity(
                     id = existing?.id ?: 0L,
-                    name = authResult.user?.name ?: username,
+                    name = existing?.name ?: authResult.user?.name ?: username,
                     serverUrl = serverUrl,
                     jellyfinUserId = userId,
                     jellyfinToken = accessToken,
                     avatarTag = authResult.user?.primaryImageTag,
                     isAdmin = isAdmin,
                     isDefault = existing?.isDefault ?: (profileRepository.count() == 0),
+                    tvDefault = existing?.tvDefault ?: false,
                     maxAgeRating = existing?.maxAgeRating,
+                    configJson = ProfileConfig.toJson(mergedConfig),
+                    avatarPath = existing?.avatarPath,
                     createdAt = existing?.createdAt ?: System.currentTimeMillis(),
                 )
                 val savedId = profileRepository.upsert(profile)

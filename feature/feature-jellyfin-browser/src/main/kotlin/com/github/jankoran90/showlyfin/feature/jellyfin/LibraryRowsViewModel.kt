@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.jellyfin
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
@@ -41,6 +42,7 @@ class LibraryRowsViewModel @Inject constructor(
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
     private val tmdb: TmdbRemoteDataSource,
+    private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -69,7 +71,10 @@ class LibraryRowsViewModel @Inject constructor(
                 )
                 val userUuid = UUID.fromString(userId)
                 val views = apiClient.userViewsApi.getUserViews(userId = userUuid).content
+                // Plan PROFILES 1E: whitelist knihoven z aktivního profilu (null = všechny).
+                val whitelist = profileRepository.activeConfig.value.jellyfinLibraryWhitelist
                 val mediaViews = views.items.filter { it.isMediaLibrary() }
+                    .let { list -> if (whitelist == null) list else list.filter { it.id.toString() in whitelist } }
                 val rows = coroutineScope {
                     mediaViews.map { view ->
                         async { loadRow(view, userUuid, serverUrl, token) }

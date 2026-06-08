@@ -94,18 +94,25 @@ private fun ProfileCard(profile: ProfileEntity, onClick: () -> Unit) {
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
+                // Plan PROFILES 1D: vlastní lokální fotka má přednost, pak Jellyfin avatar, pak iniciála.
+                val localAvatar = profile.avatarPath?.let { java.io.File(it) }?.takeIf { it.exists() }
                 val avatarUrl = profile.avatarTag?.let { tag ->
                     "${profile.serverUrl}/Users/${profile.jellyfinUserId}/Images/Primary?tag=$tag&quality=85"
                 }
-                if (avatarUrl != null) {
-                    AsyncImage(
+                when {
+                    localAvatar != null -> AsyncImage(
+                        model = localAvatar,
+                        contentDescription = profile.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    avatarUrl != null -> AsyncImage(
                         model = avatarUrl,
                         contentDescription = profile.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
-                } else {
-                    Text(
+                    else -> Text(
                         text = profile.name.take(1).uppercase(),
                         color = Color.White,
                         style = MaterialTheme.typography.headlineMedium,

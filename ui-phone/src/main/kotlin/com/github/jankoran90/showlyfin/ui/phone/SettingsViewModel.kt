@@ -1,17 +1,23 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
+import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.StreamFilterPrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +60,7 @@ class SettingsViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val uploaderDs: UploaderRemoteDataSource,
     private val absRepo: AbsRepository,
+    @ApplicationContext private val appContext: Context,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -193,10 +200,56 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { profileRepository.delete(profile) }
     }
 
+    /**
+     * Odhlášení / přepnutí profilu (Plan PROFILES 1C). Zruší aktivní profil → startovní brána
+     * (ProfileGateViewModel) ukáže ProfilePicker. Profil ZŮSTÁVÁ uložený vč. přihlášení.
+     */
+    fun logoutProfile() {
+        profileRepository.clearActive()
+    }
+
+    /** Přidat profil (Plan PROFILES 1D) — odhlásí aktivní → brána ukáže picker s „Přidat profil". */
+    fun addProfile() {
+        profileRepository.clearActive()
+    }
+
+    /** Přejmenování profilu (Plan PROFILES 1D). */
+    fun renameProfile(profileId: Long, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch { profileRepository.rename(profileId, trimmed) }
+    }
+
+    /**
+     * Nastaví vlastní fotku profilu (Plan PROFILES 1D). Zkopíruje obsah [uri] do
+     * filesDir/avatars/<id>-<ts>.jpg (timestamp → Coil cache invalidace) a uloží cestu do profilu.
+     */
+    fun setProfileAvatar(profileId: Long, uri: Uri) {
+        viewModelScope.launch {
+            val path = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = java.io.File(appContext.filesDir, "avatars").apply { mkdirs() }
+                    dir.listFiles { f -> f.name.startsWith("$profileId-") }?.forEach { it.delete() }
+                    val dest = java.io.File(dir, "$profileId-${System.currentTimeMillis()}.jpg")
+                    appContext.contentResolver.openInputStream(uri)?.use { input ->
+                        dest.outputStream().use { output -> input.copyTo(output) }
+                    } ?: error("Nelze otevřít obrázek")
+                    dest.absolutePath
+                }.getOrNull()
+            }
+            if (path != null) profileRepository.setAvatarPath(profileId, path)
+        }
+    }
+
     fun updateProfileAgeRating(profileId: Long, rating: AgeRating?) {
         viewModelScope.launch {
             profileRepository.updateMaxAgeRating(profileId, rating?.name)
         }
+    }
+
+    /** Admin write-through editace config balíku profilu (Plan PROFILES 1E): sekce/žánry. */
+    fun updateProfileConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
+        viewModelScope.launch { profileRepository.updateConfig(profileId, transform) }
     }
 
     private fun refreshJellyfinState() {

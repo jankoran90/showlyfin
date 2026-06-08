@@ -40,6 +40,7 @@ dependencies {
     implementation(project(":data:data-abs"))
     implementation(libs.hilt.android)
     implementation(libs.timber)
+    implementation(libs.coil.compose)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.core.ktx)

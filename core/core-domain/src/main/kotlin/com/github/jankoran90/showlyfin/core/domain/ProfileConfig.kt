@@ -33,6 +33,19 @@ data class ProfileConfig(
     fun isSectionVisible(key: String): Boolean =
         visibleSections.isEmpty() || visibleSections.contains(key)
 
+    /**
+     * Žánrový filtr profilu (Plan PROFILES 1E). Vrací true = položku zobrazit.
+     * Blacklist má přednost; je-li allow-list neprázdný, projdou jen položky s aspoň jedním povoleným
+     * žánrem. [allowedGenres]/[blockedGenres] se očekávají lowercase.
+     */
+    fun isGenreAllowed(itemGenres: List<String>?): Boolean {
+        if (allowedGenres.isEmpty() && blockedGenres.isEmpty()) return true
+        val g = itemGenres.orEmpty().map { it.lowercase() }
+        if (blockedGenres.isNotEmpty() && g.any { it in blockedGenres }) return false
+        if (allowedGenres.isNotEmpty() && g.none { it in allowedGenres }) return false
+        return true
+    }
+
     companion object {
         /** Default config — bez jakýchkoli restrikcí. */
         val DEFAULT = ProfileConfig()

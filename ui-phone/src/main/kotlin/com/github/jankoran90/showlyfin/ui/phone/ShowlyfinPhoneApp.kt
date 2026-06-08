@@ -47,6 +47,7 @@ import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
@@ -167,6 +168,17 @@ fun ShowlyfinPhoneApp() {
             )
             return@ShowlyfinPhoneTheme
         }
+
+        // Plan PROFILES 1E: viditelnost sekcí dle aktivního profilu. Prázdné = vše (admin/legacy).
+        val visibleSections = gateState.visibleSections
+        fun sectionVisible(key: String): Boolean = visibleSections.isEmpty() || key in visibleSections
+        val poslechVisible = sectionVisible(ProfileConfig.Sections.POSLECH)
+        val visibleSubsections = listOf(
+            ProfileConfig.Sections.KNIHOVNA,
+            ProfileConfig.Sections.CHCI_VIDET,
+            ProfileConfig.Sections.OBJEVIT,
+            ProfileConfig.Sections.NA_RD,
+        ).filter { sectionVisible(it) }
 
         var currentDestination by remember { mutableStateOf<Destination>(Destination.Hlavni) }
         var bottomTab by remember { mutableStateOf<Destination>(Destination.Hlavni) }
@@ -305,6 +317,7 @@ fun ShowlyfinPhoneApp() {
                 ) {
             when (val dest = currentDestination) {
                 is Destination.Hlavni -> MainScreen(
+                    visibleSubsections = visibleSubsections,
                     onTraktItemClick = { item ->
                         bottomTab = Destination.Hlavni
                         currentDestination = Destination.Detail(item, parent = Destination.Hlavni)
@@ -385,6 +398,7 @@ fun ShowlyfinPhoneApp() {
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Settings -> SettingsScreen(
+                    isAdmin = gateState.activeProfile?.isAdmin != false,
                     onOpenUploader = { currentDestination = Destination.Uploader },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -530,12 +544,14 @@ fun ShowlyfinPhoneApp() {
                                 icon = { Icon(Icons.Default.Home, contentDescription = null) },
                                 label = { Text("Sleduj") },
                             )
-                            NavigationBarItem(
-                                selected = bottomTab is Destination.Listen,
-                                onClick = { bottomTab = Destination.Listen; currentDestination = Destination.Listen },
-                                icon = { Icon(Icons.Default.Headphones, contentDescription = null) },
-                                label = { Text("Poslech") },
-                            )
+                            if (poslechVisible) {
+                                NavigationBarItem(
+                                    selected = bottomTab is Destination.Listen,
+                                    onClick = { bottomTab = Destination.Listen; currentDestination = Destination.Listen },
+                                    icon = { Icon(Icons.Default.Headphones, contentDescription = null) },
+                                    label = { Text("Poslech") },
+                                )
+                            }
                             NavigationBarItem(
                                 selected = bottomTab is Destination.Settings,
                                 onClick = { bottomTab = Destination.Settings; currentDestination = Destination.Settings },

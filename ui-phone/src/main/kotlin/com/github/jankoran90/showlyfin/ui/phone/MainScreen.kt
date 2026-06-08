@@ -13,18 +13,26 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
 import com.github.jankoran90.showlyfin.feature.discover.ui.RdLibraryScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.LibraryRowsScreen
 import com.github.jankoran90.showlyfin.feature.watchlist.ui.WatchlistScreen
 import kotlinx.coroutines.launch
 
-private val mainTabs = listOf("Knihovna", "Chci vidět", "Objevit", "Na RD")
+/** Pořadí + popisky podsekcí „Hlavní". Klíče = [ProfileConfig.Sections]. */
+private val ALL_SUBSECTIONS = listOf(
+    ProfileConfig.Sections.KNIHOVNA to "Knihovna",
+    ProfileConfig.Sections.CHCI_VIDET to "Chci vidět",
+    ProfileConfig.Sections.OBJEVIT to "Objevit",
+    ProfileConfig.Sections.NA_RD to "Na RD",
+)
 
 /**
- * Sekce „Hlavní" — 4 horizontálně swipovatelné podsekce: Knihovna (Trakt pohled na Jellyfin),
+ * Sekce „Hlavní" — horizontálně swipovatelné podsekce: Knihovna (Trakt pohled na Jellyfin),
  * Chci vidět (Watchlist), Objevit (Discover), Na RD (filmy uložené na RealDebrid).
  *
+ * @param visibleSubsections klíče viditelných podsekcí (Plan PROFILES 1E). Prázdné = všechny.
  * @param onTraktItemClick otevři bohatý Trakt/TMDB detail
  * @param onJellyfinItemClick otevři Jellyfin kartu (fallback pro položky bez TMDB matche)
  * @param onOpenLibrary otevři celou Jellyfin knihovnu (drill-down z řady Knihovny)
@@ -35,8 +43,12 @@ fun MainScreen(
     onJellyfinItemClick: (jellyfinId: String) -> Unit,
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
     modifier: Modifier = Modifier,
+    visibleSubsections: List<String> = emptyList(),
 ) {
-    val pagerState = rememberPagerState(initialPage = 0) { mainTabs.size }
+    val tabs = ALL_SUBSECTIONS
+        .filter { visibleSubsections.isEmpty() || it.first in visibleSubsections }
+        .ifEmpty { ALL_SUBSECTIONS }
+    val pagerState = rememberPagerState(initialPage = 0) { tabs.size }
     val scope = rememberCoroutineScope()
 
     Column(modifier.fillMaxSize()) {
@@ -45,7 +57,7 @@ fun MainScreen(
             containerColor = Color(0xFF1A1A2E),
             contentColor = Color.White,
         ) {
-            mainTabs.forEachIndexed { index, title ->
+            tabs.forEachIndexed { index, (_, title) ->
                 Tab(
                     selected = pagerState.currentPage == index,
                     onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
@@ -57,21 +69,21 @@ fun MainScreen(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
         ) { page ->
-            when (page) {
-                0 -> LibraryRowsScreen(
+            when (tabs[page].first) {
+                ProfileConfig.Sections.KNIHOVNA -> LibraryRowsScreen(
                     onItemClick = { media, jellyfinId ->
                         if (media != null) onTraktItemClick(media) else onJellyfinItemClick(jellyfinId)
                     },
                     onOpenLibrary = onOpenLibrary,
                     modifier = Modifier.fillMaxSize(),
                 )
-                1 -> WatchlistScreen(
+                ProfileConfig.Sections.CHCI_VIDET -> WatchlistScreen(
                     onItemClick = { item, jellyfinId ->
                         if (jellyfinId != null) onJellyfinItemClick(jellyfinId) else onTraktItemClick(item)
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                2 -> DiscoverScreen(
+                ProfileConfig.Sections.OBJEVIT -> DiscoverScreen(
                     onItemClick = { item, jellyfinId ->
                         if (jellyfinId != null) onJellyfinItemClick(jellyfinId) else onTraktItemClick(item)
                     },

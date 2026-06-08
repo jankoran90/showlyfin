@@ -18,6 +18,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-domain"))
+    implementation(project(":core:core-data"))
     implementation(project(":core:core-ui"))
     implementation(project(":data:data-trakt"))
     implementation(project(":data:data-tmdb"))

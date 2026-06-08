@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.watchlist
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.matchesQuery
@@ -39,6 +40,7 @@ class WatchlistViewModel @Inject constructor(
     private val parentalControlsRepository: ParentalControlsRepository,
     private val jellyfinLibraryService: JellyfinLibraryService,
     private val uploaderDs: UploaderRemoteDataSource,
+    private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -65,6 +67,10 @@ class WatchlistViewModel @Inject constructor(
                 lockedRating = if (profile.isLocked) profile.effectiveAgeRating else null
                 reapply()
             }
+            .launchIn(viewModelScope)
+        // Plan PROFILES 1E: žánrový allow/block z aktivního profilu → re-aplikuj při změně profilu.
+        profileRepository.activeConfig
+            .onEach { reapply() }
             .launchIn(viewModelScope)
     }
 
@@ -265,6 +271,11 @@ class WatchlistViewModel @Inject constructor(
 
     private fun applyAll(items: List<MediaItem>, sort: WatchlistSort, genre: String?): List<MediaItem> {
         var result = applyLock(items)
+        // Plan PROFILES 1E: žánrový blacklist/allow-list z aktivního profilu.
+        val profileConfig = profileRepository.activeConfig.value
+        if (profileConfig.allowedGenres.isNotEmpty() || profileConfig.blockedGenres.isNotEmpty()) {
+            result = result.filter { profileConfig.isGenreAllowed(it.genres) }
+        }
         if (!genre.isNullOrBlank()) {
             result = result.filter { it.genres.orEmpty().any { g -> g.equals(genre, ignoreCase = true) } }
         }

@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.discover
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
@@ -42,6 +43,7 @@ class DiscoverViewModel @Inject constructor(
     private val parentalControlsRepository: ParentalControlsRepository,
     private val tokenProvider: TokenProvider,
     private val uploaderDs: UploaderRemoteDataSource,
+    private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -65,6 +67,10 @@ class DiscoverViewModel @Inject constructor(
                 }
                 reapplyFilters()
             }
+            .launchIn(viewModelScope)
+        // Plan PROFILES 1E: žánrový allow/block z aktivního profilu → re-aplikuj při změně profilu.
+        profileRepository.activeConfig
+            .onEach { reapplyFilters() }
             .launchIn(viewModelScope)
     }
 
@@ -193,6 +199,11 @@ class DiscoverViewModel @Inject constructor(
         }
         if (state.rdOnly) {
             result = result.filter { item -> state.rdMatchedTraktIds.contains(item.traktId) }
+        }
+        // Plan PROFILES 1E: žánrový blacklist/allow-list z aktivního profilu.
+        val profileConfig = profileRepository.activeConfig.value
+        if (profileConfig.allowedGenres.isNotEmpty() || profileConfig.blockedGenres.isNotEmpty()) {
+            result = result.filter { profileConfig.isGenreAllowed(it.genres) }
         }
         val effectiveAgeRating = state.sessionAgeOverride ?: state.parentalLockedAgeRating
         effectiveAgeRating?.let { rating ->
