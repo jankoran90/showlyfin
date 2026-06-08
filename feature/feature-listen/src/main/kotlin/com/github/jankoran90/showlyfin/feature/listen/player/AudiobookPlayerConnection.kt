@@ -104,7 +104,7 @@ class AudiobookPlayerConnection @Inject constructor(
         }
     }
 
-    fun playBook(pb: AbsPlayback, fromStart: Boolean) {
+    fun playBook(pb: AbsPlayback, fromStart: Boolean, startOverrideSec: Double? = null) {
         _chapters.value = pb.chapters
         _state.update {
             it.copy(
@@ -131,7 +131,11 @@ class AudiobookPlayerConnection @Inject constructor(
                 .build()
             c.setMediaItem(item)
             c.prepare()
-            val startMs = if (fromStart) 0L else (pb.startPositionSec * 1000).toLong()
+            val startMs = when {
+                startOverrideSec != null -> (startOverrideSec * 1000).toLong()
+                fromStart -> 0L
+                else -> (pb.startPositionSec * 1000).toLong()
+            }
             if (startMs > 0) c.seekTo(startMs)
             c.playWhenReady = true
         }

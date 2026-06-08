@@ -61,13 +61,17 @@ fun AudiobookPlayerScreen(
     fromStart: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    startSec: Double? = null,
     viewModel: AudiobookPlayerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
 
     // itemId != null = otevřeno z detailu (spustit knihu); null = expand z mini-playeru (už hraje).
-    androidx.compose.runtime.LaunchedEffect(itemId) { if (itemId != null) viewModel.open(itemId, fromStart) }
+    // startSec != null = klik na kapitolu v detailu → skok na její začátek.
+    androidx.compose.runtime.LaunchedEffect(itemId, startSec) {
+        if (itemId != null) viewModel.open(itemId, fromStart, startSec)
+    }
 
     var scrubbing by remember { mutableStateOf(false) }
     var scrubMs by remember { mutableStateOf(0f) }

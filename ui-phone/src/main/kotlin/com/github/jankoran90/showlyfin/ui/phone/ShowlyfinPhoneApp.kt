@@ -48,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
@@ -84,7 +85,7 @@ private sealed interface Destination {
 
     // Poslech sub-screens
     data class AudiobookDetail(val itemId: String, val parent: Destination) : Destination
-    data class AudiobookPlayer(val itemId: String?, val fromStart: Boolean, val parent: Destination) : Destination
+    data class AudiobookPlayer(val itemId: String?, val fromStart: Boolean, val startSec: Double? = null, val parent: Destination) : Destination
 
     // Sub-screens
     data class Detail(val item: MediaItem, val parent: Destination) : Destination
@@ -176,6 +177,15 @@ fun ShowlyfinPhoneApp() {
         LaunchedEffect(Unit) {
             naTvCoordinator.messages.collect { msg ->
                 snackbarHostState.showSnackbar(msg)
+            }
+        }
+
+        // R1: klepnutí na media notifikaci audioknihy → otevřít sekci Poslech (counter signál).
+        val openListenSignal by ListenNavSignal.openListen.collectAsStateWithLifecycle()
+        LaunchedEffect(openListenSignal) {
+            if (openListenSignal > 0) {
+                bottomTab = Destination.Listen
+                currentDestination = Destination.Listen
             }
         }
 
@@ -385,14 +395,15 @@ fun ShowlyfinPhoneApp() {
                 is Destination.AudiobookDetail -> AudiobookDetailScreen(
                     itemId = dest.itemId,
                     onBack = { currentDestination = dest.parent },
-                    onPlay = { itemId, fromStart ->
-                        currentDestination = Destination.AudiobookPlayer(itemId, fromStart, parent = dest)
+                    onPlay = { itemId, fromStart, startSec ->
+                        currentDestination = Destination.AudiobookPlayer(itemId, fromStart, startSec, parent = dest)
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.AudiobookPlayer -> AudiobookPlayerScreen(
                     itemId = dest.itemId,
                     fromStart = dest.fromStart,
+                    startSec = dest.startSec,
                     onBack = { currentDestination = dest.parent },
                     modifier = Modifier.fillMaxSize(),
                 )

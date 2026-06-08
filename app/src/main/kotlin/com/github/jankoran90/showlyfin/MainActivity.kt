@@ -11,6 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.lifecycleScope
 import com.github.jankoran90.showlyfin.core.ui.DebugCaptureLauncher
 import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 import com.github.jankoran90.showlyfin.core.ui.UpdateLauncher
@@ -119,6 +120,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent) {
+        if (intent.getBooleanExtra(ListenNavSignal.EXTRA_OPEN_LISTEN, false)) {
+            ListenNavSignal.requestOpenListen()
+        }
         val uri = intent.data ?: return
         if (uri.scheme == "showlyfin" && uri.host == "trakt") {
             val code = uri.getQueryParameter("code") ?: return

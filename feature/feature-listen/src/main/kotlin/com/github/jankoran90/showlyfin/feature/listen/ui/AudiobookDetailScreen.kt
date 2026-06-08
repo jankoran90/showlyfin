@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,7 +53,7 @@ import com.github.jankoran90.showlyfin.feature.listen.AudiobookDetailViewModel
 fun AudiobookDetailScreen(
     itemId: String,
     onBack: () -> Unit,
-    onPlay: (itemId: String, fromStart: Boolean) -> Unit,
+    onPlay: (itemId: String, fromStart: Boolean, startSec: Double?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AudiobookDetailViewModel = hiltViewModel(),
 ) {
@@ -88,7 +89,7 @@ fun AudiobookDetailScreen(
                 }
                 state.detail != null -> DetailContent(
                     detail = state.detail!!,
-                    onPlay = { fromStart -> onPlay(itemId, fromStart) },
+                    onPlay = { fromStart, startSec -> onPlay(itemId, fromStart, startSec) },
                     modifier = Modifier.fillMaxSize().padding(pad),
                 )
             }
@@ -99,7 +100,7 @@ fun AudiobookDetailScreen(
 @Composable
 private fun DetailContent(
     detail: AudiobookDetail,
-    onPlay: (fromStart: Boolean) -> Unit,
+    onPlay: (fromStart: Boolean, startSec: Double?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val book = detail.book
@@ -149,7 +150,7 @@ private fun DetailContent(
                 Modifier.fillMaxWidth().padding(top = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Button(onClick = { onPlay(false) }, modifier = Modifier.weight(1f)) {
+                Button(onClick = { onPlay(false, null) }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                     Text(
                         if (canResume) "Pokračovat ${formatDuration(resumeSec)}" else "Přehrát",
@@ -159,7 +160,7 @@ private fun DetailContent(
                     )
                 }
                 if (canResume) {
-                    FilledTonalButton(onClick = { onPlay(true) }) {
+                    FilledTonalButton(onClick = { onPlay(true, null) }) {
                         Icon(Icons.Default.Replay, contentDescription = "Od začátku", modifier = Modifier.size(20.dp))
                     }
                 }
@@ -187,7 +188,7 @@ private fun DetailContent(
                 )
             }
             items(detail.chapters, key = { it.index }) { ch ->
-                ChapterRow(ch)
+                ChapterRow(ch, onClick = { onPlay(false, ch.startSec) })
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
             }
         }
@@ -195,18 +196,27 @@ private fun DetailContent(
 }
 
 @Composable
-private fun ChapterRow(ch: Chapter) {
+private fun ChapterRow(ch: Chapter, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            Icons.Default.PlayArrow,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp).padding(end = 2.dp),
+        )
         Text(
             text = ch.title,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).padding(start = 6.dp),
         )
         Text(
             text = formatDuration(ch.startSec),

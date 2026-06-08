@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.service
 
+import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -7,6 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +53,22 @@ class AudiobookPlayerService : MediaSessionService() {
             }
         })
         player = exo
-        session = MediaSession.Builder(this, exo).build()
+        session = MediaSession.Builder(this, exo)
+            .apply { contentActivityPendingIntent()?.let { setSessionActivity(it) } }
+            .build()
+    }
+
+    /** PendingIntent na vlastní app (launcher) s extra → po klepnutí na notifikaci se otevře Poslech. */
+    private fun contentActivityPendingIntent(): PendingIntent? {
+        val launch = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            putExtra(ListenNavSignal.EXTRA_OPEN_LISTEN, true)
+        } ?: return null
+        return PendingIntent.getActivity(
+            this,
+            0,
+            launch,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
