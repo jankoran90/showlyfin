@@ -20,6 +20,8 @@ import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
+import com.github.jankoran90.showlyfin.data.abs.model.Podcast
+import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
 import com.github.jankoran90.showlyfin.feature.listen.R
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
@@ -202,6 +204,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                     parentId == ROOT_ID -> rootChildren()
                     parentId == NODE_CONTINUE -> continueBooks()
                     parentId.startsWith(PREFIX_LIB) -> libraryBooks(parentId.removePrefix(PREFIX_LIB))
+                    parentId.startsWith(PREFIX_PLIB) -> libraryPodcasts(parentId.removePrefix(PREFIX_PLIB))
+                    parentId.startsWith(PREFIX_PODCAST) -> podcastEpisodes(parentId.removePrefix(PREFIX_PODCAST))
                     else -> emptyList()
                 }
                 children.forEach { itemCache[it.mediaId] = it }
@@ -251,6 +255,19 @@ class AudiobookPlayerService : MediaLibraryService() {
                     val pb = repo.startPlayback(itemId).also { currentPlayback = it }
                     val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
                     MediaSession.MediaItemsWithStartPosition(trackItems(pb), idx, pos)
+                }
+            }
+            // Auto: epizoda `epi:<itemId>|<episodeId>` bez URI → single-track play session + resume.
+            if (mediaItems.size == 1 && first != null &&
+                first.localConfiguration == null && first.mediaId.startsWith(PREFIX_EPISODE)
+            ) {
+                val parts = first.mediaId.removePrefix(PREFIX_EPISODE).split("|", limit = 2)
+                if (parts.size == 2) {
+                    return future {
+                        val pb = repo.startEpisodePlayback(parts[0], parts[1]).also { currentPlayback = it }
+                        val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
+                        MediaSession.MediaItemsWithStartPosition(trackItems(pb), idx, pos)
+                    }
                 }
             }
             // In-app přehrávač posílá už resolvované položky (s URI) → projdou beze změny.
@@ -348,8 +365,9 @@ class AudiobookPlayerService : MediaLibraryService() {
     /** Root → „Pokračovat" + (pokud hraje kniha) „Kapitoly" + jednotlivé ABS knihovny. */
     private suspend fun rootChildren(): List<MediaItem> {
         val nodes = mutableListOf(browsableNode(NODE_CONTINUE, "Pokračovat"))
-        if (currentPlayback != null) nodes += browsableNode(NODE_CHAPTERS, "Kapitoly")
+        if (currentPlayback?.chapters?.isNotEmpty() == true) nodes += browsableNode(NODE_CHAPTERS, "Kapitoly")
         repo.getAudiobookLibraries().forEach { nodes += browsableNode("$PREFIX_LIB${it.id}", it.name) }
+        repo.getPodcastLibraries().forEach { nodes += browsableNode("$PREFIX_PLIB${it.id}", it.name) }
         return nodes
     }
 
@@ -364,6 +382,18 @@ class AudiobookPlayerService : MediaLibraryService() {
 
     private suspend fun libraryBooks(libraryId: String): List<MediaItem> =
         repo.getAudiobooks(libraryId).map(::bookItem)
+
+    /** Podcasty v knihovně jako browsable uzly (klik → epizody). */
+    private suspend fun libraryPodcasts(libraryId: String): List<MediaItem> =
+        repo.getPodcasts(libraryId).map(::podcastNode)
+
+    /** Epizody podcastu jako playable položky (newest-first; respektuje skrývání přehraných). */
+    private suspend fun podcastEpisodes(podcastItemId: String): List<MediaItem> {
+        val eps = repo.getPodcastDetail(podcastItemId).episodes
+        val visible = if (repo.hideFinishedEpisodes) eps.filterNot { it.isFinished } else eps
+        val cover = repo.coverUrl(podcastItemId)
+        return visible.map { episodeItem(podcastItemId, it, cover) }
+    }
 
     /** Kapitoly aktuální knihy jako playable položky (`chap:<index>`) — klik skočí na kapitolu. */
     private fun chapterItems(): List<MediaItem> {
@@ -414,6 +444,37 @@ class AudiobookPlayerService : MediaLibraryService() {
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_AUDIO_BOOK)
+                    .build(),
+            )
+            .build()
+
+    /** Browsable uzel podcastu (mediaId `pod:<itemId>`) — klik vylistuje epizody. */
+    private fun podcastNode(p: Podcast): MediaItem =
+        MediaItem.Builder()
+            .setMediaId("$PREFIX_PODCAST${p.id}")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(p.title)
+                    .setArtist(p.author)
+                    .setArtworkUri(p.coverUrl?.let(Uri::parse))
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_PODCASTS)
+                    .build(),
+            )
+            .build()
+
+    /** Playable epizoda (mediaId `epi:<itemId>|<episodeId>`) — resolver ji expanduje na single track. */
+    private fun episodeItem(itemId: String, ep: PodcastEpisode, coverUrl: String?): MediaItem =
+        MediaItem.Builder()
+            .setMediaId("$PREFIX_EPISODE$itemId|${ep.id}")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(ep.title)
+                    .setArtworkUri(coverUrl?.let(Uri::parse))
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
                     .build(),
             )
             .build()
@@ -526,6 +587,9 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val PREFIX_LIB = "abslib:"
         const val PREFIX_BOOK = "abs:"
         const val PREFIX_CHAPTER = "chap:"
+        const val PREFIX_PLIB = "podlib:"          // podcast knihovna
+        const val PREFIX_PODCAST = "pod:"           // podcast (browsable → epizody)
+        const val PREFIX_EPISODE = "epi:"           // epizoda (playable, `epi:<itemId>|<episodeId>`)
         const val ACTION_PREV_CHAPTER = "com.github.jankoran90.showlyfin.PREV_CHAPTER"
         const val ACTION_NEXT_CHAPTER = "com.github.jankoran90.showlyfin.NEXT_CHAPTER"
         const val ACTION_SPEED = "com.github.jankoran90.showlyfin.SPEED"
