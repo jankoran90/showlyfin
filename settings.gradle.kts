@@ -35,6 +35,7 @@ include(":data:data-tmdb")
 include(":data:data-jellyfin")
 include(":data:data-csfd")
 include(":data:data-uploader")
+include(":data:data-abs")
 
 // Features
 include(":feature:feature-discover")
@@ -44,6 +45,7 @@ include(":feature:feature-remux")
 include(":feature:feature-uploader")
 include(":feature:feature-jellyfin-browser")
 include(":feature:feature-playback")
+include(":feature:feature-listen")
 
 // UI shells
 include(":ui-phone")

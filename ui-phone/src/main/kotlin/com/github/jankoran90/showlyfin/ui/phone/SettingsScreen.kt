@@ -62,6 +62,7 @@ import java.util.Locale
 
 @Composable
 fun SettingsScreen(
+    onOpenUploader: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -209,7 +210,37 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(16.dp))
+        SettingsGroupHeader("Poslech")
+        AbsSection(
+            configured = uiState.absConfigured,
+            baseUrl = uiState.absBaseUrl,
+            loading = uiState.absLoading,
+            error = uiState.absError,
+            onLogin = { url, user, pass -> viewModel.absLogin(url, user, pass) },
+            onLogout = { viewModel.absLogout() },
+        )
+
+        Spacer(Modifier.height(16.dp))
         SettingsGroupHeader("Streamování")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Uploader", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Nahrávání filmů, fronta downloadů, Sdílej.cz, Smart Remux.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onOpenUploader, modifier = Modifier.fillMaxWidth()) {
+                    Text("Otevřít Uploader")
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
         UploaderSection()
         Spacer(Modifier.height(16.dp))
         StremioFilterSection(
@@ -380,6 +411,89 @@ private fun UploaderSection(
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AbsSection(
+    configured: Boolean,
+    baseUrl: String,
+    loading: Boolean,
+    error: String?,
+    onLogin: (url: String, user: String, pass: String) -> Unit,
+    onLogout: () -> Unit,
+) {
+    var url by remember(baseUrl) { mutableStateOf(baseUrl.ifBlank { "https://poslech.jankoran.cz" }) }
+    var user by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Audiobookshelf", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Přihlášení k serveru audioknih pro sekci Poslech. Heslo se uloží pro automatické obnovení relace.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(12.dp))
+            if (configured) {
+                Text(
+                    text = "Připojeno: $baseUrl",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = onLogout,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Odhlásit Audiobookshelf") }
+            } else {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("URL serveru") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = user,
+                    onValueChange = { user = it },
+                    label = { Text("Uživatel") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Heslo") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                if (loading) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                } else {
+                    Button(
+                        onClick = { onLogin(url, user, password) },
+                        enabled = url.isNotBlank() && user.isNotBlank() && password.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Přihlásit") }
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Chyba: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

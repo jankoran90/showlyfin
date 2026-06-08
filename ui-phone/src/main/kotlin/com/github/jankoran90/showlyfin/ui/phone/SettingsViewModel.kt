@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
+import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.StreamFilterPrefs
@@ -39,6 +40,11 @@ data class SettingsUiState(
     val streamFilterError: String? = null,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
+    // Poslech / Audiobookshelf
+    val absConfigured: Boolean = false,
+    val absBaseUrl: String = "",
+    val absLoading: Boolean = false,
+    val absError: String? = null,
 )
 
 @HiltViewModel
@@ -47,6 +53,7 @@ class SettingsViewModel @Inject constructor(
     private val parentalControlsRepository: ParentalControlsRepository,
     private val profileRepository: ProfileRepository,
     private val uploaderDs: UploaderRemoteDataSource,
+    private val absRepo: AbsRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -96,7 +103,32 @@ class SettingsViewModel @Inject constructor(
             .onEach { active -> _uiState.update { it.copy(activeProfileId = active?.id) } }
             .launchIn(viewModelScope)
         _uiState.update { it.copy(liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false)) }
+        refreshAbsState()
         loadStreamFilter()
+    }
+
+    // ── Poslech / Audiobookshelf ──────────────────────────────────────────────
+
+    private fun refreshAbsState() {
+        _uiState.update { it.copy(absConfigured = absRepo.isConfigured, absBaseUrl = absRepo.baseUrl) }
+    }
+
+    fun absLogin(url: String, username: String, password: String) {
+        _uiState.update { it.copy(absLoading = true, absError = null) }
+        viewModelScope.launch {
+            absRepo.login(url, username, password)
+                .onSuccess {
+                    _uiState.update { it.copy(absLoading = false, absConfigured = true, absBaseUrl = absRepo.baseUrl) }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(absLoading = false, absError = e.message ?: "Přihlášení selhalo") }
+                }
+        }
+    }
+
+    fun absLogout() {
+        absRepo.logout()
+        refreshAbsState()
     }
 
     // ── Stremio / Comet filtr ─────────────────────────────────────────────────

@@ -6,37 +6,19 @@ plugins {
 }
 
 android {
-    namespace = "com.github.jankoran90.showlyfin.ui.phone"
+    namespace = "com.github.jankoran90.showlyfin.feature.listen"
     compileSdk = 36
-
-    defaultConfig {
-        minSdk = 23
-    }
-
+    defaultConfig { minSdk = 23 }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-
     buildFeatures { compose = true }
 }
 
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-ui"))
-    implementation(project(":core:core-data"))
-    implementation(project(":core:core-network"))
-    implementation(project(":data:data-trakt"))
-    implementation(project(":data:data-jellyfin"))
-    implementation(project(":feature:feature-discover"))
-    implementation(project(":feature:feature-watchlist"))
-    implementation(project(":feature:feature-detail"))
-    implementation(project(":feature:feature-jellyfin-browser"))
-    implementation(project(":feature:feature-playback"))
-    implementation(project(":feature:feature-remux"))
-    implementation(project(":feature:feature-uploader"))
-    implementation(project(":feature:feature-listen"))
-    implementation(project(":data:data-uploader"))
     implementation(project(":data:data-abs"))
     implementation(libs.hilt.android)
     implementation(libs.timber)
@@ -44,14 +26,19 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     val bom = platform(libs.androidx.compose.bom)
     implementation(bom)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.media3.datasource)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

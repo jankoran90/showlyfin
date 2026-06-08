@@ -4,13 +4,14 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +54,10 @@ import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinLibraryItemsScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookDetailScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookPlayerScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxHistoryScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxPickerScreen
@@ -70,9 +75,16 @@ import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
 
 private sealed interface Destination {
     // Bottom tabs
-    data object Hlavni : Destination
-    data object Uploader : Destination
+    data object Hlavni : Destination   // label „Sleduj"
+    data object Listen : Destination   // label „Poslech"
     data object Settings : Destination
+
+    // Uploader — už není tab lišty, otevírá se z Nastavení
+    data object Uploader : Destination
+
+    // Poslech sub-screens
+    data class AudiobookDetail(val itemId: String, val parent: Destination) : Destination
+    data class AudiobookPlayer(val itemId: String?, val fromStart: Boolean, val parent: Destination) : Destination
 
     // Sub-screens
     data class Detail(val item: MediaItem, val parent: Destination) : Destination
@@ -120,7 +132,7 @@ private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>
 )
 
 private val bottomTabs = listOf(
-    Destination.Hlavni, Destination.Uploader, Destination.Settings,
+    Destination.Hlavni, Destination.Listen, Destination.Settings,
 )
 
 @Composable
@@ -252,6 +264,9 @@ fun ShowlyfinPhoneApp() {
                 is Destination.JellyfinPlayback -> current.parent
                 is Destination.Player -> current.parent
                 is Destination.Detail -> current.parent
+                is Destination.Uploader -> Destination.Settings
+                is Destination.AudiobookDetail -> current.parent
+                is Destination.AudiobookPlayer -> current.parent
                 else -> bottomTab
             }
         }
@@ -357,6 +372,28 @@ fun ShowlyfinPhoneApp() {
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Settings -> SettingsScreen(
+                    onOpenUploader = { currentDestination = Destination.Uploader },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.Listen -> ListenScreen(
+                    onOpenBook = { itemId ->
+                        bottomTab = Destination.Listen
+                        currentDestination = Destination.AudiobookDetail(itemId, parent = Destination.Listen)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.AudiobookDetail -> AudiobookDetailScreen(
+                    itemId = dest.itemId,
+                    onBack = { currentDestination = dest.parent },
+                    onPlay = { itemId, fromStart ->
+                        currentDestination = Destination.AudiobookPlayer(itemId, fromStart, parent = dest)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.AudiobookPlayer -> AudiobookPlayerScreen(
+                    itemId = dest.itemId,
+                    fromStart = dest.fromStart,
+                    onBack = { currentDestination = dest.parent },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Detail -> DetailScreen(
@@ -458,25 +495,32 @@ fun ShowlyfinPhoneApp() {
                 }
 
                 if (!isSubScreen) {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .onSizeChanged { measuredBarHeightPx.floatValue = it.height.toFloat() }
                             .offset { IntOffset(0, bottomBarOffsetPx.floatValue.roundToInt()) },
                     ) {
+                        MiniPlayer(
+                            onExpand = {
+                                currentDestination = Destination.AudiobookPlayer(
+                                    itemId = null, fromStart = false, parent = currentDestination,
+                                )
+                            },
+                        )
                         NavigationBar(containerColor = Color(0xFF1A1A2E)) {
                             NavigationBarItem(
                                 selected = bottomTab is Destination.Hlavni,
                                 onClick = { bottomTab = Destination.Hlavni; currentDestination = Destination.Hlavni },
                                 icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                                label = { Text("Hlavní") },
+                                label = { Text("Sleduj") },
                             )
                             NavigationBarItem(
-                                selected = bottomTab is Destination.Uploader,
-                                onClick = { bottomTab = Destination.Uploader; currentDestination = Destination.Uploader },
-                                icon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
-                                label = { Text("Uploader") },
+                                selected = bottomTab is Destination.Listen,
+                                onClick = { bottomTab = Destination.Listen; currentDestination = Destination.Listen },
+                                icon = { Icon(Icons.Default.Headphones, contentDescription = null) },
+                                label = { Text("Poslech") },
                             )
                             NavigationBarItem(
                                 selected = bottomTab is Destination.Settings,
