@@ -85,13 +85,20 @@ class AudiobookPlayerService : MediaLibraryService() {
             .setSessionCommand(cmd)
             .setDisplayName(name)
             .setIconResId(iconRes)
+            // SLOT_OVERFLOW = custom akce (±kapitola/rychlost/sleep) NEsmí zabrat sloty BACK/FORWARD
+            // hned vedle play/pause — ty patří nativnímu ±10 s seeku (COMMAND_SEEK_BACK/FORWARD).
+            // Bez tohoto si první custom buttons (±kapitola) nárokovaly flankující sloty a vytlačily
+            // seek dál od play/pause (reklamace user testu v1.29.0). Pořadí od play/pause ven:
+            // seek ±10 s (nativní, BACK/FORWARD) → ±kapitola → rychlost → sleep (overflow).
+            .setSlots(CommandButton.SLOT_OVERFLOW)
             .build()
 
     override fun onCreate() {
         super.onCreate()
         val exo = ExoPlayer.Builder(this)
             .setHandleAudioBecomingNoisy(true)
-            // Android Auto ukáže ±30 s tlačítka odvozená z těchto inkrementů.
+            // Android Auto ukáže ±10 s seek tlačítka (BACK/FORWARD sloty hned vedle play/pause)
+            // odvozená z těchto inkrementů.
             .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
             .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
             .setAudioAttributes(
@@ -527,6 +534,6 @@ class AudiobookPlayerService : MediaLibraryService() {
         private val SLEEP_STEPS = intArrayOf(15, 30, 45, 60)
         private const val CONTINUE_LIMIT = 25
         private const val SYNC_INTERVAL_MS = 15_000L
-        private const val SEEK_INCREMENT_MS = 30_000L
+        private const val SEEK_INCREMENT_MS = 10_000L
     }
 }
