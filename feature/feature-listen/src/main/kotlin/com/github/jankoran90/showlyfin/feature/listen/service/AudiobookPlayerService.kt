@@ -203,6 +203,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                 val children: List<MediaItem> = when {
                     parentId == ROOT_ID -> rootChildren()
                     parentId == NODE_CONTINUE -> continueBooks()
+                    parentId == NODE_BOOKS -> bookSection()
+                    parentId == NODE_PODCASTS -> podcastSection()
                     parentId.startsWith(PREFIX_LIB) -> libraryBooks(parentId.removePrefix(PREFIX_LIB))
                     parentId.startsWith(PREFIX_PLIB) -> libraryPodcasts(parentId.removePrefix(PREFIX_PLIB))
                     parentId.startsWith(PREFIX_PODCAST) -> podcastEpisodes(parentId.removePrefix(PREFIX_PODCAST))
@@ -363,12 +365,30 @@ class AudiobookPlayerService : MediaLibraryService() {
     // ---- Strom: uzly ----
 
     /** Root → „Pokračovat" + (pokud hraje kniha) „Kapitoly" + jednotlivé ABS knihovny. */
-    private suspend fun rootChildren(): List<MediaItem> {
-        val nodes = mutableListOf(browsableNode(NODE_CONTINUE, "Pokračovat"))
+    private fun rootChildren(): List<MediaItem> {
+        // Pevné sekce — Android Auto zobrazuje jen pár kořenových záložek, proto Podcasty drží
+        // garantovaný slot (3.) a Kapitoly (jen při hrané knize) jdou až na konec.
+        val nodes = mutableListOf(
+            browsableNode(NODE_CONTINUE, "Pokračovat"),
+            browsableNode(NODE_BOOKS, "Audioknihy"),
+            browsableNode(NODE_PODCASTS, "Podcasty"),
+        )
         if (currentPlayback?.chapters?.isNotEmpty() == true) nodes += browsableNode(NODE_CHAPTERS, "Kapitoly")
-        repo.getAudiobookLibraries().forEach { nodes += browsableNode("$PREFIX_LIB${it.id}", it.name) }
-        repo.getPodcastLibraries().forEach { nodes += browsableNode("$PREFIX_PLIB${it.id}", it.name) }
         return nodes
+    }
+
+    /** Sekce Audioknihy → knihovny (nebo rovnou knihy, je-li jen jedna knihovna). */
+    private suspend fun bookSection(): List<MediaItem> {
+        val libs = repo.getAudiobookLibraries()
+        return if (libs.size == 1) libraryBooks(libs.first().id)
+        else libs.map { browsableNode("$PREFIX_LIB${it.id}", it.name) }
+    }
+
+    /** Sekce Podcasty → knihovny (nebo rovnou podcasty, je-li jen jedna knihovna). */
+    private suspend fun podcastSection(): List<MediaItem> {
+        val libs = repo.getPodcastLibraries()
+        return if (libs.size == 1) libraryPodcasts(libs.first().id)
+        else libs.map { browsableNode("$PREFIX_PLIB${it.id}", it.name) }
     }
 
     /** Rozposlouchané a nedokončené knihy napříč knihovnami. */
@@ -584,6 +604,8 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val ROOT_ID = "root"
         const val NODE_CONTINUE = "node:continue"
         const val NODE_CHAPTERS = "node:chapters"
+        const val NODE_BOOKS = "node:books"
+        const val NODE_PODCASTS = "node:podcasts"
         const val PREFIX_LIB = "abslib:"
         const val PREFIX_BOOK = "abs:"
         const val PREFIX_CHAPTER = "chap:"
