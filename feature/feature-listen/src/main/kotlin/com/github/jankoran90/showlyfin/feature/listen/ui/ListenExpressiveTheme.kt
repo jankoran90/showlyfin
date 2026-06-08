@@ -1,6 +1,8 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -8,12 +10,12 @@ import androidx.compose.ui.graphics.Color
 /**
  * Téma poslechové sekce — izolovaný wrapper, jediné místo, kde se řeší vzhled „Poslechu".
  *
- * CÍL: `MaterialExpressiveTheme` (Material 3 Expressive). V aktuálním BOM (compose-bom
- * 2026.05.01 → material3 **1.4.0**) je ale `MaterialExpressiveTheme`/`ExperimentalMaterial3ExpressiveApi`
- * ještě **internal** (public až v material3 1.5.0-alpha). Dokud se nerozhodne o bumpu material3
- * na alphu, běží sekce na standardním `MaterialTheme` se stejným AMOLED-dark schématem.
- * Přepnutí na expressive = záměna `MaterialTheme(...)` za `MaterialExpressiveTheme(...)` zde.
+ * Material 3 **Expressive** (`MaterialExpressiveTheme` + `MotionScheme.expressive()`).
+ * Odemčeno pinem `material3 1.5.0-alpha18` (Plan PRISM Fáze 0) — v BOM 2026.05.01 (material3 1.4.0)
+ * byla Expressive API ještě `internal`. AMOLED-dark amber schéma zatím zachováno; sjednocení se
+ * sdíleným skin enginem přijde v Plan PRISM Fázi 2.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ListenExpressiveTheme(content: @Composable () -> Unit) {
     val colors = darkColorScheme(
@@ -34,5 +36,9 @@ fun ListenExpressiveTheme(content: @Composable () -> Unit) {
         surfaceContainerHigh = Color(0xFF22223A),
         outline = Color(0xFF49495C),
     )
-    MaterialTheme(colorScheme = colors, content = content)
+    MaterialExpressiveTheme(
+        colorScheme = colors,
+        motionScheme = MotionScheme.expressive(),
+        content = content,
+    )
 }
