@@ -13,10 +13,14 @@ import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDetail
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
 import com.github.jankoran90.showlyfin.data.abs.model.AbsTrack
+import com.github.jankoran90.showlyfin.data.abs.model.AbsPodcastFeedRequest
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
+import com.github.jankoran90.showlyfin.data.abs.model.FeedEpisode
 import com.github.jankoran90.showlyfin.data.abs.model.Podcast
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
+import com.github.jankoran90.showlyfin.data.abs.model.PodcastServerAutoDownload
+import com.google.gson.JsonObject
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -184,17 +188,21 @@ class AbsRepository @Inject constructor(
 
         val episodes = (m?.episodes ?: emptyList()).map { ep ->
             val p = progressByEpisode[ep.id]
+            val title = ep.title?.takeIf { it.isNotBlank() } ?: "Epizoda ${ep.index ?: ""}".trim()
+            val subtitle = ep.subtitle?.let { stripHtml(it) }?.takeIf { it.isNotBlank() }
+            val description = ep.description?.let { stripHtml(it) }?.takeIf { it.isNotBlank() }
             PodcastEpisode(
                 id = ep.id,
                 itemId = itemId,
-                title = ep.title?.takeIf { it.isNotBlank() } ?: "Epizoda ${ep.index ?: ""}".trim(),
-                subtitle = ep.subtitle?.takeIf { it.isNotBlank() },
-                description = ep.description?.takeIf { it.isNotBlank() },
+                title = title,
+                subtitle = subtitle,
+                description = description,
                 publishedAt = ep.publishedAt,
                 durationSec = ep.durationSec.takeIf { it > 0.0 } ?: p?.duration ?: 0.0,
                 progress = p?.progress ?: 0.0,
                 currentTimeSec = p?.currentTime ?: 0.0,
                 isFinished = p?.isFinished ?: false,
+                guest = extractGuest(title, subtitle, description),
             )
         }.sortedByDescending { it.publishedAt ?: 0L }
 
@@ -243,6 +251,77 @@ class AbsRepository @Inject constructor(
     suspend fun setServerAutoDownload(itemId: String, enabled: Boolean): Result<Unit> = runCatching {
         val resp = service.patchMedia(api("/api/items/$itemId/media"), bearer(), AbsMediaUpdate(enabled))
         require(resp.isSuccessful) { "HTTP ${resp.code()}" }
+    }
+
+    /**
+     * Seznam VŠECH podcastů (napříč podcast knihovnami) i s aktuálním stavem ABS server
+     * auto-downloadu — pro správu v Nastavení. Bez `minified`, aby `media.autoDownloadEpisodes` přišlo.
+     */
+    suspend fun getPodcastsWithServerAutoDownload(): List<PodcastServerAutoDownload> {
+        val libs = getPodcastLibraries()
+        return libs.flatMap { lib ->
+            val url = api("/api/libraries/${lib.id}/items") + "?limit=500&page=0&sort=media.metadata.title&desc=0"
+            runCatching { service.getLibraryItems(url, bearer()).results }.getOrElse { emptyList() }
+                .map { item ->
+                    PodcastServerAutoDownload(
+                        itemId = item.id,
+                        title = item.media?.metadata?.title ?: "—",
+                        coverUrl = coverUrl(item.id),
+                        autoDownload = item.media?.autoDownloadEpisodes ?: false,
+                    )
+                }
+        }.sortedBy { it.title.lowercase() }
+    }
+
+    /**
+     * Dostupné epizody z RSS feedu podcastu (ABS naparsuje feed). Newest-first.
+     * `feedUrl` se bere z metadat položky; POST /api/podcasts/feed {rssFeed}.
+     */
+    suspend fun getNewServerEpisodes(itemId: String): List<FeedEpisode> {
+        val item = service.getItem(api("/api/items/$itemId?expanded=1"), bearer())
+        val feedUrl = item.media?.metadata?.feedUrl?.takeIf { it.isNotBlank() }
+            ?: error("Podcast nemá RSS feed.")
+        // Enclosure URL epizod, které server už má (pro volitelný filtr „skrýt už stažené").
+        val existingUrls: Set<String> = item.media?.episodes
+            ?.mapNotNull { it.enclosure?.url?.takeIf { u -> u.isNotBlank() } }
+            ?.toSet().orEmpty()
+        val hideDownloaded = prefs.rssHideDownloaded
+
+        val resp = service.getPodcastFeed(api("/api/podcasts/feed"), bearer(), AbsPodcastFeedRequest(feedUrl))
+        val episodes = resp.podcast?.episodes ?: emptyList()
+        Timber.i("[ABS] feed $itemId ($feedUrl) → ${episodes.size} epizod (server má ${existingUrls.size}, hideDownloaded=$hideDownloaded)")
+        return episodes.mapIndexedNotNull { i, obj ->
+            runCatching {
+                val title = obj.stringOrNull("title") ?: obj.stringOrNull("episode") ?: "Epizoda ${i + 1}"
+                val published = obj.longOrNull("publishedAt") ?: parsePubDate(obj.stringOrNull("pubDate"))
+                val subtitle = obj.stringOrNull("subtitle")?.let { stripHtml(it) }?.takeIf { it.isNotBlank() }
+                val description = obj.stringOrNull("description")?.let { stripHtml(it) }?.takeIf { it.isNotBlank() }
+                    ?: subtitle
+                val id = obj.enclosureUrl() ?: obj.stringOrNull("guid") ?: "feed_$i"
+                FeedEpisode(
+                    id = id,
+                    title = title,
+                    publishedAt = published,
+                    description = description,
+                    durationSec = obj.doubleOrNull("duration"),
+                    guest = extractGuest(title, subtitle, description),
+                    raw = obj,
+                )
+            }.getOrNull()
+        }
+            .filterNot { hideDownloaded && it.id in existingUrls }
+            .sortedByDescending { it.publishedAt ?: 0L }
+    }
+
+    /** Zařadí vybrané feed epizody ke stažení na ABS server (POST download-episodes, tělo = holé pole). */
+    suspend fun downloadEpisodesToServer(itemId: String, episodes: List<FeedEpisode>): Result<Unit> = runCatching {
+        require(episodes.isNotEmpty()) { "Nevybrána žádná epizoda." }
+        val resp = service.downloadEpisodesToServer(
+            api("/api/podcasts/$itemId/download-episodes"), bearer(),
+            episodes.map { it.raw },
+        )
+        require(resp.isSuccessful) { "HTTP ${resp.code()}" }
+        Timber.i("[ABS] download-episodes na server: ${episodes.size} epizod zařazeno (item $itemId)")
     }
 
     /** Označí epizodu jako přehranou/nepřehranou na serveru. */
@@ -307,3 +386,77 @@ class AbsRepository @Inject constructor(
 
     fun logout() = prefs.clear()
 }
+
+// ──────────────── Pomocné parsování feed epizod (JSON passthrough) ────────────────
+
+private fun JsonObject.stringOrNull(key: String): String? =
+    get(key)?.takeIf { !it.isJsonNull }?.runCatching { asString }?.getOrNull()?.takeIf { it.isNotBlank() }
+
+private fun JsonObject.longOrNull(key: String): Long? =
+    get(key)?.takeIf { !it.isJsonNull }?.runCatching { asLong }?.getOrNull()
+
+private fun JsonObject.doubleOrNull(key: String): Double? =
+    get(key)?.takeIf { !it.isJsonNull }?.runCatching { asDouble }?.getOrNull()?.takeIf { it > 0.0 }
+
+/** URL z enclosure objektu feed epizody (klíč pro deduplikaci/výběr). */
+private fun JsonObject.enclosureUrl(): String? =
+    get("enclosure")?.takeIf { it.isJsonObject }?.asJsonObject?.stringOrNull("url")
+
+/** RFC-822 pubDate → ms (best-effort, jinak null). */
+private fun parsePubDate(s: String?): Long? {
+    if (s.isNullOrBlank()) return null
+    val fmt = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", java.util.Locale.ENGLISH)
+    return runCatching { fmt.parse(s)?.time }.getOrNull()
+}
+
+// Jméno = 2–3 slova s velkým počátečním písmenem (čeština + diakritika), volitelně s prostřední spojkou.
+private const val NAME = "\\p{Lu}[\\p{L}.'-]+(?:\\s+(?:[a-záčďéěíňóřšťúůýž]+\\s+)?\\p{Lu}[\\p{L}.'-]+){1,2}"
+
+// Dvě po sobě jdoucí slova s velkým písmenem = jádro jména (detekce uvnitř delšího leadu).
+private val NAME_CORE = Regex("\\p{Lu}[\\p{Ll}.'-]+\\s+\\p{Lu}[\\p{Ll}.'-]+")
+
+// Klíčové fráze (CZ), po kterých následuje [profese] jméno hosta. Profese = volitelné malé slovo.
+// POZOR: jen spouštěcí fráze jsou case-insensitive `(?i:…)`; jádro jména (NAME / \p{Lu}) MUSÍ
+// zůstat case-sensitive, jinak se velká/malá písmena přestanou rozlišovat (chytalo „studia").
+private val GUEST_REGEXES: List<Regex> = listOf(
+    "(?i:hostem je|dnešním hostem(?: je)?|naším hostem je|host(?:em)?:)\\s+((?:\\p{Ll}+\\s+)?$NAME)",
+    "(?i:rozhovor s|povídáme si s|povídám si s|mluvíme s|bavíme se s|zpovídáme|ptáme se|na návštěvě u|setkání s|s hostem)\\s+((?:\\p{Ll}+\\s+)?$NAME)",
+    "(?i:říká|dodává|uvádí|míní|vypráví|popisuje|vzpomíná|svěřil[a]?|tvrdí)\\s+((?:\\p{Ll}+\\s+)?$NAME)",
+).map { Regex(it) }
+
+/** Lead vypadá jako (profese +) jméno: rozumná délka, obsahuje jádro jména, není to celá věta. */
+private fun looksLikePersonLead(s: String): Boolean =
+    s.length in 3..50 && !s.endsWith('.') && !s.contains('?') && NAME_CORE.containsMatchIn(s)
+
+/**
+ * Best-effort vyparsování hosta (vč. profese) z metadat epizody — CZ interview podcasty.
+ * Priorita: (1) Vizitka-styl „Pořad: Profese Jméno: headline" = prostřední segment;
+ * (2) krátký subtitle jako jméno; (3) klíčové fráze („…, říká režisérka Jana Nováková").
+ * Když nic nesedí → null (UI zobrazí jen popis normálně).
+ */
+private fun extractGuest(title: String?, subtitle: String?, description: String?): String? {
+    // 1) Titulek s dvojtečkou: vezmi první z prvních DVOU segmentů, který vypadá jako jméno.
+    //    Pokrývá „Jméno: headline" (Boomer Talk, segment 0) i „Pořad: Profese Jméno: headline"
+    //    (Vizitka, segment 1 — segment 0 „Vizitka" je jednoslovný, neprojde).
+    title?.split(":")?.map { it.trim() }?.let { segs ->
+        if (segs.size >= 2) segs.take(2).firstOrNull { looksLikePersonLead(it) }?.let { return it }
+    }
+    // 2) subtitle, který je sám o sobě jen jméno / profese+jméno
+    subtitle?.trim()?.let { if (looksLikePersonLead(it)) return it }
+    // 3) klíčové fráze napříč subtitle → title → description
+    for (text in listOfNotNull(subtitle, title, description)) {
+        for (re in GUEST_REGEXES) {
+            re.find(text)?.groupValues?.getOrNull(1)?.trim()?.trim(',', '.', ';', ':', '–', '-')
+                ?.takeIf { it.isNotBlank() && it.length <= 50 }?.let { return it }
+        }
+    }
+    return null
+}
+
+/** Odstranění HTML tagů + dekódování základních entit z popisu epizody. */
+private fun stripHtml(html: String): String =
+    html.replace(Regex("<[^>]*>"), " ")
+        .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<")
+        .replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'")
+        .replace(Regex("\\s+"), " ")
+        .trim()

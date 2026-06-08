@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.data.abs.api
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLibrariesResponse
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLibraryItem
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLibraryItemsResponse
+import com.github.jankoran90.showlyfin.data.abs.model.AbsPodcastFeedRequest
+import com.github.jankoran90.showlyfin.data.abs.model.AbsPodcastFeedResponse
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLoginRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLoginResponse
 import com.github.jankoran90.showlyfin.data.abs.model.AbsMediaUpdate
@@ -59,4 +61,12 @@ interface AbsService {
     /** Úprava media položky (ABS server auto-download): PATCH /api/items/{itemId}/media. */
     @PATCH
     suspend fun patchMedia(@Url url: String, @Header("Authorization") bearer: String, @Body body: AbsMediaUpdate): Response<ResponseBody>
+
+    /** Naparsovat RSS feed a vrátit všechny epizody: POST /api/podcasts/feed {rssFeed}. */
+    @POST
+    suspend fun getPodcastFeed(@Url url: String, @Header("Authorization") bearer: String, @Body body: AbsPodcastFeedRequest): AbsPodcastFeedResponse
+
+    /** Zařadit epizody ke stažení na ABS server: POST /api/podcasts/{itemId}/download-episodes (tělo = HOLÉ pole). */
+    @POST
+    suspend fun downloadEpisodesToServer(@Url url: String, @Header("Authorization") bearer: String, @Body episodes: List<com.google.gson.JsonObject>): Response<ResponseBody>
 }

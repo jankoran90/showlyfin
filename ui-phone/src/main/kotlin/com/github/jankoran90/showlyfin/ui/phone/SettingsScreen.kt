@@ -43,6 +43,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -254,7 +255,7 @@ fun SettingsScreen(
             )
             if (uiState.absConfigured) {
                 Spacer(Modifier.height(12.dp))
-                ListenSettingsCard(uiState.listen, viewModel)
+                ListenSettingsCard(uiState, viewModel)
             }
         }
 
@@ -597,7 +598,8 @@ private fun AbsSection(
 /** Nastavení poslechové sekce: přehrávač, fronta, stahování, zobrazení, sync. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ListenSettingsCard(s: ListenSettings, vm: SettingsViewModel) {
+private fun ListenSettingsCard(uiState: SettingsUiState, vm: SettingsViewModel) {
+    val s = uiState.listen
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
@@ -653,7 +655,24 @@ private fun ListenSettingsCard(s: ListenSettings, vm: SettingsViewModel) {
             }
 
             ListenGroupTitle("Stahování na ABS server")
-            ListenInfoText("Auto-download nových epizod z RSS na ABS server zapneš per-podcast chipem „Auto na server“ v detailu podcastu (ABS-nativní). Plánovač a pravidla řeší ABS server.")
+            ListenInfoText("Auto-download nových epizod z RSS na ABS server (ABS-nativní). Zapni per-podcast — plánovač a pravidla řeší ABS server. Konkrétní epizody dotáhneš přes „Prohledat epizody“ v detailu podcastu.")
+            LaunchedEffect(Unit) { vm.loadServerPodcasts() }
+            when {
+                uiState.serverPodcastsLoading && uiState.serverPodcasts.isEmpty() ->
+                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White)
+                    }
+                uiState.serverPodcasts.isEmpty() ->
+                    ListenInfoText("Žádné podcasty na serveru.")
+                else -> uiState.serverPodcasts.forEach { p ->
+                    ServerPodcastRow(
+                        title = p.title,
+                        checked = p.autoDownload,
+                        busy = p.itemId in uiState.serverPodcastsBusyIds,
+                        onToggle = { vm.toggleServerPodcast(p.itemId, it) },
+                    )
+                }
+            }
 
             ListenGroupTitle("Epizody")
             ListenChipRow(
@@ -663,6 +682,35 @@ private fun ListenSettingsCard(s: ListenSettings, vm: SettingsViewModel) {
                 selected = s.episodeListLimit,
                 onSelect = { vm.setEpisodeListLimit(it) },
             )
+            ListenInfoText("Počet řádků názvu a popisku platí v detailu, frontě i v sekci stahování z RSS.")
+            ListenChipRow(
+                title = "Počet řádků názvu epizody",
+                options = listOf("1" to 1, "2" to 2, "3" to 3, "Vše" to 99),
+                selected = s.episodeTitleLines,
+                onSelect = { vm.setEpisodeTitleLines(it) },
+            )
+            ListenChipRow(
+                title = "Počet řádků popisku epizody",
+                options = listOf("Skrýt" to 0, "1" to 1, "2" to 2, "3" to 3, "5" to 5, "Vše" to 99),
+                selected = s.episodeDescriptionLines,
+                onSelect = { vm.setEpisodeDescriptionLines(it) },
+            )
+            ListenSwitchRow(
+                "Zvýrazňovat hosta",
+                "Vyparsované jméno hosta (+profese) tučně jako poutač nad titulkem. Vyp = jen titulek a popis.",
+                s.highlightGuest,
+            ) { vm.setHighlightGuest(it) }
+            ListenChipRow(
+                title = "Velikost písma v seznamu",
+                options = listOf("Kompakt" to 0.9f, "Normál" to 1.0f, "Velký" to 1.15f),
+                selected = s.episodeFontScale,
+                onSelect = { vm.setEpisodeFontScale(it) },
+            )
+            ListenSwitchRow(
+                "Skrýt už stažené (Prohledat epizody)",
+                "V „Prohledat epizody“ nezobrazovat epizody, které ABS server už má.",
+                s.rssHideDownloaded,
+            ) { vm.setRssHideDownloaded(it) }
             ListenChipRow(
                 title = "Tlačítko u epizody",
                 subtitle = "Akce trailing tlačítka v seznamu epizod.",
@@ -704,6 +752,17 @@ private fun ListenGroupTitle(text: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 14.dp, bottom = 6.dp),
     )
+}
+
+@Composable
+private fun ServerPodcastRow(title: String, checked: Boolean, busy: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, color = Color.White, modifier = Modifier.weight(1f))
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp), strokeWidth = 2.dp, color = Color.White)
+        }
+        Switch(checked = checked, enabled = !busy, onCheckedChange = onToggle)
+    }
 }
 
 @Composable

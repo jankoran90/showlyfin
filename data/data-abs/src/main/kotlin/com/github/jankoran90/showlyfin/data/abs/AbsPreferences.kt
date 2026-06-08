@@ -143,6 +143,34 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getInt(KEY_EPISODE_LIMIT, 0)
         set(value) = prefs.edit { putInt(KEY_EPISODE_LIMIT, value.coerceAtLeast(0)) }
 
+    /** Počet řádků názvu epizody v seznamu (1–99; 99 = bez ořezu). Platí pro detail i RSS sheet. */
+    var episodeTitleLines: Int
+        get() = prefs.getInt(KEY_EPISODE_TITLE_LINES, 2)
+        set(value) = prefs.edit { putInt(KEY_EPISODE_TITLE_LINES, value.coerceIn(1, 99)) }
+
+    /** Zvýrazňovat vyparsovaného hosta jako poutač nad titulkem epizody. */
+    var highlightGuest: Boolean
+        get() = prefs.getBoolean(KEY_HIGHLIGHT_GUEST, true)
+        set(value) = prefs.edit { putBoolean(KEY_HIGHLIGHT_GUEST, value) }
+
+    /** Měřítko písma v seznamech epizod: 0.9 = kompakt, 1.0 = normál, 1.15 = velký. */
+    var episodeFontScale: Float
+        get() = prefs.getFloat(KEY_EPISODE_FONT_SCALE, 1f)
+        set(value) = prefs.edit { putFloat(KEY_EPISODE_FONT_SCALE, value.coerceIn(0.8f, 1.4f)) }
+
+    /** V „Prohledat epizody" skrývat epizody, které ABS server už má stažené. */
+    var rssHideDownloaded: Boolean
+        get() = prefs.getBoolean(KEY_RSS_HIDE_DOWNLOADED, false)
+        set(value) = prefs.edit { putBoolean(KEY_RSS_HIDE_DOWNLOADED, value) }
+
+    /**
+     * Počet řádků popisku epizody v seznamu (detail i RSS sheet):
+     * 0 = popis skrýt, N = N řádků, 99 = celý popis (bez ořezu).
+     */
+    var episodeDescriptionLines: Int
+        get() = prefs.getInt(KEY_EPISODE_DESC_LINES, 3)
+        set(value) = prefs.edit { putInt(KEY_EPISODE_DESC_LINES, value.coerceIn(0, 99)) }
+
     /**
      * Akce trailing tlačítka u epizody v detailu podcastu:
      * 0 = přidat do fronty (konec), 1 = přidat do fronty (další), 2 = stáhnout.
@@ -230,6 +258,11 @@ class AbsPreferences @Inject constructor(
         private const val KEY_AUTO_DOWNLOAD_IDS = "listen_auto_download_ids"
         private const val KEY_EPISODE_SORT = "listen_episode_sort_newest"
         private const val KEY_EPISODE_LIMIT = "listen_episode_limit"
+        private const val KEY_EPISODE_TITLE_LINES = "listen_episode_title_lines"
+        private const val KEY_EPISODE_DESC_LINES = "listen_episode_desc_lines"
+        private const val KEY_HIGHLIGHT_GUEST = "listen_highlight_guest"
+        private const val KEY_EPISODE_FONT_SCALE = "listen_episode_font_scale"
+        private const val KEY_RSS_HIDE_DOWNLOADED = "listen_rss_hide_downloaded"
         private const val KEY_EPISODE_ACTION = "listen_episode_action"
         private const val KEY_SHOW_REMAINING = "listen_show_remaining"
         private const val KEY_QUEUE_SWIPE = "listen_queue_swipe_action"

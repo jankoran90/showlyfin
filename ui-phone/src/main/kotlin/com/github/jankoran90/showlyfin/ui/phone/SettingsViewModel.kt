@@ -56,6 +56,10 @@ data class SettingsUiState(
     val absError: String? = null,
     val hideFinishedEpisodes: Boolean = false,
     val listen: ListenSettings = ListenSettings(),
+    // Stahování na ABS server — per-podcast auto-download (přesunuto z detailu)
+    val serverPodcasts: List<com.github.jankoran90.showlyfin.data.abs.model.PodcastServerAutoDownload> = emptyList(),
+    val serverPodcastsLoading: Boolean = false,
+    val serverPodcastsBusyIds: Set<String> = emptySet(),
 )
 
 /** Nastavení poslechové sekce (přehrávač, fronta, stahování, zobrazení, sync). */
@@ -74,6 +78,11 @@ data class ListenSettings(
     val autoDownloadScope: Int = 0,
     val episodeSortNewestFirst: Boolean = true,
     val episodeListLimit: Int = 0,
+    val episodeTitleLines: Int = 2,
+    val episodeDescriptionLines: Int = 3,
+    val highlightGuest: Boolean = true,
+    val episodeFontScale: Float = 1f,
+    val rssHideDownloaded: Boolean = false,
     val episodeQuickAction: Int = 0,
     val showRemainingTime: Boolean = false,
     val showSpeedButton: Boolean = true,
@@ -172,6 +181,11 @@ class SettingsViewModel @Inject constructor(
         autoDownloadScope = absPrefs.autoDownloadScope,
         episodeSortNewestFirst = absPrefs.episodeSortNewestFirst,
         episodeListLimit = absPrefs.episodeListLimit,
+        episodeTitleLines = absPrefs.episodeTitleLines,
+        episodeDescriptionLines = absPrefs.episodeDescriptionLines,
+        highlightGuest = absPrefs.highlightGuest,
+        episodeFontScale = absPrefs.episodeFontScale,
+        rssHideDownloaded = absPrefs.rssHideDownloaded,
         episodeQuickAction = absPrefs.episodeQuickAction,
         showRemainingTime = absPrefs.showRemainingTime,
         showSpeedButton = absPrefs.showSpeedButton,
@@ -205,7 +219,43 @@ class SettingsViewModel @Inject constructor(
     fun setAutoDownloadScope(v: Int) = updateListen { autoDownloadScope = v }
     fun setEpisodeSortNewestFirst(v: Boolean) = updateListen { episodeSortNewestFirst = v }
     fun setEpisodeListLimit(v: Int) = updateListen { episodeListLimit = v }
+    fun setEpisodeTitleLines(v: Int) = updateListen { episodeTitleLines = v }
+    fun setEpisodeDescriptionLines(v: Int) = updateListen { episodeDescriptionLines = v }
+    fun setHighlightGuest(v: Boolean) = updateListen { highlightGuest = v }
+    fun setEpisodeFontScale(v: Float) = updateListen { episodeFontScale = v }
+    fun setRssHideDownloaded(v: Boolean) = updateListen { rssHideDownloaded = v }
     fun setEpisodeQuickAction(v: Int) = updateListen { episodeQuickAction = v }
+
+    // ── Stahování na ABS server: per-podcast auto-download (seznam v Nastavení) ──
+
+    /** Načte seznam podcastů + jejich aktuální server auto-download stav (lazy, na vyžádání). */
+    fun loadServerPodcasts() {
+        if (_uiState.value.serverPodcastsLoading) return
+        _uiState.update { it.copy(serverPodcastsLoading = true) }
+        viewModelScope.launch {
+            runCatching { absRepo.getPodcastsWithServerAutoDownload() }
+                .onSuccess { list -> _uiState.update { it.copy(serverPodcastsLoading = false, serverPodcasts = list) } }
+                .onFailure { _uiState.update { it.copy(serverPodcastsLoading = false) } }
+        }
+    }
+
+    /** Přepne ABS server auto-download pro konkrétní podcast (PATCH media). */
+    fun toggleServerPodcast(itemId: String, enabled: Boolean) {
+        _uiState.update { it.copy(serverPodcastsBusyIds = it.serverPodcastsBusyIds + itemId) }
+        viewModelScope.launch {
+            absRepo.setServerAutoDownload(itemId, enabled)
+                .onSuccess {
+                    _uiState.update { st ->
+                        st.copy(
+                            serverPodcasts = st.serverPodcasts.map { if (it.itemId == itemId) it.copy(autoDownload = enabled) else it },
+                            serverPodcastsBusyIds = st.serverPodcastsBusyIds - itemId,
+                        )
+                    }
+                }
+                .onFailure { _uiState.update { it.copy(serverPodcastsBusyIds = it.serverPodcastsBusyIds - itemId) } }
+        }
+    }
+
     fun setShowRemainingTime(v: Boolean) = updateListen { showRemainingTime = v }
     fun setShowSpeedButton(v: Boolean) = updateListen { showSpeedButton = v }
     fun setShowSleepButton(v: Boolean) = updateListen { showSleepButton = v }

@@ -7,6 +7,8 @@ data class PlayerState(
     val title: String = "",
     val author: String? = null,
     val coverUrl: String? = null,
+    /** Vyparsovaný host (+profese) právě hrané epizody — poutač v přehrávači/mini-playeru. */
+    val guest: String? = null,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val speed: Float = 1f,

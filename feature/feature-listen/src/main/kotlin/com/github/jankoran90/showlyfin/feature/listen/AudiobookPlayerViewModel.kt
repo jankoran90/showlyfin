@@ -23,11 +23,21 @@ class AudiobookPlayerViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val connection: AudiobookPlayerConnection,
     private val downloadManager: EpisodeDownloadManager,
+    private val absPrefs: com.github.jankoran90.showlyfin.data.abs.AbsPreferences,
 ) : ViewModel() {
 
     val state = connection.state
     val chapters = connection.chapters
     val queue = connection.queue
+
+    /** Jednotné zobrazení epizody ve frontě (stejné jako v detailu; z nastavení). */
+    val episodeDisplay: com.github.jankoran90.showlyfin.feature.listen.ui.EpisodeDisplaySettings
+        get() = com.github.jankoran90.showlyfin.feature.listen.ui.EpisodeDisplaySettings(
+            titleLines = absPrefs.episodeTitleLines,
+            descriptionLines = absPrefs.episodeDescriptionLines,
+            highlightGuest = absPrefs.highlightGuest,
+            fontScale = absPrefs.episodeFontScale,
+        )
 
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
@@ -93,6 +103,7 @@ class AudiobookPlayerViewModel @Inject constructor(
     fun playPrevInQueue() = connection.playPrevInQueue()
     fun removeFromQueue(episodeId: String) = connection.removeFromQueue(episodeId)
     fun clearQueue() = connection.clearQueue()
+    fun clearAll() = connection.clearAll()
     fun moveQueueItem(from: Int, to: Int) = connection.moveQueueItem(from, to)
     fun moveQueuedToFront(episodeId: String) = connection.moveToFront(episodeId)
     fun downloadQueued(ep: QueuedEpisode) = downloadManager.downloadByIds(ep.itemId, ep.episodeId, ep.title, ep.coverUrl)

@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -122,6 +123,19 @@ fun AudiobookPlayerScreen(
                 return@Column
             }
 
+            // Prázdný přehrávač (po „Vymazat vše včetně přehrávaného") — nic nehraje, fronta prázdná.
+            if (!state.isActive && itemId == null && !state.isBuffering) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Přehrávač je prázdný.\nVyber epizodu nebo audioknihu a začni poslouchat.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                return@Column
+            }
+
             // Cover — menší, ať zbyde místo na seznam.
             Box(
                 Modifier
@@ -138,6 +152,19 @@ fun AudiobookPlayerScreen(
             }
 
             Spacer(Modifier.height(10.dp))
+            // Host jako poutač nad titulkem i v now-playing (když je rozpoznán a zapnuto).
+            state.guest?.takeIf { it.isNotBlank() && viewModel.episodeDisplay.highlightGuest }?.let { g ->
+                Text(
+                    g,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 2.dp),
+                )
+            }
             Text(
                 state.title.ifBlank { "Načítám…" },
                 style = MaterialTheme.typography.titleMedium,
@@ -277,12 +304,13 @@ fun AudiobookPlayerScreen(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     queue = queue,
                     currentEpisodeId = state.currentEpisodeId,
+                    display = viewModel.episodeDisplay,
                     swipeAction = state.queueSwipeAction,
                     onPlay = { viewModel.playQueued(it) },
                     onRemove = { viewModel.removeFromQueue(it) },
                     onSwipeRight = { viewModel.onQueueSwipeAction(it, state.queueSwipeAction) },
                     onMove = { from, to -> viewModel.moveQueueItem(from, to) },
-                    onClear = { viewModel.clearQueue() },
+                    onClear = { viewModel.clearAll() },
                 )
             } else if (chapters.isNotEmpty()) {
                 InlineChapterList(
@@ -355,6 +383,7 @@ private fun InlineQueueList(
     modifier: Modifier,
     queue: List<QueuedEpisode>,
     currentEpisodeId: String?,
+    display: EpisodeDisplaySettings,
     swipeAction: Int,
     onPlay: (QueuedEpisode) -> Unit,
     onRemove: (String) -> Unit,
@@ -406,14 +435,26 @@ private fun InlineQueueList(
                         } else {
                             QueueThumb(q.coverUrl, size = 36)
                         }
-                        Text(
-                            q.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isCur) accent else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                        )
+                        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                            GuestBanner(q.guest, display)
+                            Text(
+                                q.title,
+                                style = episodeTitleStyle(display),
+                                color = if (isCur) accent else MaterialTheme.colorScheme.onSurface,
+                                maxLines = display.titleLines,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            q.podcastTitle?.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            EpisodeDescriptionText(description = q.description, display = display)
+                        }
                         // Velký úchyt pro přetažení (změna pořadí) — long-press + tah nahoru/dolů.
                         Icon(
                             Icons.Default.DragHandle,

@@ -562,6 +562,7 @@ fun ShowlyfinPhoneApp() {
                                     itemId = null, fromStart = false, parent = currentDestination,
                                 )
                             },
+                            isListenSection = bottomTab is Destination.Listen,
                         )
                         NavigationBar(containerColor = Color(0xFF1A1A2E)) {
                             NavigationBarItem(

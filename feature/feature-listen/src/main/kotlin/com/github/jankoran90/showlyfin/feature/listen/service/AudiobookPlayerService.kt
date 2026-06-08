@@ -497,6 +497,8 @@ class AudiobookPlayerService : MediaLibraryService() {
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(ep.title)
+                    .setSubtitle(ep.guest)   // host (+profese) jako podtitul i v Android Auto
+                    .setArtist(ep.guest)
                     .setArtworkUri(coverUrl?.let(Uri::parse))
                     .setIsBrowsable(false)
                     .setIsPlayable(true)

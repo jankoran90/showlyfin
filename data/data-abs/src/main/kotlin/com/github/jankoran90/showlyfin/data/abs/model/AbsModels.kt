@@ -68,6 +68,24 @@ data class AbsMedia(
 /** Tělo PATCH /api/items/{id}/media — zapnutí/vypnutí ABS server auto-downloadu epizod. */
 data class AbsMediaUpdate(val autoDownloadEpisodes: Boolean)
 
+// ---- RSS feed: dostupné epizody k stažení na server ----
+// ABS 2.x: POST /api/podcasts/feed {rssFeed} → {podcast:{episodes}};
+//          POST /api/podcasts/{id}/download-episodes  (tělo = HOLÉ pole feed epizod)
+
+/** Tělo POST /api/podcasts/feed — naparsuje RSS feed a vrátí všechny epizody. */
+data class AbsPodcastFeedRequest(
+    val rssFeed: String,
+)
+
+/** Odpověď POST /api/podcasts/feed. */
+data class AbsPodcastFeedResponse(
+    val podcast: AbsFeedPodcast? = null,
+)
+
+data class AbsFeedPodcast(
+    val episodes: List<com.google.gson.JsonObject> = emptyList(),
+)
+
 data class AbsMetadata(
     val title: String? = null,
     val subtitle: String? = null,
@@ -79,6 +97,7 @@ data class AbsMetadata(
     val publishedYear: String? = null,
     val genres: List<String>? = null,
     val language: String? = null,
+    val feedUrl: String? = null,            // podcast: URL RSS feedu (pro „Prohledat epizody")
 ) {
     /** Sjednocený autor: audioknihy `authorName`, podcasty `author`. */
     val authorDisplay: String? get() = authorName?.takeIf { it.isNotBlank() } ?: author?.takeIf { it.isNotBlank() }
@@ -99,10 +118,15 @@ data class AbsPodcastEpisode(
     val duration: Double? = null,            // některé ABS verze; jinak v audioFile/audioTrack
     val audioFile: AbsAudioFile? = null,
     val audioTrack: AbsAudioTrack? = null,
+    val enclosure: AbsEnclosure? = null,     // původní RSS enclosure (porovnání s feedem)
 ) {
     /** Délka epizody v sekundách z nejspolehlivějšího zdroje. */
     val durationSec: Double get() = audioTrack?.duration ?: audioFile?.duration ?: duration ?: 0.0
 }
+
+data class AbsEnclosure(
+    val url: String? = null,
+)
 
 data class AbsAudioFile(
     val ino: String? = null,

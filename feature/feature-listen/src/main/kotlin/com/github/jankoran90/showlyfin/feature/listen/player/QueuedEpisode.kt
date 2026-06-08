@@ -6,4 +6,7 @@ data class QueuedEpisode(
     val episodeId: String,
     val title: String,
     val coverUrl: String?,
+    val guest: String? = null,        // vyparsovaný host (zvýraznit, jako v detailu)
+    val description: String? = null,  // popis epizody (zobrazit pod názvem)
+    val podcastTitle: String? = null, // název podcastu (z kterého epizoda je)
 )

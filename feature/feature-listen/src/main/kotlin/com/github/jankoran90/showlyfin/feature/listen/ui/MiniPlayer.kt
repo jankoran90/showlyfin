@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,17 +40,33 @@ import com.github.jankoran90.showlyfin.feature.listen.AudiobookPlayerViewModel
 fun MiniPlayer(
     onExpand: () -> Unit,
     modifier: Modifier = Modifier,
+    isListenSection: Boolean = true,
     viewModel: AudiobookPlayerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    if (!state.isActive) return
+    val queue by viewModel.queue.collectAsStateWithLifecycle()
+    // „Resume" režim (nic nehraje, jen uložená fronta) ukazuj JEN v sekci Poslech.
+    // Aktivní přehrávání ukazuj všude (standardní mini-player).
+    val resumeMode = !state.isActive
+    if (resumeMode && (queue.isEmpty() || !isListenSection)) return
+
+    val first = queue.firstOrNull()
+    val cover = if (resumeMode) first?.coverUrl else state.coverUrl
+    val guest = if (resumeMode) first?.guest else state.guest
+    val mainTitle = if (resumeMode) (first?.title ?: "Fronta") else state.title
+    val subLine = if (resumeMode) {
+        listOfNotNull(first?.podcastTitle?.takeIf { it.isNotBlank() }, "Fronta · ${queue.size} — klepni pro přehrání").joinToString(" · ")
+    } else state.currentChapterTitle
+    val startOrToggle = {
+        if (resumeMode) first?.let { viewModel.playQueued(it) } else viewModel.playPause()
+    }
 
     ListenExpressiveTheme {
         Row(
             modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(onClick = onExpand)
+                .clickable(onClick = { if (resumeMode) startOrToggle() else onExpand() })
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -59,9 +76,9 @@ fun MiniPlayer(
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
-                if (state.coverUrl != null) {
+                if (cover != null) {
                     AsyncImage(
-                        model = state.coverUrl,
+                        model = cover,
                         contentDescription = null,
                         modifier = Modifier.size(44.dp),
                         contentScale = ContentScale.Crop,
@@ -73,14 +90,24 @@ fun MiniPlayer(
                     .weight(1f)
                     .padding(horizontal = 10.dp),
             ) {
+                guest?.takeIf { it.isNotBlank() && viewModel.episodeDisplay.highlightGuest }?.let { g ->
+                    Text(
+                        g,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Text(
-                    state.title,
+                    mainTitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                state.currentChapterTitle?.let {
+                subLine?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
@@ -90,7 +117,7 @@ fun MiniPlayer(
                     )
                 }
             }
-            IconButton(onClick = { viewModel.playPause() }) {
+            IconButton(onClick = { startOrToggle() }) {
                 Icon(
                     if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (state.isPlaying) "Pauza" else "Přehrát",
@@ -98,11 +125,13 @@ fun MiniPlayer(
                 )
             }
         }
-        val dur = state.durationMs.coerceAtLeast(1L)
-        LinearProgressIndicator(
-            progress = { (state.positionMs.toFloat() / dur).coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(2.dp),
-            color = MaterialTheme.colorScheme.primary,
-        )
+        if (!resumeMode) {
+            val dur = state.durationMs.coerceAtLeast(1L)
+            LinearProgressIndicator(
+                progress = { (state.positionMs.toFloat() / dur).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }

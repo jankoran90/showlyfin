@@ -37,6 +37,15 @@ class PodcastDetailViewModel @Inject constructor(
     /** Akce trailing tlačítka u epizody (z nastavení): 0=fronta konec, 1=fronta další, 2=stáhnout. */
     val episodeQuickAction: Int get() = absPrefs.episodeQuickAction
 
+    /** Jednotné zobrazení epizody (řádky názvu/popisu, poutač hosta, měřítko písma) z nastavení. */
+    val episodeDisplay: com.github.jankoran90.showlyfin.feature.listen.ui.EpisodeDisplaySettings
+        get() = com.github.jankoran90.showlyfin.feature.listen.ui.EpisodeDisplaySettings(
+            titleLines = absPrefs.episodeTitleLines,
+            descriptionLines = absPrefs.episodeDescriptionLines,
+            highlightGuest = absPrefs.highlightGuest,
+            fontScale = absPrefs.episodeFontScale,
+        )
+
     // ── Auto-download DO ZAŘÍZENÍ (offline na telefon) — náš EpisodeDownloadManager ──
     /** Device auto-download je omezený na vybrané podcasty (scope==1) → ukázat per-podcast přepínač. */
     val deviceAutoDownloadSelective: Boolean get() = absPrefs.autoDownloadScope == 1 && absPrefs.autoDownloadNewest > 0
@@ -51,21 +60,50 @@ class PodcastDetailViewModel @Inject constructor(
         _deviceAutoDownloadOn.value = newVal
     }
 
-    // ── Auto-download NA ABS SERVER (ABS-nativní, per-podcast) ──
-    private val _serverAutoDownloadOn = MutableStateFlow(false)
-    val serverAutoDownloadOn = _serverAutoDownloadOn.asStateFlow()
-    private val _serverAutoDownloadBusy = MutableStateFlow(false)
-    val serverAutoDownloadBusy = _serverAutoDownloadBusy.asStateFlow()
+    // ── „Prohledat epizody" — dostupné RSS epizody k stažení na ABS server ──
+    private val _findState = MutableStateFlow(FindEpisodesState())
+    val findState = _findState.asStateFlow()
 
-    fun toggleServerAutoDownload() {
+    /** Otevře sheet a načte dostupné (nestažené) epizody z RSS feedu. */
+    fun openFindEpisodes() {
         val id = currentItemId ?: return
-        val newVal = !_serverAutoDownloadOn.value
+        _findState.value = FindEpisodesState(visible = true, loading = true)
         viewModelScope.launch {
-            _serverAutoDownloadBusy.value = true
-            repo.setServerAutoDownload(id, newVal)
-                .onSuccess { _serverAutoDownloadOn.value = newVal }
-                .onFailure { Timber.w(it, "[Listen] server auto-download PATCH selhal") }
-            _serverAutoDownloadBusy.value = false
+            runCatching { repo.getNewServerEpisodes(id) }
+                .onSuccess { eps -> _findState.update { it.copy(loading = false, episodes = eps) } }
+                .onFailure { e ->
+                    Timber.w(e, "[Listen] checkfornew selhal")
+                    _findState.update { it.copy(loading = false, error = "Načtení epizod z feedu selhalo.") }
+                }
+        }
+    }
+
+    fun closeFindEpisodes() { _findState.value = FindEpisodesState() }
+
+    fun toggleFindSelection(id: String) = _findState.update {
+        it.copy(selectedIds = if (id in it.selectedIds) it.selectedIds - id else it.selectedIds + id)
+    }
+
+    fun selectAllFind() = _findState.update { it.copy(selectedIds = it.episodes.map { e -> e.id }.toSet()) }
+    fun clearFindSelection() = _findState.update { it.copy(selectedIds = emptySet()) }
+    fun consumeFindResult() = _findState.update { it.copy(resultMessage = null) }
+
+    /** Stáhne vybrané feed epizody na ABS server (POST download). */
+    fun downloadSelectedToServer() {
+        val id = currentItemId ?: return
+        val s = _findState.value
+        val selected = s.episodes.filter { it.id in s.selectedIds }
+        if (selected.isEmpty()) return
+        _findState.update { it.copy(submitting = true) }
+        viewModelScope.launch {
+            repo.downloadEpisodesToServer(id, selected)
+                .onSuccess {
+                    _findState.value = FindEpisodesState(resultMessage = "Zařazeno ke stažení na server: ${selected.size} epizod.")
+                }
+                .onFailure { e ->
+                    Timber.w(e, "[Listen] download na server selhal")
+                    _findState.update { it.copy(submitting = false, error = "Stažení na server selhalo.") }
+                }
         }
     }
 
@@ -80,7 +118,6 @@ class PodcastDetailViewModel @Inject constructor(
     fun load(itemId: String) {
         currentItemId = itemId
         _deviceAutoDownloadOn.value = absPrefs.isAutoDownloadPodcast(itemId)
-        viewModelScope.launch { _serverAutoDownloadOn.value = repo.getServerAutoDownload(itemId) }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             runCatching { repo.getPodcastDetail(itemId) }
@@ -129,12 +166,19 @@ class PodcastDetailViewModel @Inject constructor(
 
     /** Long-press akce: přidat epizodu do fronty (atFront = hned po aktuální). */
     fun enqueue(episode: PodcastEpisode, atFront: Boolean) {
-        val cover = raw?.podcast?.coverUrl
-        connection.enqueue(QueuedEpisode(episode.itemId, episode.id, episode.title, cover), atFront)
+        val p = raw?.podcast
+        connection.enqueue(
+            QueuedEpisode(episode.itemId, episode.id, episode.title, p?.coverUrl, episode.guest, episode.description, p?.title),
+            atFront,
+        )
     }
+
+    /** Spustí přehrávání položky z fronty (z detailové fronty). */
+    fun playQueued(q: QueuedEpisode) = connection.playQueued(q)
 
     fun removeFromQueue(episodeId: String) = connection.removeFromQueue(episodeId)
     fun clearQueue() = connection.clearQueue()
+    fun clearAll() = connection.clearAll()
 
     // ──────────────────────────── Offline stažení ────────────────────────────
 

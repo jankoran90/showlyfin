@@ -81,7 +81,10 @@ class AudiobookPlayerConnection @Inject constructor(
                     itemId = o.getString("itemId"),
                     episodeId = o.getString("episodeId"),
                     title = o.optString("title"),
-                    coverUrl = if (o.isNull("coverUrl")) null else o.optString("coverUrl"),
+                    coverUrl = if (o.isNull("coverUrl")) null else o.optString("coverUrl").takeIf { it.isNotBlank() },
+                    guest = if (o.isNull("guest")) null else o.optString("guest").takeIf { it.isNotBlank() },
+                    description = if (o.isNull("description")) null else o.optString("description").takeIf { it.isNotBlank() },
+                    podcastTitle = if (o.isNull("podcastTitle")) null else o.optString("podcastTitle").takeIf { it.isNotBlank() },
                 )
             }
         }.getOrElse { emptyList() }
@@ -96,7 +99,10 @@ class AudiobookPlayerConnection @Inject constructor(
                     .put("itemId", q.itemId)
                     .put("episodeId", q.episodeId)
                     .put("title", q.title)
-                    .put("coverUrl", q.coverUrl ?: JSONObject.NULL),
+                    .put("coverUrl", q.coverUrl ?: JSONObject.NULL)
+                    .put("guest", q.guest ?: JSONObject.NULL)
+                    .put("description", q.description ?: JSONObject.NULL)
+                    .put("podcastTitle", q.podcastTitle ?: JSONObject.NULL),
             )
         }
         prefs.queueJson = arr.toString()
@@ -194,6 +200,7 @@ class AudiobookPlayerConnection @Inject constructor(
         _state.update {
             it.copy(
                 isActive = true, title = pb.title, author = pb.author, coverUrl = pb.coverUrl,
+                guest = episode?.guest,
                 durationMs = (pb.durationSec * 1000).toLong(),
                 isPodcastEpisode = episode != null,
                 currentItemId = itemId ?: episode?.itemId,
@@ -375,6 +382,18 @@ class AudiobookPlayerConnection @Inject constructor(
 
     fun clearQueue() = setQueue(emptyList())
 
+    /** Vymaže CELOU frontu včetně aktuálně přehrávaného → přehrávač zůstane prázdný (neaktivní). */
+    fun clearAll() {
+        withController { c ->
+            c.stop()
+            c.clearMediaItems()
+        }
+        currentEpisode = null
+        _chapters.value = emptyList()
+        setQueue(emptyList())
+        _state.value = PlayerState()
+    }
+
     /** Přesun položky ve frontě (drag reorder). */
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         val q = _queue.value.toMutableList()
@@ -461,12 +480,10 @@ class AudiobookPlayerConnection @Inject constructor(
         // Fronta prázdná → volitelně pokračuj další nepřehranou epizodou téhož podcastu.
         if (prefs.continuePodcastAfterQueue) {
             scope.launch {
-                val nextEp = runCatching {
-                    repo.getPodcastDetail(ended.itemId).episodes
-                        .firstOrNull { !it.isFinished && it.id != ended.episodeId }
-                }.getOrNull()
+                val detail = runCatching { repo.getPodcastDetail(ended.itemId) }.getOrNull()
+                val nextEp = detail?.episodes?.firstOrNull { !it.isFinished && it.id != ended.episodeId }
                 if (nextEp != null) {
-                    val q = QueuedEpisode(nextEp.itemId, nextEp.id, nextEp.title, ended.coverUrl)
+                    val q = QueuedEpisode(nextEp.itemId, nextEp.id, nextEp.title, ended.coverUrl, nextEp.guest, nextEp.description, detail.podcast.title)
                     runCatching { repo.startEpisodePlayback(nextEp.itemId, nextEp.id) }
                         .onSuccess { pb -> playBook(pb, fromStart = false, episode = q, itemId = nextEp.itemId) }
                         .onFailure { Timber.w(it, "[Listen] pokračování podcastu selhalo") }

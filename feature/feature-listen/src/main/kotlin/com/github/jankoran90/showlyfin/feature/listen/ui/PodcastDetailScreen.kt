@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,6 +39,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -70,8 +73,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadState
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus
+import com.github.jankoran90.showlyfin.data.abs.model.FeedEpisode
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
+import com.github.jankoran90.showlyfin.feature.listen.FindEpisodesState
 import com.github.jankoran90.showlyfin.feature.listen.PodcastDetailViewModel
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import java.text.SimpleDateFormat
@@ -93,11 +98,20 @@ fun PodcastDetailScreen(
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val playingEpisodeId = playerState.currentEpisodeId?.takeIf { playerState.isActive }
     val quickAction = viewModel.episodeQuickAction
+    val display = viewModel.episodeDisplay
     val deviceAutoDownloadOn by viewModel.deviceAutoDownloadOn.collectAsStateWithLifecycle()
     val deviceAutoDownloadSelective = viewModel.deviceAutoDownloadSelective
-    val serverAutoDownloadOn by viewModel.serverAutoDownloadOn.collectAsStateWithLifecycle()
-    val serverAutoDownloadBusy by viewModel.serverAutoDownloadBusy.collectAsStateWithLifecycle()
+    val findState by viewModel.findState.collectAsStateWithLifecycle()
     LaunchedEffect(itemId) { viewModel.load(itemId) }
+
+    // Výsledek stažení na server → snackbar/toast.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(findState.resultMessage) {
+        findState.resultMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            viewModel.consumeFindResult()
+        }
+    }
 
     var actionEpisode by remember { mutableStateOf<PodcastEpisode?>(null) }
     var showQueue by remember { mutableStateOf(false) }
@@ -143,12 +157,11 @@ fun PodcastDetailScreen(
                     downloadStates = downloadStates,
                     playingEpisodeId = playingEpisodeId,
                     quickAction = quickAction,
+                    display = display,
                     deviceAutoDownloadSelective = deviceAutoDownloadSelective,
                     deviceAutoDownloadOn = deviceAutoDownloadOn,
                     onToggleDeviceAutoDownload = { viewModel.toggleDeviceAutoDownload() },
-                    serverAutoDownloadOn = serverAutoDownloadOn,
-                    serverAutoDownloadBusy = serverAutoDownloadBusy,
-                    onToggleServerAutoDownload = { viewModel.toggleServerAutoDownload() },
+                    onFindEpisodes = { viewModel.openFindEpisodes() },
                     onPlay = { ep -> onPlayEpisode(itemId, ep.id, false, null) },
                     onLongPress = { ep -> actionEpisode = ep },
                     onOpenQueue = { showQueue = true },
@@ -183,9 +196,24 @@ fun PodcastDetailScreen(
         QueueSheet(
             queue = queue,
             playingEpisodeId = playingEpisodeId,
+            display = display,
             onDismiss = { showQueue = false },
+            onPlay = { viewModel.playQueued(it); showQueue = false },
             onRemove = { viewModel.removeFromQueue(it) },
-            onClear = { viewModel.clearQueue(); showQueue = false },
+            onClear = { viewModel.clearAll(); showQueue = false },
+        )
+    }
+
+    // „Prohledat epizody" — dostupné RSS epizody k stažení na ABS server
+    if (findState.visible) {
+        FindEpisodesSheet(
+            state = findState,
+            display = display,
+            onDismiss = { viewModel.closeFindEpisodes() },
+            onToggle = { viewModel.toggleFindSelection(it) },
+            onSelectAll = { viewModel.selectAllFind() },
+            onClearSelection = { viewModel.clearFindSelection() },
+            onConfirm = { viewModel.downloadSelectedToServer() },
         )
     }
 }
@@ -198,12 +226,11 @@ private fun DetailContent(
     downloadStates: Map<String, DownloadState>,
     playingEpisodeId: String?,
     quickAction: Int,
+    display: EpisodeDisplaySettings,
     deviceAutoDownloadSelective: Boolean,
     deviceAutoDownloadOn: Boolean,
     onToggleDeviceAutoDownload: () -> Unit,
-    serverAutoDownloadOn: Boolean,
-    serverAutoDownloadBusy: Boolean,
-    onToggleServerAutoDownload: () -> Unit,
+    onFindEpisodes: () -> Unit,
     onPlay: (PodcastEpisode) -> Unit,
     onLongPress: (PodcastEpisode) -> Unit,
     onOpenQueue: () -> Unit,
@@ -256,16 +283,16 @@ private fun DetailContent(
             }
         }
 
-        // Auto-download přepínače: na ABS server (ABS-nativní) + do telefonu (jen když je device scope=vybrané).
+        // Akce podcastu: prohledat epizody z RSS (→ stáhnout na ABS server) + volitelně auto-download do telefonu.
+        // (Auto-download na server je per-podcast přepínač přesunut do Nastavení → Poslech.)
         item {
             FlowRow(
                 Modifier.fillMaxWidth().padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilterChip(
-                    selected = serverAutoDownloadOn,
-                    onClick = { if (!serverAutoDownloadBusy) onToggleServerAutoDownload() },
-                    label = { Text("Auto na server") },
+                AssistChip(
+                    onClick = onFindEpisodes,
+                    label = { Text("Prohledat epizody") },
                     leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 )
                 if (deviceAutoDownloadSelective) {
@@ -309,6 +336,7 @@ private fun DetailContent(
                 isCurrent = ep.id == playingEpisodeId,
                 downloadState = downloadStates[ep.id] ?: DownloadState(),
                 quickAction = quickAction,
+                display = display,
                 onDownload = { onDownload(ep) },
                 onCancelDownload = { onCancelDownload(ep) },
                 onEnqueueEnd = { onEnqueueEnd(ep) },
@@ -329,6 +357,7 @@ private fun EpisodeRow(
     isCurrent: Boolean,
     downloadState: DownloadState,
     quickAction: Int,
+    display: EpisodeDisplaySettings,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onEnqueueEnd: () -> Unit,
@@ -337,37 +366,32 @@ private fun EpisodeRow(
 ) {
     val canResume = ep.currentTimeSec > 1.0 && !ep.isFinished
     val accent = MaterialTheme.colorScheme.primary
+    // Subtilní styl jako seznam kapitol v detailu audioknihy: malá ikona, žádný velký avatar.
     Row(
         modifier
             .fillMaxWidth()
             .background(if (isCurrent) accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
-            .padding(vertical = 12.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Box(
-            Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(accent),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                when {
-                    isCurrent -> Icons.Default.GraphicEq
-                    ep.isFinished -> Icons.Default.CheckCircle
-                    else -> Icons.Default.PlayArrow
-                },
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+        Icon(
+            when {
+                isCurrent -> Icons.Default.GraphicEq
+                ep.isFinished -> Icons.Default.CheckCircle
+                else -> Icons.Default.PlayArrow
+            },
+            contentDescription = null,
+            tint = if (ep.isFinished && !isCurrent) MaterialTheme.colorScheme.onSurfaceVariant else accent,
+            modifier = Modifier.size(18.dp).padding(top = 2.dp),
+        )
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            // Host jako poutač NAD titulkem (když je rozpoznán).
+            GuestBanner(ep.guest, display)
             Text(
                 text = ep.title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = episodeTitleStyle(display),
                 color = if (isCurrent) accent else MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
+                maxLines = display.titleLines,
                 overflow = TextOverflow.Ellipsis,
             )
             val meta = buildList {
@@ -383,6 +407,8 @@ private fun EpisodeRow(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
+            // Popis epizody (host je už jako poutač nad titulkem) — jednotně.
+            EpisodeDescriptionText(description = ep.description, display = display)
             AnimatedVisibility(visible = canResume) {
                 LinearProgressIndicator(
                     progress = { ep.progress.toFloat().coerceIn(0f, 1f) },
@@ -500,7 +526,9 @@ private fun EpisodeActionSheet(
 private fun QueueSheet(
     queue: List<QueuedEpisode>,
     playingEpisodeId: String?,
+    display: EpisodeDisplaySettings,
     onDismiss: () -> Unit,
+    onPlay: (QueuedEpisode) -> Unit,
     onRemove: (String) -> Unit,
     onClear: () -> Unit,
 ) {
@@ -536,20 +564,35 @@ private fun QueueSheet(
                         Modifier
                             .fillMaxWidth()
                             .background(if (isCur) accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+                            .clickable { onPlay(q) }
                             .padding(horizontal = 20.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (isCur) {
-                            Icon(Icons.Default.GraphicEq, contentDescription = "Hraje", tint = accent, modifier = Modifier.size(18.dp).padding(end = 8.dp))
+                            Icon(Icons.Default.GraphicEq, contentDescription = "Hraje", tint = accent, modifier = Modifier.size(18.dp).padding(end = 8.dp, top = 2.dp).align(Alignment.Top))
+                        } else {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát", tint = accent, modifier = Modifier.size(18.dp).padding(end = 8.dp, top = 2.dp).align(Alignment.Top))
                         }
-                        Text(
-                            q.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isCur) accent else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(Modifier.weight(1f)) {
+                            GuestBanner(q.guest, display)
+                            Text(
+                                q.title,
+                                style = episodeTitleStyle(display),
+                                color = if (isCur) accent else MaterialTheme.colorScheme.onSurface,
+                                maxLines = display.titleLines,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            q.podcastTitle?.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            EpisodeDescriptionText(description = q.description, display = display)
+                        }
                         IconButton(onClick = { onRemove(q.episodeId) }) {
                             Icon(Icons.Default.Delete, contentDescription = "Odebrat z fronty", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -559,6 +602,107 @@ private fun QueueSheet(
             }
         }
         Box(Modifier.height(12.dp))
+    }
+}
+
+/** Sheet „Prohledat epizody": dostupné RSS epizody (nestažené na serveru) + multi-select → stáhnout na server. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FindEpisodesSheet(
+    state: FindEpisodesState,
+    display: EpisodeDisplaySettings,
+    onDismiss: () -> Unit,
+    onToggle: (String) -> Unit,
+    onSelectAll: () -> Unit,
+    onClearSelection: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Prohledat epizody", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    "Dostupné v RSS, zatím nestažené na serveru.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (state.episodes.isNotEmpty()) {
+                val allSelected = state.selectedIds.size == state.episodes.size
+                TextButton(onClick = { if (allSelected) onClearSelection() else onSelectAll() }) {
+                    Text(if (allSelected) "Zrušit výběr" else "Vybrat vše")
+                }
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        when {
+            state.loading -> Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            state.error != null -> Text(
+                state.error,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(20.dp),
+            )
+            state.episodes.isEmpty() -> Text(
+                "Žádné nové epizody — server má všechny z feedu.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(20.dp),
+            )
+            else -> LazyColumn(Modifier.heightIn(max = 440.dp)) {
+                items(state.episodes, key = { it.id }) { ep ->
+                    val checked = ep.id in state.selectedIds
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggle(ep.id) }
+                            .padding(start = 8.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = checked, onCheckedChange = { onToggle(ep.id) })
+                        Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                            GuestBanner(ep.guest, display)
+                            Text(
+                                ep.title,
+                                style = episodeTitleStyle(display),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = display.titleLines,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            val meta = buildList {
+                                formatDate(ep.publishedAt)?.let { add(it) }
+                                ep.durationSec?.takeIf { it > 0 }?.let { add(formatEpisodeDuration(it)) }
+                            }.joinToString(" · ")
+                            if (meta.isNotBlank()) {
+                                Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            EpisodeDescriptionText(description = ep.description, display = display)
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                }
+            }
+        }
+        if (state.episodes.isNotEmpty()) {
+            Button(
+                onClick = onConfirm,
+                enabled = state.selectedIds.isNotEmpty() && !state.submitting,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                if (state.submitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                } else {
+                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("  Stáhnout na server (${state.selectedIds.size})")
+                }
+            }
+        }
+        Box(Modifier.height(8.dp))
     }
 }
 

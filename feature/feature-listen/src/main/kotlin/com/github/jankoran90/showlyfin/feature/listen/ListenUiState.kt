@@ -36,3 +36,14 @@ data class PodcastDetailUiState(
     val detail: PodcastDetail? = null,   // epizody již profiltrované dle hideFinished
     val hideFinished: Boolean = false,
 )
+
+/** Stav sheetu „Prohledat epizody" — dostupné RSS epizody k stažení na ABS server. */
+data class FindEpisodesState(
+    val visible: Boolean = false,
+    val loading: Boolean = false,
+    val episodes: List<com.github.jankoran90.showlyfin.data.abs.model.FeedEpisode> = emptyList(),
+    val selectedIds: Set<String> = emptySet(),
+    val error: String? = null,
+    val submitting: Boolean = false,
+    val resultMessage: String? = null,   // hláška po odeslání (snackbar)
+)
