@@ -410,50 +410,65 @@ private fun UploaderSection(
         Column(Modifier.padding(16.dp)) {
             Text("Uploader", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Přihlášení k upload serveru (Stremio streamy, Sdílej.cz, Smart Remux). Heslo se uloží pro automatické obnovení relace po vypršení.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { Text("URL serveru") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Heslo") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(12.dp))
-            if (uiState.isLoading) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            } else {
-                Button(
-                    onClick = { viewModel.saveBaseUrl(url); viewModel.login(password) },
-                    enabled = url.isNotBlank() && password.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Přihlásit") }
-            }
-            uiState.error?.let {
-                Spacer(Modifier.height(8.dp))
-                Text("Chyba: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            if (uiState.error == null && password.isBlank() && viewModel.baseUrl.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
+            if (uiState.isLoggedIn) {
+                // Plan PROFILES #21: jasný indikátor stavu přihlášení (jako Jellyfin/ABS) + Odhlásit.
                 Text(
-                    text = "Nastaveno: ${viewModel.baseUrl}",
+                    text = "Přihlášen: ${viewModel.baseUrl}",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodySmall,
                 )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Stremio streamy, Sdílej.cz, Smart Remux.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { viewModel.logout() },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Odhlásit Uploader") }
+            } else {
+                Text(
+                    text = "Přihlášení k upload serveru (Stremio streamy, Sdílej.cz, Smart Remux). " +
+                        "Zadej URL i s https://. Heslo se uloží pro automatické obnovení relace.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("URL serveru") },
+                    placeholder = { Text("https://upload.jankoran.cz") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Heslo") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                if (uiState.isLoading) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                } else {
+                    Button(
+                        onClick = { viewModel.saveBaseUrl(url); viewModel.login(password) },
+                        enabled = url.isNotBlank() && password.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Přihlásit") }
+                }
+                uiState.error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Chyba: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

@@ -13,8 +13,11 @@ import javax.inject.Singleton
  * museli měnit každý konzument (Plan PROFILES, Fáze 1A). Rozšiřuje vzor `ProfileRepository.setActive`,
  * který už dnes pushuje `jellyfin_*` klíče.
  *
- * KLÍČOVÉ: chybějící (null) credentials se **vyčistí**, aby se přihlášení jednoho profilu neprolilo
- * do druhého (např. dětský profil bez Uploaderu nesmí zdědit Uploader admina).
+ * KLÍČOVÉ (Fáze 1): credentials z balíku se aplikují **jen když existují** — chybějící (null) se
+ * NEMAŽOU. Důvod: ve Fázi 1 žádný profil ABS/Uploader creds do balíku neautoruje (ukládá se jen
+ * Jellyfin při loginu), takže mazání-na-null by jen smazalo uživatelem nastavený sdílený Uploader/ABS
+ * při každém přepnutí profilu (regrese „Failed to connect to localhost" #21). Per-profil izolace
+ * přihlášení přijde až ve Fázi 2, kdy balík reálně nese creds z backendu.
  *
  * Pozn.: klíče jsou zde zrcadleny z příslušných pref tříd (`AbsPreferences`, `UploaderViewModel`) —
  * jeden sdílený SharedPreferences soubor, stringové klíče (stávající vzor v appce).
@@ -34,27 +37,20 @@ class ProfileConfigApplier @Inject constructor(
                 putString(K_JF_USER_NAME, j.username)
             }
 
-            // ABS — aplikuj nebo vyčisti
-            creds.abs.let { a ->
-                if (a != null) {
-                    putString(K_ABS_URL, a.url.trim().trimEnd('/'))
-                    putString(K_ABS_USER, a.username)
-                    putString(K_ABS_PASS, a.password)
-                    putString(K_ABS_TOKEN, a.token.orEmpty())
-                } else {
-                    remove(K_ABS_URL); remove(K_ABS_USER); remove(K_ABS_PASS); remove(K_ABS_TOKEN)
-                }
+            // ABS — aplikuj jen když balík nese creds (null = ponech stávající sdílené, NEMAZAT)
+            creds.abs?.let { a ->
+                putString(K_ABS_URL, a.url.trim().trimEnd('/'))
+                putString(K_ABS_USER, a.username)
+                putString(K_ABS_PASS, a.password)
+                putString(K_ABS_TOKEN, a.token.orEmpty())
             }
 
-            // Uploader — aplikuj nebo vyčisti; nové heslo => zahodit cookie (vynutí relogin)
-            creds.uploader.let { u ->
-                if (u != null) {
-                    putString(K_UP_URL, u.url.trimEnd('/'))
-                    putString(K_UP_PASS, u.password)
-                    remove(K_UP_COOKIE)
-                } else {
-                    remove(K_UP_URL); remove(K_UP_PASS); remove(K_UP_COOKIE)
-                }
+            // Uploader — aplikuj jen když balík nese creds (null = ponech stávající sdílené, NEMAZAT);
+            // nové heslo z balíku => zahodit cookie (vynutí relogin)
+            creds.uploader?.let { u ->
+                putString(K_UP_URL, u.url.trimEnd('/'))
+                putString(K_UP_PASS, u.password)
+                remove(K_UP_COOKIE)
             }
 
             // Vzhled / volné toggly — klíč v mapě = kanonický pref klíč

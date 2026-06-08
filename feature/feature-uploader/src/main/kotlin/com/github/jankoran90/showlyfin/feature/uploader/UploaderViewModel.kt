@@ -21,6 +21,8 @@ data class TmmFileQueueItem(val fid: String, val file: TmmFile)
 data class UploaderUiState(
     val isLoading: Boolean = false,
     val isNotConfigured: Boolean = false,
+    /** Přihlášen = máme platnou session cookie (Plan PROFILES #21 — indikátor stavu v Nastavení). */
+    val isLoggedIn: Boolean = false,
     val sessionId: String? = null,
     val files: List<TmmFileQueueItem> = emptyList(),
     val message: String? = null,
@@ -51,6 +53,26 @@ class UploaderViewModel @Inject constructor(
 
     val isConfigured get() = baseUrl.isNotBlank()
 
+    init { refreshLoginState() }
+
+    /** Promítne aktuální stav přihlášení (cookie present) z prefs do uiState (pro indikátor v UI). */
+    fun refreshLoginState() {
+        _uiState.update {
+            it.copy(isNotConfigured = !isConfigured, isLoggedIn = isConfigured && cookie.isNotBlank())
+        }
+    }
+
+    /** Odhlášení z Uploaderu — smaže session cookie + heslo + TMM session (URL ponechá). */
+    fun logout() {
+        pollingJob?.cancel()
+        prefs.edit()
+            .remove(PREF_UPLOADER_COOKIE)
+            .remove(PREF_UPLOADER_PASSWORD)
+            .remove(PREF_TMM_SESSION_ID)
+            .apply()
+        _uiState.update { it.copy(isLoggedIn = false, sessionId = null, files = emptyList(), error = null) }
+    }
+
     fun checkConfiguration() {
         if (!isConfigured) { _uiState.update { it.copy(isNotConfigured = true) }; return }
         val sid = prefs.getString(PREF_TMM_SESSION_ID, null)
@@ -68,7 +90,7 @@ class UploaderViewModel @Inject constructor(
                         .putString(PREF_UPLOADER_COOKIE, sessionCookie)
                         .putString(PREF_UPLOADER_PASSWORD, password)
                         .apply()
-                    _uiState.update { it.copy(isLoading = false, isNotConfigured = false) }
+                    _uiState.update { it.copy(isLoading = false, isNotConfigured = false, isLoggedIn = true) }
                     checkConfiguration()
                 }
                 .onFailure { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
@@ -76,8 +98,12 @@ class UploaderViewModel @Inject constructor(
     }
 
     fun saveBaseUrl(url: String) {
-        prefs.edit().putString(PREF_UPLOADER_URL, url.trimEnd('/')).apply()
-        _uiState.update { it.copy(isNotConfigured = !url.isNotBlank()) }
+        // Doplň scheme, když chybí (uživatel zadal jen host) → OkHttp jinak spadne na localhost.
+        val normalized = url.trim().trimEnd('/').let {
+            if (it.isEmpty() || it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
+        }
+        prefs.edit().putString(PREF_UPLOADER_URL, normalized).apply()
+        _uiState.update { it.copy(isNotConfigured = normalized.isBlank()) }
     }
 
     fun startPolling(sid: String) {
