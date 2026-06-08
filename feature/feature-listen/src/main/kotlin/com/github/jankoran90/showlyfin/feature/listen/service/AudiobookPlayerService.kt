@@ -178,6 +178,7 @@ class AudiobookPlayerService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<MediaItem>> {
+            Timber.i("[AUTO] onGetLibraryRoot (verze 1.32.0 root sekce)")
             val root = browsableNode(ROOT_ID, "Showlyfin")
             return Futures.immediateFuture(LibraryResult.ofItem(root, params))
         }
@@ -210,6 +211,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                     parentId.startsWith(PREFIX_PODCAST) -> podcastEpisodes(parentId.removePrefix(PREFIX_PODCAST))
                     else -> emptyList()
                 }
+                Timber.i("[AUTO] children parent='%s' → %d: %s", parentId, children.size,
+                    children.joinToString { it.mediaMetadata.title?.toString() ?: it.mediaId })
                 children.forEach { itemCache[it.mediaId] = it }
                 LibraryResult.ofItemList(ImmutableList.copyOf(children), params)
             }
@@ -255,6 +258,7 @@ class AudiobookPlayerService : MediaLibraryService() {
                 val itemId = first.mediaId.removePrefix(PREFIX_BOOK)
                 return future {
                     val pb = repo.startPlayback(itemId).also { currentPlayback = it }
+                    Timber.i("[AUTO] play kniha '%s' tracks=%d", pb.title, pb.tracks.size)
                     val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
                     MediaSession.MediaItemsWithStartPosition(trackItems(pb), idx, pos)
                 }
@@ -267,6 +271,7 @@ class AudiobookPlayerService : MediaLibraryService() {
                 if (parts.size == 2) {
                     return future {
                         val pb = repo.startEpisodePlayback(parts[0], parts[1]).also { currentPlayback = it }
+                        Timber.i("[AUTO] play epizoda '%s' tracks=%d", pb.title, pb.tracks.size)
                         val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
                         MediaSession.MediaItemsWithStartPosition(trackItems(pb), idx, pos)
                     }
