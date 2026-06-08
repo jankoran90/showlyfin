@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.net.Uri
 import android.provider.Settings
@@ -53,7 +54,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
@@ -191,6 +194,9 @@ fun PlaybackScreen(
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var currentSubtitle by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
+    // TV: panel titulků je touch-only, na TV ho zpřístupníme D-padem (otevření Up/Menu + fokus do panelu).
+    val isTv = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
+    val menuFocusRequester = remember { FocusRequester() }
 
     // Seekbar (ruční přesouvání) + gesta jas/hlasitost
     var scrubbing by remember { mutableStateOf(false) }
@@ -295,6 +301,15 @@ fun PlaybackScreen(
     }
     LaunchedEffect(resumeDecided) {
         if (resumeDecided) runCatching { focusRequester.requestFocus() }
+    }
+    // TV: přesměruj D-pad fokus do panelu titulků při otevření, zpět na přehrávač při zavření.
+    LaunchedEffect(showSubtitleMenu, resumeDecided) {
+        if (!isTv || !resumeDecided) return@LaunchedEffect
+        delay(50)
+        runCatching {
+            if (showSubtitleMenu) menuFocusRequester.requestFocus()
+            else focusRequester.requestFocus()
+        }
     }
 
     BackHandler {
@@ -454,25 +469,32 @@ fun PlaybackScreen(
                         }
                     }
                 } else {
-                    // D-pad capture layer (TV)
+                    // D-pad capture layer (TV i telefon s D-padem). Když je otevřený panel titulků,
+                    // klávesy NEpožíráme → fokus i navigaci přebírá panel (menuFocusRequester).
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .focusRequester(focusRequester)
-                            .focusable()
-                            .onKeyEvent { ev ->
-                                if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
-                                when (ev.key) {
-                                    Key.DirectionLeft -> { exoPlayer.seekBack(); controlsVisible = true; true }
-                                    Key.DirectionRight -> { exoPlayer.seekForward(); controlsVisible = true; true }
-                                    Key.DirectionCenter, Key.Enter, Key.Spacebar -> {
-                                        if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
-                                        controlsVisible = true; true
+                            .then(
+                                if (!showSubtitleMenu) Modifier
+                                    .focusRequester(focusRequester)
+                                    .focusable()
+                                    .onKeyEvent { ev ->
+                                        if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                        when (ev.key) {
+                                            Key.DirectionLeft -> { exoPlayer.seekBack(); controlsVisible = true; true }
+                                            Key.DirectionRight -> { exoPlayer.seekForward(); controlsVisible = true; true }
+                                            Key.DirectionCenter, Key.Enter, Key.Spacebar -> {
+                                                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                                controlsVisible = true; true
+                                            }
+                                            // Up / Menu = otevři panel titulků (na TV jediná cesta k němu)
+                                            Key.DirectionUp, Key.Menu -> { showSubtitleMenu = true; controlsVisible = true; true }
+                                            Key.DirectionDown -> { controlsVisible = true; true }
+                                            else -> false
+                                        }
                                     }
-                                    Key.DirectionUp, Key.DirectionDown -> { controlsVisible = true; true }
-                                    else -> false
-                                }
-                            },
+                                else Modifier,
+                            ),
                     )
 
                     if (controlsVisible) {
@@ -559,6 +581,7 @@ fun PlaybackScreen(
                             onPosition = { viewModel.setBottomPadding(it) },
                             onNudge = { viewModel.nudgeOffset(it) },
                             onClose = { showSubtitleMenu = false },
+                            firstItemFocusRequester = if (isTv) menuFocusRequester else null,
                             modifier = Modifier.align(Alignment.CenterEnd),
                         )
                     }
@@ -626,6 +649,7 @@ private fun SubtitleSettingsPanel(
     onPosition: (Float) -> Unit,
     onNudge: (Long) -> Unit,
     onClose: () -> Unit,
+    firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -643,7 +667,7 @@ private fun SubtitleSettingsPanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Titulky", color = Color.White, style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onClose) { Text("Hotovo") }
+            TextButton(onClick = onClose, modifier = Modifier.tvFocusBorder(RoundedCornerShape(8.dp))) { Text("Hotovo") }
         }
 
         // Stopa
@@ -652,6 +676,7 @@ private fun SubtitleSettingsPanel(
             label = "Vypnuto",
             selected = state.selectedSubtitleIndex < 0,
             onClick = { onSelect(-1) },
+            focusRequester = firstItemFocusRequester,
         )
         state.subtitleCandidates.forEachIndexed { i, c ->
             val rel = c.release.ifBlank { c.title }
@@ -702,6 +727,7 @@ private fun SubtitleSettingsPanel(
                 val sel = state.subtitleStyle.colorArgb == argb
                 Box(
                     modifier = Modifier
+                        .tvFocusBorder(CircleShape)
                         .size(32.dp)
                         .background(Color(argb), CircleShape)
                         .border(if (sel) 3.dp else 1.dp, if (sel) Color.White else Color.White.copy(alpha = 0.3f), CircleShape)
@@ -713,12 +739,20 @@ private fun SubtitleSettingsPanel(
 }
 
 @Composable
-private fun SubtitleRow(label: String, sub: String = "", selected: Boolean, onClick: () -> Unit) {
+private fun SubtitleRow(
+    label: String,
+    sub: String = "",
+    selected: Boolean,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .tvFocusBorder(RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
+            .padding(vertical = 6.dp, horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(if (selected) "●" else "○", color = if (selected) Color(0xFFFFBF00) else Color.White.copy(alpha = 0.5f))
@@ -739,9 +773,26 @@ private fun StepperRow(label: String, value: String, onMinus: () -> Unit, onPlus
     ) {
         Text(label, color = Color.White, style = MaterialTheme.typography.bodyMedium)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onMinus) { Text("−", color = Color.White, style = MaterialTheme.typography.titleLarge) }
+            TextButton(onClick = onMinus, modifier = Modifier.tvFocusBorder(CircleShape)) { Text("−", color = Color.White, style = MaterialTheme.typography.titleLarge) }
             Text(value, color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            TextButton(onClick = onPlus) { Text("+", color = Color.White, style = MaterialTheme.typography.titleLarge) }
+            TextButton(onClick = onPlus, modifier = Modifier.tvFocusBorder(CircleShape)) { Text("+", color = Color.White, style = MaterialTheme.typography.titleLarge) }
         }
     }
+}
+
+/**
+ * TV fokus-highlight: bílý prstenec kolem prvku, když je zafokusovaný D-padem.
+ * Musí být v řetězci modifierů PŘED `clickable`/button, aby `onFocusChanged` viděl jejich fokus.
+ * Na telefonu (dotyk) se nikdy neukáže — focus stav nastává jen při D-pad/klávesnicové navigaci.
+ */
+@Composable
+private fun Modifier.tvFocusBorder(shape: Shape): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { focused = it.isFocused }
+        .border(
+            width = if (focused) 2.dp else 0.dp,
+            color = if (focused) Color.White else Color.Transparent,
+            shape = shape,
+        )
 }
