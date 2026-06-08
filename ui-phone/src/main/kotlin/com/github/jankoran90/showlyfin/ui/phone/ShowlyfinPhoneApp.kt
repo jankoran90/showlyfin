@@ -60,6 +60,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookDetailScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookPlayerScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
+import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDetailScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxHistoryScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxPickerScreen
@@ -86,7 +87,8 @@ private sealed interface Destination {
 
     // Poslech sub-screens
     data class AudiobookDetail(val itemId: String, val parent: Destination) : Destination
-    data class AudiobookPlayer(val itemId: String?, val fromStart: Boolean, val startSec: Double? = null, val parent: Destination) : Destination
+    data class PodcastDetail(val itemId: String, val parent: Destination) : Destination
+    data class AudiobookPlayer(val itemId: String?, val fromStart: Boolean, val startSec: Double? = null, val episodeId: String? = null, val parent: Destination) : Destination
 
     // Sub-screens
     data class Detail(val item: MediaItem, val parent: Destination) : Destination
@@ -291,6 +293,7 @@ fun ShowlyfinPhoneApp() {
                 is Destination.Detail -> current.parent
                 is Destination.Uploader -> Destination.Settings
                 is Destination.AudiobookDetail -> current.parent
+                is Destination.PodcastDetail -> current.parent
                 is Destination.AudiobookPlayer -> current.parent
                 else -> bottomTab
             }
@@ -407,6 +410,10 @@ fun ShowlyfinPhoneApp() {
                         bottomTab = Destination.Listen
                         currentDestination = Destination.AudiobookDetail(itemId, parent = Destination.Listen)
                     },
+                    onOpenPodcast = { itemId ->
+                        bottomTab = Destination.Listen
+                        currentDestination = Destination.PodcastDetail(itemId, parent = Destination.Listen)
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.AudiobookDetail -> AudiobookDetailScreen(
@@ -417,10 +424,22 @@ fun ShowlyfinPhoneApp() {
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+                is Destination.PodcastDetail -> PodcastDetailScreen(
+                    itemId = dest.itemId,
+                    onBack = { currentDestination = dest.parent },
+                    onPlayEpisode = { itemId, episodeId, fromStart, startSec ->
+                        currentDestination = Destination.AudiobookPlayer(
+                            itemId = itemId, fromStart = fromStart, startSec = startSec,
+                            episodeId = episodeId, parent = dest,
+                        )
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
                 is Destination.AudiobookPlayer -> AudiobookPlayerScreen(
                     itemId = dest.itemId,
                     fromStart = dest.fromStart,
                     startSec = dest.startSec,
+                    episodeId = dest.episodeId,
                     onBack = { currentDestination = dest.parent },
                     modifier = Modifier.fillMaxSize(),
                 )

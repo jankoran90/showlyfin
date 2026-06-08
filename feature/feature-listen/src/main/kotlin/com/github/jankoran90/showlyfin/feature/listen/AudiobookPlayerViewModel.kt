@@ -30,17 +30,22 @@ class AudiobookPlayerViewModel @Inject constructor(
     private var openedFor: String? = null
 
     /**
-     * Spustí přehrávání knihy. [startSec] != null = skok na začátek vybrané kapitoly.
-     * Pokud už tato kniha hraje (Activity-scoped VM), kapitolu řešíme přímým seekem bez restartu.
+     * Spustí přehrávání knihy nebo podcast epizody. [episodeId] != null = podcast epizoda
+     * (single track, bez kapitol). [startSec] != null = skok na začátek vybrané kapitoly.
+     * Pokud už totéž hraje (Activity-scoped VM), kapitolu řešíme přímým seekem bez restartu.
      */
-    fun open(itemId: String, fromStart: Boolean, startSec: Double? = null) {
-        if (openedFor == itemId) {
+    fun open(itemId: String, fromStart: Boolean, startSec: Double? = null, episodeId: String? = null) {
+        val key = if (episodeId != null) "$itemId/$episodeId" else itemId
+        if (openedFor == key) {
             if (startSec != null) connection.seekTo((startSec * 1000).toLong())
             return
         }
-        openedFor = itemId
+        openedFor = key
         viewModelScope.launch {
-            runCatching { repo.startPlayback(itemId) }
+            runCatching {
+                if (episodeId != null) repo.startEpisodePlayback(itemId, episodeId)
+                else repo.startPlayback(itemId)
+            }
                 .onSuccess { connection.playBook(it, fromStart, startSec) }
                 .onFailure {
                     Timber.w(it, "[Listen] startPlayback selhal")

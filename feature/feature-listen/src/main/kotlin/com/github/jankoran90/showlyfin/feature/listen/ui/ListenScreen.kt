@@ -15,8 +15,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,15 +30,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.feature.listen.ListenMode
+import com.github.jankoran90.showlyfin.feature.listen.ListenUiState
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 
 /**
- * Poslechová sekce — knihovny audioknih (chips) + grid obálek s progressem.
+ * Poslechová sekce — přepínač Audioknihy ↔ Podcasty, knihovní chips + grid obálek s progressem.
  * Vše v Material 3 Expressive tématu (ListenExpressiveTheme). ABS login je v Nastavení.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListenScreen(
     onOpenBook: (itemId: String) -> Unit,
+    onOpenPodcast: (itemId: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ListenViewModel = hiltViewModel(),
 ) {
@@ -46,53 +54,136 @@ fun ListenScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            when {
-                !state.isConfigured -> CenteredMessage(
+            if (!state.isConfigured) {
+                CenteredMessage(
                     "Poslech zatím není nastaven.\nPřihlas se k Audiobookshelf serveru v Nastavení → Poslech (Audiobookshelf).",
                 )
-
-                state.isLoading && state.books.isEmpty() ->
-                    CircularProgressIndicator(Modifier.align(Alignment.Center))
-
-                state.error != null && state.books.isEmpty() ->
-                    CenteredMessage(state.error!!)
-
-                else -> Column(Modifier.fillMaxSize()) {
-                    if (state.libraries.size > 1) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            state.libraries.forEach { lib ->
-                                FilterChip(
-                                    selected = lib.id == state.selectedLibraryId,
-                                    onClick = { viewModel.selectLibrary(lib.id) },
-                                    label = { Text(lib.name) },
-                                )
-                            }
-                        }
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    SingleChoiceSegmentedButtonRow(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        SegmentedButton(
+                            selected = state.mode == ListenMode.BOOKS,
+                            onClick = { viewModel.setMode(ListenMode.BOOKS) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        ) { Text("Audioknihy") }
+                        SegmentedButton(
+                            selected = state.mode == ListenMode.PODCASTS,
+                            onClick = { viewModel.setMode(ListenMode.PODCASTS) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        ) { Text("Podcasty") }
                     }
 
-                    if (state.books.isEmpty() && !state.isLoading) {
-                        CenteredMessage("V této knihovně zatím nejsou žádné audioknihy.")
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 150.dp),
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            items(state.books, key = { it.id }) { book ->
-                                AudiobookCard(book = book, onClick = { onOpenBook(book.id) })
-                            }
-                        }
+                    when (state.mode) {
+                        ListenMode.BOOKS -> BooksContent(state, viewModel, onOpenBook)
+                        ListenMode.PODCASTS -> PodcastsContent(state, viewModel, onOpenPodcast)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BooksContent(
+    state: ListenUiState,
+    viewModel: ListenViewModel,
+    onOpenBook: (String) -> Unit,
+) {
+    when {
+        state.isLoading && state.books.isEmpty() ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+
+        state.error != null && state.books.isEmpty() -> CenteredMessage(state.error)
+
+        else -> Column(Modifier.fillMaxSize()) {
+            if (state.libraries.size > 1) {
+                LibraryChips(
+                    libraries = state.libraries.map { it.id to it.name },
+                    selectedId = state.selectedLibraryId,
+                    onSelect = viewModel::selectLibrary,
+                )
+            }
+            if (state.books.isEmpty() && !state.isLoading) {
+                CenteredMessage("V této knihovně zatím nejsou žádné audioknihy.")
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 150.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(state.books, key = { it.id }) { book ->
+                        AudiobookCard(book = book, onClick = { onOpenBook(book.id) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PodcastsContent(
+    state: ListenUiState,
+    viewModel: ListenViewModel,
+    onOpenPodcast: (String) -> Unit,
+) {
+    when {
+        state.isLoading && state.podcasts.isEmpty() ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+
+        state.error != null && state.podcasts.isEmpty() -> CenteredMessage(state.error)
+
+        else -> Column(Modifier.fillMaxSize()) {
+            if (state.podcastLibraries.size > 1) {
+                LibraryChips(
+                    libraries = state.podcastLibraries.map { it.id to it.name },
+                    selectedId = state.selectedPodcastLibraryId,
+                    onSelect = viewModel::selectPodcastLibrary,
+                )
+            }
+            if (state.podcasts.isEmpty() && !state.isLoading) {
+                CenteredMessage("V této knihovně zatím nejsou žádné podcasty.")
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 150.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(state.podcasts, key = { it.id }) { podcast ->
+                        PodcastCard(podcast = podcast, onClick = { onOpenPodcast(podcast.id) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryChips(
+    libraries: List<Pair<String, String>>,
+    selectedId: String?,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        libraries.forEach { (id, name) ->
+            FilterChip(
+                selected = id == selectedId,
+                onClick = { onSelect(id) },
+                label = { Text(name) },
+            )
         }
     }
 }
