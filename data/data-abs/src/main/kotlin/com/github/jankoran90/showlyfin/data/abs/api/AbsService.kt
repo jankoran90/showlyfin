@@ -8,6 +8,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsLoginResponse
 import com.github.jankoran90.showlyfin.data.abs.model.AbsMeResponse
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlaySession
+import com.github.jankoran90.showlyfin.data.abs.model.AbsProgressUpdate
 import com.github.jankoran90.showlyfin.data.abs.model.AbsSyncRequest
 import okhttp3.ResponseBody
 import retrofit2.Response
@@ -15,6 +16,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Headers
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Url
 
@@ -48,4 +50,8 @@ interface AbsService {
 
     @POST
     suspend fun closeSession(@Url url: String, @Header("Authorization") bearer: String, @Body request: AbsSyncRequest): Response<ResponseBody>
+
+    /** Označení epizody/položky přehráno/nepřehráno: PATCH /api/me/progress/{itemId}[/{episodeId}]. */
+    @PATCH
+    suspend fun patchProgress(@Url url: String, @Header("Authorization") bearer: String, @Body body: AbsProgressUpdate): Response<ResponseBody>
 }

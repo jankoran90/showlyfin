@@ -58,20 +58,63 @@ data class AbsMedia(
     val duration: Double? = null,
     val numChapters: Int? = null,
     val numTracks: Int? = null,
+    val numEpisodes: Int? = null,            // podcast: počet epizod
     val chapters: List<AbsChapter>? = null,
     val tracks: List<AbsAudioTrack>? = null,
+    val episodes: List<AbsPodcastEpisode>? = null, // podcast: epizody (expanded)
 )
 
 data class AbsMetadata(
     val title: String? = null,
     val subtitle: String? = null,
     val authorName: String? = null,
+    val author: String? = null,              // podcast metadata používá `author`
     val narratorName: String? = null,
     val seriesName: String? = null,
     val description: String? = null,
     val publishedYear: String? = null,
     val genres: List<String>? = null,
     val language: String? = null,
+) {
+    /** Sjednocený autor: audioknihy `authorName`, podcasty `author`. */
+    val authorDisplay: String? get() = authorName?.takeIf { it.isNotBlank() } ?: author?.takeIf { it.isNotBlank() }
+}
+
+// ---- Podcast epizody ----
+data class AbsPodcastEpisode(
+    val id: String,
+    val index: Int? = null,
+    val season: String? = null,
+    val episode: String? = null,
+    val episodeType: String? = null,
+    val title: String? = null,
+    val subtitle: String? = null,
+    val description: String? = null,
+    val pubDate: String? = null,
+    val publishedAt: Long? = null,           // ms
+    val duration: Double? = null,            // některé ABS verze; jinak v audioFile/audioTrack
+    val audioFile: AbsAudioFile? = null,
+    val audioTrack: AbsAudioTrack? = null,
+) {
+    /** Délka epizody v sekundách z nejspolehlivějšího zdroje. */
+    val durationSec: Double get() = audioTrack?.duration ?: audioFile?.duration ?: duration ?: 0.0
+}
+
+data class AbsAudioFile(
+    val ino: String? = null,
+    val duration: Double? = null,
+    val mimeType: String? = null,
+    val codec: String? = null,
+    val metadata: AbsFileMetadata? = null,
+)
+
+data class AbsFileMetadata(
+    val filename: String? = null,
+)
+
+/** Tělo PATCH /api/me/progress/{itemId}/{episodeId} pro označení přehráno/nepřehráno. */
+data class AbsProgressUpdate(
+    val isFinished: Boolean,
 )
 
 data class AbsChapter(
