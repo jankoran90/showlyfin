@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -19,6 +20,7 @@ import javax.inject.Inject
 class PodcastDetailViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val connection: AudiobookPlayerConnection,
+    private val downloadManager: EpisodeDownloadManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PodcastDetailUiState())
@@ -26,6 +28,9 @@ class PodcastDetailViewModel @Inject constructor(
 
     /** Fronta epizod (sdílená s přehrávačem) — pro indikátor a správu v detailu. */
     val queue = connection.queue
+
+    /** Stav stažení per epizoda (badge u řádků). */
+    val downloadStates = downloadManager.states
 
     /** Nefiltrovaný detail (drží všechny epizody; filtr se aplikuje na zobrazení). */
     private var raw: PodcastDetail? = null
@@ -77,4 +82,15 @@ class PodcastDetailViewModel @Inject constructor(
 
     fun removeFromQueue(episodeId: String) = connection.removeFromQueue(episodeId)
     fun clearQueue() = connection.clearQueue()
+
+    // ──────────────────────────── Offline stažení ────────────────────────────
+
+    /** Stáhne epizodu pro offline poslech. */
+    fun downloadEpisode(episode: PodcastEpisode) {
+        val p = raw?.podcast
+        downloadManager.download(episode, p?.title, p?.coverUrl)
+    }
+
+    fun cancelDownload(episodeId: String) = downloadManager.cancel(episodeId)
+    fun deleteDownload(episodeId: String) = downloadManager.delete(episodeId)
 }

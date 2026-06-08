@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,10 +15,17 @@ import javax.inject.Inject
 @HiltViewModel
 class ListenViewModel @Inject constructor(
     private val repo: AbsRepository,
+    private val downloadManager: EpisodeDownloadManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ListenUiState())
     val uiState = _uiState.asStateFlow()
+
+    /** Všechny stažené epizody (správa offline stažení). */
+    val downloads = downloadManager.downloads
+
+    fun deleteDownload(episodeId: String) = downloadManager.delete(episodeId)
+    fun deleteAllDownloads() = downloadManager.deleteAll()
 
     init { refresh() }
 

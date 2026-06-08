@@ -1,8 +1,10 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,6 +22,7 @@ import javax.inject.Inject
 class AudiobookPlayerViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val connection: AudiobookPlayerConnection,
+    private val downloadManager: EpisodeDownloadManager,
 ) : ViewModel() {
 
     val state = connection.state
@@ -44,8 +47,20 @@ class AudiobookPlayerViewModel @Inject constructor(
         openedFor = key
         viewModelScope.launch {
             runCatching {
-                if (episodeId != null) repo.startEpisodePlayback(itemId, episodeId)
-                else repo.startPlayback(itemId)
+                when {
+                    episodeId == null -> repo.startPlayback(itemId)
+                    // Stažená epizoda: hraj z lokálního souboru (funguje offline). Když jsme online,
+                    // přesto otevřeme server session kvůli resume pozici + syncu, ale audio URL
+                    // přepíšeme na lokální soubor; když server selže (offline) → čistě lokální session.
+                    downloadManager.localFile(episodeId) != null -> {
+                        val local = downloadManager.localFile(episodeId)!!
+                        val server = runCatching { repo.startEpisodePlayback(itemId, episodeId) }.getOrNull()
+                        server?.copy(tracks = listOf(server.tracks.first().copy(url = Uri.fromFile(local).toString())))
+                            ?: downloadManager.offlinePlayback(episodeId)
+                            ?: error("Stažený soubor epizody chybí.")
+                    }
+                    else -> repo.startEpisodePlayback(itemId, episodeId)
+                }
             }
                 .onSuccess { pb ->
                     val ep = if (episodeId != null) {

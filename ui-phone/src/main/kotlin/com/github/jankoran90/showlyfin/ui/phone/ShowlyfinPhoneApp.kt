@@ -414,6 +414,13 @@ fun ShowlyfinPhoneApp() {
                         bottomTab = Destination.Listen
                         currentDestination = Destination.PodcastDetail(itemId, parent = Destination.Listen)
                     },
+                    onPlayEpisode = { itemId, episodeId ->
+                        bottomTab = Destination.Listen
+                        currentDestination = Destination.AudiobookPlayer(
+                            itemId = itemId, fromStart = false, episodeId = episodeId,
+                            parent = Destination.Listen,
+                        )
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.AudiobookDetail -> AudiobookDetailScreen(

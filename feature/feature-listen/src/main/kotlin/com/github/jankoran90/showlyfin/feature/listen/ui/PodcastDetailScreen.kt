@@ -24,7 +24,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.outlined.Circle
@@ -58,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.data.abs.model.DownloadState
+import com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
 import com.github.jankoran90.showlyfin.feature.listen.PodcastDetailViewModel
@@ -77,6 +83,7 @@ fun PodcastDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val queue by viewModel.queue.collectAsStateWithLifecycle()
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
     LaunchedEffect(itemId) { viewModel.load(itemId) }
 
     var actionEpisode by remember { mutableStateOf<PodcastEpisode?>(null) }
@@ -120,9 +127,12 @@ fun PodcastDetailScreen(
                 state.detail != null -> DetailContent(
                     detail = state.detail!!,
                     queueSize = queue.size,
+                    downloadStates = downloadStates,
                     onPlay = { ep -> onPlayEpisode(itemId, ep.id, false, null) },
                     onLongPress = { ep -> actionEpisode = ep },
                     onOpenQueue = { showQueue = true },
+                    onDownload = { ep -> viewModel.downloadEpisode(ep) },
+                    onCancelDownload = { ep -> viewModel.cancelDownload(ep.id) },
                     modifier = Modifier.fillMaxSize().padding(pad),
                 )
             }
@@ -133,11 +143,15 @@ fun PodcastDetailScreen(
     actionEpisode?.let { ep ->
         EpisodeActionSheet(
             episode = ep,
+            downloadStatus = (downloadStates[ep.id] ?: DownloadState()).status,
             onDismiss = { actionEpisode = null },
             onPlay = { onPlayEpisode(itemId, ep.id, false, null); actionEpisode = null },
             onToggleFinished = { viewModel.setEpisodeFinished(ep, !ep.isFinished); actionEpisode = null },
             onEnqueueNext = { viewModel.enqueue(ep, atFront = true); actionEpisode = null },
             onEnqueueEnd = { viewModel.enqueue(ep, atFront = false); actionEpisode = null },
+            onDownload = { viewModel.downloadEpisode(ep); actionEpisode = null },
+            onCancelDownload = { viewModel.cancelDownload(ep.id); actionEpisode = null },
+            onDeleteDownload = { viewModel.deleteDownload(ep.id); actionEpisode = null },
         )
     }
 
@@ -157,9 +171,12 @@ fun PodcastDetailScreen(
 private fun DetailContent(
     detail: PodcastDetail,
     queueSize: Int,
+    downloadStates: Map<String, DownloadState>,
     onPlay: (PodcastEpisode) -> Unit,
     onLongPress: (PodcastEpisode) -> Unit,
     onOpenQueue: () -> Unit,
+    onDownload: (PodcastEpisode) -> Unit,
+    onCancelDownload: (PodcastEpisode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val podcast = detail.podcast
@@ -232,6 +249,9 @@ private fun DetailContent(
         items(detail.episodes, key = { it.id }) { ep ->
             EpisodeRow(
                 ep,
+                downloadState = downloadStates[ep.id] ?: DownloadState(),
+                onDownload = { onDownload(ep) },
+                onCancelDownload = { onCancelDownload(ep) },
                 modifier = Modifier.combinedClickable(
                     onClick = { onPlay(ep) },
                     onLongClick = { onLongPress(ep) },
@@ -243,7 +263,13 @@ private fun DetailContent(
 }
 
 @Composable
-private fun EpisodeRow(ep: PodcastEpisode, modifier: Modifier = Modifier) {
+private fun EpisodeRow(
+    ep: PodcastEpisode,
+    downloadState: DownloadState,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val canResume = ep.currentTimeSec > 1.0 && !ep.isFinished
     Row(
         modifier
@@ -298,6 +324,49 @@ private fun EpisodeRow(ep: PodcastEpisode, modifier: Modifier = Modifier) {
                 )
             }
         }
+        DownloadControl(
+            state = downloadState,
+            onDownload = onDownload,
+            onCancel = onCancelDownload,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+/** Trailing badge stažení epizody: stáhnout / probíhá (klik = zrušit) / staženo / chyba (klik = znovu). */
+@Composable
+private fun DownloadControl(
+    state: DownloadState,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        when (state.status) {
+            DownloadStatus.DOWNLOADED -> Icon(
+                Icons.Default.DownloadDone,
+                contentDescription = "Staženo (offline)",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp),
+            )
+            DownloadStatus.DOWNLOADING -> Box(contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    progress = { state.progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.size(28.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Zrušit stahování", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            DownloadStatus.FAILED -> IconButton(onClick = onDownload) {
+                Icon(Icons.Default.ErrorOutline, contentDescription = "Stažení selhalo — zkusit znovu", tint = MaterialTheme.colorScheme.error)
+            }
+            DownloadStatus.NONE -> IconButton(onClick = onDownload) {
+                Icon(Icons.Default.Download, contentDescription = "Stáhnout pro offline", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
@@ -305,11 +374,15 @@ private fun EpisodeRow(ep: PodcastEpisode, modifier: Modifier = Modifier) {
 @Composable
 private fun EpisodeActionSheet(
     episode: PodcastEpisode,
+    downloadStatus: DownloadStatus,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
     onToggleFinished: () -> Unit,
     onEnqueueNext: () -> Unit,
     onEnqueueEnd: () -> Unit,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onDeleteDownload: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Text(
@@ -329,6 +402,16 @@ private fun EpisodeActionSheet(
         )
         ActionRow(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)", onEnqueueNext)
         ActionRow(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)", onEnqueueEnd)
+        when (downloadStatus) {
+            DownloadStatus.DOWNLOADED ->
+                ActionRow(Icons.Default.Delete, "Smazat stažení", onDeleteDownload)
+            DownloadStatus.DOWNLOADING ->
+                ActionRow(Icons.Default.Close, "Zrušit stahování", onCancelDownload)
+            DownloadStatus.FAILED ->
+                ActionRow(Icons.Default.Download, "Stáhnout znovu", onDownload)
+            DownloadStatus.NONE ->
+                ActionRow(Icons.Default.Download, "Stáhnout pro offline", onDownload)
+        }
         Box(Modifier.height(12.dp))
     }
 }
