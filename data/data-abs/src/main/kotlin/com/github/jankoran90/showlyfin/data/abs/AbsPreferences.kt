@@ -32,6 +32,11 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getString(KEY_TOKEN, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_TOKEN, value) }
 
+    /** Skrývat již přehrané (dokončené) podcast epizody v detailu. */
+    var hideFinishedEpisodes: Boolean
+        get() = prefs.getBoolean(KEY_HIDE_FINISHED, false)
+        set(value) = prefs.edit { putBoolean(KEY_HIDE_FINISHED, value) }
+
     /** Stabilní device id pro ABS play session. */
     val deviceId: String
         get() = prefs.getString(KEY_DEVICE, null) ?: UUID.randomUUID().toString().also {
@@ -62,5 +67,6 @@ class AbsPreferences @Inject constructor(
         private const val KEY_PASS = "abs_password"
         private const val KEY_TOKEN = "abs_token"
         private const val KEY_DEVICE = "abs_device_id"
+        private const val KEY_HIDE_FINISHED = "listen_hide_finished"
     }
 }

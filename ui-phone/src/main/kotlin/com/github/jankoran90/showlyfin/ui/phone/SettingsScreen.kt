@@ -247,8 +247,10 @@ fun SettingsScreen(
                 baseUrl = uiState.absBaseUrl,
                 loading = uiState.absLoading,
                 error = uiState.absError,
+                hideFinishedEpisodes = uiState.hideFinishedEpisodes,
                 onLogin = { url, user, pass -> viewModel.absLogin(url, user, pass) },
                 onLogout = { viewModel.absLogout() },
+                onToggleHideFinished = { viewModel.setHideFinishedEpisodes(it) },
             )
         }
 
@@ -497,8 +499,10 @@ private fun AbsSection(
     baseUrl: String,
     loading: Boolean,
     error: String?,
+    hideFinishedEpisodes: Boolean,
     onLogin: (url: String, user: String, pass: String) -> Unit,
     onLogout: () -> Unit,
+    onToggleHideFinished: (Boolean) -> Unit,
 ) {
     var url by remember(baseUrl) { mutableStateOf(baseUrl.ifBlank { "https://poslech.jankoran.cz" }) }
     var user by remember { mutableStateOf("") }
@@ -529,6 +533,18 @@ private fun AbsSection(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) { Text("Odhlásit Audiobookshelf") }
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Skrývat přehrané epizody", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                        Text(
+                            "Dokončené podcast epizody se v detailu nezobrazí.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.6f),
+                        )
+                    }
+                    Switch(checked = hideFinishedEpisodes, onCheckedChange = onToggleHideFinished)
+                }
             } else {
                 OutlinedTextField(
                     value = url,

@@ -53,6 +53,7 @@ data class SettingsUiState(
     val absBaseUrl: String = "",
     val absLoading: Boolean = false,
     val absError: String? = null,
+    val hideFinishedEpisodes: Boolean = false,
 )
 
 @HiltViewModel
@@ -119,7 +120,18 @@ class SettingsViewModel @Inject constructor(
     // ── Poslech / Audiobookshelf ──────────────────────────────────────────────
 
     private fun refreshAbsState() {
-        _uiState.update { it.copy(absConfigured = absRepo.isConfigured, absBaseUrl = absRepo.baseUrl) }
+        _uiState.update {
+            it.copy(
+                absConfigured = absRepo.isConfigured,
+                absBaseUrl = absRepo.baseUrl,
+                hideFinishedEpisodes = absRepo.hideFinishedEpisodes,
+            )
+        }
+    }
+
+    fun setHideFinishedEpisodes(value: Boolean) {
+        absRepo.hideFinishedEpisodes = value
+        _uiState.update { it.copy(hideFinishedEpisodes = value) }
     }
 
     fun absLogin(url: String, username: String, password: String) {

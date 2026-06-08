@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,7 +47,12 @@ class AudiobookPlayerViewModel @Inject constructor(
                 if (episodeId != null) repo.startEpisodePlayback(itemId, episodeId)
                 else repo.startPlayback(itemId)
             }
-                .onSuccess { connection.playBook(it, fromStart, startSec) }
+                .onSuccess { pb ->
+                    val ep = if (episodeId != null) {
+                        QueuedEpisode(itemId, episodeId, pb.title, pb.coverUrl)
+                    } else null
+                    connection.playBook(pb, fromStart, startSec, ep)
+                }
                 .onFailure {
                     Timber.w(it, "[Listen] startPlayback selhal")
                     _error.value = "Přehrávání se nepodařilo spustit."

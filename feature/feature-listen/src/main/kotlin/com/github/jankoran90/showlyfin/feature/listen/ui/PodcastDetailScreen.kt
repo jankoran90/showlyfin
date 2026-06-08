@@ -1,8 +1,10 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +21,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -28,8 +36,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -41,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,6 +61,7 @@ import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
 import com.github.jankoran90.showlyfin.feature.listen.PodcastDetailViewModel
+import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -64,7 +76,11 @@ fun PodcastDetailScreen(
     viewModel: PodcastDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val queue by viewModel.queue.collectAsStateWithLifecycle()
     LaunchedEffect(itemId) { viewModel.load(itemId) }
+
+    var actionEpisode by remember { mutableStateOf<PodcastEpisode?>(null) }
+    var showQueue by remember { mutableStateOf(false) }
 
     ListenExpressiveTheme {
         Scaffold(
@@ -78,10 +94,18 @@ fun PodcastDetailScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
                         }
                     },
+                    actions = {
+                        if (queue.isNotEmpty()) {
+                            IconButton(onClick = { showQueue = true }) {
+                                Icon(Icons.Default.QueueMusic, contentDescription = "Fronta (${queue.size})")
+                            }
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onSurface,
                         navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
             },
@@ -95,18 +119,47 @@ fun PodcastDetailScreen(
                 }
                 state.detail != null -> DetailContent(
                     detail = state.detail!!,
-                    onPlayEpisode = { ep, fromStart -> onPlayEpisode(itemId, ep.id, fromStart, null) },
+                    queueSize = queue.size,
+                    onPlay = { ep -> onPlayEpisode(itemId, ep.id, false, null) },
+                    onLongPress = { ep -> actionEpisode = ep },
+                    onOpenQueue = { showQueue = true },
                     modifier = Modifier.fillMaxSize().padding(pad),
                 )
             }
         }
     }
+
+    // Long-press menu epizody
+    actionEpisode?.let { ep ->
+        EpisodeActionSheet(
+            episode = ep,
+            onDismiss = { actionEpisode = null },
+            onPlay = { onPlayEpisode(itemId, ep.id, false, null); actionEpisode = null },
+            onToggleFinished = { viewModel.setEpisodeFinished(ep, !ep.isFinished); actionEpisode = null },
+            onEnqueueNext = { viewModel.enqueue(ep, atFront = true); actionEpisode = null },
+            onEnqueueEnd = { viewModel.enqueue(ep, atFront = false); actionEpisode = null },
+        )
+    }
+
+    // Správa fronty
+    if (showQueue) {
+        QueueSheet(
+            queue = queue,
+            onDismiss = { showQueue = false },
+            onRemove = { viewModel.removeFromQueue(it) },
+            onClear = { viewModel.clearQueue(); showQueue = false },
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DetailContent(
     detail: PodcastDetail,
-    onPlayEpisode: (PodcastEpisode, fromStart: Boolean) -> Unit,
+    queueSize: Int,
+    onPlay: (PodcastEpisode) -> Unit,
+    onLongPress: (PodcastEpisode) -> Unit,
+    onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val podcast = detail.podcast
@@ -140,6 +193,14 @@ private fun DetailContent(
                         if (podcast.numUnfinished > 0) add("${podcast.numUnfinished} nepřehraných")
                     }.joinToString(" · ")
                     Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                    if (queueSize > 0) {
+                        AssistChip(
+                            onClick = onOpenQueue,
+                            label = { Text("Fronta · $queueSize") },
+                            leadingIcon = { Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
             }
         }
@@ -169,19 +230,24 @@ private fun DetailContent(
             )
         }
         items(detail.episodes, key = { it.id }) { ep ->
-            EpisodeRow(ep, onClick = { onPlayEpisode(ep, false) })
+            EpisodeRow(
+                ep,
+                modifier = Modifier.combinedClickable(
+                    onClick = { onPlay(ep) },
+                    onLongClick = { onLongPress(ep) },
+                ),
+            )
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
         }
     }
 }
 
 @Composable
-private fun EpisodeRow(ep: PodcastEpisode, onClick: () -> Unit) {
+private fun EpisodeRow(ep: PodcastEpisode, modifier: Modifier = Modifier) {
     val canResume = ep.currentTimeSec > 1.0 && !ep.isFinished
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -232,6 +298,111 @@ private fun EpisodeRow(ep: PodcastEpisode, onClick: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EpisodeActionSheet(
+    episode: PodcastEpisode,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onToggleFinished: () -> Unit,
+    onEnqueueNext: () -> Unit,
+    onEnqueueEnd: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Text(
+            episode.title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        ActionRow(Icons.Default.PlayArrow, "Přehrát", onPlay)
+        ActionRow(
+            if (episode.isFinished) Icons.Outlined.Circle else Icons.Default.CheckCircle,
+            if (episode.isFinished) "Označit jako nedokončené" else "Označit jako dokončené",
+            onToggleFinished,
+        )
+        ActionRow(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)", onEnqueueNext)
+        ActionRow(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)", onEnqueueEnd)
+        Box(Modifier.height(12.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QueueSheet(
+    queue: List<QueuedEpisode>,
+    onDismiss: () -> Unit,
+    onRemove: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Fronta · ${queue.size}",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (queue.isNotEmpty()) {
+                TextButton(onClick = onClear) { Text("Vymazat vše") }
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        if (queue.isEmpty()) {
+            Text(
+                "Fronta je prázdná.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(20.dp),
+            )
+        } else {
+            LazyColumn {
+                items(queue, key = { it.episodeId }) { q ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            q.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { onRemove(q.episodeId) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Odebrat z fronty", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                }
+            }
+        }
+        Box(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 

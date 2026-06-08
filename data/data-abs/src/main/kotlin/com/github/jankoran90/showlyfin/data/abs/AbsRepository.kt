@@ -32,6 +32,11 @@ class AbsRepository @Inject constructor(
     val isConfigured: Boolean get() = prefs.isConfigured
     val baseUrl: String get() = prefs.baseUrl
 
+    /** Nastavení: skrývat dokončené podcast epizody. */
+    var hideFinishedEpisodes: Boolean
+        get() = prefs.hideFinishedEpisodes
+        set(value) { prefs.hideFinishedEpisodes = value }
+
     private fun bearer(): String = "Bearer ${prefs.token}"
     private fun api(path: String): String = "${prefs.baseUrl}$path"
 

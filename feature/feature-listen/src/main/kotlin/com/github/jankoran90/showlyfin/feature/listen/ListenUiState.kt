@@ -33,5 +33,6 @@ data class AudiobookDetailUiState(
 data class PodcastDetailUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
-    val detail: PodcastDetail? = null,
+    val detail: PodcastDetail? = null,   // epizody již profiltrované dle hideFinished
+    val hideFinished: Boolean = false,
 )
