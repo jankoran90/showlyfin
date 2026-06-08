@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.core.data
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.dao.ProfileDao
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,9 +18,14 @@ private const val PREF_ACTIVE_PROFILE_ID = "active_profile_id"
 class ProfileRepository @Inject constructor(
     private val dao: ProfileDao,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val configApplier: ProfileConfigApplier,
 ) {
     private val _activeProfile = MutableStateFlow<ProfileEntity?>(null)
     val activeProfile: StateFlow<ProfileEntity?> = _activeProfile.asStateFlow()
+
+    /** Config balík aktivního profilu (Plan PROFILES). DEFAULT = bez restrikcí (legacy/odhlášeno). */
+    private val _activeConfig = MutableStateFlow(ProfileConfig.DEFAULT)
+    val activeConfig: StateFlow<ProfileConfig> = _activeConfig.asStateFlow()
 
     fun observeAll(): Flow<List<ProfileEntity>> = dao.observeAll()
 
@@ -36,7 +42,31 @@ class ProfileRepository @Inject constructor(
         dao.delete(profile)
         if (_activeProfile.value?.id == profile.id) {
             _activeProfile.value = null
+            _activeConfig.value = ProfileConfig.DEFAULT
             prefs.edit().remove(PREF_ACTIVE_PROFILE_ID).apply()
+        }
+    }
+
+    /**
+     * Odhlášení / přepnutí profilu (Plan PROFILES 1C). Zruší aktivní profil → startovní brána ukáže
+     * ProfilePicker. Profil ZŮSTÁVÁ uložený v DB vč. přihlášení (kanonické creds se přepíšou až při
+     * příští aktivaci profilu).
+     */
+    fun clearActive() {
+        _activeProfile.value = null
+        _activeConfig.value = ProfileConfig.DEFAULT
+        prefs.edit().remove(PREF_ACTIVE_PROFILE_ID).apply()
+    }
+
+    /** Write-through editace configu profilu (admin in-app). Re-aplikuje, je-li profil aktivní. */
+    suspend fun updateConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
+        val profile = dao.getById(profileId) ?: return
+        val newConfig = transform(ProfileConfig.fromJson(profile.configJson))
+        dao.update(profile.copy(configJson = ProfileConfig.toJson(newConfig)))
+        if (_activeProfile.value?.id == profileId) {
+            _activeProfile.value = dao.getById(profileId)
+            _activeConfig.value = newConfig
+            configApplier.apply(newConfig)
         }
     }
 
@@ -72,6 +102,10 @@ class ProfileRepository @Inject constructor(
             .putString("jellyfin_token", profile.jellyfinToken)
             .putString("jellyfin_user_id", profile.jellyfinUserId)
             .apply()
+        // Plan PROFILES: aplikuj config balík do kanonických prefs (ABS/Uploader/vzhled…)
+        val config = ProfileConfig.fromJson(profile.configJson)
+        _activeConfig.value = config
+        configApplier.apply(config)
     }
 
     suspend fun restoreActive(preferTv: Boolean = false) {

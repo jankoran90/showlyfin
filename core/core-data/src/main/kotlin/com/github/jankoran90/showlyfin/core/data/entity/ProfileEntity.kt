@@ -15,5 +15,9 @@ data class ProfileEntity(
     val isDefault: Boolean = false,
     val tvDefault: Boolean = false,
     val maxAgeRating: String? = null,
+    /** Serializovaný [com.github.jankoran90.showlyfin.core.domain.ProfileConfig] (Plan PROFILES). */
+    val configJson: String? = null,
+    /** Cesta k vlastní lokální fotce profilu (filesDir/avatars/<id>.jpg). null = Jellyfin avatar/iniciála. */
+    val avatarPath: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
 )
