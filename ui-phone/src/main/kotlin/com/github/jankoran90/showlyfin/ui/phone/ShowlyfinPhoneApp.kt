@@ -74,6 +74,7 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfileGateViewMod
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfilePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ServerSetupScreen
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
+import com.github.jankoran90.showlyfin.ui.phone.theme.ThemeViewModel
 
 private sealed interface Destination {
     // Bottom tabs
@@ -139,7 +140,9 @@ private val bottomTabs = listOf(
 
 @Composable
 fun ShowlyfinPhoneApp() {
-    ShowlyfinPhoneTheme {
+    val themeViewModel: ThemeViewModel = hiltViewModel()
+    val skin by themeViewModel.state.collectAsStateWithLifecycle()
+    ShowlyfinPhoneTheme(skin = skin) {
         val gateViewModel: ProfileGateViewModel = hiltViewModel()
         val gateState by gateViewModel.state.collectAsStateWithLifecycle()
 
