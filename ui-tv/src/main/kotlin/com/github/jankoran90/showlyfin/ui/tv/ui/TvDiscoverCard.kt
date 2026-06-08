@@ -49,6 +49,7 @@ fun TvDiscoverCard(
     modifier: Modifier = Modifier,
     progress: Float? = null,
     inLibrary: Boolean = false,
+    watched: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -128,6 +129,18 @@ fun TvDiscoverCard(
                         tint = Color.Black,
                         modifier = Modifier.size(14.dp),
                     )
+                }
+            }
+            // Zhlédnuto = 👁 vlevo nahoře (badge sémantika dle telefonu)
+            if (watched) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                ) {
+                    Text("👁", style = MaterialTheme.typography.labelSmall)
                 }
             }
         }

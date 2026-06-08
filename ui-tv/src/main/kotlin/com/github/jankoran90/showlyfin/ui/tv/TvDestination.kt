@@ -23,6 +23,11 @@ sealed class TvDestination {
         val itemId: String,
         val parent: TvDestination = JellyfinBrowse,
     ) : TvDestination()
+    data class EpisodePicker(
+        val seriesId: String,
+        val seriesName: String,
+        val parent: TvDestination = JellyfinBrowse,
+    ) : TvDestination()
     data class Playback(
         val itemId: String = "",
         val positionMs: Long = 0L,

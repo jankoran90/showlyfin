@@ -24,7 +24,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import com.github.jankoran90.showlyfin.feature.uploader.UploaderViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -221,9 +227,11 @@ fun TvSettingsScreen(
     onDisconnected: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: TvSettingsViewModel = hiltViewModel(),
+    uploaderVm: UploaderViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val display by viewModel.displayPrefs.collectAsStateWithLifecycle()
+    val uploaderState by uploaderVm.uiState.collectAsStateWithLifecycle()
     val activeProfile = state.profiles.firstOrNull { it.id == state.activeProfileId }
     val updateLauncher = LocalUpdateLauncher.current
     val context = LocalContext.current
@@ -435,6 +443,55 @@ fun TvSettingsScreen(
                 }
             }
             state.traktStatus?.let { Text(it, color = Color.White.copy(alpha = 0.8f)) }
+
+            Spacer(Modifier.height(16.dp))
+            Text(text = "Uploader (streamy / titulky / ČSFD)", color = Color.White, style = MaterialTheme.typography.titleLarge)
+            var uploaderUrl by remember { mutableStateOf(uploaderVm.baseUrl.ifBlank { "https://upload.jankoran.cz" }) }
+            var uploaderPassword by remember { mutableStateOf("") }
+            if (uploaderState.isLoggedIn) {
+                Text("Přihlášen: ${uploaderVm.baseUrl}", color = MaterialTheme.colorScheme.primary)
+                Text(
+                    "Odemyká ČSFD popisy/recenze/galerii, CZ titulky a Stremio/RD streamy na TV.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Button(onClick = { uploaderVm.logout() }) { Text("Odhlásit Uploader") }
+            } else {
+                Text(
+                    "Přihlášení k upload serveru odemyká ČSFD popisy/recenze/galerii, CZ titulky a Stremio/RD streamy. Zadej URL i s https://, heslo se uloží pro auto-obnovu relace.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = uploaderUrl,
+                    onValueChange = { uploaderUrl = it },
+                    label = { Text("URL serveru") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = uploaderPassword,
+                    onValueChange = { uploaderPassword = it },
+                    label = { Text("Heslo") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                if (uploaderState.isLoading) {
+                    CircularProgressIndicator(color = Color.White)
+                } else {
+                    Button(
+                        onClick = { uploaderVm.saveBaseUrl(uploaderUrl); uploaderVm.login(uploaderPassword) },
+                        enabled = uploaderUrl.isNotBlank() && uploaderPassword.isNotBlank(),
+                    ) { Text("Přihlásit") }
+                }
+                uploaderState.error?.let {
+                    Text("Chyba: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
             Text(text = "Aktualizace", color = Color.White, style = MaterialTheme.typography.titleLarge)

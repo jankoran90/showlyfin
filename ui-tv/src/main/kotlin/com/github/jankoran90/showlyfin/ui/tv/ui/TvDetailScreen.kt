@@ -29,6 +29,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +51,9 @@ import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
+import com.github.jankoran90.showlyfin.feature.detail.ui.CsfdGalleryDialog
+import com.github.jankoran90.showlyfin.feature.detail.ui.CsfdRatingBadge
+import com.github.jankoran90.showlyfin.feature.detail.ui.CsfdReviewsBottomSheet
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -63,6 +69,8 @@ fun TvDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showReviewsSheet by remember { mutableStateOf(false) }
+    var plotExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) {
         viewModel.load(item)
@@ -121,16 +129,36 @@ fun TvDetailScreen(
             Spacer(Modifier.height(8.dp))
             val year = item.year
             val rating = uiState.movieDetails?.vote_average ?: uiState.showDetails?.vote_average
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 year?.let { Text("$it", color = Color.White.copy(alpha = 0.7f)) }
-                rating?.let { Text("TMDB: ${"%.1f".format(it)}", color = Color.White.copy(alpha = 0.7f)) }
-                uiState.csfdRating?.let { Text("ČSFD: $it%", color = Color.White.copy(alpha = 0.7f)) }
+                // ČSFD hodnocení v % (barevný badge), fallback na TMDB když ČSFD chybí
+                val csfdRating = uiState.csfdRating
+                if (csfdRating != null) {
+                    CsfdRatingBadge(rating = csfdRating, big = true)
+                } else {
+                    rating?.let { Text("TMDB: ${"%.1f".format(it)}", color = Color.White.copy(alpha = 0.7f)) }
+                }
                 if (uiState.isOwnedInLibrary) {
                     Text("✓ V knihovně", color = MaterialTheme.colorScheme.primary)
                 }
                 if (uiState.isWatched) {
                     Text("👁 Zhlédnuto", color = Color.White.copy(alpha = 0.8f))
                 }
+            }
+            // Žánry
+            val tvGenres = uiState.movieDetails?.genres?.map { it.name }
+                ?: uiState.showDetails?.genres?.map { it.name }
+                ?: item.genres
+            if (!tvGenres.isNullOrEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    tvGenres.take(5).joinToString(" · "),
+                    color = Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
             Spacer(Modifier.height(24.dp))
             FlowRow(
@@ -166,6 +194,17 @@ fun TvDetailScreen(
                         )
                     }
                 }
+                // ČSFD galerie (vyžaduje přihlášený Uploader) + recenze
+                if (uiState.csfdId != null && uiState.uploaderConfigured) {
+                    Button(onClick = { viewModel.openGallery() }, modifier = Modifier.height(56.dp)) {
+                        Text("Galerie")
+                    }
+                }
+                if (uiState.csfdReviews.isNotEmpty()) {
+                    Button(onClick = { showReviewsSheet = true }, modifier = Modifier.height(56.dp)) {
+                        Text("ČSFD recenze (${uiState.csfdReviews.size})")
+                    }
+                }
                 Button(onClick = onBack, modifier = Modifier.height(56.dp)) {
                     Text("Zpět")
                 }
@@ -178,12 +217,20 @@ fun TvDetailScreen(
             if (plot.isNotBlank()) {
                 Spacer(Modifier.height(24.dp))
                 // focusable → D-pad může najet na plot a verticalScroll ho přiroluje (fix TV scroll)
+                val collapsedLines = uiState.plotCollapsedLines
+                val limitActive = collapsedLines > 0 && !plotExpanded
                 Text(
                     text = plot,
                     color = Color.White.copy(alpha = 0.85f),
                     style = MaterialTheme.typography.bodyLarge,
+                    maxLines = if (limitActive) collapsedLines else Int.MAX_VALUE,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.focusable(),
                 )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { plotExpanded = !plotExpanded }, modifier = Modifier.height(48.dp)) {
+                    Text(if (plotExpanded) "Sbalit popis" else "Zobrazit celý popis")
+                }
             }
             uiState.mergedCollection?.let { TvPosterRow(it, onPartClick) }
             uiState.directorMovies?.let { TvPosterRow(it, onPartClick) }
@@ -242,6 +289,25 @@ fun TvDetailScreen(
                 Spacer(Modifier.height(16.dp))
                 CircularProgressIndicator(color = Color.White)
             }
+        }
+
+        // ČSFD galerie + recenze (reuse sdílených komponent z feature-detail)
+        if (uiState.showGallery) {
+            CsfdGalleryDialog(
+                urls = uiState.csfdGallery,
+                isLoading = uiState.isGalleryLoading,
+                onDismiss = { viewModel.dismissGallery() },
+            )
+        }
+        if (showReviewsSheet) {
+            val tvTitle = uiState.tmdbCzTitle?.takeIf { it.isNotBlank() }
+                ?: item.titleCz?.takeIf { it.isNotBlank() } ?: item.title
+            CsfdReviewsBottomSheet(
+                reviews = uiState.csfdReviews,
+                title = tvTitle,
+                year = item.year,
+                onDismiss = { showReviewsSheet = false },
+            )
         }
 
         // Overlay pickery (Stremio / Stáhnout / Sdílej.cz)

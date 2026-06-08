@@ -66,13 +66,31 @@ fun TvWatchlistScreen(
             }
             Spacer(Modifier.height(8.dp))
 
-            // Sort
+            // Sort + 💾 Na RD
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 64.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                TvChip(if (uiState.rdMatchLoading) "💾 Na RD…" else "💾 Na RD", uiState.rdOnly) {
+                    viewModel.toggleRdOnly()
+                }
                 WatchlistSort.entries.forEach { sort ->
                     TvChip(sort.label, uiState.sort == sort) { viewModel.selectSort(sort) }
+                }
+            }
+            // Žánry
+            if (uiState.availableGenres.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 64.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TvChip("Vše", uiState.genreFilter == null) { viewModel.selectGenre(null) }
+                    uiState.availableGenres.forEach { genre ->
+                        TvChip(genre, uiState.genreFilter == genre) {
+                            viewModel.selectGenre(if (uiState.genreFilter == genre) null else genre)
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -104,11 +122,15 @@ fun TvWatchlistScreen(
                         items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
                             val inLib = (item.imdbId != null && item.imdbId in uiState.ownedImdbIds) ||
                                 (item.tmdbId != null && uiState.tmdbToJellyfin.containsKey(item.tmdbId))
+                            val watched = (item.imdbId?.let { it in uiState.watchedImdbIds } ?: false) ||
+                                (item.tmdbId?.let { it in uiState.watchedTmdbIds } ?: false) ||
+                                item.traktId in uiState.watchedTraktIds
                             TvDiscoverCard(
                                 item = item,
                                 onClick = { onItemClick(item) },
                                 progress = uiState.progressMap[item.traktId]?.fraction,
                                 inLibrary = inLib,
+                                watched = watched,
                             )
                         }
                     }

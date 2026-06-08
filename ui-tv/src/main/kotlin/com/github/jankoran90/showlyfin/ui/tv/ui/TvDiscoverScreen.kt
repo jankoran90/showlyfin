@@ -31,6 +31,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
+import com.github.jankoran90.showlyfin.feature.discover.DiscoverSort
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverTab
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverViewModel
 
@@ -91,6 +92,39 @@ fun TvDiscoverScreen(
                     viewModel.selectFilter(DiscoverFilter.RECOMMENDED)
                 }
             }
+            Spacer(Modifier.height(8.dp))
+
+            // 💾 Na RD + řazení
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 64.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TvChip(if (uiState.rdMatchLoading) "💾 Na RD…" else "💾 Na RD", uiState.rdOnly) {
+                    viewModel.toggleRdOnly()
+                }
+                DiscoverSort.entries.forEach { sort ->
+                    TvChip(sort.displayName, uiState.filters.sortBy == sort) {
+                        viewModel.updateFilters(uiState.filters.copy(sortBy = sort))
+                    }
+                }
+            }
+            // Žánry
+            if (uiState.availableGenres.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 64.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    uiState.availableGenres.forEach { genre ->
+                        val sel = genre in uiState.filters.selectedGenres
+                        TvChip(genre, sel) {
+                            val updated = if (sel) uiState.filters.selectedGenres - genre
+                            else uiState.filters.selectedGenres + genre
+                            viewModel.updateFilters(uiState.filters.copy(selectedGenres = updated))
+                        }
+                    }
+                }
+            }
             Spacer(Modifier.height(12.dp))
 
             Box(Modifier.fillMaxSize()) {
@@ -119,10 +153,14 @@ fun TvDiscoverScreen(
                         items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
                             val inLib = (item.imdbId != null && item.imdbId in uiState.ownedImdbIds) ||
                                 (item.tmdbId != null && uiState.tmdbToJellyfin.containsKey(item.tmdbId))
+                            val watched = (item.imdbId?.let { it in uiState.watchedImdbIds } ?: false) ||
+                                (item.tmdbId?.let { it in uiState.watchedTmdbIds } ?: false) ||
+                                item.traktId in uiState.watchedTraktIds
                             TvDiscoverCard(
                                 item = item,
                                 onClick = { onItemClick(item) },
                                 inLibrary = inLib,
+                                watched = watched,
                             )
                         }
                     }

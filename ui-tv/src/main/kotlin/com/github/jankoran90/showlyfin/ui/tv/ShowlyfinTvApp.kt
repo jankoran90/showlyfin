@@ -39,6 +39,7 @@ import com.github.jankoran90.showlyfin.ui.tv.ui.TvDetailScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvDiscoverScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinBrowseScreen
+import com.github.jankoran90.showlyfin.ui.tv.ui.TvEpisodePickerScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinDetailScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvJellyfinItemsScreen
 import com.github.jankoran90.showlyfin.ui.tv.ui.TvDrawerEntry
@@ -118,6 +119,7 @@ fun ShowlyfinTvApp(
         currentDestination = when (val d = currentDestination) {
             is TvDestination.JellyfinLibrary -> d.parent
             is TvDestination.JellyfinDetail -> d.parent
+            is TvDestination.EpisodePicker -> d.parent
             is TvDestination.Detail -> TvDestination.Discover
             is TvDestination.SmartDetect -> TvDestination.Detail(d.item)
             is TvDestination.Setup -> TvDestination.Settings
@@ -294,6 +296,16 @@ fun ShowlyfinTvApp(
                     is TvDestination.JellyfinDetail -> TvJellyfinDetailScreen(
                         itemId = dest.itemId,
                         onPlay = { itemId -> currentDestination = TvDestination.Playback(itemId) },
+                        onBack = { currentDestination = dest.parent },
+                        onOpenEpisodes = { seriesId, name ->
+                            currentDestination = TvDestination.EpisodePicker(seriesId, name, parent = dest)
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    is TvDestination.EpisodePicker -> TvEpisodePickerScreen(
+                        seriesId = dest.seriesId,
+                        seriesName = dest.seriesName,
+                        onPlayEpisode = { epId -> currentDestination = TvDestination.Playback(itemId = epId) },
                         onBack = { currentDestination = dest.parent },
                         modifier = Modifier.fillMaxSize(),
                     )

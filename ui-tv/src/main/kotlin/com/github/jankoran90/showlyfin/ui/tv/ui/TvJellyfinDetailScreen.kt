@@ -43,6 +43,7 @@ fun TvJellyfinDetailScreen(
     itemId: String,
     onPlay: (String) -> Unit,
     onBack: () -> Unit,
+    onOpenEpisodes: ((seriesId: String, name: String) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: JellyfinDetailViewModel = hiltViewModel(),
 ) {
@@ -97,9 +98,16 @@ fun TvJellyfinDetailScreen(
                     Text(detail.genres.joinToString(" · "), color = Color.White.copy(alpha = 0.6f))
                 }
                 Spacer(Modifier.height(24.dp))
+                val isSeries = detail.type.equals("SERIES", ignoreCase = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Button(onClick = { onPlay(detail.id) }, modifier = Modifier.height(56.dp)) {
-                        Text("Přehrát")
+                    Button(
+                        onClick = {
+                            if (isSeries && onOpenEpisodes != null) onOpenEpisodes(detail.id, detail.name)
+                            else onPlay(detail.id)
+                        },
+                        modifier = Modifier.height(56.dp),
+                    ) {
+                        Text(if (isSeries) "Epizody" else "Přehrát")
                     }
                     Button(onClick = onBack, modifier = Modifier.height(56.dp)) {
                         Text("Zpět")
