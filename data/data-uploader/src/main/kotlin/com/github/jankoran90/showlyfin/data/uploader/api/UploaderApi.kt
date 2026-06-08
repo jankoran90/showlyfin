@@ -132,6 +132,30 @@ internal class UploaderApi(
         return setCookie.substringAfter("session=").substringBefore(";")
     }
 
+    // Plan PROFILES Fáze 2 — config balík per profil (raw JSON)
+
+    override suspend fun getProfileConfig(baseUrl: String, sessionCookie: String, key: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.getProfileConfig("$base/api/profiles/${enc(key)}/config", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
+    override suspend fun putProfileConfig(baseUrl: String, sessionCookie: String, key: String, json: String) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val resp = service.putProfileConfig("$base/api/profiles/${enc(key)}/config", cookie, body)
+        if (!resp.isSuccessful) throw HttpException(resp)
+    }
+
+    override suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.putProfile("$base/api/profiles/${enc(key)}", cookie, ProfileMetaRequest(name, isAdmin, jellyfinUserId))
+        if (!resp.isSuccessful) throw HttpException(resp)
+    }
+
     override suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int?, season: Int?, episode: Int?): List<UploaderStream> {
         val base = baseUrl.trimEnd('/')
         val params = buildString {

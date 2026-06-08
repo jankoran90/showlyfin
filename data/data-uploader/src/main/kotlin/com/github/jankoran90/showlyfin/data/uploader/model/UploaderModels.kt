@@ -192,6 +192,13 @@ data class UploaderCaptureResponse(
 
 data class UploaderLoginRequest(val password: String)
 
+// Plan PROFILES Fáze 2 — metadata profilu pro backend web admin (config se posílá jako raw JSON).
+data class ProfileMetaRequest(
+    val name: String,
+    val isAdmin: Boolean,
+    val jellyfinUserId: String,
+)
+
 // ── TMM Pipeline models ──────────────────────────────────────────────────────
 
 data class TmmCandidate(

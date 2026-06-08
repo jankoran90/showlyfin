@@ -46,6 +46,8 @@ data class SettingsUiState(
     val streamFilterError: String? = null,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
+    // Plan PROFILES Fáze 2 — web admin profilů (uploader backend)
+    val uploaderBaseUrl: String = "",
     // Poslech / Audiobookshelf
     val absConfigured: Boolean = false,
     val absBaseUrl: String = "",
@@ -109,7 +111,7 @@ class SettingsViewModel @Inject constructor(
         profileRepository.activeProfile
             .onEach { active -> _uiState.update { it.copy(activeProfileId = active?.id) } }
             .launchIn(viewModelScope)
-        _uiState.update { it.copy(liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false)) }
+        _uiState.update { it.copy(liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false), uploaderBaseUrl = uploaderBase) }
         refreshAbsState()
         loadStreamFilter()
     }

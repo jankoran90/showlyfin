@@ -1,6 +1,8 @@
 package com.github.jankoran90.showlyfin.data.uploader.di
 
 import android.content.SharedPreferences
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
+import com.github.jankoran90.showlyfin.data.uploader.UploaderProfileConfigGateway
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.api.UploaderApi
 import com.github.jankoran90.showlyfin.data.uploader.api.UploaderAuthInterceptor
@@ -43,4 +45,12 @@ object UploaderModule {
     fun providesUploaderRemoteDataSource(
         @Named("retrofitUploader") retrofit: Retrofit,
     ): UploaderRemoteDataSource = UploaderApi(retrofit.create(UploaderService::class.java))
+
+    // Plan PROFILES Fáze 2 — backend gateway pro config balík (dependency inversion do core-data)
+    @Provides
+    @Singleton
+    fun providesProfileConfigGateway(
+        remote: UploaderRemoteDataSource,
+        @Named("traktPreferences") prefs: SharedPreferences,
+    ): ProfileConfigGateway = UploaderProfileConfigGateway(remote, prefs)
 }

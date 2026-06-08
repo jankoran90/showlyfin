@@ -4,6 +4,8 @@ import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.dao.ProfileDao
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +21,11 @@ class ProfileRepository @Inject constructor(
     private val dao: ProfileDao,
     @Named("traktPreferences") private val prefs: SharedPreferences,
     private val configApplier: ProfileConfigApplier,
+    private val configGateway: ProfileConfigGateway,
 ) {
+    /** Klíč profilu pro backend (Plan PROFILES Fáze 2) = jellyfinUserId, fallback `p<localId>`. */
+    private fun ProfileEntity.backendKey(): String = jellyfinUserId.ifBlank { "p$id" }
+
     private val _activeProfile = MutableStateFlow<ProfileEntity?>(null)
     val activeProfile: StateFlow<ProfileEntity?> = _activeProfile.asStateFlow()
 
@@ -76,12 +82,15 @@ class ProfileRepository @Inject constructor(
     suspend fun updateConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
         val profile = dao.getById(profileId) ?: return
         val newConfig = transform(ProfileConfig.fromJson(profile.configJson))
-        dao.update(profile.copy(configJson = ProfileConfig.toJson(newConfig)))
+        val newJson = ProfileConfig.toJson(newConfig)
+        dao.update(profile.copy(configJson = newJson))
         if (_activeProfile.value?.id == profileId) {
             _activeProfile.value = dao.getById(profileId)
             _activeConfig.value = newConfig
             configApplier.apply(newConfig)
         }
+        // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
+        configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId)
     }
 
     suspend fun setDefault(profileId: Long) {
@@ -120,6 +129,26 @@ class ProfileRepository @Inject constructor(
         val config = ProfileConfig.fromJson(profile.configJson)
         _activeConfig.value = config
         configApplier.apply(config)
+        // Plan PROFILES Fáze 2: zkus stáhnout aktuální balík z backendu (cache = lokální configJson).
+        // Best-effort + timeout, ať přepnutí profilu nevisí offline. Uploader creds aplikované výše
+        // → gateway má URL+cookie. Re-aplikuje jen pokud je profil pořád aktivní a balík přišel.
+        syncConfigFromBackend(profile)
+    }
+
+    /** Stáhne config balík profilu z backendu (Plan PROFILES Fáze 2) a uloží jako lokální cache. */
+    private suspend fun syncConfigFromBackend(profile: ProfileEntity) {
+        val remoteJson = withTimeoutOrNull(5000) {
+            configGateway.fetchConfig(profile.backendKey())
+        }?.takeIf { it.isNotBlank() } ?: return
+        val remoteConfig = ProfileConfig.fromJson(remoteJson)
+        val canonical = ProfileConfig.toJson(remoteConfig)
+        if (canonical == profile.configJson) return // beze změny
+        dao.update(profile.copy(configJson = canonical))
+        if (_activeProfile.value?.id == profile.id) {
+            _activeProfile.value = dao.getById(profile.id)
+            _activeConfig.value = remoteConfig
+            configApplier.apply(remoteConfig)
+        }
     }
 
     suspend fun restoreActive(preferTv: Boolean = false) {

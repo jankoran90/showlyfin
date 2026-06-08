@@ -303,6 +303,23 @@ fun SettingsScreen(
                 onAddProfile = { viewModel.addProfile() },
             )
             val activeProfile = uiState.profiles.firstOrNull { it.id == uiState.activeProfileId }
+            if (activeProfile?.isAdmin == true && uiState.uploaderBaseUrl.isNotBlank()) {
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uiState.uploaderBaseUrl)))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Spravovat profily na webu") }
+                Text(
+                    "Centrální administrace profilů: sekce, knihovny, žánry, věk, přihlášení.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             if (activeProfile?.isAdmin == true && uiState.profiles.size > 1) {
                 Spacer(Modifier.height(16.dp))
                 AdminRestrictionsSection(

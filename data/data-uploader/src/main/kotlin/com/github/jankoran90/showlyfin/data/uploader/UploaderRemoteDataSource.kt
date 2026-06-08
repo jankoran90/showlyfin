@@ -17,6 +17,10 @@ interface UploaderRemoteDataSource {
     suspend fun putStreamFilter(baseUrl: String, sessionCookie: String, prefs: StreamFilterPrefs)
     suspend fun capture(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse
     suspend fun login(baseUrl: String, password: String): String
+    // Plan PROFILES Fáze 2 — config balík per profil (raw JSON; key = jellyfinUserId)
+    suspend fun getProfileConfig(baseUrl: String, sessionCookie: String, key: String): String?
+    suspend fun putProfileConfig(baseUrl: String, sessionCookie: String, key: String, json: String)
+    suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String)
     suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int? = null, season: Int? = null, episode: Int? = null): List<UploaderStream>
     suspend fun captureSdillej(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse
 

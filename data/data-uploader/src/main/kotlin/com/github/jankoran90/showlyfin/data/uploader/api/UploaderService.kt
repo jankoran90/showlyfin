@@ -19,6 +19,11 @@ interface UploaderService {
     @POST suspend fun capture(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderCaptureRequest): UploaderCaptureResponse
     @POST suspend fun login(@Url url: String, @Body request: UploaderLoginRequest): Response<ResponseBody>
 
+    // Plan PROFILES Fáze 2 — config balík per profil (raw JSON přes ResponseBody/RequestBody)
+    @GET suspend fun getProfileConfig(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @PUT suspend fun putProfileConfig(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+    @PUT suspend fun putProfile(@Url url: String, @Header("Cookie") cookie: String, @Body request: ProfileMetaRequest): Response<ResponseBody>
+
     // Titulky.com CZ titulky (Fáze E)
     @GET suspend fun getSubtitles(@Url url: String, @Header("Cookie") cookie: String): SubtitlesResponse
     @GET @Streaming suspend fun downloadSubtitle(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
