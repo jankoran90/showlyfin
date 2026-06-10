@@ -79,7 +79,10 @@ fun MediaCard(
         onClick = onClick,
         modifier = modifier
             .aspectRatio(2f / 3f)
-            .clip(CardShape),
+            .clip(CardShape)
+            // FUSE F2: D-pad fokus highlight na TV (no-op telefon). Card(onClick) je už fokusovatelná,
+            // tohle jen kreslí prstenec → platí pro všechny poster gridy (Discover/Watchlist/Knihovna/Home).
+            .tvFocusable(shape = CardShape),
         shape = CardShape,
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
     ) {
