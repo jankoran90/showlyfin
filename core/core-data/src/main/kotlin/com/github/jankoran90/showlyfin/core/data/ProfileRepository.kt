@@ -258,6 +258,20 @@ class ProfileRepository @Inject constructor(
 
     suspend fun getDefault(): ProfileEntity? = dao.getDefault()
 
+    /** Plan GATEKEY G-A4 — stáhne config balík profilu z backendu (raw JSON; dešifrované creds). */
+    suspend fun fetchBackendConfig(profile: ProfileEntity): String? =
+        configGateway.fetchConfig(profile.backendKey())
+
+    /**
+     * Plan GATEKEY G-A4 — zapíše **hydratované** Jellyfin creds (po fetchi balíku / AuthenticateByName)
+     * do entity PŘED aktivací, aby [setActive] zapsal kanonické prefs už se správným serverUrl/tokenem
+     * (jinak JF/ABS obrazovky naběhnou s prázdným tokenem dřív, než async sync dotáhne creds).
+     */
+    suspend fun applyHydratedJellyfin(profileId: Long, serverUrl: String, token: String, configJson: String?) {
+        val p = dao.getById(profileId) ?: return
+        dao.update(p.copy(serverUrl = serverUrl, jellyfinToken = token, configJson = configJson ?: p.configJson))
+    }
+
     suspend fun setActive(profileId: Long) {
         val profile = dao.getById(profileId) ?: return
         _activeProfile.value = profile

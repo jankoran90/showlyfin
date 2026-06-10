@@ -160,8 +160,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         val gateViewModel: ProfileGateViewModel = hiltViewModel()
         val gateState by gateViewModel.state.collectAsStateWithLifecycle()
 
-        // Plan GATEKEY G-A3: během stahování rosteru drž spinner (ať neproblikne ServerSetup).
-        if (gateState.isLoading || gateState.seeding) {
+        // Plan GATEKEY G-A3/G-A4: během stahování rosteru i hydratace profilu drž spinner
+        // (ať neproblikne ServerSetup a JF obrazovky nenaběhnou nepřihlášené).
+        if (gateState.isLoading || gateState.seeding || gateState.activating) {
             androidx.compose.foundation.layout.Box(
                 Modifier.fillMaxSize(),
                 contentAlignment = androidx.compose.ui.Alignment.Center,
