@@ -5,7 +5,9 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -19,6 +21,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -35,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -50,6 +55,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
@@ -139,8 +145,16 @@ private val bottomTabs = listOf(
     Destination.Hlavni, Destination.Listen, Destination.Settings,
 )
 
+/** FUSE F1: jedna definice navigačních cílů → vykreslí se buď ve spodní liště (telefon),
+ * nebo ve fokus railu (TV). */
+private data class ShellNavItem(
+    val dest: Destination,
+    val icon: ImageVector,
+    val label: String,
+)
+
 @Composable
-fun ShowlyfinPhoneApp() {
+fun ShowlyfinApp(isTv: Boolean = false) {
     ShowlyfinPhoneTheme {
         val gateViewModel: ProfileGateViewModel = hiltViewModel()
         val gateState by gateViewModel.state.collectAsStateWithLifecycle()
@@ -267,6 +281,12 @@ fun ShowlyfinPhoneApp() {
 
         val isSubScreen = currentDestination !in bottomTabs
 
+        val navItems = buildList {
+            add(ShellNavItem(Destination.Hlavni, Icons.Default.Home, "Sleduj"))
+            if (poslechVisible) add(ShellNavItem(Destination.Listen, Icons.Default.Headphones, "Poslech"))
+            add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
+        }
+
         val density = LocalDensity.current
         val measuredBarHeightPx = remember { mutableFloatStateOf(with(density) { 80.dp.toPx() }) }
         val bottomBarOffsetPx = remember { mutableFloatStateOf(0f) }
@@ -316,16 +336,31 @@ fun ShowlyfinPhoneApp() {
             containerColor = Color(0xFF0D0D1A),
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { paddingValues ->
-            val effectiveBottomDp = if (isSubScreen) {
+            val effectiveBottomDp = if (isSubScreen || isTv) {
                 0.dp
             } else {
                 with(density) { (measuredBarHeightPx.floatValue - bottomBarOffsetPx.floatValue).coerceAtLeast(0f).toDp() }
             }
-            Box(modifier = Modifier
+            Row(modifier = Modifier
                 .fillMaxSize()
                 .padding(top = paddingValues.calculateTopPadding())
                 .consumeWindowInsets(paddingValues)
             ) {
+                // FUSE F1: na TV fokus rail vlevo místo spodní lišty (D-pad navigace).
+                if (isTv && !isSubScreen) {
+                    NavigationRail(containerColor = Color(0xFF1A1A2E)) {
+                        navItems.forEach { item ->
+                            NavigationRailItem(
+                                selected = bottomTab == item.dest,
+                                onClick = { bottomTab = item.dest; currentDestination = item.dest },
+                                icon = { Icon(item.icon, contentDescription = null) },
+                                label = { Text(item.label) },
+                                modifier = Modifier.tvFocusable(),
+                            )
+                        }
+                    }
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Box(modifier = Modifier
                     .fillMaxSize()
                     .nestedScroll(nestedScrollConnection)
@@ -562,7 +597,7 @@ fun ShowlyfinPhoneApp() {
             }
                 }
 
-                if (!isSubScreen) {
+                if (!isTv && !isSubScreen) {
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -579,28 +614,29 @@ fun ShowlyfinPhoneApp() {
                             isListenSection = bottomTab is Destination.Listen,
                         )
                         NavigationBar(containerColor = Color(0xFF1A1A2E)) {
-                            NavigationBarItem(
-                                selected = bottomTab is Destination.Hlavni,
-                                onClick = { bottomTab = Destination.Hlavni; currentDestination = Destination.Hlavni },
-                                icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                                label = { Text("Sleduj") },
-                            )
-                            if (poslechVisible) {
+                            navItems.forEach { item ->
                                 NavigationBarItem(
-                                    selected = bottomTab is Destination.Listen,
-                                    onClick = { bottomTab = Destination.Listen; currentDestination = Destination.Listen },
-                                    icon = { Icon(Icons.Default.Headphones, contentDescription = null) },
-                                    label = { Text("Poslech") },
+                                    selected = bottomTab == item.dest,
+                                    onClick = { bottomTab = item.dest; currentDestination = item.dest },
+                                    icon = { Icon(item.icon, contentDescription = null) },
+                                    label = { Text(item.label) },
                                 )
                             }
-                            NavigationBarItem(
-                                selected = bottomTab is Destination.Settings,
-                                onClick = { bottomTab = Destination.Settings; currentDestination = Destination.Settings },
-                                icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                                label = { Text("Nastavení") },
-                            )
                         }
                     }
+                }
+                // FUSE F1: na TV není spodní lišta (nav je v railu) — mini-player drží dole.
+                if (isTv && !isSubScreen) {
+                    MiniPlayer(
+                        onExpand = {
+                            currentDestination = Destination.AudiobookPlayer(
+                                itemId = null, fromStart = false, parent = currentDestination,
+                            )
+                        },
+                        isListenSection = bottomTab is Destination.Listen,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
+                }
                 }
             }
         }

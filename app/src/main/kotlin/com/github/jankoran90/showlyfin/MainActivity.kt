@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.lifecycleScope
 import com.github.jankoran90.showlyfin.core.ui.DebugCaptureLauncher
+import com.github.jankoran90.showlyfin.core.ui.FormFactor
 import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
+import com.github.jankoran90.showlyfin.core.ui.LocalFormFactor
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
@@ -25,8 +27,7 @@ import com.github.jankoran90.showlyfin.services.UpdateChecker
 import com.github.jankoran90.showlyfin.services.UpdatePreferences
 import com.github.jankoran90.showlyfin.ui.UpdateOverlayController
 import com.github.jankoran90.showlyfin.ui.UpdateOverlayHost
-import com.github.jankoran90.showlyfin.ui.phone.ShowlyfinPhoneApp
-import com.github.jankoran90.showlyfin.ui.tv.ShowlyfinTvApp
+import com.github.jankoran90.showlyfin.ui.phone.ShowlyfinApp
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -98,14 +99,12 @@ class MainActivity : ComponentActivity() {
             CompositionLocalProvider(
                 LocalUpdateLauncher provides launcher,
                 LocalDebugCaptureLauncher provides debugLauncher,
+                LocalFormFactor provides if (isTV) FormFactor.TV else FormFactor.PHONE,
             ) {
                 DebugCaptureGestureHost {
                     Box {
-                        if (isTV) {
-                            ShowlyfinTvApp()
-                        } else {
-                            ShowlyfinPhoneApp()
-                        }
+                        // FUSE F1: jeden sjednocený app pro telefon i TV (TV = telefonní UI s fokus railem).
+                        ShowlyfinApp(isTv = isTV)
                         UpdateOverlayHost()
                     }
                 }
