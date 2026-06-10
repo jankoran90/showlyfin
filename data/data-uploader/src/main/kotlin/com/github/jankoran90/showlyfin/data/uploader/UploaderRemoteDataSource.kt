@@ -24,6 +24,11 @@ interface UploaderRemoteDataSource {
     // Plan WARDEN W3c — raw JSON: pole šablon (/api/templates) + pole profilových meta (/api/profiles).
     suspend fun getTemplates(baseUrl: String, sessionCookie: String): String?
     suspend fun getProfilesMeta(baseUrl: String, sessionCookie: String): String?
+    // Plan HELM — admin parity (in-app administrace profilů): JF knihovny, TMDB žánry, export/import.
+    suspend fun getJellyfinLibraries(baseUrl: String, sessionCookie: String, userId: String): String?
+    suspend fun getTmdbGenres(baseUrl: String, sessionCookie: String): String?
+    suspend fun exportProfiles(baseUrl: String, sessionCookie: String): String?
+    suspend fun importProfiles(baseUrl: String, sessionCookie: String, json: String): Boolean
     // Plan WARDEN W3c (část 2) — write-through authoring šablon na backend.
     suspend fun putTemplate(baseUrl: String, sessionCookie: String, uuid: String, name: String, ageRating: String?, configJson: String)
     suspend fun deleteTemplate(baseUrl: String, sessionCookie: String, uuid: String)

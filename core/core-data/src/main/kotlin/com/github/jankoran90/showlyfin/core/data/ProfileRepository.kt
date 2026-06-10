@@ -262,6 +262,13 @@ class ProfileRepository @Inject constructor(
     suspend fun fetchBackendConfig(profile: ProfileEntity): String? =
         configGateway.fetchConfig(profile.backendKey())
 
+    // Plan HELM — passthrough na gateway pro in-app admin editor (knihovny/žánry/záloha).
+    suspend fun fetchJellyfinLibraries(jellyfinUserId: String?) =
+        configGateway.fetchJellyfinLibraries(jellyfinUserId)
+    suspend fun fetchTmdbGenres(): List<String>? = configGateway.fetchTmdbGenres()
+    suspend fun exportProfiles(): String? = configGateway.exportProfiles()
+    suspend fun importProfiles(json: String): Boolean = configGateway.importProfiles(json)
+
     /**
      * Plan GATEKEY G-A4 — zapíše **hydratované** Jellyfin creds (po fetchi balíku / AuthenticateByName)
      * do entity PŘED aktivací, aby [setActive] zapsal kanonické prefs už se správným serverUrl/tokenem

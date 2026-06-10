@@ -28,6 +28,11 @@ interface UploaderService {
     @GET suspend fun getProfilesMeta(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @PUT suspend fun putTemplate(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
     @DELETE suspend fun deleteTemplate(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    // Plan HELM — admin parity (raw JSON přes ResponseBody)
+    @GET suspend fun getJellyfinLibraries(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @GET suspend fun getTmdbGenres(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @GET suspend fun exportProfiles(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @POST suspend fun importProfiles(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
 
     // Titulky.com CZ titulky (Fáze E)
     @GET suspend fun getSubtitles(@Url url: String, @Header("Cookie") cookie: String): SubtitlesResponse

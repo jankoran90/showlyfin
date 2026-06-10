@@ -39,6 +39,17 @@ data class ProfileMeta(
     val hasConfig: Boolean,
 )
 
+/**
+ * Plan HELM — odkaz na Jellyfin knihovnu (UserView) pro in-app admin editor whitelistu.
+ * [collectionType] = movies/tvshows/… (nebo null). [id] se ukládá do
+ * [ProfileConfig.jellyfinLibraryWhitelist].
+ */
+data class JellyfinLibraryRef(
+    val id: String,
+    val name: String,
+    val collectionType: String?,
+)
+
 interface ProfileConfigGateway {
     companion object {
         /**
@@ -101,4 +112,21 @@ interface ProfileConfigGateway {
      * prázdný = zrušit (backend uloží "", sync to přečte jako bez šablony). Best-effort.
      */
     suspend fun pushAssignedTemplate(key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String)
+
+    /**
+     * Plan HELM — seznam Jellyfin knihoven (UserView ids) pro in-app admin editor whitelistu.
+     * [userId] = `jellyfinUserId` editovaného profilu (prázdné = všechny media folders). Jde přes
+     * backend (`/api/jellyfin/libraries`, admin API key), aby admin viděl knihovny i cizího profilu
+     * bez vlastního JF tokenu. null = nedostupné.
+     */
+    suspend fun fetchJellyfinLibraries(userId: String?): List<JellyfinLibraryRef>?
+
+    /** Plan HELM — seznam TMDB žánrů (názvy, cs) pro in-app editor žánrů. null = nedostupné. */
+    suspend fun fetchTmdbGenres(): List<String>?
+
+    /** Plan HELM — záloha: export všech profilů + šablon z backendu (raw JSON balík). null = nedostupné. */
+    suspend fun exportProfiles(): String?
+
+    /** Plan HELM — obnova: import balíku profilů + šablon na backend. true = úspěch. */
+    suspend fun importProfiles(json: String): Boolean
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -88,6 +89,7 @@ private sealed interface Destination {
     data object Hlavni : Destination   // label „Sleduj"
     data object Listen : Destination   // label „Poslech"
     data object Settings : Destination
+    data object Admin : Destination     // Plan HELM — admin destinace (jen pro admin profil)
 
     // Uploader — už není tab lišty, otevírá se z Nastavení
     data object Uploader : Destination
@@ -143,7 +145,7 @@ private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>
 )
 
 private val bottomTabs = listOf(
-    Destination.Hlavni, Destination.Listen, Destination.Settings,
+    Destination.Hlavni, Destination.Listen, Destination.Settings, Destination.Admin,
 )
 
 /** FUSE F1: jedna definice navigačních cílů → vykreslí se buď ve spodní liště (telefon),
@@ -303,6 +305,10 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             add(ShellNavItem(Destination.Hlavni, Icons.Default.Home, "Sleduj"))
             if (poslechVisible) add(ShellNavItem(Destination.Listen, Icons.Default.Headphones, "Poslech"))
             add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
+            // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.
+            if (gateState.activeProfile?.isAdmin == true) {
+                add(ShellNavItem(Destination.Admin, Icons.Default.AdminPanelSettings, "Správa"))
+            }
         }
 
         val density = LocalDensity.current
@@ -470,6 +476,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.Settings -> SettingsScreen(
                     isAdmin = gateState.activeProfile?.isAdmin != false,
                     onOpenUploader = { currentDestination = Destination.Uploader },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.Admin -> AdminScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Listen -> ListenScreen(

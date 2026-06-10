@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.data.uploader
 
 import android.content.SharedPreferences
+import com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
 import com.github.jankoran90.showlyfin.core.domain.TemplatePayload
@@ -135,5 +136,48 @@ internal class UploaderProfileConfigGateway @Inject constructor(
         if (!isAvailable() || key.isBlank()) return
         runCatching { remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId, templateUuid) }
             .onFailure { Timber.w(it, "[Profiles] pushAssignedTemplate($key) selhal") }
+    }
+
+    // Plan HELM — admin parity (in-app administrace profilů)
+
+    override suspend fun fetchJellyfinLibraries(userId: String?): List<JellyfinLibraryRef>? {
+        if (!isAvailable()) return null
+        return runCatching {
+            val raw = remote.getJellyfinLibraries(baseUrl(), cookie(), userId.orEmpty()) ?: return@runCatching emptyList()
+            JsonParser.parseString(raw).asJsonArray.mapNotNull { el ->
+                val o = el.asJsonObject
+                val id = o.get("id")?.takeIf { !it.isJsonNull }?.asString ?: return@mapNotNull null
+                JellyfinLibraryRef(
+                    id = id,
+                    name = o.get("name")?.takeIf { !it.isJsonNull }?.asString ?: "",
+                    collectionType = o.get("collectionType")?.takeIf { !it.isJsonNull }?.asString,
+                )
+            }
+        }.onFailure { Timber.w(it, "[HELM] fetchJellyfinLibraries selhal") }.getOrNull()
+    }
+
+    override suspend fun fetchTmdbGenres(): List<String>? {
+        if (!isAvailable()) return null
+        return runCatching {
+            // Backend vrací mapu {id: název}; pro editor stačí seřazené názvy.
+            val raw = remote.getTmdbGenres(baseUrl(), cookie()) ?: return@runCatching emptyList()
+            JsonParser.parseString(raw).asJsonObject.entrySet()
+                .mapNotNull { it.value?.takeIf { v -> !v.isJsonNull }?.asString }
+                .sorted()
+        }.onFailure { Timber.w(it, "[HELM] fetchTmdbGenres selhal") }.getOrNull()
+    }
+
+    override suspend fun exportProfiles(): String? {
+        if (!isAvailable()) return null
+        return runCatching { remote.exportProfiles(baseUrl(), cookie()) }
+            .onFailure { Timber.w(it, "[HELM] exportProfiles selhal") }
+            .getOrNull()
+    }
+
+    override suspend fun importProfiles(json: String): Boolean {
+        if (!isAvailable() || json.isBlank()) return false
+        return runCatching { remote.importProfiles(baseUrl(), cookie(), json) }
+            .onFailure { Timber.w(it, "[HELM] importProfiles selhal") }
+            .getOrDefault(false)
     }
 }

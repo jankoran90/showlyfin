@@ -196,6 +196,38 @@ internal class UploaderApi(
         return if (resp.isSuccessful) resp.body()?.string() else null
     }
 
+    // Plan HELM — admin parity (raw JSON parsuje gateway přes Gson)
+
+    override suspend fun getJellyfinLibraries(baseUrl: String, sessionCookie: String, userId: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val url = "$base/api/jellyfin/libraries" + if (userId.isNotBlank()) "?user_id=${enc(userId)}" else ""
+        val resp = service.getJellyfinLibraries(url, cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
+    override suspend fun getTmdbGenres(baseUrl: String, sessionCookie: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.getTmdbGenres("$base/api/tmdb/genres", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
+    override suspend fun exportProfiles(baseUrl: String, sessionCookie: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.exportProfiles("$base/api/profiles/export", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
+    override suspend fun importProfiles(baseUrl: String, sessionCookie: String, json: String): Boolean {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val resp = service.importProfiles("$base/api/profiles/import", cookie, body)
+        return resp.isSuccessful
+    }
+
     override suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int?, season: Int?, episode: Int?): List<UploaderStream> {
         val base = baseUrl.trimEnd('/')
         val params = buildString {
