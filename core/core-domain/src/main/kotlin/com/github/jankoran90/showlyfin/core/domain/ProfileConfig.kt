@@ -156,6 +156,8 @@ data class CredentialBundle(
     val jellyfin: JellyfinCreds? = null,
     val abs: AbsCreds? = null,
     val uploader: UploaderCreds? = null,
+    /** Trakt OAuth tokeny per profil (Plan VAULT) — Trakt se stal 4. creds doménou pod adminem. */
+    val trakt: TraktCreds? = null,
     /** Serializovaný Stremio/Comet StreamFilterPrefs (server-side), volitelný. */
     val streamFilterJson: String? = null,
 )
@@ -181,4 +183,19 @@ data class AbsCreds(
 data class UploaderCreds(
     val url: String = "",
     val password: String = "",
+)
+
+/**
+ * Trakt OAuth tokeny per profil (Plan VAULT). Klíče v prefs zrcadlí
+ * [com.github.jankoran90.showlyfin.data.trakt.token.TraktTokenProvider] (`TRAKT_ACCESS_TOKEN`…),
+ * aby applier zapsal token tam, odkud `TokenProvider`/`isLoggedIn` čte. Časy jsou **absolutní
+ * epoch millis** (cross-device): `createdAtMillis` + `expiresAtMillis` řídí `shouldRefresh`.
+ */
+@Serializable
+data class TraktCreds(
+    val accessToken: String = "",
+    val refreshToken: String = "",
+    val createdAtMillis: Long = 0,
+    val expiresAtMillis: Long = 0,
+    val username: String? = null,
 )

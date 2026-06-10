@@ -54,6 +54,15 @@ class ProfileConfigApplier @Inject constructor(
                 remove(K_UP_COOKIE)
             }
 
+            // Trakt (Plan VAULT) — per-profil OAuth tokeny. Klíče zrcadlí TraktTokenProvider, aby
+            // TokenProvider/isLoggedIn token rovnou viděl. null = ponech stávající (NEMAZAT).
+            creds.trakt?.let { t ->
+                putString(K_TRAKT_ACCESS, t.accessToken)
+                putString(K_TRAKT_REFRESH, t.refreshToken)
+                putLong(K_TRAKT_CREATED, t.createdAtMillis)
+                putLong(K_TRAKT_EXPIRES, t.expiresAtMillis)
+            }
+
             // Vzhled / volné toggly — klíč v mapě = kanonický pref klíč
             config.appearance.forEach { (key, value) -> putString(key, value) }
 
@@ -83,5 +92,11 @@ class ProfileConfigApplier @Inject constructor(
         const val K_UP_URL = "uploader_base_url"
         const val K_UP_PASS = "uploader_password"
         const val K_UP_COOKIE = "uploader_session_cookie"
+
+        // Plan VAULT — zrcadlí TraktTokenProvider klíče (data-trakt).
+        const val K_TRAKT_ACCESS = "TRAKT_ACCESS_TOKEN"
+        const val K_TRAKT_REFRESH = "TRAKT_REFRESH_TOKEN"
+        const val K_TRAKT_CREATED = "TRAKT_ACCESS_TOKEN_TIMESTAMP"
+        const val K_TRAKT_EXPIRES = "TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP"
     }
 }

@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -13,12 +15,18 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.github.jankoran90.showlyfin.core.network.Config
+import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -117,6 +125,9 @@ fun AdminScreen(
                             onSetPin = { id, pin -> viewModel.setProfilePin(id, pin) },
                             onClearPin = { id -> viewModel.clearProfilePin(id) },
                         )
+                        Spacer(Modifier.height(16.dp))
+                        // Plan VAULT — Trakt (OAuth) pro AKTIVNÍ profil; tokeny se uloží do jeho balíku.
+                        AdminTraktCard(uiState = uiState, viewModel = viewModel)
                     }
                 }
                 AdminTab.SABLONY -> AdminTabScroll {
@@ -207,6 +218,77 @@ private fun AdminBackupTab(viewModel: SettingsViewModel) {
         status?.let {
             Spacer(Modifier.height(4.dp))
             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+/**
+ * Plan VAULT — přihlášení Trakt (OAuth, vč. Google sign-in) pro **aktivní profil**. Tokeny se po
+ * úspěchu uloží do balíku aktivního profilu ([SettingsViewModel.captureTraktIntoActiveProfile]) a
+ * pushnou na backend. Telefon = browser redirect; TV = device-code (kód na trakt.tv/activate).
+ * Pro jiný profil je třeba na něj nejdřív přepnout (Trakt vyžaduje interaktivní přihlášení vlastníka).
+ */
+@Composable
+private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewModel) {
+    val context = LocalContext.current
+    val activeName = uiState.profiles.firstOrNull { it.id == uiState.activeProfileId }?.name ?: "—"
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Trakt — profil: $activeName", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Přihlášení přes Trakt (i účtem Google). Tokeny se uloží k aktivnímu profilu. " +
+                    "Pro jiný profil na něj nejdřív přepni.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(12.dp))
+            when {
+                uiState.traktLoggedIn -> {
+                    Text("Přihlášen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { viewModel.logout() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text("Odhlásit z Trakt") }
+                }
+                isTvFormFactor() -> {
+                    Text("Nepřihlášen", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.65f))
+                    uiState.traktUserCode?.let { code ->
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Otevři ${uiState.traktVerificationUrl ?: "trakt.tv/activate"} a zadej kód:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.85f),
+                        )
+                        Text(code, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { viewModel.startTraktDeviceLogin() },
+                        enabled = uiState.traktUserCode == null,
+                        modifier = Modifier.fillMaxWidth().tvFocusable(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFED1C24)),
+                    ) { Text(if (uiState.traktUserCode == null) "Přihlásit přes Trakt" else "Čekám na potvrzení…") }
+                    uiState.traktStatus?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                    }
+                }
+                else -> {
+                    Text("Nepřihlášen", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.65f))
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Config.traktAuthorizeUrl))) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFED1C24)),
+                    ) { Text("Přihlásit přes Trakt") }
+                }
+            }
         }
     }
 }

@@ -142,6 +142,7 @@ class SettingsViewModel @Inject constructor(
                 try {
                     traktAuthManager.authorize(code)
                     _uiState.update { it.copy(traktLoggedIn = true, isLoading = false) }
+                    captureTraktIntoActiveProfile() // Plan VAULT — Trakt per-profil
                 } catch (e: Throwable) {
                     _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba autorizace") }
                 }
@@ -430,6 +431,27 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { profileRepository.updateConfig(profileId, transform) }
     }
 
+    /**
+     * Plan VAULT — po úspěšném Trakt loginu/odhlášení promítni globální Trakt tokeny do balíku
+     * AKTIVNÍHO profilu (Trakt je per-profil pod adminem) a pushni na backend. Login zapisuje token
+     * do sdílených `traktPreferences`; tady ho zrcadlíme do profilu, ať přežije přepnutí i fresh-install.
+     * Odhlášení (prázdný token) → trakt = null (z balíku se vyčistí).
+     */
+    private fun captureTraktIntoActiveProfile() {
+        val activeId = _uiState.value.activeProfileId ?: return
+        val access = prefs.getString("TRAKT_ACCESS_TOKEN", "").orEmpty()
+        val refresh = prefs.getString("TRAKT_REFRESH_TOKEN", "").orEmpty()
+        val created = prefs.getLong("TRAKT_ACCESS_TOKEN_TIMESTAMP", 0L)
+        val expires = prefs.getLong("TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP", 0L)
+        val trakt = if (access.isNotBlank())
+            com.github.jankoran90.showlyfin.core.domain.TraktCreds(
+                accessToken = access, refreshToken = refresh,
+                createdAtMillis = created, expiresAtMillis = expires,
+            )
+        else null
+        updateProfileConfig(activeId) { c -> c.copy(credentials = c.credentials.copy(trakt = trakt)) }
+    }
+
     // ── Plan HELM — in-app admin editor (knihovny + PIN) ─────────────────────────
 
     /** Plan HELM — načte seznam Jellyfin knihoven z backendu pro editor whitelistu (admin tab). */
@@ -538,13 +560,16 @@ class SettingsViewModel @Inject constructor(
                 )
             }
             when (val result = traktDeviceAuth.poll(code)) {
-                is TraktDevicePollResult.Success -> _uiState.update {
-                    it.copy(
-                        traktLoggedIn = true,
-                        traktUserCode = null,
-                        traktVerificationUrl = null,
-                        traktStatus = "Přihlášeno ✓",
-                    )
+                is TraktDevicePollResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            traktLoggedIn = true,
+                            traktUserCode = null,
+                            traktVerificationUrl = null,
+                            traktStatus = "Přihlášeno ✓",
+                        )
+                    }
+                    captureTraktIntoActiveProfile() // Plan VAULT — Trakt per-profil
                 }
                 is TraktDevicePollResult.Expired -> _uiState.update {
                     it.copy(traktUserCode = null, traktVerificationUrl = null, traktStatus = "Kód vypršel, zkus to znovu")
@@ -561,6 +586,7 @@ class SettingsViewModel @Inject constructor(
         _uiState.update {
             it.copy(traktLoggedIn = false, traktUserCode = null, traktVerificationUrl = null, traktStatus = null)
         }
+        captureTraktIntoActiveProfile() // Plan VAULT — vyčistí Trakt i z balíku aktivního profilu
     }
 
     fun disconnectJellyfin() {

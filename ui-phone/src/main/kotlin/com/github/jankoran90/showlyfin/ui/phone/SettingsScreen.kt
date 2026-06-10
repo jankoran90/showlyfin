@@ -83,6 +83,7 @@ fun SettingsScreen(
     onOpenUploader: () -> Unit,
     modifier: Modifier = Modifier,
     isAdmin: Boolean = true,
+    onOpenAdmin: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -151,21 +152,14 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        Spacer(Modifier.height(12.dp))
-                        OutlinedButton(
-                            onClick = { viewModel.disconnectJellyfin() },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        ) {
-                            Text("Odhlásit Jellyfin")
-                        }
                     } else {
                         Text(
-                            text = "Nenastaveno — otevři kartu Jellyfin a přihlas se",
+                            text = "Nenastaveno",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.65f),
                         )
                     }
+                    ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
                 }
             }
 
@@ -213,76 +207,21 @@ fun SettingsScreen(
                 Column(Modifier.padding(16.dp)) {
                     Text("Trakt", style = MaterialTheme.typography.titleMedium, color = Color.White)
                     Spacer(Modifier.height(8.dp))
+                    // Plan VAULT — Trakt je teď per-profil pod adminem (OAuth, vč. Google sign-in);
+                    // přihlášení/odhlášení se dělá v sekci Správa, tady jen stav.
                     if (uiState.isLoading) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
-                    } else if (uiState.traktLoggedIn) {
-                        Text(
-                            "Přihlášen",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        OutlinedButton(
-                            onClick = { viewModel.logout() },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        ) {
-                            Text("Odhlásit z Trakt")
-                        }
-                    } else if (isTvFormFactor()) {
-                        // Plan FUSE F5 — na TV není prohlížeč/klávesnice pro OAuth redirect → device-code flow:
-                        // uživatel zadá krátký kód na trakt.tv/activate na telefonu, appka pollu je token.
-                        Text(
-                            "Nepřihlášen",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.65f),
-                        )
-                        uiState.traktUserCode?.let { code ->
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "Otevři ${uiState.traktVerificationUrl ?: "trakt.tv/activate"} a zadej kód:",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.85f),
-                            )
-                            Text(
-                                code,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = { viewModel.startTraktDeviceLogin() },
-                            enabled = uiState.traktUserCode == null,
-                            modifier = Modifier.fillMaxWidth().tvFocusable(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFED1C24)),
-                        ) {
-                            Text(if (uiState.traktUserCode == null) "Přihlásit přes Trakt" else "Čekám na potvrzení…")
-                        }
-                        uiState.traktStatus?.let {
-                            Spacer(Modifier.height(8.dp))
-                            Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
-                        }
                     } else {
                         Text(
-                            "Nepřihlášen",
+                            if (uiState.traktLoggedIn) "Přihlášen" else "Nepřihlášen",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.65f),
+                            color = if (uiState.traktLoggedIn) MaterialTheme.colorScheme.primary
+                            else Color.White.copy(alpha = 0.65f),
                         )
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Config.traktAuthorizeUrl))
-                                context.startActivity(intent)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFED1C24)),
-                        ) {
-                            Text("Přihlásit přes Trakt")
-                        }
                     }
+                    ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
                 }
             }
           }
@@ -295,12 +234,10 @@ fun SettingsScreen(
             AbsSection(
                 configured = uiState.absConfigured,
                 baseUrl = uiState.absBaseUrl,
-                loading = uiState.absLoading,
-                error = uiState.absError,
                 hideFinishedEpisodes = uiState.hideFinishedEpisodes,
-                onLogin = { url, user, pass -> viewModel.absLogin(url, user, pass) },
-                onLogout = { viewModel.absLogout() },
                 onToggleHideFinished = { viewModel.setHideFinishedEpisodes(it) },
+                isAdmin = isAdmin,
+                onOpenAdmin = onOpenAdmin,
             )
           }
             // Playback preference (ne creds) — dostupné i při uzamčeném přihlášení, pokud je ABS nastaven.
@@ -333,7 +270,7 @@ fun SettingsScreen(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            UploaderSection()
+            UploaderSection(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
             Spacer(Modifier.height(16.dp))
             StremioFilterSection(
                 sf = uiState.streamFilter,
@@ -463,6 +400,37 @@ private fun LockedByAdminNote() {
     }
 }
 
+/**
+ * Plan VAULT — přihlašovací údaje (Jellyfin/Poslech/Streamování/Trakt) jsou JEDINÝM zdrojem pravdy
+ * spravovány v admin sekci „Správa" (per-profil editor → push na backend). Staré sekce v Nastavení
+ * proto jen ZOBRAZUJÍ stav a odkazují do Správy; samostatné přihlašování zde už není (zabraňuje
+ * driftu mezi kanonickými prefs a profilem na backendu). Admin dostane tlačítko rovnou do Správy.
+ */
+@Composable
+private fun ManagedInAdminNote(isAdmin: Boolean, onOpenAdmin: () -> Unit) {
+    Spacer(Modifier.height(12.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = Icons.Default.Lock,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.5f),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = if (isAdmin) "Přihlašovací údaje spravuješ v sekci Správa."
+            else "Přihlašovací údaje spravuje správce profilu.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.6f),
+        )
+    }
+    if (isAdmin) {
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = onOpenAdmin, modifier = Modifier.fillMaxWidth()) {
+            Text("Otevřít Správu")
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailModeSection(
@@ -526,12 +494,12 @@ private fun DetailSectionCheckRow(label: String, checked: Boolean, onChange: (Bo
 
 @Composable
 private fun UploaderSection(
+    isAdmin: Boolean,
+    onOpenAdmin: () -> Unit,
     viewModel: UploaderViewModel = hiltViewModel(),
 ) {
+    // Plan VAULT — jen stav. Přihlášení Uploaderu se spravuje v sekci Správa (jediný zdroj pravdy).
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var url by remember { mutableStateOf(viewModel.baseUrl) }
-    var password by remember { mutableStateOf("") }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
@@ -539,66 +507,19 @@ private fun UploaderSection(
         Column(Modifier.padding(16.dp)) {
             Text("Uploader", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(Modifier.height(8.dp))
-            if (uiState.isLoggedIn) {
-                // Plan PROFILES #21: jasný indikátor stavu přihlášení (jako Jellyfin/ABS) + Odhlásit.
-                Text(
-                    text = "Přihlášen: ${viewModel.baseUrl}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Stremio streamy, Sdílej.cz, Smart Remux.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { viewModel.logout() },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("Odhlásit Uploader") }
-            } else {
-                Text(
-                    text = "Přihlášení k upload serveru (Stremio streamy, Sdílej.cz, Smart Remux). " +
-                        "Zadej URL i s https://. Heslo se uloží pro automatické obnovení relace.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("URL serveru") },
-                    placeholder = { Text("https://upload.jankoran.cz") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Heslo") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(12.dp))
-                if (uiState.isLoading) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                } else {
-                    Button(
-                        onClick = { viewModel.saveBaseUrl(url); viewModel.login(password) },
-                        enabled = url.isNotBlank() && password.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Přihlásit") }
-                }
-                uiState.error?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Chyba: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-            }
+            Text(
+                text = if (uiState.isLoggedIn) "Přihlášen: ${viewModel.baseUrl}" else "Nenastaveno",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (uiState.isLoggedIn) MaterialTheme.colorScheme.primary
+                else Color.White.copy(alpha = 0.65f),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Stremio streamy, Sdílej.cz, Smart Remux.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+            ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
         }
     }
 }
@@ -607,17 +528,12 @@ private fun UploaderSection(
 private fun AbsSection(
     configured: Boolean,
     baseUrl: String,
-    loading: Boolean,
-    error: String?,
     hideFinishedEpisodes: Boolean,
-    onLogin: (url: String, user: String, pass: String) -> Unit,
-    onLogout: () -> Unit,
     onToggleHideFinished: (Boolean) -> Unit,
+    isAdmin: Boolean,
+    onOpenAdmin: () -> Unit,
 ) {
-    var url by remember(baseUrl) { mutableStateOf(baseUrl.ifBlank { "https://poslech.jankoran.cz" }) }
-    var user by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-
+    // Plan VAULT — jen stav + playback toggle. Přihlášení ABS se spravuje v sekci Správa.
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
@@ -626,23 +542,12 @@ private fun AbsSection(
             Text("Audiobookshelf", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Přihlášení k serveru audioknih pro sekci Poslech. Heslo se uloží pro automatické obnovení relace.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                text = if (configured) "Připojeno: $baseUrl" else "Nenastaveno",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (configured) MaterialTheme.colorScheme.primary
+                else Color.White.copy(alpha = 0.65f),
             )
-            Spacer(Modifier.height(12.dp))
             if (configured) {
-                Text(
-                    text = "Připojeno: $baseUrl",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = onLogout,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("Odhlásit Audiobookshelf") }
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -655,47 +560,8 @@ private fun AbsSection(
                     }
                     Switch(checked = hideFinishedEpisodes, onCheckedChange = onToggleHideFinished)
                 }
-            } else {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("URL serveru") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = user,
-                    onValueChange = { user = it },
-                    label = { Text("Uživatel") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Heslo") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(12.dp))
-                if (loading) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                } else {
-                    Button(
-                        onClick = { onLogin(url, user, password) },
-                        enabled = url.isNotBlank() && user.isNotBlank() && password.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Přihlásit") }
-                }
-                error?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Chyba: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
             }
+            ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
         }
     }
 }

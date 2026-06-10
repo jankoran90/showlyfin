@@ -215,8 +215,13 @@ class AbsPreferences @Inject constructor(
             prefs.edit { putString(KEY_DEVICE, it) }
         }
 
+    // Plan VAULT — „configured" stačí URL + (token NEBO heslo). Když profil z admin Správy přinese
+    // jen url/user/heslo (žádný token, protože admin token nemintuje), s původním `&& token` byl
+    // `isConfigured=false` → app ABS request vůbec neposlala → AbsAuthInterceptor neměl 401 co
+    // re-přihlásit = deadlock (Poslech „Nenastaveno"). Stejný vzor jako POLISH fix u Uploaderu.
+    // S heslem request projde → 401 → interceptor relogin heslem → token se mintne a zahojí.
     val isConfigured: Boolean
-        get() = baseUrl.isNotBlank() && token.isNotBlank()
+        get() = baseUrl.isNotBlank() && (token.isNotBlank() || (username.isNotBlank() && password.isNotBlank()))
 
     fun saveCredentials(url: String, user: String, pass: String, token: String) {
         prefs.edit {

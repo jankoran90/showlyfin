@@ -476,6 +476,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.Settings -> SettingsScreen(
                     isAdmin = gateState.activeProfile?.isAdmin != false,
                     onOpenUploader = { currentDestination = Destination.Uploader },
+                    onOpenAdmin = { currentDestination = Destination.Admin },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Admin -> AdminScreen(
