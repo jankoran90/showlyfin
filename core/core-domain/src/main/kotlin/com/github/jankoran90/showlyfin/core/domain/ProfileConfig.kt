@@ -41,6 +41,13 @@ data class ProfileConfig(
     val credentials: CredentialBundle = CredentialBundle(),
     /** Ostatní vzhledové/chování toggly (volné klíče → string hodnoty). */
     val appearance: Map<String, String> = emptyMap(),
+    /**
+     * Lock-mapa (Plan WARDEN W0): logické klíče ([LockKeys]), které jsou **admin-zamčené** =
+     * uživatel je nesmí editovat a do efektivního configu se vždy berou ze **šablony**, ne z
+     * uživatelského override. Smysl má jen na **šabloně**; na uživatelském override se ignoruje.
+     * Prázdné = nic zamčené (legacy/bez šablony = plná volnost).
+     */
+    val lockedKeys: Set<String> = emptySet(),
 ) {
     fun isSectionVisible(key: String): Boolean =
         visibleSections.isEmpty() || visibleSections.contains(key)
@@ -58,6 +65,9 @@ data class ProfileConfig(
         return true
     }
 
+    /** true = klíč je touto šablonou zamčený (uživatel needituje, bere se hodnota šablony). */
+    fun isLocked(lockKey: String): Boolean = lockedKeys.contains(lockKey)
+
     companion object {
         /** Default config — bez jakýchkoli restrikcí. */
         val DEFAULT = ProfileConfig()
@@ -72,6 +82,53 @@ data class ProfileConfig(
             else runCatching { json.decodeFromString<ProfileConfig>(raw) }.getOrDefault(DEFAULT)
 
         fun toJson(config: ProfileConfig): String = json.encodeToString(config)
+
+        /**
+         * Plan WARDEN W0 — efektivní config = **šablona ⊕ uživatelský override**.
+         *
+         * Model granularity (rozhodnutí W0): override drží *kompletní* uživatelskou konfiguraci
+         * (při přiřazení šablony se inicializuje jejím snapshotem). Merge proto vychází z [override]
+         * a **přepíše jen zamčená pole** hodnotou ze [template] ([ProfileConfig.lockedKeys] šablony).
+         * Tím odpadá nejednoznačnost „prázdná množina = nenastaveno vs. záměrně prázdné": odemčená
+         * pole vlastní uživatel, zamčená vždy živě diktuje šablona (admin změní zámek → propíše se
+         * všem). [template] == null (legacy profil bez šablony) → override beze změny (plná volnost).
+         */
+        fun mergeEffective(template: ProfileConfig?, override: ProfileConfig): ProfileConfig {
+            if (template == null) return override
+            val locked = template.lockedKeys
+            if (locked.isEmpty()) return override
+            var r = override
+            if (LockKeys.VISIBLE_SECTIONS in locked) r = r.copy(visibleSections = template.visibleSections)
+            if (LockKeys.JELLYFIN_LIBRARIES in locked) r = r.copy(jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist)
+            if (LockKeys.ABS_LIBRARIES in locked) r = r.copy(absLibraryWhitelist = template.absLibraryWhitelist)
+            if (LockKeys.GENRES in locked) r = r.copy(allowedGenres = template.allowedGenres, blockedGenres = template.blockedGenres)
+            if (LockKeys.AGE_RATING in locked) r = r.copy(preferredAgeRating = template.preferredAgeRating)
+            if (LockKeys.DEFAULT_SECTION in locked) r = r.copy(defaultSection = template.defaultSection)
+            if (LockKeys.APPEARANCE in locked) r = r.copy(appearance = template.appearance)
+            if (LockKeys.CREDENTIALS in locked) r = r.copy(credentials = template.credentials)
+            return r
+        }
+    }
+
+    /**
+     * Logické klíče pro [lockedKeys] (Plan WARDEN). Hrubá granularita (per-doména, ne per-field) —
+     * dostatečná pro WARDEN a jednoduchá na UI. Případné zjemnění je otevřené rozhodnutí plánu.
+     */
+    object LockKeys {
+        const val VISIBLE_SECTIONS = "visibleSections"
+        const val JELLYFIN_LIBRARIES = "jellyfinLibraries"
+        const val ABS_LIBRARIES = "absLibraries"
+        const val GENRES = "genres"
+        const val AGE_RATING = "ageRating"
+        const val DEFAULT_SECTION = "defaultSection"
+        const val APPEARANCE = "appearance"
+        const val CREDENTIALS = "credentials"
+
+        /** Všechny zamykatelné klíče (pro authoring UI ve W3). */
+        val ALL = setOf(
+            VISIBLE_SECTIONS, JELLYFIN_LIBRARIES, ABS_LIBRARIES, GENRES,
+            AGE_RATING, DEFAULT_SECTION, APPEARANCE, CREDENTIALS,
+        )
     }
 
     /** Klíče sekcí pro [visibleSections]. */

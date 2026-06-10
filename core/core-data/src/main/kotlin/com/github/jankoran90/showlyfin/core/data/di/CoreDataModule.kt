@@ -40,6 +40,29 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/**
+ * v5 → v6 (Plan WARDEN W0): profilová architektura admin/uživatel.
+ * - `profile` += `templateUuid` (přiřazená šablona; null = legacy/bez šablony = plná volnost) +
+ *   `loginPinHash` (volitelný app-login PIN, hash; null = bez hesla).
+ * - nová tabulka `template` = pojmenovaná znovupoužitelná šablona (config + lock-mapa + věk).
+ * Stávající profily zůstanou bez šablony (NULL) → efektivní config = jejich override (beze změny).
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE profile ADD COLUMN templateUuid TEXT")
+        db.execSQL("ALTER TABLE profile ADD COLUMN loginPinHash TEXT")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `template` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`templateUuid` TEXT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`configJson` TEXT, " +
+                "`maxAgeRating` TEXT, " +
+                "`createdAt` INTEGER NOT NULL)"
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object CoreDataModule {
@@ -52,12 +75,15 @@ object CoreDataModule {
         context,
         ShowlyfinDatabase::class.java,
         "showlyfin.db",
-    ).addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+    ).addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
 
     @Provides
     fun providesProfileDao(db: ShowlyfinDatabase) = db.profileDao()
+
+    @Provides
+    fun providesTemplateDao(db: ShowlyfinDatabase) = db.templateDao()
 
     @Provides
     @Singleton

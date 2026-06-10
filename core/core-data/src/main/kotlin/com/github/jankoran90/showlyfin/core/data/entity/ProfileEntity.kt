@@ -22,5 +22,15 @@ data class ProfileEntity(
     val configJson: String? = null,
     /** Cesta k vlastní lokální fotce profilu (filesDir/avatars/<id>.jpg). null = Jellyfin avatar/iniciála. */
     val avatarPath: String? = null,
+    /**
+     * Plan WARDEN: přiřazená šablona ([com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity.templateUuid]).
+     * null = legacy / bez šablony = plná volnost („Dospělý/vše"). Efektivní config = šablona ⊕ override.
+     */
+    val templateUuid: String? = null,
+    /**
+     * Plan WARDEN: hash volitelného app-login PINu uživatele. null = bez hesla (rychlý vstup).
+     * Admin profil ho má vždy nastavený. Hash, ne plaintext.
+     */
+    val loginPinHash: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
 )
