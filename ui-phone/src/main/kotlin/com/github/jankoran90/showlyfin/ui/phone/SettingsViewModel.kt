@@ -69,6 +69,8 @@ data class SettingsUiState(
     val hideFinishedEpisodes: Boolean = false,
     // Plan PROFILES Fáze 4E — seznam ABS knihoven (audioknihy+podcasty) pro admin authoring whitelistu
     val absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary> = emptyList(),
+    // Plan HELM — seznam Jellyfin knihoven (z backendu) pro in-app admin editor whitelistu.
+    val adminJellyfinLibraries: List<com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef> = emptyList(),
     val listen: ListenSettings = ListenSettings(),
     // Stahování na ABS server — per-podcast auto-download (přesunuto z detailu)
     val serverPodcasts: List<com.github.jankoran90.showlyfin.data.abs.model.PodcastServerAutoDownload> = emptyList(),
@@ -426,6 +428,44 @@ class SettingsViewModel @Inject constructor(
     /** Admin write-through editace config balíku profilu (Plan PROFILES 1E): sekce/žánry. */
     fun updateProfileConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
         viewModelScope.launch { profileRepository.updateConfig(profileId, transform) }
+    }
+
+    // ── Plan HELM — in-app admin editor (knihovny + PIN) ─────────────────────────
+
+    /** Plan HELM — načte seznam Jellyfin knihoven z backendu pro editor whitelistu (admin tab). */
+    fun loadAdminJellyfinLibraries() {
+        viewModelScope.launch {
+            val uid = _uiState.value.profiles.firstOrNull { it.isAdmin }?.jellyfinUserId
+            val libs = profileRepository.fetchJellyfinLibraries(uid).orEmpty()
+            _uiState.update { it.copy(adminJellyfinLibraries = libs) }
+        }
+    }
+
+    /** Plan HELM — nastaví app-login PIN profilu (hash). Prázdné = zrušit PIN. */
+    fun setProfilePin(profileId: Long, pin: String) {
+        viewModelScope.launch {
+            val trimmed = pin.trim()
+            val hash = if (trimmed.isBlank()) null
+            else com.github.jankoran90.showlyfin.core.domain.PinHasher.hash(trimmed)
+            profileRepository.setLoginPinHash(profileId, hash)
+        }
+    }
+
+    /** Plan HELM — zruší PIN profilu. */
+    fun clearProfilePin(profileId: Long) {
+        viewModelScope.launch { profileRepository.setLoginPinHash(profileId, null) }
+    }
+
+    // ── Plan HELM — záloha (export/import balíku profilů+šablon z backendu) ───────
+
+    /** Stáhne balík profilů+šablon z backendu (raw JSON); [onReady] dostane null při selhání. */
+    fun exportProfiles(onReady: (String?) -> Unit) {
+        viewModelScope.launch { onReady(profileRepository.exportProfiles()) }
+    }
+
+    /** Nahraje balík profilů+šablon na backend; [onDone] true = úspěch. */
+    fun importProfiles(json: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch { onDone(profileRepository.importProfiles(json)) }
     }
 
     // ── Šablony — in-app admin authoring (Plan WARDEN W3c část 2) ──────────────

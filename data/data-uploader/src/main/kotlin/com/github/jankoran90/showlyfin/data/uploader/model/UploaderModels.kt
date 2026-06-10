@@ -199,6 +199,8 @@ data class ProfileMetaRequest(
     val jellyfinUserId: String,
     // Plan WARDEN W3c — přiřazená šablona (null = neposílat/nezměnit; "" = zrušit přiřazení).
     val templateUuid: String? = null,
+    // Plan HELM — app-login PIN hash (null = neposílat/nezměnit; "" = zrušit PIN). Gson vynechá null.
+    val loginPinHash: String? = null,
 )
 
 // ── TMM Pipeline models ──────────────────────────────────────────────────────

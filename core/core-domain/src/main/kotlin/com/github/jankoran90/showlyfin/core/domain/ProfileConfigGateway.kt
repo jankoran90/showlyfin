@@ -129,4 +129,10 @@ interface ProfileConfigGateway {
 
     /** Plan HELM — obnova: import balíku profilů + šablon na backend. true = úspěch. */
     suspend fun importProfiles(json: String): Boolean
+
+    /**
+     * Plan HELM — write-through app-login PINu profilu na backend (cross-device). [pinHash] = SHA-256
+     * hash, nebo `""` = zrušit PIN. Best-effort; selhání se tiše ignoruje (lokál je už zapsaný).
+     */
+    suspend fun pushLoginPin(key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, pinHash: String)
 }

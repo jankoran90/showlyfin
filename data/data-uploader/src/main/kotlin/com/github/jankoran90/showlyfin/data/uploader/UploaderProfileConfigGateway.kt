@@ -180,4 +180,10 @@ internal class UploaderProfileConfigGateway @Inject constructor(
             .onFailure { Timber.w(it, "[HELM] importProfiles selhal") }
             .getOrDefault(false)
     }
+
+    override suspend fun pushLoginPin(key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, pinHash: String) {
+        if (!isAvailable() || key.isBlank()) return
+        runCatching { remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId, loginPinHash = pinHash) }
+            .onFailure { Timber.w(it, "[HELM] pushLoginPin($key) selhal") }
+    }
 }

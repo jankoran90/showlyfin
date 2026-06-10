@@ -145,6 +145,14 @@ class ProfileRepository @Inject constructor(
         if (_activeProfile.value?.id == profileId) _activeProfile.value = dao.getById(profileId)
     }
 
+    /** Plan HELM — nastaví/zruší app-login PIN profilu (hash; null = zrušit) + write-through na backend. */
+    suspend fun setLoginPinHash(profileId: Long, hash: String?) {
+        val profile = dao.getById(profileId) ?: return
+        dao.update(profile.copy(loginPinHash = hash))
+        if (_activeProfile.value?.id == profileId) _activeProfile.value = dao.getById(profileId)
+        configGateway.pushLoginPin(profile.backendKey(), profile.name, profile.isAdmin, profile.jellyfinUserId, hash ?: "")
+    }
+
     /** Nastaví/zruší cestu k vlastní fotce profilu (Plan PROFILES 1D). */
     suspend fun setAvatarPath(profileId: Long, path: String?) {
         val profile = dao.getById(profileId) ?: return

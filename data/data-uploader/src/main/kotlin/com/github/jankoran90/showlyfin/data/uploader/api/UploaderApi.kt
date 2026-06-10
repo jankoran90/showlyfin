@@ -152,10 +152,10 @@ internal class UploaderApi(
         if (!resp.isSuccessful) throw HttpException(resp)
     }
 
-    override suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String?) {
+    override suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String?, loginPinHash: String?) {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        val resp = service.putProfile("$base/api/profiles/${enc(key)}", cookie, ProfileMetaRequest(name, isAdmin, jellyfinUserId, templateUuid))
+        val resp = service.putProfile("$base/api/profiles/${enc(key)}", cookie, ProfileMetaRequest(name, isAdmin, jellyfinUserId, templateUuid, loginPinHash))
         if (!resp.isSuccessful) throw HttpException(resp)
     }
 

@@ -404,6 +404,7 @@ fun SettingsScreen(
                 AdminRestrictionsSection(
                     profiles = uiState.profiles.filter { it.id != activeProfile.id },
                     absLibraries = uiState.absLibraries,
+                    jellyfinLibraries = uiState.adminJellyfinLibraries,
                     templates = uiState.templates,
                     onUpdateAgeRating = { profileId, rating ->
                         viewModel.updateProfileAgeRating(profileId, rating)
@@ -414,6 +415,8 @@ fun SettingsScreen(
                     onAssignTemplate = { profileId, uuid ->
                         viewModel.assignTemplate(profileId, uuid)
                     },
+                    onSetPin = { profileId, pin -> viewModel.setProfilePin(profileId, pin) },
+                    onClearPin = { profileId -> viewModel.clearProfilePin(profileId) },
                 )
             }
         }
@@ -1029,7 +1032,7 @@ private fun UpdateSection() {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProfilesSection(
+internal fun ProfilesSection(
     profiles: List<ProfileEntity>,
     activeProfileId: Long?,
     canManage: Boolean,
@@ -1241,13 +1244,16 @@ private val LANDING_OPTIONS = listOf(
  * (push na backend pod stabilním `profileUuid` → bez prolévání mezi profily).
  */
 @Composable
-private fun AdminRestrictionsSection(
+internal fun AdminRestrictionsSection(
     profiles: List<ProfileEntity>,
     absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
+    jellyfinLibraries: List<com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef>,
     templates: List<TemplateEntity>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
     onUpdateConfig: (Long, (ProfileConfig) -> ProfileConfig) -> Unit,
     onAssignTemplate: (Long, String?) -> Unit,
+    onSetPin: (Long, String) -> Unit,
+    onClearPin: (Long) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
@@ -1257,14 +1263,14 @@ private fun AdminRestrictionsSection(
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            "Pro každý profil nastav hlavní sekci, viditelné sekce/podsekce, žánry a věk. " +
-                "Aplikuje se při přepnutí profilu. Každý profil má vlastní izolované nastavení.",
+            "Pro každý profil nastav hlavní sekci, viditelné sekce/podsekce, knihovny, žánry, věk, " +
+                "PIN a přihlašovací údaje. Aplikuje se při přepnutí profilu. Každý profil má vlastní izolované nastavení.",
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.6f),
         )
         Spacer(Modifier.height(10.dp))
         profiles.forEach { profile ->
-            ProfileAuthoringBlock(profile, absLibraries, templates, onUpdateAgeRating, onUpdateConfig, onAssignTemplate)
+            ProfileAuthoringBlock(profile, absLibraries, jellyfinLibraries, templates, onUpdateAgeRating, onUpdateConfig, onAssignTemplate, onSetPin, onClearPin)
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -1275,10 +1281,13 @@ private fun AdminRestrictionsSection(
 private fun ProfileAuthoringBlock(
     profile: ProfileEntity,
     absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
+    jellyfinLibraries: List<com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef>,
     templates: List<TemplateEntity>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
     onUpdateConfig: (Long, (ProfileConfig) -> ProfileConfig) -> Unit,
     onAssignTemplate: (Long, String?) -> Unit,
+    onSetPin: (Long, String) -> Unit,
+    onClearPin: (Long) -> Unit,
 ) {
     val cfg = ProfileConfig.fromJson(profile.configJson)
     var open by remember(profile.id) { mutableStateOf(false) }
@@ -1350,6 +1359,31 @@ private fun ProfileAuthoringBlock(
                 }
                 Spacer(Modifier.height(12.dp))
 
+                // — Knihovny Jellyfin: whitelist (Plan HELM; nic = všechny) —
+                if (jellyfinLibraries.isNotEmpty()) {
+                    Text("Knihovny (Jellyfin) — nic zaškrtnuté = všechny", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    val jwl = cfg.jellyfinLibraryWhitelist
+                    jellyfinLibraries.forEach { lib ->
+                        val checked = jwl == null || lib.id in jwl
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(lib.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            Switch(
+                                checked = checked,
+                                onCheckedChange = { enabled ->
+                                    onUpdateConfig(profile.id) { c ->
+                                        val current = c.jellyfinLibraryWhitelist?.toMutableSet()
+                                            ?: jellyfinLibraries.map { it.id }.toMutableSet()
+                                        if (enabled) current.add(lib.id) else current.remove(lib.id)
+                                        val newWl = if (current.size == jellyfinLibraries.size) null else current.toList()
+                                        c.copy(jellyfinLibraryWhitelist = newWl)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
                 // — Poslech: whitelist ABS knihoven (Plan PROFILES Fáze 4E) —
                 if (cfg.isSectionVisible(ProfileConfig.Sections.POSLECH) && absLibraries.isNotEmpty()) {
                     Text("Poslech — knihovny (nic = všechny)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
@@ -1417,9 +1451,145 @@ private fun ProfileAuthoringBlock(
                     },
                     onSelect = { onUpdateAgeRating(profile.id, it) },
                 )
+                Spacer(Modifier.height(12.dp))
+
+                // — PIN (Plan HELM) —
+                ProfilePinEditor(
+                    hasPin = !profile.loginPinHash.isNullOrBlank(),
+                    onSetPin = { onSetPin(profile.id, it) },
+                    onClearPin = { onClearPin(profile.id) },
+                )
+                Spacer(Modifier.height(12.dp))
+
+                // — Přihlašovací údaje sub-appek (Plan HELM) —
+                ProfileCredentialsEditor(
+                    profileKey = profile.id,
+                    configJson = profile.configJson,
+                    current = cfg.credentials,
+                    onSave = { bundle -> onUpdateConfig(profile.id) { c -> c.copy(credentials = bundle) } },
+                )
             }
         }
     }
+}
+
+/** Plan HELM — nastavení/zrušení app-login PINu profilu (krátký rodinný kód). */
+@Composable
+private fun ProfilePinEditor(
+    hasPin: Boolean,
+    onSetPin: (String) -> Unit,
+    onClearPin: () -> Unit,
+) {
+    var pin by remember { mutableStateOf("") }
+    Text(
+        if (hasPin) "PIN: nastaven" else "PIN: bez PINu",
+        style = MaterialTheme.typography.labelMedium,
+        color = Color.White.copy(alpha = 0.7f),
+    )
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = pin,
+            onValueChange = { pin = it.filter { ch -> ch.isDigit() } },
+            label = { Text("Nový PIN") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        OutlinedButton(onClick = { if (pin.isNotBlank()) { onSetPin(pin); pin = "" } }) { Text("Nastavit") }
+    }
+    if (hasPin) {
+        OutlinedButton(
+            onClick = onClearPin,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        ) { Text("Zrušit PIN") }
+    }
+}
+
+/**
+ * Plan HELM — editor předvyplněných přihlašovacích údajů profilu (Jellyfin/ABS/Uploader). Ukládá do
+ * [ProfileConfig.credentials]; při fresh-installu/přepnutí se z balíku auto-přihlásí (GATEKEY).
+ */
+@Composable
+private fun ProfileCredentialsEditor(
+    profileKey: Long,
+    configJson: String?,
+    current: com.github.jankoran90.showlyfin.core.domain.CredentialBundle,
+    onSave: (com.github.jankoran90.showlyfin.core.domain.CredentialBundle) -> Unit,
+) {
+    var open by remember(profileKey) { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().clickable { open = !open },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Přihlašovací údaje", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+        Icon(
+            imageVector = if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+        )
+    }
+    if (open) {
+        // Lokální editovatelný stav inicializovaný z balíku; reset při změně profilu/configu.
+        var jfUrl by remember(profileKey, configJson) { mutableStateOf(current.jellyfin?.url ?: "") }
+        var jfUser by remember(profileKey, configJson) { mutableStateOf(current.jellyfin?.username ?: "") }
+        var jfPass by remember(profileKey, configJson) { mutableStateOf(current.jellyfin?.password ?: "") }
+        var absUrl by remember(profileKey, configJson) { mutableStateOf(current.abs?.url ?: "") }
+        var absUser by remember(profileKey, configJson) { mutableStateOf(current.abs?.username ?: "") }
+        var absPass by remember(profileKey, configJson) { mutableStateOf(current.abs?.password ?: "") }
+        var upUrl by remember(profileKey, configJson) { mutableStateOf(current.uploader?.url ?: "") }
+        var upPass by remember(profileKey, configJson) { mutableStateOf(current.uploader?.password ?: "") }
+
+        Spacer(Modifier.height(6.dp))
+        Text("Jellyfin", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        CredField("Jellyfin URL", jfUrl) { jfUrl = it }
+        CredField("Jellyfin jméno", jfUser) { jfUser = it }
+        CredField("Jellyfin heslo", jfPass, isPassword = true) { jfPass = it }
+        Spacer(Modifier.height(6.dp))
+        Text("Audiobookshelf", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        CredField("ABS URL", absUrl) { absUrl = it }
+        CredField("ABS jméno", absUser) { absUser = it }
+        CredField("ABS heslo", absPass, isPassword = true) { absPass = it }
+        Spacer(Modifier.height(6.dp))
+        Text("Uploader", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        CredField("Uploader URL", upUrl) { upUrl = it }
+        CredField("Uploader heslo", upPass, isPassword = true) { upPass = it }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = {
+            // Token zachovat ze stávajícího balíku (vyrobí se reálným přihlášením / GATEKEY hydratací).
+            val jf = com.github.jankoran90.showlyfin.core.domain.JellyfinCreds(
+                url = jfUrl.trim(),
+                userId = current.jellyfin?.userId ?: "",
+                token = current.jellyfin?.token ?: "",
+                username = jfUser.trim(),
+                password = jfPass.ifBlank { null },
+            )
+            val abs = com.github.jankoran90.showlyfin.core.domain.AbsCreds(
+                url = absUrl.trim(), username = absUser.trim(), password = absPass, token = current.abs?.token,
+            )
+            val up = com.github.jankoran90.showlyfin.core.domain.UploaderCreds(url = upUrl.trim(), password = upPass)
+            onSave(
+                current.copy(
+                    jellyfin = jf.takeIf { jfUrl.isNotBlank() || jfUser.isNotBlank() },
+                    abs = abs.takeIf { absUrl.isNotBlank() || absUser.isNotBlank() },
+                    uploader = up.takeIf { upUrl.isNotBlank() },
+                ),
+            )
+        }) { Text("Uložit přihlášení") }
+    }
+}
+
+/** Plan HELM — řádek přihlašovacího pole (kompaktní). */
+@Composable
+private fun CredField(label: String, value: String, isPassword: Boolean = false, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = if (isPassword) androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(4.dp))
 }
 
 @Composable
@@ -1528,7 +1698,7 @@ private fun TemplateAssignDropdown(
 
 /** Admin sekce authoringu šablon — seznam editorů + vytvoření nové. */
 @Composable
-private fun TemplateAuthoringSection(
+internal fun TemplateAuthoringSection(
     templates: List<TemplateEntity>,
     absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
     onCreate: (String) -> Unit,

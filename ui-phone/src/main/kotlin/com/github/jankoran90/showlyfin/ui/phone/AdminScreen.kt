@@ -1,21 +1,33 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,6 +59,12 @@ fun AdminScreen(
     val pagerState = rememberPagerState(initialPage = 0) { tabs.size }
     val scope = rememberCoroutineScope()
 
+    // Plan HELM — načti zdroje editoru (knihovny) při otevření admin obrazovky.
+    LaunchedEffect(Unit) {
+        viewModel.loadAdminJellyfinLibraries()
+        viewModel.loadAbsLibraries()
+    }
+
     Column(modifier.fillMaxSize()) {
         ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
@@ -67,20 +85,124 @@ fun AdminScreen(
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             when (tabs[page]) {
-                AdminTab.PROFILY -> AdminTabPlaceholder("Profily — plný editor (H3)")
-                AdminTab.SABLONY -> AdminTabPlaceholder("Šablony — lock-mapa (H4)")
-                AdminTab.ZALOHA -> AdminTabPlaceholder("Záloha — export/import (H5)")
+                AdminTab.PROFILY -> AdminTabScroll {
+                    // Správa profilů (přidat/přejmenovat/foto/výchozí/smazat).
+                    ProfilesSection(
+                        profiles = uiState.profiles,
+                        activeProfileId = uiState.activeProfileId,
+                        canManage = true,
+                        onSwitch = { viewModel.switchProfile(it) },
+                        onSetDefault = { viewModel.setDefaultProfile(it) },
+                        onSetTvDefault = { viewModel.setTvDefaultProfile(it) },
+                        onDelete = { viewModel.deleteProfile(it) },
+                        onLogout = { viewModel.logoutProfile() },
+                        onRename = { id, name -> viewModel.renameProfile(id, name) },
+                        onSetAvatar = { id, uri -> viewModel.setProfileAvatar(id, uri) },
+                        onAddProfile = { viewModel.addProfile() },
+                    )
+                    // Per-profil editor (sekce/knihovny/žánry/věk/PIN/přihlášení) — všechny profily.
+                    if (uiState.profiles.isNotEmpty()) {
+                        AdminRestrictionsSection(
+                            profiles = uiState.profiles,
+                            absLibraries = uiState.absLibraries,
+                            jellyfinLibraries = uiState.adminJellyfinLibraries,
+                            templates = uiState.templates,
+                            onUpdateAgeRating = { id, rating -> viewModel.updateProfileAgeRating(id, rating) },
+                            onUpdateConfig = { id, transform -> viewModel.updateProfileConfig(id, transform) },
+                            onAssignTemplate = { id, uuid -> viewModel.assignTemplate(id, uuid) },
+                            onSetPin = { id, pin -> viewModel.setProfilePin(id, pin) },
+                            onClearPin = { id -> viewModel.clearProfilePin(id) },
+                        )
+                    }
+                }
+                AdminTab.SABLONY -> AdminTabScroll {
+                    TemplateAuthoringSection(
+                        templates = uiState.templates,
+                        absLibraries = uiState.absLibraries,
+                        onCreate = { viewModel.createTemplate(it) },
+                        onSave = { tpl, name, age, cfg -> viewModel.saveTemplate(tpl, name, age, cfg) },
+                        onDelete = { viewModel.deleteTemplate(it) },
+                    )
+                }
+                AdminTab.ZALOHA -> AdminBackupTab(viewModel)
             }
         }
     }
 }
 
-/** Plan HELM H2 — dočasný placeholder obsahu tabu (nahradí H3–H5). */
+/** Plan HELM — scrollovatelný kontejner obsahu tabu. */
 @Composable
-private fun AdminTabPlaceholder(label: String) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(label)
+private fun AdminTabScroll(content: @Composable () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        content()
+    }
+}
+
+/**
+ * Plan HELM H5 — tab Záloha: export balíku profilů+šablon z backendu do souboru (SAF) a import zpět.
+ * Backend zůstává zdrojem pravdy; tohle je jen ruční záloha/obnova celého balíku.
+ */
+@Composable
+private fun AdminBackupTab(viewModel: SettingsViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.exportProfiles { json ->
+            if (json == null) { status = "Export selhal (backend nedostupný?)"; return@exportProfiles }
+            scope.launch {
+                val ok = runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                }.isSuccess
+                status = if (ok) "Záloha uložena." else "Zápis do souboru selhal."
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val json = runCatching {
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            }.getOrNull()
+            if (json.isNullOrBlank()) { status = "Soubor nelze přečíst."; return@launch }
+            viewModel.importProfiles(json) { ok ->
+                status = if (ok) "Import dokončen. Balík obnoven na backendu." else "Import selhal."
+            }
+        }
+    }
+
+    AdminTabScroll {
+        Text("Záloha profilů a šablon", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text(
+            "Export stáhne celý balík profilů + šablon (vč. přihlašovacích údajů) z backendu do souboru. " +
+                "Import ho nahraje zpět. Backend je zdroj pravdy.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.6f),
+        )
+        OutlinedButton(
+            onClick = { exportLauncher.launch("showlyfin-profily-zaloha.json") },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Exportovat do souboru") }
+        OutlinedButton(
+            onClick = { importLauncher.launch(arrayOf("application/json")) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Importovat ze souboru") }
+        status?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
