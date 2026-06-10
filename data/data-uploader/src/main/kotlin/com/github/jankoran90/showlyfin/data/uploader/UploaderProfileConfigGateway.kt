@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.data.uploader
 
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
+import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
 import com.github.jankoran90.showlyfin.core.domain.TemplatePayload
 import com.google.gson.JsonParser
 import timber.log.Timber
@@ -22,13 +23,60 @@ internal class UploaderProfileConfigGateway @Inject constructor(
     private fun baseUrl(): String = prefs.getString("uploader_base_url", "")?.trim().orEmpty()
     private fun cookie(): String = prefs.getString("uploader_session_cookie", "")?.trim().orEmpty()
 
+    /** Doplní scheme, když chybí (uživatel zadal jen host), a odřízne koncové „/". */
+    private fun normalizeUrl(raw: String): String = raw.trim().trimEnd('/').let {
+        if (it.isEmpty() || it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
+    }
+
     override suspend fun isAvailable(): Boolean = baseUrl().isNotBlank() && cookie().isNotBlank()
+
+    override suspend fun login(password: String, baseUrlOverride: String?): Boolean {
+        // URL: override (pokročilé) → uložená → zapečená default. Pak normalizace scheme.
+        val resolved = baseUrlOverride?.trim().orEmpty()
+            .ifBlank { baseUrl() }
+            .ifBlank { ProfileConfigGateway.DEFAULT_BASE_URL }
+        val url = normalizeUrl(resolved)
+        return runCatching {
+            val sessionCookie = remote.login(url, password)
+            if (sessionCookie.isBlank()) return@runCatching false
+            // Ulož URL + cookie + heslo (heslo → interceptor umí auto-relogin po 401), jako UploaderViewModel.
+            prefs.edit()
+                .putString("uploader_base_url", url)
+                .putString("uploader_session_cookie", sessionCookie)
+                .putString("uploader_password", password)
+                .apply()
+            true
+        }.onFailure { Timber.w(it, "[GATEKEY] hlavní login selhal") }.getOrDefault(false)
+    }
 
     override suspend fun fetchConfig(key: String): String? {
         if (!isAvailable() || key.isBlank()) return null
         return runCatching { remote.getProfileConfig(baseUrl(), cookie(), key) }
             .onFailure { Timber.w(it, "[Profiles] fetchConfig($key) selhal") }
             .getOrNull()
+    }
+
+    override suspend fun fetchAllProfiles(): List<ProfileMeta>? {
+        if (!isAvailable()) return null
+        return runCatching {
+            val raw = remote.getProfilesMeta(baseUrl(), cookie()) ?: return@runCatching emptyList()
+            JsonParser.parseString(raw).asJsonArray.mapNotNull { el ->
+                val o = el.asJsonObject
+                fun str(field: String): String? = o.get(field)?.takeIf { !it.isJsonNull }?.asString
+                val jfUserId = str("jellyfinUserId").orEmpty()
+                val key = str("key") ?: jfUserId.ifBlank { return@mapNotNull null }
+                ProfileMeta(
+                    key = key,
+                    name = str("name").orEmpty(),
+                    isAdmin = o.get("isAdmin")?.takeIf { !it.isJsonNull }?.asBoolean ?: false,
+                    jellyfinUserId = jfUserId,
+                    avatarTag = str("avatarTag"),
+                    templateUuid = str("templateUuid"),
+                    loginPinHash = str("loginPinHash"),
+                    hasConfig = o.get("hasConfig")?.takeIf { !it.isJsonNull }?.asBoolean ?: false,
+                )
+            }
+        }.onFailure { Timber.w(it, "[GATEKEY] fetchAllProfiles selhal") }.getOrNull()
     }
 
     override suspend fun pushConfig(key: String, json: String, name: String, isAdmin: Boolean, jellyfinUserId: String) {

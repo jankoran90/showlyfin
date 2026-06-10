@@ -77,6 +77,7 @@ import com.github.jankoran90.showlyfin.feature.uploader.LibraryDetailScreen
 import com.github.jankoran90.showlyfin.feature.uploader.MoveStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.ReviewStepScreen
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderScreen
+import com.github.jankoran90.showlyfin.feature.jellyfin.setup.MainLoginScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfileGateViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfilePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ServerSetupScreen
@@ -159,11 +160,23 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         val gateViewModel: ProfileGateViewModel = hiltViewModel()
         val gateState by gateViewModel.state.collectAsStateWithLifecycle()
 
-        if (gateState.isLoading) {
+        // Plan GATEKEY G-A3: během stahování rosteru drž spinner (ať neproblikne ServerSetup).
+        if (gateState.isLoading || gateState.seeding) {
             androidx.compose.foundation.layout.Box(
                 Modifier.fillMaxSize(),
                 contentAlignment = androidx.compose.ui.Alignment.Center,
             ) { CircularProgressIndicator() }
+            return@ShowlyfinPhoneTheme
+        }
+
+        // Plan GATEKEY G-A1: čistá instalace → hlavní login (backend heslo) PŘED ServerSetup/pickerem.
+        if (gateState.needsMainLogin) {
+            MainLoginScreen(
+                isLoading = gateState.mainLoginLoading,
+                error = gateState.mainLoginError,
+                onLogin = { password, urlOverride -> gateViewModel.submitMainLogin(password, urlOverride) },
+                modifier = Modifier.fillMaxSize(),
+            )
             return@ShowlyfinPhoneTheme
         }
 

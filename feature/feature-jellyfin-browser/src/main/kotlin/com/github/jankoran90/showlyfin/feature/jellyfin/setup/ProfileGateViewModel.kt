@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.PinHasher
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -28,35 +30,90 @@ data class ProfileGateState(
     val pendingPinProfile: ProfileEntity? = null,
     /** Plan WARDEN W1: poslední zadaný PIN byl špatný. */
     val pinError: Boolean = false,
+    /**
+     * Plan GATEKEY G-A1: čistá instalace (žádná lokální data + backend nepřihlášen) → ukázat **hlavní
+     * login obrazovku** před ServerSetup/pickerem. Po úspěšném loginu → false.
+     */
+    val needsMainLogin: Boolean = false,
+    /** Plan GATEKEY G-A1: probíhá hlavní login (spinner v tlačítku). */
+    val mainLoginLoading: Boolean = false,
+    /** Plan GATEKEY G-A1: hlavní login selhal (špatné heslo / síť). */
+    val mainLoginError: String? = null,
+    /** Plan GATEKEY G-A3: stahuje se roster profilů z backendu (drží spinner místo ServerSetup). */
+    val seeding: Boolean = false,
 )
 
 @HiltViewModel
 class ProfileGateViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
+    private val configGateway: ProfileConfigGateway,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileGateState())
     val state: StateFlow<ProfileGateState> = _state.asStateFlow()
 
+    /**
+     * Plan GATEKEY G-A1 — dostupnost backendu (uploader URL+cookie). null = ještě nezjištěno (drží
+     * spinner, ať neproblikne ServerSetup), false = nepřihlášen (fresh install → hlavní login),
+     * true = přihlášen. Po úspěšném [submitMainLogin] se nastaví na true.
+     */
+    private val uploaderAvailable = MutableStateFlow<Boolean?>(null)
+
     init {
-        profileRepository.observeAll()
-            .combine(profileRepository.activeProfile) { profiles, active -> profiles to active }
-            .onEach { (profiles, active) ->
-                _state.value = _state.value.copy(
-                    profiles = profiles,
-                    activeProfile = active,
-                    isLoading = false,
-                )
+        viewModelScope.launch {
+            val available = configGateway.isAvailable()
+            uploaderAvailable.value = available
+            // Backend dostupný (cookie přežila / re-install s cookie) ale lokál prázdný → nasaď roster.
+            if (available && profileRepository.getAll().isEmpty()) seedRoster()
+        }
+
+        combine(
+            profileRepository.observeAll(),
+            profileRepository.activeProfile,
+            uploaderAvailable,
+        ) { profiles, active, available -> Triple(profiles, active, available) }
+            .onEach { (profiles, active, available) ->
+                _state.update {
+                    it.copy(
+                        profiles = profiles,
+                        activeProfile = active,
+                        // Čekáme na zjištění stavu backendu → žádné probliknutí ServerSetup.
+                        isLoading = available == null,
+                        // Fresh install = nepřihlášený backend + žádná lokální data → hlavní login.
+                        needsMainLogin = available == false && profiles.isEmpty() && active == null,
+                    )
+                }
             }
             .launchIn(viewModelScope)
+
         profileRepository.activeConfig
             .onEach { cfg ->
-                _state.value = _state.value.copy(
-                    visibleSections = cfg.visibleSections,
-                    defaultSection = cfg.defaultSection,
-                )
+                _state.update {
+                    it.copy(visibleSections = cfg.visibleSections, defaultSection = cfg.defaultSection)
+                }
             }
             .launchIn(viewModelScope)
+    }
+
+    /**
+     * Plan GATEKEY G-A1 — hlavní login: přihlásí app k backendu (heslo, URL zapečená nebo
+     * [urlOverride]). Úspěch → backend dostupný → fresh-install pokračuje na roster/picker (G-A3).
+     */
+    fun submitMainLogin(password: String, urlOverride: String?) {
+        viewModelScope.launch {
+            _state.update { it.copy(mainLoginLoading = true, mainLoginError = null) }
+            val ok = configGateway.login(password, urlOverride)
+            if (ok) {
+                uploaderAvailable.value = true
+                _state.update { it.copy(mainLoginLoading = false, needsMainLogin = false) }
+                // Plan GATEKEY G-A3: stáhni roster profilů z backendu → profil picker.
+                seedRoster()
+            } else {
+                _state.update {
+                    it.copy(mainLoginLoading = false, mainLoginError = "Přihlášení selhalo. Zkontroluj heslo a připojení.")
+                }
+            }
+        }
     }
 
     fun selectProfile(profile: ProfileEntity) {
@@ -88,6 +145,15 @@ class ProfileGateViewModel @Inject constructor(
 
     fun cancelPin() {
         _state.value = _state.value.copy(pendingPinProfile = null, pinError = false)
+    }
+
+    /** Plan GATEKEY G-A3 — stáhne backend roster a nasadí lokální stuby; observeAll pak ukáže picker. */
+    private fun seedRoster() {
+        viewModelScope.launch {
+            _state.update { it.copy(seeding = true) }
+            runCatching { profileRepository.seedFromBackendRoster() }
+            _state.update { it.copy(seeding = false) }
+        }
     }
 
     fun startAddProfile() {

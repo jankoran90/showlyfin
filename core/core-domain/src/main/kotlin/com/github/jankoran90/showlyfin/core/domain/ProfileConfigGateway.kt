@@ -22,12 +22,53 @@ data class TemplatePayload(
     val configJson: String,
 )
 
+/**
+ * Plan GATEKEY G-A3 — meta jednoho profilu z backend rosteru (`GET /api/profiles`), **bez creds**.
+ * Slouží k seedu lokálních `ProfileEntity` stubů po čisté instalaci → profil picker. Creds
+ * (Jellyfin/ABS/Uploader) se dotáhnou až při tapu profilu přes [ProfileConfigGateway.fetchConfig].
+ * [key] = backendový klíč (= `jellyfinUserId`); [hasConfig] = profil má na backendu uložený balík.
+ */
+data class ProfileMeta(
+    val key: String,
+    val name: String,
+    val isAdmin: Boolean,
+    val jellyfinUserId: String,
+    val avatarTag: String?,
+    val templateUuid: String?,
+    val loginPinHash: String?,
+    val hasConfig: Boolean,
+)
+
 interface ProfileConfigGateway {
+    companion object {
+        /**
+         * Plan GATEKEY G-A1 — zapečená URL backendu (jellyfin-uploader). Hlavní login se na ni
+         * přihlašuje bez nutnosti cokoli zadávat; „pokročilé" v login obrazovce ji umí přepsat.
+         */
+        const val DEFAULT_BASE_URL = "https://upload.jankoran.cz"
+    }
+
     /** true = uploader je nakonfigurován (URL + session cookie) a lze volat backend. */
     suspend fun isAvailable(): Boolean
 
+    /**
+     * Plan GATEKEY G-A1 — **hlavní login** do Showlyfinu = přihlášení k jellyfin-uploader backendu
+     * (heslo = `UPLOAD_PASSWORD`). URL je zapečená ([DEFAULT_BASE_URL]); [baseUrlOverride] (neprázdné)
+     * ji přepíše pro „pokročilé". Při úspěchu uloží URL + session cookie + heslo do kanonických prefs
+     * (`uploader_base_url`/`uploader_session_cookie`/`uploader_password`) → backend je dál dostupný
+     * pro roster i config. Vrací **true = úspěch** (cookie získána), false = selhání (špatné heslo/síť).
+     */
+    suspend fun login(password: String, baseUrlOverride: String? = null): Boolean
+
     /** Stáhne config balík profilu z backendu (raw JSON). null = nedostupné / profil neexistuje. */
     suspend fun fetchConfig(key: String): String?
+
+    /**
+     * Plan GATEKEY G-A3 — roster všech profilů z backendu (`GET /api/profiles`, jen meta — bez creds).
+     * null = nedostupné / nepřihlášeno. Po čisté instalaci se z něj nasadí lokální `ProfileEntity` stuby
+     * → profil picker.
+     */
+    suspend fun fetchAllProfiles(): List<ProfileMeta>?
 
     /** Uloží metadata + config balík profilu na backend. Selhání se tiše ignoruje. */
     suspend fun pushConfig(key: String, json: String, name: String, isAdmin: Boolean, jellyfinUserId: String)

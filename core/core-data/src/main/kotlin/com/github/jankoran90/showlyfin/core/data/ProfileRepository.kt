@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
+import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,6 +60,56 @@ class ProfileRepository @Inject constructor(
     fun observeAll(): Flow<List<ProfileEntity>> = dao.observeAll()
 
     suspend fun getAll(): List<ProfileEntity> = dao.getAll()
+
+    /**
+     * Plan GATEKEY G-A3 — nasadí lokální `ProfileEntity` **stuby** z backend rosteru (`/api/profiles`),
+     * aby profil picker po čisté instalaci ukázal profily bez ručního zadávání. Stub nese jen meta
+     * (jméno/admin/jellyfinUserId/šablona/PIN/avatarTag) — creds (serverUrl/token/config) jsou **prázdné**
+     * a dotáhnou se až při tapu profilu ([setActive] → [syncConfigFromBackend] + auto JF login = G-A4).
+     *
+     * Idempotentní: profil se páruje na `backendKey` (= jellyfinUserId/key). Existující se aktualizuje
+     * o meta (jméno/admin/šablona/PIN/avatar), creds zůstávají netknuté. Vrací počet **nově přidaných**.
+     */
+    suspend fun seedFromRoster(metas: List<ProfileMeta>): Int {
+        var added = 0
+        val existing = dao.getAll()
+        for (meta in metas) {
+            val key = meta.key.ifBlank { meta.jellyfinUserId }.ifBlank { continue }
+            val match = existing.firstOrNull { it.backendKey() == key }
+            if (match != null) {
+                // Roster je zdroj pravdy pro meta; creds (serverUrl/token/configJson) neměníme.
+                val updated = match.copy(
+                    name = meta.name.ifBlank { match.name },
+                    isAdmin = meta.isAdmin,
+                    avatarTag = meta.avatarTag ?: match.avatarTag,
+                    templateUuid = meta.templateUuid ?: match.templateUuid,
+                    loginPinHash = meta.loginPinHash ?: match.loginPinHash,
+                )
+                if (updated != match) dao.update(updated)
+            } else {
+                dao.insert(
+                    ProfileEntity(
+                        name = meta.name.ifBlank { "Profil" },
+                        serverUrl = "",
+                        jellyfinUserId = meta.jellyfinUserId.ifBlank { meta.key },
+                        jellyfinToken = "",
+                        avatarTag = meta.avatarTag,
+                        isAdmin = meta.isAdmin,
+                        templateUuid = meta.templateUuid,
+                        loginPinHash = meta.loginPinHash,
+                    )
+                )
+                added++
+            }
+        }
+        return added
+    }
+
+    /** Plan GATEKEY G-A3 — stáhne backend roster a nasadí stuby. Best-effort; vrací počet přidaných. */
+    suspend fun seedFromBackendRoster(): Int {
+        val metas = configGateway.fetchAllProfiles() ?: return 0
+        return seedFromRoster(metas)
+    }
 
     suspend fun count(): Int = dao.count()
 
