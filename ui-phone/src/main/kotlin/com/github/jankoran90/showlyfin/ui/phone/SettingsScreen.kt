@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -95,7 +96,12 @@ fun SettingsScreen(
         horizontalAlignment = Alignment.Start,
     ) {
         Text("Nastavení", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+
+        // Plan WARDEN W2: hlavička aktivního profilu (avatar + jméno + stav) vlevo, přepnout/odhlásit vpravo.
+        val activeHeaderProfile = uiState.profiles.firstOrNull { it.id == uiState.activeProfileId }
+        ProfileHeader(profile = activeHeaderProfile, onSwitch = { viewModel.logoutProfile() })
+        Spacer(Modifier.height(16.dp))
 
         // Plan PROFILES Fáze 4E: ne-admin (dětský) profil MÁ přístup do Nastavení (vzhled, poslech…),
         // jen NE do správy profilů a admin sekce omezení/práv (ty jsou gated `isAdmin` níže).
@@ -289,7 +295,12 @@ fun SettingsScreen(
         }
 
         CollapsibleSettingsSection("Vzhled", expanded) {
-            DetailModeSection()
+            // Plan WARDEN W2: ne-admin user vidí Vzhled jen pokud ho šablona nezamkla (lock-mapa).
+            if (isAdmin || ProfileConfig.LockKeys.APPEARANCE !in uiState.lockedKeys) {
+                DetailModeSection()
+            } else {
+                LockedByAdminNote()
+            }
         }
 
         CollapsibleSettingsSection("Účet & profily", expanded) {
@@ -351,6 +362,79 @@ fun SettingsScreen(
         uiState.error?.let {
             Spacer(Modifier.height(8.dp))
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** Plan WARDEN W2: hlavička Nastavení — avatar + jméno + stav vlevo, „Přepnout" (odhlásit→brána) vpravo. */
+@Composable
+private fun ProfileHeader(profile: ProfileEntity?, onSwitch: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                val localAvatar = profile?.avatarPath?.let { java.io.File(it) }?.takeIf { it.exists() }
+                val avatarUrl = profile?.avatarTag?.let { tag ->
+                    "${profile.serverUrl}/Users/${profile.jellyfinUserId}/Images/Primary?tag=$tag&quality=85"
+                }
+                when {
+                    localAvatar != null -> AsyncImage(localAvatar, profile?.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    avatarUrl != null -> AsyncImage(avatarUrl, profile?.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    else -> Text(
+                        (profile?.name ?: "?").take(1).uppercase(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    profile?.name ?: "Nepřihlášen",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                )
+                Text(
+                    if (profile?.isAdmin == true) "Admin · přihlášen" else "Přihlášen",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            TextButton(onClick = onSwitch) { Text("Přepnout") }
+        }
+    }
+}
+
+/** Plan WARDEN W2: blok zamčený správcem profilu (lock-mapa) — ne-admin user ho needituje. */
+@Composable
+private fun LockedByAdminNote() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Lock,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "Zamčeno správcem profilu.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.7f),
+            )
         }
     }
 }

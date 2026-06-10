@@ -41,6 +41,9 @@ data class SettingsUiState(
     val maxParentalRating: Int? = null,
     val profiles: List<ProfileEntity> = emptyList(),
     val activeProfileId: Long? = null,
+    /** Plan WARDEN W2: zamčené klíče efektivního configu aktivního profilu ([ProfileConfig.LockKeys]).
+     * Ne-admin user needituje zamčené bloky Nastavení. Prázdné = nic zamčené (admin/legacy/bez šablony). */
+    val lockedKeys: Set<String> = emptySet(),
     // Stremio / Comet filtr výsledků
     val streamFilter: StreamFilterPrefs? = null,
     val streamFilterLoading: Boolean = false,
@@ -149,6 +152,9 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
         profileRepository.activeProfile
             .onEach { active -> _uiState.update { it.copy(activeProfileId = active?.id) } }
+            .launchIn(viewModelScope)
+        profileRepository.activeConfig
+            .onEach { cfg -> _uiState.update { it.copy(lockedKeys = cfg.lockedKeys) } }
             .launchIn(viewModelScope)
         _uiState.update { it.copy(liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false), uploaderBaseUrl = uploaderBase) }
         refreshAbsState()

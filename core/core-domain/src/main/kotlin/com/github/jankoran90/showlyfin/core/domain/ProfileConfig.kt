@@ -96,8 +96,9 @@ data class ProfileConfig(
         fun mergeEffective(template: ProfileConfig?, override: ProfileConfig): ProfileConfig {
             if (template == null) return override
             val locked = template.lockedKeys
-            if (locked.isEmpty()) return override
-            var r = override
+            // Efektivní config nese zámky šablony → UI (Nastavení) ví, co smí uživatel editovat (W2).
+            var r = override.copy(lockedKeys = locked)
+            if (locked.isEmpty()) return r
             if (LockKeys.VISIBLE_SECTIONS in locked) r = r.copy(visibleSections = template.visibleSections)
             if (LockKeys.JELLYFIN_LIBRARIES in locked) r = r.copy(jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist)
             if (LockKeys.ABS_LIBRARIES in locked) r = r.copy(absLibraryWhitelist = template.absLibraryWhitelist)
