@@ -28,6 +28,18 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/**
+ * v4 → v5 (Plan PROFILES Fáze 4): přidá `profileUuid` = stabilní per-profil backend klíč nezávislý
+ * na Jellyfin účtu (fix „prolévání" configu mezi profily, které sdílejí jeden JF účet). Existující
+ * řádky se zpětně doplní náhodným uuid (`randomblob`), aby každý měl unikátní stabilní klíč.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE profile ADD COLUMN profileUuid TEXT NOT NULL DEFAULT ''")
+        db.execSQL("UPDATE profile SET profileUuid = lower(hex(randomblob(16))) WHERE profileUuid = '' OR profileUuid IS NULL")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object CoreDataModule {
@@ -40,7 +52,7 @@ object CoreDataModule {
         context,
         ShowlyfinDatabase::class.java,
         "showlyfin.db",
-    ).addMigrations(MIGRATION_3_4)
+    ).addMigrations(MIGRATION_3_4, MIGRATION_4_5)
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
 

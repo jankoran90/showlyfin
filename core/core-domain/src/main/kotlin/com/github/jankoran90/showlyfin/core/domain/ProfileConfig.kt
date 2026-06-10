@@ -25,6 +25,13 @@ data class ProfileConfig(
     val blockedGenres: Set<String> = emptySet(),
     /** Preferovaný věkový rating pro Discover — název [AgeRating]. null = bez omezení z profilu. */
     val preferredAgeRating: String? = null,
+    /**
+     * „Hlavní" sekce — která sekce/podsekce se profilu otevře po vstupu (Plan PROFILES Fáze 4).
+     * Hodnota = klíč ze [Sections] (spodní lišta: [Sections.SLEDUJ]/[Sections.POSLECH], nebo podsekce
+     * Sleduj: [Sections.KNIHOVNA]/[Sections.CHCI_VIDET]/[Sections.OBJEVIT]/[Sections.NA_RD]).
+     * null = výchozí (Sleduj / první podsekce).
+     */
+    val defaultSection: String? = null,
     /** Předvyplněné přihlašovací údaje sub-appek. */
     val credentials: CredentialBundle = CredentialBundle(),
     /** Ostatní vzhledové/chování toggly (volné klíče → string hodnoty). */

@@ -44,11 +44,16 @@ fun MainScreen(
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
     modifier: Modifier = Modifier,
     visibleSubsections: List<String> = emptyList(),
+    initialSubsection: String? = null,
 ) {
     val tabs = ALL_SUBSECTIONS
         .filter { visibleSubsections.isEmpty() || it.first in visibleSubsections }
         .ifEmpty { ALL_SUBSECTIONS }
-    val pagerState = rememberPagerState(initialPage = 0) { tabs.size }
+    // Plan PROFILES Fáze 4: „hlavní" podsekce profilu otevřená jako první (jinak Knihovna).
+    val initialPage = initialSubsection
+        ?.let { key -> tabs.indexOfFirst { it.first == key } }
+        ?.takeIf { it >= 0 } ?: 0
+    val pagerState = rememberPagerState(initialPage = initialPage) { tabs.size }
     val scope = rememberCoroutineScope()
 
     Column(modifier.fillMaxSize()) {

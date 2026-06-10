@@ -21,6 +21,8 @@ data class ProfileGateState(
     val isAddingProfile: Boolean = false,
     /** Viditelné sekce aktivního profilu (Plan PROFILES 1E). Prázdné = vše (admin/legacy). */
     val visibleSections: Set<String> = emptySet(),
+    /** „Hlavní" sekce aktivního profilu (Plan PROFILES Fáze 4). null = výchozí. */
+    val defaultSection: String? = null,
 )
 
 @HiltViewModel
@@ -43,7 +45,12 @@ class ProfileGateViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
         profileRepository.activeConfig
-            .onEach { cfg -> _state.value = _state.value.copy(visibleSections = cfg.visibleSections) }
+            .onEach { cfg ->
+                _state.value = _state.value.copy(
+                    visibleSections = cfg.visibleSections,
+                    defaultSection = cfg.defaultSection,
+                )
+            }
             .launchIn(viewModelScope)
     }
 

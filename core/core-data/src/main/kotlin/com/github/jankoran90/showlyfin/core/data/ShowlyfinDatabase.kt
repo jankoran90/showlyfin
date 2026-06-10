@@ -8,7 +8,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 
 @Database(
     entities = [AppSettingsEntity::class, ProfileEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class ShowlyfinDatabase : RoomDatabase() {

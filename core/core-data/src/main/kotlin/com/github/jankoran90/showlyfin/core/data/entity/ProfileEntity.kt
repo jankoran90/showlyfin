@@ -6,6 +6,9 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "profile")
 data class ProfileEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** Stabilní per-profil klíč pro backend (Plan PROFILES Fáze 4). Nezávislý na Jellyfin účtu →
+     * dva profily sdílející jeden JF účet se NEpřelévají. Generuje se při vzniku profilu. */
+    val profileUuid: String = java.util.UUID.randomUUID().toString(),
     val name: String,
     val serverUrl: String,
     val jellyfinUserId: String,

@@ -1069,76 +1069,180 @@ private fun toggledSections(cfg: ProfileConfig, key: String, enabled: Boolean): 
     }
 }
 
+/** Možnosti „hlavní" (výchozí otevřené) sekce per profil (Plan PROFILES Fáze 4). */
+private val LANDING_OPTIONS = listOf(
+    ProfileConfig.Sections.KNIHOVNA to "Sleduj → Knihovna",
+    ProfileConfig.Sections.CHCI_VIDET to "Sleduj → Chci vidět",
+    ProfileConfig.Sections.OBJEVIT to "Sleduj → Objevit",
+    ProfileConfig.Sections.NA_RD to "Sleduj → Na RD",
+    ProfileConfig.Sections.POSLECH to "Poslech",
+)
+
+/**
+ * Admin authoring profilů (Plan PROFILES Fáze 4) — KAŽDÝ profil je vlastní sbalovací kategorický blok
+ * (šablona Plan TIDY / CLAUDE.md „## Nastavení"). Uvnitř logicky seskupené: Hlavní sekce · Viditelné
+ * sekce + podsekce „Sleduj" · Žánry (allow/block) · Věkový limit. Write-through `onUpdateConfig`
+ * (push na backend pod stabilním `profileUuid` → bez prolévání mezi profily).
+ */
 @Composable
 private fun AdminRestrictionsSection(
     profiles: List<ProfileEntity>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
     onUpdateConfig: (Long, (ProfileConfig) -> ProfileConfig) -> Unit,
 ) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            "Profily (Admin) — nastavení per profil",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Pro každý profil nastav hlavní sekci, viditelné sekce/podsekce, žánry a věk. " +
+                "Aplikuje se při přepnutí profilu. Každý profil má vlastní izolované nastavení.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.6f),
+        )
+        Spacer(Modifier.height(10.dp))
+        profiles.forEach { profile ->
+            ProfileAuthoringBlock(profile, onUpdateAgeRating, onUpdateConfig)
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+/** Jeden profil = sbalovací blok (default sbaleno, reset při odchodu z tabu). */
+@Composable
+private fun ProfileAuthoringBlock(
+    profile: ProfileEntity,
+    onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
+    onUpdateConfig: (Long, (ProfileConfig) -> ProfileConfig) -> Unit,
+) {
+    val cfg = ProfileConfig.fromJson(profile.configJson)
+    var open by remember(profile.id) { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(
-                "Restrikce profilů (Admin)",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Pro každý profil nastav věkový limit, viditelné sekce a zakázané žánry. " +
-                    "Aplikuje se, když daný profil přepneš jako aktivní.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
-            )
-            Spacer(Modifier.height(12.dp))
-            profiles.forEach { profile ->
-                val cfg = ProfileConfig.fromJson(profile.configJson)
-                Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                    Text(
-                        text = profile.name,
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text("Věkový limit", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
-                    AgeRatingDropdown(
-                        current = profile.maxAgeRating?.let {
-                            runCatching { com.github.jankoran90.showlyfin.core.domain.AgeRating.valueOf(it) }.getOrNull()
-                        },
-                        onSelect = { onUpdateAgeRating(profile.id, it) },
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text("Viditelné sekce", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
-                    SECTION_TOGGLES.forEach { (key, label) ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                            Switch(
-                                checked = cfg.isSectionVisible(key),
-                                onCheckedChange = { enabled ->
-                                    onUpdateConfig(profile.id) { c -> c.copy(visibleSections = toggledSections(c, key, enabled)) }
-                                },
-                            )
-                        }
+            Row(
+                Modifier.fillMaxWidth().clickable { open = !open },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    buildString {
+                        append(profile.name)
+                        if (profile.isAdmin) append(" 👑")
+                    },
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White,
+                )
+                Icon(
+                    imageVector = if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (open) "Sbalit" else "Rozbalit",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (open) {
+                Spacer(Modifier.height(10.dp))
+
+                // — Hlavní sekce —
+                Text("Hlavní sekce (otevře se po vstupu)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                val landingChoices = LANDING_OPTIONS.filter { (key, _) -> cfg.isSectionVisible(key) }
+                LandingDropdown(
+                    current = cfg.defaultSection,
+                    options = landingChoices,
+                    onSelect = { key -> onUpdateConfig(profile.id) { c -> c.copy(defaultSection = key) } },
+                )
+                Spacer(Modifier.height(12.dp))
+
+                // — Viditelné sekce + podsekce —
+                Text("Viditelné sekce a podsekce", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                SECTION_TOGGLES.forEach { (key, label) ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                        Switch(
+                            checked = cfg.isSectionVisible(key),
+                            onCheckedChange = { enabled ->
+                                onUpdateConfig(profile.id) { c ->
+                                    val sections = toggledSections(c, key, enabled)
+                                    // Skrytá hlavní sekce → zruš defaultSection (jinak by se otevřela skrytá).
+                                    val newDefault = c.defaultSection?.takeIf { d ->
+                                        sections.isEmpty() || d in sections
+                                    }
+                                    c.copy(visibleSections = sections, defaultSection = newDefault)
+                                }
+                            },
+                        )
                     }
-                    Spacer(Modifier.height(10.dp))
-                    var genresText by remember(profile.id, profile.configJson) {
-                        mutableStateOf(cfg.blockedGenres.joinToString(", "))
-                    }
-                    OutlinedTextField(
-                        value = genresText,
-                        onValueChange = { genresText = it },
-                        label = { Text("Zakázané žánry (oddělené čárkou)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedButton(onClick = {
-                        val set = genresText.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
-                        onUpdateConfig(profile.id) { c -> c.copy(blockedGenres = set) }
-                    }) { Text("Uložit žánry") }
                 }
+                Spacer(Modifier.height(12.dp))
+
+                // — Žánry (allow + block) —
+                Text("Žánry", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                var blockText by remember(profile.id, profile.configJson) {
+                    mutableStateOf(cfg.blockedGenres.joinToString(", "))
+                }
+                var allowText by remember(profile.id, profile.configJson) {
+                    mutableStateOf(cfg.allowedGenres.joinToString(", "))
+                }
+                OutlinedTextField(
+                    value = blockText,
+                    onValueChange = { blockText = it },
+                    label = { Text("Zakázané žánry (čárkou)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = allowText,
+                    onValueChange = { allowText = it },
+                    label = { Text("Povolené žánry (prázdné = vše kromě zakázaných)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = {
+                    val block = blockText.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+                    val allow = allowText.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+                    onUpdateConfig(profile.id) { c -> c.copy(blockedGenres = block, allowedGenres = allow) }
+                }) { Text("Uložit žánry") }
+                Spacer(Modifier.height(12.dp))
+
+                // — Věk —
+                Text("Věkový limit", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                AgeRatingDropdown(
+                    current = profile.maxAgeRating?.let {
+                        runCatching { com.github.jankoran90.showlyfin.core.domain.AgeRating.valueOf(it) }.getOrNull()
+                    },
+                    onSelect = { onUpdateAgeRating(profile.id, it) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LandingDropdown(
+    current: String?,
+    options: List<Pair<String, String>>,
+    onSelect: (String?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = options.firstOrNull { it.first == current }?.second ?: "Výchozí (první viditelná)"
+    Box {
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+        androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Výchozí (první viditelná)") },
+                onClick = { onSelect(null); expanded = false },
+            )
+            options.forEach { (key, lbl) ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(lbl) },
+                    onClick = { onSelect(key); expanded = false },
+                )
             }
         }
     }

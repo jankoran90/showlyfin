@@ -182,8 +182,21 @@ fun ShowlyfinPhoneApp() {
             ProfileConfig.Sections.NA_RD,
         ).filter { sectionVisible(it) }
 
-        var currentDestination by remember { mutableStateOf<Destination>(Destination.Hlavni) }
-        var bottomTab by remember { mutableStateOf<Destination>(Destination.Hlavni) }
+        // Plan PROFILES Fáze 4: „hlavní" sekce — která sekce se profilu otevře po vstupu.
+        // Poslech → spodní tab Listen; podsekce Sleduj → Hlavni s předvybranou podsekcí.
+        val defaultSection = gateState.defaultSection?.takeIf { it.isNotBlank() }
+        val startBottomTab: Destination = when {
+            defaultSection == ProfileConfig.Sections.POSLECH && poslechVisible -> Destination.Listen
+            else -> Destination.Hlavni
+        }
+        // Předvybraná podsekce „Sleduj" (jen je-li viditelná), jinak první viditelná.
+        val initialSubsection: String? = defaultSection
+            ?.takeIf { it in visibleSubsections }
+
+        // Keyed na aktivní profil → přepnutí profilu znovu aplikuje jeho „hlavní" sekci.
+        val profileKey = gateState.activeProfile?.id
+        var currentDestination by remember(profileKey) { mutableStateOf<Destination>(startBottomTab) }
+        var bottomTab by remember(profileKey) { mutableStateOf<Destination>(startBottomTab) }
         val context = LocalContext.current
         val naTvCoordinator: NaTvCoordinator = hiltViewModel()
         val snackbarHostState = remember { SnackbarHostState() }
@@ -321,6 +334,7 @@ fun ShowlyfinPhoneApp() {
             when (val dest = currentDestination) {
                 is Destination.Hlavni -> MainScreen(
                     visibleSubsections = visibleSubsections,
+                    initialSubsection = initialSubsection,
                     onTraktItemClick = { item ->
                         bottomTab = Destination.Hlavni
                         currentDestination = Destination.Detail(item, parent = Destination.Hlavni)
