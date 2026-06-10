@@ -370,55 +370,8 @@ fun SettingsScreen(
                 onSetAvatar = { id, uri -> viewModel.setProfileAvatar(id, uri) },
                 onAddProfile = { viewModel.addProfile() },
             )
-            val activeProfile = uiState.profiles.firstOrNull { it.id == uiState.activeProfileId }
-            if (activeProfile?.isAdmin == true && uiState.uploaderBaseUrl.isNotBlank()) {
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = {
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uiState.uploaderBaseUrl)))
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Spravovat profily na webu") }
-                Text(
-                    "Centrální administrace profilů: sekce, knihovny, žánry, věk, přihlášení.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            // Plan WARDEN W3c část 2 — in-app authoring šablon (admin). Šablony jsou globální (i s 1 profilem).
-            if (activeProfile?.isAdmin == true) {
-                Spacer(Modifier.height(16.dp))
-                TemplateAuthoringSection(
-                    templates = uiState.templates,
-                    absLibraries = uiState.absLibraries,
-                    onCreate = { viewModel.createTemplate(it) },
-                    onSave = { tpl, name, age, cfg -> viewModel.saveTemplate(tpl, name, age, cfg) },
-                    onDelete = { viewModel.deleteTemplate(it) },
-                )
-            }
-            if (activeProfile?.isAdmin == true && uiState.profiles.size > 1) {
-                Spacer(Modifier.height(16.dp))
-                AdminRestrictionsSection(
-                    profiles = uiState.profiles.filter { it.id != activeProfile.id },
-                    absLibraries = uiState.absLibraries,
-                    jellyfinLibraries = uiState.adminJellyfinLibraries,
-                    templates = uiState.templates,
-                    onUpdateAgeRating = { profileId, rating ->
-                        viewModel.updateProfileAgeRating(profileId, rating)
-                    },
-                    onUpdateConfig = { profileId, transform ->
-                        viewModel.updateProfileConfig(profileId, transform)
-                    },
-                    onAssignTemplate = { profileId, uuid ->
-                        viewModel.assignTemplate(profileId, uuid)
-                    },
-                    onSetPin = { profileId, pin -> viewModel.setProfilePin(profileId, pin) },
-                    onClearPin = { profileId -> viewModel.clearProfilePin(profileId) },
-                )
-            }
+            // Plan HELM H6: administrace profilů/šablon přesunuta do samostatné admin destinace
+            // („Správa" ve spodní liště, jen pro admin) — už NENÍ zamíchaná v Nastavení. Web admin zrušen.
         }
 
         CollapsibleSettingsSection("Systém", expanded) {
