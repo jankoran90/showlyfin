@@ -28,6 +28,12 @@ class ProfileConfigApplier @Inject constructor(
 ) {
     fun apply(config: ProfileConfig) {
         val creds = config.credentials
+        // Plan VAULT diag — co reálně dostává aktivní profil (JF/ABS creds + whitelisty). Čteno z live.log.
+        timber.log.Timber.i(
+            "[VAULT] applyConfig jf=${creds.jellyfin != null}(url=${!creds.jellyfin?.url.isNullOrBlank()},tok=${!creds.jellyfin?.token.isNullOrBlank()},pw=${!creds.jellyfin?.password.isNullOrBlank()}) " +
+                "abs=${creds.abs != null} up=${creds.uploader != null} trakt=${creds.trakt != null} " +
+                "absWl=${config.absLibraryWhitelist} jfWl=${config.jellyfinLibraryWhitelist} sections=${config.visibleSections}",
+        )
         prefs.edit {
             // Jellyfin (volitelně z balíku; jinak drží entity přes setActive). URL normalizujeme
             // (doplníme https:// když chybí) — web admin ukládá host bez scheme → SDK by jinak spadlo.

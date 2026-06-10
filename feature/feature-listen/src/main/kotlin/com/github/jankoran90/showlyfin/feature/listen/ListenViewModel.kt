@@ -26,7 +26,9 @@ class ListenViewModel @Inject constructor(
      */
     private fun List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>.applyProfileWhitelist():
         List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary> {
-        val wl = profileRepository.activeConfig.value.absLibraryWhitelist ?: return this
+        val wl = profileRepository.activeConfig.value.absLibraryWhitelist
+        Timber.i("[VAULT] ABS whitelist=$wl libs=${this.map { it.id to it.name }}")
+        if (wl == null) return this
         return filter { it.id in wl }
     }
 

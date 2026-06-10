@@ -9,7 +9,9 @@ plugins {
 
 val isCI = System.getenv("CI")?.toBoolean() ?: false
 val keystorePath = System.getenv("SIGNING_KEYSTORE_PATH")
-val shouldSign = isCI && !keystorePath.isNullOrBlank()
+// Plan CHANNEL — podepiš release kdykoli je keystore env (lokálně i v CI), ne jen v CI.
+// Self-hosted update (náš server) staví podepsaný release lokálně na Zenbooku vlastním keystorem.
+val shouldSign = !keystorePath.isNullOrBlank() && file(keystorePath).exists()
 
 kotlin {
     compilerOptions {
@@ -26,8 +28,8 @@ android {
         applicationId = "com.github.jankoran90.showlyfin"
         minSdk = 23
         targetSdk = 36
-        versionCode = 126
-        versionName = "1.45.0"
+        versionCode = 127
+        versionName = "1.45.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
