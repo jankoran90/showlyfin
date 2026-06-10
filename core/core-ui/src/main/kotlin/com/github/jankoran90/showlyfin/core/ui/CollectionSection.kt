@@ -76,7 +76,8 @@ private fun CollectionPartCard(part: CollectionPart, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .width(110.dp)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .tvFocusable(shape = RoundedCornerShape(8.dp)),
     ) {
         Box(
             Modifier

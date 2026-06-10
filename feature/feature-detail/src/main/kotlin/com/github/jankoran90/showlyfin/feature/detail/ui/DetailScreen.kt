@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import android.widget.Toast
@@ -72,6 +73,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 
 /** Heuristika „text je v češtině" — přítomnost znaku z české abecedy s diakritikou.
@@ -195,7 +197,7 @@ fun DetailScreen(
             TopAppBar(
                 title = { Text(displayTitle, maxLines = 1) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.tvFocusable(shape = CircleShape)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
                     }
                 },
@@ -235,7 +237,7 @@ fun DetailScreen(
                     .fillMaxWidth()
                     .heightIn(min = 200.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .then(if (hasGallery) Modifier.clickable { viewModel.openGallery() } else Modifier),
+                    .then(if (hasGallery) Modifier.clickable { viewModel.openGallery() }.tvFocusable(shape = RoundedCornerShape(0.dp)) else Modifier),
             ) {
                 if (backdropUrl != null) {
                     AsyncImage(
@@ -366,7 +368,7 @@ fun DetailScreen(
                 )
                 if (plotOverflow || plotExpanded) {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        IconButton(onClick = { plotExpanded = !plotExpanded }) {
+                        IconButton(onClick = { plotExpanded = !plotExpanded }, modifier = Modifier.tvFocusable(shape = CircleShape)) {
                             Icon(
                                 imageVector = if (plotExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                 contentDescription = if (plotExpanded) "Sbalit popis" else "Zobrazit celý popis",
@@ -382,13 +384,13 @@ fun DetailScreen(
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (hasGallery) {
-                            OutlinedButton(onClick = { viewModel.openGallery() }) {
+                            OutlinedButton(onClick = { viewModel.openGallery() }, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
                                 Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                                 Text("Galerie")
                             }
                         }
                         if (uiState.csfdReviews.isNotEmpty()) {
-                            OutlinedButton(onClick = { showReviewsSheet = true }) {
+                            OutlinedButton(onClick = { showReviewsSheet = true }, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
                                 Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                                 Text("ČSFD recenze (${uiState.csfdReviews.size})")
                             }
@@ -480,13 +482,13 @@ private fun DetailActionRow(
         if (inLibrary) {
             // Film je v Jellyfin knihovně → přehrávání
             if (onPlayNaTv != null) {
-                Button(onClick = onPlayNaTv) {
+                Button(onClick = onPlayNaTv, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
                     Icon(Icons.Default.Cast, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                     Text("Přehrát Na TV")
                 }
             }
             if (onPlayHere != null) {
-                Button(onClick = onPlayHere) {
+                Button(onClick = onPlayHere, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
                     Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                     Text("V tomto zařízení")
                 }
@@ -497,17 +499,20 @@ private fun DetailActionRow(
                 onClick = onDownload,
                 label = { Text("Stáhnout") },
                 leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50)),
             )
             AssistChip(
                 onClick = onStream,
                 label = { Text("Stremio") },
                 leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50)),
             )
         }
         FilterChip(
             selected = inWatchlist,
             onClick = onWatchlist,
             enabled = !isTogglingWatchlist,
+            modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50)),
             label = { Text(if (inWatchlist) "V seznamu" else "Chci vidět") },
             leadingIcon = {
                 if (isTogglingWatchlist) {

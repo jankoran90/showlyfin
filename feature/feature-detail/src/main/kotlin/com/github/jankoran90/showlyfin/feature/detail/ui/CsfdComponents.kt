@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
 
 private val CsfdRed = Color(0xFFBA0305)
@@ -171,7 +172,10 @@ fun CsfdGalleryDialog(
             }
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .tvFocusable(shape = androidx.compose.foundation.shape.CircleShape),
             ) {
                 Icon(Icons.Default.Close, contentDescription = "Zavřít", tint = Color.White)
             }
