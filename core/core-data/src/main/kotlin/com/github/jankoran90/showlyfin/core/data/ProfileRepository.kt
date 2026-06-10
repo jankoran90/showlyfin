@@ -8,6 +8,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
+import timber.log.Timber
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -150,6 +151,7 @@ class ProfileRepository @Inject constructor(
         val profile = dao.getById(profileId) ?: return
         dao.update(profile.copy(loginPinHash = hash))
         if (_activeProfile.value?.id == profileId) _activeProfile.value = dao.getById(profileId)
+        Timber.i("[PUSH] setLoginPinHash → push key='${profile.backendKey()}' pin=${if (hash==null) "clear" else "set"}")
         configGateway.pushLoginPin(profile.backendKey(), profile.name, profile.isAdmin, profile.jellyfinUserId, hash ?: "")
     }
 
@@ -178,6 +180,7 @@ class ProfileRepository @Inject constructor(
             configApplier.apply(effective)
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
+        Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
         configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId)
     }
 
@@ -204,6 +207,7 @@ class ProfileRepository @Inject constructor(
      */
     suspend fun saveTemplateAuthored(template: TemplateEntity): Long {
         val id = upsertTemplate(template)
+        Timber.i("[PUSH] saveTemplate → push uuid='${template.templateUuid.ifBlank { "<BLANK!>" }}' name='${template.name}'")
         configGateway.pushTemplate(template.templateUuid, template.name, template.maxAgeRating, template.configJson ?: "{}")
         reapplyIfActiveUsesTemplate(template.templateUuid)
         return id

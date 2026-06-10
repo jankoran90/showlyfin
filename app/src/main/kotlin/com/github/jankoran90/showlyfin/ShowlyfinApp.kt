@@ -35,6 +35,11 @@ class ShowlyfinApp : Application() {
     private fun setupLiveLogging() {
         val prefs = getSharedPreferences("trakt_prefs", MODE_PRIVATE)
         val verInfo = "=== LIVE v${BuildConfig.VERSION_NAME} build ${BuildConfig.VERSION_CODE} ==="
+        // V debug buildu zapni živý log defaultně po čisté instalaci (klíč ještě nenastaven) →
+        // pref se zapíše true, takže to konzistentně vidí i toggle v Nastavení. Ostrá verze beze změny.
+        if (BuildConfig.DEBUG && !prefs.contains("live_logging_enabled")) {
+            prefs.edit().putBoolean("live_logging_enabled", true).apply()
+        }
         DebugCaptureManager.setLiveLogging(verInfo, prefs.getBoolean("live_logging_enabled", false))
         liveLogListener = SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
             if (key == "live_logging_enabled") {

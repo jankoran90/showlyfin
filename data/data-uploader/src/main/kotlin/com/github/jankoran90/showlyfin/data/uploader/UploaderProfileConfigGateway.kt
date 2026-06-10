@@ -81,11 +81,13 @@ internal class UploaderProfileConfigGateway @Inject constructor(
     }
 
     override suspend fun pushConfig(key: String, json: String, name: String, isAdmin: Boolean, jellyfinUserId: String) {
-        if (!isAvailable() || key.isBlank()) return
+        Timber.i("[PUSH] gw.pushConfig key='$key' avail=${isAvailable()} url='${baseUrl()}' cookie=${cookie().isNotBlank()}")
+        if (!isAvailable() || key.isBlank()) { Timber.i("[PUSH] gw.pushConfig SKIP (avail/key)"); return }
         runCatching {
             remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId)
             remote.putProfileConfig(baseUrl(), cookie(), key, json)
-        }.onFailure { Timber.w(it, "[Profiles] pushConfig($key) selhal") }
+        }.onSuccess { Timber.i("[PUSH] gw.pushConfig OK '$key'") }
+            .onFailure { Timber.i(it, "[PUSH] gw.pushConfig FAIL '$key': ${it.message}") }
     }
 
     override suspend fun fetchTemplates(): List<TemplatePayload>? {
@@ -121,9 +123,11 @@ internal class UploaderProfileConfigGateway @Inject constructor(
     }
 
     override suspend fun pushTemplate(uuid: String, name: String, ageRating: String?, configJson: String) {
-        if (!isAvailable() || uuid.isBlank()) return
+        Timber.i("[PUSH] gw.pushTemplate uuid='$uuid' avail=${isAvailable()}")
+        if (!isAvailable() || uuid.isBlank()) { Timber.i("[PUSH] gw.pushTemplate SKIP (avail/uuid blank)"); return }
         runCatching { remote.putTemplate(baseUrl(), cookie(), uuid, name, ageRating, configJson) }
-            .onFailure { Timber.w(it, "[Profiles] pushTemplate($uuid) selhal") }
+            .onSuccess { Timber.i("[PUSH] gw.pushTemplate OK '$uuid'") }
+            .onFailure { Timber.i(it, "[PUSH] gw.pushTemplate FAIL '$uuid': ${it.message}") }
     }
 
     override suspend fun deleteTemplate(uuid: String) {
@@ -182,8 +186,10 @@ internal class UploaderProfileConfigGateway @Inject constructor(
     }
 
     override suspend fun pushLoginPin(key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, pinHash: String) {
-        if (!isAvailable() || key.isBlank()) return
+        Timber.i("[PUSH] gw.pushLoginPin key='$key' avail=${isAvailable()}")
+        if (!isAvailable() || key.isBlank()) { Timber.i("[PUSH] gw.pushLoginPin SKIP"); return }
         runCatching { remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId, loginPinHash = pinHash) }
-            .onFailure { Timber.w(it, "[HELM] pushLoginPin($key) selhal") }
+            .onSuccess { Timber.i("[PUSH] gw.pushLoginPin OK '$key'") }
+            .onFailure { Timber.i(it, "[PUSH] gw.pushLoginPin FAIL '$key': ${it.message}") }
     }
 }
