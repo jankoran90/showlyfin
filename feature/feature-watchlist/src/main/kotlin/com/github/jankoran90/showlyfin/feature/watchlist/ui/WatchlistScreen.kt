@@ -53,6 +53,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistSort
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistTab
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistViewModel
@@ -84,6 +85,7 @@ fun WatchlistScreen(
                             selected = uiState.activeTab == tab,
                             onClick = { viewModel.selectTab(tab) },
                             text = { Text(if (tab == WatchlistTab.MOVIES) "Filmy" else "Seriály") },
+                            modifier = Modifier.tvFocusable(),
                         )
                     }
                 }
@@ -99,7 +101,10 @@ fun WatchlistScreen(
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (uiState.searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                IconButton(
+                                    onClick = { viewModel.setSearchQuery("") },
+                                    modifier = Modifier.tvFocusable(),
+                                ) {
                                     Icon(Icons.Default.Close, contentDescription = "Vymazat")
                                 }
                             }
@@ -244,6 +249,7 @@ private fun WatchlistChips(
             FilterChip(
                 selected = rdOnly,
                 onClick = onRdOnlyToggle,
+                modifier = Modifier.tvFocusable(),
                 label = { Text("💾 Na RD") },
                 leadingIcon = if (rdMatchLoading) {
                     {
@@ -260,6 +266,7 @@ private fun WatchlistChips(
                 FilterChip(
                     selected = sort != WatchlistSort.DEFAULT,
                     onClick = { sortMenuOpen = true },
+                    modifier = Modifier.tvFocusable(),
                     label = { Text(sort.label) },
                     leadingIcon = { Icon(Icons.Default.Sort, contentDescription = null) },
                 )
@@ -280,6 +287,7 @@ private fun WatchlistChips(
             FilterChip(
                 selected = genreFilter == null,
                 onClick = { onGenreSelected(null) },
+                modifier = Modifier.tvFocusable(),
                 label = { Text("Vše") },
             )
         }
@@ -287,6 +295,7 @@ private fun WatchlistChips(
             FilterChip(
                 selected = genreFilter == genre,
                 onClick = { onGenreSelected(if (genreFilter == genre) null else genre) },
+                modifier = Modifier.tvFocusable(),
                 label = { Text(genre) },
             )
         }

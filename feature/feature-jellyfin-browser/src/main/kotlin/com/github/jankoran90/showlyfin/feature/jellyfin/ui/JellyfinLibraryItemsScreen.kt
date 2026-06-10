@@ -146,7 +146,10 @@ fun JellyfinLibraryItemsScreen(
                             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                             trailingIcon = {
                                 if (state.searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                    IconButton(
+                                        onClick = { viewModel.setSearchQuery("") },
+                                        modifier = Modifier.tvFocusable(),
+                                    ) {
                                         Icon(Icons.Default.Close, contentDescription = "Vymazat")
                                     }
                                 }
@@ -226,6 +229,7 @@ private fun JellyfinChipsRow(
                 FilterChip(
                     selected = sort != JellyfinSort.NAME,
                     onClick = { sortMenuOpen = true },
+                    modifier = Modifier.tvFocusable(),
                     label = { Text(sort.label) },
                     leadingIcon = { Icon(Icons.Default.Sort, contentDescription = null) },
                 )
@@ -247,6 +251,7 @@ private fun JellyfinChipsRow(
                 FilterChip(
                     selected = typeFilter == entry,
                     onClick = { onTypeSelected(entry) },
+                    modifier = Modifier.tvFocusable(),
                     label = { Text(entry.label) },
                 )
             }

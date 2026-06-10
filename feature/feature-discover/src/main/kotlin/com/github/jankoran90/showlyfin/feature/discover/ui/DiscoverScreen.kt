@@ -66,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverSort
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverTab
@@ -156,10 +157,13 @@ fun DiscoverScreen(
                             singleLine = true,
                             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                             trailingIcon = {
-                                IconButton(onClick = {
-                                    viewModel.clearSearch()
-                                    searchExpanded = false
-                                }) {
+                                IconButton(
+                                    onClick = {
+                                        viewModel.clearSearch()
+                                        searchExpanded = false
+                                    },
+                                    modifier = Modifier.tvFocusable(),
+                                ) {
                                     Icon(Icons.Default.Clear, contentDescription = "Vymazat")
                                 }
                             },
@@ -310,7 +314,7 @@ private fun DiscoverFilterRow(
     ) {
         item {
             val isSearchActive = uiState.searchQuery.isNotBlank()
-            IconButton(onClick = onSearchClick) {
+            IconButton(onClick = onSearchClick, modifier = Modifier.tvFocusable()) {
                 Icon(
                     Icons.Default.Search,
                     contentDescription = "Hledat",
@@ -331,6 +335,7 @@ private fun DiscoverFilterRow(
                     onClick = { onSortMenuToggle(true) },
                     label = { Text(sortLabel) },
                     trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                    modifier = Modifier.tvFocusable(),
                 )
                 DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { onSortMenuToggle(false) }) {
                     val sortItems = listOf(
@@ -360,6 +365,7 @@ private fun DiscoverFilterRow(
                     onClick = { onGenresMenuToggle(true) },
                     label = { Text(genresLabel) },
                     trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                    modifier = Modifier.tvFocusable(),
                 )
                 DropdownMenu(expanded = genresMenuOpen, onDismissRequest = { onGenresMenuToggle(false) }) {
                     if (uiState.availableGenres.isEmpty()) {
@@ -398,6 +404,7 @@ private fun DiscoverFilterRow(
                     onClick = { onAgeMenuToggle(true) },
                     label = { Text(ageLabel) },
                     trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                    modifier = Modifier.tvFocusable(),
                 )
                 DropdownMenu(expanded = ageMenuOpen, onDismissRequest = { onAgeMenuToggle(false) }) {
                     val ageItems = listOf<Pair<AgeRating?, String>>(
@@ -423,6 +430,7 @@ private fun DiscoverFilterRow(
             FilterChip(
                 selected = uiState.rdOnly,
                 onClick = onRdOnlyToggle,
+                modifier = Modifier.tvFocusable(),
                 label = { Text("💾 Na RD") },
                 leadingIcon = if (uiState.rdMatchLoading) {
                     {
@@ -438,6 +446,7 @@ private fun DiscoverFilterRow(
             FilterChip(
                 selected = uiState.activeFilter == filter,
                 onClick = { onFilterChipSelect(filter) },
+                modifier = Modifier.tvFocusable(),
                 label = {
                     Text(
                         when (filter) {
@@ -451,7 +460,7 @@ private fun DiscoverFilterRow(
             )
         }
         item {
-            IconButton(onClick = onFilterClick) {
+            IconButton(onClick = onFilterClick, modifier = Modifier.tvFocusable()) {
                 BadgedBox(badge = {
                     if (uiState.filters.isActive) {
                         Badge {}
