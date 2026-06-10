@@ -156,6 +156,22 @@ internal class UploaderApi(
         if (!resp.isSuccessful) throw HttpException(resp)
     }
 
+    // Plan WARDEN W3c — raw JSON pole (parsuje gateway přes Gson JsonParser)
+
+    override suspend fun getTemplates(baseUrl: String, sessionCookie: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.getTemplates("$base/api/templates", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
+    override suspend fun getProfilesMeta(baseUrl: String, sessionCookie: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.getProfilesMeta("$base/api/profiles", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
     override suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int?, season: Int?, episode: Int?): List<UploaderStream> {
         val base = baseUrl.trimEnd('/')
         val params = buildString {

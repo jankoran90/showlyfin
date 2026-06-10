@@ -197,20 +197,52 @@ class ProfileRepository @Inject constructor(
         syncConfigFromBackend(profile)
     }
 
-    /** Stáhne config balík profilu z backendu (Plan PROFILES Fáze 2) a uloží jako lokální cache. */
+    /**
+     * Stáhne z backendu šablony + přiřazení + config balík profilu a uloží jako lokální cache
+     * (Plan PROFILES Fáze 2 + WARDEN W3c). Best-effort s timeouty; po všech změnách re-aplikuje
+     * efektivní config (šablona ⊕ override) jednou, je-li profil aktivní.
+     */
     private suspend fun syncConfigFromBackend(profile: ProfileEntity) {
+        var changed = false
+
+        // 1. Šablony (globální, web authoring → lokální cache pro mergeEffective i offline).
+        withTimeoutOrNull(5000) { configGateway.fetchTemplates() }?.let { payloads ->
+            for (p in payloads) {
+                val existing = templateDao.getByUuid(p.uuid)
+                val entity = (existing ?: TemplateEntity(templateUuid = p.uuid, name = p.name))
+                    .copy(name = p.name, maxAgeRating = p.ageRating, configJson = p.configJson)
+                templateDao.insert(entity) // REPLACE dle PK (existující nese své id)
+            }
+        }
+
+        // 2. Přiřazení šablony profilu (cross-device). null = neměnit; "" = zrušit; jinak = uuid.
+        val assigned = withTimeoutOrNull(5000) { configGateway.fetchAssignedTemplateUuid(profile.backendKey()) }
+        if (assigned != null) {
+            val newUuid = assigned.ifBlank { null }
+            if (newUuid != profile.templateUuid) {
+                dao.update(profile.copy(templateUuid = newUuid))
+                changed = true
+            }
+        }
+
+        // 3. Config balík (uživatelský override).
         val remoteJson = withTimeoutOrNull(5000) {
             configGateway.fetchConfig(profile.backendKey())
-        }?.takeIf { it.isNotBlank() } ?: return
-        val remoteConfig = ProfileConfig.fromJson(remoteJson)
-        val canonical = ProfileConfig.toJson(remoteConfig)
-        if (canonical == profile.configJson) return // beze změny
-        dao.update(profile.copy(configJson = canonical))
-        if (_activeProfile.value?.id == profile.id) {
+        }?.takeIf { it.isNotBlank() }
+        if (remoteJson != null) {
+            val canonical = ProfileConfig.toJson(ProfileConfig.fromJson(remoteJson))
+            val current = dao.getById(profile.id) ?: profile
+            if (canonical != current.configJson) {
+                dao.update(current.copy(configJson = canonical))
+                changed = true
+            }
+        }
+
+        // 4. Re-aplikuj efektivní config, je-li profil aktivní a něco se změnilo.
+        if (changed && _activeProfile.value?.id == profile.id) {
             val updated = dao.getById(profile.id)
-            _activeProfile.value = updated
             if (updated != null) {
-                // Plan WARDEN W0: backend nese override; efektivní = šablona ⊕ override.
+                _activeProfile.value = updated
                 val effective = effectiveConfigFor(updated)
                 _activeConfig.value = effective
                 configApplier.apply(effective)

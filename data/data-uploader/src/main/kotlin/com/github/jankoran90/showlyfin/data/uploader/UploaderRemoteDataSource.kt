@@ -21,6 +21,9 @@ interface UploaderRemoteDataSource {
     suspend fun getProfileConfig(baseUrl: String, sessionCookie: String, key: String): String?
     suspend fun putProfileConfig(baseUrl: String, sessionCookie: String, key: String, json: String)
     suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String)
+    // Plan WARDEN W3c — raw JSON: pole šablon (/api/templates) + pole profilových meta (/api/profiles).
+    suspend fun getTemplates(baseUrl: String, sessionCookie: String): String?
+    suspend fun getProfilesMeta(baseUrl: String, sessionCookie: String): String?
     suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int? = null, season: Int? = null, episode: Int? = null): List<UploaderStream>
     suspend fun captureSdillej(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse
 
