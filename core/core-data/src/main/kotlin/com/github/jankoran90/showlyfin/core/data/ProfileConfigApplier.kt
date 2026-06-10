@@ -29,9 +29,10 @@ class ProfileConfigApplier @Inject constructor(
     fun apply(config: ProfileConfig) {
         val creds = config.credentials
         prefs.edit {
-            // Jellyfin (volitelně z balíku; jinak drží entity přes setActive)
+            // Jellyfin (volitelně z balíku; jinak drží entity přes setActive). URL normalizujeme
+            // (doplníme https:// když chybí) — web admin ukládá host bez scheme → SDK by jinak spadlo.
             creds.jellyfin?.let { j ->
-                putString(K_JF_URL, j.url)
+                putString(K_JF_URL, normalizeUrl(j.url))
                 putString(K_JF_TOKEN, j.token)
                 putString(K_JF_USER_ID, j.userId)
                 putString(K_JF_USER_NAME, j.username)
@@ -39,7 +40,7 @@ class ProfileConfigApplier @Inject constructor(
 
             // ABS — aplikuj jen když balík nese creds (null = ponech stávající sdílené, NEMAZAT)
             creds.abs?.let { a ->
-                putString(K_ABS_URL, a.url.trim().trimEnd('/'))
+                putString(K_ABS_URL, normalizeUrl(a.url))
                 putString(K_ABS_USER, a.username)
                 putString(K_ABS_PASS, a.password)
                 putString(K_ABS_TOKEN, a.token.orEmpty())
@@ -48,7 +49,7 @@ class ProfileConfigApplier @Inject constructor(
             // Uploader — aplikuj jen když balík nese creds (null = ponech stávající sdílené, NEMAZAT);
             // nové heslo z balíku => zahodit cookie (vynutí relogin)
             creds.uploader?.let { u ->
-                putString(K_UP_URL, u.url.trimEnd('/'))
+                putString(K_UP_URL, normalizeUrl(u.url))
                 putString(K_UP_PASS, u.password)
                 remove(K_UP_COOKIE)
             }
@@ -59,6 +60,13 @@ class ProfileConfigApplier @Inject constructor(
             // TODO(Fáze 2): streamFilterJson je server-side (Uploader backend) → aplikace = push na
             // backend při přepnutí profilu. Zatím se jen veze v balíku pro zálohu/obnovu.
         }
+    }
+
+    /** Doplní https:// když chybí scheme, odřízne koncové „/". Prázdné nechá prázdné. */
+    private fun normalizeUrl(raw: String): String {
+        val t = raw.trim().trimEnd('/')
+        if (t.isEmpty() || t.startsWith("http://") || t.startsWith("https://")) return t
+        return "https://$t"
     }
 
     private companion object {

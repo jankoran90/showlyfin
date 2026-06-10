@@ -144,12 +144,21 @@ class ProfileGateViewModel @Inject constructor(
         }
     }
 
+    /** Doplní https:// když chybí scheme, odřízne koncové „/". Prázdné nechá prázdné. */
+    private fun normalizeUrl(raw: String): String {
+        val t = raw.trim().trimEnd('/')
+        if (t.isEmpty() || t.startsWith("http://") || t.startsWith("https://")) return t
+        return "https://$t"
+    }
+
     private suspend fun hydrateAndActivate(profile: ProfileEntity) {
         // 1. Stáhni config balík (dešifrované creds); offline → fallback na lokální configJson.
         val json = profileRepository.fetchBackendConfig(profile) ?: profile.configJson
         val config = ProfileConfig.fromJson(json)
         val jf = config.credentials.jellyfin
-        var serverUrl = jf?.url?.takeIf { it.isNotBlank() } ?: profile.serverUrl
+        // Web admin ukládá host bez scheme (např. „video.jankoran.cz") → doplň https://, jinak
+        // jellyfin.createApi() i applier spadnou/nepřihlásí.
+        var serverUrl = normalizeUrl(jf?.url?.takeIf { it.isNotBlank() } ?: profile.serverUrl)
         var token = jf?.token?.takeIf { it.isNotBlank() } ?: profile.jellyfinToken
         var effectiveJson = json
 
@@ -167,7 +176,7 @@ class ProfileGateViewModel @Inject constructor(
                     token = at
                     val merged = config.copy(
                         credentials = config.credentials.copy(
-                            jellyfin = jf.copy(token = at, userId = (uid ?: jf.userId.ifBlank { profile.jellyfinUserId })),
+                            jellyfin = jf.copy(url = serverUrl, token = at, userId = (uid ?: jf.userId.ifBlank { profile.jellyfinUserId })),
                         ),
                     )
                     effectiveJson = ProfileConfig.toJson(merged)
