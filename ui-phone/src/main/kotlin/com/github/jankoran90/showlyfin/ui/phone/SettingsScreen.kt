@@ -68,6 +68,8 @@ import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderViewModel
 import com.github.jankoran90.showlyfin.core.network.Config
+import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
 import com.github.jankoran90.showlyfin.data.uploader.model.StreamFilterPrefs
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
@@ -228,6 +230,40 @@ fun SettingsScreen(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         ) {
                             Text("Odhlásit z Trakt")
+                        }
+                    } else if (isTvFormFactor()) {
+                        // Plan FUSE F5 — na TV není prohlížeč/klávesnice pro OAuth redirect → device-code flow:
+                        // uživatel zadá krátký kód na trakt.tv/activate na telefonu, appka pollu je token.
+                        Text(
+                            "Nepřihlášen",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.65f),
+                        )
+                        uiState.traktUserCode?.let { code ->
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "Otevři ${uiState.traktVerificationUrl ?: "trakt.tv/activate"} a zadej kód:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.85f),
+                            )
+                            Text(
+                                code,
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = { viewModel.startTraktDeviceLogin() },
+                            enabled = uiState.traktUserCode == null,
+                            modifier = Modifier.fillMaxWidth().tvFocusable(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFED1C24)),
+                        ) {
+                            Text(if (uiState.traktUserCode == null) "Přihlásit přes Trakt" else "Čekám na potvrzení…")
+                        }
+                        uiState.traktStatus?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
                         }
                     } else {
                         Text(
@@ -1674,6 +1710,8 @@ private fun CollapsibleSettingsSection(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expandedMap[title] = !isOpen }
+            // Plan FUSE F5 — D-pad highlight hlavičky sekce na TV (no-op telefon).
+            .tvFocusable()
             .padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -14,6 +14,8 @@ import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
+import com.github.jankoran90.showlyfin.data.trakt.TraktDeviceAuthManager
+import com.github.jankoran90.showlyfin.data.trakt.TraktDevicePollResult
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.StreamFilterPrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +34,10 @@ import javax.inject.Named
 
 data class SettingsUiState(
     val traktLoggedIn: Boolean = false,
+    // Plan FUSE F5 — Trakt device-code login (TV: bez browseru, uživatel zadá kód na jiném zařízení).
+    val traktUserCode: String? = null,
+    val traktVerificationUrl: String? = null,
+    val traktStatus: String? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
     val jellyfinServerUrl: String = "",
@@ -102,6 +108,7 @@ data class ListenSettings(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val traktAuthManager: TraktAuthManager,
+    private val traktDeviceAuth: TraktDeviceAuthManager,
     private val parentalControlsRepository: ParentalControlsRepository,
     private val profileRepository: ProfileRepository,
     private val uploaderDs: UploaderRemoteDataSource,
@@ -468,9 +475,52 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Plan FUSE F5 — Trakt device-code přihlášení (TV větev, bez webového redirectu).
+     * Vyžádá kód → uživatel ho zadá na trakt.tv/activate na telefonu → polluje token.
+     * Token se ukládá přes stejný [com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider]
+     * jako browser flow, takže `isLoggedIn()`/`logout()` fungují beze změny.
+     */
+    fun startTraktDeviceLogin() {
+        if (_uiState.value.traktUserCode != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(traktStatus = "Získávám kód…") }
+            val code = traktDeviceAuth.requestCode()
+            if (code == null) {
+                _uiState.update { it.copy(traktStatus = "Nepodařilo se získat kód, zkus to znovu") }
+                return@launch
+            }
+            _uiState.update {
+                it.copy(
+                    traktUserCode = code.userCode,
+                    traktVerificationUrl = code.verificationUrl,
+                    traktStatus = "Otevři ${code.verificationUrl} a zadej kód",
+                )
+            }
+            when (val result = traktDeviceAuth.poll(code)) {
+                is TraktDevicePollResult.Success -> _uiState.update {
+                    it.copy(
+                        traktLoggedIn = true,
+                        traktUserCode = null,
+                        traktVerificationUrl = null,
+                        traktStatus = "Přihlášeno ✓",
+                    )
+                }
+                is TraktDevicePollResult.Expired -> _uiState.update {
+                    it.copy(traktUserCode = null, traktVerificationUrl = null, traktStatus = "Kód vypršel, zkus to znovu")
+                }
+                is TraktDevicePollResult.Failed -> _uiState.update {
+                    it.copy(traktUserCode = null, traktVerificationUrl = null, traktStatus = result.message)
+                }
+            }
+        }
+    }
+
     fun logout() {
         traktAuthManager.logout()
-        _uiState.update { it.copy(traktLoggedIn = false) }
+        _uiState.update {
+            it.copy(traktLoggedIn = false, traktUserCode = null, traktVerificationUrl = null, traktStatus = null)
+        }
     }
 
     fun disconnectJellyfin() {
