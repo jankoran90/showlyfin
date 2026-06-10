@@ -16,10 +16,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.jellyfin.sdk.Jellyfin
+import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService
 import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.authenticateUserByName
-import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
 import timber.log.Timber
@@ -51,13 +49,19 @@ data class ProfileGateState(
     val seeding: Boolean = false,
     /** Plan GATEKEY G-A4: tap profilu → hydratace creds + auto JF login (drží spinner do vstupu). */
     val activating: Boolean = false,
+    /**
+     * Plan VAULT — Jellyfin server ODMÍTL přihlášení profilu (špatné jméno/heslo v balíku) →
+     * aktivace se NEPROVEDLA a brána ukáže tuhle chybu. Dřív tichý Timber.w → user nevěděl proč
+     * „není nastaven". null = bez chyby.
+     */
+    val activationError: String? = null,
 )
 
 @HiltViewModel
 class ProfileGateViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val configGateway: ProfileConfigGateway,
-    private val jellyfin: Jellyfin,
+    private val jellyfinAuth: JellyfinAuthService,
     private val apiClient: ApiClient,
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
@@ -137,10 +141,11 @@ class ProfileGateViewModel @Inject constructor(
      */
     fun selectProfile(profile: ProfileEntity) {
         viewModelScope.launch {
-            _state.update { it.copy(activating = true) }
-            runCatching { hydrateAndActivate(profile) }
+            _state.update { it.copy(activating = true, activationError = null) }
+            val error = runCatching { hydrateAndActivate(profile) }
                 .onFailure { Timber.w(it, "[GATEKEY] aktivace profilu selhala") }
-            _state.update { it.copy(activating = false) }
+                .getOrNull()
+            _state.update { it.copy(activating = false, activationError = error) }
         }
     }
 
@@ -151,7 +156,11 @@ class ProfileGateViewModel @Inject constructor(
         return "https://$t"
     }
 
-    private suspend fun hydrateAndActivate(profile: ProfileEntity) {
+    /**
+     * Vrací `null` = aktivováno; jinak text chyby pro bránu (a profil se NEaktivuje) — Jellyfin
+     * server creds odmítl (Plan VAULT: viditelná chyba místo tichého warningu).
+     */
+    private suspend fun hydrateAndActivate(profile: ProfileEntity): String? {
         // 1. Stáhni config balík (dešifrované creds); offline → fallback na lokální configJson.
         val json = profileRepository.fetchBackendConfig(profile) ?: profile.configJson
         val config = ProfileConfig.fromJson(json)
@@ -162,27 +171,39 @@ class ProfileGateViewModel @Inject constructor(
         var token = jf?.token?.takeIf { it.isNotBlank() } ?: profile.jellyfinToken
         var effectiveJson = json
 
-        // 2. Bez tokenu, ale s heslem → vyrob token přes AuthenticateByName (jádro G-A4).
-        if (token.isBlank() && jf != null && !jf.password.isNullOrBlank() && serverUrl.isNotBlank()) {
-            runCatching {
-                val api = jellyfin.createApi(baseUrl = serverUrl)
-                val authResult by api.userApi.authenticateUserByName(
-                    username = jf.username.ifBlank { profile.name },
-                    password = jf.password!!,
-                )
-                val at = authResult.accessToken
-                val uid = authResult.user?.id?.toString()
-                if (!at.isNullOrBlank()) {
-                    token = at
-                    val merged = config.copy(
-                        credentials = config.credentials.copy(
-                            jellyfin = jf.copy(url = serverUrl, token = at, userId = (uid ?: jf.userId.ifBlank { profile.jellyfinUserId })),
-                        ),
-                    )
-                    effectiveJson = ProfileConfig.toJson(merged)
-                    Timber.i("[GATEKEY] AuthenticateByName OK pro '${profile.name}'")
+        // 2. Vyrob/obnov token (jádro G-A4 + VAULT): bez tokenu, NEBO server uložený token odmítá
+        //    (admin změnil heslo v Správě → starý token patří starým creds) → AuthenticateByName.
+        //    Offline (validace/login nejde posoudit) → pokračuj s tím co je, ať profil jde otevřít.
+        if (serverUrl.isNotBlank()) {
+            val tokenValid = if (token.isBlank()) false else (jellyfinAuth.validateToken(serverUrl, token) ?: true)
+            val password = jf?.password
+            if (!tokenValid && jf != null && !password.isNullOrBlank()) {
+                when (val outcome = jellyfinAuth.authenticate(serverUrl, jf.username.ifBlank { profile.name }, password)) {
+                    is JellyfinAuthService.AuthOutcome.Success -> {
+                        token = outcome.login.token
+                        val merged = config.copy(
+                            credentials = config.credentials.copy(
+                                jellyfin = jf.copy(
+                                    url = serverUrl,
+                                    token = token,
+                                    userId = outcome.login.userId.ifBlank { jf.userId.ifBlank { profile.jellyfinUserId } },
+                                ),
+                            ),
+                        )
+                        effectiveJson = ProfileConfig.toJson(merged)
+                        Timber.i("[GATEKEY] AuthenticateByName OK pro '${profile.name}'")
+                    }
+                    is JellyfinAuthService.AuthOutcome.Rejected -> {
+                        Timber.w("[GATEKEY] AuthenticateByName ODMÍTNUT pro '${profile.name}' (HTTP ${outcome.status})")
+                        return "Jellyfin odmítl přihlášení profilu ${profile.name} (HTTP ${outcome.status}). " +
+                            "Zkontroluj jméno a heslo v admin Správě profilů."
+                    }
+                    is JellyfinAuthService.AuthOutcome.Unavailable ->
+                        Timber.w("[GATEKEY] AuthenticateByName nedostupný pro '${profile.name}': ${outcome.message}")
                 }
-            }.onFailure { Timber.w(it, "[GATEKEY] AuthenticateByName selhal pro '${profile.name}'") }
+            } else if (!tokenValid && token.isBlank()) {
+                Timber.w("[GATEKEY] profil '${profile.name}' nemá token ani heslo — JF zůstane nepřihlášen")
+            }
         }
 
         // 3. Nastav sdílený ApiClient hned, ať JF obrazovky naběhnou už přihlášené (ne až po async syncu).
@@ -195,6 +216,7 @@ class ProfileGateViewModel @Inject constructor(
         // 4. Zapiš hydratované creds do entity PŘED aktivací → setActive zapíše správné kanonické prefs.
         profileRepository.applyHydratedJellyfin(profile.id, serverUrl, token, effectiveJson)
         profileRepository.setActive(profile.id)
+        return null
     }
 
     /**

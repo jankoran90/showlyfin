@@ -64,6 +64,8 @@ fun ProfilePickerScreen(
     pinError: Boolean = false,
     onSubmitPin: (String) -> Unit = {},
     onCancelPin: () -> Unit = {},
+    /** Plan VAULT — chyba poslední aktivace (Jellyfin odmítl creds profilu); null = bez chyby. */
+    errorMessage: String? = null,
 ) {
     Box(modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         Column(
@@ -87,6 +89,16 @@ fun ProfilePickerScreen(
                     AvatarItem(profile = profile, onClick = { onProfileClicked(profile) })
                 }
                 AddAvatarItem(onClick = onAddProfile)
+            }
+            if (errorMessage != null) {
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+                )
             }
         }
     }

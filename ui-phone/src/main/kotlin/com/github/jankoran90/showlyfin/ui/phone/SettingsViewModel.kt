@@ -76,6 +76,8 @@ data class SettingsUiState(
     val serverPodcasts: List<com.github.jankoran90.showlyfin.data.abs.model.PodcastServerAutoDownload> = emptyList(),
     val serverPodcastsLoading: Boolean = false,
     val serverPodcastsBusyIds: Set<String> = emptySet(),
+    /** Plan VAULT — výsledek uložení creds v admin editoru (profileId → zpráva). Viditelný feedback. */
+    val adminCredsStatus: Pair<Long, String>? = null,
 )
 
 /** Nastavení poslechové sekce (přehrávač, fronta, stahování, zobrazení, sync). */
@@ -116,6 +118,7 @@ class SettingsViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val absRepo: AbsRepository,
     private val absPrefs: AbsPreferences,
+    private val jellyfinAuth: com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService,
     @ApplicationContext private val appContext: Context,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
@@ -132,6 +135,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    /** Plan VAULT — aktivní profil má v balíku JF heslo (auto-login schopný i bez tokenu). */
+    private var activeJfHasPassword = false
 
     init {
         refreshJellyfinState()
@@ -167,7 +173,13 @@ class SettingsViewModel @Inject constructor(
             .onEach { active -> _uiState.update { it.copy(activeProfileId = active?.id) } }
             .launchIn(viewModelScope)
         profileRepository.activeConfig
-            .onEach { cfg -> _uiState.update { it.copy(lockedKeys = cfg.lockedKeys) } }
+            .onEach { cfg ->
+                // Plan VAULT — „Jellyfin nastaven" toleruje i uložené heslo bez tokenu (token se
+                // mintuje při vstupu přes bránu / 401 reloginem), jako ABS isConfigured.
+                activeJfHasPassword = !cfg.credentials.jellyfin?.password.isNullOrBlank()
+                _uiState.update { it.copy(lockedKeys = cfg.lockedKeys) }
+                refreshJellyfinState()
+            }
             .launchIn(viewModelScope)
         profileRepository.observeTemplates()
             .onEach { list -> _uiState.update { it.copy(templates = list) } }
@@ -432,6 +444,68 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
+     * Plan VAULT — uložení přihlašovacích údajů profilu z admin editoru S viditelným výsledkem
+     * ([SettingsUiState.adminCredsStatus]) a okamžitým ověřením Jellyfin loginu:
+     * 1. Změněné JF/ABS creds → **vyčistí starý token** (patří starým údajům; dřív se přenášel dál
+     *    a brána pak AuthenticateByName přeskočila → 401 „není nastaven").
+     * 2. Uloží balík (write-through na backend).
+     * 3. JF url+jméno+heslo → rovnou zkusí AuthenticateByName; úspěch = token+userId do balíku,
+     *    odmítnutí = jasná chyba adminovi (tohle dřív nešlo zjistit jinak než vstupem do profilu).
+     */
+    fun saveProfileCredentials(profileId: Long, bundle: com.github.jankoran90.showlyfin.core.domain.CredentialBundle) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(adminCredsStatus = profileId to "Ukládám…") }
+            val profile = _uiState.value.profiles.firstOrNull { it.id == profileId }
+            val old = ProfileConfig.fromJson(profile?.configJson).credentials
+
+            val jfChanged = bundle.jellyfin?.let { n ->
+                val o = old.jellyfin
+                o == null || n.url != o.url || n.username != o.username || n.password != o.password
+            } ?: false
+            val absChanged = bundle.abs?.let { n ->
+                val o = old.abs
+                o == null || n.url != o.url || n.username != o.username || n.password != o.password
+            } ?: false
+            val cleaned = bundle.copy(
+                jellyfin = bundle.jellyfin?.let { if (jfChanged) it.copy(token = "", userId = "") else it },
+                abs = bundle.abs?.let { if (absChanged) it.copy(token = null) else it },
+            )
+            profileRepository.updateConfig(profileId) { c -> c.copy(credentials = cleaned) }
+
+            val jf = cleaned.jellyfin
+            val status = if (jf != null && jf.url.isNotBlank() && jf.username.isNotBlank() && !jf.password.isNullOrBlank()) {
+                val url = normalizeUrl(jf.url)
+                when (val outcome = jellyfinAuth.authenticate(url, jf.username, jf.password!!)) {
+                    is com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService.AuthOutcome.Success -> {
+                        profileRepository.updateConfig(profileId) { c ->
+                            c.copy(
+                                credentials = c.credentials.copy(
+                                    jellyfin = jf.copy(token = outcome.login.token, userId = outcome.login.userId),
+                                ),
+                            )
+                        }
+                        "Uloženo ✓ — Jellyfin přihlášení ověřeno (${outcome.login.userName})"
+                    }
+                    is com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService.AuthOutcome.Rejected ->
+                        "Uloženo, ale Jellyfin jméno/heslo ODMÍTNUTO (HTTP ${outcome.status}) — oprav údaje"
+                    is com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService.AuthOutcome.Unavailable ->
+                        "Uloženo ✓ — Jellyfin teď nešlo ověřit (${outcome.message ?: "síť"}), přihlásí se při vstupu"
+                }
+            } else {
+                "Uloženo ✓ (Jellyfin bez kompletních údajů — přihlášení proběhne při vstupu do profilu)"
+            }
+            _uiState.update { it.copy(adminCredsStatus = profileId to status) }
+        }
+    }
+
+    /** Doplní https:// když chybí scheme, odřízne koncové „/" (zrcadlí ProfileConfigApplier). */
+    private fun normalizeUrl(raw: String): String {
+        val t = raw.trim().trimEnd('/')
+        if (t.isEmpty() || t.startsWith("http://") || t.startsWith("https://")) return t
+        return "https://$t"
+    }
+
+    /**
      * Plan VAULT — po úspěšném Trakt loginu/odhlášení promítni globální Trakt tokeny do balíku
      * AKTIVNÍHO profilu (Trakt je per-profil pod adminem) a pushni na backend. Login zapisuje token
      * do sdílených `traktPreferences`; tady ho zrcadlíme do profilu, ať přežije přepnutí i fresh-install.
@@ -532,7 +606,8 @@ class SettingsViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 jellyfinServerUrl = url,
-                jellyfinConnected = url.isNotBlank() && token.isNotBlank() && userId.isNotBlank(),
+                // Token+userId = přihlášeno; samotné heslo v balíku = „nastaveno" (login při vstupu).
+                jellyfinConnected = url.isNotBlank() && ((token.isNotBlank() && userId.isNotBlank()) || activeJfHasPassword),
             )
         }
     }

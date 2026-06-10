@@ -8,6 +8,10 @@ import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -41,7 +45,22 @@ class ListenViewModel @Inject constructor(
     fun deleteDownload(episodeId: String) = downloadManager.delete(episodeId)
     fun deleteAllDownloads() = downloadManager.deleteAll()
 
-    init { refresh() }
+    init {
+        // Plan VAULT — refresh řízený configem aktivního profilu, ne jen vznikem VM. StateFlow emitne
+        // hned (= původní init refresh) a pak při každé změně whitelistu/ABS creds (přepnutí profilu,
+        // sync z backendu). Applier zapisuje prefs PŘED emisí configu (ProfileRepository), takže tady
+        // už čteme správné přihlášení — řeší závod „fetch knihoven se starým tokenem → prázdné libs".
+        profileRepository.activeConfig
+            .map { it.absLibraryWhitelist to it.credentials.abs }
+            .distinctUntilChanged()
+            .onEach {
+                refresh()
+                if (_uiState.value.podcastsLoaded || _uiState.value.mode == ListenMode.PODCASTS) {
+                    loadPodcastLibraries()
+                }
+            }
+            .launchIn(viewModelScope)
+    }
 
     /** Načte knihovny audioknih a knihy ve vybrané (či první) knihovně. */
     fun refresh() {

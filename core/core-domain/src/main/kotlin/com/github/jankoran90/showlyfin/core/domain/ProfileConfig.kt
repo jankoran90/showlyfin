@@ -86,18 +86,30 @@ data class ProfileConfig(
         /**
          * Plan WARDEN W0 — efektivní config = **šablona ⊕ uživatelský override**.
          *
-         * Model granularity (rozhodnutí W0): override drží *kompletní* uživatelskou konfiguraci
-         * (při přiřazení šablony se inicializuje jejím snapshotem). Merge proto vychází z [override]
-         * a **přepíše jen zamčená pole** hodnotou ze [template] ([ProfileConfig.lockedKeys] šablony).
-         * Tím odpadá nejednoznačnost „prázdná množina = nenastaveno vs. záměrně prázdné": odemčená
-         * pole vlastní uživatel, zamčená vždy živě diktuje šablona (admin změní zámek → propíše se
-         * všem). [template] == null (legacy profil bez šablony) → override beze změny (plná volnost).
+         * Sémantika (revize Plan VAULT, 2026-06-11): override z backendu/webu NEMUSÍ nést snapshot
+         * šablony (GATEKEY stuby, web authoring, starší pushe) — proto **nenastavená pole override
+         * (null / prázdná množina = „nedefinováno") dědí hodnotu šablony**. Bez toho stačil backend
+         * override s `absLibraryWhitelist = null`, aby sync přepsal restrikci šablony „Pro děti"
+         * (bug cluster #41: dětský profil viděl dospělou knihovnu). Explicitně nastavená pole
+         * override vyhrávají; **zamčená pole** ([ProfileConfig.lockedKeys] šablony) vždy živě
+         * diktuje šablona. [template] == null (legacy bez šablony) → override beze změny.
          */
         fun mergeEffective(template: ProfileConfig?, override: ProfileConfig): ProfileConfig {
             if (template == null) return override
             val locked = template.lockedKeys
             // Efektivní config nese zámky šablony → UI (Nastavení) ví, co smí uživatel editovat (W2).
-            var r = override.copy(lockedKeys = locked)
+            var r = override.copy(
+                lockedKeys = locked,
+                visibleSections = override.visibleSections.ifEmpty { template.visibleSections },
+                jellyfinLibraryWhitelist = override.jellyfinLibraryWhitelist ?: template.jellyfinLibraryWhitelist,
+                absLibraryWhitelist = override.absLibraryWhitelist ?: template.absLibraryWhitelist,
+                allowedGenres = override.allowedGenres.ifEmpty { template.allowedGenres },
+                blockedGenres = override.blockedGenres.ifEmpty { template.blockedGenres },
+                preferredAgeRating = override.preferredAgeRating ?: template.preferredAgeRating,
+                defaultSection = override.defaultSection ?: template.defaultSection,
+                appearance = override.appearance.ifEmpty { template.appearance },
+                credentials = override.credentials.mergeMissingFrom(template.credentials),
+            )
             if (locked.isEmpty()) return r
             if (LockKeys.VISIBLE_SECTIONS in locked) r = r.copy(visibleSections = template.visibleSections)
             if (LockKeys.JELLYFIN_LIBRARIES in locked) r = r.copy(jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist)
@@ -160,7 +172,16 @@ data class CredentialBundle(
     val trakt: TraktCreds? = null,
     /** Serializovaný Stremio/Comet StreamFilterPrefs (server-side), volitelný. */
     val streamFilterJson: String? = null,
-)
+) {
+    /** Chybějící (null) creds domény doplní z [other] — defaults šablony v [ProfileConfig.mergeEffective]. */
+    fun mergeMissingFrom(other: CredentialBundle): CredentialBundle = CredentialBundle(
+        jellyfin = jellyfin ?: other.jellyfin,
+        abs = abs ?: other.abs,
+        uploader = uploader ?: other.uploader,
+        trakt = trakt ?: other.trakt,
+        streamFilterJson = streamFilterJson ?: other.streamFilterJson,
+    )
+}
 
 @Serializable
 data class JellyfinCreds(

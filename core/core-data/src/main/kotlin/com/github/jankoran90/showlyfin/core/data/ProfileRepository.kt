@@ -176,8 +176,10 @@ class ProfileRepository @Inject constructor(
         if (_activeProfile.value?.id == profileId && updated != null) {
             _activeProfile.value = updated
             val effective = effectiveConfigFor(updated)
-            _activeConfig.value = effective
+            // Applier PŘED publikací do _activeConfig — observeři (ListenViewModel…) čtou kanonické
+            // prefs, takže je musí applier stihnout zapsat dřív, než je emise configu probudí.
             configApplier.apply(effective)
+            _activeConfig.value = effective
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
         Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
@@ -224,8 +226,8 @@ class ProfileRepository @Inject constructor(
         val active = _activeProfile.value ?: return
         if (active.templateUuid != uuid) return
         val effective = effectiveConfigFor(active)
-        _activeConfig.value = effective
         configApplier.apply(effective)
+        _activeConfig.value = effective
     }
 
     /**
@@ -239,8 +241,8 @@ class ProfileRepository @Inject constructor(
         if (_activeProfile.value?.id == profileId && updated != null) {
             _activeProfile.value = updated
             val effective = effectiveConfigFor(updated)
-            _activeConfig.value = effective
             configApplier.apply(effective)
+            _activeConfig.value = effective
         }
         // Plan WARDEN W3c: write-through přiřazení na backend ("" = zrušit → backend uloží "").
         configGateway.pushAssignedTemplate(
@@ -302,10 +304,10 @@ class ProfileRepository @Inject constructor(
             .putString("jellyfin_user_id", profile.jellyfinUserId)
             .apply()
         // Plan PROFILES: aplikuj config balík do kanonických prefs (ABS/Uploader/vzhled…).
-        // Plan WARDEN W0: efektivní config = šablona ⊕ override.
+        // Plan WARDEN W0: efektivní config = šablona ⊕ override. Applier PŘED publikací (viz updateConfig).
         val config = effectiveConfigFor(profile)
-        _activeConfig.value = config
         configApplier.apply(config)
+        _activeConfig.value = config
         // Plan PROFILES Fáze 2: zkus stáhnout aktuální balík z backendu (cache = lokální configJson).
         // Best-effort + timeout, ať přepnutí profilu nevisí offline. Uploader creds aplikované výše
         // → gateway má URL+cookie. Re-aplikuje jen pokud je profil pořád aktivní a balík přišel.
@@ -359,8 +361,8 @@ class ProfileRepository @Inject constructor(
             if (updated != null) {
                 _activeProfile.value = updated
                 val effective = effectiveConfigFor(updated)
-                _activeConfig.value = effective
                 configApplier.apply(effective)
+                _activeConfig.value = effective
             }
         }
     }

@@ -1073,6 +1073,9 @@ internal fun AdminRestrictionsSection(
     onAssignTemplate: (Long, String?) -> Unit,
     onSetPin: (Long, String) -> Unit,
     onClearPin: (Long) -> Unit,
+    // Plan VAULT — uložení creds s ověřením JF loginu + viditelný výsledek (profileId → zpráva).
+    onSaveCredentials: (Long, com.github.jankoran90.showlyfin.core.domain.CredentialBundle) -> Unit,
+    credsStatus: Pair<Long, String>? = null,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
@@ -1089,7 +1092,12 @@ internal fun AdminRestrictionsSection(
         )
         Spacer(Modifier.height(10.dp))
         profiles.forEach { profile ->
-            ProfileAuthoringBlock(profile, absLibraries, jellyfinLibraries, templates, onUpdateAgeRating, onUpdateConfig, onAssignTemplate, onSetPin, onClearPin)
+            ProfileAuthoringBlock(
+                profile, absLibraries, jellyfinLibraries, templates,
+                onUpdateAgeRating, onUpdateConfig, onAssignTemplate, onSetPin, onClearPin,
+                onSaveCredentials = onSaveCredentials,
+                credsStatus = credsStatus?.takeIf { it.first == profile.id }?.second,
+            )
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -1107,6 +1115,8 @@ private fun ProfileAuthoringBlock(
     onAssignTemplate: (Long, String?) -> Unit,
     onSetPin: (Long, String) -> Unit,
     onClearPin: (Long) -> Unit,
+    onSaveCredentials: (Long, com.github.jankoran90.showlyfin.core.domain.CredentialBundle) -> Unit,
+    credsStatus: String? = null,
 ) {
     val cfg = ProfileConfig.fromJson(profile.configJson)
     var open by remember(profile.id) { mutableStateOf(false) }
@@ -1280,12 +1290,13 @@ private fun ProfileAuthoringBlock(
                 )
                 Spacer(Modifier.height(12.dp))
 
-                // — Přihlašovací údaje sub-appek (Plan HELM) —
+                // — Přihlašovací údaje sub-appek (Plan HELM; uložení + ověření JF = Plan VAULT) —
                 ProfileCredentialsEditor(
                     profileKey = profile.id,
                     configJson = profile.configJson,
                     current = cfg.credentials,
-                    onSave = { bundle -> onUpdateConfig(profile.id) { c -> c.copy(credentials = bundle) } },
+                    onSave = { bundle -> onSaveCredentials(profile.id, bundle) },
+                    status = credsStatus,
                 )
             }
         }
@@ -1334,6 +1345,8 @@ private fun ProfileCredentialsEditor(
     configJson: String?,
     current: com.github.jankoran90.showlyfin.core.domain.CredentialBundle,
     onSave: (com.github.jankoran90.showlyfin.core.domain.CredentialBundle) -> Unit,
+    /** Plan VAULT — výsledek posledního uložení (Ukládám… / ověřeno / odmítnuto). */
+    status: String? = null,
 ) {
     var open by remember(profileKey) { mutableStateOf(false) }
     Row(
@@ -1393,7 +1406,15 @@ private fun ProfileCredentialsEditor(
                     uploader = up.takeIf { upUrl.isNotBlank() },
                 ),
             )
-        }) { Text("Uložit přihlášení") }
+        }) { Text("Uložit a ověřit přihlášení") }
+        if (status != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                status,
+                style = MaterialTheme.typography.bodySmall,
+                color = if ("ODMÍTNUTO" in status) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
 

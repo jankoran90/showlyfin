@@ -124,6 +124,8 @@ fun AdminScreen(
                             onAssignTemplate = { id, uuid -> viewModel.assignTemplate(id, uuid) },
                             onSetPin = { id, pin -> viewModel.setProfilePin(id, pin) },
                             onClearPin = { id -> viewModel.clearProfilePin(id) },
+                            onSaveCredentials = { id, bundle -> viewModel.saveProfileCredentials(id, bundle) },
+                            credsStatus = uiState.adminCredsStatus,
                         )
                         Spacer(Modifier.height(16.dp))
                         // Plan VAULT — Trakt (OAuth) pro AKTIVNÍ profil; tokeny se uloží do jeho balíku.

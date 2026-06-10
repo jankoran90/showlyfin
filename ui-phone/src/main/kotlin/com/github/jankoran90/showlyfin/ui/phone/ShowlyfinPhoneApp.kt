@@ -200,6 +200,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 pinError = gateState.pinError,
                 onSubmitPin = { gateViewModel.submitPin(it) },
                 onCancelPin = { gateViewModel.cancelPin() },
+                errorMessage = gateState.activationError,
                 modifier = Modifier.fillMaxSize(),
             )
             return@ShowlyfinPhoneTheme
