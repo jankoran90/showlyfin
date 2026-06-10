@@ -2,6 +2,9 @@ package com.github.jankoran90.showlyfin.data.uploader.api
 
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.*
+import com.google.gson.JsonNull
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
@@ -149,10 +152,31 @@ internal class UploaderApi(
         if (!resp.isSuccessful) throw HttpException(resp)
     }
 
-    override suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String) {
+    override suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String?) {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        val resp = service.putProfile("$base/api/profiles/${enc(key)}", cookie, ProfileMetaRequest(name, isAdmin, jellyfinUserId))
+        val resp = service.putProfile("$base/api/profiles/${enc(key)}", cookie, ProfileMetaRequest(name, isAdmin, jellyfinUserId, templateUuid))
+        if (!resp.isSuccessful) throw HttpException(resp)
+    }
+
+    override suspend fun putTemplate(baseUrl: String, sessionCookie: String, uuid: String, name: String, ageRating: String?, configJson: String) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        // config musí jít jako JSON objekt (backend ho Fernet-šifruje), ne string → vlož raw configJson.
+        val obj = JsonObject().apply {
+            addProperty("name", name)
+            if (ageRating != null) addProperty("ageRating", ageRating) else add("ageRating", JsonNull.INSTANCE)
+            add("config", runCatching { JsonParser.parseString(configJson) }.getOrDefault(JsonObject()))
+        }
+        val body = obj.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+        val resp = service.putTemplate("$base/api/templates/${enc(uuid)}", cookie, body)
+        if (!resp.isSuccessful) throw HttpException(resp)
+    }
+
+    override suspend fun deleteTemplate(baseUrl: String, sessionCookie: String, uuid: String) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.deleteTemplate("$base/api/templates/${enc(uuid)}", cookie)
         if (!resp.isSuccessful) throw HttpException(resp)
     }
 

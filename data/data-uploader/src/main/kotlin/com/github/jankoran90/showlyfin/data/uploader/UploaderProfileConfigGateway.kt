@@ -70,4 +70,22 @@ internal class UploaderProfileConfigGateway @Inject constructor(
             null // profil na backendu není → neměnit lokální stav
         }.onFailure { Timber.w(it, "[Profiles] fetchAssignedTemplateUuid($key) selhal") }.getOrNull()
     }
+
+    override suspend fun pushTemplate(uuid: String, name: String, ageRating: String?, configJson: String) {
+        if (!isAvailable() || uuid.isBlank()) return
+        runCatching { remote.putTemplate(baseUrl(), cookie(), uuid, name, ageRating, configJson) }
+            .onFailure { Timber.w(it, "[Profiles] pushTemplate($uuid) selhal") }
+    }
+
+    override suspend fun deleteTemplate(uuid: String) {
+        if (!isAvailable() || uuid.isBlank()) return
+        runCatching { remote.deleteTemplate(baseUrl(), cookie(), uuid) }
+            .onFailure { Timber.w(it, "[Profiles] deleteTemplate($uuid) selhal") }
+    }
+
+    override suspend fun pushAssignedTemplate(key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String) {
+        if (!isAvailable() || key.isBlank()) return
+        runCatching { remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId, templateUuid) }
+            .onFailure { Timber.w(it, "[Profiles] pushAssignedTemplate($key) selhal") }
+    }
 }

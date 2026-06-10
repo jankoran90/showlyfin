@@ -63,6 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
+import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
+import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderViewModel
 import com.github.jankoran90.showlyfin.core.network.Config
@@ -335,16 +337,31 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+            // Plan WARDEN W3c část 2 — in-app authoring šablon (admin). Šablony jsou globální (i s 1 profilem).
+            if (activeProfile?.isAdmin == true) {
+                Spacer(Modifier.height(16.dp))
+                TemplateAuthoringSection(
+                    templates = uiState.templates,
+                    absLibraries = uiState.absLibraries,
+                    onCreate = { viewModel.createTemplate(it) },
+                    onSave = { tpl, name, age, cfg -> viewModel.saveTemplate(tpl, name, age, cfg) },
+                    onDelete = { viewModel.deleteTemplate(it) },
+                )
+            }
             if (activeProfile?.isAdmin == true && uiState.profiles.size > 1) {
                 Spacer(Modifier.height(16.dp))
                 AdminRestrictionsSection(
                     profiles = uiState.profiles.filter { it.id != activeProfile.id },
                     absLibraries = uiState.absLibraries,
+                    templates = uiState.templates,
                     onUpdateAgeRating = { profileId, rating ->
                         viewModel.updateProfileAgeRating(profileId, rating)
                     },
                     onUpdateConfig = { profileId, transform ->
                         viewModel.updateProfileConfig(profileId, transform)
+                    },
+                    onAssignTemplate = { profileId, uuid ->
+                        viewModel.assignTemplate(profileId, uuid)
                     },
                 )
             }
@@ -1176,8 +1193,10 @@ private val LANDING_OPTIONS = listOf(
 private fun AdminRestrictionsSection(
     profiles: List<ProfileEntity>,
     absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
+    templates: List<TemplateEntity>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
     onUpdateConfig: (Long, (ProfileConfig) -> ProfileConfig) -> Unit,
+    onAssignTemplate: (Long, String?) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
@@ -1194,7 +1213,7 @@ private fun AdminRestrictionsSection(
         )
         Spacer(Modifier.height(10.dp))
         profiles.forEach { profile ->
-            ProfileAuthoringBlock(profile, absLibraries, onUpdateAgeRating, onUpdateConfig)
+            ProfileAuthoringBlock(profile, absLibraries, templates, onUpdateAgeRating, onUpdateConfig, onAssignTemplate)
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -1205,8 +1224,10 @@ private fun AdminRestrictionsSection(
 private fun ProfileAuthoringBlock(
     profile: ProfileEntity,
     absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
+    templates: List<TemplateEntity>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
     onUpdateConfig: (Long, (ProfileConfig) -> ProfileConfig) -> Unit,
+    onAssignTemplate: (Long, String?) -> Unit,
 ) {
     val cfg = ProfileConfig.fromJson(profile.configJson)
     var open by remember(profile.id) { mutableStateOf(false) }
@@ -1236,6 +1257,15 @@ private fun ProfileAuthoringBlock(
             }
             if (open) {
                 Spacer(Modifier.height(10.dp))
+
+                // — Šablona (Plan WARDEN W3c) — zamčené domény diktuje šablona, odemčené si user mění sám —
+                Text("Šablona", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                TemplateAssignDropdown(
+                    templates = templates,
+                    current = profile.templateUuid,
+                    onSelect = { uuid -> onAssignTemplate(profile.id, uuid) },
+                )
+                Spacer(Modifier.height(12.dp))
 
                 // — Hlavní sekce —
                 Text("Hlavní sekce (otevře se po vstupu)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
@@ -1400,6 +1430,214 @@ private fun AgeRatingDropdown(
                         expanded = false
                     },
                 )
+            }
+        }
+    }
+}
+
+// ── Šablony — in-app admin authoring (Plan WARDEN W3c část 2) ────────────────────
+
+/** Zamykatelné domény šablony (LockKeys) s popiskem pro UI. */
+private val TEMPLATE_LOCKS = listOf(
+    ProfileConfig.LockKeys.VISIBLE_SECTIONS to "Viditelné sekce",
+    ProfileConfig.LockKeys.JELLYFIN_LIBRARIES to "Knihovny (Jellyfin)",
+    ProfileConfig.LockKeys.ABS_LIBRARIES to "Knihovny (Poslech)",
+    ProfileConfig.LockKeys.GENRES to "Žánry",
+    ProfileConfig.LockKeys.AGE_RATING to "Věk",
+    ProfileConfig.LockKeys.DEFAULT_SECTION to "Hlavní sekce",
+    ProfileConfig.LockKeys.APPEARANCE to "Vzhled",
+    ProfileConfig.LockKeys.CREDENTIALS to "Přihlášení",
+)
+
+/** Dropdown přiřazení šablony profilu (v ProfileAuthoringBlock). */
+@Composable
+private fun TemplateAssignDropdown(
+    templates: List<TemplateEntity>,
+    current: String?,
+    onSelect: (String?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = templates.firstOrNull { it.templateUuid == current }?.name ?: "Bez šablony (plná volnost)"
+    Box {
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+        androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Bez šablony (plná volnost)") },
+                onClick = { onSelect(null); expanded = false },
+            )
+            templates.forEach { t ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(t.name.ifBlank { "(bez názvu)" }) },
+                    onClick = { onSelect(t.templateUuid); expanded = false },
+                )
+            }
+        }
+    }
+}
+
+/** Admin sekce authoringu šablon — seznam editorů + vytvoření nové. */
+@Composable
+private fun TemplateAuthoringSection(
+    templates: List<TemplateEntity>,
+    absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
+    onCreate: (String) -> Unit,
+    onSave: (TemplateEntity, String, AgeRating?, ProfileConfig) -> Unit,
+    onDelete: (TemplateEntity) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Text("Šablony (Admin)", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Pojmenovaná sada nastavení + zámky („co smí uživatel měnit“). Přiřaď ji profilu níže. " +
+                "Zamčené domény diktuje šablona, odemčené si uživatel mění sám.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.6f),
+        )
+        Spacer(Modifier.height(10.dp))
+        templates.forEach { t ->
+            TemplateEditorBlock(t, absLibraries, onSave, onDelete)
+            Spacer(Modifier.height(8.dp))
+        }
+        var newName by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value = newName,
+            onValueChange = { newName = it },
+            label = { Text("Název nové šablony") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(6.dp))
+        OutlinedButton(onClick = {
+            if (newName.isNotBlank()) { onCreate(newName); newName = "" }
+        }) { Text("+ Vytvořit šablonu") }
+    }
+}
+
+/** Editor jedné šablony (sbalovací) — název, hlavní/viditelné sekce, žánry, věk, zamčené domény. */
+@Composable
+private fun TemplateEditorBlock(
+    template: TemplateEntity,
+    absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
+    onSave: (TemplateEntity, String, AgeRating?, ProfileConfig) -> Unit,
+    onDelete: (TemplateEntity) -> Unit,
+) {
+    var open by remember(template.id) { mutableStateOf(false) }
+    val initial = remember(template.id, template.configJson) { ProfileConfig.fromJson(template.configJson) }
+    var name by remember(template.id, template.name) { mutableStateOf(template.name) }
+    var cfg by remember(template.id, template.configJson) { mutableStateOf(initial) }
+    var age by remember(template.id, template.maxAgeRating) {
+        mutableStateOf(template.maxAgeRating?.let { runCatching { AgeRating.valueOf(it) }.getOrNull() })
+    }
+    var blockText by remember(template.id, template.configJson) { mutableStateOf(initial.blockedGenres.joinToString(", ")) }
+    var allowText by remember(template.id, template.configJson) { mutableStateOf(initial.allowedGenres.joinToString(", ")) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clickable { open = !open },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "🧩 " + name.ifBlank { "(bez názvu)" },
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White,
+                )
+                Text(
+                    "${cfg.lockedKeys.size} 🔒",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    imageVector = if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (open) "Sbalit" else "Rozbalit",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (open) {
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Název šablony") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+
+                Text("Hlavní sekce (otevře se po vstupu)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                LandingDropdown(
+                    current = cfg.defaultSection,
+                    options = LANDING_OPTIONS.filter { (key, _) -> cfg.isSectionVisible(key) },
+                    onSelect = { key -> cfg = cfg.copy(defaultSection = key) },
+                )
+                Spacer(Modifier.height(12.dp))
+
+                Text("Viditelné sekce a podsekce", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                SECTION_TOGGLES.forEach { (key, label) ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                        Switch(
+                            checked = cfg.isSectionVisible(key),
+                            onCheckedChange = { enabled ->
+                                val sections = toggledSections(cfg, key, enabled)
+                                val newDefault = cfg.defaultSection?.takeIf { d -> sections.isEmpty() || d in sections }
+                                cfg = cfg.copy(visibleSections = sections, defaultSection = newDefault)
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+
+                Text("Žánry", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                OutlinedTextField(
+                    value = blockText,
+                    onValueChange = { blockText = it },
+                    label = { Text("Zakázané žánry (čárkou)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = allowText,
+                    onValueChange = { allowText = it },
+                    label = { Text("Povolené žánry (prázdné = vše kromě zakázaných)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+
+                Text("Věkový limit", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                AgeRatingDropdown(current = age, onSelect = { age = it })
+                Spacer(Modifier.height(12.dp))
+
+                Text("🔒 Zamčené domény (uživatel needituje; bere se ze šablony)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                TEMPLATE_LOCKS.forEach { (key, label) ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔒 $label", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                        Switch(
+                            checked = cfg.lockedKeys.contains(key),
+                            onCheckedChange = { enabled ->
+                                cfg = cfg.copy(lockedKeys = if (enabled) cfg.lockedKeys + key else cfg.lockedKeys - key)
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = {
+                        val block = blockText.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+                        val allow = allowText.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+                        onSave(template, name, age, cfg.copy(blockedGenres = block, allowedGenres = allow))
+                    }) { Text("💾 Uložit šablonu") }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { onDelete(template) }) { Text("🗑 Smazat") }
+                }
             }
         }
     }

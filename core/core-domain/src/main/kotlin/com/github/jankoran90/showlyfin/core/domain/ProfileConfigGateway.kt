@@ -44,4 +44,20 @@ interface ProfileConfigGateway {
      * **prázdný string** = profil existuje, ale bez šablony (lokálně zrušit přiřazení); jinak = uuid.
      */
     suspend fun fetchAssignedTemplateUuid(key: String): String?
+
+    /**
+     * Plan WARDEN W3c (část 2) — write-through in-app authoringu šablony na backend (zdroj pravdy,
+     * jako [pushConfig]). [configJson] = serializovaný [ProfileConfig] (baseline + lockedKeys).
+     * Best-effort; selhání se tiše ignoruje (lokální `TemplateDao` je už zapsaný).
+     */
+    suspend fun pushTemplate(uuid: String, name: String, ageRating: String?, configJson: String)
+
+    /** Plan WARDEN W3c — smazání šablony na backendu (auto-odpojí profily server-side). Best-effort. */
+    suspend fun deleteTemplate(uuid: String)
+
+    /**
+     * Plan WARDEN W3c — write-through přiřazení/zrušení šablony profilu na backend. [templateUuid]
+     * prázdný = zrušit (backend uloží "", sync to přečte jako bez šablony). Best-effort.
+     */
+    suspend fun pushAssignedTemplate(key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String)
 }

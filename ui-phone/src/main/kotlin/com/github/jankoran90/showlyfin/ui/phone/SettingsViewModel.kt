@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
+import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
@@ -41,6 +42,8 @@ data class SettingsUiState(
     val maxParentalRating: Int? = null,
     val profiles: List<ProfileEntity> = emptyList(),
     val activeProfileId: Long? = null,
+    /** Plan WARDEN W3c — šablony pro in-app admin authoring. */
+    val templates: List<TemplateEntity> = emptyList(),
     /** Plan WARDEN W2: zamčené klíče efektivního configu aktivního profilu ([ProfileConfig.LockKeys]).
      * Ne-admin user needituje zamčené bloky Nastavení. Prázdné = nic zamčené (admin/legacy/bez šablony). */
     val lockedKeys: Set<String> = emptySet(),
@@ -155,6 +158,9 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
         profileRepository.activeConfig
             .onEach { cfg -> _uiState.update { it.copy(lockedKeys = cfg.lockedKeys) } }
+            .launchIn(viewModelScope)
+        profileRepository.observeTemplates()
+            .onEach { list -> _uiState.update { it.copy(templates = list) } }
             .launchIn(viewModelScope)
         _uiState.update { it.copy(liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false), uploaderBaseUrl = uploaderBase) }
         refreshAbsState()
@@ -413,6 +419,41 @@ class SettingsViewModel @Inject constructor(
     /** Admin write-through editace config balíku profilu (Plan PROFILES 1E): sekce/žánry. */
     fun updateProfileConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
         viewModelScope.launch { profileRepository.updateConfig(profileId, transform) }
+    }
+
+    // ── Šablony — in-app admin authoring (Plan WARDEN W3c část 2) ──────────────
+
+    /** Vytvoří novou prázdnou šablonu (lokál + backend). */
+    fun createTemplate(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            profileRepository.saveTemplateAuthored(
+                TemplateEntity(name = trimmed, configJson = ProfileConfig.toJson(ProfileConfig())),
+            )
+        }
+    }
+
+    /** Uloží editovanou šablonu — název, věk, config (vč. lockedKeys); write-through na backend. */
+    fun saveTemplate(template: TemplateEntity, name: String, ageRating: AgeRating?, config: ProfileConfig) {
+        viewModelScope.launch {
+            profileRepository.saveTemplateAuthored(
+                template.copy(
+                    name = name.trim().ifBlank { template.name },
+                    maxAgeRating = ageRating?.name,
+                    configJson = ProfileConfig.toJson(config),
+                ),
+            )
+        }
+    }
+
+    fun deleteTemplate(template: TemplateEntity) {
+        viewModelScope.launch { profileRepository.deleteTemplateAuthored(template) }
+    }
+
+    /** Přiřadí (uuid != null) / zruší (null) šablonu profilu (lokál + backend). */
+    fun assignTemplate(profileId: Long, templateUuid: String?) {
+        viewModelScope.launch { profileRepository.assignTemplate(profileId, templateUuid) }
     }
 
     private fun refreshJellyfinState() {

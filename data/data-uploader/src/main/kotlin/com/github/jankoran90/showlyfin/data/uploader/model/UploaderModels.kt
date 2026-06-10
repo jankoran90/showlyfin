@@ -197,6 +197,8 @@ data class ProfileMetaRequest(
     val name: String,
     val isAdmin: Boolean,
     val jellyfinUserId: String,
+    // Plan WARDEN W3c — přiřazená šablona (null = neposílat/nezměnit; "" = zrušit přiřazení).
+    val templateUuid: String? = null,
 )
 
 // ── TMM Pipeline models ──────────────────────────────────────────────────────

@@ -139,6 +139,33 @@ class ProfileRepository @Inject constructor(
     suspend fun deleteTemplate(template: TemplateEntity) = templateDao.delete(template)
 
     /**
+     * In-app authoring šablony (Plan WARDEN W3c část 2) — lokální upsert + write-through na backend
+     * (zdroj pravdy, jako [updateConfig]). Re-aplikuje efektivní config, pokud aktivní profil tuhle
+     * šablonu používá (zamčená pole se mohla změnit).
+     */
+    suspend fun saveTemplateAuthored(template: TemplateEntity): Long {
+        val id = upsertTemplate(template)
+        configGateway.pushTemplate(template.templateUuid, template.name, template.maxAgeRating, template.configJson ?: "{}")
+        reapplyIfActiveUsesTemplate(template.templateUuid)
+        return id
+    }
+
+    /** In-app smazání šablony (Plan WARDEN W3c) — lokál + backend (auto-odpojí profily server-side). */
+    suspend fun deleteTemplateAuthored(template: TemplateEntity) {
+        templateDao.delete(template)
+        configGateway.deleteTemplate(template.templateUuid)
+        reapplyIfActiveUsesTemplate(template.templateUuid)
+    }
+
+    private suspend fun reapplyIfActiveUsesTemplate(uuid: String) {
+        val active = _activeProfile.value ?: return
+        if (active.templateUuid != uuid) return
+        val effective = effectiveConfigFor(active)
+        _activeConfig.value = effective
+        configApplier.apply(effective)
+    }
+
+    /**
      * Přiřadí (uuid != null) nebo zruší (uuid = null) šablonu profilu (Plan WARDEN W0). Re-aplikuje
      * efektivní config, je-li profil aktivní.
      */
@@ -152,6 +179,10 @@ class ProfileRepository @Inject constructor(
             _activeConfig.value = effective
             configApplier.apply(effective)
         }
+        // Plan WARDEN W3c: write-through přiřazení na backend ("" = zrušit → backend uloží "").
+        configGateway.pushAssignedTemplate(
+            profile.backendKey(), profile.name, profile.isAdmin, profile.jellyfinUserId, templateUuid ?: "",
+        )
     }
 
     suspend fun setDefault(profileId: Long) {

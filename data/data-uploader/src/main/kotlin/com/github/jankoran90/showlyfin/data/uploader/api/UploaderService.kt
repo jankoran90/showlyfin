@@ -26,6 +26,8 @@ interface UploaderService {
     // Plan WARDEN W3c — šablony + profilová meta (raw JSON pole přes ResponseBody)
     @GET suspend fun getTemplates(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @GET suspend fun getProfilesMeta(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @PUT suspend fun putTemplate(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+    @DELETE suspend fun deleteTemplate(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
 
     // Titulky.com CZ titulky (Fáze E)
     @GET suspend fun getSubtitles(@Url url: String, @Header("Cookie") cookie: String): SubtitlesResponse
