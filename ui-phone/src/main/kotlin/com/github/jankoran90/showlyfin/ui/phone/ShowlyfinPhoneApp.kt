@@ -178,8 +178,12 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         if (gateState.activeProfile == null) {
             ProfilePickerScreen(
                 profiles = gateState.profiles,
-                onProfileSelected = { gateViewModel.selectProfile(it) },
+                onProfileClicked = { gateViewModel.onProfileClicked(it) },
                 onAddProfile = { gateViewModel.startAddProfile() },
+                pinPromptName = gateState.pendingPinProfile?.name,
+                pinError = gateState.pinError,
+                onSubmitPin = { gateViewModel.submitPin(it) },
+                onCancelPin = { gateViewModel.cancelPin() },
                 modifier = Modifier.fillMaxSize(),
             )
             return@ShowlyfinPhoneTheme
