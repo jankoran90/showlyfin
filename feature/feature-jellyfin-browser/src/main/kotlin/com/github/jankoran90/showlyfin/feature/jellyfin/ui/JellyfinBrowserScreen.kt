@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinBrowserViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinLibrary
 
@@ -106,7 +108,7 @@ fun JellyfinBrowserScreen(
 private fun LibraryCard(library: JellyfinLibrary, onClick: () -> Unit) {
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).tvFocusable(shape = RoundedCornerShape(12.dp)),
     ) {
         Box(Modifier.fillMaxSize()) {
             val img = library.imageUrl

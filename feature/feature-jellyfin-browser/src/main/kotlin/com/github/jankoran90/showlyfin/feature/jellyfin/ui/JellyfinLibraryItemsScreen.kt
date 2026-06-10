@@ -60,12 +60,15 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.github.jankoran90.showlyfin.core.ui.InLibraryBadge
 import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadge
 import com.github.jankoran90.showlyfin.core.ui.InLibraryTitleBadgeSpacer
 import com.github.jankoran90.showlyfin.core.ui.WatchedBadge
 import com.github.jankoran90.showlyfin.core.ui.WatchedTitleBadge
 import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.matchesQuery
@@ -101,7 +104,7 @@ fun JellyfinLibraryItemsScreen(
             TopAppBar(
                 title = { Text(state.libraryName.ifBlank { libraryName }, color = Color.White) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.tvFocusable(shape = CircleShape)) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Zpět",
@@ -274,7 +277,7 @@ private fun JellyfinItemCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f),
+        modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f).tvFocusable(shape = RoundedCornerShape(12.dp)),
     ) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(

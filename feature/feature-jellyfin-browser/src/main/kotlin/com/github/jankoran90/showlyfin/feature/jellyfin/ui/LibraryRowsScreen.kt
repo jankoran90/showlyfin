@@ -41,7 +41,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.github.jankoran90.showlyfin.core.ui.WatchedBadge
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRow
 import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowItem
 import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
@@ -115,7 +117,10 @@ private fun LibraryRowSection(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { onOpenLibrary(row.libraryId, row.libraryName, row.collectionType) }) {
+            TextButton(
+                onClick = { onOpenLibrary(row.libraryId, row.libraryName, row.collectionType) },
+                modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50)),
+            ) {
                 Text("Vše", color = Color.White.copy(alpha = 0.8f))
                 Spacer(Modifier.width(2.dp))
                 Icon(
@@ -148,7 +153,8 @@ private fun LibraryRowCard(
         onClick = onClick,
         modifier = Modifier
             .width(120.dp)
-            .aspectRatio(2f / 3f),
+            .aspectRatio(2f / 3f)
+            .tvFocusable(shape = RoundedCornerShape(12.dp)),
     ) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(
