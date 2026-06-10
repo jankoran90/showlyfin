@@ -95,7 +95,6 @@ dependencies {
     implementation(project(":feature:feature-uploader"))
 
     implementation(project(":ui-phone"))
-    implementation(project(":ui-tv"))
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

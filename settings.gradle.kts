@@ -47,6 +47,5 @@ include(":feature:feature-jellyfin-browser")
 include(":feature:feature-playback")
 include(":feature:feature-listen")
 
-// UI shells
+// UI shells (Plan FUSE F6: ui-tv smazán — TV dědí telefonní UI přes LocalFormFactor)
 include(":ui-phone")
-include(":ui-tv")
