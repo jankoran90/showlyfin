@@ -115,7 +115,12 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(16.dp))
         }
+        // Plan WARDEN W4: ne-admin user s uzamčeným přihlášením (lock-mapa CREDENTIALS) needituje účty.
+        val credLocked = !isAdmin && ProfileConfig.LockKeys.CREDENTIALS in uiState.lockedKeys
         CollapsibleSettingsSection("Účty", expanded) {
+          if (credLocked) {
+            LockedByAdminNote()
+          } else {
             // Jellyfin sekce
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -244,9 +249,13 @@ fun SettingsScreen(
                     }
                 }
             }
+          }
         }
 
         CollapsibleSettingsSection("Poslech", expanded) {
+          if (credLocked) {
+            LockedByAdminNote()
+          } else {
             AbsSection(
                 configured = uiState.absConfigured,
                 baseUrl = uiState.absBaseUrl,
@@ -257,6 +266,8 @@ fun SettingsScreen(
                 onLogout = { viewModel.absLogout() },
                 onToggleHideFinished = { viewModel.setHideFinishedEpisodes(it) },
             )
+          }
+            // Playback preference (ne creds) — dostupné i při uzamčeném přihlášení, pokud je ABS nastaven.
             if (uiState.absConfigured) {
                 Spacer(Modifier.height(12.dp))
                 ListenSettingsCard(uiState, viewModel)
@@ -264,6 +275,9 @@ fun SettingsScreen(
         }
 
         CollapsibleSettingsSection("Streamování", expanded) {
+          if (credLocked) {
+            LockedByAdminNote()
+          } else {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
@@ -294,6 +308,7 @@ fun SettingsScreen(
                 onToggleFallback = { k, e -> viewModel.toggleFallback(k, e) },
                 onReload = { viewModel.loadStreamFilter() },
             )
+          }
         }
 
         CollapsibleSettingsSection("Vzhled", expanded) {
