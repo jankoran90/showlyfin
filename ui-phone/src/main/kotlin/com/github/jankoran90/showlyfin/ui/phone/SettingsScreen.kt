@@ -1250,7 +1250,7 @@ private fun ProfileAuthoringBlock(
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(
-                Modifier.fillMaxWidth().clickable { open = !open },
+                Modifier.fillMaxWidth().clickable { open = !open }.tvFocusable(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -1471,7 +1471,7 @@ private fun ProfileCredentialsEditor(
 ) {
     var open by remember(profileKey) { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().clickable { open = !open },
+        Modifier.fillMaxWidth().clickable { open = !open }.tvFocusable(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Přihlašovací údaje", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))

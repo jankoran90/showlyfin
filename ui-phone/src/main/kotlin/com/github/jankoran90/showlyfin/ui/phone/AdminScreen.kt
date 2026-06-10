@@ -29,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
+import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -65,7 +67,8 @@ fun AdminScreen(
         viewModel.loadAbsLibraries()
     }
 
-    Column(modifier.fillMaxSize()) {
+    // FUSE/HELM: tvOverscan = bezpečné okraje na TV (no-op na telefonu), ať se taby/obsah neořežou.
+    Column(modifier.fillMaxSize().tvOverscan()) {
         ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
             containerColor = Color(0xFF1A1A2E),
@@ -77,6 +80,7 @@ fun AdminScreen(
                     selected = pagerState.currentPage == index,
                     onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
                     text = { Text(tab.title) },
+                    modifier = Modifier.tvFocusable(), // D-pad fokus highlight tabu na TV
                 )
             }
         }
