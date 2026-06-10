@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,7 +17,18 @@ import javax.inject.Inject
 class ListenViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val downloadManager: EpisodeDownloadManager,
+    private val profileRepository: ProfileRepository,
 ) : ViewModel() {
+
+    /**
+     * Profilový whitelist ABS knihoven (Plan PROFILES Fáze 4E). null = bez omezení (vidět vše).
+     * Filtruje audioknihy i podcasty police podle aktivního profilu.
+     */
+    private fun List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>.applyProfileWhitelist():
+        List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary> {
+        val wl = profileRepository.activeConfig.value.absLibraryWhitelist ?: return this
+        return filter { it.id in wl }
+    }
 
     private val _uiState = MutableStateFlow(ListenUiState())
     val uiState = _uiState.asStateFlow()
@@ -37,7 +49,7 @@ class ListenViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isConfigured = true, isLoading = true, error = null) }
-            runCatching { repo.getAudiobookLibraries() }
+            runCatching { repo.getAudiobookLibraries().applyProfileWhitelist() }
                 .onSuccess { libs ->
                     if (libs.isEmpty()) {
                         _uiState.update { it.copy(isLoading = false, libraries = emptyList(), books = emptyList()) }
@@ -86,7 +98,7 @@ class ListenViewModel @Inject constructor(
         if (!repo.isConfigured) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            runCatching { repo.getPodcastLibraries() }
+            runCatching { repo.getPodcastLibraries().applyProfileWhitelist() }
                 .onSuccess { libs ->
                     if (libs.isEmpty()) {
                         _uiState.update {

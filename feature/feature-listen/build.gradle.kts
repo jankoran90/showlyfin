@@ -18,6 +18,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-domain"))
+    implementation(project(":core:core-data"))
     implementation(project(":core:core-ui"))
     implementation(project(":data:data-abs"))
     implementation(libs.hilt.android)

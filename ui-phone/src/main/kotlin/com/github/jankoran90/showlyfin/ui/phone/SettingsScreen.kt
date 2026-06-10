@@ -97,20 +97,16 @@ fun SettingsScreen(
         Text("Nastavení", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(24.dp))
 
+        // Plan PROFILES Fáze 4E: ne-admin (dětský) profil MÁ přístup do Nastavení (vzhled, poslech…),
+        // jen NE do správy profilů a admin sekce omezení/práv (ty jsou gated `isAdmin` níže).
         if (!isAdmin) {
-            // Plan PROFILES 1E: ne-admin (dětský) profil — žádná editace, jen odhlášení/přepnutí.
             Text(
-                "Toto je dětský profil. Nastavení spravuje správce. Pro přepnutí účtu se odhlas.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.75f),
+                "Dětský profil — omezení a práva spravuje správce z admin profilu.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f),
             )
-            Spacer(Modifier.height(20.dp))
-            Button(
-                onClick = { viewModel.logoutProfile() },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            ) { Text("Odhlásit / přepnout profil") }
-        } else {
+            Spacer(Modifier.height(16.dp))
+        }
         CollapsibleSettingsSection("Účty", expanded) {
             // Jellyfin sekce
             Card(
@@ -300,6 +296,7 @@ fun SettingsScreen(
             ProfilesSection(
                 profiles = uiState.profiles,
                 activeProfileId = uiState.activeProfileId,
+                canManage = isAdmin,
                 onSwitch = { viewModel.switchProfile(it) },
                 onSetDefault = { viewModel.setDefaultProfile(it) },
                 onSetTvDefault = { viewModel.setTvDefaultProfile(it) },
@@ -331,6 +328,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(16.dp))
                 AdminRestrictionsSection(
                     profiles = uiState.profiles.filter { it.id != activeProfile.id },
+                    absLibraries = uiState.absLibraries,
                     onUpdateAgeRating = { profileId, rating ->
                         viewModel.updateProfileAgeRating(profileId, rating)
                     },
@@ -353,7 +351,6 @@ fun SettingsScreen(
         uiState.error?.let {
             Spacer(Modifier.height(8.dp))
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
         }
     }
 }
@@ -883,6 +880,7 @@ private fun UpdateSection() {
 private fun ProfilesSection(
     profiles: List<ProfileEntity>,
     activeProfileId: Long?,
+    canManage: Boolean,
     onSwitch: (Long) -> Unit,
     onSetDefault: (Long) -> Unit,
     onSetTvDefault: (Long) -> Unit,
@@ -917,7 +915,9 @@ private fun ProfilesSection(
                     color = Color.White.copy(alpha = 0.65f),
                 )
             } else {
-                profiles.forEach { profile ->
+                // Ne-admin (děti) vidí jen svůj aktivní profil (read-only), bez správy ostatních.
+                val shown = if (canManage) profiles else profiles.filter { it.id == activeProfileId }
+                shown.forEach { profile ->
                     val isActive = profile.id == activeProfileId
                     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         ProfileAvatar(profile)
@@ -940,35 +940,39 @@ private fun ProfilesSection(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             Spacer(Modifier.height(6.dp))
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (!isActive) {
-                                    OutlinedButton(onClick = { onSwitch(profile.id) }) { Text("Přepnout") }
+                            if (canManage) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (!isActive) {
+                                        OutlinedButton(onClick = { onSwitch(profile.id) }) { Text("Přepnout") }
+                                    }
+                                    OutlinedButton(onClick = {
+                                        avatarTargetId = profile.id
+                                        photoPicker.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                        )
+                                    }) { Text("Foto") }
+                                    OutlinedButton(onClick = { renameTarget = profile }) { Text("Přejmenovat") }
+                                    if (!profile.isDefault) {
+                                        OutlinedButton(onClick = { onSetDefault(profile.id) }) { Text("Výchozí pro telefon") }
+                                    }
+                                    if (!profile.tvDefault) {
+                                        OutlinedButton(onClick = { onSetTvDefault(profile.id) }) { Text("Výchozí pro TV") }
+                                    }
+                                    OutlinedButton(
+                                        onClick = { onDelete(profile) },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                    ) { Text("Smazat") }
                                 }
-                                OutlinedButton(onClick = {
-                                    avatarTargetId = profile.id
-                                    photoPicker.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                    )
-                                }) { Text("Foto") }
-                                OutlinedButton(onClick = { renameTarget = profile }) { Text("Přejmenovat") }
-                                if (!profile.isDefault) {
-                                    OutlinedButton(onClick = { onSetDefault(profile.id) }) { Text("Výchozí pro telefon") }
-                                }
-                                if (!profile.tvDefault) {
-                                    OutlinedButton(onClick = { onSetTvDefault(profile.id) }) { Text("Výchozí pro TV") }
-                                }
-                                OutlinedButton(
-                                    onClick = { onDelete(profile) },
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                ) { Text("Smazat") }
                             }
                         }
                     }
                 }
             }
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = onAddProfile, modifier = Modifier.fillMaxWidth()) {
-                Text("Přidat profil")
+            if (canManage) {
+                OutlinedButton(onClick = onAddProfile, modifier = Modifier.fillMaxWidth()) {
+                    Text("Přidat profil")
+                }
             }
             if (activeProfileId != null) {
                 Spacer(Modifier.height(8.dp))
@@ -1087,6 +1091,7 @@ private val LANDING_OPTIONS = listOf(
 @Composable
 private fun AdminRestrictionsSection(
     profiles: List<ProfileEntity>,
+    absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
     onUpdateConfig: (Long, (ProfileConfig) -> ProfileConfig) -> Unit,
 ) {
@@ -1105,7 +1110,7 @@ private fun AdminRestrictionsSection(
         )
         Spacer(Modifier.height(10.dp))
         profiles.forEach { profile ->
-            ProfileAuthoringBlock(profile, onUpdateAgeRating, onUpdateConfig)
+            ProfileAuthoringBlock(profile, absLibraries, onUpdateAgeRating, onUpdateConfig)
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -1115,6 +1120,7 @@ private fun AdminRestrictionsSection(
 @Composable
 private fun ProfileAuthoringBlock(
     profile: ProfileEntity,
+    absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
     onUpdateConfig: (Long, (ProfileConfig) -> ProfileConfig) -> Unit,
 ) {
@@ -1178,6 +1184,34 @@ private fun ProfileAuthoringBlock(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+
+                // — Poslech: whitelist ABS knihoven (Plan PROFILES Fáze 4E) —
+                if (cfg.isSectionVisible(ProfileConfig.Sections.POSLECH) && absLibraries.isNotEmpty()) {
+                    Text("Poslech — knihovny (nic = všechny)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    val wl = cfg.absLibraryWhitelist
+                    absLibraries.forEach { lib ->
+                        val checked = wl == null || lib.id in wl
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(lib.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            Switch(
+                                checked = checked,
+                                onCheckedChange = { enabled ->
+                                    onUpdateConfig(profile.id) { c ->
+                                        val current = c.absLibraryWhitelist?.toMutableSet()
+                                            ?: absLibraries.map { it.id }.toMutableSet()
+                                        if (enabled) current.add(lib.id) else current.remove(lib.id)
+                                        val newWl = when {
+                                            current.size == absLibraries.size -> null // vše = bez omezení
+                                            else -> current.toList()
+                                        }
+                                        c.copy(absLibraryWhitelist = newWl)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
 
                 // — Žánry (allow + block) —
                 Text("Žánry", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))

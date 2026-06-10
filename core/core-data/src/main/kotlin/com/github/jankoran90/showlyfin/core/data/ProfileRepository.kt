@@ -24,11 +24,14 @@ class ProfileRepository @Inject constructor(
     private val configGateway: ProfileConfigGateway,
 ) {
     /**
-     * Klíč profilu pro backend (Plan PROFILES Fáze 4) = stabilní per-profil [ProfileEntity.profileUuid].
-     * Nezávislý na Jellyfin účtu → dva profily sdílející jeden JF účet se NEpřelévají (fix bleedu z
-     * Fáze 2, kde key=jellyfinUserId kolidoval). Fallback `p<localId>` jen pro teoretický prázdný uuid.
+     * Klíč profilu pro backend (Plan PROFILES Fáze 4E) = **`jellyfinUserId`** (prefer) → stabilní
+     * NAPŘÍČ ZAŘÍZENÍMI: stejný Jellyfin uživatel = stejný klíč na všech telefonech → config se stáhne
+     * z backendu kdekoliv (cross-device sync). Každý profil má vlastní JF účet (rozhodnutí usera #33),
+     * takže klíče nekolidují. Fallback = stabilní per-profil [ProfileEntity.profileUuid] (profily bez
+     * JF loginu — device-local), pak `p<localId>`.
      */
-    private fun ProfileEntity.backendKey(): String = profileUuid.ifBlank { "p$id" }
+    private fun ProfileEntity.backendKey(): String =
+        jellyfinUserId.ifBlank { profileUuid.ifBlank { "p$id" } }
 
     private val _activeProfile = MutableStateFlow<ProfileEntity?>(null)
     val activeProfile: StateFlow<ProfileEntity?> = _activeProfile.asStateFlow()

@@ -19,6 +19,11 @@ data class ProfileConfig(
     val visibleSections: Set<String> = emptySet(),
     /** Povolené Jellyfin library ids. null = všechny. Prázdný seznam = žádná (záměrně). */
     val jellyfinLibraryWhitelist: List<String>? = null,
+    /**
+     * Povolené Audiobookshelf knihovny (police) v sekci Poslech (Plan PROFILES Fáze 4E). Ids platí pro
+     * audioknihy i podcasty. null = všechny. Prázdný seznam = žádná (skryje vše v Poslechu).
+     */
+    val absLibraryWhitelist: List<String>? = null,
     /** Povolené žánry (lowercase). Prázdné = bez allow-listu (vše kromě blacklistu). */
     val allowedGenres: Set<String> = emptySet(),
     /** Zakázané žánry (lowercase) — blacklist. */

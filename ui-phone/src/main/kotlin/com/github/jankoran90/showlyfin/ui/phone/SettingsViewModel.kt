@@ -55,6 +55,8 @@ data class SettingsUiState(
     val absLoading: Boolean = false,
     val absError: String? = null,
     val hideFinishedEpisodes: Boolean = false,
+    // Plan PROFILES Fáze 4E — seznam ABS knihoven (audioknihy+podcasty) pro admin authoring whitelistu
+    val absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary> = emptyList(),
     val listen: ListenSettings = ListenSettings(),
     // Stahování na ABS server — per-podcast auto-download (přesunuto z detailu)
     val serverPodcasts: List<com.github.jankoran90.showlyfin.data.abs.model.PodcastServerAutoDownload> = emptyList(),
@@ -150,7 +152,20 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
         _uiState.update { it.copy(liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false), uploaderBaseUrl = uploaderBase) }
         refreshAbsState()
+        loadAbsLibraries()
         loadStreamFilter()
+    }
+
+    /** Načte ABS knihovny (audioknihy + podcasty, dedup dle id) pro admin authoring whitelistu Poslechu. */
+    fun loadAbsLibraries() {
+        if (!absRepo.isConfigured) return
+        viewModelScope.launch {
+            val libs = runCatching {
+                (absRepo.getAudiobookLibraries() + absRepo.getPodcastLibraries())
+                    .distinctBy { it.id }
+            }.getOrElse { emptyList() }
+            _uiState.update { it.copy(absLibraries = libs) }
+        }
     }
 
     // ── Poslech / Audiobookshelf ──────────────────────────────────────────────
