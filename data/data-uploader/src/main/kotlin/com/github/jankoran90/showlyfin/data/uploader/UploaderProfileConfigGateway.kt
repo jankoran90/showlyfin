@@ -23,13 +23,18 @@ internal class UploaderProfileConfigGateway @Inject constructor(
 
     private fun baseUrl(): String = prefs.getString("uploader_base_url", "")?.trim().orEmpty()
     private fun cookie(): String = prefs.getString("uploader_session_cookie", "")?.trim().orEmpty()
+    private fun password(): String = prefs.getString("uploader_password", "")?.trim().orEmpty()
 
     /** Doplní scheme, když chybí (uživatel zadal jen host), a odřízne koncové „/". */
     private fun normalizeUrl(raw: String): String = raw.trim().trimEnd('/').let {
         if (it.isEmpty() || it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
     }
 
-    override suspend fun isAvailable(): Boolean = baseUrl().isNotBlank() && cookie().isNotBlank()
+    // Plan HELM fix: cookie NEBO heslo stačí. ProfileConfigApplier při přepnutí profilu maže cookie
+    // (vynutí relogin); kdyby isAvailable vyžadovalo cookie, push by se přeskočil dřív, než pošle
+    // request → interceptor by neměl co re-přihlásit = deadlock. S heslem request projde (401 →
+    // UploaderAuthInterceptor relogin heslem → retry OK), takže se push sám zahojí.
+    override suspend fun isAvailable(): Boolean = baseUrl().isNotBlank() && (cookie().isNotBlank() || password().isNotBlank())
 
     override suspend fun login(password: String, baseUrlOverride: String?): Boolean {
         // URL: override (pokročilé) → uložená → zapečená default. Pak normalizace scheme.
