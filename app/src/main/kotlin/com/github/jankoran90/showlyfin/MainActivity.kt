@@ -1,11 +1,15 @@
 package com.github.jankoran90.showlyfin
 
+import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.lifecycleScope
@@ -38,9 +42,13 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var traktAuthManager: TraktAuthManager
     @Inject lateinit var profileRepository: ProfileRepository
 
+    private val notifPermLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* výsledek neřešíme */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        requestNotificationPermissionIfNeeded()
         handleIntent(intent)
         UpdateCheckWorker.enqueue(applicationContext)
         runStartupUpdateCheck()
@@ -105,6 +113,15 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         handleIntent(intent)
         maybeShowUpdateDialogFromIntent(intent)
+    }
+
+    /** Android 13+ vyžaduje runtime souhlas s notifikacemi — bez něj se mediální ovladač (BEACON
+     *  lockscreen + přehrávač audioknih) i update notifikace neukáží. Požádáme jednou při startu. */
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     private fun handleIntent(intent: Intent) {

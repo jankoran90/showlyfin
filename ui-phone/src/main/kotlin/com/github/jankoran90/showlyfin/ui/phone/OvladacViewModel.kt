@@ -1,11 +1,14 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
+import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
+import com.github.jankoran90.showlyfin.ui.phone.beacon.OvladacBeaconService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,7 @@ import javax.inject.Named
 class OvladacViewModel @Inject constructor(
     private val naTv: NaTvService,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     data class UiState(
@@ -79,6 +83,9 @@ class OvladacViewModel @Inject constructor(
         val current = sessions.firstOrNull { it.sessionId == userSelectedId }
             ?: naTv.pickWatchSession(sessions)
         val cover = current?.itemId?.let { naTv.imageUrl(c.url, c.token, it, current.imageTag) }
+        // BEACON — když na TV běží přehrávání a sekce je v popředí, nastartuj lockscreen ovladač
+        // (foreground service). Služba se pak udržuje a ukončí sama, až přehrávání skončí.
+        if (current?.nowPlayingTitle != null) OvladacBeaconService.start(appContext)
         _state.update {
             it.copy(
                 loading = false,
