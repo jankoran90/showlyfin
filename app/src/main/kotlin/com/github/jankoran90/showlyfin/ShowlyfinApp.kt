@@ -6,6 +6,7 @@ import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.debug.BufferTree
 import com.github.jankoran90.showlyfin.debug.DebugCaptureManager
+import com.github.jankoran90.showlyfin.widget.WidgetRefreshWorker
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
 import java.io.File
@@ -30,6 +31,8 @@ class ShowlyfinApp : Application() {
         )
         // Auto-login k backendu po čisté instalaci (vývojová pohodlnost) — heslo jen z build env.
         ProfileConfigGateway.autoLoginPassword = BuildConfig.BACKEND_AUTOLOGIN_PASSWORD
+        // RELAY — periodická obnova domácích widgetů (no-op když žádný není na ploše).
+        WidgetRefreshWorker.schedule(this)
     }
 
     private var liveLogListener: SharedPreferences.OnSharedPreferenceChangeListener? = null

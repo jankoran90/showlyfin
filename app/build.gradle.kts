@@ -28,8 +28,8 @@ android {
         applicationId = "com.github.jankoran90.showlyfin"
         minSdk = 23
         targetSdk = 36
-        versionCode = 137
-        versionName = "1.45.11"
+        versionCode = 138
+        versionName = "1.45.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -98,6 +98,8 @@ dependencies {
 
     implementation(project(":feature:feature-remux"))
     implementation(project(":feature:feature-uploader"))
+    // RELAY — widget „Poslouchej" bindí MediaController na AudiobookPlayerService z feature-listen
+    implementation(project(":feature:feature-listen"))
 
     implementation(project(":ui-phone"))
 
@@ -111,6 +113,10 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
+    // RELAY — domácí widgety (Glance) + media3 session pro MediaController binding
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+    implementation(libs.androidx.media3.session)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.gson)
 

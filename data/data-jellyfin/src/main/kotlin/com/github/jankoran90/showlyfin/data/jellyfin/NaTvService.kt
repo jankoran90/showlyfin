@@ -40,6 +40,10 @@ class NaTvService @Inject constructor(
         }.getOrNull()
     }
 
+    /**
+     * Vrátí remote-control schopné Jellyfin session i s now-playing stavem.
+     * Filtruje jen klienty, které hlásí `SupportsRemoteControl` (typicky přehrávače na TV).
+     */
     suspend fun getSessions(baseUrl: String, token: String): List<JellyfinSessionSummary> {
         if (baseUrl.isBlank() || token.isBlank()) return emptyList()
         val base = baseUrl.trimEnd('/')
@@ -57,13 +61,25 @@ class NaTvService @Inject constructor(
                     val deviceName = s.optString("DeviceName").takeIf { it.isNotBlank() } ?: "?"
                     val client = s.optString("Client").takeIf { it.isNotBlank() }
                     val supportsRemote = s.optBoolean("SupportsRemoteControl", false)
-                    val isActive = s.optString("LastActivityDate").isNotBlank()
+                    val lastActivity = s.optString("LastActivityDate")
+                    val isActive = lastActivity.isNotBlank()
                     if (!supportsRemote) continue
+
+                    val nowPlaying = s.optJSONObject("NowPlayingItem")
+                    val playState = s.optJSONObject("PlayState")
                     out += JellyfinSessionSummary(
                         sessionId = id,
                         deviceName = deviceName,
                         client = client,
                         isActive = isActive,
+                        lastActivityDate = lastActivity.takeIf { it.isNotBlank() },
+                        nowPlayingTitle = nowPlaying?.let { buildNowPlayingTitle(it) },
+                        nowPlayingSubtitle = nowPlaying?.let { buildNowPlayingSubtitle(it) },
+                        isPlaying = nowPlaying != null && !(playState?.optBoolean("IsPaused", false) ?: true),
+                        isPaused = playState?.optBoolean("IsPaused", false) ?: false,
+                        positionTicks = playState?.optLong("PositionTicks", 0L) ?: 0L,
+                        runtimeTicks = nowPlaying?.optLong("RunTimeTicks", 0L) ?: 0L,
+                        canSeek = playState?.optBoolean("CanSeek", false) ?: false,
                     )
                 }
                 out
@@ -71,10 +87,73 @@ class NaTvService @Inject constructor(
         }.getOrElse { emptyList() }
     }
 
+    private fun buildNowPlayingTitle(item: JSONObject): String? {
+        val type = item.optString("Type")
+        // U epizod ukaž seriál jako hlavní titulek (epizoda je v podtitulku).
+        return if (type == "Episode") {
+            item.optString("SeriesName").takeIf { it.isNotBlank() }
+                ?: item.optString("Name").takeIf { it.isNotBlank() }
+        } else {
+            item.optString("Name").takeIf { it.isNotBlank() }
+        }
+    }
+
+    private fun buildNowPlayingSubtitle(item: JSONObject): String? {
+        if (item.optString("Type") != "Episode") return null
+        val season = item.optInt("ParentIndexNumber", -1)
+        val episode = item.optInt("IndexNumber", -1)
+        val epName = item.optString("Name").takeIf { it.isNotBlank() }
+        val code = when {
+            season >= 0 && episode >= 0 -> "S%02dE%02d".format(season, episode)
+            episode >= 0 -> "E%02d".format(episode)
+            else -> null
+        }
+        return listOfNotNull(code, epName).joinToString(" · ").takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Vybere cílovou session pro „Sleduj" widget.
+     * Priorita: Wolphin/Yellyfin TV klient s běžícím přehráváním → jakákoli Wolphin/Yellyfin →
+     * aktivní s now-playing → první aktivní → první.
+     */
+    fun pickWatchSession(sessions: List<JellyfinSessionSummary>): JellyfinSessionSummary? {
+        if (sessions.isEmpty()) return null
+        fun isWolphin(s: JellyfinSessionSummary): Boolean {
+            val hay = "${s.client.orEmpty()} ${s.deviceName}".lowercase()
+            return hay.contains("wolphin") || hay.contains("wholphin") || hay.contains("yellyfin")
+        }
+        return sessions.firstOrNull { isWolphin(it) && it.nowPlayingTitle != null }
+            ?: sessions.firstOrNull { isWolphin(it) }
+            ?: sessions.firstOrNull { it.nowPlayingTitle != null }
+            ?: sessions.firstOrNull { it.isActive }
+            ?: sessions.first()
+    }
+
     suspend fun sendPlayCommand(baseUrl: String, token: String, sessionId: String, itemId: String): Boolean {
         if (baseUrl.isBlank() || token.isBlank() || sessionId.isBlank() || itemId.isBlank()) return false
         val base = baseUrl.trimEnd('/')
         val url = "$base/Sessions/$sessionId/Playing?playCommand=PlayNow&itemIds=$itemId&startPositionTicks=0&api_key=$token"
+        return post(url)
+    }
+
+    /** Playstate příkaz na běžící session: PlayPause / Pause / Unpause / Stop / NextTrack / PreviousTrack. */
+    suspend fun sendPlaystateCommand(baseUrl: String, token: String, sessionId: String, command: String): Boolean {
+        if (baseUrl.isBlank() || token.isBlank() || sessionId.isBlank() || command.isBlank()) return false
+        val base = baseUrl.trimEnd('/')
+        val url = "$base/Sessions/$sessionId/Playing/$command?api_key=$token"
+        return post(url)
+    }
+
+    /** Seek na absolutní pozici v ticks (1 ms = 10000 ticks). */
+    suspend fun sendSeek(baseUrl: String, token: String, sessionId: String, positionTicks: Long): Boolean {
+        if (baseUrl.isBlank() || token.isBlank() || sessionId.isBlank()) return false
+        val pos = positionTicks.coerceAtLeast(0L)
+        val base = baseUrl.trimEnd('/')
+        val url = "$base/Sessions/$sessionId/Playing/Seek?seekPositionTicks=$pos&api_key=$token"
+        return post(url)
+    }
+
+    private fun post(url: String): Boolean {
         val body = "".toRequestBody("application/json".toMediaType())
         val request = Request.Builder().url(url).post(body).build()
         return runCatching {
@@ -88,4 +167,12 @@ data class JellyfinSessionSummary(
     val deviceName: String,
     val client: String?,
     val isActive: Boolean,
+    val lastActivityDate: String? = null,
+    val nowPlayingTitle: String? = null,
+    val nowPlayingSubtitle: String? = null,
+    val isPlaying: Boolean = false,
+    val isPaused: Boolean = false,
+    val positionTicks: Long = 0L,
+    val runtimeTicks: Long = 0L,
+    val canSeek: Boolean = false,
 )
