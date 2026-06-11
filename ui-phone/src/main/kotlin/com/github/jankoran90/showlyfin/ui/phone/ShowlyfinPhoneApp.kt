@@ -207,7 +207,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         }
 
         // Plan PROFILES 1E: viditelnost sekcí dle aktivního profilu. Prázdné = vše (admin/legacy).
-        val visibleSections = gateState.visibleSections
+        // Plan VAULT V10: TV má vlastní sadu (visibleSectionsTv); null = zrcadlí telefon.
+        val visibleSections = if (isTv) gateState.visibleSectionsTv ?: gateState.visibleSections else gateState.visibleSections
         fun sectionVisible(key: String): Boolean = visibleSections.isEmpty() || key in visibleSections
         val poslechVisible = sectionVisible(ProfileConfig.Sections.POSLECH)
         val visibleSubsections = listOf(
@@ -219,10 +220,14 @@ fun ShowlyfinApp(isTv: Boolean = false) {
 
         // Plan PROFILES Fáze 4: „hlavní" sekce — která sekce se profilu otevře po vstupu.
         // Poslech → spodní tab Listen; podsekce Sleduj → Hlavni s předvybranou podsekcí.
+        // Plan VAULT V10: Sleduj je nově skrývatelná → fallback Poslech, pak Nastavení.
+        val sledujVisible = sectionVisible(ProfileConfig.Sections.SLEDUJ)
         val defaultSection = gateState.defaultSection?.takeIf { it.isNotBlank() }
         val startBottomTab: Destination = when {
             defaultSection == ProfileConfig.Sections.POSLECH && poslechVisible -> Destination.Listen
-            else -> Destination.Hlavni
+            sledujVisible -> Destination.Hlavni
+            poslechVisible -> Destination.Listen
+            else -> Destination.Settings
         }
         // Předvybraná podsekce „Sleduj" (jen je-li viditelná), jinak první viditelná.
         val initialSubsection: String? = defaultSection
@@ -303,7 +308,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         val isSubScreen = currentDestination !in bottomTabs
 
         val navItems = buildList {
-            add(ShellNavItem(Destination.Hlavni, Icons.Default.Home, "Sleduj"))
+            if (sledujVisible) add(ShellNavItem(Destination.Hlavni, Icons.Default.Home, "Sleduj"))
             if (poslechVisible) add(ShellNavItem(Destination.Listen, Icons.Default.Headphones, "Poslech"))
             add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
             // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.

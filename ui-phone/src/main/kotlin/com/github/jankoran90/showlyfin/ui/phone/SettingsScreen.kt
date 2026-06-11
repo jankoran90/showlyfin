@@ -1025,11 +1025,14 @@ private fun ProfileAvatar(profile: ProfileEntity) {
 
 /** Sekce přepínatelné adminem (Plan PROFILES 1E). SLEDUJ + NASTAVENI jsou vždy viditelné. */
 private val SECTION_TOGGLES = listOf(
+    // V10: Sleduj (Jellyfin/Trakt video sekce) je nově skrývatelná — typicky skrýt na telefonu,
+    // nechat na TV. Nastavení zůstává jediná vždy viditelná sekce.
+    ProfileConfig.Sections.SLEDUJ to "Sleduj (Jellyfin)",
     ProfileConfig.Sections.POSLECH to "Poslech",
-    ProfileConfig.Sections.KNIHOVNA to "Knihovna",
-    ProfileConfig.Sections.CHCI_VIDET to "Chci vidět",
-    ProfileConfig.Sections.OBJEVIT to "Objevit",
-    ProfileConfig.Sections.NA_RD to "Na RD",
+    ProfileConfig.Sections.KNIHOVNA to "— Knihovna",
+    ProfileConfig.Sections.CHCI_VIDET to "— Chci vidět",
+    ProfileConfig.Sections.OBJEVIT to "— Objevit",
+    ProfileConfig.Sections.NA_RD to "— Na RD",
 )
 
 /**
@@ -1041,7 +1044,23 @@ private fun toggledSections(cfg: ProfileConfig, key: String, enabled: Boolean): 
     vis[key] = enabled
     return if (vis.values.all { it }) emptySet()
     else buildSet {
-        add(ProfileConfig.Sections.SLEDUJ)
+        add(ProfileConfig.Sections.NASTAVENI) // jediná vždy viditelná (V10: Sleduj už je přepínatelná)
+        vis.forEach { (k, v) -> if (v) add(k) }
+    }
+}
+
+/** Viditelnost sekce na TV (Plan VAULT V10): TV sada null = zrcadlí telefon; prázdná = vše. */
+private fun tvSectionVisible(cfg: ProfileConfig, key: String): Boolean {
+    val tv = cfg.visibleSectionsTv ?: return cfg.isSectionVisible(key)
+    return tv.isEmpty() || key in tv
+}
+
+/** Přepne viditelnost sekce [key] na TV — od prvního dotyku je TV sada nezávislá na telefonu. */
+private fun toggledSectionsTv(cfg: ProfileConfig, key: String, enabled: Boolean): Set<String> {
+    val vis = SECTION_TOGGLES.associate { (k, _) -> k to tvSectionVisible(cfg, k) }.toMutableMap()
+    vis[key] = enabled
+    return if (vis.values.all { it }) emptySet()
+    else buildSet {
         add(ProfileConfig.Sections.NASTAVENI)
         vis.forEach { (k, v) -> if (v) add(k) }
     }
@@ -1166,8 +1185,15 @@ private fun ProfileAuthoringBlock(
                 )
                 Spacer(Modifier.height(12.dp))
 
-                // — Viditelné sekce + podsekce —
-                Text("Viditelné sekce a podsekce", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                // — Viditelné sekce + podsekce (V10: zvlášť telefon a TV; TV zrcadlí telefon do
+                //   prvního vlastního přepnutí) —
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Viditelné sekce a podsekce", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("📱", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Spacer(Modifier.width(34.dp))
+                    Text("📺", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Spacer(Modifier.width(22.dp))
+                }
                 SECTION_TOGGLES.forEach { (key, label) ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
@@ -1181,6 +1207,15 @@ private fun ProfileAuthoringBlock(
                                         sections.isEmpty() || d in sections
                                     }
                                     c.copy(visibleSections = sections, defaultSection = newDefault)
+                                }
+                            },
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Switch(
+                            checked = tvSectionVisible(cfg, key),
+                            onCheckedChange = { enabled ->
+                                onUpdateConfig(profile.id) { c ->
+                                    c.copy(visibleSectionsTv = toggledSectionsTv(c, key, enabled))
                                 }
                             },
                         )

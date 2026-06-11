@@ -15,8 +15,13 @@ import kotlinx.serialization.json.Json
  */
 @Serializable
 data class ProfileConfig(
-    /** Viditelné sekce. Prázdné = vše viditelné (admin/legacy). Viz [Sections]. */
+    /** Viditelné sekce (telefon). Prázdné = vše viditelné (admin/legacy). Viz [Sections]. */
     val visibleSections: Set<String> = emptySet(),
+    /**
+     * Viditelné sekce na TV (Plan VAULT V10 — per-form-factor viditelnost, např. „Knihovnu skrýt na
+     * telefonu, nechat na TV"). **null = zrcadlí [visibleSections]** (telefon); prázdné = vše viditelné.
+     */
+    val visibleSectionsTv: Set<String>? = null,
     /** Povolené Jellyfin library ids. null = všechny. Prázdný seznam = žádná (záměrně). */
     val jellyfinLibraryWhitelist: List<String>? = null,
     /**
@@ -51,6 +56,10 @@ data class ProfileConfig(
 ) {
     fun isSectionVisible(key: String): Boolean =
         visibleSections.isEmpty() || visibleSections.contains(key)
+
+    /** Sekce pro daný form factor (V10): TV bere [visibleSectionsTv], null = zrcadlí telefon. */
+    fun visibleSectionsFor(tv: Boolean): Set<String> =
+        if (tv) visibleSectionsTv ?: visibleSections else visibleSections
 
     /**
      * Žánrový filtr profilu (Plan PROFILES 1E). Vrací true = položku zobrazit.
@@ -115,6 +124,7 @@ data class ProfileConfig(
         fun snapshotFromTemplate(template: ProfileConfig, override: ProfileConfig): ProfileConfig =
             override.copy(
                 visibleSections = if (template.visibleSections.isNotEmpty()) template.visibleSections else override.visibleSections,
+                visibleSectionsTv = template.visibleSectionsTv ?: override.visibleSectionsTv,
                 jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist ?: override.jellyfinLibraryWhitelist,
                 absLibraryWhitelist = template.absLibraryWhitelist ?: override.absLibraryWhitelist,
                 allowedGenres = template.allowedGenres.ifEmpty { override.allowedGenres },

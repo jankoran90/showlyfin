@@ -30,6 +30,8 @@ data class ProfileGateState(
     val isAddingProfile: Boolean = false,
     /** Viditelné sekce aktivního profilu (Plan PROFILES 1E). Prázdné = vše (admin/legacy). */
     val visibleSections: Set<String> = emptySet(),
+    /** Viditelné sekce na TV (Plan VAULT V10). null = zrcadlí [visibleSections]. */
+    val visibleSectionsTv: Set<String>? = null,
     /** „Hlavní" sekce aktivního profilu (Plan PROFILES Fáze 4). null = výchozí. */
     val defaultSection: String? = null,
     /** Plan WARDEN W1: profil čekající na zadání PINu (klik na profil s [ProfileEntity.loginPinHash]). */
@@ -107,7 +109,11 @@ class ProfileGateViewModel @Inject constructor(
         profileRepository.activeConfig
             .onEach { cfg ->
                 _state.update {
-                    it.copy(visibleSections = cfg.visibleSections, defaultSection = cfg.defaultSection)
+                    it.copy(
+                        visibleSections = cfg.visibleSections,
+                        visibleSectionsTv = cfg.visibleSectionsTv,
+                        defaultSection = cfg.defaultSection,
+                    )
                 }
             }
             .launchIn(viewModelScope)
