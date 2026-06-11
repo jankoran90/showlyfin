@@ -48,7 +48,23 @@ class ProfileRepository @Inject constructor(
         val template = profile.templateUuid
             ?.let { templateDao.getByUuid(it) }
             ?.let { ProfileConfig.fromJson(it.configJson) }
-        return ProfileConfig.mergeEffective(template, override)
+        val merged = ProfileConfig.mergeEffective(template, override)
+        // VAULT V7: applier per-profil creds MAŽE (null = odhlásit) — ale legacy/lokální profily
+        // drží JF přihlášení jen v entitě (serverUrl+token), ne v balíku. Syntetizuj ho do configu,
+        // ať applier funkční entity login nesmaže.
+        if (merged.credentials.jellyfin == null && profile.serverUrl.isNotBlank() && profile.jellyfinToken.isNotBlank()) {
+            return merged.copy(
+                credentials = merged.credentials.copy(
+                    jellyfin = com.github.jankoran90.showlyfin.core.domain.JellyfinCreds(
+                        url = profile.serverUrl,
+                        userId = profile.jellyfinUserId,
+                        token = profile.jellyfinToken,
+                        username = profile.name,
+                    ),
+                ),
+            )
+        }
+        return merged
     }
 
     private val _activeProfile = MutableStateFlow<ProfileEntity?>(null)
@@ -297,11 +313,12 @@ class ProfileRepository @Inject constructor(
         val profile = dao.getById(profileId) ?: return
         _activeProfile.value = profile
         prefs.edit().putLong(PREF_ACTIVE_PROFILE_ID, profileId).apply()
-        // Backward compat: write canonical Jellyfin prefs so existing ViewModels work
+        // Backward compat: write canonical Jellyfin prefs so existing ViewModels work.
+        // userId VŽDY s pomlčkami — konzumenti parsují UUID.fromString (VAULT V7, viz dashUuid).
         prefs.edit()
             .putString("jellyfin_server_url", profile.serverUrl)
             .putString("jellyfin_token", profile.jellyfinToken)
-            .putString("jellyfin_user_id", profile.jellyfinUserId)
+            .putString("jellyfin_user_id", dashUuid(profile.jellyfinUserId))
             .apply()
         // Plan PROFILES: aplikuj config balík do kanonických prefs (ABS/Uploader/vzhled…).
         // Plan WARDEN W0: efektivní config = šablona ⊕ override. Applier PŘED publikací (viz updateConfig).

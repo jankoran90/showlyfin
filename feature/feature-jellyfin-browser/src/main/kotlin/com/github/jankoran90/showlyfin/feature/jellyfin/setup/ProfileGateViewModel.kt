@@ -149,11 +149,11 @@ class ProfileGateViewModel @Inject constructor(
         }
     }
 
-    /** Doplní https:// když chybí scheme, odřízne koncové „/". Prázdné nechá prázdné. */
+    /** Doplní https:// když chybí scheme, odřízne koncové i úvodní „/". Prázdné nechá prázdné. */
     private fun normalizeUrl(raw: String): String {
         val t = raw.trim().trimEnd('/')
         if (t.isEmpty() || t.startsWith("http://") || t.startsWith("https://")) return t
-        return "https://$t"
+        return "https://${t.trimStart('/')}"
     }
 
     /**
@@ -162,8 +162,18 @@ class ProfileGateViewModel @Inject constructor(
      */
     private suspend fun hydrateAndActivate(profile: ProfileEntity): String? {
         // 1. Stáhni config balík (dešifrované creds); offline → fallback na lokální configJson.
-        val json = profileRepository.fetchBackendConfig(profile) ?: profile.configJson
-        val config = ProfileConfig.fromJson(json)
+        //    VAULT V7: chybějící creds domény v backend balíku doplň z LOKÁLNÍHO configu TÉHOŽ
+        //    profilu — anomální/prázdný backend záznam jinak smaže funkční přihlášení (incident
+        //    b129: prázdný override → Děti zdědily adminovy účty přes tehdejší „NEMAZAT" applier).
+        val localConfig = ProfileConfig.fromJson(profile.configJson)
+        val remoteJson = profileRepository.fetchBackendConfig(profile)
+        val config = if (remoteJson != null) {
+            val remote = ProfileConfig.fromJson(remoteJson)
+            remote.copy(credentials = remote.credentials.mergeMissingFrom(localConfig.credentials))
+        } else {
+            localConfig
+        }
+        val json = ProfileConfig.toJson(config)
         val jf = config.credentials.jellyfin
         // Web admin ukládá host bez scheme (např. „video.jankoran.cz") → doplň https://, jinak
         // jellyfin.createApi() i applier spadnou/nepřihlásí.

@@ -498,11 +498,11 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** Doplní https:// když chybí scheme, odřízne koncové „/" (zrcadlí ProfileConfigApplier). */
+    /** Doplní https:// když chybí scheme, odřízne koncové i úvodní „/" (zrcadlí ProfileConfigApplier). */
     private fun normalizeUrl(raw: String): String {
         val t = raw.trim().trimEnd('/')
         if (t.isEmpty() || t.startsWith("http://") || t.startsWith("https://")) return t
-        return "https://$t"
+        return "https://${t.trimStart('/')}"
     }
 
     /**
