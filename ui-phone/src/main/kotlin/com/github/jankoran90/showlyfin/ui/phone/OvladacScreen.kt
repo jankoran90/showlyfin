@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,10 +20,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PauseCircleFilled
 import androidx.compose.material.icons.filled.PlayCircleFilled
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Subtitles
@@ -34,6 +39,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -297,20 +305,51 @@ private fun ProgressSeek(s: JellyfinSessionSummary, vm: OvladacViewModel) {
 
 @Composable
 private fun VolumeRow(s: JellyfinSessionSummary, vm: OvladacViewModel) {
-    var local by remember(s.volumeLevel) { mutableFloatStateOf((s.volumeLevel ?: 50).toFloat()) }
+    // Krok 5 na klik; optimisticky držíme lokální hodnotu, server ji potvrdí v dalším pollu.
+    var local by remember(s.volumeLevel) { mutableIntStateOf(s.volumeLevel ?: 50) }
+    fun step(delta: Int) {
+        local = (local + delta).coerceIn(0, 100)
+        vm.setVolume(local)
+    }
+    // Dynamický bar: šířka výplně se animuje podle hlasitosti (0..100), ztlumeno = prázdný.
+    val frac by animateFloatAsState(
+        targetValue = if (s.isMuted) 0f else local / 100f,
+        label = "volumeBar",
+    )
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = { vm.toggleMute() }) {
             Icon(if (s.isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, "Ztlumit")
         }
-        Slider(
-            value = local,
-            onValueChange = { local = it },
-            onValueChangeFinished = { vm.setVolume(local.toInt()) },
-            valueRange = 0f..100f,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text("${local.toInt()}", style = MaterialTheme.typography.labelMedium)
+        FilledTonalIconButton(onClick = { step(-5) }, enabled = !s.isMuted && local > 0) {
+            Icon(Icons.Filled.Remove, "Snížit hlasitost")
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp)
+                .height(32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(frac)
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+            Text(
+                text = if (s.isMuted) "ztlumeno" else "$local",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        FilledTonalIconButton(onClick = { step(5) }, enabled = !s.isMuted && local < 100) {
+            Icon(Icons.Filled.Add, "Zvýšit hlasitost")
+        }
     }
 }
 
