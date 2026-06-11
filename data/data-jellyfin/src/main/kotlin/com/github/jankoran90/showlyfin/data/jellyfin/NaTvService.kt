@@ -67,7 +67,6 @@ class NaTvService @Inject constructor(
                 val body = response.body?.string() ?: return@use emptyList()
                 val arr = JSONArray(body)
                 val out = mutableListOf<JellyfinSessionSummary>()
-                val rawDump = mutableListOf<String>()
                 for (i in 0 until arr.length()) {
                     val s = arr.optJSONObject(i) ?: continue
                     val id = s.optString("Id").takeIf { it.isNotBlank() } ?: continue
@@ -76,12 +75,7 @@ class NaTvService @Inject constructor(
                     val supportsRemote = s.optBoolean("SupportsRemoteControl", false)
                     val lastActivity = s.optString("LastActivityDate")
                     val isActive = lastActivity.isNotBlank()
-                    val yellyfin = isYellyfinClient(deviceName, client)
-                    // Diagnostika: ukaž VŠECHNY session s důvodem zahození (proč se Yellyfin nedrží).
-                    rawDump += "$deviceName/$client[remote=$supportsRemote,yellyfin=$yellyfin]"
-                    // Bereme VÝHRADNĚ Yellyfin TV klienty (pokyn usera 2026-06-11: žádný Jellyfin Web /
-                    // Firefox / jiná instance — ani v Ovladači, ani v „Přehrát na TV"). Musí umět remote.
-                    if (!supportsRemote || !yellyfin) continue
+                    if (!supportsRemote) continue
 
                     val nowPlaying = s.optJSONObject("NowPlayingItem")
                     val playState = s.optJSONObject("PlayState")
@@ -112,10 +106,9 @@ class NaTvService @Inject constructor(
                     )
                 }
                 Timber.i(
-                    "[Ovladac] getSessions host=%s code=%d raw=%d kept=%d(jen Yellyfin) → kept:[%s] raw:[%s]",
+                    "[Ovladac] getSessions host=%s code=%d raw=%d kept=%d → %s",
                     base.substringAfter("://").substringBefore("/"), response.code, arr.length(), out.size,
                     out.joinToString { "${it.deviceName}/${it.client}[now=${it.nowPlayingTitle}]" },
-                    rawDump.joinToString(),
                 )
                 out
             }
@@ -213,16 +206,15 @@ class NaTvService @Inject constructor(
      * Priorita: Wolphin/Yellyfin TV klient s běžícím přehráváním → jakákoli Wolphin/Yellyfin →
      * aktivní s now-playing → první aktivní → první.
      */
-    /** Je session náš Yellyfin TV klient? (filtr proti Jellyfin Web/Firefox/jiným instancím). */
-    private fun isYellyfinClient(deviceName: String, client: String?): Boolean {
-        val hay = "${client.orEmpty()} $deviceName".lowercase()
-        return hay.contains("yellyfin") || hay.contains("wolphin") || hay.contains("wholphin")
-    }
-
     fun pickWatchSession(sessions: List<JellyfinSessionSummary>): JellyfinSessionSummary? {
         if (sessions.isEmpty()) return null
-        // Seznam je už z getSessions filtrovaný jen na Yellyfin → preferuj běžící přehrávání.
-        return sessions.firstOrNull { it.nowPlayingTitle != null }
+        fun isWolphin(s: JellyfinSessionSummary): Boolean {
+            val hay = "${s.client.orEmpty()} ${s.deviceName}".lowercase()
+            return hay.contains("wolphin") || hay.contains("wholphin") || hay.contains("yellyfin")
+        }
+        return sessions.firstOrNull { isWolphin(it) && it.nowPlayingTitle != null }
+            ?: sessions.firstOrNull { isWolphin(it) }
+            ?: sessions.firstOrNull { it.nowPlayingTitle != null }
             ?: sessions.firstOrNull { it.isActive }
             ?: sessions.first()
     }

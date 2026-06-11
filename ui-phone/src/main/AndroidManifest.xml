@@ -1,19 +1,2 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!--
-      BEACON — mediální ovládání běžícího Jellyfin TV přehrávání z lockscreenu / mediapanelu telefonu.
-      FOREGROUND_SERVICE perms deklaruje feature-listen (merge do app), POST_NOTIFICATIONS má app manifest.
-    -->
-    <application>
-        <service
-            android:name="com.github.jankoran90.showlyfin.ui.phone.beacon.OvladacBeaconService"
-            android:exported="true"
-            android:foregroundServiceType="mediaPlayback">
-            <intent-filter>
-                <action android:name="androidx.media3.session.MediaSessionService" />
-            </intent-filter>
-        </service>
-    </application>
-
-</manifest>
+<manifest />
