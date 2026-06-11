@@ -28,7 +28,7 @@ rsync -az --delete \
   -e 'ssh -p 2222' "$SRC/" "yellman@localhost:$ZSRC/"
 
 echo "==> 2/4 assembleRelease (podpis vlastním keystorem)…"
-$ZEN_SSH "source ~/.showlyfin-build.env && cd $ZSRC && ANDROID_HOME=\$HOME/Android/Sdk ./gradlew :app:assembleRelease --no-daemon"
+$ZEN_SSH "source ~/.showlyfin-build.env && cd $ZSRC && ANDROID_HOME=\$HOME/Android/Sdk ./gradlew :app:assembleRelease --no-daemon --no-configuration-cache"
 
 echo "==> 3/4 stahuju podepsaný APK na server…"
 APK="$TEMP/showlyfin-release.apk"

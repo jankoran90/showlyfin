@@ -482,9 +482,18 @@ class SettingsViewModel @Inject constructor(
                 val o = old.abs
                 o == null || n.url != o.url || n.username != o.username || n.password != o.password
             } ?: false
+            // Normalizuj URL VŠECH domén před uložením (ne až pro ověření) — jinak se do backendu uloží
+            // syrová „video.jankoran.cz" / „/video…" a profil má rozbitou URL (root cause `/video.jankoran.cz`).
             val cleaned = bundle.copy(
-                jellyfin = bundle.jellyfin?.let { if (jfChanged) it.copy(token = "", userId = "") else it },
-                abs = bundle.abs?.let { if (absChanged) it.copy(token = null) else it },
+                jellyfin = bundle.jellyfin?.let {
+                    val u = it.copy(url = normalizeUrl(it.url))
+                    if (jfChanged) u.copy(token = "", userId = "") else u
+                },
+                abs = bundle.abs?.let {
+                    val u = it.copy(url = normalizeUrl(it.url))
+                    if (absChanged) u.copy(token = null) else u
+                },
+                uploader = bundle.uploader?.let { it.copy(url = normalizeUrl(it.url)) },
             )
             profileRepository.updateConfig(profileId) { c -> c.copy(credentials = cleaned) }
 

@@ -50,7 +50,7 @@ class AbsRepository @Inject constructor(
 
     /** Přihlášení + uložení tokenu. Vrací Result se srozumitelnou chybou. */
     suspend fun login(url: String, username: String, password: String): Result<Unit> = runCatching {
-        val base = url.trim().trimEnd('/')
+        val base = com.github.jankoran90.showlyfin.core.domain.normalizeServerUrl(url)
         val resp = service.login("$base/login", AbsLoginRequest(username, password))
         val token = resp.user?.bearerToken
             ?: error("Server nevrátil token (zkontroluj jméno/heslo).")
