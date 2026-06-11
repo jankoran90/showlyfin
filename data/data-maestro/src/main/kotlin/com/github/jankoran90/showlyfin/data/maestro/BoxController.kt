@@ -74,6 +74,20 @@ class BoxController @Inject constructor(
             }
         }
 
+    /** Uspí box přes ADB (`KEYCODE_SLEEP`). Pro „vypnout obývák". */
+    suspend fun sleep(host: String): Boolean = withContext(Dispatchers.IO) {
+        withTimeoutOrNull(ADB_TIMEOUT_MS) {
+            runCatching {
+                Dadb.create(host, ADB_PORT, adbKeyPair()).use { it.shell("input keyevent KEYCODE_SLEEP") }
+                Timber.i("[MAESTRO] box ADB @%s sleep OK", host)
+                true
+            }.getOrElse {
+                Timber.w(it, "[MAESTRO] box ADB @%s sleep selhalo", host)
+                false
+            }
+        } ?: false
+    }
+
     /** Persistovaný ADB klíč telefonu (jinak by box vyžadoval autorizaci při každém spojení). */
     private fun adbKeyPair(): AdbKeyPair {
         val priv = File(context.filesDir, "maestro_adb_key")

@@ -46,6 +46,8 @@ class AvrController @Inject constructor(
 
     suspend fun powerOn(host: String): Boolean = eiscp.command(host, "PWR01") != null
 
+    suspend fun powerOff(host: String): Boolean = eiscp.command(host, "PWR00") != null
+
     suspend fun setInput(host: String, sliCode: String): Boolean =
         eiscp.command(host, "SLI$sliCode") != null
 

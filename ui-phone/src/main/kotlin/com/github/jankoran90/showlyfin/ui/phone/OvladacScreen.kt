@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PauseCircleFilled
 import androidx.compose.material.icons.filled.PlayCircleFilled
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Stop
@@ -113,6 +114,12 @@ fun OvladacScreen(
             Spacer(Modifier.height(12.dp))
         }
 
+        // Napájení domácí sestavy (zapnout/vypnout receiver + box) — vždy, když je sestava povolená.
+        if (state.avrEnabled) {
+            SystemPowerCard(state.sceneStatus, vm)
+            Spacer(Modifier.height(12.dp))
+        }
+
         when {
             state.loading && state.current == null -> Box(
                 Modifier.fillMaxWidth().height(220.dp),
@@ -128,6 +135,35 @@ fun OvladacScreen(
             )
 
             else -> NowPlaying(state.current!!, state.coverUrl, onOpenDetail, vm)
+        }
+    }
+}
+
+@Composable
+private fun SystemPowerCard(sceneStatus: String?, vm: OvladacViewModel) {
+    val busy = sceneStatus != null
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Domácí sestava", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(
+                    onClick = { vm.powerOnSystem() },
+                    enabled = !busy,
+                    label = { Text("Zapnout") },
+                    leadingIcon = { Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(18.dp)) },
+                )
+                AssistChip(
+                    onClick = { vm.powerOffSystem() },
+                    enabled = !busy,
+                    label = { Text("Vypnout") },
+                    leadingIcon = { Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(18.dp)) },
+                )
+            }
+            if (sceneStatus != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(sceneStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

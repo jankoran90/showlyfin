@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.maestro.AvrController
+import com.github.jankoran90.showlyfin.data.maestro.BoxController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -26,6 +27,7 @@ import javax.inject.Named
 class OvladacViewModel @Inject constructor(
     private val naTv: NaTvService,
     private val avr: AvrController,
+    private val box: BoxController,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -46,6 +48,8 @@ class OvladacViewModel @Inject constructor(
         /** Poslední známá absolutní hlasitost AVR (0..[AvrController.MAX_VOLUME]). */
         val avrVolume: Int? = null,
         val avrMuted: Boolean = false,
+        /** Probíhající akce napájení sestavy (zapínám/vypínám…), null = nic. */
+        val sceneStatus: String? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -122,6 +126,35 @@ class OvladacViewModel @Inject constructor(
             )
         }
     }
+
+    /** Ručně zapnout celou sestavu (receiver + probudit box + spustit přehrávač). */
+    fun powerOnSystem() = sceneAction("Zapínám obývák…") {
+        avrConfig()?.let { avr.powerOn(it) }
+        boxMac()?.let { box.wakeViaWol(it) }
+        boxHost()?.let { box.wakeAndLaunch(it) }
+    }
+
+    /** Ručně vypnout sestavu (receiver do standby + uspat box). */
+    fun powerOffSystem() = sceneAction("Vypínám obývák…") {
+        avrConfig()?.let { avr.powerOff(it) }
+        boxHost()?.let { box.sleep(it) }
+    }
+
+    private fun sceneAction(status: String, block: suspend () -> Unit) {
+        viewModelScope.launch {
+            _state.update { it.copy(sceneStatus = status) }
+            runCatching { block() }
+            delay(COMMAND_SETTLE_MS)
+            avrConfig()?.let { refreshAvrOnly(it) }
+            _state.update { it.copy(sceneStatus = null) }
+        }
+    }
+
+    private fun boxHost(): String? =
+        prefs.getString("avr_box_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+
+    private fun boxMac(): String? =
+        prefs.getString("avr_box_mac", "").orEmpty().trim().takeIf { it.isNotBlank() }
 
     fun playPause() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "PlayPause") }
     fun stopPlayback() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "Stop") }
