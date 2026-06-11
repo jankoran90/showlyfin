@@ -49,8 +49,8 @@ fun UpdateOverlayHost() {
 
     val current = pending ?: return
     UpdateAvailableDialog(
-        tagName = current.tagName,
-        body = current.body,
+        tagName = current.versionName,
+        body = current.notes,
         isDownloading = isDownloading,
         downloadProgress = progress.floatValue,
         onConfirm = {
@@ -58,15 +58,7 @@ fun UpdateOverlayHost() {
                 isDownloading = true
                 progress.floatValue = 0f
                 val checker = UpdateChecker()
-                val release = checker.fetchLatestRelease() ?: run {
-                    isDownloading = false
-                    return@launch
-                }
-                val asset = checker.findApkAsset(release) ?: run {
-                    isDownloading = false
-                    return@launch
-                }
-                val file = checker.downloadApk(context, asset) { progress.floatValue = it }
+                val file = checker.downloadApk(context, current.toManifest()) { progress.floatValue = it }
                 isDownloading = false
                 if (file != null) {
                     runCatching {

@@ -55,31 +55,20 @@ class MainActivity : ComponentActivity() {
             override fun checkNow(onResult: (UpdateCheckResult) -> Unit) {
                 lifecycleScope.launch {
                     val checker = UpdateChecker()
-                    val release = checker.fetchLatestRelease()
+                    val manifest = checker.fetchManifest(applicationContext)
                     UpdatePreferences.storeCheckAt(applicationContext)
-                    if (release == null) {
+                    if (manifest == null) {
                         onResult(UpdateCheckResult.Failed)
                         return@launch
                     }
-                    if (!checker.isUpdateAvailable(release)) {
+                    if (!checker.isUpdateAvailable(manifest)) {
                         UpdatePreferences.clearAvailable(applicationContext)
                         onResult(UpdateCheckResult.UpToDate)
                         return@launch
                     }
-                    val asset = checker.findApkAsset(release)
-                    val url = asset?.browserDownloadUrl
-                    if (asset == null || url == null) {
-                        onResult(UpdateCheckResult.Failed)
-                        return@launch
-                    }
-                    UpdatePreferences.storeAvailable(
-                        applicationContext,
-                        release,
-                        url,
-                        asset.name ?: "showlyfin.apk",
-                    )
+                    UpdatePreferences.storeAvailable(applicationContext, manifest)
                     UpdateOverlayController.show(applicationContext)
-                    onResult(UpdateCheckResult.Available(release.tagName ?: "?"))
+                    onResult(UpdateCheckResult.Available(manifest.versionName))
                 }
             }
 
@@ -138,20 +127,13 @@ class MainActivity : ComponentActivity() {
     private fun runStartupUpdateCheck() {
         lifecycleScope.launch {
             val checker = UpdateChecker()
-            val release = checker.fetchLatestRelease() ?: return@launch
+            val manifest = checker.fetchManifest(applicationContext) ?: return@launch
             UpdatePreferences.storeCheckAt(applicationContext)
-            if (!checker.isUpdateAvailable(release)) {
+            if (!checker.isUpdateAvailable(manifest)) {
                 UpdatePreferences.clearAvailable(applicationContext)
                 return@launch
             }
-            val asset = checker.findApkAsset(release) ?: return@launch
-            val url = asset.browserDownloadUrl ?: return@launch
-            UpdatePreferences.storeAvailable(
-                applicationContext,
-                release,
-                url,
-                asset.name ?: "showlyfin.apk",
-            )
+            UpdatePreferences.storeAvailable(applicationContext, manifest)
             UpdateOverlayController.show(applicationContext)
         }
     }

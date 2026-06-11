@@ -17,9 +17,18 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val RELEASE_URL = "https://api.github.com/repos/jankoran90/showlyfin/releases/latest"
+/** Výchozí server (zapečený) — přebije ho prefs `uploader_base_url`, pokud je nastaven. */
+private const val DEFAULT_BASE_URL = "https://upload.jankoran.cz"
+private const val PREFS_NAME = "trakt_prefs"
+private const val KEY_BASE_URL = "uploader_base_url"
 private const val APK_DIR_NAME = "updates"
 
+/**
+ * Self-hosted auto-update (Plan CHANNEL) — žádný GitHub. Manifest `GET <base>/api/appupdate`
+ * nese poslední `versionCode/versionName/notes`; porovnání přes [BuildConfig.VERSION_CODE];
+ * APK z `<base>/api/appupdate/apk`. Endpointy jsou PUBLIC (bez tokenu). Base = uploader prefs
+ * (`uploader_base_url`, ukládá GATEKEY) s fallbackem na [DEFAULT_BASE_URL].
+ */
 @Singleton
 class UpdateChecker @Inject constructor() {
 
@@ -29,44 +38,46 @@ class UpdateChecker @Inject constructor() {
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    suspend fun fetchLatestRelease(): GitHubRelease? = withContext(Dispatchers.IO) {
+    private fun baseUrl(context: Context): String {
+        val stored = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_BASE_URL, null)?.trim()?.takeIf { it.isNotBlank() }
+        return (stored ?: DEFAULT_BASE_URL).trimEnd('/')
+    }
+
+    suspend fun fetchManifest(context: Context): ReleaseManifest? = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
-                .url(RELEASE_URL)
-                .header("Accept", "application/vnd.github+json")
+                .url("${baseUrl(context)}/api/appupdate")
                 .header("User-Agent", "Showlyfin/${BuildConfig.VERSION_NAME}")
                 .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@runCatching null
                 val body = response.body?.string() ?: return@runCatching null
-                gson.fromJson(body, GitHubRelease::class.java)
+                gson.fromJson(body, ReleaseManifest::class.java)
             }
-        }.onFailure { Timber.w(it, "fetchLatestRelease failed") }.getOrNull()
+        }.onFailure { Timber.w(it, "fetchManifest failed") }.getOrNull()
     }
 
-    fun isUpdateAvailable(release: GitHubRelease?): Boolean {
-        if (release == null || release.draft || release.prerelease) return false
-        val latest = Version.parse(release.tagName) ?: return false
-        val current = Version.parse(BuildConfig.VERSION_NAME) ?: return false
-        return latest > current
+    fun isUpdateAvailable(manifest: ReleaseManifest?): Boolean {
+        if (manifest == null) return false
+        return manifest.versionCode > BuildConfig.VERSION_CODE
     }
-
-    fun findApkAsset(release: GitHubRelease): GitHubReleaseAsset? =
-        release.assets.firstOrNull { (it.name?.endsWith(".apk", ignoreCase = true) == true) && !it.browserDownloadUrl.isNullOrBlank() }
 
     suspend fun downloadApk(
         context: Context,
-        asset: GitHubReleaseAsset,
+        manifest: ReleaseManifest,
         onProgress: (Float) -> Unit,
     ): File? = withContext(Dispatchers.IO) {
-        val url = asset.browserDownloadUrl ?: return@withContext null
         runCatching {
-            val request = Request.Builder().url(url).build()
+            val request = Request.Builder()
+                .url("${baseUrl(context)}/api/appupdate/apk")
+                .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@runCatching null
-                val total = response.body?.contentLength()?.takeIf { it > 0 } ?: asset.size.takeIf { it > 0 } ?: 0L
+                val total = response.body?.contentLength()?.takeIf { it > 0 }
+                    ?: manifest.size.takeIf { it > 0 } ?: 0L
                 val dir = File(context.filesDir, APK_DIR_NAME).apply { mkdirs() }
-                val outFile = File(dir, "showlyfin-${asset.name ?: "latest"}.apk")
+                val outFile = File(dir, "showlyfin-${manifest.versionCode}.apk")
                 if (outFile.exists()) outFile.delete()
                 response.body?.byteStream()?.use { input ->
                     FileOutputStream(outFile).use { output ->

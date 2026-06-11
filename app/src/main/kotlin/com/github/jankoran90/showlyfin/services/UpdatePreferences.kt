@@ -5,21 +5,19 @@ import android.content.SharedPreferences
 
 object UpdatePreferences {
     private const val PREFS = "showlyfin_update_prefs"
-    private const val KEY_LATEST_TAG = "latest_tag"
-    private const val KEY_LATEST_BODY = "latest_body"
-    private const val KEY_LATEST_APK_URL = "latest_apk_url"
-    private const val KEY_LATEST_APK_NAME = "latest_apk_name"
+    private const val KEY_LATEST_VERSION_NAME = "latest_version_name"
+    private const val KEY_LATEST_NOTES = "latest_notes"
+    private const val KEY_LATEST_VERSION_CODE = "latest_version_code"
     private const val KEY_LAST_CHECK_AT = "last_check_at"
 
     fun get(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun storeAvailable(context: Context, release: GitHubRelease, apkUrl: String, apkName: String) {
+    fun storeAvailable(context: Context, manifest: ReleaseManifest) {
         get(context).edit().apply {
-            putString(KEY_LATEST_TAG, release.tagName)
-            putString(KEY_LATEST_BODY, release.body)
-            putString(KEY_LATEST_APK_URL, apkUrl)
-            putString(KEY_LATEST_APK_NAME, apkName)
+            putString(KEY_LATEST_VERSION_NAME, manifest.versionName)
+            putString(KEY_LATEST_NOTES, manifest.notes)
+            putInt(KEY_LATEST_VERSION_CODE, manifest.versionCode)
             putLong(KEY_LAST_CHECK_AT, System.currentTimeMillis())
             apply()
         }
@@ -31,29 +29,29 @@ object UpdatePreferences {
 
     fun clearAvailable(context: Context) {
         get(context).edit().apply {
-            remove(KEY_LATEST_TAG)
-            remove(KEY_LATEST_BODY)
-            remove(KEY_LATEST_APK_URL)
-            remove(KEY_LATEST_APK_NAME)
+            remove(KEY_LATEST_VERSION_NAME)
+            remove(KEY_LATEST_NOTES)
+            remove(KEY_LATEST_VERSION_CODE)
             apply()
         }
     }
 
     fun read(context: Context): PendingUpdate? {
         val p = get(context)
-        val tag = p.getString(KEY_LATEST_TAG, null) ?: return null
-        val url = p.getString(KEY_LATEST_APK_URL, null) ?: return null
-        val name = p.getString(KEY_LATEST_APK_NAME, null) ?: "showlyfin.apk"
-        val body = p.getString(KEY_LATEST_BODY, null).orEmpty()
-        return PendingUpdate(tag, body, url, name)
+        val versionName = p.getString(KEY_LATEST_VERSION_NAME, null) ?: return null
+        val versionCode = p.getInt(KEY_LATEST_VERSION_CODE, 0)
+        if (versionCode <= 0) return null
+        val notes = p.getString(KEY_LATEST_NOTES, null).orEmpty()
+        return PendingUpdate(versionName, notes, versionCode)
     }
 
     fun lastCheckAt(context: Context): Long = get(context).getLong(KEY_LAST_CHECK_AT, 0L)
 }
 
 data class PendingUpdate(
-    val tagName: String,
-    val body: String,
-    val apkUrl: String,
-    val apkName: String,
-)
+    val versionName: String,
+    val notes: String,
+    val versionCode: Int,
+) {
+    fun toManifest(): ReleaseManifest = ReleaseManifest(versionCode, versionName, notes)
+}

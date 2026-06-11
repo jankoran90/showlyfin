@@ -33,17 +33,15 @@ class UpdateCheckWorker(
 
     override suspend fun doWork(): Result {
         val checker = UpdateChecker()
-        val release = checker.fetchLatestRelease()
+        val manifest = checker.fetchManifest(applicationContext)
         UpdatePreferences.storeCheckAt(applicationContext)
-        if (release == null) return Result.retry()
-        if (!checker.isUpdateAvailable(release)) {
+        if (manifest == null) return Result.retry()
+        if (!checker.isUpdateAvailable(manifest)) {
             UpdatePreferences.clearAvailable(applicationContext)
             return Result.success()
         }
-        val asset = checker.findApkAsset(release) ?: return Result.success()
-        val url = asset.browserDownloadUrl ?: return Result.success()
-        UpdatePreferences.storeAvailable(applicationContext, release, url, asset.name ?: "showlyfin.apk")
-        notifyUpdate(release.tagName ?: "?")
+        UpdatePreferences.storeAvailable(applicationContext, manifest)
+        notifyUpdate(manifest.versionName)
         return Result.success()
     }
 
