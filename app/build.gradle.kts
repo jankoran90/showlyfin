@@ -28,8 +28,8 @@ android {
         applicationId = "com.github.jankoran90.showlyfin"
         minSdk = 23
         targetSdk = 36
-        versionCode = 135
-        versionName = "1.45.9"
+        versionCode = 136
+        versionName = "1.45.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -37,6 +37,9 @@ android {
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"${System.getenv("TRAKT_CLIENT_ID") ?: ""}\"")
         buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"${System.getenv("TRAKT_CLIENT_SECRET") ?: ""}\"")
         buildConfigField("String", "TMDB_API_KEY", "\"${System.getenv("TMDB_API_KEY") ?: ""}\"")
+        // Auto-login k backendu po čisté instalaci (vývojová pohodlnost) — heslo JEN z build env
+        // (`SHOWLYFIN_BACKEND_PASSWORD`), nikdy v gitu. Prázdné = feature vypnutá.
+        buildConfigField("String", "BACKEND_AUTOLOGIN_PASSWORD", "\"${System.getenv("SHOWLYFIN_BACKEND_PASSWORD") ?: ""}\"")
     }
 
     if (shouldSign) {

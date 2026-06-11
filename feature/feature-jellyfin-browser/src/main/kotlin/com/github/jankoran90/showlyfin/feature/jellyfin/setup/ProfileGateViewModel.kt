@@ -81,9 +81,17 @@ class ProfileGateViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val available = configGateway.isAvailable()
+            var available = configGateway.isAvailable()
+            // Auto-login z hesla zapečeného v build env (ProfileConfigGateway.autoLoginPassword) po čisté
+            // instalaci — ať se při vývoji nemusí pořád znovu vyplňovat přihlášení. Prázdné heslo (env
+            // nenastaven) = přeskočí se (běžný fresh-install tok → hlavní login obrazovka). Release-only.
+            if (!available && profileRepository.getAll().isEmpty() &&
+                ProfileConfigGateway.autoLoginPassword.isNotBlank()
+            ) {
+                if (configGateway.login(ProfileConfigGateway.autoLoginPassword)) available = true
+            }
             uploaderAvailable.value = available
-            // Backend dostupný (cookie přežila / re-install s cookie) ale lokál prázdný → nasaď roster.
+            // Backend dostupný (cookie přežila / re-install s cookie / auto-login) ale lokál prázdný → roster.
             if (available && profileRepository.getAll().isEmpty()) seedRoster()
         }
 

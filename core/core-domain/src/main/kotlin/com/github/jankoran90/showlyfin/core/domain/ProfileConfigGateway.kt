@@ -57,6 +57,14 @@ interface ProfileConfigGateway {
          * přihlašuje bez nutnosti cokoli zadávat; „pokročilé" v login obrazovce ji umí přepsat.
          */
         const val DEFAULT_BASE_URL = "https://upload.jankoran.cz"
+
+        /**
+         * Heslo k backendu (UPLOAD_PASSWORD) napevno z build env — **auto-login po čisté instalaci**,
+         * aby se při vývoji nemusely pořád znovu vyplňovat profily/přihlášení (rozhodnutí usera
+         * 2026-06-11; release jde jen k němu). Nastavuje `ShowlyfinApp` z `BuildConfig.BACKEND_AUTOLOGIN_PASSWORD`
+         * (zdroj = env `SHOWLYFIN_BACKEND_PASSWORD`, **mimo git**). Prázdné = feature vypnutá.
+         */
+        var autoLoginPassword: String = ""
     }
 
     /** true = uploader je nakonfigurován (URL + session cookie) a lze volat backend. */

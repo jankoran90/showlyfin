@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin
 
 import android.app.Application
 import android.content.SharedPreferences
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.debug.BufferTree
 import com.github.jankoran90.showlyfin.debug.DebugCaptureManager
@@ -27,6 +28,8 @@ class ShowlyfinApp : Application() {
             traktClientSecret = BuildConfig.TRAKT_CLIENT_SECRET,
             tmdbApiKey = BuildConfig.TMDB_API_KEY,
         )
+        // Auto-login k backendu po čisté instalaci (vývojová pohodlnost) — heslo jen z build env.
+        ProfileConfigGateway.autoLoginPassword = BuildConfig.BACKEND_AUTOLOGIN_PASSWORD
     }
 
     private var liveLogListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
@@ -35,9 +38,10 @@ class ShowlyfinApp : Application() {
     private fun setupLiveLogging() {
         val prefs = getSharedPreferences("trakt_prefs", MODE_PRIVATE)
         val verInfo = "=== LIVE v${BuildConfig.VERSION_NAME} build ${BuildConfig.VERSION_CODE} ==="
-        // V debug buildu zapni živý log defaultně po čisté instalaci (klíč ještě nenastaven) →
-        // pref se zapíše true, takže to konzistentně vidí i toggle v Nastavení. Ostrá verze beze změny.
-        if (BuildConfig.DEBUG && !prefs.contains("live_logging_enabled")) {
+        // Vždy ostrá (rozhodnutí 2026-06-11) — zrušili jsme paralelní debug variantu. Živý log proto
+        // zapni defaultně po čisté instalaci i v ostré (klíč ještě nenastaven); toggle v Nastavení ho
+        // vypne. Umožní číst logy ze serveru bez debug buildu.
+        if (!prefs.contains("live_logging_enabled")) {
             prefs.edit().putBoolean("live_logging_enabled", true).apply()
         }
         DebugCaptureManager.setLiveLogging(verInfo, prefs.getBoolean("live_logging_enabled", false))
