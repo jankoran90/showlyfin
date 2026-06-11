@@ -72,9 +72,16 @@ class LibraryRowsViewModel @Inject constructor(
                 val userUuid = UUID.fromString(userId)
                 val views = apiClient.userViewsApi.getUserViews(userId = userUuid).content
                 // Plan PROFILES 1E: whitelist knihoven z aktivního profilu (null = všechny).
+                // Plan VAULT: backend posílá ids BEZ pomlček, SDK UUID.toString() je S pomlčkami →
+                // bez normalizace je průnik vždy prázdný (= prázdná Knihovna u profilů s whitelistem).
                 val whitelist = profileRepository.activeConfig.value.jellyfinLibraryWhitelist
+                    ?.map { it.replace("-", "").lowercase() }?.toSet()
                 val mediaViews = views.items.filter { it.isMediaLibrary() }
-                    .let { list -> if (whitelist == null) list else list.filter { it.id.toString() in whitelist } }
+                    .let { list ->
+                        if (whitelist == null) list
+                        else list.filter { it.id.toString().replace("-", "").lowercase() in whitelist }
+                    }
+                Timber.i("[VAULT] JF views=${views.items.map { it.name }} → po whitelistu=${mediaViews.map { it.name }}")
                 val rows = coroutineScope {
                     mediaViews.map { view ->
                         async { loadRow(view, userUuid, serverUrl, token) }
