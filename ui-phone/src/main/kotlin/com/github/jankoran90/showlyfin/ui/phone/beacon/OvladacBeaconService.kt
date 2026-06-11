@@ -1,12 +1,20 @@
 package com.github.jankoran90.showlyfin.ui.phone.beacon
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.Bundle
+import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.session.CacheBitmapLoader
 import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -71,9 +79,17 @@ class OvladacBeaconService : MediaSessionService(), RemoteTvPlayer.Commander {
 
     override fun onCreate() {
         super.onCreate()
+        createNotificationChannel()
+        // media3 použije STEJNÉ id+kanál jako naše placeholder notifikace → svou MediaStyle notifikaci
+        // jen nahradí (bez druhé/blikající notifikace).
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setNotificationId(NOTIF_ID)
+                .setChannelId(CHANNEL_ID)
+                .build(),
+        )
         val p = RemoteTvPlayer(mainLooper, this)
-        // Placeholder „připojuji" stav (hraje+má obsah) → media3 hned posune službu do foregroundu
-        // a posadí notifikaci v rámci startForeground okna; první poll do ~2 s ho přepíše.
+        // Placeholder „připojuji" stav (hraje+má obsah); první poll do ~2 s ho přepíše.
         p.updateFromSession(PLACEHOLDER_SESSION, null)
         player = p
         session = MediaSession.Builder(this, p)
@@ -82,6 +98,43 @@ class OvladacBeaconService : MediaSessionService(), RemoteTvPlayer.Commander {
             .apply { contentActivityPendingIntent()?.let { setSessionActivity(it) } }
             .build()
         startPolling()
+    }
+
+    /**
+     * KLÍČOVÉ: `startForegroundService` má 5s kontrakt na `startForeground`. Nespoléhej, že media3
+     * stihne posadit notifikaci sám (zvlášť než se povolí POST_NOTIFICATIONS) — jinak systém appku
+     * shodí (`ForegroundServiceDidNotStartInTimeException`). Proto foreground splníme DETERMINISTICKY
+     * hned tady vlastní notifikací; media3 ji pak (stejné id+kanál) převezme.
+     */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        runCatching { startForegroundCompat() }
+            .onFailure { Timber.w(it, "[Beacon] startForeground selhal") }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    private fun startForegroundCompat() {
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
+        ServiceCompat.startForeground(this, NOTIF_ID, buildPlaceholderNotification(), type)
+    }
+
+    private fun buildPlaceholderNotification(): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(androidx.media3.session.R.drawable.media3_notification_small_icon)
+            .setContentTitle("Ovladač TV")
+            .setContentText("Připojuji…")
+            .setOngoing(true)
+            .apply { contentActivityPendingIntent()?.let { setContentIntent(it) } }
+            .build()
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val mgr = getSystemService(NotificationManager::class.java) ?: return
+        if (mgr.getNotificationChannel(CHANNEL_ID) != null) return
+        mgr.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "Ovladač TV", NotificationManager.IMPORTANCE_LOW)
+                .apply { setShowBadge(false) },
+        )
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
@@ -217,6 +270,8 @@ class OvladacBeaconService : MediaSessionService(), RemoteTvPlayer.Commander {
 
     companion object {
         const val ACTION_TOGGLE_SUBTITLES = "com.github.jankoran90.showlyfin.beacon.TOGGLE_SUBTITLES"
+        private const val CHANNEL_ID = "beacon_tv_remote"
+        private const val NOTIF_ID = 0xBEAC
         private const val POLL_MS = 2_000L
         private const val COMMAND_SETTLE_MS = 300L
         private const val MAX_EMPTY_POLLS = 2
