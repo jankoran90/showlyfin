@@ -57,7 +57,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -1904,16 +1903,16 @@ private fun AvrTextField(
     var local by remember(value) { mutableStateOf(value) }
     OutlinedTextField(
         value = local,
-        onValueChange = { local = it },
+        // Ukládáme HNED při psaní (ne až při opuštění pole — to se nemuselo spustit a hodnota se
+        // pak neuložila; device test #50).
+        onValueChange = { local = it; onCommit(it.trim()) },
         label = { Text(label) },
         placeholder = { Text(placeholder) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(
             keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
         ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { if (!it.isFocused && local != value) onCommit(local) },
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
