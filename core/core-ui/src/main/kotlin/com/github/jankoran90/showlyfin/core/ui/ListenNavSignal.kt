@@ -16,6 +16,9 @@ object ListenNavSignal {
     /** Boolean extra na launch intentu z notifikace audiopřehrávače. */
     const val EXTRA_OPEN_LISTEN = "showlyfin_open_listen"
 
+    /** Broadcast: AudiobookPlayerService -> app obnovi Poslouchej widget pri zmene prehravani. */
+    const val ACTION_LISTEN_STATE_CHANGED = "com.github.jankoran90.showlyfin.LISTEN_STATE_CHANGED"
+
     private val _openListen = MutableStateFlow(0L)
     val openListen = _openListen.asStateFlow()
 

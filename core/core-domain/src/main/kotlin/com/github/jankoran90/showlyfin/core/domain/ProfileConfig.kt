@@ -171,6 +171,7 @@ data class ProfileConfig(
     object Sections {
         // Spodní lišta
         const val SLEDUJ = "sleduj"
+        const val OVLADAC = "ovladac" // RELAY/Ovladač — dálkové ovládání běžící TV session
         const val POSLECH = "poslech"
         const val NASTAVENI = "nastaveni" // vždy viditelné (jediná cesta k odhlášení)
         // Podsekce „Sleduj" pageru

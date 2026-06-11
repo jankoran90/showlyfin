@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -87,6 +88,7 @@ import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
 private sealed interface Destination {
     // Bottom tabs
     data object Hlavni : Destination   // label „Sleduj"
+    data object Ovladac : Destination  // RELAY — sekce Ovladač
     data object Listen : Destination   // label „Poslech"
     data object Settings : Destination
     data object Admin : Destination     // Plan HELM — admin destinace (jen pro admin profil)
@@ -145,7 +147,7 @@ private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>
 )
 
 private val bottomTabs = listOf(
-    Destination.Hlavni, Destination.Listen, Destination.Settings, Destination.Admin,
+    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Settings, Destination.Admin,
 )
 
 /** FUSE F1: jedna definice navigačních cílů → vykreslí se buď ve spodní liště (telefon),
@@ -211,6 +213,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         val visibleSections = if (isTv) gateState.visibleSectionsTv ?: gateState.visibleSections else gateState.visibleSections
         fun sectionVisible(key: String): Boolean = visibleSections.isEmpty() || key in visibleSections
         val poslechVisible = sectionVisible(ProfileConfig.Sections.POSLECH)
+        val ovladacVisible = sectionVisible(ProfileConfig.Sections.OVLADAC)
         val visibleSubsections = listOf(
             ProfileConfig.Sections.KNIHOVNA,
             ProfileConfig.Sections.CHCI_VIDET,
@@ -309,6 +312,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
 
         val navItems = buildList {
             if (sledujVisible) add(ShellNavItem(Destination.Hlavni, Icons.Default.Home, "Sleduj"))
+            if (ovladacVisible) add(ShellNavItem(Destination.Ovladac, Icons.Default.SettingsRemote, "Ovladač"))
             if (poslechVisible) add(ShellNavItem(Destination.Listen, Icons.Default.Headphones, "Poslech"))
             add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
             // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.
@@ -486,6 +490,13 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Admin -> AdminScreen(
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.Ovladac -> OvladacScreen(
+                    onOpenDetail = { itemId ->
+                        bottomTab = Destination.Ovladac
+                        currentDestination = Destination.JellyfinDetail(itemId, parent = Destination.Ovladac)
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Listen -> ListenScreen(

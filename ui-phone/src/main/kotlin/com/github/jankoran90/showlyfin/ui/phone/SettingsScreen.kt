@@ -1028,6 +1028,7 @@ private val SECTION_TOGGLES = listOf(
     // V10: Sleduj (Jellyfin/Trakt video sekce) je nově skrývatelná — typicky skrýt na telefonu,
     // nechat na TV. Nastavení zůstává jediná vždy viditelná sekce.
     ProfileConfig.Sections.SLEDUJ to "Sleduj (Jellyfin)",
+    ProfileConfig.Sections.OVLADAC to "Ovladač (TV)",
     ProfileConfig.Sections.POSLECH to "Poslech",
     ProfileConfig.Sections.KNIHOVNA to "— Knihovna",
     ProfileConfig.Sections.CHCI_VIDET to "— Chci vidět",

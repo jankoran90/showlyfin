@@ -1,7 +1,18 @@
 package com.github.jankoran90.showlyfin
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
+import androidx.core.content.ContextCompat
+import androidx.glance.appwidget.updateAll
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
+import com.github.jankoran90.showlyfin.widget.ListenWidget
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.debug.BufferTree
@@ -33,6 +44,23 @@ class ShowlyfinApp : Application() {
         ProfileConfigGateway.autoLoginPassword = BuildConfig.BACKEND_AUTOLOGIN_PASSWORD
         // RELAY — periodická obnova domácích widgetů (no-op když žádný není na ploše).
         WidgetRefreshWorker.schedule(this)
+        registerListenWidgetRefresh()
+    }
+
+    /** RELAY — AudiobookPlayerService broadcastne zmenu prehravani -> obnovime Poslouchej widget. */
+    private fun registerListenWidgetRefresh() {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                CoroutineScope(Dispatchers.Default).launch {
+                    runCatching { ListenWidget().updateAll(applicationContext) }
+                }
+            }
+        }
+        ContextCompat.registerReceiver(
+            this, receiver,
+            IntentFilter(ListenNavSignal.ACTION_LISTEN_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     private var liveLogListener: SharedPreferences.OnSharedPreferenceChangeListener? = null

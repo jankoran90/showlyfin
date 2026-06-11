@@ -115,6 +115,10 @@ class AudiobookPlayerService : MediaLibraryService() {
         exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) startSync() else { stopSync(); syncNow() }
+                notifyListenWidget()
+            }
+            override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
+                notifyListenWidget()
             }
         })
         player = exo
@@ -134,6 +138,13 @@ class AudiobookPlayerService : MediaLibraryService() {
             launch,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+    }
+
+    /** RELAY — Glance se sam neobnovuje: rekni Poslouchej widgetu, at se prekresli. */
+    private fun notifyListenWidget() {
+        runCatching {
+            sendBroadcast(Intent(ListenNavSignal.ACTION_LISTEN_STATE_CHANGED).setPackage(packageName))
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session

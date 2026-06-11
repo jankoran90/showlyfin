@@ -24,7 +24,6 @@ class WidgetRefreshWorker(
     override suspend fun doWork(): Result {
         // updateAll je no-op, když daný widget na ploše není.
         runCatching { ListenWidget().updateAll(applicationContext) }
-        runCatching { WatchWidget().updateAll(applicationContext) }
         return Result.success()
     }
 

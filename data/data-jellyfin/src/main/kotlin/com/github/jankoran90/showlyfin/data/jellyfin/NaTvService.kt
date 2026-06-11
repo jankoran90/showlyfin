@@ -6,6 +6,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,17 +42,23 @@ class NaTvService @Inject constructor(
     }
 
     /**
-     * Vrátí remote-control schopné Jellyfin session i s now-playing stavem.
-     * Filtruje jen klienty, které hlásí `SupportsRemoteControl` (typicky přehrávače na TV).
+     * Vrátí remote-control schopné Jellyfin session i s now-playing stavem (titulky/audio/hlasitost/
+     * media info). Filtruje jen klienty, které hlásí `SupportsRemoteControl` (typicky přehrávače na TV).
      */
     suspend fun getSessions(baseUrl: String, token: String): List<JellyfinSessionSummary> {
-        if (baseUrl.isBlank() || token.isBlank()) return emptyList()
+        if (baseUrl.isBlank() || token.isBlank()) {
+            Timber.w("[Ovladac] getSessions: prázdné creds url=%s tokenLen=%d", baseUrl, token.length)
+            return emptyList()
+        }
         val base = baseUrl.trimEnd('/')
         val url = "$base/Sessions?api_key=$token"
         val request = Request.Builder().url(url).get().build()
         return runCatching {
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
+                if (!response.isSuccessful) {
+                    Timber.w("[Ovladac] getSessions HTTP %d", response.code)
+                    return@use emptyList()
+                }
                 val body = response.body?.string() ?: return@use emptyList()
                 val arr = JSONArray(body)
                 val out = mutableListOf<JellyfinSessionSummary>()
@@ -67,12 +74,16 @@ class NaTvService @Inject constructor(
 
                     val nowPlaying = s.optJSONObject("NowPlayingItem")
                     val playState = s.optJSONObject("PlayState")
+                    val streams = parseStreams(nowPlaying)
                     out += JellyfinSessionSummary(
                         sessionId = id,
                         deviceName = deviceName,
                         client = client,
                         isActive = isActive,
                         lastActivityDate = lastActivity.takeIf { it.isNotBlank() },
+                        itemId = nowPlaying?.optString("Id")?.takeIf { it.isNotBlank() },
+                        imageTag = nowPlaying?.optJSONObject("ImageTags")?.optString("Primary")?.takeIf { it.isNotBlank() },
+                        overview = nowPlaying?.optString("Overview")?.takeIf { it.isNotBlank() },
                         nowPlayingTitle = nowPlaying?.let { buildNowPlayingTitle(it) },
                         nowPlayingSubtitle = nowPlaying?.let { buildNowPlayingSubtitle(it) },
                         isPlaying = nowPlaying != null && !(playState?.optBoolean("IsPaused", false) ?: true),
@@ -80,12 +91,76 @@ class NaTvService @Inject constructor(
                         positionTicks = playState?.optLong("PositionTicks", 0L) ?: 0L,
                         runtimeTicks = nowPlaying?.optLong("RunTimeTicks", 0L) ?: 0L,
                         canSeek = playState?.optBoolean("CanSeek", false) ?: false,
+                        volumeLevel = playState?.optInt("VolumeLevel", -1)?.takeIf { it >= 0 },
+                        isMuted = playState?.optBoolean("IsMuted", false) ?: false,
+                        currentSubtitleIndex = playState?.optInt("SubtitleStreamIndex", -1) ?: -1,
+                        currentAudioIndex = playState?.optInt("AudioStreamIndex", -1) ?: -1,
+                        subtitleTracks = streams.subtitles,
+                        audioTracks = streams.audios,
+                        mediaInfoLines = streams.infoLines,
                     )
                 }
+                Timber.i(
+                    "[Ovladac] getSessions host=%s code=%d raw=%d kept=%d → %s",
+                    base.substringAfter("://").substringBefore("/"), response.code, arr.length(), out.size,
+                    out.joinToString { "${it.deviceName}/${it.client}[now=${it.nowPlayingTitle}]" },
+                )
                 out
             }
-        }.getOrElse { emptyList() }
+        }.getOrElse {
+            Timber.w(it, "[Ovladac] getSessions selhalo")
+            emptyList()
+        }
     }
+
+    private data class ParsedStreams(
+        val subtitles: List<StreamTrack>,
+        val audios: List<StreamTrack>,
+        val infoLines: List<String>,
+    )
+
+    /** Jeden průchod MediaStreams → titulky, audio stopy a čitelné info řádky (video/audio/kontejner). */
+    private fun parseStreams(item: JSONObject?): ParsedStreams {
+        val streams = item?.optJSONArray("MediaStreams")
+            ?: return ParsedStreams(emptyList(), emptyList(), emptyList())
+        val subs = mutableListOf<StreamTrack>()
+        val audios = mutableListOf<StreamTrack>()
+        val info = mutableListOf<String>()
+        for (i in 0 until streams.length()) {
+            val st = streams.optJSONObject(i) ?: continue
+            val idx = st.optInt("Index", -1)
+            when (st.optString("Type")) {
+                "Subtitle" -> if (idx >= 0) subs += StreamTrack(idx, streamLabel(st, "Titulky $idx"))
+                "Audio" -> {
+                    if (idx >= 0) audios += StreamTrack(idx, streamLabel(st, "Audio $idx"))
+                    val ch = st.optInt("Channels", 0).takeIf { it > 0 }?.let { "${it}ch" }
+                    info += listOfNotNull(
+                        "🔊", st.optString("DisplayTitle").takeIf { it.isNotBlank() }
+                            ?: st.optString("Language").takeIf { it.isNotBlank() },
+                        st.optString("Codec").takeIf { it.isNotBlank() }?.uppercase(), ch,
+                    ).joinToString(" ")
+                }
+                "Video" -> {
+                    val res = listOfNotNull(
+                        st.optInt("Width", 0).takeIf { it > 0 },
+                        st.optInt("Height", 0).takeIf { it > 0 },
+                    ).takeIf { it.size == 2 }?.let { "${it[0]}×${it[1]}" }
+                    info += listOfNotNull(
+                        "🎬", st.optString("Codec").takeIf { it.isNotBlank() }?.uppercase(), res,
+                        st.optString("DisplayTitle").takeIf { it.isNotBlank() },
+                    ).joinToString(" ")
+                }
+            }
+        }
+        item.optString("Container").takeIf { it.isNotBlank() }?.let { info += "📦 ${it.uppercase()}" }
+        return ParsedStreams(subs, audios, info)
+    }
+
+    private fun streamLabel(st: JSONObject, fallback: String): String =
+        st.optString("DisplayTitle").takeIf { it.isNotBlank() }
+            ?: st.optString("Title").takeIf { it.isNotBlank() }
+            ?: st.optString("Language").takeIf { it.isNotBlank() }
+            ?: fallback
 
     private fun buildNowPlayingTitle(item: JSONObject): String? {
         val type = item.optString("Type")
@@ -112,7 +187,7 @@ class NaTvService @Inject constructor(
     }
 
     /**
-     * Vybere cílovou session pro „Sleduj" widget.
+     * Vybere cílovou session pro „Ovladač".
      * Priorita: Wolphin/Yellyfin TV klient s běžícím přehráváním → jakákoli Wolphin/Yellyfin →
      * aktivní s now-playing → první aktivní → první.
      */
@@ -127,6 +202,13 @@ class NaTvService @Inject constructor(
             ?: sessions.firstOrNull { it.nowPlayingTitle != null }
             ?: sessions.firstOrNull { it.isActive }
             ?: sessions.first()
+    }
+
+    /** URL na cover (Primary) běžící položky — pro Coil; api_key v query je v pořádku. */
+    fun imageUrl(baseUrl: String, token: String, itemId: String, tag: String?): String {
+        val base = baseUrl.trimEnd('/')
+        val tagPart = if (!tag.isNullOrBlank()) "tag=$tag&" else ""
+        return "$base/Items/$itemId/Images/Primary?${tagPart}quality=90&maxHeight=480&api_key=$token"
     }
 
     suspend fun sendPlayCommand(baseUrl: String, token: String, sessionId: String, itemId: String): Boolean {
@@ -153,6 +235,43 @@ class NaTvService @Inject constructor(
         return post(url)
     }
 
+    /** Obecný příkaz na session (GeneralCommand): SetVolume / ToggleMute / Set(Subtitle|Audio)StreamIndex. */
+    suspend fun sendGeneralCommand(
+        baseUrl: String,
+        token: String,
+        sessionId: String,
+        name: String,
+        arguments: Map<String, String> = emptyMap(),
+    ): Boolean {
+        if (baseUrl.isBlank() || token.isBlank() || sessionId.isBlank() || name.isBlank()) return false
+        val base = baseUrl.trimEnd('/')
+        val url = "$base/Sessions/$sessionId/Command?api_key=$token"
+        val args = JSONObject().apply { arguments.forEach { (k, v) -> put(k, v) } }
+        val payload = JSONObject().apply { put("Name", name); put("Arguments", args) }.toString()
+        val request = Request.Builder().url(url)
+            .post(payload.toRequestBody("application/json".toMediaType())).build()
+        return runCatching {
+            httpClient.newCall(request).execute().use { it.isSuccessful }
+        }.getOrDefault(false)
+    }
+
+    suspend fun setVolume(baseUrl: String, token: String, sessionId: String, volume: Int): Boolean =
+        sendGeneralCommand(baseUrl, token, sessionId, "SetVolume",
+            mapOf("Volume" to volume.coerceIn(0, 100).toString()))
+
+    suspend fun toggleMute(baseUrl: String, token: String, sessionId: String): Boolean =
+        sendGeneralCommand(baseUrl, token, sessionId, "ToggleMute")
+
+    /** Index titulkové stopy; -1 = vypnout titulky. */
+    suspend fun setSubtitleIndex(baseUrl: String, token: String, sessionId: String, index: Int): Boolean =
+        sendGeneralCommand(baseUrl, token, sessionId, "SetSubtitleStreamIndex",
+            mapOf("Index" to index.toString()))
+
+    /** Index audio stopy. */
+    suspend fun setAudioIndex(baseUrl: String, token: String, sessionId: String, index: Int): Boolean =
+        sendGeneralCommand(baseUrl, token, sessionId, "SetAudioStreamIndex",
+            mapOf("Index" to index.toString()))
+
     private fun post(url: String): Boolean {
         val body = "".toRequestBody("application/json".toMediaType())
         val request = Request.Builder().url(url).post(body).build()
@@ -168,6 +287,9 @@ data class JellyfinSessionSummary(
     val client: String?,
     val isActive: Boolean,
     val lastActivityDate: String? = null,
+    val itemId: String? = null,
+    val imageTag: String? = null,
+    val overview: String? = null,
     val nowPlayingTitle: String? = null,
     val nowPlayingSubtitle: String? = null,
     val isPlaying: Boolean = false,
@@ -175,4 +297,13 @@ data class JellyfinSessionSummary(
     val positionTicks: Long = 0L,
     val runtimeTicks: Long = 0L,
     val canSeek: Boolean = false,
+    val volumeLevel: Int? = null,
+    val isMuted: Boolean = false,
+    val currentSubtitleIndex: Int = -1,
+    val currentAudioIndex: Int = -1,
+    val subtitleTracks: List<StreamTrack> = emptyList(),
+    val audioTracks: List<StreamTrack> = emptyList(),
+    val mediaInfoLines: List<String> = emptyList(),
 )
+
+data class StreamTrack(val index: Int, val label: String)
