@@ -6,6 +6,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,7 +23,8 @@ class NaTvService @Inject constructor(
         val base = baseUrl.trimEnd('/')
         val url = "$base/Items?HasAnyProviderId=Imdb,Tmdb&Fields=ProviderIds&IncludeItemTypes=Movie,Series&Recursive=true&Limit=2000&api_key=$token"
         val request = Request.Builder().url(url).get().build()
-        return runCatching {
+        return withContext(Dispatchers.IO) {
+            runCatching {
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use null
                 val body = response.body?.string() ?: return@use null
@@ -39,6 +42,7 @@ class NaTvService @Inject constructor(
                 null
             }
         }.getOrNull()
+        }
     }
 
     /**
@@ -53,7 +57,8 @@ class NaTvService @Inject constructor(
         val base = baseUrl.trimEnd('/')
         val url = "$base/Sessions?api_key=$token"
         val request = Request.Builder().url(url).get().build()
-        return runCatching {
+        return withContext(Dispatchers.IO) {
+            runCatching {
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     Timber.w("[Ovladac] getSessions HTTP %d", response.code)
@@ -107,9 +112,10 @@ class NaTvService @Inject constructor(
                 )
                 out
             }
-        }.getOrElse {
-            Timber.w(it, "[Ovladac] getSessions selhalo")
-            emptyList()
+            }.getOrElse {
+                Timber.w(it, "[Ovladac] getSessions selhalo")
+                emptyList()
+            }
         }
     }
 
@@ -250,9 +256,11 @@ class NaTvService @Inject constructor(
         val payload = JSONObject().apply { put("Name", name); put("Arguments", args) }.toString()
         val request = Request.Builder().url(url)
             .post(payload.toRequestBody("application/json".toMediaType())).build()
-        return runCatching {
-            httpClient.newCall(request).execute().use { it.isSuccessful }
-        }.getOrDefault(false)
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                httpClient.newCall(request).execute().use { it.isSuccessful }
+            }.getOrDefault(false)
+        }
     }
 
     suspend fun setVolume(baseUrl: String, token: String, sessionId: String, volume: Int): Boolean =
@@ -272,10 +280,10 @@ class NaTvService @Inject constructor(
         sendGeneralCommand(baseUrl, token, sessionId, "SetAudioStreamIndex",
             mapOf("Index" to index.toString()))
 
-    private fun post(url: String): Boolean {
+    private suspend fun post(url: String): Boolean = withContext(Dispatchers.IO) {
         val body = "".toRequestBody("application/json".toMediaType())
         val request = Request.Builder().url(url).post(body).build()
-        return runCatching {
+        runCatching {
             httpClient.newCall(request).execute().use { it.isSuccessful }
         }.getOrDefault(false)
     }
