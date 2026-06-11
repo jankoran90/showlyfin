@@ -31,6 +31,7 @@ class EiscpClient @Inject constructor() {
         host: String,
         cmd: String,
         expectReply: Boolean = false,
+        expectPrefix: String? = null,
         port: Int = PORT,
     ): List<String>? = withContext(Dispatchers.IO) {
         if (host.isBlank()) return@withContext null
@@ -40,18 +41,51 @@ class EiscpClient @Inject constructor() {
                 sock.soTimeout = READ_TIMEOUT_MS
                 sock.getOutputStream().apply { write(frame(cmd)); flush() }
                 if (!expectReply) return@use emptyList()
-                val buf = ByteArray(8192)
-                val n = try {
-                    sock.getInputStream().read(buf)
-                } catch (_: SocketTimeoutException) {
-                    -1
-                }
-                if (n <= 0) emptyList() else parse(buf, n)
+                readReplies(sock, expectPrefix)
             }
         }.getOrElse {
             Timber.w(it, "[MAESTRO] eISCP %s @%s selhalo", cmd, host)
             null
         }
+    }
+
+    /** Pošle víc příkazů po sobě na JEDNOM spojení (rychlejší než connect na každý). */
+    suspend fun commandMulti(host: String, cmds: List<String>, port: Int = PORT): Boolean =
+        withContext(Dispatchers.IO) {
+            if (host.isBlank() || cmds.isEmpty()) return@withContext false
+            runCatching {
+                Socket().use { sock ->
+                    sock.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
+                    val out = sock.getOutputStream()
+                    cmds.forEach { out.write(frame(it)); out.flush() }
+                }
+                true
+            }.getOrElse {
+                Timber.w(it, "[MAESTRO] eISCP multi @%s selhalo", host)
+                false
+            }
+        }
+
+    /**
+     * Čte rámce ve smyčce do celkového deadline, dokud nepřijde odpověď s [expectPrefix] (např.
+     * `MVL`). AVR po dotazu občas pošle víc/nevyžádaných rámců nebo odpoví se zpožděním → jedno
+     * `read()` to mine. Akumuluje a vrátí všechny přečtené payloady.
+     */
+    private fun readReplies(sock: Socket, expectPrefix: String?): List<String> {
+        val out = mutableListOf<String>()
+        val deadline = System.currentTimeMillis() + REPLY_DEADLINE_MS
+        val buf = ByteArray(8192)
+        while (System.currentTimeMillis() < deadline) {
+            val n = try {
+                sock.getInputStream().read(buf)
+            } catch (_: SocketTimeoutException) {
+                break
+            }
+            if (n <= 0) break
+            out += parse(buf, n)
+            if (expectPrefix == null || out.any { it.startsWith(expectPrefix) }) break
+        }
+        return out
     }
 
     private fun frame(cmd: String): ByteArray {
@@ -95,5 +129,6 @@ class EiscpClient @Inject constructor() {
         const val HEADER_SIZE = 16
         const val CONNECT_TIMEOUT_MS = 1500
         const val READ_TIMEOUT_MS = 1200
+        const val REPLY_DEADLINE_MS = 2000L
     }
 }

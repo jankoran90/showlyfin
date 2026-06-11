@@ -262,6 +262,15 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             }
         }
 
+        // MAESTRO: „Přehrát na TV" → přepni rovnou na sekci „Ovladač" (jen když je viditelná).
+        val openOvladacSignal by ListenNavSignal.openOvladac.collectAsStateWithLifecycle()
+        LaunchedEffect(openOvladacSignal) {
+            if (openOvladacSignal > 0 && ovladacVisible) {
+                bottomTab = Destination.Ovladac
+                currentDestination = Destination.Ovladac
+            }
+        }
+
         val onCollectionPartClick: (CollectionPart) -> Unit = { part ->
             val jfId = part.jellyfinId
             val tmdb = part.tmdbId

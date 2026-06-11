@@ -48,6 +48,8 @@ class OvladacViewModel @Inject constructor(
         /** Poslední známá absolutní hlasitost AVR (0..[AvrController.MAX_VOLUME]). */
         val avrVolume: Int? = null,
         val avrMuted: Boolean = false,
+        /** Krok hlasitosti +/- (jednotky AVR), z Nastavení; default 3. */
+        val avrVolumeStep: Int = 3,
         /** Probíhající akce napájení sestavy (zapínám/vypínám…), null = nic. */
         val sceneStatus: String? = null,
     )
@@ -106,6 +108,7 @@ class OvladacViewModel @Inject constructor(
                 avrReachable = avrStatus?.reachable ?: false,
                 avrVolume = avrStatus?.volume ?: it.avrVolume,
                 avrMuted = if (avrStatus?.reachable == true) avrStatus.muted else it.avrMuted,
+                avrVolumeStep = avrVolumeStepPref(),
             )
         }
     }
@@ -129,7 +132,12 @@ class OvladacViewModel @Inject constructor(
 
     /** Ručně zapnout celou sestavu (receiver + probudit TV + box + spustit přehrávač). */
     fun powerOnSystem() = sceneAction("Zapínám obývák…") {
-        avrConfig()?.let { avr.powerOn(it) }
+        avrConfig()?.let { host ->
+            avr.powerOn(host)
+            // Respekt k vlastní power-on hlasitosti AVR: hodnotu nastavíme JEN když ji user
+            // v appce přímo zadal (override). Prázdné = ponecháme na receiveru (děti ráno).
+            avrDefaultVolume()?.let { delay(POWER_ON_VOL_DELAY_MS); avr.setVolume(host, it) }
+        }
         tvHost()?.let { box.wake(it) }
         boxMac()?.let { box.wakeViaWol(it) }
         boxHost()?.let { box.wakeAndLaunch(it) }
@@ -161,6 +169,14 @@ class OvladacViewModel @Inject constructor(
     private fun tvHost(): String? =
         prefs.getString("avr_tv_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
 
+    /** Override výchozí hlasitosti po zapnutí; null = ponechat na receiveru (respekt). */
+    private fun avrDefaultVolume(): Int? =
+        prefs.getString("avr_default_volume", "").orEmpty().trim().toIntOrNull()?.takeIf { it > 0 }
+
+    /** Krok hlasitosti +/- (jednotky AVR), default 3. */
+    private fun avrVolumeStepPref(): Int =
+        prefs.getString("avr_volume_step", "").orEmpty().trim().toIntOrNull()?.coerceIn(1, 20) ?: 3
+
     fun playPause() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "PlayPause") }
     fun stopPlayback() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "Stop") }
 
@@ -178,16 +194,20 @@ class OvladacViewModel @Inject constructor(
         naTv.sendSeek(c.url, c.token, id, target)
     }
 
-    /** Nastaví hlasitost: na AVR (pravý master obýváku), jinak fallback na JF session. */
-    fun applyVolume(volume: Int) {
-        val host = avrConfig()
-        if (host == null) {
-            command { c, id -> naTv.setVolume(c.url, c.token, id, volume) }
-            return
-        }
+    /** JF fallback (bez AVR): absolutní hlasitost na session. AVR jede přes [avrVolumeStep]. */
+    fun applyVolume(volume: Int) =
+        command { c, id -> naTv.setVolume(c.url, c.token, id, volume) }
+
+    /**
+     * RELATIVNÍ změna hlasitosti AVR o [steps] jednotek (`MVLUP`/`MVLDOWN`). Mění od reálné úrovně
+     * AVR → nikdy neskočí na 0/ticho, i když se aktuální hodnota zrovna nepřečetla. Optimisticky
+     * posuneme bar, poll pak potvrdí reálnou hodnotu z AVR.
+     */
+    fun avrVolumeStep(steps: Int) {
+        val host = avrConfig() ?: return
         viewModelScope.launch {
-            _state.update { it.copy(avrVolume = volume) } // optimisticky, poll potvrdí
-            avr.setVolume(host, volume)
+            _state.update { st -> st.copy(avrVolume = st.avrVolume?.let { (it + steps).coerceIn(0, AvrController.MAX_VOLUME) }) }
+            avr.volumeStep(host, steps)
             delay(COMMAND_SETTLE_MS)
             refreshAvrOnly(host)
         }
@@ -232,6 +252,7 @@ class OvladacViewModel @Inject constructor(
     private companion object {
         const val POLL_MS = 2_000L
         const val COMMAND_SETTLE_MS = 300L
+        const val POWER_ON_VOL_DELAY_MS = 800L
         const val TICKS_PER_MS = 10_000L
     }
 }

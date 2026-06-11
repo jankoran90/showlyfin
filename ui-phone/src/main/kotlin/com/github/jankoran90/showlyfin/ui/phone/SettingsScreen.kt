@@ -318,11 +318,15 @@ fun SettingsScreen(
                 boxHost = uiState.avrBoxHost,
                 boxMac = uiState.avrBoxMac,
                 tvHost = uiState.avrTvHost,
+                defaultVolume = uiState.avrDefaultVolume,
+                volumeStep = uiState.avrVolumeStep,
                 onEnabled = { viewModel.setAvrEnabled(it) },
                 onHost = { viewModel.setAvrHost(it) },
                 onBoxHost = { viewModel.setAvrBoxHost(it) },
                 onBoxMac = { viewModel.setAvrBoxMac(it) },
                 onTvHost = { viewModel.setAvrTvHost(it) },
+                onDefaultVolume = { viewModel.setAvrDefaultVolume(it) },
+                onVolumeStep = { viewModel.setAvrVolumeStep(it) },
             )
         }
 
@@ -1830,11 +1834,15 @@ private fun AvrSection(
     boxHost: String,
     boxMac: String,
     tvHost: String,
+    defaultVolume: String,
+    volumeStep: String,
     onEnabled: (Boolean) -> Unit,
     onHost: (String) -> Unit,
     onBoxHost: (String) -> Unit,
     onBoxMac: (String) -> Unit,
     onTvHost: (String) -> Unit,
+    onDefaultVolume: (String) -> Unit,
+    onVolumeStep: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1854,7 +1862,7 @@ private fun AvrSection(
                 value = host,
                 onCommit = onHost,
                 label = "IP receiveru",
-                placeholder = "192.168.1.233",
+                placeholder = "např. 192.168.1.233",
                 numeric = true,
             )
             Spacer(Modifier.height(8.dp))
@@ -1862,7 +1870,7 @@ private fun AvrSection(
                 value = boxHost,
                 onCommit = onBoxHost,
                 label = "IP TV boxu",
-                placeholder = "192.168.1.184",
+                placeholder = "např. 192.168.1.184",
                 numeric = true,
             )
             Spacer(Modifier.height(8.dp))
@@ -1870,7 +1878,7 @@ private fun AvrSection(
                 value = boxMac,
                 onCommit = onBoxMac,
                 label = "MAC TV boxu (pro probuzení)",
-                placeholder = "80:9d:65:fd:68:04",
+                placeholder = "např. 80:9d:65:fd:68:04",
                 numeric = false,
             )
             Spacer(Modifier.height(8.dp))
@@ -1878,12 +1886,28 @@ private fun AvrSection(
                 value = tvHost,
                 onCommit = onTvHost,
                 label = "IP televize (zapnout/vypnout napřímo)",
-                placeholder = "192.168.1.102",
+                placeholder = "např. 192.168.1.102",
+                numeric = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            AvrTextField(
+                value = volumeStep,
+                onCommit = onVolumeStep,
+                label = "Krok hlasitosti +/- (jednotky AVR)",
+                placeholder = "např. 3",
+                numeric = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            AvrTextField(
+                value = defaultVolume,
+                onCommit = onDefaultVolume,
+                label = "Výchozí hlasitost po zapnutí (prázdné = nechat na receiveru)",
+                placeholder = "např. 45",
                 numeric = true,
             )
             Text(
                 "Vše na stejné Wi‑Fi. Box i televize potřebují zapnuté ladění po síti (port 5555) " +
-                    "a jednou povolit telefon (dialog na obrazovce). Pole se uloží po opuštění.",
+                    "a jednou povolit telefon (dialog na obrazovce). Ukládá se hned při psaní.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),

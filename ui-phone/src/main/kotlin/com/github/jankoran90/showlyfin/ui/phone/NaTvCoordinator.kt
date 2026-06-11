@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.maestro.AvrController
@@ -28,6 +29,8 @@ class NaTvCoordinator @Inject constructor(
     val messages = _messages.receiveAsFlow()
 
     fun playOnTv(item: MediaItem, knownJellyfinId: String? = null) {
+        // Hned přepni appku na sekci „Ovladač" (uvidíš průběh scény + ovládání). MAESTRO.
+        ListenNavSignal.requestOpenOvladac()
         viewModelScope.launch {
             val url = prefs.getString("jellyfin_server_url", "") ?: ""
             val token = prefs.getString("jellyfin_token", "") ?: ""
@@ -68,8 +71,12 @@ class NaTvCoordinator @Inject constructor(
     /** Scéna „spustit z vypnuté TV": AVR power → box WoL + ADB launch Yellyfin → poll na session. */
     private suspend fun runWakeScene(url: String, token: String): JellyfinSessionSummary? {
         _messages.send("Zapínám obývák…")
-        // 1) Receiver ze standby (vstup STRM BOX si AVR přepne sám přes CEC).
-        avrConfig()?.let { avr.powerOn(it) }
+        // 1) Receiver ze standby (vstup STRM BOX si AVR přepne sám přes CEC). Výchozí hlasitost
+        // nastavíme JEN když ji user v appce zadal (jinak respekt k power-on hlasitosti AVR).
+        avrConfig()?.let { host ->
+            avr.powerOn(host)
+            avrDefaultVolume()?.let { delay(800); avr.setVolume(host, it) }
+        }
         // 2) Televize napřímo (CEC kaskáda nemusí stačit — viz device test).
         tvHost()?.let { box.wake(it) }
         // 3) Box z hlubokého spánku (Wake-on-LAN; ADB ho pak probudí z lehkého).
@@ -109,6 +116,9 @@ class NaTvCoordinator @Inject constructor(
 
     private fun tvHost(): String? =
         prefs.getString("avr_tv_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+
+    private fun avrDefaultVolume(): Int? =
+        prefs.getString("avr_default_volume", "").orEmpty().trim().toIntOrNull()?.takeIf { it > 0 }
 
     private companion object {
         const val SCENE_MAX_POLLS = 16      // ~32 s

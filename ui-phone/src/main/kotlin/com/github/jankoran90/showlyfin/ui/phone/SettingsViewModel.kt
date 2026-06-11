@@ -65,6 +65,8 @@ data class SettingsUiState(
     val avrBoxHost: String = "",
     val avrBoxMac: String = "",
     val avrTvHost: String = "",
+    val avrDefaultVolume: String = "",
+    val avrVolumeStep: String = "",
     // Plan PROFILES Fáze 2 — web admin profilů (uploader backend)
     val uploaderBaseUrl: String = "",
     // Poslech / Audiobookshelf
@@ -141,6 +143,8 @@ class SettingsViewModel @Inject constructor(
         const val KEY_AVR_BOX_HOST = "avr_box_host"
         const val KEY_AVR_BOX_MAC = "avr_box_mac"
         const val KEY_AVR_TV_HOST = "avr_tv_host"
+        const val KEY_AVR_DEFAULT_VOLUME = "avr_default_volume"
+        const val KEY_AVR_VOLUME_STEP = "avr_volume_step"
     }
 
     private val uploaderBase get() = prefs.getString("uploader_base_url", "") ?: ""
@@ -206,6 +210,8 @@ class SettingsViewModel @Inject constructor(
                 avrBoxHost = prefs.getString(KEY_AVR_BOX_HOST, "").orEmpty(),
                 avrBoxMac = prefs.getString(KEY_AVR_BOX_MAC, "").orEmpty(),
                 avrTvHost = prefs.getString(KEY_AVR_TV_HOST, "").orEmpty(),
+                avrDefaultVolume = prefs.getString(KEY_AVR_DEFAULT_VOLUME, "").orEmpty(),
+                avrVolumeStep = prefs.getString(KEY_AVR_VOLUME_STEP, "").orEmpty(),
             )
         }
         refreshAbsState()
@@ -439,6 +445,18 @@ class SettingsViewModel @Inject constructor(
         val clean = host.trim()
         prefs.edit().putString(KEY_AVR_TV_HOST, clean).apply()
         _uiState.update { it.copy(avrTvHost = clean) }
+    }
+
+    fun setAvrDefaultVolume(v: String) {
+        val clean = v.trim().filter { it.isDigit() }
+        prefs.edit().putString(KEY_AVR_DEFAULT_VOLUME, clean).apply()
+        _uiState.update { it.copy(avrDefaultVolume = clean) }
+    }
+
+    fun setAvrVolumeStep(v: String) {
+        val clean = v.trim().filter { it.isDigit() }
+        prefs.edit().putString(KEY_AVR_VOLUME_STEP, clean).apply()
+        _uiState.update { it.copy(avrVolumeStep = clean) }
     }
 
     fun switchProfile(profileId: Long) {

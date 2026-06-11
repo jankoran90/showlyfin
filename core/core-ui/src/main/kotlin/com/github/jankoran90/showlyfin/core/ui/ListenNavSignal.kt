@@ -25,4 +25,12 @@ object ListenNavSignal {
     fun requestOpenListen() {
         _openListen.value = _openListen.value + 1
     }
+
+    /** MAESTRO: „Přehrát na TV" → phone shell přepne spodní lištu na sekci „Ovladač". Counter jako výše. */
+    private val _openOvladac = MutableStateFlow(0L)
+    val openOvladac = _openOvladac.asStateFlow()
+
+    fun requestOpenOvladac() {
+        _openOvladac.value = _openOvladac.value + 1
+    }
 }

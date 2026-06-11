@@ -24,11 +24,11 @@ class AvrController @Inject constructor(
         val muted: Boolean = false,
     )
 
-    /** Načte hlasitost (`MVLQSTN`) + mute (`AMTQSTN`). */
+    /** Načte hlasitost (`MVLQSTN`) + mute (`AMTQSTN`) — čte ve smyčce dokud nepřijde `MVL`/`AMT`. */
     suspend fun status(host: String): AvrStatus {
-        val mvl = eiscp.command(host, "MVLQSTN", expectReply = true)
+        val mvl = eiscp.command(host, "MVLQSTN", expectReply = true, expectPrefix = "MVL")
         if (mvl == null) return AvrStatus(reachable = false)
-        val amt = eiscp.command(host, "AMTQSTN", expectReply = true)
+        val amt = eiscp.command(host, "AMTQSTN", expectReply = true, expectPrefix = "AMT")
         val volume = mvl.firstNotNullOfOrNull(::parseMvl)
         val muted = amt?.any { it.startsWith("AMT") && it.removePrefix("AMT").trim().startsWith("01") } ?: false
         Timber.i("[MAESTRO] AVR @%s status vol=%s muted=%b", host, volume, muted)
@@ -39,6 +39,16 @@ class AvrController @Inject constructor(
     suspend fun setVolume(host: String, value: Int): Boolean {
         val hex = value.coerceIn(0, MAX_VOLUME).toString(16).uppercase().padStart(2, '0')
         return eiscp.command(host, "MVL$hex") != null
+    }
+
+    /**
+     * RELATIVNÍ změna hlasitosti o [steps] jednotek (`MVLUP`/`MVLDOWN` × |steps|) na jednom spojení.
+     * Mění od reálné úrovně AVR → nikdy neskočí na 0/ticho, i když se aktuální hodnota nepřečetla.
+     */
+    suspend fun volumeStep(host: String, steps: Int): Boolean {
+        if (steps == 0) return true
+        val cmd = if (steps > 0) "MVLUP" else "MVLDOWN"
+        return eiscp.commandMulti(host, List(kotlin.math.abs(steps)) { cmd })
     }
 
     suspend fun setMute(host: String, mute: Boolean): Boolean =

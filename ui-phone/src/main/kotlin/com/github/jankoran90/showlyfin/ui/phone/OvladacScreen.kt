@@ -76,8 +76,7 @@ import java.util.Locale
 
 private const val TICKS_PER_MS = 10_000L
 
-/** Krok hlasitosti na klik: jemnější pro AVR (≈1 dB / jednotka), 5 pro JF session. */
-private const val AVR_VOLUME_STEP = 2
+/** Krok hlasitosti JF session na klik (AVR krok je konfigurovatelný v Nastavení, default 3). */
 private const val JF_VOLUME_STEP = 5
 
 /** RELAY — sekce „Ovladač": real-time sledování + dálkové ovládání běžící Jellyfin TV session. */
@@ -351,26 +350,32 @@ private fun VolumeRow(s: JellyfinSessionSummary, vm: OvladacViewModel) {
     // digitálně zeslabuje); jinak fallback na hlasitost JF session.
     val avr = st.avrEnabled
     val max = if (avr) AvrController.MAX_VOLUME else 100
-    val stepSize = if (avr) AVR_VOLUME_STEP else JF_VOLUME_STEP
-    val effVolume = if (avr) (st.avrVolume ?: 0) else (s.volumeLevel ?: 50)
+    val stepSize = if (avr) st.avrVolumeStep else JF_VOLUME_STEP
     val effMuted = if (avr) st.avrMuted else s.isMuted
+    // Známá hlasitost: u AVR může být null (zatím nepřečteno) → zobrazíme „—", krok ale funguje
+    // RELATIVNĚ (MVLUP/MVLDOWN) → nikdy neskočí na 0/ticho. JF session jede absolutně z lokálu.
+    val knownVol: Int? = if (avr) st.avrVolume else (s.volumeLevel ?: 50)
 
-    // Optimisticky držíme lokální hodnotu, poll ji potvrdí.
-    var local by remember(effVolume) { mutableIntStateOf(effVolume) }
+    var jfLocal by remember(knownVol) { mutableIntStateOf(knownVol ?: 50) }
     fun step(delta: Int) {
-        local = (local + delta).coerceIn(0, max)
-        vm.applyVolume(local)
+        if (avr) {
+            vm.avrVolumeStep(delta)
+        } else {
+            jfLocal = (jfLocal + delta).coerceIn(0, max)
+            vm.applyVolume(jfLocal)
+        }
     }
-    // Dynamický bar: šířka výplně se animuje podle hlasitosti, ztlumeno = prázdný.
+    val displayVol = if (avr) knownVol else jfLocal
     val frac by animateFloatAsState(
-        targetValue = if (effMuted) 0f else (local.toFloat() / max).coerceIn(0f, 1f),
+        targetValue = if (effMuted || displayVol == null) 0f else (displayVol.toFloat() / max).coerceIn(0f, 1f),
         label = "volumeBar",
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = { vm.toggleVolumeMute() }) {
             Icon(if (effMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, "Ztlumit")
         }
-        FilledTonalIconButton(onClick = { step(-stepSize) }, enabled = !effMuted && local > 0) {
+        // AVR: +/- povolené vždy (relativní krok od reálné úrovně AVR). JF: dle lokálu.
+        FilledTonalIconButton(onClick = { step(-stepSize) }, enabled = !effMuted && (avr || jfLocal > 0)) {
             Icon(Icons.Filled.Remove, "Snížit hlasitost")
         }
         Box(
@@ -389,7 +394,11 @@ private fun VolumeRow(s: JellyfinSessionSummary, vm: OvladacViewModel) {
                     .background(MaterialTheme.colorScheme.primary),
             )
             Text(
-                text = if (effMuted) "ztlumeno" else "$local",
+                text = when {
+                    effMuted -> "ztlumeno"
+                    displayVol == null -> "—"
+                    else -> "$displayVol"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -397,7 +406,7 @@ private fun VolumeRow(s: JellyfinSessionSummary, vm: OvladacViewModel) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        FilledTonalIconButton(onClick = { step(stepSize) }, enabled = !effMuted && local < max) {
+        FilledTonalIconButton(onClick = { step(stepSize) }, enabled = !effMuted && (avr || jfLocal < max)) {
             Icon(Icons.Filled.Add, "Zvýšit hlasitost")
         }
     }
