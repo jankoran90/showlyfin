@@ -84,50 +84,46 @@ data class ProfileConfig(
         fun toJson(config: ProfileConfig): String = json.encodeToString(config)
 
         /**
-         * Plan WARDEN W0 — efektivní config = **šablona ⊕ uživatelský override**.
+         * Plan WARDEN W0 / finální sémantika Plan VAULT V9 (#42, 2026-06-11):
          *
-         * Sémantika (revize Plan VAULT, 2026-06-11): override z backendu/webu NEMUSÍ nést snapshot
-         * šablony (GATEKEY stuby, web authoring, starší pushe) — proto **nenastavená pole override
-         * (null / prázdná množina = „nedefinováno") dědí hodnotu šablony**. Bez toho stačil backend
-         * override s `absLibraryWhitelist = null`, aby sync přepsal restrikci šablony „Pro děti"
-         * (bug cluster #41: dětský profil viděl dospělou knihovnu). Explicitně nastavená pole
-         * override vyhrávají; **zamčená pole** ([ProfileConfig.lockedKeys] šablony) diktuje šablona,
-         * ALE jen když v ní hodnota reálně JE (V8, #42): zámek s prázdnou hodnotou v šabloně znamená
-         * „uživatel to nesmí editovat" — hodnota se pak bere z override (per-profil admin authoring).
-         * Bez toho šablona se zamčeným vším a prázdnými hodnotami vynulovala creds + whitelisty
-         * profilu (device test b130: „ABS se nechová jako maty").
-         * [template] == null (legacy bez šablony) → override beze změny.
+         * **Per-profil override (autoruje VÝHRADNĚ admin ve Správě) vždy vyhrává.** Šablona dává:
+         * 1. [lockedKeys] = lock-mapa pro **gating ne-admin Nastavení** (UI; hodnoty nevynucuje),
+         * 2. **defaulty při PŘIŘAZENÍ** — snapshot hodnot šablony do override dělá
+         *    `ProfileRepository.assignTemplate` (jednorázově), ne merge,
+         * 3. chybějící creds domény (null = „chybí", u creds nikdy „všechny") se doplní živě.
+         *
+         * Proč ne vynucování hodnot šablonou: V8 ukázala, že zamčená šablona s prázdnými hodnotami
+         * nuluje plný per-profil config („ABS se nechová jako maty", b130) a vynucování dělá adminův
+         * per-profil editor mrtvým („skrývání sekcí nereaguje", b131). U sekcí/whitelistů má navíc
+         * prázdno/null význam „vše" → nejde rozlišit od „nenastaveno" → živá dědičnost hodnot je
+         * inherentně nejednoznačná. [template] == null (legacy bez šablony) → override beze změny.
          */
         fun mergeEffective(template: ProfileConfig?, override: ProfileConfig): ProfileConfig {
             if (template == null) return override
-            val locked = template.lockedKeys
-            // Efektivní config nese zámky šablony → UI (Nastavení) ví, co smí uživatel editovat (W2).
-            var r = override.copy(
-                lockedKeys = locked,
-                visibleSections = override.visibleSections.ifEmpty { template.visibleSections },
-                jellyfinLibraryWhitelist = override.jellyfinLibraryWhitelist ?: template.jellyfinLibraryWhitelist,
-                absLibraryWhitelist = override.absLibraryWhitelist ?: template.absLibraryWhitelist,
-                allowedGenres = override.allowedGenres.ifEmpty { template.allowedGenres },
-                blockedGenres = override.blockedGenres.ifEmpty { template.blockedGenres },
-                preferredAgeRating = override.preferredAgeRating ?: template.preferredAgeRating,
-                defaultSection = override.defaultSection ?: template.defaultSection,
-                appearance = override.appearance.ifEmpty { template.appearance },
+            return override.copy(
+                // Efektivní config nese zámky šablony → UI (Nastavení) ví, co smí uživatel editovat (W2).
+                lockedKeys = template.lockedKeys,
                 credentials = override.credentials.mergeMissingFrom(template.credentials),
             )
-            if (locked.isEmpty()) return r
-            // Zamčené pole vynucuje šablona JEN když nese hodnotu (V8) — zámek s prázdnem v šabloně
-            // gatuje editaci (UI přes lockedKeys), ale hodnotu nechává per-profil overridu.
-            if (LockKeys.VISIBLE_SECTIONS in locked && template.visibleSections.isNotEmpty()) r = r.copy(visibleSections = template.visibleSections)
-            if (LockKeys.JELLYFIN_LIBRARIES in locked && template.jellyfinLibraryWhitelist != null) r = r.copy(jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist)
-            if (LockKeys.ABS_LIBRARIES in locked && template.absLibraryWhitelist != null) r = r.copy(absLibraryWhitelist = template.absLibraryWhitelist)
-            if (LockKeys.GENRES in locked && (template.allowedGenres.isNotEmpty() || template.blockedGenres.isNotEmpty())) r = r.copy(allowedGenres = template.allowedGenres, blockedGenres = template.blockedGenres)
-            if (LockKeys.AGE_RATING in locked && template.preferredAgeRating != null) r = r.copy(preferredAgeRating = template.preferredAgeRating)
-            if (LockKeys.DEFAULT_SECTION in locked && template.defaultSection != null) r = r.copy(defaultSection = template.defaultSection)
-            if (LockKeys.APPEARANCE in locked && template.appearance.isNotEmpty()) r = r.copy(appearance = template.appearance)
-            // Creds per-doména: šablona vynucuje jen domény, které sama nese; zbytek drží override.
-            if (LockKeys.CREDENTIALS in locked) r = r.copy(credentials = template.credentials.mergeMissingFrom(r.credentials))
-            return r
         }
+
+        /**
+         * Plan VAULT V9 — jednorázový **snapshot hodnot šablony do override při přiřazení**
+         * ([ProfileRepository.assignTemplate]). Přenese jen pole, která šablona reálně nese
+         * (non-null / non-empty); zbytek override drží. Creds chybějící domény doplní.
+         */
+        fun snapshotFromTemplate(template: ProfileConfig, override: ProfileConfig): ProfileConfig =
+            override.copy(
+                visibleSections = if (template.visibleSections.isNotEmpty()) template.visibleSections else override.visibleSections,
+                jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist ?: override.jellyfinLibraryWhitelist,
+                absLibraryWhitelist = template.absLibraryWhitelist ?: override.absLibraryWhitelist,
+                allowedGenres = template.allowedGenres.ifEmpty { override.allowedGenres },
+                blockedGenres = template.blockedGenres.ifEmpty { override.blockedGenres },
+                preferredAgeRating = template.preferredAgeRating ?: override.preferredAgeRating,
+                defaultSection = template.defaultSection ?: override.defaultSection,
+                appearance = template.appearance.ifEmpty { override.appearance },
+                credentials = override.credentials.mergeMissingFrom(template.credentials),
+            )
     }
 
     /**

@@ -248,11 +248,22 @@ class ProfileRepository @Inject constructor(
 
     /**
      * Přiřadí (uuid != null) nebo zruší (uuid = null) šablonu profilu (Plan WARDEN W0). Re-aplikuje
-     * efektivní config, je-li profil aktivní.
+     * efektivní config, je-li profil aktivní. VAULT V9: při přiřazení se hodnoty šablony jednorázově
+     * **snapshotnou do override** ([ProfileConfig.snapshotFromTemplate]) — merge už hodnoty šablony
+     * nevynucuje (zámky jen gateují editaci), takže default profilu vzniká tady.
      */
     suspend fun assignTemplate(profileId: Long, templateUuid: String?) {
         val profile = dao.getById(profileId) ?: return
-        dao.update(profile.copy(templateUuid = templateUuid))
+        val templateCfg = templateUuid
+            ?.let { templateDao.getByUuid(it) }
+            ?.let { ProfileConfig.fromJson(it.configJson) }
+        val newJson = if (templateCfg != null) {
+            val snapped = ProfileConfig.snapshotFromTemplate(templateCfg, ProfileConfig.fromJson(profile.configJson))
+            ProfileConfig.toJson(snapped)
+        } else {
+            profile.configJson
+        }
+        dao.update(profile.copy(templateUuid = templateUuid, configJson = newJson))
         val updated = dao.getById(profileId)
         if (_activeProfile.value?.id == profileId && updated != null) {
             _activeProfile.value = updated
@@ -264,6 +275,10 @@ class ProfileRepository @Inject constructor(
         configGateway.pushAssignedTemplate(
             profile.backendKey(), profile.name, profile.isAdmin, profile.jellyfinUserId, templateUuid ?: "",
         )
+        // VAULT V9: snapshot změnil override → propsat i config (jinak by ho příští sync vrátil).
+        if (newJson != profile.configJson) {
+            configGateway.pushConfig(profile.backendKey(), newJson ?: "{}", profile.name, profile.isAdmin, profile.jellyfinUserId)
+        }
     }
 
     suspend fun setDefault(profileId: Long) {
