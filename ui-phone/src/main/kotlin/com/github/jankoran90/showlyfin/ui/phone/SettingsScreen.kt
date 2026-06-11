@@ -318,10 +318,12 @@ fun SettingsScreen(
                 host = uiState.avrHost,
                 boxHost = uiState.avrBoxHost,
                 boxMac = uiState.avrBoxMac,
+                tvHost = uiState.avrTvHost,
                 onEnabled = { viewModel.setAvrEnabled(it) },
                 onHost = { viewModel.setAvrHost(it) },
                 onBoxHost = { viewModel.setAvrBoxHost(it) },
                 onBoxMac = { viewModel.setAvrBoxMac(it) },
+                onTvHost = { viewModel.setAvrTvHost(it) },
             )
         }
 
@@ -1828,10 +1830,12 @@ private fun AvrSection(
     host: String,
     boxHost: String,
     boxMac: String,
+    tvHost: String,
     onEnabled: (Boolean) -> Unit,
     onHost: (String) -> Unit,
     onBoxHost: (String) -> Unit,
     onBoxMac: (String) -> Unit,
+    onTvHost: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1870,9 +1874,17 @@ private fun AvrSection(
                 placeholder = "80:9d:65:fd:68:04",
                 numeric = false,
             )
+            Spacer(Modifier.height(8.dp))
+            AvrTextField(
+                value = tvHost,
+                onCommit = onTvHost,
+                label = "IP televize (zapnout/vypnout napřímo)",
+                placeholder = "192.168.1.102",
+                numeric = true,
+            )
             Text(
-                "Vše na stejné Wi‑Fi. Box potřebuje zapnuté ladění po síti (port 5555) a jednou " +
-                    "povolit telefon (dialog na TV). Pole se uloží po opuštění.",
+                "Vše na stejné Wi‑Fi. Box i televize potřebují zapnuté ladění po síti (port 5555) " +
+                    "a jednou povolit telefon (dialog na obrazovce). Pole se uloží po opuštění.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),

@@ -127,16 +127,18 @@ class OvladacViewModel @Inject constructor(
         }
     }
 
-    /** Ručně zapnout celou sestavu (receiver + probudit box + spustit přehrávač). */
+    /** Ručně zapnout celou sestavu (receiver + probudit TV + box + spustit přehrávač). */
     fun powerOnSystem() = sceneAction("Zapínám obývák…") {
         avrConfig()?.let { avr.powerOn(it) }
+        tvHost()?.let { box.wake(it) }
         boxMac()?.let { box.wakeViaWol(it) }
         boxHost()?.let { box.wakeAndLaunch(it) }
     }
 
-    /** Ručně vypnout sestavu (receiver do standby + uspat box). */
+    /** Ručně vypnout sestavu (receiver do standby + uspat TV i box). */
     fun powerOffSystem() = sceneAction("Vypínám obývák…") {
         avrConfig()?.let { avr.powerOff(it) }
+        tvHost()?.let { box.sleep(it) }
         boxHost()?.let { box.sleep(it) }
     }
 
@@ -155,6 +157,9 @@ class OvladacViewModel @Inject constructor(
 
     private fun boxMac(): String? =
         prefs.getString("avr_box_mac", "").orEmpty().trim().takeIf { it.isNotBlank() }
+
+    private fun tvHost(): String? =
+        prefs.getString("avr_tv_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
 
     fun playPause() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "PlayPause") }
     fun stopPlayback() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "Stop") }

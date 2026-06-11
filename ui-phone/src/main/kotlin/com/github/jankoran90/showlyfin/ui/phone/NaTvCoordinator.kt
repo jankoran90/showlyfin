@@ -68,9 +68,11 @@ class NaTvCoordinator @Inject constructor(
     /** Scéna „spustit z vypnuté TV": AVR power → box WoL + ADB launch Yellyfin → poll na session. */
     private suspend fun runWakeScene(url: String, token: String): JellyfinSessionSummary? {
         _messages.send("Zapínám obývák…")
-        // 1) Receiver ze standby (CEC kaskáda pak probudí TV; vstup STRM BOX si AVR přepne sám).
+        // 1) Receiver ze standby (vstup STRM BOX si AVR přepne sám přes CEC).
         avrConfig()?.let { avr.powerOn(it) }
-        // 2) Box z hlubokého spánku (Wake-on-LAN; ADB ho pak probudí z lehkého).
+        // 2) Televize napřímo (CEC kaskáda nemusí stačit — viz device test).
+        tvHost()?.let { box.wake(it) }
+        // 3) Box z hlubokého spánku (Wake-on-LAN; ADB ho pak probudí z lehkého).
         boxMac()?.let { box.wakeViaWol(it) }
         val boxHost = boxHost()
 
@@ -104,6 +106,9 @@ class NaTvCoordinator @Inject constructor(
 
     private fun boxMac(): String? =
         prefs.getString("avr_box_mac", "").orEmpty().trim().takeIf { it.isNotBlank() }
+
+    private fun tvHost(): String? =
+        prefs.getString("avr_tv_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
 
     private companion object {
         const val SCENE_MAX_POLLS = 16      // ~32 s

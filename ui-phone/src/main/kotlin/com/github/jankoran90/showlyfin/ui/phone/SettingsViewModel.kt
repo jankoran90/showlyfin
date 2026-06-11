@@ -64,6 +64,7 @@ data class SettingsUiState(
     val avrHost: String = "",
     val avrBoxHost: String = "",
     val avrBoxMac: String = "",
+    val avrTvHost: String = "",
     // Plan PROFILES Fáze 2 — web admin profilů (uploader backend)
     val uploaderBaseUrl: String = "",
     // Poslech / Audiobookshelf
@@ -139,6 +140,7 @@ class SettingsViewModel @Inject constructor(
         const val KEY_AVR_HOST = "avr_host"
         const val KEY_AVR_BOX_HOST = "avr_box_host"
         const val KEY_AVR_BOX_MAC = "avr_box_mac"
+        const val KEY_AVR_TV_HOST = "avr_tv_host"
     }
 
     private val uploaderBase get() = prefs.getString("uploader_base_url", "") ?: ""
@@ -203,6 +205,7 @@ class SettingsViewModel @Inject constructor(
                 avrHost = prefs.getString(KEY_AVR_HOST, "").orEmpty(),
                 avrBoxHost = prefs.getString(KEY_AVR_BOX_HOST, "").orEmpty(),
                 avrBoxMac = prefs.getString(KEY_AVR_BOX_MAC, "").orEmpty(),
+                avrTvHost = prefs.getString(KEY_AVR_TV_HOST, "").orEmpty(),
             )
         }
         refreshAbsState()
@@ -430,6 +433,12 @@ class SettingsViewModel @Inject constructor(
         val clean = mac.trim()
         prefs.edit().putString(KEY_AVR_BOX_MAC, clean).apply()
         _uiState.update { it.copy(avrBoxMac = clean) }
+    }
+
+    fun setAvrTvHost(host: String) {
+        val clean = host.trim()
+        prefs.edit().putString(KEY_AVR_TV_HOST, clean).apply()
+        _uiState.update { it.copy(avrTvHost = clean) }
     }
 
     fun switchProfile(profileId: Long) {

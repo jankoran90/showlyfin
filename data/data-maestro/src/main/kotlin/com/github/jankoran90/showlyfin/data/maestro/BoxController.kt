@@ -74,6 +74,20 @@ class BoxController @Inject constructor(
             }
         }
 
+    /** Jen probudí zařízení přes ADB (`KEYCODE_WAKEUP`), bez spouštění appky — pro TV. */
+    suspend fun wake(host: String): Boolean = withContext(Dispatchers.IO) {
+        withTimeoutOrNull(ADB_TIMEOUT_MS) {
+            runCatching {
+                Dadb.create(host, ADB_PORT, adbKeyPair()).use { it.shell("input keyevent KEYCODE_WAKEUP") }
+                Timber.i("[MAESTRO] ADB @%s wake OK", host)
+                true
+            }.getOrElse {
+                Timber.w(it, "[MAESTRO] ADB @%s wake selhalo", host)
+                false
+            }
+        } ?: false
+    }
+
     /** Uspí box přes ADB (`KEYCODE_SLEEP`). Pro „vypnout obývák". */
     suspend fun sleep(host: String): Boolean = withContext(Dispatchers.IO) {
         withTimeoutOrNull(ADB_TIMEOUT_MS) {
