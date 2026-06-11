@@ -68,11 +68,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.StreamTrack
+import com.github.jankoran90.showlyfin.data.maestro.AvrController
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 private const val TICKS_PER_MS = 10_000L
+
+/** Krok hlasitosti na klik: jemnější pro AVR (≈1 dB / jednotka), 5 pro JF session. */
+private const val AVR_VOLUME_STEP = 2
+private const val JF_VOLUME_STEP = 5
 
 /** RELAY — sekce „Ovladač": real-time sledování + dálkové ovládání běžící Jellyfin TV session. */
 @Composable
@@ -305,22 +310,31 @@ private fun ProgressSeek(s: JellyfinSessionSummary, vm: OvladacViewModel) {
 
 @Composable
 private fun VolumeRow(s: JellyfinSessionSummary, vm: OvladacViewModel) {
-    // Krok 5 na klik; optimisticky držíme lokální hodnotu, server ji potvrdí v dalším pollu.
-    var local by remember(s.volumeLevel) { mutableIntStateOf(s.volumeLevel ?: 50) }
+    val st by vm.state.collectAsStateWithLifecycle()
+    // Když je v Nastavení zapnutý AVR, hlasitost cílí na něj (pravý master obýváku — box jen
+    // digitálně zeslabuje); jinak fallback na hlasitost JF session.
+    val avr = st.avrEnabled
+    val max = if (avr) AvrController.MAX_VOLUME else 100
+    val stepSize = if (avr) AVR_VOLUME_STEP else JF_VOLUME_STEP
+    val effVolume = if (avr) (st.avrVolume ?: 0) else (s.volumeLevel ?: 50)
+    val effMuted = if (avr) st.avrMuted else s.isMuted
+
+    // Optimisticky držíme lokální hodnotu, poll ji potvrdí.
+    var local by remember(effVolume) { mutableIntStateOf(effVolume) }
     fun step(delta: Int) {
-        local = (local + delta).coerceIn(0, 100)
-        vm.setVolume(local)
+        local = (local + delta).coerceIn(0, max)
+        vm.applyVolume(local)
     }
-    // Dynamický bar: šířka výplně se animuje podle hlasitosti (0..100), ztlumeno = prázdný.
+    // Dynamický bar: šířka výplně se animuje podle hlasitosti, ztlumeno = prázdný.
     val frac by animateFloatAsState(
-        targetValue = if (s.isMuted) 0f else local / 100f,
+        targetValue = if (effMuted) 0f else (local.toFloat() / max).coerceIn(0f, 1f),
         label = "volumeBar",
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { vm.toggleMute() }) {
-            Icon(if (s.isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, "Ztlumit")
+        IconButton(onClick = { vm.toggleVolumeMute() }) {
+            Icon(if (effMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, "Ztlumit")
         }
-        FilledTonalIconButton(onClick = { step(-5) }, enabled = !s.isMuted && local > 0) {
+        FilledTonalIconButton(onClick = { step(-stepSize) }, enabled = !effMuted && local > 0) {
             Icon(Icons.Filled.Remove, "Snížit hlasitost")
         }
         Box(
@@ -339,7 +353,7 @@ private fun VolumeRow(s: JellyfinSessionSummary, vm: OvladacViewModel) {
                     .background(MaterialTheme.colorScheme.primary),
             )
             Text(
-                text = if (s.isMuted) "ztlumeno" else "$local",
+                text = if (effMuted) "ztlumeno" else "$local",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -347,9 +361,17 @@ private fun VolumeRow(s: JellyfinSessionSummary, vm: OvladacViewModel) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        FilledTonalIconButton(onClick = { step(5) }, enabled = !s.isMuted && local < 100) {
+        FilledTonalIconButton(onClick = { step(stepSize) }, enabled = !effMuted && local < max) {
             Icon(Icons.Filled.Add, "Zvýšit hlasitost")
         }
+    }
+    if (avr) {
+        Text(
+            text = if (st.avrReachable) "Hlasitost ovládá AVR" else "AVR nedostupný — zkontroluj síť/IP",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+        )
     }
 }
 

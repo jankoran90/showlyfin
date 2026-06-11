@@ -57,6 +57,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -309,6 +310,15 @@ fun SettingsScreen(
             )
             // Plan HELM H6: administrace profilů/šablon přesunuta do samostatné admin destinace
             // („Správa" ve spodní liště, jen pro admin) — už NENÍ zamíchaná v Nastavení. Web admin zrušen.
+        }
+
+        CollapsibleSettingsSection("Domácí sestava", expanded) {
+            AvrSection(
+                enabled = uiState.avrEnabled,
+                host = uiState.avrHost,
+                onEnabled = { viewModel.setAvrEnabled(it) },
+                onHost = { viewModel.setAvrHost(it) },
+            )
         }
 
         CollapsibleSettingsSection("Systém", expanded) {
@@ -1801,6 +1811,53 @@ private fun CollapsibleSettingsSection(
         content()
     }
     Spacer(Modifier.height(16.dp))
+}
+
+/**
+ * Plan MAESTRO — ovládání AV receiveru (Pioneer/Onkyo eISCP). Když je zapnuté, hlasitost v Ovladači
+ * cílí na AVR (pravý master obýváku) místo na Jellyfin session (box jen digitálně zeslabuje).
+ */
+@Composable
+private fun AvrSection(
+    enabled: Boolean,
+    host: String,
+    onEnabled: (Boolean) -> Unit,
+    onHost: (String) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Hlasitost přes AV receiver", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Tlačítka hlasitosti v Ovladači řídí receiver (Pioneer), ne box",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = onEnabled)
+        }
+        if (enabled) {
+            Spacer(Modifier.height(8.dp))
+            var local by remember(host) { mutableStateOf(host) }
+            OutlinedTextField(
+                value = local,
+                onValueChange = { local = it },
+                label = { Text("IP receiveru") },
+                placeholder = { Text("192.168.1.233") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { if (!it.isFocused && local != host) onHost(local) },
+            )
+            Text(
+                "Receiver na stejné Wi‑Fi (eISCP, port 60128). Uloží se po opuštění pole.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
 }
 
 @Composable

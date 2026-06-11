@@ -38,6 +38,7 @@ dependencies {
     implementation(project(":feature:feature-listen"))
     implementation(project(":data:data-uploader"))
     implementation(project(":data:data-abs"))
+    implementation(project(":data:data-maestro"))
     implementation(libs.hilt.android)
     implementation(libs.timber)
     implementation(libs.coil.compose)

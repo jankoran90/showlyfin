@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
+import com.github.jankoran90.showlyfin.data.maestro.AvrController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ import javax.inject.Named
 @HiltViewModel
 class OvladacViewModel @Inject constructor(
     private val naTv: NaTvService,
+    private val avr: AvrController,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -37,6 +39,13 @@ class OvladacViewModel @Inject constructor(
         /** Vyřešená aktivní session, kterou ovládáme. */
         val current: JellyfinSessionSummary? = null,
         val coverUrl: String? = null,
+        /** AVR (Pioneer) ovládání hlasitosti zapnuté v Nastavení + IP vyplněná. */
+        val avrEnabled: Boolean = false,
+        /** AVR odpovídá na síti (jinak fallback na hlasitost JF session). */
+        val avrReachable: Boolean = false,
+        /** Poslední známá absolutní hlasitost AVR (0..[AvrController.MAX_VOLUME]). */
+        val avrVolume: Int? = null,
+        val avrMuted: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -79,6 +88,8 @@ class OvladacViewModel @Inject constructor(
         val current = sessions.firstOrNull { it.sessionId == userSelectedId }
             ?: naTv.pickWatchSession(sessions)
         val cover = current?.itemId?.let { naTv.imageUrl(c.url, c.token, it, current.imageTag) }
+        val avrCfg = avrConfig()
+        val avrStatus = avrCfg?.let { avr.status(it) }
         _state.update {
             it.copy(
                 loading = false,
@@ -87,6 +98,27 @@ class OvladacViewModel @Inject constructor(
                 current = current,
                 selectedId = current?.sessionId,
                 coverUrl = cover,
+                avrEnabled = avrCfg != null,
+                avrReachable = avrStatus?.reachable ?: false,
+                avrVolume = avrStatus?.volume ?: it.avrVolume,
+                avrMuted = if (avrStatus?.reachable == true) avrStatus.muted else it.avrMuted,
+            )
+        }
+    }
+
+    /** Vrátí host AVR pokud je ovládání hlasitosti přes AVR povolené a IP vyplněná, jinak null. */
+    private fun avrConfig(): String? {
+        if (!prefs.getBoolean("avr_enabled", false)) return null
+        return prefs.getString("avr_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun refreshAvrOnly(host: String) {
+        val s = avr.status(host)
+        _state.update {
+            it.copy(
+                avrReachable = s.reachable,
+                avrVolume = s.volume ?: it.avrVolume,
+                avrMuted = if (s.reachable) s.muted else it.avrMuted,
             )
         }
     }
@@ -108,8 +140,36 @@ class OvladacViewModel @Inject constructor(
         naTv.sendSeek(c.url, c.token, id, target)
     }
 
-    fun setVolume(volume: Int) = command { c, id -> naTv.setVolume(c.url, c.token, id, volume) }
-    fun toggleMute() = command { c, id -> naTv.toggleMute(c.url, c.token, id) }
+    /** Nastaví hlasitost: na AVR (pravý master obýváku), jinak fallback na JF session. */
+    fun applyVolume(volume: Int) {
+        val host = avrConfig()
+        if (host == null) {
+            command { c, id -> naTv.setVolume(c.url, c.token, id, volume) }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(avrVolume = volume) } // optimisticky, poll potvrdí
+            avr.setVolume(host, volume)
+            delay(COMMAND_SETTLE_MS)
+            refreshAvrOnly(host)
+        }
+    }
+
+    /** Ztlumení: AVR `AMT`, jinak JF session. */
+    fun toggleVolumeMute() {
+        val host = avrConfig()
+        if (host == null) {
+            command { c, id -> naTv.toggleMute(c.url, c.token, id) }
+            return
+        }
+        viewModelScope.launch {
+            val newMute = !_state.value.avrMuted
+            _state.update { it.copy(avrMuted = newMute) }
+            avr.setMute(host, newMute)
+            delay(COMMAND_SETTLE_MS)
+            refreshAvrOnly(host)
+        }
+    }
     fun setSubtitle(index: Int) = command { c, id -> naTv.setSubtitleIndex(c.url, c.token, id, index) }
     fun setAudio(index: Int) = command { c, id -> naTv.setAudioIndex(c.url, c.token, id, index) }
 

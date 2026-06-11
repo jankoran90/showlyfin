@@ -36,6 +36,7 @@ include(":data:data-jellyfin")
 include(":data:data-csfd")
 include(":data:data-uploader")
 include(":data:data-abs")
+include(":data:data-maestro")
 
 // Features
 include(":feature:feature-discover")

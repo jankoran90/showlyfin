@@ -59,6 +59,9 @@ data class SettingsUiState(
     val streamFilterError: String? = null,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
+    // Plan MAESTRO — ovládání hlasitosti přes AV receiver (Pioneer eISCP) místo JF session.
+    val avrEnabled: Boolean = false,
+    val avrHost: String = "",
     // Plan PROFILES Fáze 2 — web admin profilů (uploader backend)
     val uploaderBaseUrl: String = "",
     // Poslech / Audiobookshelf
@@ -130,6 +133,8 @@ class SettingsViewModel @Inject constructor(
         private const val KEY_TOKEN = "jellyfin_token"
         private const val KEY_USER_ID = "jellyfin_user_id"
         const val KEY_LIVE_LOGGING = "live_logging_enabled"
+        const val KEY_AVR_ENABLED = "avr_enabled"
+        const val KEY_AVR_HOST = "avr_host"
     }
 
     private val uploaderBase get() = prefs.getString("uploader_base_url", "") ?: ""
@@ -186,7 +191,14 @@ class SettingsViewModel @Inject constructor(
         profileRepository.observeTemplates()
             .onEach { list -> _uiState.update { it.copy(templates = list) } }
             .launchIn(viewModelScope)
-        _uiState.update { it.copy(liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false), uploaderBaseUrl = uploaderBase) }
+        _uiState.update {
+            it.copy(
+                liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false),
+                uploaderBaseUrl = uploaderBase,
+                avrEnabled = prefs.getBoolean(KEY_AVR_ENABLED, false),
+                avrHost = prefs.getString(KEY_AVR_HOST, "").orEmpty(),
+            )
+        }
         refreshAbsState()
         loadAbsLibraries()
         loadStreamFilter()
@@ -389,6 +401,17 @@ class SettingsViewModel @Inject constructor(
     fun setLiveLogging(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_LIVE_LOGGING, enabled).apply()
         _uiState.update { it.copy(liveLogging = enabled) }
+    }
+
+    fun setAvrEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AVR_ENABLED, enabled).apply()
+        _uiState.update { it.copy(avrEnabled = enabled) }
+    }
+
+    fun setAvrHost(host: String) {
+        val clean = host.trim()
+        prefs.edit().putString(KEY_AVR_HOST, clean).apply()
+        _uiState.update { it.copy(avrHost = clean) }
     }
 
     fun switchProfile(profileId: Long) {
