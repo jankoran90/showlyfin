@@ -91,8 +91,12 @@ data class ProfileConfig(
          * (null / prázdná množina = „nedefinováno") dědí hodnotu šablony**. Bez toho stačil backend
          * override s `absLibraryWhitelist = null`, aby sync přepsal restrikci šablony „Pro děti"
          * (bug cluster #41: dětský profil viděl dospělou knihovnu). Explicitně nastavená pole
-         * override vyhrávají; **zamčená pole** ([ProfileConfig.lockedKeys] šablony) vždy živě
-         * diktuje šablona. [template] == null (legacy bez šablony) → override beze změny.
+         * override vyhrávají; **zamčená pole** ([ProfileConfig.lockedKeys] šablony) diktuje šablona,
+         * ALE jen když v ní hodnota reálně JE (V8, #42): zámek s prázdnou hodnotou v šabloně znamená
+         * „uživatel to nesmí editovat" — hodnota se pak bere z override (per-profil admin authoring).
+         * Bez toho šablona se zamčeným vším a prázdnými hodnotami vynulovala creds + whitelisty
+         * profilu (device test b130: „ABS se nechová jako maty").
+         * [template] == null (legacy bez šablony) → override beze změny.
          */
         fun mergeEffective(template: ProfileConfig?, override: ProfileConfig): ProfileConfig {
             if (template == null) return override
@@ -111,14 +115,17 @@ data class ProfileConfig(
                 credentials = override.credentials.mergeMissingFrom(template.credentials),
             )
             if (locked.isEmpty()) return r
-            if (LockKeys.VISIBLE_SECTIONS in locked) r = r.copy(visibleSections = template.visibleSections)
-            if (LockKeys.JELLYFIN_LIBRARIES in locked) r = r.copy(jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist)
-            if (LockKeys.ABS_LIBRARIES in locked) r = r.copy(absLibraryWhitelist = template.absLibraryWhitelist)
-            if (LockKeys.GENRES in locked) r = r.copy(allowedGenres = template.allowedGenres, blockedGenres = template.blockedGenres)
-            if (LockKeys.AGE_RATING in locked) r = r.copy(preferredAgeRating = template.preferredAgeRating)
-            if (LockKeys.DEFAULT_SECTION in locked) r = r.copy(defaultSection = template.defaultSection)
-            if (LockKeys.APPEARANCE in locked) r = r.copy(appearance = template.appearance)
-            if (LockKeys.CREDENTIALS in locked) r = r.copy(credentials = template.credentials)
+            // Zamčené pole vynucuje šablona JEN když nese hodnotu (V8) — zámek s prázdnem v šabloně
+            // gatuje editaci (UI přes lockedKeys), ale hodnotu nechává per-profil overridu.
+            if (LockKeys.VISIBLE_SECTIONS in locked && template.visibleSections.isNotEmpty()) r = r.copy(visibleSections = template.visibleSections)
+            if (LockKeys.JELLYFIN_LIBRARIES in locked && template.jellyfinLibraryWhitelist != null) r = r.copy(jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist)
+            if (LockKeys.ABS_LIBRARIES in locked && template.absLibraryWhitelist != null) r = r.copy(absLibraryWhitelist = template.absLibraryWhitelist)
+            if (LockKeys.GENRES in locked && (template.allowedGenres.isNotEmpty() || template.blockedGenres.isNotEmpty())) r = r.copy(allowedGenres = template.allowedGenres, blockedGenres = template.blockedGenres)
+            if (LockKeys.AGE_RATING in locked && template.preferredAgeRating != null) r = r.copy(preferredAgeRating = template.preferredAgeRating)
+            if (LockKeys.DEFAULT_SECTION in locked && template.defaultSection != null) r = r.copy(defaultSection = template.defaultSection)
+            if (LockKeys.APPEARANCE in locked && template.appearance.isNotEmpty()) r = r.copy(appearance = template.appearance)
+            // Creds per-doména: šablona vynucuje jen domény, které sama nese; zbytek drží override.
+            if (LockKeys.CREDENTIALS in locked) r = r.copy(credentials = template.credentials.mergeMissingFrom(r.credentials))
             return r
         }
     }
