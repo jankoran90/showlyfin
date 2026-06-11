@@ -69,6 +69,8 @@ data class SettingsUiState(
     val hideFinishedEpisodes: Boolean = false,
     // Plan PROFILES Fáze 4E — seznam ABS knihoven (audioknihy+podcasty) pro admin authoring whitelistu
     val absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary> = emptyList(),
+    // Skrývání jednotlivých podcastů per profil (admin authoring) — seznam dostupných pořadů (id+název+cover).
+    val adminPodcasts: List<com.github.jankoran90.showlyfin.data.abs.model.Podcast> = emptyList(),
     // Plan HELM — seznam Jellyfin knihoven (z backendu) pro in-app admin editor whitelistu.
     val adminJellyfinLibraries: List<com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef> = emptyList(),
     val listen: ListenSettings = ListenSettings(),
@@ -199,6 +201,20 @@ class SettingsViewModel @Inject constructor(
                     .distinctBy { it.id }
             }.getOrElse { emptyList() }
             _uiState.update { it.copy(absLibraries = libs) }
+        }
+    }
+
+    /** Načte všechny podcasty napříč ABS podcast knihovnami pro admin authoring skrývání per profil. */
+    fun loadAdminPodcasts() {
+        if (!absRepo.isConfigured) return
+        viewModelScope.launch {
+            val pods = runCatching {
+                absRepo.getPodcastLibraries()
+                    .flatMap { absRepo.getPodcasts(it.id) }
+                    .distinctBy { it.id }
+                    .sortedBy { it.title.lowercase() }
+            }.getOrElse { emptyList() }
+            _uiState.update { it.copy(adminPodcasts = pods) }
         }
     }
 

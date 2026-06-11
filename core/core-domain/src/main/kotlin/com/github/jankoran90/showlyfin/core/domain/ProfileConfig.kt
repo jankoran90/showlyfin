@@ -29,6 +29,12 @@ data class ProfileConfig(
      * audioknihy i podcasty. null = všechny. Prázdný seznam = žádná (skryje vše v Poslechu).
      */
     val absLibraryWhitelist: List<String>? = null,
+    /**
+     * Skryté podcasty (ABS library-item ids) pro tento profil — autoruje admin ve Správě.
+     * Jemnější než [absLibraryWhitelist] (skrývá jednotlivé pořady, ne celou polici).
+     * Prázdné = nic skryté. Filtruje seznam podcastů v sekci Poslech.
+     */
+    val hiddenPodcastIds: Set<String> = emptySet(),
     /** Povolené žánry (lowercase). Prázdné = bez allow-listu (vše kromě blacklistu). */
     val allowedGenres: Set<String> = emptySet(),
     /** Zakázané žánry (lowercase) — blacklist. */
@@ -73,6 +79,9 @@ data class ProfileConfig(
         if (allowedGenres.isNotEmpty() && g.none { it in allowedGenres }) return false
         return true
     }
+
+    /** true = podcast (ABS id) se má profilu zobrazit (není ve [hiddenPodcastIds]). */
+    fun isPodcastVisible(podcastId: String): Boolean = podcastId !in hiddenPodcastIds
 
     /** true = klíč je touto šablonou zamčený (uživatel needituje, bere se hodnota šablony). */
     fun isLocked(lockKey: String): Boolean = lockedKeys.contains(lockKey)
@@ -127,6 +136,7 @@ data class ProfileConfig(
                 visibleSectionsTv = template.visibleSectionsTv ?: override.visibleSectionsTv,
                 jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist ?: override.jellyfinLibraryWhitelist,
                 absLibraryWhitelist = template.absLibraryWhitelist ?: override.absLibraryWhitelist,
+                hiddenPodcastIds = template.hiddenPodcastIds.ifEmpty { override.hiddenPodcastIds },
                 allowedGenres = template.allowedGenres.ifEmpty { override.allowedGenres },
                 blockedGenres = template.blockedGenres.ifEmpty { override.blockedGenres },
                 preferredAgeRating = template.preferredAgeRating ?: override.preferredAgeRating,

@@ -36,6 +36,17 @@ class ListenViewModel @Inject constructor(
         return filter { it.id in wl }
     }
 
+    /**
+     * Per-profil skrytí jednotlivých podcastů (admin authoring ve Správě). Odfiltruje pořady, jejichž
+     * id je ve [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.hiddenPodcastIds].
+     */
+    private fun List<com.github.jankoran90.showlyfin.data.abs.model.Podcast>.applyProfileHidden():
+        List<com.github.jankoran90.showlyfin.data.abs.model.Podcast> {
+        val hidden = profileRepository.activeConfig.value.hiddenPodcastIds
+        if (hidden.isEmpty()) return this
+        return filter { it.id !in hidden }
+    }
+
     private val _uiState = MutableStateFlow(ListenUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -51,7 +62,7 @@ class ListenViewModel @Inject constructor(
         // sync z backendu). Applier zapisuje prefs PŘED emisí configu (ProfileRepository), takže tady
         // už čteme správné přihlášení — řeší závod „fetch knihoven se starým tokenem → prázdné libs".
         profileRepository.activeConfig
-            .map { it.absLibraryWhitelist to it.credentials.abs }
+            .map { Triple(it.absLibraryWhitelist, it.credentials.abs, it.hiddenPodcastIds) }
             .distinctUntilChanged()
             .onEach {
                 refresh()
@@ -148,7 +159,7 @@ class ListenViewModel @Inject constructor(
     private suspend fun loadPodcasts(libraryId: String) {
         _uiState.update { it.copy(isLoading = true, error = null) }
         runCatching { repo.getPodcasts(libraryId) }
-            .onSuccess { ps -> _uiState.update { it.copy(isLoading = false, podcasts = ps) } }
+            .onSuccess { ps -> _uiState.update { it.copy(isLoading = false, podcasts = ps.applyProfileHidden()) } }
             .onFailure { e ->
                 Timber.w(e, "[Listen] podcasty selhaly")
                 _uiState.update { it.copy(isLoading = false, error = "Načtení podcastů selhalo.") }

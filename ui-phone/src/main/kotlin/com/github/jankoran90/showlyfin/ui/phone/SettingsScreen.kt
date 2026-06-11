@@ -1085,6 +1085,7 @@ private val LANDING_OPTIONS = listOf(
 internal fun AdminRestrictionsSection(
     profiles: List<ProfileEntity>,
     absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
+    adminPodcasts: List<com.github.jankoran90.showlyfin.data.abs.model.Podcast>,
     jellyfinLibraries: List<com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef>,
     templates: List<TemplateEntity>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
@@ -1112,7 +1113,7 @@ internal fun AdminRestrictionsSection(
         Spacer(Modifier.height(10.dp))
         profiles.forEach { profile ->
             ProfileAuthoringBlock(
-                profile, absLibraries, jellyfinLibraries, templates,
+                profile, absLibraries, adminPodcasts, jellyfinLibraries, templates,
                 onUpdateAgeRating, onUpdateConfig, onAssignTemplate, onSetPin, onClearPin,
                 onSaveCredentials = onSaveCredentials,
                 credsStatus = credsStatus?.takeIf { it.first == profile.id }?.second,
@@ -1127,6 +1128,7 @@ internal fun AdminRestrictionsSection(
 private fun ProfileAuthoringBlock(
     profile: ProfileEntity,
     absLibraries: List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>,
+    adminPodcasts: List<com.github.jankoran90.showlyfin.data.abs.model.Podcast>,
     jellyfinLibraries: List<com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef>,
     templates: List<TemplateEntity>,
     onUpdateAgeRating: (Long, com.github.jankoran90.showlyfin.core.domain.AgeRating?) -> Unit,
@@ -1268,6 +1270,28 @@ private fun ProfileAuthoringBlock(
                                             else -> current.toList()
                                         }
                                         c.copy(absLibraryWhitelist = newWl)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                // — Poslech: skrýt jednotlivé podcasty pro tento profil (jemnější než whitelist police) —
+                if (cfg.isSectionVisible(ProfileConfig.Sections.POSLECH) && adminPodcasts.isNotEmpty()) {
+                    Text("Podcasty — zapnuto = skrytý pro tento profil", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    adminPodcasts.forEach { pod ->
+                        val hidden = pod.id in cfg.hiddenPodcastIds
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(pod.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            Switch(
+                                checked = hidden,
+                                onCheckedChange = { hide ->
+                                    onUpdateConfig(profile.id) { c ->
+                                        val current = c.hiddenPodcastIds.toMutableSet()
+                                        if (hide) current.add(pod.id) else current.remove(pod.id)
+                                        c.copy(hiddenPodcastIds = current)
                                     }
                                 },
                             )

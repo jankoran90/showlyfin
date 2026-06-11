@@ -73,6 +73,7 @@ fun AdminScreen(
     LaunchedEffect(Unit) {
         viewModel.loadAdminJellyfinLibraries()
         viewModel.loadAbsLibraries()
+        viewModel.loadAdminPodcasts()
     }
 
     // FUSE/HELM: tvOverscan = bezpečné okraje na TV (no-op na telefonu), ať se taby/obsah neořežou.
@@ -117,6 +118,7 @@ fun AdminScreen(
                         AdminRestrictionsSection(
                             profiles = uiState.profiles,
                             absLibraries = uiState.absLibraries,
+                            adminPodcasts = uiState.adminPodcasts,
                             jellyfinLibraries = uiState.adminJellyfinLibraries,
                             templates = uiState.templates,
                             onUpdateAgeRating = { id, rating -> viewModel.updateProfileAgeRating(id, rating) },
