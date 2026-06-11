@@ -86,7 +86,7 @@ class NaTvService @Inject constructor(
                         client = client,
                         isActive = isActive,
                         lastActivityDate = lastActivity.takeIf { it.isNotBlank() },
-                        itemId = nowPlaying?.optString("Id")?.takeIf { it.isNotBlank() },
+                        itemId = nowPlaying?.optString("Id")?.takeIf { it.isNotBlank() }?.let(::dashUuid),
                         imageTag = nowPlaying?.optJSONObject("ImageTags")?.optString("Primary")?.takeIf { it.isNotBlank() },
                         overview = nowPlaying?.optString("Overview")?.takeIf { it.isNotBlank() },
                         nowPlayingTitle = nowPlaying?.let { buildNowPlayingTitle(it) },
@@ -167,6 +167,15 @@ class NaTvService @Inject constructor(
             ?: st.optString("Title").takeIf { it.isNotBlank() }
             ?: st.optString("Language").takeIf { it.isNotBlank() }
             ?: fallback
+
+    /** JF /Sessions vrací item Id bez pomlček; JellyfinDetail (UUID.fromString) je vyžaduje. */
+    private fun dashUuid(id: String): String =
+        if (id.length == 32 && !id.contains('-')) {
+            "${id.substring(0, 8)}-${id.substring(8, 12)}-${id.substring(12, 16)}-" +
+                "${id.substring(16, 20)}-${id.substring(20)}"
+        } else {
+            id
+        }
 
     private fun buildNowPlayingTitle(item: JSONObject): String? {
         val type = item.optString("Type")
@@ -257,9 +266,11 @@ class NaTvService @Inject constructor(
         val request = Request.Builder().url(url)
             .post(payload.toRequestBody("application/json".toMediaType())).build()
         return withContext(Dispatchers.IO) {
-            runCatching {
+            val ok = runCatching {
                 httpClient.newCall(request).execute().use { it.isSuccessful }
             }.getOrDefault(false)
+            Timber.i("[Ovladac] cmd %s args=%s -> ok=%b", name, arguments, ok)
+            ok
         }
     }
 
@@ -283,9 +294,11 @@ class NaTvService @Inject constructor(
     private suspend fun post(url: String): Boolean = withContext(Dispatchers.IO) {
         val body = "".toRequestBody("application/json".toMediaType())
         val request = Request.Builder().url(url).post(body).build()
-        runCatching {
+        val ok = runCatching {
             httpClient.newCall(request).execute().use { it.isSuccessful }
         }.getOrDefault(false)
+        Timber.i("[Ovladac] post %s -> ok=%b", url.substringBefore("?").substringAfterLast("/"), ok)
+        ok
     }
 }
 
