@@ -59,9 +59,11 @@ data class SettingsUiState(
     val streamFilterError: String? = null,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
-    // Plan MAESTRO — ovládání hlasitosti přes AV receiver (Pioneer eISCP) místo JF session.
+    // Plan MAESTRO — ovládání domácí sestavy (AVR hlasitost + scéna „spustit z vypnuté TV").
     val avrEnabled: Boolean = false,
     val avrHost: String = "",
+    val avrBoxHost: String = "",
+    val avrBoxMac: String = "",
     // Plan PROFILES Fáze 2 — web admin profilů (uploader backend)
     val uploaderBaseUrl: String = "",
     // Poslech / Audiobookshelf
@@ -135,6 +137,8 @@ class SettingsViewModel @Inject constructor(
         const val KEY_LIVE_LOGGING = "live_logging_enabled"
         const val KEY_AVR_ENABLED = "avr_enabled"
         const val KEY_AVR_HOST = "avr_host"
+        const val KEY_AVR_BOX_HOST = "avr_box_host"
+        const val KEY_AVR_BOX_MAC = "avr_box_mac"
     }
 
     private val uploaderBase get() = prefs.getString("uploader_base_url", "") ?: ""
@@ -197,6 +201,8 @@ class SettingsViewModel @Inject constructor(
                 uploaderBaseUrl = uploaderBase,
                 avrEnabled = prefs.getBoolean(KEY_AVR_ENABLED, false),
                 avrHost = prefs.getString(KEY_AVR_HOST, "").orEmpty(),
+                avrBoxHost = prefs.getString(KEY_AVR_BOX_HOST, "").orEmpty(),
+                avrBoxMac = prefs.getString(KEY_AVR_BOX_MAC, "").orEmpty(),
             )
         }
         refreshAbsState()
@@ -412,6 +418,18 @@ class SettingsViewModel @Inject constructor(
         val clean = host.trim()
         prefs.edit().putString(KEY_AVR_HOST, clean).apply()
         _uiState.update { it.copy(avrHost = clean) }
+    }
+
+    fun setAvrBoxHost(host: String) {
+        val clean = host.trim()
+        prefs.edit().putString(KEY_AVR_BOX_HOST, clean).apply()
+        _uiState.update { it.copy(avrBoxHost = clean) }
+    }
+
+    fun setAvrBoxMac(mac: String) {
+        val clean = mac.trim()
+        prefs.edit().putString(KEY_AVR_BOX_MAC, clean).apply()
+        _uiState.update { it.copy(avrBoxMac = clean) }
     }
 
     fun switchProfile(profileId: Long) {

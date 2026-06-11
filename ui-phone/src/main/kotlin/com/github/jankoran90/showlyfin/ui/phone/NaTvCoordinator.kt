@@ -4,9 +4,13 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
+import com.github.jankoran90.showlyfin.data.maestro.AvrController
+import com.github.jankoran90.showlyfin.data.maestro.BoxController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -15,6 +19,8 @@ import javax.inject.Named
 @HiltViewModel
 class NaTvCoordinator @Inject constructor(
     private val naTvService: NaTvService,
+    private val avr: AvrController,
+    private val box: BoxController,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -37,15 +43,71 @@ class NaTvCoordinator @Inject constructor(
                 _messages.send("Film není v Jellyfin knihovně")
                 return@launch
             }
-            val sessions = naTvService.getSessions(url, token)
-            if (sessions.isEmpty()) {
-                _messages.send("Žádná aktivní Jellyfin session")
+
+            // Rychlá cesta: běží už Yellyfin session na TV? Hned přehraj.
+            var target = pickYellyfin(naTvService.getSessions(url, token))
+
+            // Jinak spusť scénu MAESTRO: probuď receiver + box, spusť Yellyfin, počkej na session.
+            if (target == null && isSceneConfigured()) {
+                target = runWakeScene(url, token)
+            }
+
+            if (target == null) {
+                _messages.send(
+                    if (isSceneConfigured()) "Nepodařilo se probudit TV"
+                    else "Žádná aktivní Jellyfin session",
+                )
                 return@launch
             }
-            val target = sessions.firstOrNull { it.isActive } ?: sessions.first()
             val ok = naTvService.sendPlayCommand(url, token, target.sessionId, itemId)
             if (ok) _messages.send("Spuštěno na ${target.deviceName}")
             else _messages.send("Odeslání selhalo")
         }
+    }
+
+    /** Scéna „spustit z vypnuté TV": AVR power → box WoL + ADB launch Yellyfin → poll na session. */
+    private suspend fun runWakeScene(url: String, token: String): JellyfinSessionSummary? {
+        _messages.send("Zapínám obývák…")
+        // 1) Receiver ze standby (CEC kaskáda pak probudí TV; vstup STRM BOX si AVR přepne sám).
+        avrConfig()?.let { avr.powerOn(it) }
+        // 2) Box z hlubokého spánku (Wake-on-LAN; ADB ho pak probudí z lehkého).
+        boxMac()?.let { box.wakeViaWol(it) }
+        val boxHost = boxHost()
+
+        // 3) Poll na Yellyfin session; mezitím (po)spouštěj Yellyfin na boxu, jak naběhne síť.
+        repeat(SCENE_MAX_POLLS) { i ->
+            val found = pickYellyfin(naTvService.getSessions(url, token))
+            if (found != null) return found
+            if (boxHost != null && (i == 0 || i == LAUNCH_RETRY_POLL)) {
+                if (i == LAUNCH_RETRY_POLL) _messages.send("Spouštím přehrávač na TV…")
+                box.wakeAndLaunch(boxHost)
+            }
+            delay(SCENE_POLL_MS)
+        }
+        return null
+    }
+
+    private fun pickYellyfin(sessions: List<JellyfinSessionSummary>): JellyfinSessionSummary? =
+        sessions.firstOrNull {
+            val hay = "${it.client.orEmpty()} ${it.deviceName}".lowercase()
+            hay.contains("yellyfin") || hay.contains("wolphin") || hay.contains("wholphin")
+        }
+
+    private fun isSceneConfigured(): Boolean =
+        prefs.getBoolean("avr_enabled", false) && (avrConfig() != null || boxHost() != null)
+
+    private fun avrConfig(): String? =
+        prefs.getString("avr_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+
+    private fun boxHost(): String? =
+        prefs.getString("avr_box_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+
+    private fun boxMac(): String? =
+        prefs.getString("avr_box_mac", "").orEmpty().trim().takeIf { it.isNotBlank() }
+
+    private companion object {
+        const val SCENE_MAX_POLLS = 16      // ~32 s
+        const val SCENE_POLL_MS = 2_000L
+        const val LAUNCH_RETRY_POLL = 6     // ~12 s — po doběhnutí WoL zkus spustit Yellyfin znovu
     }
 }

@@ -20,4 +20,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.timber)
+    // Plan MAESTRO M3 — ADB klient pro probuzení + spuštění Yellyfinu na Android TV boxu.
+    implementation(libs.dadb)
 }

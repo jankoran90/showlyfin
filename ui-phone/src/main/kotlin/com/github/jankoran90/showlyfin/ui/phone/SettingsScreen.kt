@@ -316,8 +316,12 @@ fun SettingsScreen(
             AvrSection(
                 enabled = uiState.avrEnabled,
                 host = uiState.avrHost,
+                boxHost = uiState.avrBoxHost,
+                boxMac = uiState.avrBoxMac,
                 onEnabled = { viewModel.setAvrEnabled(it) },
                 onHost = { viewModel.setAvrHost(it) },
+                onBoxHost = { viewModel.setAvrBoxHost(it) },
+                onBoxMac = { viewModel.setAvrBoxMac(it) },
             )
         }
 
@@ -1814,22 +1818,27 @@ private fun CollapsibleSettingsSection(
 }
 
 /**
- * Plan MAESTRO — ovládání AV receiveru (Pioneer/Onkyo eISCP). Když je zapnuté, hlasitost v Ovladači
- * cílí na AVR (pravý master obýváku) místo na Jellyfin session (box jen digitálně zeslabuje).
+ * Plan MAESTRO — ovládání domácí sestavy. Když je zapnuté: (1) hlasitost v Ovladači cílí na AV
+ * receiver (pravý master obýváku, box jen digitálně zeslabuje); (2) „Přehrát na TV" umí probrat
+ * celou sestavu z vypnutého stavu (receiver + box + spuštění Yellyfinu) přes IP boxu a jeho MAC.
  */
 @Composable
 private fun AvrSection(
     enabled: Boolean,
     host: String,
+    boxHost: String,
+    boxMac: String,
     onEnabled: (Boolean) -> Unit,
     onHost: (String) -> Unit,
+    onBoxHost: (String) -> Unit,
+    onBoxMac: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Hlasitost přes AV receiver", style = MaterialTheme.typography.bodyMedium)
+                Text("Ovládat domácí sestavu", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Tlačítka hlasitosti v Ovladači řídí receiver (Pioneer), ne box",
+                    "Hlasitost přes receiver + „Přehrát na TV” probudí celý obývák",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1838,26 +1847,62 @@ private fun AvrSection(
         }
         if (enabled) {
             Spacer(Modifier.height(8.dp))
-            var local by remember(host) { mutableStateOf(host) }
-            OutlinedTextField(
-                value = local,
-                onValueChange = { local = it },
-                label = { Text("IP receiveru") },
-                placeholder = { Text("192.168.1.233") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { if (!it.isFocused && local != host) onHost(local) },
+            AvrTextField(
+                value = host,
+                onCommit = onHost,
+                label = "IP receiveru",
+                placeholder = "192.168.1.233",
+                numeric = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            AvrTextField(
+                value = boxHost,
+                onCommit = onBoxHost,
+                label = "IP TV boxu",
+                placeholder = "192.168.1.184",
+                numeric = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            AvrTextField(
+                value = boxMac,
+                onCommit = onBoxMac,
+                label = "MAC TV boxu (pro probuzení)",
+                placeholder = "80:9d:65:fd:68:04",
+                numeric = false,
             )
             Text(
-                "Receiver na stejné Wi‑Fi (eISCP, port 60128). Uloží se po opuštění pole.",
+                "Vše na stejné Wi‑Fi. Box potřebuje zapnuté ladění po síti (port 5555) a jednou " +
+                    "povolit telefon (dialog na TV). Pole se uloží po opuštění.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
     }
+}
+
+@Composable
+private fun AvrTextField(
+    value: String,
+    onCommit: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    numeric: Boolean,
+) {
+    var local by remember(value) { mutableStateOf(value) }
+    OutlinedTextField(
+        value = local,
+        onValueChange = { local = it },
+        label = { Text(label) },
+        placeholder = { Text(placeholder) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { if (!it.isFocused && local != value) onCommit(local) },
+    )
 }
 
 @Composable
