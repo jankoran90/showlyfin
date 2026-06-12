@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
@@ -23,6 +24,7 @@ class AudiobookPlayerViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val connection: AudiobookPlayerConnection,
     private val downloadManager: EpisodeDownloadManager,
+    private val audiobookDownloads: AudiobookDownloadManager,
     private val absPrefs: com.github.jankoran90.showlyfin.data.abs.AbsPreferences,
 ) : ViewModel() {
 
@@ -59,6 +61,19 @@ class AudiobookPlayerViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 when {
+                    // Stažená audiokniha: hraj z lokálních souborů (offline). Když jsme online, vezmi
+                    // server session kvůli resume pozici + syncu, ale URL stop přepiš na lokální (dle
+                    // indexu); když server selže (offline) → čistě lokální session.
+                    episodeId == null && audiobookDownloads.offlineAudiobookPlayback(itemId) != null -> {
+                        val offline = audiobookDownloads.offlineAudiobookPlayback(itemId)!!
+                        val server = runCatching { repo.startPlayback(itemId) }.getOrNull()
+                        if (server != null) {
+                            val localByIndex = offline.tracks.associateBy { it.index }
+                            server.copy(tracks = server.tracks.map { t -> localByIndex[t.index]?.let { t.copy(url = it.url) } ?: t })
+                        } else {
+                            offline
+                        }
+                    }
                     episodeId == null -> repo.startPlayback(itemId)
                     // Stažená epizoda: hraj z lokálního souboru (funguje offline). Když jsme online,
                     // přesto otevřeme server session kvůli resume pozici + syncu, ale audio URL

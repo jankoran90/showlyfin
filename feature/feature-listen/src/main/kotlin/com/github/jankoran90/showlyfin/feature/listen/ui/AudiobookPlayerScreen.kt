@@ -1,8 +1,10 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,10 +68,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.feature.listen.AudiobookPlayerViewModel
@@ -103,17 +108,52 @@ fun AudiobookPlayerScreen(
     var speedMenu by remember { mutableStateOf(false) }
     var sleepMenu by remember { mutableStateOf(false) }
 
+    // CADENCE Fáze E: tah dolů (z horní lišty nebo coveru) sbalí přehrávač do mini-playeru (jako Deezer/Qobuz).
+    val collapseOffset = remember { Animatable(0f) }
+    val dragScope = rememberCoroutineScope()
+    val collapseThresholdPx = with(LocalDensity.current) { 120.dp.toPx() }
+    val collapseDrag = Modifier.pointerInput(Unit) {
+        detectVerticalDragGestures(
+            onVerticalDrag = { change, dragAmount ->
+                val newY = (collapseOffset.value + dragAmount).coerceAtLeast(0f)
+                dragScope.launch { collapseOffset.snapTo(newY) }
+                if (dragAmount > 0f) change.consume()
+            },
+            onDragEnd = {
+                if (collapseOffset.value > collapseThresholdPx) onBack()
+                else dragScope.launch { collapseOffset.animateTo(0f) }
+            },
+            onDragCancel = { dragScope.launch { collapseOffset.animateTo(0f) } },
+        )
+    }
+
     ListenExpressiveTheme {
         Column(
             modifier
                 .fillMaxSize()
+                .graphicsLayer { translationY = collapseOffset.value }
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp)
                 .padding(top = 4.dp, bottom = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.align(Alignment.Start).size(40.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět", tint = MaterialTheme.colorScheme.onBackground)
+            // Horní lišta = úchyt pro tah dolů (sbalit). IconButton = klasický „zpět".
+            Row(
+                Modifier.fillMaxWidth().then(collapseDrag),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět", tint = MaterialTheme.colorScheme.onBackground)
+                }
+                Spacer(Modifier.weight(1f))
+                Icon(
+                    Icons.Default.DragHandle,
+                    contentDescription = "Stáhnout přehrávač",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.size(40.dp))
             }
 
             if (error != null) {
@@ -141,6 +181,7 @@ fun AudiobookPlayerScreen(
                 Modifier
                     .fillMaxWidth(0.42f)
                     .aspectRatio(1f)
+                    .then(collapseDrag)
                     .clip(RoundedCornerShape(18.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,

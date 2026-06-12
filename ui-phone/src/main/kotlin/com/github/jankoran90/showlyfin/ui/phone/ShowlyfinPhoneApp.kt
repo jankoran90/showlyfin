@@ -318,6 +318,10 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         }
 
         val isSubScreen = currentDestination !in bottomTabs
+        // CADENCE: podsekce Poslechu (detail audioknihy/podcastu) drží spodní lištu přehrávání viditelnou
+        // (jen MiniPlayer, bez nav baru) — narozdíl od ostatních sub-screens.
+        val isListenDetailSub = currentDestination is Destination.AudiobookDetail ||
+            currentDestination is Destination.PodcastDetail
 
         val navItems = buildList {
             if (sledujVisible) add(ShellNavItem(Destination.Hlavni, Icons.Default.Home, "Sleduj"))
@@ -379,7 +383,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             containerColor = Color(0xFF0D0D1A),
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { paddingValues ->
-            val effectiveBottomDp = if (isSubScreen || isTv) {
+            val effectiveBottomDp = if ((isSubScreen && !isListenDetailSub) || isTv) {
                 0.dp
             } else {
                 with(density) { (measuredBarHeightPx.floatValue - bottomBarOffsetPx.floatValue).coerceAtLeast(0f).toDp() }
@@ -651,7 +655,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             }
                 }
 
-                if (!isTv && !isSubScreen) {
+                if (!isTv && (!isSubScreen || isListenDetailSub)) {
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -667,14 +671,17 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             },
                             isListenSection = bottomTab is Destination.Listen,
                         )
-                        NavigationBar(containerColor = Color(0xFF1A1A2E)) {
-                            navItems.forEach { item ->
-                                NavigationBarItem(
-                                    selected = bottomTab == item.dest,
-                                    onClick = { bottomTab = item.dest; currentDestination = item.dest },
-                                    icon = { Icon(item.icon, contentDescription = null) },
-                                    label = { Text(item.label) },
-                                )
+                        // Nav bar jen na hlavních tabech; v podsekci Poslechu (isListenDetailSub) jen MiniPlayer.
+                        if (!isSubScreen) {
+                            NavigationBar(containerColor = Color(0xFF1A1A2E)) {
+                                navItems.forEach { item ->
+                                    NavigationBarItem(
+                                        selected = bottomTab == item.dest,
+                                        onClick = { bottomTab = item.dest; currentDestination = item.dest },
+                                        icon = { Icon(item.icon, contentDescription = null) },
+                                        label = { Text(item.label) },
+                                    )
+                                }
                             }
                         }
                     }

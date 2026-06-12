@@ -122,17 +122,10 @@ fun PodcastDetailScreen(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
-                    title = { Text(state.detail?.podcast?.title ?: "Podcast", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    title = { Text(state.detail?.podcast?.title ?: "Podcast", maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
-                        }
-                    },
-                    actions = {
-                        if (queue.isNotEmpty()) {
-                            IconButton(onClick = { showQueue = true }) {
-                                Icon(Icons.Default.QueueMusic, contentDescription = "Fronta (${queue.size})")
-                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -245,6 +238,7 @@ private fun DetailContent(
 
     LazyColumn(modifier, contentPadding = PaddingValues(16.dp)) {
         item {
+            // Hlavička: cover vlevo, info vpravo VYPLNÍ výšku coveru (název je jen v app-baru).
             Row {
                 Box(
                     Modifier
@@ -261,40 +255,53 @@ private fun DetailContent(
                         )
                     }
                 }
-                Column(Modifier.padding(start = 16.dp).align(Alignment.CenterVertically)) {
-                    Text(podcast.title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
-                    podcast.author?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                Column(
+                    Modifier
+                        .padding(start = 16.dp)
+                        .height(120.dp)
+                        .weight(1f),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column {
+                        podcast.author?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        val meta = buildList {
+                            add("${podcast.numEpisodes} epizod")
+                            if (podcast.numUnfinished > 0) add("${podcast.numUnfinished} nepřehraných")
+                        }.joinToString(" · ")
+                        Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                     }
-                    val meta = buildList {
-                        add("${podcast.numEpisodes} epizod")
-                        if (podcast.numUnfinished > 0) add("${podcast.numUnfinished} nepřehraných")
-                    }.joinToString(" · ")
-                    Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                    if (queueSize > 0) {
-                        AssistChip(
-                            onClick = onOpenQueue,
-                            label = { Text("Fronta · $queueSize") },
-                            leadingIcon = { Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
+                    // „Prohledat epizody" přesunuto sem k coveru (dřív tu byl chip Fronta).
+                    AssistChip(
+                        onClick = onFindEpisodes,
+                        label = { Text("Prohledat epizody") },
+                        leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    )
                 }
             }
         }
 
-        // Akce podcastu: prohledat epizody z RSS (→ stáhnout na ABS server) + volitelně auto-download do telefonu.
+        // Řádek pod hlavičkou: chip Fronta (dřív „Prohledat epizody") + volitelně auto-download do telefonu.
         // (Auto-download na server je per-podcast přepínač přesunut do Nastavení → Poslech.)
         item {
             FlowRow(
                 Modifier.fillMaxWidth().padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                AssistChip(
-                    onClick = onFindEpisodes,
-                    label = { Text("Prohledat epizody") },
-                    leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                )
+                if (queueSize > 0) {
+                    AssistChip(
+                        onClick = onOpenQueue,
+                        label = { Text("Fronta · $queueSize") },
+                        leadingIcon = { Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    )
+                }
                 if (deviceAutoDownloadSelective) {
                     FilterChip(
                         selected = deviceAutoDownloadOn,
