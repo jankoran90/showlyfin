@@ -598,14 +598,15 @@ private fun AbsSection(
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Skrývat přehrané epizody", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                        Text("Zobrazovat přehrané epizody", style = MaterialTheme.typography.bodyLarge, color = Color.White)
                         Text(
-                            "Dokončené podcast epizody se v detailu nezobrazí.",
+                            "Dokončené podcast epizody zůstanou v detailu (vyp = skryjí se).",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.6f),
                         )
                     }
-                    Switch(checked = hideFinishedEpisodes, onCheckedChange = onToggleHideFinished)
+                    // Polarita: zapnuto = viditelné (model je „hide", proto invertujeme).
+                    Switch(checked = !hideFinishedEpisodes, onCheckedChange = { onToggleHideFinished(!it) })
                 }
             }
             ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
@@ -755,11 +756,12 @@ private fun ListenSettingsCard(uiState: SettingsUiState, vm: SettingsViewModel) 
                 selected = s.episodeFontScale,
                 onSelect = { vm.setEpisodeFontScale(it) },
             )
+            // Polarita: zapnuto = viditelné (model je „hide", proto invertujeme).
             ListenSwitchRow(
-                "Skrýt už stažené (Prohledat epizody)",
-                "V „Prohledat epizody“ nezobrazovat epizody, které ABS server už má.",
-                s.rssHideDownloaded,
-            ) { vm.setRssHideDownloaded(it) }
+                "Zobrazit už stažené (Prohledat epizody)",
+                "V „Prohledat epizody“ ukazovat i epizody, které ABS server už má (vyp = skryje je).",
+                !s.rssHideDownloaded,
+            ) { vm.setRssHideDownloaded(!it) }
             ListenChipRow(
                 title = "Tlačítko u epizody",
                 subtitle = "Akce trailing tlačítka v seznamu epizod.",
@@ -1418,19 +1420,20 @@ private fun ProfileAuthoringBlock(
                     Spacer(Modifier.height(12.dp))
                 }
 
-                // — Poslech: skrýt jednotlivé podcasty pro tento profil (jemnější než whitelist police) —
+                // — Poslech: viditelnost jednotlivých podcastů pro tento profil (jemnější než whitelist police) —
                 if (cfg.isSectionVisible(ProfileConfig.Sections.POSLECH) && adminPodcasts.isNotEmpty()) {
-                    Text("Podcasty — zapnuto = skrytý pro tento profil", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("Podcasty — zapnuto = zobrazený pro tento profil", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
                     adminPodcasts.forEach { pod ->
-                        val hidden = pod.id in cfg.hiddenPodcastIds
+                        val visible = pod.id !in cfg.hiddenPodcastIds
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(pod.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            // Polarita: zapnuto = viditelné (model drží skryté id, proto invertujeme).
                             Switch(
-                                checked = hidden,
-                                onCheckedChange = { hide ->
+                                checked = visible,
+                                onCheckedChange = { show ->
                                     onUpdateConfig(profile.id) { c ->
                                         val current = c.hiddenPodcastIds.toMutableSet()
-                                        if (hide) current.add(pod.id) else current.remove(pod.id)
+                                        if (show) current.remove(pod.id) else current.add(pod.id)
                                         c.copy(hiddenPodcastIds = current)
                                     }
                                 },
