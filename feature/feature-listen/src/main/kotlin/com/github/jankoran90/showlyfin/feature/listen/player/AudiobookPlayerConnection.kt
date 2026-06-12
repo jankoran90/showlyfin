@@ -66,6 +66,12 @@ class AudiobookPlayerConnection @Inject constructor(
     private var currentEpisode: QueuedEpisode? = null
     private var advancing = false
 
+    // Stabilní titul/autor knihy — drží se mimo MediaItem metadata, protože systémovou metadata titulek
+    // (notifikace + Android Auto) přepisujeme na PRÁVĚ HRANOU KAPITOLU. In-app UI tak ukáže titul knihy
+    // velkým písmem + kapitolu zvlášť, kdežto lišta systému ukáže kapitolu (dřív se duplikoval titul).
+    private var bookTitle: String = ""
+    private var bookAuthor: String? = null
+
     /** Sleep „do konce kapitoly/epizody": cílový čas kapitoly (book ms) nebo -1 = do konce epizody. */
     private var sleepEndChapterMs: Long? = null
     private var sleepEndOfEpisode = false
@@ -149,8 +155,28 @@ class AudiobookPlayerConnection @Inject constructor(
         val pos = bookPosMs(c)
         val posSec = pos / 1000.0
         val currentChapter = _chapters.value.firstOrNull { posSec >= it.startSec && posSec < it.endSec }
-        val bookDurationMs = (c.currentMediaItem?.mediaMetadata?.extras
-            ?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0).let { (it * 1000).toLong() }
+        val extras = c.currentMediaItem?.mediaMetadata?.extras
+        val bookDurationMs = (extras?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0)
+            .let { (it * 1000).toLong() }
+        // Stabilní titul/autor knihy: z polí (in-app start) nebo z extras (reconnect / Auto start). Systémová
+        // metadata.title je totiž přepsaná na kapitolu, takže ji pro in-app titul číst nelze.
+        val bookTitleNow = bookTitle.ifBlank { extras?.getString(AudiobookPlayerService.KEY_BOOK_TITLE).orEmpty() }
+        val bookAuthorNow = bookAuthor ?: extras?.getString(AudiobookPlayerService.KEY_BOOK_AUTHOR)
+
+        // Systémová metadata (notifikace + Android Auto): u audioknihy s kapitolami ukaž PRÁVĚ HRANOU
+        // KAPITOLU jako titulek (autor = kniha). Bez toho lišta jen duplikovala titul knihy. Podcast
+        // (epizoda, bez kapitol) necháváme — titulek = název epizody. replaceMediaItem mění jen metadata
+        // (stejné URI) → bez přerušení přehrávání. (Auto-spuštěné přehrávání řeší stejně i service.)
+        if (currentEpisode == null && currentChapter != null) {
+            val cur = c.currentMediaItem
+            if (cur != null && cur.mediaMetadata.title?.toString() != currentChapter.title) {
+                val newMeta = cur.mediaMetadata.buildUpon()
+                    .setTitle(currentChapter.title)
+                    .setArtist(bookTitleNow.ifBlank { bookAuthorNow ?: "" })
+                    .build()
+                runCatching { c.replaceMediaItem(c.currentMediaItemIndex, cur.buildUpon().setMediaMetadata(newMeta).build()) }
+            }
+        }
 
         // Sleep „do konce kapitoly" — pauzni, jakmile pozice překročí konec cílové kapitoly.
         sleepEndChapterMs?.let { target ->
@@ -166,8 +192,8 @@ class AudiobookPlayerConnection @Inject constructor(
                 isActive = c.mediaItemCount > 0,
                 isPlaying = c.isPlaying,
                 isBuffering = c.playbackState == Player.STATE_BUFFERING,
-                title = c.mediaMetadata.title?.toString() ?: it.title,
-                author = c.mediaMetadata.artist?.toString() ?: it.author,
+                title = bookTitleNow.ifBlank { c.mediaMetadata.title?.toString() ?: it.title },
+                author = bookAuthorNow ?: c.mediaMetadata.artist?.toString() ?: it.author,
                 coverUrl = c.mediaMetadata.artworkUri?.toString() ?: it.coverUrl,
                 positionMs = pos,
                 durationMs = bookDurationMs.takeIf { d -> d > 0 } ?: it.durationMs,
@@ -197,6 +223,8 @@ class AudiobookPlayerConnection @Inject constructor(
             setQueue(listOf(episode) + _queue.value)
         }
         _chapters.value = pb.chapters
+        bookTitle = pb.title
+        bookAuthor = pb.author
         _state.update {
             it.copy(
                 isActive = true, title = pb.title, author = pb.author, coverUrl = pb.coverUrl,
@@ -223,6 +251,8 @@ class AudiobookPlayerConnection @Inject constructor(
                     putString(AudiobookPlayerService.KEY_SESSION_ID, pb.sessionId)
                     putDouble(AudiobookPlayerService.KEY_DURATION_SEC, pb.durationSec)
                     putDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC, t.startOffsetSec)
+                    putString(AudiobookPlayerService.KEY_BOOK_TITLE, pb.title)
+                    pb.author?.let { putString(AudiobookPlayerService.KEY_BOOK_AUTHOR, it) }
                 }
                 MediaItem.Builder()
                     .setUri(t.url)

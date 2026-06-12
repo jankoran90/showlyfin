@@ -12,6 +12,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsSyncRequest
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDetail
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
+import com.github.jankoran90.showlyfin.data.abs.model.AbsAudioTrack
 import com.github.jankoran90.showlyfin.data.abs.model.AbsTrack
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPodcastFeedRequest
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
@@ -115,9 +116,12 @@ class AbsRepository @Inject constructor(
             currentTimeSec = progress?.currentTime ?: 0.0,
             isFinished = progress?.isFinished ?: false,
         )
-        val chapters = (m?.chapters ?: emptyList()).map {
+        val parsedChapters = (m?.chapters ?: emptyList()).map {
             Chapter(it.id, it.title ?: "Kapitola ${it.id + 1}", it.start, it.end)
         }
+        // Fallback: knihy bez embedded kapitol, ale rozdělené na víc souborů (např. HP Kámen mudrců /
+        // Tajemná komnata) → každý soubor = kapitola, ať jde navigovat i zobrazit název části.
+        val chapters = parsedChapters.ifEmpty { chaptersFromTracks(m?.tracks ?: emptyList()) }
         return AudiobookDetail(
             book = book,
             description = md?.description?.takeIf { it.isNotBlank() },
@@ -352,6 +356,9 @@ class AbsRepository @Inject constructor(
                 )
             }
         require(tracks.isNotEmpty()) { "Audiokniha nemá audio stopu." }
+        val parsedChapters = s.chapters.map { Chapter(it.id, it.title ?: "Kapitola ${it.id + 1}", it.start, it.end) }
+        // Fallback jako v detailu: bez embedded kapitol → každý soubor = kapitola (název části + navigace).
+        val chapters = parsedChapters.ifEmpty { chaptersFromTracks(s.audioTracks) }
         return AbsPlayback(
             sessionId = s.id,
             title = s.displayTitle ?: "",
@@ -360,8 +367,28 @@ class AbsRepository @Inject constructor(
             tracks = tracks,
             startPositionSec = s.currentTime ?: 0.0,
             durationSec = s.duration ?: tracks.sumOf { it.durationSec },
-            chapters = s.chapters.map { Chapter(it.id, it.title ?: "Kapitola ${it.id + 1}", it.start, it.end) },
+            chapters = chapters,
         )
+    }
+
+    /**
+     * Syntetizuje kapitoly ze seznamu audio souborů — pro knihy BEZ embedded kapitol rozdělené na víc
+     * souborů. Každý soubor = kapitola (název = title souboru, jinak „Část N"). Jeden soubor → prázdné
+     * (jedna „kapitola" = celá kniha nedává smysl).
+     */
+    private fun chaptersFromTracks(tracks: List<AbsAudioTrack>): List<Chapter> {
+        if (tracks.size < 2) return emptyList()
+        return tracks
+            .sortedBy { it.startOffset ?: it.index?.toDouble() ?: 0.0 }
+            .mapIndexed { i, t ->
+                val start = t.startOffset ?: 0.0
+                Chapter(
+                    index = t.index ?: i,
+                    title = t.title?.takeIf { it.isNotBlank() } ?: "Část ${i + 1}",
+                    startSec = start,
+                    endSec = start + (t.duration ?: 0.0),
+                )
+            }
     }
 
     /** Periodický sync pozice na server (drží Continue Listening). */

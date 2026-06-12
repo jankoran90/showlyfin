@@ -60,6 +60,7 @@ class AudiobookPlayerService : MediaLibraryService() {
     private var player: ExoPlayer? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var syncJob: Job? = null
+    private var metaJob: Job? = null
     private var sleepJob: Job? = null
 
     /** Cache položek vrácených v onGetChildren (pro onGetItem). Přístup jen z main threadu. */
@@ -114,7 +115,7 @@ class AudiobookPlayerService : MediaLibraryService() {
             .build()
         exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) startSync() else { stopSync(); syncNow() }
+                if (isPlaying) { startSync(); startMetaTicker() } else { stopSync(); stopMetaTicker(); syncNow() }
                 notifyListenWidget()
             }
             override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
@@ -526,6 +527,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                 putString(KEY_SESSION_ID, pb.sessionId)
                 putDouble(KEY_DURATION_SEC, pb.durationSec)
                 putDouble(KEY_TRACK_OFFSET_SEC, t.startOffsetSec)
+                putString(KEY_BOOK_TITLE, pb.title)
+                pb.author?.let { putString(KEY_BOOK_AUTHOR, it) }
             }
             MediaItem.Builder()
                 .setUri(t.url)
@@ -601,6 +604,41 @@ class AudiobookPlayerService : MediaLibraryService() {
         syncJob = null
     }
 
+    /**
+     * Drží systémovou metadata titulek = PRÁVĚ HRANÁ KAPITOLA (notifikace + Android Auto). Řeší
+     * přehrávání spuštěné z Auta (kde [currentPlayback] zná kapitoly); in-app spuštění řeší stejně
+     * AudiobookPlayerConnection. Bez toho lišta ukazovala jen (duplikovaný) titul knihy.
+     */
+    private fun startMetaTicker() {
+        if (metaJob?.isActive == true) return
+        metaJob = scope.launch {
+            while (true) {
+                updateChapterMetadata()
+                delay(1000)
+            }
+        }
+    }
+
+    private fun stopMetaTicker() {
+        metaJob?.cancel()
+        metaJob = null
+    }
+
+    private fun updateChapterMetadata() {
+        val p = player ?: return
+        val pb = currentPlayback ?: return
+        if (pb.chapters.isEmpty()) return
+        val posSec = bookPosMs() / 1000.0
+        val chap = pb.chapters.firstOrNull { posSec >= it.startSec && posSec < it.endSec } ?: return
+        val cur = p.currentMediaItem ?: return
+        if (cur.mediaMetadata.title?.toString() == chap.title) return
+        val newMeta = cur.mediaMetadata.buildUpon()
+            .setTitle(chap.title)
+            .setArtist(pb.title)
+            .build()
+        runCatching { p.replaceMediaItem(p.currentMediaItemIndex, cur.buildUpon().setMediaMetadata(newMeta).build()) }
+    }
+
     /** Pošle aktuální pozici na ABS (drží „Pokračovat v poslechu"). */
     private fun syncNow() {
         val p = player ?: return
@@ -620,6 +658,10 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val KEY_SESSION_ID = "abs_session_id"
         const val KEY_DURATION_SEC = "abs_duration_sec"
         const val KEY_TRACK_OFFSET_SEC = "abs_track_offset_sec"
+        // Stabilní titul/autor knihy v extras — systémovou metadata titulek přepisujeme na kapitolu,
+        // tahle pole drží původní titul knihy i přes reconnect controlleru (cold start za běhu).
+        const val KEY_BOOK_TITLE = "abs_book_title"
+        const val KEY_BOOK_AUTHOR = "abs_book_author"
         const val ROOT_ID = "root"
         const val NODE_CONTINUE = "node:continue"
         const val NODE_CHAPTERS = "node:chapters"
