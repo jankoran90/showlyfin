@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -24,25 +24,13 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -52,6 +40,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.core.ui.SectionBar
+import com.github.jankoran90.showlyfin.core.ui.SectionSortChip
 import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistSort
@@ -78,54 +68,30 @@ fun WatchlistScreen(
             enter = fadeIn(tween(180)) + expandVertically(tween(180)),
             exit = fadeOut(tween(140)) + shrinkVertically(tween(140)),
         ) {
-            Column {
-                TabRow(selectedTabIndex = uiState.activeTab.ordinal) {
-                    WatchlistTab.entries.forEach { tab ->
-                        Tab(
-                            selected = uiState.activeTab == tab,
-                            onClick = { viewModel.selectTab(tab) },
-                            text = { Text(if (tab == WatchlistTab.MOVIES) "Filmy" else "Seriály") },
-                            modifier = Modifier.tvFocusable(),
+            val showChips = uiState.isLoggedIn &&
+                (uiState.items.isNotEmpty() || uiState.genreFilter != null || uiState.rdOnly)
+            SectionBar(
+                segments = listOf("Filmy", "Seriály"),
+                selectedSegment = uiState.activeTab.ordinal,
+                onSegmentSelected = { viewModel.selectTab(WatchlistTab.entries[it]) },
+                searchQuery = if (uiState.isLoggedIn) uiState.searchQuery else null,
+                onSearchQueryChange = { viewModel.setSearchQuery(it) },
+                searchPlaceholder = "Hledat (česky i originál)…",
+                chips = if (showChips) {
+                    {
+                        watchlistChips(
+                            sort = uiState.sort,
+                            genreFilter = uiState.genreFilter,
+                            availableGenres = uiState.availableGenres,
+                            rdOnly = uiState.rdOnly,
+                            rdMatchLoading = uiState.rdMatchLoading,
+                            onSortSelected = { viewModel.selectSort(it) },
+                            onGenreSelected = { viewModel.selectGenre(it) },
+                            onRdOnlyToggle = { viewModel.toggleRdOnly() },
                         )
                     }
-                }
-
-                if (uiState.isLoggedIn) {
-                    OutlinedTextField(
-                        value = uiState.searchQuery,
-                        onValueChange = { viewModel.setSearchQuery(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        placeholder = { Text("Hledat (česky i originál)…") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (uiState.searchQuery.isNotEmpty()) {
-                                IconButton(
-                                    onClick = { viewModel.setSearchQuery("") },
-                                    modifier = Modifier.tvFocusable(),
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Vymazat")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                    )
-                }
-
-                if (uiState.isLoggedIn && (uiState.items.isNotEmpty() || uiState.genreFilter != null || uiState.rdOnly)) {
-                    WatchlistChips(
-                        sort = uiState.sort,
-                        genreFilter = uiState.genreFilter,
-                        availableGenres = uiState.availableGenres,
-                        rdOnly = uiState.rdOnly,
-                        rdMatchLoading = uiState.rdMatchLoading,
-                        onSortSelected = { viewModel.selectSort(it) },
-                        onGenreSelected = { viewModel.selectGenre(it) },
-                        onRdOnlyToggle = { viewModel.toggleRdOnly() },
-                    )
-                }
-            }
+                } else null,
+            )
         }
 
         when {
@@ -228,8 +194,8 @@ fun WatchlistScreen(
     }
 }
 
-@Composable
-private fun WatchlistChips(
+/** Chipy Chci vidět vykreslené do sdílené [SectionBar] lišty (RD · řazení · žánry). */
+private fun LazyListScope.watchlistChips(
     sort: WatchlistSort,
     genreFilter: String?,
     availableGenres: List<String>,
@@ -239,65 +205,44 @@ private fun WatchlistChips(
     onGenreSelected: (String?) -> Unit,
     onRdOnlyToggle: () -> Unit,
 ) {
-    var sortMenuOpen by remember { mutableStateOf(false) }
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        item {
-            FilterChip(
-                selected = rdOnly,
-                onClick = onRdOnlyToggle,
-                modifier = Modifier.tvFocusable(),
-                label = { Text("💾 Na RD") },
-                leadingIcon = if (rdMatchLoading) {
-                    {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    }
-                } else null,
-            )
-        }
-        item {
-            Box {
-                FilterChip(
-                    selected = sort != WatchlistSort.DEFAULT,
-                    onClick = { sortMenuOpen = true },
-                    modifier = Modifier.tvFocusable(),
-                    label = { Text(sort.label) },
-                    leadingIcon = { Icon(Icons.Default.Sort, contentDescription = null) },
-                )
-                DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
-                    WatchlistSort.entries.forEach { entry ->
-                        DropdownMenuItem(
-                            text = { Text(entry.label) },
-                            onClick = {
-                                onSortSelected(entry)
-                                sortMenuOpen = false
-                            },
-                        )
-                    }
+    item {
+        FilterChip(
+            selected = rdOnly,
+            onClick = onRdOnlyToggle,
+            modifier = Modifier.tvFocusable(),
+            label = { Text("💾 Na RD") },
+            leadingIcon = if (rdMatchLoading) {
+                {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
                 }
-            }
-        }
-        item {
-            FilterChip(
-                selected = genreFilter == null,
-                onClick = { onGenreSelected(null) },
-                modifier = Modifier.tvFocusable(),
-                label = { Text("Vše") },
-            )
-        }
-        items(availableGenres) { genre ->
-            FilterChip(
-                selected = genreFilter == genre,
-                onClick = { onGenreSelected(if (genreFilter == genre) null else genre) },
-                modifier = Modifier.tvFocusable(),
-                label = { Text(genre) },
-            )
-        }
+            } else null,
+        )
+    }
+    item {
+        SectionSortChip(
+            label = if (sort == WatchlistSort.DEFAULT) "Řazení" else "Řazení: ${sort.label}",
+            options = WatchlistSort.entries.map { it to it.label },
+            selected = sort,
+            onSelect = onSortSelected,
+        )
+    }
+    item {
+        FilterChip(
+            selected = genreFilter == null,
+            onClick = { onGenreSelected(null) },
+            modifier = Modifier.tvFocusable(),
+            label = { Text("Vše") },
+        )
+    }
+    items(availableGenres) { genre ->
+        FilterChip(
+            selected = genreFilter == genre,
+            onClick = { onGenreSelected(if (genreFilter == genre) null else genre) },
+            modifier = Modifier.tvFocusable(),
+            label = { Text(genre) },
+        )
     }
 }

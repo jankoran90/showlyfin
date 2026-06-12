@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,16 +20,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,8 +35,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.core.ui.SectionBar
 import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
-import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 
 /**
  * Plan STRATA B5 — Historie zhlédnutého (Trakt `sync/watched`, vzor yeshowly). Pohledy Naposledy/Vše,
@@ -68,40 +61,14 @@ fun HistoryScreen(
             enter = fadeIn(tween(180)) + expandVertically(tween(180)),
             exit = fadeOut(tween(140)) + shrinkVertically(tween(140)),
         ) {
-            Column {
-                TabRow(selectedTabIndex = uiState.view.ordinal) {
-                    HistoryView.entries.forEach { view ->
-                        Tab(
-                            selected = uiState.view == view,
-                            onClick = { viewModel.selectView(view) },
-                            text = { Text(view.label) },
-                            modifier = Modifier.tvFocusable(),
-                        )
-                    }
-                }
-                if (uiState.isLoggedIn) {
-                    OutlinedTextField(
-                        value = uiState.searchQuery,
-                        onValueChange = { viewModel.setSearchQuery(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        placeholder = { Text("Hledat (česky i originál)…") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (uiState.searchQuery.isNotEmpty()) {
-                                IconButton(
-                                    onClick = { viewModel.setSearchQuery("") },
-                                    modifier = Modifier.tvFocusable(),
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Vymazat")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                    )
-                }
-            }
+            SectionBar(
+                segments = HistoryView.entries.map { it.label },
+                selectedSegment = uiState.view.ordinal,
+                onSegmentSelected = { viewModel.selectView(HistoryView.entries[it]) },
+                searchQuery = if (uiState.isLoggedIn) uiState.searchQuery else null,
+                onSearchQueryChange = { viewModel.setSearchQuery(it) },
+                searchPlaceholder = "Hledat (česky i originál)…",
+            )
         }
 
         when {

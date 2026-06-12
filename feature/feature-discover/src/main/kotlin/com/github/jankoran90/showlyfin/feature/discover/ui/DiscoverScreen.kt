@@ -12,13 +12,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -27,11 +25,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,12 +36,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,13 +51,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.core.ui.SectionBar
+import com.github.jankoran90.showlyfin.core.ui.SectionSortChip
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverSort
@@ -104,8 +97,6 @@ fun DiscoverScreen(
             }
     }
 
-    var searchExpanded by remember { mutableStateOf(false) }
-    var sortMenuOpen by remember { mutableStateOf(false) }
     var genresMenuOpen by remember { mutableStateOf(false) }
     var ageMenuOpen by remember { mutableStateOf(false) }
 
@@ -128,88 +119,48 @@ fun DiscoverScreen(
                 enter = fadeIn(tween(180)) + expandVertically(tween(180)),
                 exit = fadeOut(tween(140)) + shrinkVertically(tween(140)),
             ) {
-                TabRow(selectedTabIndex = uiState.activeTab.ordinal) {
-                    DiscoverTab.entries.forEach { tab ->
-                        Tab(
-                            selected = uiState.activeTab == tab,
-                            onClick = { viewModel.selectTab(tab) },
-                            text = { Text(if (tab == DiscoverTab.MOVIES) "Filmy" else "Seriály") },
-                        )
-                    }
-                }
-            }
-            AnimatedVisibility(
-                visible = isHeaderVisible,
-                enter = fadeIn(tween(180)) + expandVertically(tween(180)),
-                exit = fadeOut(tween(140)) + shrinkVertically(tween(140)),
-            ) {
-                if (searchExpanded || isSearchMode) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = uiState.searchQuery,
-                            onValueChange = { viewModel.onSearchQueryChange(it) },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("Hledat filmy a seriály…") },
-                            singleLine = true,
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = {
-                                        viewModel.clearSearch()
-                                        searchExpanded = false
-                                    },
-                                    modifier = Modifier.tvFocusable(),
-                                ) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Vymazat")
+                SectionBar(
+                    segments = listOf("Filmy", "Seriály"),
+                    selectedSegment = uiState.activeTab.ordinal,
+                    onSegmentSelected = { viewModel.selectTab(DiscoverTab.entries[it]) },
+                    searchQuery = uiState.searchQuery,
+                    onSearchQueryChange = { viewModel.onSearchQueryChange(it) },
+                    searchPlaceholder = "Hledat filmy a seriály…",
+                    chips = {
+                        discoverChips(
+                            uiState = uiState,
+                            genresMenuOpen = genresMenuOpen,
+                            onGenresMenuToggle = { genresMenuOpen = it },
+                            ageMenuOpen = ageMenuOpen,
+                            onAgeMenuToggle = { ageMenuOpen = it },
+                            onFilterClick = { viewModel.openFilterSheet() },
+                            onSortSelect = { viewModel.updateFilters(uiState.filters.copy(sortBy = it)) },
+                            onGenreToggle = { genre ->
+                                val current = uiState.filters.selectedGenres
+                                val updated = if (current.contains(genre)) current - genre else current + genre
+                                viewModel.updateFilters(uiState.filters.copy(selectedGenres = updated))
+                            },
+                            onGenresClear = {
+                                viewModel.updateFilters(uiState.filters.copy(selectedGenres = emptySet()))
+                                genresMenuOpen = false
+                            },
+                            onAgeSelect = {
+                                viewModel.setSessionAgeOverride(it)
+                                ageMenuOpen = false
+                            },
+                            onFilterChipSelect = { filter ->
+                                if (filter == DiscoverFilter.RECOMMENDED && !uiState.isTraktLoggedIn) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Pro doporučení se přihlas k Trakt v Nastavení")
+                                    }
+                                } else {
+                                    viewModel.selectFilter(filter)
                                 }
                             },
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
+                            onRdOnlyToggle = { viewModel.toggleRdOnly() },
                         )
-                    }
-                } else {
-                    DiscoverFilterRow(
-                        uiState = uiState,
-                        sortMenuOpen = sortMenuOpen,
-                        onSortMenuToggle = { sortMenuOpen = it },
-                        genresMenuOpen = genresMenuOpen,
-                        onGenresMenuToggle = { genresMenuOpen = it },
-                        ageMenuOpen = ageMenuOpen,
-                        onAgeMenuToggle = { ageMenuOpen = it },
-                        onSearchClick = { searchExpanded = true },
-                        onFilterClick = { viewModel.openFilterSheet() },
-                        onSortSelect = {
-                            viewModel.updateFilters(uiState.filters.copy(sortBy = it))
-                            sortMenuOpen = false
-                        },
-                        onGenreToggle = { genre ->
-                            val current = uiState.filters.selectedGenres
-                            val updated = if (current.contains(genre)) current - genre else current + genre
-                            viewModel.updateFilters(uiState.filters.copy(selectedGenres = updated))
-                        },
-                        onGenresClear = {
-                            viewModel.updateFilters(uiState.filters.copy(selectedGenres = emptySet()))
-                            genresMenuOpen = false
-                        },
-                        onAgeSelect = {
-                            viewModel.setSessionAgeOverride(it)
-                            ageMenuOpen = false
-                        },
-                        onFilterChipSelect = { filter ->
-                            if (filter == DiscoverFilter.RECOMMENDED && !uiState.isTraktLoggedIn) {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Pro doporučení se přihlas k Trakt v Nastavení")
-                                }
-                            } else {
-                                viewModel.selectFilter(filter)
-                            }
-                        },
-                        onRdOnlyToggle = { viewModel.toggleRdOnly() },
-                    )
-                }
+                    },
+                )
             }
 
             val items = if (isSearchMode) uiState.searchResults else uiState.items
@@ -287,16 +238,13 @@ fun DiscoverScreen(
     }
 }
 
-@Composable
-private fun DiscoverFilterRow(
+/** Chipy Objevit vykreslené do sdílené [SectionBar] lišty (řazení · žánry · věk · RD · obsahové filtry · filter sheet). */
+private fun LazyListScope.discoverChips(
     uiState: com.github.jankoran90.showlyfin.feature.discover.DiscoverUiState,
-    sortMenuOpen: Boolean,
-    onSortMenuToggle: (Boolean) -> Unit,
     genresMenuOpen: Boolean,
     onGenresMenuToggle: (Boolean) -> Unit,
     ageMenuOpen: Boolean,
     onAgeMenuToggle: (Boolean) -> Unit,
-    onSearchClick: () -> Unit,
     onFilterClick: () -> Unit,
     onSortSelect: (DiscoverSort) -> Unit,
     onGenreToggle: (String) -> Unit,
@@ -306,58 +254,28 @@ private fun DiscoverFilterRow(
     onRdOnlyToggle: () -> Unit,
 ) {
     val activeAge = uiState.sessionAgeOverride ?: uiState.parentalLockedAgeRating
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        item {
-            val isSearchActive = uiState.searchQuery.isNotBlank()
-            IconButton(onClick = onSearchClick, modifier = Modifier.tvFocusable()) {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = "Hledat",
-                    tint = if (isSearchActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                )
-            }
+    item {
+        val sortLabel = when (uiState.filters.sortBy) {
+            DiscoverSort.DEFAULT -> "Řazení"
+            DiscoverSort.RATING_DESC -> "Řazení: Hodnocení"
+            DiscoverSort.YEAR_DESC -> "Řazení: Nejnovější"
+            DiscoverSort.YEAR_ASC -> "Řazení: Nejstarší"
+            DiscoverSort.ALPHABETICAL -> "Řazení: A–Z"
         }
-        item {
-            Box {
-                val sortLabel = when (uiState.filters.sortBy) {
-                    DiscoverSort.DEFAULT -> "Řazení"
-                    DiscoverSort.RATING_DESC -> "Řazení: Hodnocení"
-                    DiscoverSort.YEAR_DESC -> "Řazení: Nejnovější"
-                    DiscoverSort.YEAR_ASC -> "Řazení: Nejstarší"
-                    DiscoverSort.ALPHABETICAL -> "Řazení: A–Z"
-                }
-                AssistChip(
-                    onClick = { onSortMenuToggle(true) },
-                    label = { Text(sortLabel) },
-                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-                    modifier = Modifier.tvFocusable(),
-                )
-                DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { onSortMenuToggle(false) }) {
-                    val sortItems = listOf(
-                        DiscoverSort.DEFAULT to "Výchozí",
-                        DiscoverSort.RATING_DESC to "Hodnocení ↓",
-                        DiscoverSort.YEAR_DESC to "Rok ↓",
-                        DiscoverSort.YEAR_ASC to "Rok ↑",
-                        DiscoverSort.ALPHABETICAL to "Abecedně",
-                    )
-                    sortItems.forEach { (sort, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = { onSortSelect(sort) },
-                            trailingIcon = if (uiState.filters.sortBy == sort) {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null,
-                        )
-                    }
-                }
-            }
-        }
-        item {
+        SectionSortChip(
+            label = sortLabel,
+            options = listOf(
+                DiscoverSort.DEFAULT to "Výchozí",
+                DiscoverSort.RATING_DESC to "Hodnocení ↓",
+                DiscoverSort.YEAR_DESC to "Rok ↓",
+                DiscoverSort.YEAR_ASC to "Rok ↑",
+                DiscoverSort.ALPHABETICAL to "Abecedně",
+            ),
+            selected = uiState.filters.sortBy,
+            onSelect = onSortSelect,
+        )
+    }
+    item {
             Box {
                 val genresLabel = if (uiState.filters.selectedGenres.isEmpty()) "Žánry"
                 else "Žánry (${uiState.filters.selectedGenres.size})"
@@ -470,5 +388,4 @@ private fun DiscoverFilterRow(
                 }
             }
         }
-    }
 }
