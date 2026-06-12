@@ -22,8 +22,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,8 +40,8 @@ import androidx.compose.ui.unit.dp
  * Plan STRATA B3/B4 (Path A) — **sjednocená lišta podsekcí Sleduj.**
  *
  * Jedna sdílená komponenta napříč Objevit / Chci vidět / Historie → layout/design se NEMĚNÍ mezi
- * sekcemi, mění se jen obsah:
- *   [volitelný segment TabRow]  +  [chip řádek: lupa→expand hledání + chipy dodané volajícím]
+ * sekcemi, mění se jen obsah. Vše v JEDNÉ liště (žádná horní tab-lišta):
+ *   [segment Filmy/Seriály (resp. pohledy)] + [lupa→expand hledání] + [chipy dodané volajícím]
  *
  * Hledání je konzistentně **lupa → rozbalené pole** (dřív Discover lupa-expand, ale Chci vidět/Historie
  * měly trvalé pole). Komponenta si drží `searchExpanded` stav sama; když query není prázdné, drží pole
@@ -58,19 +59,7 @@ fun SectionBar(
     chips: (LazyListScope.() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth()) {
-        if (!segments.isNullOrEmpty()) {
-            TabRow(selectedTabIndex = selectedSegment.coerceIn(0, segments.lastIndex)) {
-                segments.forEachIndexed { index, label ->
-                    Tab(
-                        selected = selectedSegment == index,
-                        onClick = { onSegmentSelected(index) },
-                        text = { Text(label) },
-                        modifier = Modifier.tvFocusable(),
-                    )
-                }
-            }
-        }
-
+        val hasSegments = !segments.isNullOrEmpty()
         val hasSearch = searchQuery != null
         var searchExpanded by remember { mutableStateOf(false) }
         val expanded = hasSearch && (searchExpanded || !searchQuery.isNullOrBlank())
@@ -96,13 +85,28 @@ fun SectionBar(
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             )
-        } else if (hasSearch || chips != null) {
+        } else if (hasSegments || hasSearch || chips != null) {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Plan STRATA: Filmy/Seriály (resp. pohledy) = segment přímo v liště místo horní tab-lišty.
+                if (hasSegments) {
+                    item {
+                        SingleChoiceSegmentedButtonRow {
+                            segments!!.forEachIndexed { index, label ->
+                                SegmentedButton(
+                                    selected = selectedSegment == index,
+                                    onClick = { onSegmentSelected(index) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = index, count = segments.size),
+                                    modifier = Modifier.tvFocusable(),
+                                ) { Text(label) }
+                            }
+                        }
+                    }
+                }
                 if (hasSearch) {
                     item {
                         val active = !searchQuery.isNullOrBlank()
