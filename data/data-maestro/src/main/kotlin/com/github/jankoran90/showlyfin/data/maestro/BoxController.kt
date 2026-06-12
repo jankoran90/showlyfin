@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.data.maestro
 
 import android.content.Context
+import android.util.Base64
 import dadb.AdbKeyPair
 import dadb.Dadb
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -157,10 +158,27 @@ class BoxController @Inject constructor(
         }
     }
 
-    /** Persistovaný ADB klíč telefonu (jinak by box vyžadoval autorizaci při každém spojení). */
+    /**
+     * ADB klíč pro spojení s boxem. **Společný klíč zašitý do appky** (build env → BuildConfig,
+     * base64) má přednost: všechny instalace mají stejnou ADB identitu → box autorizuje JEDNOU
+     * (klíč je už autorizovaný), žádné dialogy „Vždy povolit" na TV. Když embedded klíč chybí
+     * (prázdné BuildConfig pole), spadne na původní chování = per-instalaci vygenerovaný klíč.
+     */
     private fun adbKeyPair(): AdbKeyPair {
         val priv = File(context.filesDir, "maestro_adb_key")
         val pub = File(context.filesDir, "maestro_adb_key.pub")
+        val embeddedPriv = BuildConfig.MAESTRO_ADB_KEY_PRIVATE
+        val embeddedPub = BuildConfig.MAESTRO_ADB_KEY_PUBLIC
+        if (embeddedPriv.isNotBlank() && embeddedPub.isNotBlank()) {
+            // Materializuj sdílený klíč do filesDir (přepiš případný starý per-instalaci klíč),
+            // ať `AdbKeyPair.read` čte File. Zapiš jen když se obsah liší (idempotentní).
+            runCatching {
+                val privBytes = Base64.decode(embeddedPriv, Base64.DEFAULT)
+                val pubBytes = Base64.decode(embeddedPub, Base64.DEFAULT)
+                if (!priv.exists() || !priv.readBytes().contentEquals(privBytes)) priv.writeBytes(privBytes)
+                if (!pub.exists() || !pub.readBytes().contentEquals(pubBytes)) pub.writeBytes(pubBytes)
+            }.onFailure { Timber.w(it, "[MAESTRO] zápis sdíleného ADB klíče selhal — fallback na lokální") }
+        }
         if (!priv.exists() || !pub.exists()) AdbKeyPair.generate(priv, pub)
         return AdbKeyPair.read(priv, pub)
     }
