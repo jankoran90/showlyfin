@@ -101,6 +101,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Plan RIPPLE (SHW-34): první onResume hned po onCreate přeskoč (restoreActive už syncuje config);
+    // další návraty do popředí re-pullnou config aktivního profilu → admin změny z jiného zařízení se
+    // propíšou i bez přepnutí profilu / cold-startu.
+    private var skipFirstResume = true
+
+    override fun onResume() {
+        super.onResume()
+        if (skipFirstResume) {
+            skipFirstResume = false
+            return
+        }
+        lifecycleScope.launch { profileRepository.refreshActiveConfig() }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)

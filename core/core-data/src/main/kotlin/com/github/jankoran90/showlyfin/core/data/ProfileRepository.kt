@@ -347,6 +347,17 @@ class ProfileRepository @Inject constructor(
     }
 
     /**
+     * Plan RIPPLE (SHW-34) — aktivní re-pull configu AKTIVNÍHO profilu z backendu, aby se admin změny
+     * provedené z JINÉHO zařízení propsaly i bez přepnutí profilu / cold-startu. Volá se při návratu
+     * appky do popředí (ON_RESUME). Lehké: žádný re-login, jen [syncConfigFromBackend] (best-effort +
+     * timeouty), re-aplikuje efektivní config jen když se reálně něco změnilo.
+     */
+    suspend fun refreshActiveConfig() {
+        val profile = _activeProfile.value ?: return
+        syncConfigFromBackend(profile)
+    }
+
+    /**
      * Stáhne z backendu šablony + přiřazení + config balík profilu a uloží jako lokální cache
      * (Plan PROFILES Fáze 2 + WARDEN W3c). Best-effort s timeouty; po všech změnách re-aplikuje
      * efektivní config (šablona ⊕ override) jednou, je-li profil aktivní.
