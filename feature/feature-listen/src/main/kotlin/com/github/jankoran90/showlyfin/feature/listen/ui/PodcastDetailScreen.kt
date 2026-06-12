@@ -153,6 +153,7 @@ fun PodcastDetailScreen(
                     display = display,
                     deviceAutoDownloadSelective = deviceAutoDownloadSelective,
                     deviceAutoDownloadOn = deviceAutoDownloadOn,
+                    canManageEpisodes = viewModel.canManageEpisodes,
                     onToggleDeviceAutoDownload = { viewModel.toggleDeviceAutoDownload() },
                     onFindEpisodes = { viewModel.openFindEpisodes() },
                     onPlay = { ep -> onPlayEpisode(itemId, ep.id, false, null) },
@@ -222,6 +223,7 @@ private fun DetailContent(
     display: EpisodeDisplaySettings,
     deviceAutoDownloadSelective: Boolean,
     deviceAutoDownloadOn: Boolean,
+    canManageEpisodes: Boolean,
     onToggleDeviceAutoDownload: () -> Unit,
     onFindEpisodes: () -> Unit,
     onPlay: (PodcastEpisode) -> Unit,
@@ -278,12 +280,14 @@ private fun DetailContent(
                         }.joinToString(" · ")
                         Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                     }
-                    // „Prohledat epizody" přesunuto sem k coveru (dřív tu byl chip Fronta).
-                    AssistChip(
-                        onClick = onFindEpisodes,
-                        label = { Text("Prohledat epizody") },
-                        leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    )
+                    // „Prohledat epizody" = ABS upload-akce → jen admin profil (ostatní účty 403). Bug 2026-06-12.
+                    if (canManageEpisodes) {
+                        AssistChip(
+                            onClick = onFindEpisodes,
+                            label = { Text("Prohledat epizody") },
+                            leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        )
+                    }
                 }
             }
         }

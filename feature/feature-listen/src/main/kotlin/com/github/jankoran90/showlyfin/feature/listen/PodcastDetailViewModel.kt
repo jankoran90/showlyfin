@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
@@ -23,7 +24,17 @@ class PodcastDetailViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val downloadManager: EpisodeDownloadManager,
     private val absPrefs: AbsPreferences,
+    private val profileRepository: ProfileRepository,
 ) : ViewModel() {
+
+    /**
+     * „Prohledat epizody" (parsování RSS feedu + stažení epizod na ABS server) je v Audiobookshelf
+     * **upload-akce** — smí ji jen admin/upload ABS účet. Rodinné profily (Děti/Neli) mají omezené
+     * ABS účty bez upload práva → server vracel 403. Akci proto vystavíme jen u **admin profilu**
+     * (ten používá admin ABS účet), u ostatních tlačítko skryjeme. (Bug všechny telefony 2026-06-12.)
+     */
+    val canManageEpisodes: Boolean
+        get() = profileRepository.activeProfile.value?.isAdmin == true
 
     private val _uiState = MutableStateFlow(PodcastDetailUiState())
     val uiState = _uiState.asStateFlow()
@@ -66,6 +77,7 @@ class PodcastDetailViewModel @Inject constructor(
 
     /** Otevře sheet a načte dostupné (nestažené) epizody z RSS feedu. */
     fun openFindEpisodes() {
+        if (!canManageEpisodes) return
         val id = currentItemId ?: return
         _findState.value = FindEpisodesState(visible = true, loading = true)
         viewModelScope.launch {
