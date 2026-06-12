@@ -8,6 +8,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -34,6 +36,45 @@ class BoxController @Inject constructor(
 ) {
     /** Vlastní scope, ať blokující ADB práce běží odděleně a volající ji může po timeoutu opustit. */
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /**
+     * Serializace ADB operací — NIKDY víc spojení na box najednou. Paralelní wake(TV)+launch(box) +
+     * retry scény dřív otevíraly víc spojení současně → na neautorizovaném boxu se hromadily
+     * autorizační dialogy (loop). S mutexem běží vždy jen jedno → uživatel potvrdí jeden dialog.
+     */
+    private val adbMutex = Mutex()
+
+    /** Výsledek párování boxu — pro jasnou diagnostiku v UI (proč to nejde). */
+    sealed interface PairResult {
+        data object Success : PairResult       // spojení + autorizace OK
+        data object Unreachable : PairResult    // port 5555 neodpovídá (ladění po síti vyplé / jiná IP / jiná Wi-Fi)
+        data object NotConfirmed : PairResult   // dosažitelný, ale spojení/autorizace se nedokončilo (potvrď „Vždy povolit" na TV)
+    }
+
+    /**
+     * Explicitní jednorázové spárování boxu s DLOUHÝM oknem na potvrzení ([PAIR_TIMEOUT_MS]) — uživatel
+     * má čas dojít k TV a kliknout „Vždy povolit". Jedno spojení (mutex), žádné retry, vrací důvod selhání.
+     */
+    suspend fun pair(host: String): PairResult {
+        val deferred = scope.async {
+            adbMutex.withLock {
+                if (!isReachable(host)) return@withLock PairResult.Unreachable
+                runCatching {
+                    Dadb.create(host, ADB_PORT, adbKeyPair()).use { it.shell("echo showlyfin-pair") }
+                    Timber.i("[MAESTRO] box @%s spárován", host)
+                    PairResult.Success as PairResult
+                }.getOrElse {
+                    Timber.w(it, "[MAESTRO] box @%s párování nepotvrzeno", host)
+                    PairResult.NotConfirmed
+                }
+            }
+        }
+        return withTimeoutOrNull(PAIR_TIMEOUT_MS) { deferred.await() } ?: run {
+            deferred.cancel()
+            Timber.w("[MAESTRO] box @%s párování timeout — nepotvrzeno na TV?", host)
+            PairResult.NotConfirmed
+        }
+    }
 
     /** Probudí box přes Wake-on-LAN (magic packet na broadcast). [mac] = `AA:BB:CC:DD:EE:FF`. */
     suspend fun wakeViaWol(mac: String): Boolean = withContext(Dispatchers.IO) {
@@ -94,17 +135,19 @@ class BoxController @Inject constructor(
      */
     private suspend fun runAdb(host: String, label: String, op: (Dadb) -> Unit): Boolean {
         val deferred = scope.async {
-            if (!isReachable(host)) {
-                Timber.w("[MAESTRO] box @%s nedostupný (port %d) — %s přeskočeno", host, ADB_PORT, label)
-                return@async false
-            }
-            runCatching {
-                Dadb.create(host, ADB_PORT, adbKeyPair()).use { op(it) }
-                Timber.i("[MAESTRO] box ADB @%s %s OK", host, label)
-                true
-            }.getOrElse {
-                Timber.w(it, "[MAESTRO] box ADB @%s %s selhalo (autorizace/síť?)", host, label)
-                false
+            adbMutex.withLock {
+                if (!isReachable(host)) {
+                    Timber.w("[MAESTRO] box @%s nedostupný (port %d) — %s přeskočeno", host, ADB_PORT, label)
+                    return@withLock false
+                }
+                runCatching {
+                    Dadb.create(host, ADB_PORT, adbKeyPair()).use { op(it) }
+                    Timber.i("[MAESTRO] box ADB @%s %s OK", host, label)
+                    true
+                }.getOrElse {
+                    Timber.w(it, "[MAESTRO] box ADB @%s %s selhalo (autorizace/síť?)", host, label)
+                    false
+                }
             }
         }
         return withTimeoutOrNull(ADB_TIMEOUT_MS) { deferred.await() } ?: run {
@@ -126,6 +169,7 @@ class BoxController @Inject constructor(
         const val YELLYFIN_PACKAGE = "com.github.jankoran90.yellyfin"
         private const val ADB_PORT = 5555
         private const val ADB_TIMEOUT_MS = 8000L
+        private const val PAIR_TIMEOUT_MS = 60_000L  // dlouhé okno na potvrzení „Vždy povolit" na TV
         private const val PROBE_TIMEOUT_MS = 2500
     }
 }

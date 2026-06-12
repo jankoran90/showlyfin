@@ -74,6 +74,8 @@ data class SettingsUiState(
     val avrTvHost: String = "",
     val avrDefaultVolume: String = "",
     val avrVolumeStep: String = "",
+    val avrBoxPairing: Boolean = false,      // probíhá párování boxu (ADB)
+    val avrBoxPairStatus: String? = null,    // výsledek/diagnostika párování
     // Plan PROFILES Fáze 2 — web admin profilů (uploader backend)
     val uploaderBaseUrl: String = "",
     // Poslech / Audiobookshelf
@@ -151,6 +153,7 @@ class SettingsViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val absRepo: AbsRepository,
     private val audiobookDownloads: com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager,
+    private val box: com.github.jankoran90.showlyfin.data.maestro.BoxController,
     private val absPrefs: AbsPreferences,
     private val jellyfinAuth: com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService,
     @ApplicationContext private val appContext: Context,
@@ -516,7 +519,35 @@ class SettingsViewModel @Inject constructor(
     fun setAvrBoxHost(host: String) {
         val clean = host.trim()
         prefs.edit().putString(KEY_AVR_BOX_HOST, clean).apply()
-        _uiState.update { it.copy(avrBoxHost = clean) }
+        _uiState.update { it.copy(avrBoxHost = clean, avrBoxPairStatus = null) }
+    }
+
+    /**
+     * Plan MAESTRO — jednorázové spárování TV boxu přes ADB s jasnou diagnostikou. Jedno spojení,
+     * dlouhé okno na potvrzení („Vždy povolit" na TV). Řeší loop dialogů (víc paralelních spojení)
+     * i tiché selhání (probe usekne nedostupný box bez zpětné vazby).
+     */
+    fun pairBox() {
+        val host = prefs.getString(KEY_AVR_BOX_HOST, "").orEmpty().trim()
+        if (host.isBlank()) {
+            _uiState.update { it.copy(avrBoxPairStatus = "Nejdřív vyplň IP TV boxu.") }
+            return
+        }
+        if (_uiState.value.avrBoxPairing) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(avrBoxPairing = true, avrBoxPairStatus = "Zkouším spojení… na TV potvrď „Vždy povolit z tohoto zařízení“.")
+            }
+            val msg = when (box.pair(host)) {
+                com.github.jankoran90.showlyfin.data.maestro.BoxController.PairResult.Success ->
+                    "✓ Box spárován — teď půjde Zapnout/Vypnout i „Přehrát na TV“."
+                com.github.jankoran90.showlyfin.data.maestro.BoxController.PairResult.Unreachable ->
+                    "Box nedostupný na $host:5555 — na boxu zapni „Ladění po síti“ a zkontroluj IP + že je telefon na stejné Wi-Fi."
+                com.github.jankoran90.showlyfin.data.maestro.BoxController.PairResult.NotConfirmed ->
+                    "Nepotvrzeno — na TV klikni „Vždy povolit z tohoto zařízení“ a dej Spárovat znovu."
+            }
+            _uiState.update { it.copy(avrBoxPairing = false, avrBoxPairStatus = msg) }
+        }
     }
 
     fun setAvrBoxMac(mac: String) {

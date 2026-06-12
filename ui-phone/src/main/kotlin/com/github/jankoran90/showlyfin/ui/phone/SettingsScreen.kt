@@ -348,6 +348,8 @@ fun SettingsScreen(
                 tvHost = uiState.avrTvHost,
                 defaultVolume = uiState.avrDefaultVolume,
                 volumeStep = uiState.avrVolumeStep,
+                boxPairing = uiState.avrBoxPairing,
+                boxPairStatus = uiState.avrBoxPairStatus,
                 onEnabled = { viewModel.setAvrEnabled(it) },
                 onHost = { viewModel.setAvrHost(it) },
                 onBoxHost = { viewModel.setAvrBoxHost(it) },
@@ -355,6 +357,7 @@ fun SettingsScreen(
                 onTvHost = { viewModel.setAvrTvHost(it) },
                 onDefaultVolume = { viewModel.setAvrDefaultVolume(it) },
                 onVolumeStep = { viewModel.setAvrVolumeStep(it) },
+                onPairBox = { viewModel.pairBox() },
             )
         }
 
@@ -1987,6 +1990,8 @@ private fun AvrSection(
     tvHost: String,
     defaultVolume: String,
     volumeStep: String,
+    boxPairing: Boolean,
+    boxPairStatus: String?,
     onEnabled: (Boolean) -> Unit,
     onHost: (String) -> Unit,
     onBoxHost: (String) -> Unit,
@@ -1994,6 +1999,7 @@ private fun AvrSection(
     onTvHost: (String) -> Unit,
     onDefaultVolume: (String) -> Unit,
     onVolumeStep: (String) -> Unit,
+    onPairBox: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -2024,6 +2030,24 @@ private fun AvrSection(
                 placeholder = "např. 192.168.1.184",
                 numeric = true,
             )
+            // Plan MAESTRO — jednorázové spárování boxu (ADB) s diagnostikou. Box musí běžet, mít
+            // zapnuté „Ladění po síti" a na TV potvrď „Vždy povolit". Jedno spojení → žádný loop dialogů.
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onPairBox,
+                enabled = !boxPairing && boxHost.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (boxPairing) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (boxPairing) "Páruji box…" else "Spárovat box (ADB)")
+            }
+            boxPairStatus?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Spacer(Modifier.height(8.dp))
             AvrTextField(
                 value = boxMac,
