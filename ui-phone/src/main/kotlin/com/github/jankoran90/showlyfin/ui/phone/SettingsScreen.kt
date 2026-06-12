@@ -122,7 +122,7 @@ fun SettingsScreen(
         }
         // Plan WARDEN W4: ne-admin user s uzamčeným přihlášením (lock-mapa CREDENTIALS) needituje účty.
         val credLocked = !isAdmin && ProfileConfig.LockKeys.CREDENTIALS in uiState.lockedKeys
-        CollapsibleSettingsSection("Účty", expanded) {
+        CollapsibleSettingsSection("Připojení a účty", expanded) {
           if (credLocked) {
             LockedByAdminNote()
           } else {
@@ -226,13 +226,9 @@ fun SettingsScreen(
                     ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
                 }
             }
-          }
-        }
 
-        CollapsibleSettingsSection("Poslech", expanded) {
-          if (credLocked) {
-            LockedByAdminNote()
-          } else {
+            // Plan STRATA Fáze I — všechna přihlášení pohromadě: Audiobookshelf + Uploader sem.
+            Spacer(Modifier.height(16.dp))
             AbsSection(
                 configured = uiState.absConfigured,
                 baseUrl = uiState.absBaseUrl,
@@ -241,11 +237,21 @@ fun SettingsScreen(
                 isAdmin = isAdmin,
                 onOpenAdmin = onOpenAdmin,
             )
+            Spacer(Modifier.height(16.dp))
+            UploaderSection(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
           }
-            // Playback preference (ne creds) — dostupné i při uzamčeném přihlášení, pokud je ABS nastaven.
+        }
+
+        CollapsibleSettingsSection("Poslech", expanded) {
+            // Plan STRATA Fáze I — Poslech = JEN volby přehrávání; přihlášení ABS je v „Připojení a účty".
             if (uiState.absConfigured) {
-                Spacer(Modifier.height(12.dp))
                 ListenSettingsCard(uiState, viewModel)
+            } else {
+                Text(
+                    "Připoj Audiobookshelf v sekci „Připojení a účty“, pak se tu objeví volby přehrávání.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
             }
         }
 
@@ -271,8 +277,6 @@ fun SettingsScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            UploaderSection(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
             Spacer(Modifier.height(16.dp))
             StremioFilterSection(
                 sf = uiState.streamFilter,
@@ -321,7 +325,7 @@ fun SettingsScreen(
             }
         }
 
-        CollapsibleSettingsSection("Účet & profily", expanded) {
+        CollapsibleSettingsSection("Profily", expanded) {
             ProfilesSection(
                 profiles = uiState.profiles,
                 activeProfileId = uiState.activeProfileId,
