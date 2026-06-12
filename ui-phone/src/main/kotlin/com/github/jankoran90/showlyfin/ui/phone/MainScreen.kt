@@ -17,6 +17,7 @@ import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
 import com.github.jankoran90.showlyfin.feature.discover.ui.RdLibraryScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.LibraryRowsScreen
+import com.github.jankoran90.showlyfin.feature.watchlist.history.HistoryScreen
 import com.github.jankoran90.showlyfin.feature.watchlist.ui.WatchlistScreen
 import kotlinx.coroutines.launch
 
@@ -25,6 +26,7 @@ private val ALL_SUBSECTIONS = listOf(
     ProfileConfig.Sections.KNIHOVNA to "Knihovna",
     ProfileConfig.Sections.CHCI_VIDET to "Chci vidět",
     ProfileConfig.Sections.OBJEVIT to "Objevit",
+    ProfileConfig.Sections.HISTORIE to "Historie",
     ProfileConfig.Sections.NA_RD to "Na RD",
 )
 
@@ -89,6 +91,12 @@ fun MainScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
                 ProfileConfig.Sections.OBJEVIT -> DiscoverScreen(
+                    onItemClick = { item, jellyfinId ->
+                        if (jellyfinId != null) onJellyfinItemClick(jellyfinId) else onTraktItemClick(item)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                ProfileConfig.Sections.HISTORIE -> HistoryScreen(
                     onItemClick = { item, jellyfinId ->
                         if (jellyfinId != null) onJellyfinItemClick(jellyfinId) else onTraktItemClick(item)
                     },

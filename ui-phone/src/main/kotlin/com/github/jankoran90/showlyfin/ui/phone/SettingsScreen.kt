@@ -672,6 +672,37 @@ private fun ListenSettingsCard(uiState: SettingsUiState, vm: SettingsViewModel) 
                 )
             }
 
+            // Plan STRATA B2 — hromadné stažení celých audioknih (scoped na profil).
+            ListenGroupTitle("Celé audioknihy")
+            ListenInfoText("Stáhne do telefonu všechny audioknihy, které vidí tento profil (dle knihoven profilu). Stahuje na pozadí, počet souběžných řídí nastavení výše.")
+            val bulk by vm.audiobookBulk.collectAsStateWithLifecycle()
+            when {
+                bulk.resolving -> ListenInfoText("Zjišťuji seznam knih…")
+                bulk.total > 0 -> ListenInfoText(
+                    buildString {
+                        append("Staženo ${bulk.done} z ${bulk.total}")
+                        if (bulk.downloading > 0) append(" · stahuje se ${bulk.downloading}")
+                        if (bulk.failed > 0) append(" · selhalo ${bulk.failed}")
+                    },
+                )
+                bulk.storedTotal > 0 -> ListenInfoText("V telefonu: ${bulk.storedTotal} stažených audioknih.")
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = { vm.downloadAllAudiobooks() },
+                    enabled = !bulk.active,
+                    modifier = Modifier.weight(1f),
+                ) { Text(if (bulk.active) "Stahuji…" else "Stáhnout vše") }
+                OutlinedButton(
+                    onClick = { vm.deleteAllAudiobookDownloads() },
+                    enabled = bulk.storedTotal > 0 && !bulk.active,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Smazat stažené") }
+            }
+
             ListenGroupTitle("Stahování na ABS server")
             ListenInfoText("Auto-download nových epizod z RSS na ABS server (ABS-nativní). Zapni per-podcast — plánovač a pravidla řeší ABS server. Konkrétní epizody dotáhneš přes „Prohledat epizody“ v detailu podcastu.")
             LaunchedEffect(Unit) { vm.loadServerPodcasts() }
@@ -1080,6 +1111,7 @@ private val SECTION_TOGGLES = listOf(
     ProfileConfig.Sections.KNIHOVNA to "— Knihovna",
     ProfileConfig.Sections.CHCI_VIDET to "— Chci vidět",
     ProfileConfig.Sections.OBJEVIT to "— Objevit",
+    ProfileConfig.Sections.HISTORIE to "— Historie",
     ProfileConfig.Sections.NA_RD to "— Na RD",
 )
 
@@ -1107,6 +1139,7 @@ private val LANDING_OPTIONS = listOf(
     ProfileConfig.Sections.KNIHOVNA to "Sleduj → Knihovna",
     ProfileConfig.Sections.CHCI_VIDET to "Sleduj → Chci vidět",
     ProfileConfig.Sections.OBJEVIT to "Sleduj → Objevit",
+    ProfileConfig.Sections.HISTORIE to "Sleduj → Historie",
     ProfileConfig.Sections.NA_RD to "Sleduj → Na RD",
     ProfileConfig.Sections.POSLECH to "Poslech",
 )
@@ -1121,6 +1154,7 @@ private val SUBSECTION_ORDER_LABELS = mapOf(
     ProfileConfig.Sections.KNIHOVNA to "Knihovna",
     ProfileConfig.Sections.CHCI_VIDET to "Chci vidět",
     ProfileConfig.Sections.OBJEVIT to "Objevit",
+    ProfileConfig.Sections.HISTORIE to "Historie",
     ProfileConfig.Sections.NA_RD to "Na RD",
 )
 

@@ -23,12 +23,16 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -122,6 +126,22 @@ data class ListenSettings(
     val syncIntervalSeconds: Int = 15,
 )
 
+/**
+ * Plan STRATA B2 — průběh hromadného stažení audioknih (scoped na whitelist aktivního profilu).
+ * [total] = počet knih v záběru profilu, [done]/[downloading]/[failed] počítané z [AudiobookDownloadManager.states].
+ */
+data class AudiobookBulkState(
+    val resolving: Boolean = false,   // zjišťuji seznam knih ze serveru
+    val total: Int = 0,
+    val done: Int = 0,
+    val downloading: Int = 0,
+    val failed: Int = 0,
+    val storedTotal: Int = 0,         // všechny stažené audioknihy v telefonu (i z dřívějška)
+) {
+    val active: Boolean get() = resolving || downloading > 0
+    val pending: Int get() = (total - done - downloading - failed).coerceAtLeast(0)
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val traktAuthManager: TraktAuthManager,
@@ -130,6 +150,7 @@ class SettingsViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val uploaderDs: UploaderRemoteDataSource,
     private val absRepo: AbsRepository,
+    private val audiobookDownloads: com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager,
     private val absPrefs: AbsPreferences,
     private val jellyfinAuth: com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService,
     @ApplicationContext private val appContext: Context,
@@ -155,6 +176,51 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    // ─── Plan STRATA B2 — hromadné stažení audioknih (scoped na profil) ───
+    private val _bulkResolving = MutableStateFlow(false)
+    private val _bulkTargets = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Agregovaný průběh hromadného stažení (cílový set ∩ stavy z download manageru). */
+    val audiobookBulk: StateFlow<AudiobookBulkState> =
+        combine(_bulkResolving, _bulkTargets, audiobookDownloads.states) { resolving, targets, states ->
+            AudiobookBulkState(
+                resolving = resolving,
+                total = targets.size,
+                done = targets.count { states[it]?.status == com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus.DOWNLOADED },
+                downloading = targets.count { states[it]?.status == com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus.DOWNLOADING },
+                failed = targets.count { states[it]?.status == com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus.FAILED },
+                storedTotal = states.values.count { it.status == com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus.DOWNLOADED },
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, AudiobookBulkState())
+
+    /**
+     * Stáhne do telefonu všechny audioknihy, které vidí aktivní profil (whitelist ABS knihoven).
+     * Idempotentní — už stažené/stahující se přeskočí ([AudiobookDownloadManager.download]).
+     */
+    fun downloadAllAudiobooks() {
+        if (_bulkResolving.value) return
+        viewModelScope.launch {
+            _bulkResolving.value = true
+            runCatching {
+                val wl = profileRepository.activeConfig.value.absLibraryWhitelist
+                val libs = absRepo.getAudiobookLibraries().let { l -> if (wl == null) l else l.filter { it.id in wl } }
+                libs.flatMap { absRepo.getAudiobooks(it.id) }
+            }.onSuccess { books ->
+                _bulkTargets.value = books.map { it.id }.toSet()
+                books.forEach { b -> audiobookDownloads.download(b.id, b.title, b.author, b.coverUrl) }
+            }.onFailure { e ->
+                Timber.w(e, "[Listen] hromadné stažení audioknih selhalo")
+            }
+            _bulkResolving.value = false
+        }
+    }
+
+    /** Smaže VŠECHNY stažené audioknihy z telefonu (offline index). */
+    fun deleteAllAudiobookDownloads() {
+        audiobookDownloads.deleteAll()
+        _bulkTargets.value = emptySet()
+    }
 
     /** Plan VAULT — aktivní profil má v balíku JF heslo (auto-login schopný i bez tokenu). */
     private var activeJfHasPassword = false

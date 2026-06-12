@@ -243,14 +243,15 @@ data class ProfileConfig(
         const val KNIHOVNA = "knihovna"
         const val CHCI_VIDET = "chciVidet"
         const val OBJEVIT = "objevit"
+        const val HISTORIE = "historie" // Plan STRATA B5 — Trakt watched (vzor yeshowly)
         const val NA_RD = "naRd"
 
         /** Plan STRATA Fáze E — kanonické pořadí top-level nav (bez Nastavení; to je vždy poslední/fixní). */
         val CANONICAL_NAV = listOf(SLEDUJ, OVLADAC, POSLECH)
         /** Kanonické pořadí podsekcí „Sleduj". */
-        val CANONICAL_SUBSECTIONS = listOf(KNIHOVNA, CHCI_VIDET, OBJEVIT, NA_RD)
+        val CANONICAL_SUBSECTIONS = listOf(KNIHOVNA, CHCI_VIDET, OBJEVIT, HISTORIE, NA_RD)
         /** Přepínatelné (skrývatelné) sekce — vše krom [NASTAVENI]. */
-        val TOGGLEABLE = setOf(SLEDUJ, OVLADAC, POSLECH, KNIHOVNA, CHCI_VIDET, OBJEVIT, NA_RD)
+        val TOGGLEABLE = setOf(SLEDUJ, OVLADAC, POSLECH, KNIHOVNA, CHCI_VIDET, OBJEVIT, HISTORIE, NA_RD)
     }
 }
 
