@@ -180,6 +180,25 @@ class OvladacViewModel @Inject constructor(
     fun playPause() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "PlayPause") }
     fun stopPlayback() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "Stop") }
 
+    // --- PILOT: virtuální D-pad — navigace nativním UI na TV přes Jellyfin GeneralCommand.
+    // Yellyfin na boxu je přeloží na injektnuté D-pad klávesy (viz RemoteControlReceiver).
+    fun navUp() = nav("MoveUp")
+    fun navDown() = nav("MoveDown")
+    fun navLeft() = nav("MoveLeft")
+    fun navRight() = nav("MoveRight")
+    fun navSelect() = nav("Select")
+    fun navBack() = nav("Back")
+    fun navHome() = nav("GoHome")
+    private fun nav(name: String) = command { c, id -> naTv.sendGeneralCommand(c.url, c.token, id, name) }
+
+    /** True, když je dostupná ovladatelná TV session (= box/Yellyfin běží) → power tlačítko zelené. */
+    fun isTvOn(): Boolean = _state.value.sessions.isNotEmpty()
+
+    /** Power tlačítko D-padu: dle stavu TV zapne/vypne celou sestavu (MAESTRO). */
+    fun togglePower() {
+        if (isTvOn()) powerOffSystem() else powerOnSystem()
+    }
+
     fun seekBy(deltaMs: Long) = command { c, id ->
         val cur = _state.value.current ?: return@command false
         val newPos = (cur.positionTicks + deltaMs * TICKS_PER_MS).coerceAtLeast(0L)

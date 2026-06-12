@@ -135,6 +135,18 @@ fun OvladacScreen(
 
             else -> NowPlaying(state.current!!, state.coverUrl, onOpenDetail, vm)
         }
+
+        // PILOT: virtuální D-pad „dálkáč" v dolní části — navigace nativního UI na TV.
+        // Viditelný i bez session (power tlačítko umí sestavu zapnout).
+        if (!state.noCreds) {
+            Spacer(Modifier.height(16.dp))
+            RemotePad(
+                tvOn = state.sessions.isNotEmpty(),
+                hasSession = state.current != null,
+                isPlaying = state.current?.isPlaying == true,
+                vm = vm,
+            )
+        }
     }
 }
 
