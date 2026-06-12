@@ -53,6 +53,9 @@ data class SettingsUiState(
     /** Plan WARDEN W2: zamčené klíče efektivního configu aktivního profilu ([ProfileConfig.LockKeys]).
      * Ne-admin user needituje zamčené bloky Nastavení. Prázdné = nic zamčené (admin/legacy/bez šablony). */
     val lockedKeys: Set<String> = emptySet(),
+    /** Plan STRATA Fáze E — aktuální pořadí sekcí/podsekcí aktivního profilu (pro user reorder v Nastavení). */
+    val orderedSections: List<String> = emptyList(),
+    val orderedSubsections: List<String> = emptyList(),
     // Stremio / Comet filtr výsledků
     val streamFilter: StreamFilterPrefs? = null,
     val streamFilterLoading: Boolean = false,
@@ -194,7 +197,13 @@ class SettingsViewModel @Inject constructor(
                 // Plan VAULT — „Jellyfin nastaven" toleruje i uložené heslo bez tokenu (token se
                 // mintuje při vstupu přes bránu / 401 reloginem), jako ABS isConfigured.
                 activeJfHasPassword = !cfg.credentials.jellyfin?.password.isNullOrBlank()
-                _uiState.update { it.copy(lockedKeys = cfg.lockedKeys) }
+                _uiState.update {
+                    it.copy(
+                        lockedKeys = cfg.lockedKeys,
+                        orderedSections = cfg.orderedSections(),
+                        orderedSubsections = cfg.orderedSubsections(),
+                    )
+                }
                 refreshJellyfinState()
             }
             .launchIn(viewModelScope)
@@ -295,6 +304,15 @@ class SettingsViewModel @Inject constructor(
     fun setHideFinishedEpisodes(value: Boolean) {
         absRepo.hideFinishedEpisodes = value
         _uiState.update { it.copy(hideFinishedEpisodes = value) }
+    }
+
+    /** Plan STRATA Fáze E — uživatel si přerovná pořadí sekcí/podsekcí (jen když admin nezamkl ORDER). */
+    fun reorderSections(newOrder: List<String>) = updateActiveConfig { it.copy(sectionOrder = newOrder) }
+    fun reorderSubsections(newOrder: List<String>) = updateActiveConfig { it.copy(subsectionOrder = newOrder) }
+
+    private fun updateActiveConfig(transform: (ProfileConfig) -> ProfileConfig) {
+        val id = _uiState.value.activeProfileId ?: return
+        viewModelScope.launch { profileRepository.updateConfig(id, transform) }
     }
 
     fun setSkipSeconds(v: Int) = updateListen { skipSeconds = v }

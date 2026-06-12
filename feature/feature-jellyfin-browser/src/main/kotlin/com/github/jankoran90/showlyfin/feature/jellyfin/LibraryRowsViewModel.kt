@@ -82,8 +82,15 @@ class LibraryRowsViewModel @Inject constructor(
                         else list.filter { it.id.toString().replace("-", "").lowercase() in whitelist }
                     }
                 Timber.i("[VAULT] JF views=${views.items.map { it.name }} → po whitelistu=${mediaViews.map { it.name }}")
+                // Plan STRATA Fáze E: pořadí knihovních řádků dle profilu (libraryOrder; norm. id bez pomlček).
+                val norm = { id: String -> id.replace("-", "").lowercase() }
+                val orderNorm = profileRepository.activeConfig.value.libraryOrder.map(norm)
+                val orderedViews = if (orderNorm.isEmpty()) mediaViews else {
+                    val known = orderNorm.mapNotNull { o -> mediaViews.firstOrNull { norm(it.id.toString()) == o } }
+                    known + mediaViews.filterNot { it in known }
+                }
                 val rows = coroutineScope {
-                    mediaViews.map { view ->
+                    orderedViews.map { view ->
                         async { loadRow(view, userUuid, serverUrl, token) }
                     }.awaitAll()
                 }.filter { it.items.isNotEmpty() }

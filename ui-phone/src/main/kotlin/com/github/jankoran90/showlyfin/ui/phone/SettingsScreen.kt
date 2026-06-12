@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
@@ -290,6 +292,32 @@ fun SettingsScreen(
                 DetailModeSection()
             } else {
                 LockedByAdminNote()
+            }
+        }
+
+        // Plan STRATA Fáze E — uživatelské přehazování pořadí (jen když admin nezamkl ORDER).
+        CollapsibleSettingsSection("Pořadí sekcí", expanded) {
+            if (ProfileConfig.LockKeys.ORDER in uiState.lockedKeys) {
+                LockedByAdminNote()
+            } else {
+                Text(
+                    "Podrž a táhni pro změnu pořadí záložek a podsekcí.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+                Spacer(Modifier.height(8.dp))
+                OrderEditor(
+                    title = "Záložky",
+                    orderedKeys = uiState.orderedSections,
+                    label = { NAV_ORDER_LABELS[it] ?: it },
+                    onReorder = { viewModel.reorderSections(it) },
+                )
+                OrderEditor(
+                    title = "Podsekce Sleduj",
+                    orderedKeys = uiState.orderedSubsections,
+                    label = { SUBSECTION_ORDER_LABELS[it] ?: it },
+                    onReorder = { viewModel.reorderSubsections(it) },
+                )
             }
         }
 
@@ -1083,6 +1111,56 @@ private val LANDING_OPTIONS = listOf(
     ProfileConfig.Sections.POSLECH to "Poslech",
 )
 
+// Plan STRATA Fáze E — popisky pro editor pořadí (drag&drop).
+private val NAV_ORDER_LABELS = mapOf(
+    ProfileConfig.Sections.SLEDUJ to "Sleduj",
+    ProfileConfig.Sections.OVLADAC to "Ovladač",
+    ProfileConfig.Sections.POSLECH to "Poslech",
+)
+private val SUBSECTION_ORDER_LABELS = mapOf(
+    ProfileConfig.Sections.KNIHOVNA to "Knihovna",
+    ProfileConfig.Sections.CHCI_VIDET to "Chci vidět",
+    ProfileConfig.Sections.OBJEVIT to "Objevit",
+    ProfileConfig.Sections.NA_RD to "Na RD",
+)
+
+/**
+ * Plan STRATA Fáze E — znovupoužitelný editor pořadí (drag&drop) pro seznam klíčů s popiskem.
+ * [orderedKeys] = aktuální pořadí; [onReorder] dostane NOVÉ pořadí klíčů. Skryje se pro <2 položky.
+ */
+@Composable
+private fun OrderEditor(
+    title: String,
+    orderedKeys: List<String>,
+    label: (String) -> String,
+    onReorder: (List<String>) -> Unit,
+) {
+    if (orderedKeys.size < 2) return
+    Text(title, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+    ReorderColumn(
+        items = orderedKeys,
+        key = { it },
+        onMove = { from, to -> onReorder(orderedKeys.moved(from, to)) },
+    ) { keyItem, dragging, handle ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .then(handle)
+                .background(
+                    if (dragging) Color.White.copy(alpha = 0.08f) else Color.Transparent,
+                    RoundedCornerShape(8.dp),
+                )
+                .padding(vertical = 8.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.Menu, contentDescription = "Přesunout", tint = Color.White.copy(alpha = 0.5f))
+            Spacer(Modifier.width(12.dp))
+            Text(label(keyItem), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
 /**
  * Admin authoring profilů (Plan PROFILES Fáze 4) — KAŽDÝ profil je vlastní sbalovací kategorický blok
  * (šablona Plan TIDY / CLAUDE.md „## Nastavení"). Uvnitř logicky seskupené: Hlavní sekce · Viditelné
@@ -1231,6 +1309,20 @@ private fun ProfileAuthoringBlock(
                 }
                 Spacer(Modifier.height(12.dp))
 
+                // — Pořadí sekcí a podsekcí (Plan STRATA Fáze E, drag&drop — podrž a táhni) —
+                OrderEditor(
+                    title = "Pořadí sekcí (podrž a táhni)",
+                    orderedKeys = cfg.orderedSections(),
+                    label = { NAV_ORDER_LABELS[it] ?: it },
+                    onReorder = { newOrder -> onUpdateConfig(profile.id) { c -> c.copy(sectionOrder = newOrder) } },
+                )
+                OrderEditor(
+                    title = "Pořadí podsekcí Sleduj",
+                    orderedKeys = cfg.orderedSubsections(),
+                    label = { SUBSECTION_ORDER_LABELS[it] ?: it },
+                    onReorder = { newOrder -> onUpdateConfig(profile.id) { c -> c.copy(subsectionOrder = newOrder) } },
+                )
+
                 // — Knihovny Jellyfin: whitelist (Plan HELM; nic = všechny) —
                 if (jellyfinLibraries.isNotEmpty()) {
                     Text("Knihovny (Jellyfin) — nic zaškrtnuté = všechny", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
@@ -1254,6 +1346,14 @@ private fun ProfileAuthoringBlock(
                         }
                     }
                     Spacer(Modifier.height(12.dp))
+                    // Pořadí knihovních řádků (Plan STRATA Fáze E) — drag&drop.
+                    val libIds = jellyfinLibraries.map { it.id }
+                    OrderEditor(
+                        title = "Pořadí knihoven (podrž a táhni)",
+                        orderedKeys = cfg.orderedLibraryIds(libIds),
+                        label = { id -> jellyfinLibraries.firstOrNull { it.id == id }?.name ?: id },
+                        onReorder = { newOrder -> onUpdateConfig(profile.id) { c -> c.copy(libraryOrder = newOrder) } },
+                    )
                 }
 
                 // — Poslech: whitelist ABS knihoven (Plan PROFILES Fáze 4E) —
@@ -1571,6 +1671,7 @@ private val TEMPLATE_LOCKS = listOf(
     ProfileConfig.LockKeys.GENRES to "Žánry",
     ProfileConfig.LockKeys.AGE_RATING to "Věk",
     ProfileConfig.LockKeys.DEFAULT_SECTION to "Hlavní sekce",
+    ProfileConfig.LockKeys.ORDER to "Pořadí sekcí/podsekcí",
     ProfileConfig.LockKeys.APPEARANCE to "Vzhled",
     ProfileConfig.LockKeys.CREDENTIALS to "Přihlášení",
 )
@@ -1731,6 +1832,20 @@ private fun TemplateEditorBlock(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+
+                // Pořadí sekcí/podsekcí (Plan STRATA Fáze E) — šablona předvyplní pořadí profilu při přiřazení.
+                OrderEditor(
+                    title = "Pořadí sekcí (podrž a táhni)",
+                    orderedKeys = cfg.orderedSections(),
+                    label = { NAV_ORDER_LABELS[it] ?: it },
+                    onReorder = { newOrder -> cfg = cfg.copy(sectionOrder = newOrder) },
+                )
+                OrderEditor(
+                    title = "Pořadí podsekcí Sleduj",
+                    orderedKeys = cfg.orderedSubsections(),
+                    label = { SUBSECTION_ORDER_LABELS[it] ?: it },
+                    onReorder = { newOrder -> cfg = cfg.copy(subsectionOrder = newOrder) },
+                )
 
                 Text("Žánry", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
                 OutlinedTextField(
