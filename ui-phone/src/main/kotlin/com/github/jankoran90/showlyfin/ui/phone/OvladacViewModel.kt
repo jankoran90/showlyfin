@@ -9,6 +9,8 @@ import com.github.jankoran90.showlyfin.data.maestro.AvrController
 import com.github.jankoran90.showlyfin.data.maestro.BoxController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -132,30 +134,51 @@ class OvladacViewModel @Inject constructor(
 
     /** Ručně zapnout celou sestavu (receiver + probudit TV + box + spustit přehrávač). */
     fun powerOnSystem() = sceneAction("Zapínám obývák…") {
-        avrConfig()?.let { host ->
-            avr.powerOn(host)
-            // Respekt k vlastní power-on hlasitosti AVR: hodnotu nastavíme JEN když ji user
-            // v appce přímo zadal (override). Prázdné = ponecháme na receiveru (děti ráno).
-            avrDefaultVolume()?.let { delay(POWER_ON_VOL_DELAY_MS); avr.setVolume(host, it) }
+        // Prvky sestavy probouzíme paralelně — když jeden vázne (timeout boxu), nezdrží ostatní.
+        coroutineScope {
+            avrConfig()?.let { host ->
+                launch {
+                    avr.powerOn(host)
+                    // Respekt k vlastní power-on hlasitosti AVR: hodnotu nastavíme JEN když ji user
+                    // v appce přímo zadal (override). Prázdné = ponecháme na receiveru (děti ráno).
+                    avrDefaultVolume()?.let { delay(POWER_ON_VOL_DELAY_MS); avr.setVolume(host, it) }
+                }
+            }
+            tvHost()?.let { launch { box.wake(it) } }
+            boxMac()?.let { launch { box.wakeViaWol(it) } }
+            boxHost()?.let { launch { box.wakeAndLaunch(it) } }
         }
-        tvHost()?.let { box.wake(it) }
-        boxMac()?.let { box.wakeViaWol(it) }
-        boxHost()?.let { box.wakeAndLaunch(it) }
+        null
     }
 
     /** Ručně vypnout sestavu (receiver do standby + uspat TV i box). */
     fun powerOffSystem() = sceneAction("Vypínám obývák…") {
-        avrConfig()?.let { avr.powerOff(it) }
-        tvHost()?.let { box.sleep(it) }
-        boxHost()?.let { box.sleep(it) }
+        // Vše paralelně + ohraničeno timeoutem v BoxController → dialog nikdy nevisí.
+        val boxOk: Boolean? = coroutineScope {
+            avrConfig()?.let { launch { avr.powerOff(it) } }
+            val tv = tvHost()?.let { async { box.sleep(it) } }
+            val bx = boxHost()?.let { async { box.sleep(it) } }
+            val results = listOfNotNull(tv, bx).map { it.await() }
+            if (results.isEmpty()) null else results.any { it }
+        }
+        // Box nakonfigurován, ale ani TV ani box se nepodařilo uspat → typicky chybí ADB autorizace.
+        if (boxOk == false) "Box se nepodařilo uspat — autorizuj ADB na boxu (dialog na TV)." else null
     }
 
-    private fun sceneAction(status: String, block: suspend () -> Unit) {
+    /**
+     * Spustí scénu (zapnout/vypnout sestavu). [block] vrátí volitelnou hlášku, která se krátce ukáže
+     * (např. nutnost ADB autorizace), pak se dialog vždy schová — i kdyby ADB pod tím ještě doznívalo.
+     */
+    private fun sceneAction(status: String, block: suspend () -> String?) {
         viewModelScope.launch {
             _state.update { it.copy(sceneStatus = status) }
-            runCatching { block() }
+            val result = runCatching { block() }.getOrNull()
             delay(COMMAND_SETTLE_MS)
             avrConfig()?.let { refreshAvrOnly(it) }
+            if (result != null) {
+                _state.update { it.copy(sceneStatus = result) }
+                delay(SCENE_RESULT_MS)
+            }
             _state.update { it.copy(sceneStatus = null) }
         }
     }
@@ -272,6 +295,7 @@ class OvladacViewModel @Inject constructor(
         const val POLL_MS = 2_000L
         const val COMMAND_SETTLE_MS = 300L
         const val POWER_ON_VOL_DELAY_MS = 800L
+        const val SCENE_RESULT_MS = 3_500L
         const val TICKS_PER_MS = 10_000L
     }
 }
