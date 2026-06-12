@@ -43,7 +43,7 @@ class ProfileConfigApplier @Inject constructor(
         timber.log.Timber.i(
             "[VAULT] applyConfig jf=${creds.jellyfin != null}(url=${!creds.jellyfin?.url.isNullOrBlank()},tok=${!creds.jellyfin?.token.isNullOrBlank()},pw=${!creds.jellyfin?.password.isNullOrBlank()}) " +
                 "abs=${creds.abs != null} up=${creds.uploader != null} trakt=${creds.trakt != null} " +
-                "absWl=${config.absLibraryWhitelist} jfWl=${config.jellyfinLibraryWhitelist} sections=${config.visibleSections}",
+                "absWl=${config.absLibraryWhitelist} jfWl=${config.jellyfinLibraryWhitelist} hiddenSections=${config.hiddenSections}",
         )
         prefs.edit {
             // Jellyfin (per-profil): null = ODHLÁSIT. URL normalizujeme (https:// + bez úvodních

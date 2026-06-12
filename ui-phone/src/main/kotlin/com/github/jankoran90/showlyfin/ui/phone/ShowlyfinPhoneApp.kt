@@ -208,18 +208,24 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             return@ShowlyfinPhoneTheme
         }
 
-        // Plan PROFILES 1E: viditelnost sekcí dle aktivního profilu. Prázdné = vše (admin/legacy).
-        // Plan VAULT V10: TV má vlastní sadu (visibleSectionsTv); null = zrcadlí telefon.
-        val visibleSections = if (isTv) gateState.visibleSectionsTv ?: gateState.visibleSections else gateState.visibleSections
-        fun sectionVisible(key: String): Boolean = visibleSections.isEmpty() || key in visibleSections
+        // Plan STRATA Fáze C: počkej na config aktivního profilu (defaultSection + viditelnost), ať
+        // úvodní záložka nezmrzne na Knihovně místo výchozího Poslechu (cold-start race).
+        if (!gateState.configLoaded) {
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxSize(),
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) { CircularProgressIndicator() }
+            return@ShowlyfinPhoneTheme
+        }
+
+        // Plan STRATA: blocklist viditelnost dle aktivního profilu (prázdné = vše vidět). TV má vlastní
+        // sadu skrytých (hiddenSectionsTv); null = zrcadlí telefon. + Fáze E: pořadí nav/podsekcí.
+        val hiddenSections = if (isTv) gateState.hiddenSectionsTv ?: gateState.hiddenSections else gateState.hiddenSections
+        fun sectionVisible(key: String): Boolean = key !in hiddenSections
+        val orderCfg = ProfileConfig(sectionOrder = gateState.sectionOrder, subsectionOrder = gateState.subsectionOrder)
         val poslechVisible = sectionVisible(ProfileConfig.Sections.POSLECH)
         val ovladacVisible = sectionVisible(ProfileConfig.Sections.OVLADAC)
-        val visibleSubsections = listOf(
-            ProfileConfig.Sections.KNIHOVNA,
-            ProfileConfig.Sections.CHCI_VIDET,
-            ProfileConfig.Sections.OBJEVIT,
-            ProfileConfig.Sections.NA_RD,
-        ).filter { sectionVisible(it) }
+        val visibleSubsections = orderCfg.orderedSubsections().filter { sectionVisible(it) }
 
         // Plan PROFILES Fáze 4: „hlavní" sekce — která sekce se profilu otevře po vstupu.
         // Poslech → spodní tab Listen; podsekce Sleduj → Hlavni s předvybranou podsekcí.
@@ -324,9 +330,14 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             currentDestination is Destination.PodcastDetail
 
         val navItems = buildList {
-            if (sledujVisible) add(ShellNavItem(Destination.Hlavni, Icons.Default.Home, "Sleduj"))
-            if (ovladacVisible) add(ShellNavItem(Destination.Ovladac, Icons.Default.SettingsRemote, "Ovladač"))
-            if (poslechVisible) add(ShellNavItem(Destination.Listen, Icons.Default.Headphones, "Poslech"))
+            // Plan STRATA Fáze E: top-level nav v pořadí profilu (Nastavení/Správa vždy fixně na konci).
+            orderCfg.orderedSections().forEach { key ->
+                when (key) {
+                    ProfileConfig.Sections.SLEDUJ -> if (sledujVisible) add(ShellNavItem(Destination.Hlavni, Icons.Default.Home, "Sleduj"))
+                    ProfileConfig.Sections.OVLADAC -> if (ovladacVisible) add(ShellNavItem(Destination.Ovladac, Icons.Default.SettingsRemote, "Ovladač"))
+                    ProfileConfig.Sections.POSLECH -> if (poslechVisible) add(ShellNavItem(Destination.Listen, Icons.Default.Headphones, "Poslech"))
+                }
+            }
             add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
             // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.
             if (gateState.activeProfile?.isAdmin == true) {

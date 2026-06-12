@@ -1059,31 +1059,19 @@ private val SECTION_TOGGLES = listOf(
  * Přepne viditelnost sekce [key]. Když jsou viditelné všechny přepínatelné → prázdná množina
  * (= vše, legacy). Jinak explicitní allow-list (SLEDUJ + NASTAVENI vždy + zapnuté přepínatelné).
  */
-private fun toggledSections(cfg: ProfileConfig, key: String, enabled: Boolean): Set<String> {
-    val vis = SECTION_TOGGLES.associate { (k, _) -> k to cfg.isSectionVisible(k) }.toMutableMap()
-    vis[key] = enabled
-    return if (vis.values.all { it }) emptySet()
-    else buildSet {
-        add(ProfileConfig.Sections.NASTAVENI) // jediná vždy viditelná (V10: Sleduj už je přepínatelná)
-        vis.forEach { (k, v) -> if (v) add(k) }
-    }
-}
+private fun toggledHidden(cfg: ProfileConfig, key: String, visible: Boolean): Set<String> =
+    if (visible) cfg.hiddenSections - key else cfg.hiddenSections + key
 
-/** Viditelnost sekce na TV (Plan VAULT V10): TV sada null = zrcadlí telefon; prázdná = vše. */
+/** Viditelnost sekce na TV (Plan STRATA): TV sada skrytých null = zrcadlí telefon. */
 private fun tvSectionVisible(cfg: ProfileConfig, key: String): Boolean {
-    val tv = cfg.visibleSectionsTv ?: return cfg.isSectionVisible(key)
-    return tv.isEmpty() || key in tv
+    val tvHidden = cfg.hiddenSectionsTv ?: return cfg.isSectionVisible(key)
+    return key !in tvHidden
 }
 
-/** Přepne viditelnost sekce [key] na TV — od prvního dotyku je TV sada nezávislá na telefonu. */
-private fun toggledSectionsTv(cfg: ProfileConfig, key: String, enabled: Boolean): Set<String> {
-    val vis = SECTION_TOGGLES.associate { (k, _) -> k to tvSectionVisible(cfg, k) }.toMutableMap()
-    vis[key] = enabled
-    return if (vis.values.all { it }) emptySet()
-    else buildSet {
-        add(ProfileConfig.Sections.NASTAVENI)
-        vis.forEach { (k, v) -> if (v) add(k) }
-    }
+/** Přepne viditelnost sekce [key] na TV — od prvního dotyku je TV sada skrytých nezávislá (forkne z telefonu). */
+private fun toggledHiddenTv(cfg: ProfileConfig, key: String, visible: Boolean): Set<String> {
+    val base = cfg.hiddenSectionsTv ?: cfg.hiddenSections
+    return if (visible) base - key else base + key
 }
 
 /** Možnosti „hlavní" (výchozí otevřené) sekce per profil (Plan PROFILES Fáze 4). */
@@ -1221,23 +1209,21 @@ private fun ProfileAuthoringBlock(
                         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
                         Switch(
                             checked = cfg.isSectionVisible(key),
-                            onCheckedChange = { enabled ->
+                            onCheckedChange = { visible ->
                                 onUpdateConfig(profile.id) { c ->
-                                    val sections = toggledSections(c, key, enabled)
+                                    val hidden = toggledHidden(c, key, visible)
                                     // Skrytá hlavní sekce → zruš defaultSection (jinak by se otevřela skrytá).
-                                    val newDefault = c.defaultSection?.takeIf { d ->
-                                        sections.isEmpty() || d in sections
-                                    }
-                                    c.copy(visibleSections = sections, defaultSection = newDefault)
+                                    val newDefault = c.defaultSection?.takeIf { it !in hidden }
+                                    c.copy(hiddenSections = hidden, defaultSection = newDefault)
                                 }
                             },
                         )
                         Spacer(Modifier.width(10.dp))
                         Switch(
                             checked = tvSectionVisible(cfg, key),
-                            onCheckedChange = { enabled ->
+                            onCheckedChange = { visible ->
                                 onUpdateConfig(profile.id) { c ->
-                                    c.copy(visibleSectionsTv = toggledSectionsTv(c, key, enabled))
+                                    c.copy(hiddenSectionsTv = toggledHiddenTv(c, key, visible))
                                 }
                             },
                         )
@@ -1717,16 +1703,29 @@ private fun TemplateEditorBlock(
                 )
                 Spacer(Modifier.height(12.dp))
 
-                Text("Viditelné sekce a podsekce", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Viditelné sekce a podsekce", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("📱", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Spacer(Modifier.width(34.dp))
+                    Text("📺", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Spacer(Modifier.width(22.dp))
+                }
                 SECTION_TOGGLES.forEach { (key, label) ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
                         Switch(
                             checked = cfg.isSectionVisible(key),
-                            onCheckedChange = { enabled ->
-                                val sections = toggledSections(cfg, key, enabled)
-                                val newDefault = cfg.defaultSection?.takeIf { d -> sections.isEmpty() || d in sections }
-                                cfg = cfg.copy(visibleSections = sections, defaultSection = newDefault)
+                            onCheckedChange = { visible ->
+                                val hidden = toggledHidden(cfg, key, visible)
+                                val newDefault = cfg.defaultSection?.takeIf { it !in hidden }
+                                cfg = cfg.copy(hiddenSections = hidden, defaultSection = newDefault)
+                            },
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Switch(
+                            checked = tvSectionVisible(cfg, key),
+                            onCheckedChange = { visible ->
+                                cfg = cfg.copy(hiddenSectionsTv = toggledHiddenTv(cfg, key, visible))
                             },
                         )
                     }

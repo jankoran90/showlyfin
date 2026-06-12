@@ -28,10 +28,19 @@ data class ProfileGateState(
     val profiles: List<ProfileEntity> = emptyList(),
     val activeProfile: ProfileEntity? = null,
     val isAddingProfile: Boolean = false,
-    /** Viditelné sekce aktivního profilu (Plan PROFILES 1E). Prázdné = vše (admin/legacy). */
-    val visibleSections: Set<String> = emptySet(),
-    /** Viditelné sekce na TV (Plan VAULT V10). null = zrcadlí [visibleSections]. */
-    val visibleSectionsTv: Set<String>? = null,
+    /** Plan STRATA — skryté sekce aktivního profilu (blocklist). Prázdné = nic skryté = vše viditelné. */
+    val hiddenSections: Set<String> = emptySet(),
+    /** Skryté sekce na TV. null = zrcadlí [hiddenSections]. */
+    val hiddenSectionsTv: Set<String>? = null,
+    /** Plan STRATA Fáze E — pořadí top-level nav sekcí. Prázdné = kanonické. */
+    val sectionOrder: List<String> = emptyList(),
+    /** Pořadí podsekcí „Sleduj". Prázdné = kanonické. */
+    val subsectionOrder: List<String> = emptyList(),
+    /**
+     * Plan STRATA Fáze C — config aktivního profilu už dorazil. Než je true, NEPOČÍTÁME úvodní záložku
+     * (jinak race → zmrazí se Knihovna místo výchozího Poslechu po restartu).
+     */
+    val configLoaded: Boolean = false,
     /** „Hlavní" sekce aktivního profilu (Plan PROFILES Fáze 4). null = výchozí. */
     val defaultSection: String? = null,
     /** Plan WARDEN W1: profil čekající na zadání PINu (klik na profil s [ProfileEntity.loginPinHash]). */
@@ -118,8 +127,11 @@ class ProfileGateViewModel @Inject constructor(
             .onEach { cfg ->
                 _state.update {
                     it.copy(
-                        visibleSections = cfg.visibleSections,
-                        visibleSectionsTv = cfg.visibleSectionsTv,
+                        hiddenSections = cfg.hiddenSections,
+                        hiddenSectionsTv = cfg.hiddenSectionsTv,
+                        sectionOrder = cfg.sectionOrder,
+                        subsectionOrder = cfg.subsectionOrder,
+                        configLoaded = true,
                         defaultSection = cfg.defaultSection,
                     )
                 }

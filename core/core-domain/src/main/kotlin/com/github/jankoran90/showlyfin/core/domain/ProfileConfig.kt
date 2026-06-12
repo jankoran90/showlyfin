@@ -15,12 +15,33 @@ import kotlinx.serialization.json.Json
  */
 @Serializable
 data class ProfileConfig(
-    /** Viditelné sekce (telefon). Prázdné = vše viditelné (admin/legacy). Viz [Sections]. */
-    val visibleSections: Set<String> = emptySet(),
     /**
-     * Viditelné sekce na TV (Plan VAULT V10 — per-form-factor viditelnost, např. „Knihovnu skrýt na
-     * telefonu, nechat na TV"). **null = zrcadlí [visibleSections]** (telefon); prázdné = vše viditelné.
+     * Plan STRATA (SHW-33) — **skryté sekce (telefon)**, blocklist. Prázdné = nic skryté = vše
+     * viditelné (default). Ukládají se JEN výslovně skryté sekce → nová sekce (Ovladač i budoucí) je
+     * vždy viditelná, dokud ji admin sám neskryje. Nahrazuje křehký allow-list [visibleSections].
+     * [Sections.NASTAVENI] se nikdy neskrývá (jediná cesta k odhlášení).
      */
+    val hiddenSections: Set<String> = emptySet(),
+    /**
+     * Skryté sekce na TV (per-form-factor, např. „Knihovnu skrýt na telefonu, nechat na TV").
+     * **null = zrcadlí [hiddenSections]** (telefon); prázdné = nic skryté na TV (nezávisle na telefonu).
+     */
+    val hiddenSectionsTv: Set<String>? = null,
+    /**
+     * Pořadí top-level nav sekcí (Plan STRATA Fáze E) — klíče ze [Sections] (spodní lišta). Prázdné =
+     * kanonické pořadí. Neznámé/chybějící klíče se doplní kanonicky na konec (robustní vůči novým sekcím).
+     */
+    val sectionOrder: List<String> = emptyList(),
+    /** Pořadí podsekcí „Sleduj" (Knihovna/Chci vidět/Objevit/Na RD). Prázdné = kanonické. */
+    val subsectionOrder: List<String> = emptyList(),
+    /**
+     * Pořadí Jellyfin knihovních řádků v podsekci „Knihovna" (Plan STRATA Fáze E) — list library ids.
+     * Prázdné = pořadí ze serveru. Neznámé id zahodit, chybějící doplnit na konec.
+     */
+    val libraryOrder: List<String> = emptyList(),
+    // LEGACY (Plan STRATA migrace): allow-list model před blocklistem. Deserializují se JEN kvůli
+    // [migrateLegacySections]; nový kód je needituje ani neukládá (po migraci se nulují).
+    val visibleSections: Set<String> = emptySet(),
     val visibleSectionsTv: Set<String>? = null,
     /** Povolené Jellyfin library ids. null = všechny. Prázdný seznam = žádná (záměrně). */
     val jellyfinLibraryWhitelist: List<String>? = null,
@@ -60,12 +81,25 @@ data class ProfileConfig(
      */
     val lockedKeys: Set<String> = emptySet(),
 ) {
-    fun isSectionVisible(key: String): Boolean =
-        visibleSections.isEmpty() || visibleSections.contains(key)
+    /** Plan STRATA — blocklist: sekce je viditelná, dokud není ve [hiddenSections]. */
+    fun isSectionVisible(key: String): Boolean = key !in hiddenSections
 
-    /** Sekce pro daný form factor (V10): TV bere [visibleSectionsTv], null = zrcadlí telefon. */
-    fun visibleSectionsFor(tv: Boolean): Set<String> =
-        if (tv) visibleSectionsTv ?: visibleSections else visibleSections
+    /** Skryté sekce pro daný form factor: TV bere [hiddenSectionsTv], null = zrcadlí telefon. */
+    fun hiddenSectionsFor(tv: Boolean): Set<String> =
+        if (tv) hiddenSectionsTv ?: hiddenSections else hiddenSections
+
+    /** Plan STRATA Fáze E — top-level nav sekce v efektivním pořadí (neznámé/chybějící kanonicky na konec). */
+    fun orderedSections(): List<String> = applyOrder(sectionOrder, Sections.CANONICAL_NAV)
+
+    /** Podsekce „Sleduj" v efektivním pořadí. */
+    fun orderedSubsections(): List<String> = applyOrder(subsectionOrder, Sections.CANONICAL_SUBSECTIONS)
+
+    /** Jellyfin knihovny v efektivním pořadí (dynamická sada [available] = co server vrátil). */
+    fun orderedLibraryIds(available: List<String>): List<String> {
+        if (libraryOrder.isEmpty()) return available
+        val known = libraryOrder.filter { it in available }
+        return known + available.filterNot { it in known }
+    }
 
     /**
      * Žánrový filtr profilu (Plan PROFILES 1E). Vrací true = položku zobrazit.
@@ -86,6 +120,32 @@ data class ProfileConfig(
     /** true = klíč je touto šablonou zamčený (uživatel needituje, bere se hodnota šablony). */
     fun isLocked(lockKey: String): Boolean = lockedKeys.contains(lockKey)
 
+    /**
+     * Plan STRATA migrace: pokud config nese legacy allow-list ([visibleSections]/[visibleSectionsTv]),
+     * přepočítá ho na blocklist [hiddenSections]/[hiddenSectionsTv] a legacy pole vynuluje. Idempotentní
+     * (po prvním uložení už legacy pole nejsou). Ovladač se po migraci VŽDY zviditelní (řešený root
+     * cause — v starých allow-listech chyběl). Prázdný allow-list = vše viditelné = nic skryté.
+     */
+    fun migrateLegacySections(): ProfileConfig {
+        if (visibleSections.isEmpty() && visibleSectionsTv == null) return this
+        val toggleable = Sections.TOGGLEABLE
+        fun hiddenFrom(allow: Set<String>): Set<String> =
+            if (allow.isEmpty()) emptySet() else (toggleable - allow - Sections.OVLADAC)
+        return copy(
+            hiddenSections = hiddenFrom(visibleSections),
+            hiddenSectionsTv = visibleSectionsTv?.let { hiddenFrom(it) },
+            visibleSections = emptySet(),
+            visibleSectionsTv = null,
+        )
+    }
+
+    /** Seřadí [canonical] dle [order]; neznámé klíče z order zahodí, chybějící kanonicky doplní na konec. */
+    private fun applyOrder(order: List<String>, canonical: List<String>): List<String> {
+        if (order.isEmpty()) return canonical
+        val known = order.filter { it in canonical }
+        return known + canonical.filterNot { it in known }
+    }
+
     companion object {
         /** Default config — bez jakýchkoli restrikcí. */
         val DEFAULT = ProfileConfig()
@@ -97,7 +157,8 @@ data class ProfileConfig(
 
         fun fromJson(raw: String?): ProfileConfig =
             if (raw.isNullOrBlank()) DEFAULT
-            else runCatching { json.decodeFromString<ProfileConfig>(raw) }.getOrDefault(DEFAULT)
+            else runCatching { json.decodeFromString<ProfileConfig>(raw).migrateLegacySections() }
+                .getOrDefault(DEFAULT)
 
         fun toJson(config: ProfileConfig): String = json.encodeToString(config)
 
@@ -132,8 +193,11 @@ data class ProfileConfig(
          */
         fun snapshotFromTemplate(template: ProfileConfig, override: ProfileConfig): ProfileConfig =
             override.copy(
-                visibleSections = if (template.visibleSections.isNotEmpty()) template.visibleSections else override.visibleSections,
-                visibleSectionsTv = template.visibleSectionsTv ?: override.visibleSectionsTv,
+                hiddenSections = if (template.hiddenSections.isNotEmpty()) template.hiddenSections else override.hiddenSections,
+                hiddenSectionsTv = template.hiddenSectionsTv ?: override.hiddenSectionsTv,
+                sectionOrder = template.sectionOrder.ifEmpty { override.sectionOrder },
+                subsectionOrder = template.subsectionOrder.ifEmpty { override.subsectionOrder },
+                libraryOrder = template.libraryOrder.ifEmpty { override.libraryOrder },
                 jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist ?: override.jellyfinLibraryWhitelist,
                 absLibraryWhitelist = template.absLibraryWhitelist ?: override.absLibraryWhitelist,
                 hiddenPodcastIds = template.hiddenPodcastIds.ifEmpty { override.hiddenPodcastIds },
@@ -159,15 +223,16 @@ data class ProfileConfig(
         const val DEFAULT_SECTION = "defaultSection"
         const val APPEARANCE = "appearance"
         const val CREDENTIALS = "credentials"
+        const val ORDER = "order" // Plan STRATA Fáze E — pořadí sekcí/podsekcí (zamčeno = jen admin)
 
         /** Všechny zamykatelné klíče (pro authoring UI ve W3). */
         val ALL = setOf(
             VISIBLE_SECTIONS, JELLYFIN_LIBRARIES, ABS_LIBRARIES, GENRES,
-            AGE_RATING, DEFAULT_SECTION, APPEARANCE, CREDENTIALS,
+            AGE_RATING, DEFAULT_SECTION, APPEARANCE, CREDENTIALS, ORDER,
         )
     }
 
-    /** Klíče sekcí pro [visibleSections]. */
+    /** Klíče sekcí pro [hiddenSections] / pořadí. */
     object Sections {
         // Spodní lišta
         const val SLEDUJ = "sleduj"
@@ -179,6 +244,13 @@ data class ProfileConfig(
         const val CHCI_VIDET = "chciVidet"
         const val OBJEVIT = "objevit"
         const val NA_RD = "naRd"
+
+        /** Plan STRATA Fáze E — kanonické pořadí top-level nav (bez Nastavení; to je vždy poslední/fixní). */
+        val CANONICAL_NAV = listOf(SLEDUJ, OVLADAC, POSLECH)
+        /** Kanonické pořadí podsekcí „Sleduj". */
+        val CANONICAL_SUBSECTIONS = listOf(KNIHOVNA, CHCI_VIDET, OBJEVIT, NA_RD)
+        /** Přepínatelné (skrývatelné) sekce — vše krom [NASTAVENI]. */
+        val TOGGLEABLE = setOf(SLEDUJ, OVLADAC, POSLECH, KNIHOVNA, CHCI_VIDET, OBJEVIT, NA_RD)
     }
 }
 
