@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.services
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.github.jankoran90.showlyfin.BuildConfig
 
 object UpdatePreferences {
     private const val PREFS = "showlyfin_update_prefs"
@@ -40,7 +41,11 @@ object UpdatePreferences {
         val p = get(context)
         val versionName = p.getString(KEY_LATEST_VERSION_NAME, null) ?: return null
         val versionCode = p.getInt(KEY_LATEST_VERSION_CODE, 0)
-        if (versionCode <= 0) return null
+        // Plan ENCORE (FLT-04): nabídku ber jen když je NOVĚJŠÍ než nainstalovaná verze. Po dokončení
+        // updatu zůstane uložená nabídka s versionCode == aktuální → bez tohoto guardu by se popup po
+        // aktualizaci objevil ZNOVU (UpdateOverlayHost ji ukazuje z prefs na každém startu, dřív než
+        // doběhne síťová kontrola, která prefs vyčistí).
+        if (versionCode <= BuildConfig.VERSION_CODE) return null
         val notes = p.getString(KEY_LATEST_NOTES, null).orEmpty()
         return PendingUpdate(versionName, notes, versionCode)
     }
