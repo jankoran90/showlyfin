@@ -3,8 +3,12 @@ package com.github.jankoran90.showlyfin.feature.listen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.network.ConnectivityObserver
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
+import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
+import com.github.jankoran90.showlyfin.data.abs.model.toAudiobook
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +25,8 @@ import javax.inject.Inject
 class ListenViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val downloadManager: EpisodeDownloadManager,
+    private val audiobookDownloads: AudiobookDownloadManager,
+    private val connectivity: ConnectivityObserver,
     private val profileRepository: ProfileRepository,
 ) : ViewModel() {
 
@@ -71,20 +77,66 @@ class ListenViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+
+        // Plan CASTAWAY — offline police: drž množinu stažených knih (badge „staženo") a v offline
+        // režimu jimi naplň seznam, aby šly otevřít i bez sítě.
+        audiobookDownloads.downloads
+            .onEach { dls ->
+                _uiState.update { it.copy(downloadedBookIds = dls.map { d -> d.itemId }.toSet()) }
+                if (!connectivity.isCurrentlyOnline()) refresh()
+            }
+            .launchIn(viewModelScope)
+
+        // Reaguj na změnu konektivity: offline → degraduj na stažené; návrat online → načti znovu.
+        // (StateFlow už emituje jen distinct hodnoty, proto bez distinctUntilChanged.)
+        connectivity.isOnline
+            .onEach { online ->
+                _uiState.update { it.copy(isOffline = !online) }
+                refresh()
+                if (online && (_uiState.value.podcastsLoaded || _uiState.value.mode == ListenMode.PODCASTS)) {
+                    loadPodcastLibraries()
+                }
+            }
+            .launchIn(viewModelScope)
     }
+
+    /** Stažené audioknihy jako UI police (Plan CASTAWAY CA-2). */
+    private fun downloadedBooks(): List<Audiobook> =
+        audiobookDownloads.downloads.value.map { it.toAudiobook() }
 
     /** Načte knihovny audioknih a knihy ve vybrané (či první) knihovně. */
     fun refresh() {
+        val offlineBooks = downloadedBooks()
+        // Plan CASTAWAY — bez přihlášení k ABS ukaž aspoň stažené knihy (offline police), ať jdou hrát.
         if (!repo.isConfigured) {
-            _uiState.update { it.copy(isConfigured = false, isLoading = false) }
+            _uiState.update {
+                it.copy(
+                    isConfigured = offlineBooks.isNotEmpty(),
+                    isLoading = false,
+                    isOffline = !connectivity.isCurrentlyOnline(),
+                    libraries = emptyList(),
+                    books = offlineBooks,
+                    error = null,
+                )
+            }
+            return
+        }
+        // Plan CASTAWAY — offline: nestreamuj seznam, rovnou ukaž stažené knihy.
+        if (!connectivity.isCurrentlyOnline()) {
+            _uiState.update {
+                it.copy(
+                    isConfigured = true, isLoading = false, isOffline = true,
+                    libraries = emptyList(), books = offlineBooks, error = null,
+                )
+            }
             return
         }
         viewModelScope.launch {
-            _uiState.update { it.copy(isConfigured = true, isLoading = true, error = null) }
+            _uiState.update { it.copy(isConfigured = true, isLoading = true, isOffline = false, error = null) }
             runCatching { repo.getAudiobookLibraries().applyProfileWhitelist() }
                 .onSuccess { libs ->
                     if (libs.isEmpty()) {
-                        _uiState.update { it.copy(isLoading = false, libraries = emptyList(), books = emptyList()) }
+                        _uiState.update { it.copy(isLoading = false, libraries = emptyList(), books = downloadedBooks()) }
                         return@onSuccess
                     }
                     val selected = _uiState.value.selectedLibraryId?.takeIf { id -> libs.any { it.id == id } }
@@ -93,8 +145,15 @@ class ListenViewModel @Inject constructor(
                     loadBooks(selected)
                 }
                 .onFailure { e ->
+                    // Síť/server selhaly i přes „online" stav → degraduj na stažené knihy místo prázdna.
                     Timber.w(e, "[Listen] knihovny selhaly")
-                    _uiState.update { it.copy(isLoading = false, error = "Načtení knihoven selhalo. Zkontroluj přihlášení k Audiobookshelf v Nastavení.") }
+                    val books = downloadedBooks()
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false, libraries = emptyList(), books = books, isOffline = true,
+                            error = if (books.isEmpty()) "Načtení knihoven selhalo. Zkontroluj přihlášení k Audiobookshelf v Nastavení." else null,
+                        )
+                    }
                 }
         }
     }
@@ -120,7 +179,13 @@ class ListenViewModel @Inject constructor(
             .onSuccess { books -> _uiState.update { it.copy(isLoading = false, books = books) } }
             .onFailure { e ->
                 Timber.w(e, "[Listen] knihy selhaly")
-                _uiState.update { it.copy(isLoading = false, error = "Načtení audioknih selhalo.") }
+                val offline = downloadedBooks()
+                _uiState.update {
+                    it.copy(
+                        isLoading = false, books = offline, isOffline = true,
+                        error = if (offline.isEmpty()) "Načtení audioknih selhalo." else null,
+                    )
+                }
             }
     }
 

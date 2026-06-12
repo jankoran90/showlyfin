@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadState
+import com.github.jankoran90.showlyfin.data.abs.model.toAudiobookDetail
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,8 +62,15 @@ class AudiobookDetailViewModel @Inject constructor(
             runCatching { repo.getAudiobookDetail(itemId) }
                 .onSuccess { d -> _uiState.update { it.copy(isLoading = false, detail = d) } }
                 .onFailure { e ->
-                    Timber.w(e, "[Listen] detail selhal")
-                    _uiState.update { it.copy(isLoading = false, error = "Načtení detailu selhalo.") }
+                    // Plan CASTAWAY — offline/selhání serveru: postav detail ze stažené knihy, ať jde
+                    // otevřít a spustit přehrávač i bez sítě.
+                    val offline = audiobookDownloads.downloadRecord(itemId)?.toAudiobookDetail()
+                    if (offline != null) {
+                        _uiState.update { it.copy(isLoading = false, detail = offline, error = null) }
+                    } else {
+                        Timber.w(e, "[Listen] detail selhal")
+                        _uiState.update { it.copy(isLoading = false, error = "Načtení detailu selhalo.") }
+                    }
                 }
         }
     }

@@ -13,6 +13,9 @@ data class ListenUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val mode: ListenMode = ListenMode.BOOKS,
+    // Plan CASTAWAY — offline režim
+    val isOffline: Boolean = false,
+    val downloadedBookIds: Set<String> = emptySet(),
     // audioknihy
     val libraries: List<AbsLibrary> = emptyList(),
     val selectedLibraryId: String? = null,

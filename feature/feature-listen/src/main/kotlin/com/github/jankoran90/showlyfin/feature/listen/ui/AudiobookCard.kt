@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -33,6 +36,7 @@ fun AudiobookCard(
     book: Audiobook,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    downloaded: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -72,6 +76,20 @@ fun AudiobookCard(
                         .height(4.dp),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                )
+            }
+            // Plan CASTAWAY — odznak „staženo" (dostupné i offline).
+            if (downloaded) {
+                Icon(
+                    imageVector = Icons.Default.DownloadDone,
+                    contentDescription = "Staženo",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .padding(3.dp)
+                        .size(16.dp),
                 )
             }
         }

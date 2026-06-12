@@ -22,6 +22,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.PlayArrow
@@ -96,6 +97,7 @@ fun ListenScreen(
                     viewModel.setMode(if (pagerState.currentPage == 1) ListenMode.PODCASTS else ListenMode.BOOKS)
                 }
                 Column(Modifier.fillMaxSize()) {
+                    if (state.isOffline) OfflineBanner()
                     SingleChoiceSegmentedButtonRow(
                         Modifier
                             .fillMaxWidth()
@@ -160,7 +162,13 @@ private fun BooksContent(
                 )
             }
             if (state.books.isEmpty() && !state.isLoading) {
-                CenteredMessage("V této knihovně zatím nejsou žádné audioknihy.")
+                CenteredMessage(
+                    if (state.isOffline) {
+                        "Jsi offline a nemáš žádné stažené audioknihy.\nStáhni je v detailu knihy, dokud jsi připojený."
+                    } else {
+                        "V této knihovně zatím nejsou žádné audioknihy."
+                    },
+                )
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 150.dp),
@@ -170,7 +178,11 @@ private fun BooksContent(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(state.books, key = { it.id }) { book ->
-                        AudiobookCard(book = book, onClick = { onOpenBook(book.id) })
+                        AudiobookCard(
+                            book = book,
+                            onClick = { onOpenBook(book.id) },
+                            downloaded = book.id in state.downloadedBookIds,
+                        )
                     }
                 }
             }
@@ -186,44 +198,82 @@ private fun PodcastsContent(
     downloadCount: Int,
     onOpenDownloads: () -> Unit,
 ) {
-    when {
-        state.isLoading && state.podcasts.isEmpty() ->
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    // Plan CASTAWAY — „Stažené epizody" musí zůstat dostupné i offline / při chybě načtení podcastů,
+    // proto je chip nad obsahovou částí (ne uvnitř úspěšné větve).
+    Column(Modifier.fillMaxSize()) {
+        if (downloadCount > 0) {
+            AssistChip(
+                onClick = onOpenDownloads,
+                label = { Text("Stažené epizody · $downloadCount") },
+                leadingIcon = { Icon(Icons.Default.DownloadDone, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+        when {
+            state.isLoading && state.podcasts.isEmpty() ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 
-        state.error != null && state.podcasts.isEmpty() -> CenteredMessage(state.error)
+            state.isOffline && state.podcasts.isEmpty() ->
+                CenteredMessage(
+                    if (downloadCount > 0) {
+                        "Offline — online seznam podcastů není dostupný.\nStažené epizody najdeš nahoře."
+                    } else {
+                        "Jsi offline a nemáš žádné stažené epizody."
+                    },
+                )
 
-        else -> Column(Modifier.fillMaxSize()) {
-            if (downloadCount > 0) {
-                AssistChip(
-                    onClick = onOpenDownloads,
-                    label = { Text("Stažené epizody · $downloadCount") },
-                    leadingIcon = { Icon(Icons.Default.DownloadDone, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                )
-            }
-            if (state.podcastLibraries.size > 1) {
-                LibraryChips(
-                    libraries = state.podcastLibraries.map { it.id to it.name },
-                    selectedId = state.selectedPodcastLibraryId,
-                    onSelect = viewModel::selectPodcastLibrary,
-                )
-            }
-            if (state.podcasts.isEmpty() && !state.isLoading) {
-                CenteredMessage("V této knihovně zatím nejsou žádné podcasty.")
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 150.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(state.podcasts, key = { it.id }) { podcast ->
-                        PodcastCard(podcast = podcast, onClick = { onOpenPodcast(podcast.id) })
+            state.error != null && state.podcasts.isEmpty() -> CenteredMessage(state.error)
+
+            else -> {
+                if (state.podcastLibraries.size > 1) {
+                    LibraryChips(
+                        libraries = state.podcastLibraries.map { it.id to it.name },
+                        selectedId = state.selectedPodcastLibraryId,
+                        onSelect = viewModel::selectPodcastLibrary,
+                    )
+                }
+                if (state.podcasts.isEmpty() && !state.isLoading) {
+                    CenteredMessage("V této knihovně zatím nejsou žádné podcasty.")
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 150.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(state.podcasts, key = { it.id }) { podcast ->
+                            PodcastCard(podcast = podcast, onClick = { onOpenPodcast(podcast.id) })
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** Plan CASTAWAY — proužek „Offline", když není síť; vysvětlí, proč jsou vidět jen stažené věci. */
+@Composable
+private fun OfflineBanner() {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            Icons.Default.CloudOff,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            "Offline — zobrazeny jen stažené položky.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

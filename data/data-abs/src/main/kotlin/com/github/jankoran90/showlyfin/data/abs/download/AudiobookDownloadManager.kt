@@ -14,6 +14,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDownload
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadState
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus
 import com.github.jankoran90.showlyfin.data.abs.model.LocalAudiobookTrack
+import com.github.jankoran90.showlyfin.data.abs.model.displayCover
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -81,9 +82,16 @@ class AudiobookDownloadManager @Inject constructor(
     /** Per-kniha stav stažení (UI řádek v detailu). */
     val states = _states.asStateFlow()
 
+    private val _downloads = MutableStateFlow(sortedDownloads())
+    /** Seznam všech stažených audioknih (offline police v Poslechu, Plan CASTAWAY CA-2). */
+    val downloads = _downloads.asStateFlow()
+
     fun stateFor(itemId: String): DownloadState = _states.value[itemId] ?: DownloadState()
 
     fun isDownloaded(itemId: String): Boolean = offlineAudiobookPlayback(itemId) != null
+
+    /** Lokální záznam stažené knihy (pro offline detail), nebo null. */
+    fun downloadRecord(itemId: String): AudiobookDownload? = index[itemId]
 
     /** Spustí stažení celé audioknihy (idempotentně — už stažená/stahující se přeskočí). */
     fun download(itemId: String, title: String, author: String?, coverUrl: String?) {
@@ -96,6 +104,7 @@ class AudiobookDownloadManager @Inject constructor(
                     index[itemId] = dl
                     persistIndex()
                     setState(itemId, DownloadState(DownloadStatus.DOWNLOADED))
+                    refreshDownloads()
                 }
                 .onFailure { e ->
                     Timber.w(e, "[ABS] stažení audioknihy '%s' selhalo", title)
@@ -140,6 +149,10 @@ class AudiobookDownloadManager @Inject constructor(
             doneDur += t.durationSec
             LocalAudiobookTrack(t.index, out.absolutePath, t.startOffsetSec, t.durationSec)
         }
+        // Plan CASTAWAY CA-4 — obal stáhnout lokálně, ať je vidět i offline (best-effort).
+        val localCover = coverUrl?.let {
+            runCatching { downloadCover(it, File(target, "cover.img")) }.getOrNull()
+        }
         AudiobookDownload(
             itemId = itemId,
             title = title,
@@ -149,7 +162,18 @@ class AudiobookDownloadManager @Inject constructor(
             chapters = pb.chapters,
             tracks = local,
             sizeBytes = local.sumOf { File(it.filePath).length() },
+            localCoverPath = localCover,
         )
+    }
+
+    /** Stáhne obal do [out], vrátí absolutní cestu (Plan CASTAWAY CA-4). */
+    private fun downloadCover(url: String, out: File): String {
+        client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+            if (!resp.isSuccessful) error("HTTP ${resp.code}")
+            val body = resp.body ?: error("Prázdná odpověď serveru.")
+            out.outputStream().use { os -> body.byteStream().use { it.copyTo(os) } }
+        }
+        return out.absolutePath
     }
 
     /** Stáhne jeden soubor do [tmp], po dokončení přejmenuje na [out]. [onProgress] = 0..1 pro stopu. */
@@ -190,6 +214,7 @@ class AudiobookDownloadManager @Inject constructor(
         itemDir(itemId).deleteRecursively()
         persistIndex()
         setState(itemId, DownloadState(DownloadStatus.NONE))
+        refreshDownloads()
     }
 
     fun deleteAll() {
@@ -199,6 +224,7 @@ class AudiobookDownloadManager @Inject constructor(
         dir.listFiles()?.forEach { it.deleteRecursively() }
         persistIndex()
         _states.value = emptyMap()
+        refreshDownloads()
     }
 
     /**
@@ -221,7 +247,7 @@ class AudiobookDownloadManager @Inject constructor(
             sessionId = "",
             title = dl.title,
             author = dl.author,
-            coverUrl = dl.coverUrl,
+            coverUrl = dl.displayCover(),
             tracks = tracks,
             startPositionSec = 0.0,
             durationSec = dl.durationSec,
@@ -239,6 +265,13 @@ class AudiobookDownloadManager @Inject constructor(
     private fun setState(id: String, s: DownloadState) {
         _states.update { it + (id to s) }
     }
+
+    private fun refreshDownloads() {
+        _downloads.value = sortedDownloads()
+    }
+
+    private fun sortedDownloads(): List<AudiobookDownload> =
+        index.values.sortedWith(compareBy({ it.author ?: "" }, { it.title }))
 
     private fun itemDir(itemId: String) = File(dir, itemId.replace(Regex("[^A-Za-z0-9_-]"), "_"))
 
