@@ -1,8 +1,11 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -193,6 +196,7 @@ private fun SystemPowerCard(sceneStatus: String?, vm: OvladacViewModel) {
  * CONSOLE (SHW-39): nastavení obrazu a titulků běžícího externího streamu na TV (z telefonu).
  * Posílá se na box přes FERRYCFG kanál; box aplikuje na PlayerView/ExoPlayer. Sbalitelné.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DisplaySettingsCard(state: OvladacViewModel.UiState, vm: OvladacViewModel) {
     var expanded by remember { mutableStateOf(false) }
@@ -232,40 +236,93 @@ private fun DisplaySettingsCard(state: OvladacViewModel.UiState, vm: OvladacView
                 // Pozice (svislý posun).
                 StepperRow("Pozice titulků", "${state.subBottomMarginPct} %", { vm.nudgeSubMargin(-2) }, { vm.nudgeSubMargin(2) })
                 Spacer(Modifier.height(12.dp))
-                // Barva titulků.
-                Text("Barva titulků", style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val swatches = listOf(
-                        0xFFFFFFFF.toInt() to "Bílá",
-                        0xFFFFEB3B.toInt() to "Žlutá",
-                        0xFF00E5FF.toInt() to "Azurová",
-                        0xFF76FF03.toInt() to "Zelená",
-                    )
-                    swatches.forEach { (argb, desc) ->
-                        Box(
-                            Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(androidx.compose.ui.graphics.Color(argb))
-                                .clickable { vm.setSubColor(argb) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (state.subColorArgb == argb) {
-                                Icon(Icons.Filled.Add, desc, Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color.Black)
-                            }
-                        }
-                    }
+                // Barva titulků — 4 uložitelné pozice (tap = použít, dlouhý stisk = přepsat z palety).
+                var pickerForSlot by remember { mutableStateOf(-1) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Barva titulků", style = MaterialTheme.typography.labelLarge)
+                    Text("Dlouhý stisk = upravit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    "Časový posun titulků (sync) zatím jen v přehrávači na telefonu — na TV připravujeme.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    state.subColorSlots.forEachIndexed { i, argb ->
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(androidx.compose.ui.graphics.Color(argb))
+                                .border(
+                                    width = if (state.subColorArgb == argb) 3.dp else 1.dp,
+                                    color = if (state.subColorArgb == argb) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .combinedClickable(
+                                    onClick = { vm.setSubColor(argb) },
+                                    onLongClick = { pickerForSlot = i },
+                                ),
+                        )
+                    }
+                }
+                if (pickerForSlot >= 0) {
+                    ColorPickerDialog(
+                        initial = state.subColorSlots.getOrElse(pickerForSlot) { 0xFFFFFFFF.toInt() },
+                        onDismiss = { pickerForSlot = -1 },
+                        onPick = { argb -> vm.saveColorToSlot(pickerForSlot, argb); pickerForSlot = -1 },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                // Časový posun titulků (sync) — re-timestamp na boxu, krok ±0,1 s.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text("Posun titulků", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (state.subOffsetMs == 0) "synchronní" else "%+.1f s".format(state.subOffsetMs / 1000f),
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalIconButton(onClick = { vm.nudgeSubOffset(-100) }) { Icon(Icons.Filled.Remove, "Titulky dřív") }
+                        TextButton(onClick = { vm.resetSubOffset() }) { Text("0") }
+                        FilledTonalIconButton(onClick = { vm.nudgeSubOffset(100) }) { Icon(Icons.Filled.Add, "Titulky později") }
+                    }
+                }
             }
         }
     }
+}
+
+/** CONSOLE: plný výběr barvy (HSV spektrum) → uloží na zvolenou pozici. */
+@Composable
+private fun ColorPickerDialog(initial: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    val hsv = remember { FloatArray(3).also { android.graphics.Color.colorToHSV(initial, it) } }
+    var hue by remember { mutableFloatStateOf(hsv[0]) }
+    var sat by remember { mutableFloatStateOf(hsv[1]) }
+    var value by remember { mutableFloatStateOf(hsv[2]) }
+    val argb = android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value))
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = { onPick(argb) }) { Text("Uložit") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
+        title = { Text("Barva titulků") },
+        text = {
+            Column {
+                // Náhled.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(androidx.compose.ui.graphics.Color(argb)),
+                )
+                Spacer(Modifier.height(12.dp))
+                Text("Odstín", style = MaterialTheme.typography.labelMedium)
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f)
+                Text("Sytost", style = MaterialTheme.typography.labelMedium)
+                Slider(value = sat, onValueChange = { sat = it }, valueRange = 0f..1f)
+                Text("Jas", style = MaterialTheme.typography.labelMedium)
+                Slider(value = value, onValueChange = { value = it }, valueRange = 0f..1f)
+            }
+        },
+    )
 }
 
 @Composable

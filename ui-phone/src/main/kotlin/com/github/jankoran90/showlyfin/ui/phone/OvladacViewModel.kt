@@ -8,6 +8,12 @@ import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.maestro.AvrController
 import com.github.jankoran90.showlyfin.data.maestro.BoxController
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrBoxHostOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrBoxMacOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrEnabledOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrHostOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrTvHostOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrVolumeStepOrDefault
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -68,6 +74,10 @@ class OvladacViewModel @Inject constructor(
         val subFontSizeSp: Int = 28,
         val subBottomMarginPct: Int = 5,
         val subColorArgb: Int? = null,
+        /** CONSOLE: 4 uživatelsky uložitelné barevné pozice titulků (ARGB). */
+        val subColorSlots: List<Int> = DEFAULT_COLOR_SLOTS,
+        /** CONSOLE: časový posun titulků na TV v ms (− = dřív, + = později). */
+        val subOffsetMs: Int = 0,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -75,6 +85,14 @@ class OvladacViewModel @Inject constructor(
 
     private var pollJob: Job? = null
     private var userSelectedId: String? = null
+
+    init {
+        // CONSOLE: načti uložené barevné pozice titulků (přežijí restart; po fixu revokeToken i Trakt logout).
+        val slots = (0 until 4).map { i ->
+            prefs.getInt("sub_color_slot_$i", DEFAULT_COLOR_SLOTS[i])
+        }
+        _state.update { it.copy(subColorSlots = slots) }
+    }
 
     fun start() {
         if (pollJob?.isActive == true) return
@@ -173,10 +191,10 @@ class OvladacViewModel @Inject constructor(
         fc.tmdbId?.let { ListenNavSignal.requestOpenDetail(it, fc.title) }
     }
 
-    /** Vrátí host AVR pokud je ovládání hlasitosti přes AVR povolené a IP vyplněná, jinak null. */
+    /** Vrátí host AVR pokud je ovládání hlasitosti přes AVR povolené (default zapnuto + předvyplněná IP). */
     private fun avrConfig(): String? {
-        if (!prefs.getBoolean("avr_enabled", false)) return null
-        return prefs.getString("avr_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+        if (!prefs.avrEnabledOrDefault()) return null
+        return prefs.avrHostOrDefault().takeIf { it.isNotBlank() }
     }
 
     private suspend fun refreshAvrOnly(host: String) {
@@ -241,22 +259,18 @@ class OvladacViewModel @Inject constructor(
         }
     }
 
-    private fun boxHost(): String? =
-        prefs.getString("avr_box_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+    private fun boxHost(): String? = prefs.avrBoxHostOrDefault().takeIf { it.isNotBlank() }
 
-    private fun boxMac(): String? =
-        prefs.getString("avr_box_mac", "").orEmpty().trim().takeIf { it.isNotBlank() }
+    private fun boxMac(): String? = prefs.avrBoxMacOrDefault().takeIf { it.isNotBlank() }
 
-    private fun tvHost(): String? =
-        prefs.getString("avr_tv_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+    private fun tvHost(): String? = prefs.avrTvHostOrDefault().takeIf { it.isNotBlank() }
 
     /** Override výchozí hlasitosti po zapnutí; null = ponechat na receiveru (respekt). */
     private fun avrDefaultVolume(): Int? =
         prefs.getString("avr_default_volume", "").orEmpty().trim().toIntOrNull()?.takeIf { it > 0 }
 
     /** Krok hlasitosti +/- (jednotky AVR), default 3. */
-    private fun avrVolumeStepPref(): Int =
-        prefs.getString("avr_volume_step", "").orEmpty().trim().toIntOrNull()?.coerceIn(1, 20) ?: 3
+    private fun avrVolumeStepPref(): Int = prefs.avrVolumeStepOrDefault()
 
     fun playPause() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "PlayPause") }
     fun stopPlayback() {
@@ -357,16 +371,35 @@ class OvladacViewModel @Inject constructor(
         _state.update { it.copy(subColorArgb = argb) }
         sendDisplayConfig(subColorArgb = argb)
     }
+    /** Uloží vybranou barvu na pozici [slot] (0..3), aplikuje ji a zapamatuje napříč restarty. */
+    fun saveColorToSlot(slot: Int, argb: Int) {
+        if (slot !in 0..3) return
+        val slots = _state.value.subColorSlots.toMutableList().also { it[slot] = argb }
+        prefs.edit().putInt("sub_color_slot_$slot", argb).apply()
+        _state.update { it.copy(subColorSlots = slots, subColorArgb = argb) }
+        sendDisplayConfig(subColorArgb = argb)
+    }
+    /** Posun titulků v čase o [deltaMs] (− dřív / + později), rozsah ±10 s, krok obvykle ±100 ms. */
+    fun nudgeSubOffset(deltaMs: Int) {
+        val v = (_state.value.subOffsetMs + deltaMs).coerceIn(-10_000, 10_000)
+        _state.update { it.copy(subOffsetMs = v) }
+        sendDisplayConfig(subOffsetMs = v)
+    }
+    fun resetSubOffset() {
+        _state.update { it.copy(subOffsetMs = 0) }
+        sendDisplayConfig(subOffsetMs = 0)
+    }
 
     private fun sendDisplayConfig(
         resizeMode: String? = null,
         subFontSizeSp: Int? = null,
         subColorArgb: Int? = null,
         subBottomMarginPct: Int? = null,
+        subOffsetMs: Int? = null,
     ) {
         viewModelScope.launch {
             val c = creds() ?: return@launch
-            naTv.castFerryConfig(c.url, c.token, resizeMode, subFontSizeSp, subColorArgb, subBottomMarginPct)
+            naTv.castFerryConfig(c.url, c.token, resizeMode, subFontSizeSp, subColorArgb, subBottomMarginPct, subOffsetMs)
         }
     }
 
@@ -395,5 +428,11 @@ class OvladacViewModel @Inject constructor(
         const val SCENE_RESULT_MS = 3_500L
         const val TICKS_PER_MS = 10_000L
         const val EXTERNAL_TTL_MS = 6 * 60 * 60 * 1000L // 6 h — externí stream může běžet dlouho
+        val DEFAULT_COLOR_SLOTS = listOf(
+            0xFFFFFFFF.toInt(), // bílá
+            0xFFFFEB3B.toInt(), // žlutá
+            0xFF00E5FF.toInt(), // azurová
+            0xFF76FF03.toInt(), // zelená
+        )
     }
 }

@@ -14,6 +14,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrBoxHostOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrBoxMacOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrEnabledOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrHostOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrTvHostOrDefault
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -103,19 +108,15 @@ class NaTvCoordinator @Inject constructor(
         }
 
     private fun isSceneConfigured(): Boolean =
-        prefs.getBoolean("avr_enabled", false) && (avrConfig() != null || boxHost() != null)
+        prefs.avrEnabledOrDefault() && (avrConfig() != null || boxHost() != null)
 
-    private fun avrConfig(): String? =
-        prefs.getString("avr_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+    private fun avrConfig(): String? = prefs.avrHostOrDefault().takeIf { it.isNotBlank() }
 
-    private fun boxHost(): String? =
-        prefs.getString("avr_box_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+    private fun boxHost(): String? = prefs.avrBoxHostOrDefault().takeIf { it.isNotBlank() }
 
-    private fun boxMac(): String? =
-        prefs.getString("avr_box_mac", "").orEmpty().trim().takeIf { it.isNotBlank() }
+    private fun boxMac(): String? = prefs.avrBoxMacOrDefault().takeIf { it.isNotBlank() }
 
-    private fun tvHost(): String? =
-        prefs.getString("avr_tv_host", "").orEmpty().trim().takeIf { it.isNotBlank() }
+    private fun tvHost(): String? = prefs.avrTvHostOrDefault().takeIf { it.isNotBlank() }
 
     private fun avrDefaultVolume(): Int? =
         prefs.getString("avr_default_volume", "").orEmpty().trim().toIntOrNull()?.takeIf { it > 0 }

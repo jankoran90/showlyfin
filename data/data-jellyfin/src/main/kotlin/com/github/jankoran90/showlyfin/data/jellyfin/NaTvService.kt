@@ -402,6 +402,7 @@ class NaTvService @Inject constructor(
         subFontSizeSp: Int? = null,
         subColorArgb: Int? = null,
         subBottomMarginPct: Int? = null,
+        subOffsetMs: Int? = null,
     ): Boolean {
         if (baseUrl.isBlank() || token.isBlank()) return false
         val target = pickWatchSession(getSessions(baseUrl, token)) ?: return false
@@ -410,6 +411,7 @@ class NaTvService @Inject constructor(
             subFontSizeSp?.let { put("subFontSizeSp", it) }
             subColorArgb?.let { put("subColorArgb", it) }
             subBottomMarginPct?.let { put("subBottomMarginPct", it) }
+            subOffsetMs?.let { put("subOffsetMs", it) }
         }
         return sendGeneralCommand(baseUrl, token, target.sessionId, "SendString", mapOf("String" to "FERRYCFG1:$json"))
     }

@@ -58,7 +58,11 @@ internal class TraktTokenProvider(
     }
 
     override fun revokeToken() {
-        sharedPreferences.edit().clear()
+        // POZOR: dřív tu bylo `.clear()`, které smetlo CELÉ traktPreferences — včetně nastavení
+        // „Domácí sestava" (avr_*) a dalších app prefs. Trakt token expiruje ~7 dní → 401 →
+        // TraktAuthenticator zavolá revokeToken() → uživateli zmizela konfigurace AVR a hlasitost
+        // spadla na box. Odhlášení Traktu smí smazat JEN Trakt klíče, nic víc.
+        sharedPreferences.edit()
             .remove(KEY_ACCESS_TOKEN).remove(KEY_REFRESH_TOKEN)
             .remove(KEY_TOKEN_CREATED_AT).remove(KEY_TOKEN_EXPIRES_AT)
             .commit()

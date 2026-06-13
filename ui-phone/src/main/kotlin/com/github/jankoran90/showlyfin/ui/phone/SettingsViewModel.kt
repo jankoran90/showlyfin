@@ -33,6 +33,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrBoxHostOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrBoxMacOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrEnabledOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrHostOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrTvHostOrDefault
+import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrVolumeStepOrDefault
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -283,13 +289,14 @@ class SettingsViewModel @Inject constructor(
             it.copy(
                 liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false),
                 uploaderBaseUrl = uploaderBase,
-                avrEnabled = prefs.getBoolean(KEY_AVR_ENABLED, false),
-                avrHost = prefs.getString(KEY_AVR_HOST, "").orEmpty(),
-                avrBoxHost = prefs.getString(KEY_AVR_BOX_HOST, "").orEmpty(),
-                avrBoxMac = prefs.getString(KEY_AVR_BOX_MAC, "").orEmpty(),
-                avrTvHost = prefs.getString(KEY_AVR_TV_HOST, "").orEmpty(),
+                // Předvyplněné defaulty „Domácí sestava" (MAESTRO mapa) — user je vidí vyplněné a může editovat.
+                avrEnabled = prefs.avrEnabledOrDefault(),
+                avrHost = prefs.avrHostOrDefault(),
+                avrBoxHost = prefs.avrBoxHostOrDefault(),
+                avrBoxMac = prefs.avrBoxMacOrDefault(),
+                avrTvHost = prefs.avrTvHostOrDefault(),
                 avrDefaultVolume = prefs.getString(KEY_AVR_DEFAULT_VOLUME, "").orEmpty(),
-                avrVolumeStep = prefs.getString(KEY_AVR_VOLUME_STEP, "").orEmpty(),
+                avrVolumeStep = prefs.avrVolumeStepOrDefault().toString(),
             )
         }
         refreshAbsState()
