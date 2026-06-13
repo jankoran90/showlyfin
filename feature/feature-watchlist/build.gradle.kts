@@ -24,6 +24,7 @@ dependencies {
     implementation(project(":data:data-tmdb"))
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-uploader"))
+    implementation(project(":data:data-csfd"))
     implementation(libs.jellyfin.sdk)
     implementation(libs.hilt.android)
     implementation(libs.timber)

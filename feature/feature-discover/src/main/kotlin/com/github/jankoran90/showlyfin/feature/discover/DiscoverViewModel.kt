@@ -57,8 +57,12 @@ class DiscoverViewModel @Inject constructor(
     private var rdMatchJob: Job? = null
 
     init {
-        _uiState.update { it.copy(isTraktLoggedIn = tokenProvider.getToken() != null) }
-        load(DiscoverTab.MOVIES, DiscoverFilter.TRENDING)
+        val loggedIn = tokenProvider.getToken() != null
+        // VISTA V2a: výchozí filtr = Doporučené (vyžaduje Trakt); bez přihlášení padni na Trending,
+        // ať se na startu neukáže zámek místo obsahu.
+        val initialFilter = if (loggedIn) DiscoverFilter.RECOMMENDED else DiscoverFilter.TRENDING
+        _uiState.update { it.copy(isTraktLoggedIn = loggedIn, activeFilter = initialFilter) }
+        load(DiscoverTab.MOVIES, initialFilter)
         loadFilterContext()
         parentalControlsRepository.profile
             .onEach { profile ->

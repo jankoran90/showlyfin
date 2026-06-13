@@ -16,6 +16,7 @@ import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
 import com.github.jankoran90.showlyfin.feature.watchlist.mapper.toMovieMediaItem
 import com.github.jankoran90.showlyfin.feature.watchlist.mapper.toShowMediaItem
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -39,6 +40,8 @@ data class HistoryUiState(
     val isLoading: Boolean = false,
     val view: HistoryView = HistoryView.RECENT,
     val items: List<MediaItem> = emptyList(),
+    /** VISTA V1 — je k dispozici další blok pod aktuálním oknem (tlačítko „načíst dalších 20"). */
+    val hasMore: Boolean = false,
     val searchQuery: String = "",
     val error: String? = null,
     val imdbToJellyfin: Map<String, String> = emptyMap(),
@@ -63,8 +66,17 @@ class HistoryViewModel @Inject constructor(
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
-    /** Položka + čas posledního zhlédnutí (epoch ms) pro řazení pohledu „Naposledy". */
+    /**
+     * VISTA V1 — surová (NEobohacená) historie: položka + čas posledního zhlédnutí (epoch ms).
+     * Titul/rok jsou z Traktu hned; TMDB enrichment (poster/CZ překlad) probíhá líně jen pro
+     * viditelné okno (níž). Dřív se obohacovala CELÁ historie (1146+ × 2 TMDB volání) před zobrazením.
+     */
     private var raw: List<Pair<MediaItem, Long>> = emptyList()
+    /** Cache obohacených položek podle traktId (base garantuje traktId != 0). */
+    private val enrichedCache = mutableMapOf<Long, MediaItem>()
+    /** Kolik položek aktuálního filtrovaného+seřazeného seznamu je viditelných (okno). */
+    private var visibleCount: Int = PAGE
+    private var enrichJob: Job? = null
     private var lockedRating: AgeRating? = null
 
     private val _uiState = MutableStateFlow(HistoryUiState())
@@ -93,12 +105,21 @@ class HistoryViewModel @Inject constructor(
     fun selectView(view: HistoryView) {
         if (view == _uiState.value.view) return
         _uiState.update { it.copy(view = view) }
-        reapply()
+        resetWindow()
     }
 
     fun setSearchQuery(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
+        resetWindow()
+    }
+
+    /** VISTA V1 — rozbalit další blok historie (PAGE položek) + obohatit jeho okno. */
+    fun loadMore() {
+        val total = filteredSorted().size
+        if (visibleCount >= total) return
+        visibleCount = (visibleCount + PAGE).coerceAtMost(total)
         reapply()
+        enrichVisible()
     }
 
     private fun load() {
@@ -110,48 +131,77 @@ class HistoryViewModel @Inject constructor(
                     val s = async { authorizedTraktApi.fetchSyncWatchedShows() }
                     m.await() to s.await()
                 }
-                val base = (
+                // VISTA V1: jen surová data (titul/rok z Traktu) — žádné TMDB obohacení tady.
+                raw = (
                     movies.map { it.toMovieMediaItem() to it.lastWatchedMillis() } +
                         shows.map { it.toShowMediaItem() to it.lastWatchedMillis() }
                     ).filter { it.first.traktId != 0L }
-
-                val enriched = coroutineScope {
-                    base.map { (item, ts) ->
-                        async {
-                            val tmdbId = item.tmdbId ?: return@async item to ts
-                            if (item.type == MediaType.MOVIE) {
-                                val details = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
-                                val translation = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
-                                val d = details.await()
-                                val t = translation.await()
-                                item.copy(
-                                    posterPath = d?.poster_path,
-                                    backdropPath = d?.backdrop_path,
-                                    titleCz = t?.title?.takeIf { s -> s.isNotBlank() },
-                                    overviewCz = t?.overview?.takeIf { s -> s.isNotBlank() },
-                                ) to ts
-                            } else {
-                                val details = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
-                                val translation = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
-                                val d = details.await()
-                                val t = translation.await()
-                                item.copy(
-                                    posterPath = d?.poster_path,
-                                    backdropPath = d?.backdrop_path,
-                                    titleCz = t?.name?.takeIf { s -> s.isNotBlank() },
-                                    overviewCz = t?.overview?.takeIf { s -> s.isNotBlank() },
-                                ) to ts
-                            }
-                        }
-                    }.awaitAll()
-                }
-                raw = enriched
-                reapply()
+                enrichedCache.clear()
                 _uiState.update { it.copy(isLoading = false) }
+                resetWindow()
             } catch (e: Throwable) {
                 Timber.w(e, "[History] načtení historie selhalo")
                 _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba načítání") }
             }
+        }
+    }
+
+    /**
+     * VISTA V1 — nastaví počáteční okno podle pohledu: RECENT = vše z posledních [RECENT_DAYS] dní
+     * (min. [PAGE]), ALL = první [PAGE]. Pak hned vykreslí (titulky) a líně obohatí okno.
+     */
+    private fun resetWindow() {
+        val sorted = filteredSorted()
+        val initial = when (_uiState.value.view) {
+            HistoryView.RECENT -> {
+                val cutoff = System.currentTimeMillis() - RECENT_WINDOW_MS
+                maxOf(sorted.count { it.second >= cutoff }, PAGE)
+            }
+            HistoryView.ALL -> PAGE
+        }
+        visibleCount = initial.coerceAtMost(sorted.size)
+        reapply()
+        enrichVisible()
+    }
+
+    /** Líně obohatí (poster/CZ překlad z TMDB) jen položky aktuálního okna, které ještě nejsou v cache. */
+    private fun enrichVisible() {
+        enrichJob?.cancel()
+        enrichJob = viewModelScope.launch {
+            val window = filteredSorted().take(visibleCount).map { it.first }
+            val toEnrich = window.filter { it.traktId !in enrichedCache && it.tmdbId != null }
+            if (toEnrich.isEmpty()) return@launch
+            coroutineScope {
+                toEnrich.map { item -> async { enrichedCache[item.traktId] = enrich(item) } }.awaitAll()
+            }
+            reapply()
+        }
+    }
+
+    private suspend fun enrich(item: MediaItem): MediaItem = coroutineScope {
+        val tmdbId = item.tmdbId ?: return@coroutineScope item
+        if (item.type == MediaType.MOVIE) {
+            val details = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
+            val translation = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
+            val d = details.await()
+            val t = translation.await()
+            item.copy(
+                posterPath = d?.poster_path,
+                backdropPath = d?.backdrop_path,
+                titleCz = t?.title?.takeIf { s -> s.isNotBlank() },
+                overviewCz = t?.overview?.takeIf { s -> s.isNotBlank() },
+            )
+        } else {
+            val details = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
+            val translation = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
+            val d = details.await()
+            val t = translation.await()
+            item.copy(
+                posterPath = d?.poster_path,
+                backdropPath = d?.backdrop_path,
+                titleCz = t?.name?.takeIf { s -> s.isNotBlank() },
+                overviewCz = t?.overview?.takeIf { s -> s.isNotBlank() },
+            )
         }
     }
 
@@ -172,7 +222,8 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
-    private fun reapply() {
+    /** Filtr (zámek + žánry profilu + hledání) a řazení dle pohledu — nad celým surovým seznamem. */
+    private fun filteredSorted(): List<Pair<MediaItem, Long>> {
         val state = _uiState.value
         var list = applyLock(raw)
         val cfg = profileRepository.activeConfig.value
@@ -182,11 +233,18 @@ class HistoryViewModel @Inject constructor(
         if (state.searchQuery.isNotBlank()) {
             list = list.filter { it.first.matchesQuery(state.searchQuery) }
         }
-        val sorted = when (state.view) {
+        return when (state.view) {
             HistoryView.RECENT -> list.sortedByDescending { it.second }
             HistoryView.ALL -> list.sortedBy { it.first.title.lowercase() }
         }
-        _uiState.update { it.copy(items = sorted.map { p -> p.first }) }
+    }
+
+    /** Vykreslí jen aktuální okno (mapuje na obohacenou variantu z cache, jinak surovou položku). */
+    private fun reapply() {
+        val sorted = filteredSorted()
+        val count = visibleCount.coerceAtMost(sorted.size)
+        val window = sorted.take(count).map { (item, _) -> enrichedCache[item.traktId] ?: item }
+        _uiState.update { it.copy(items = window, hasMore = sorted.size > count) }
     }
 
     private fun applyLock(items: List<Pair<MediaItem, Long>>): List<Pair<MediaItem, Long>> {
@@ -204,6 +262,10 @@ class HistoryViewModel @Inject constructor(
     }
 
     companion object {
+        /** VISTA V1 — velikost bloku „načíst dalších N". */
+        private const val PAGE = 20
+        /** VISTA V1 — okno „Naposledy": vše z posledních 90 dní se ukáže hned. */
+        private const val RECENT_WINDOW_MS = 90L * 24 * 60 * 60 * 1000
         private val CHILDREN_ALLOWED = setOf("family", "animation", "rodinné", "rodinný", "animovaný", "animovaný film", "kids", "children", "dětský")
         private val FAMILY_BLOCKED = setOf("horror", "horor", "thriller", "war", "válečný", "erotic", "erotika")
         private val ADULT = setOf("horror", "horor", "erotic", "erotika", "adult")

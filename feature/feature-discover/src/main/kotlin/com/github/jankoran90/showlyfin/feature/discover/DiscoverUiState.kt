@@ -2,7 +2,8 @@ package com.github.jankoran90.showlyfin.feature.discover
 
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 
-enum class DiscoverFilter { TRENDING, POPULAR, ANTICIPATED, RECOMMENDED }
+// VISTA V2a — pořadí enumu = pořadí chipů v Objevit (DiscoverFilter.entries). Doporučené první.
+enum class DiscoverFilter { RECOMMENDED, TRENDING, POPULAR, ANTICIPATED }
 enum class DiscoverTab { MOVIES, SHOWS }
 
 data class DiscoverUiState(
@@ -11,7 +12,7 @@ data class DiscoverUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val activeTab: DiscoverTab = DiscoverTab.MOVIES,
-    val activeFilter: DiscoverFilter = DiscoverFilter.TRENDING,
+    val activeFilter: DiscoverFilter = DiscoverFilter.RECOMMENDED,
     val searchQuery: String = "",
     val searchResults: List<MediaItem> = emptyList(),
     val rawSearchResults: List<MediaItem> = emptyList(),

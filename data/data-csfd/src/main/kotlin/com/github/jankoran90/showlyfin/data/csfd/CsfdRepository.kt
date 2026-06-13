@@ -95,6 +95,34 @@ class CsfdRepository @Inject constructor(
         plot
     }
 
+    /**
+     * VISTA V3 — ČSFD hodnocení (0–100 %) pro řádek „Chci vidět". Resolve csfdId (Wikidata/cache) →
+     * scrape hodnocení, vše s prefs cache (TTL jako plot). Volá se LÍNĚ jen pro viditelné řádky.
+     * Vrací null, když se nepodařilo zjistit (necachuje se neúspěch → příště zkusí znovu).
+     */
+    suspend fun getRating(imdbId: String, tmdbId: Long? = null, title: String = "", year: Int = 0): Int? =
+        withContext(Dispatchers.IO) {
+            val csfdId = getCsfdId(imdbId, tmdbId, title, year) ?: return@withContext null
+            getRatingById(csfdId)
+        }
+
+    suspend fun getRatingById(csfdId: Long): Int? = withContext(Dispatchers.IO) {
+        val cacheKey = "CSFD_RATING_$csfdId"
+        val cachedAt = prefs.getLong("CSFD_RATING_AT_$csfdId", 0L)
+        if (System.currentTimeMillis() - cachedAt < TTL_PLOT_MS) {
+            val cached = prefs.getInt(cacheKey, -1)
+            if (cached >= 0) return@withContext cached
+        }
+        val rating = scraper.scrapeRating(csfdId)
+        if (rating != null) {
+            prefs.edit {
+                putInt(cacheKey, rating)
+                putLong("CSFD_RATING_AT_$csfdId", System.currentTimeMillis())
+            }
+        }
+        rating
+    }
+
     fun setOverrideCsfdId(imdbId: String, csfdId: Long) {
         prefs.edit {
             putLong("CSFD_OVERRIDE_$imdbId", csfdId)

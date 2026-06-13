@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.matchesQuery
+import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
@@ -41,12 +42,21 @@ class WatchlistViewModel @Inject constructor(
     private val jellyfinLibraryService: JellyfinLibraryService,
     private val uploaderDs: UploaderRemoteDataSource,
     private val profileRepository: ProfileRepository,
+    private val csfdRepository: CsfdRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _rawItems = MutableStateFlow<List<MediaItem>>(emptyList())
     private var lockedRating: AgeRating? = null
     private var rdMatchJob: kotlinx.coroutines.Job? = null
+
+    /** VISTA V3 — čas přidání na watchlist (Trakt `listed_at`) podle traktId → řazení „Naposledy přidané". */
+    private var listedAtMap: Map<Long, Long> = emptyMap()
+
+    /** VISTA V3 — líně načtené ČSFD hodnocení (0–100 %) podle traktId pro řádky „Chci vidět". */
+    private val _csfdRatings = MutableStateFlow<Map<Long, Int?>>(emptyMap())
+    val csfdRatings: StateFlow<Map<Long, Int?>> = _csfdRatings.asStateFlow()
+    private val csfdInFlight = mutableSetOf<Long>()
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
@@ -167,14 +177,39 @@ class WatchlistViewModel @Inject constructor(
         if (_uiState.value.isLoggedIn) load(_uiState.value.activeTab)
     }
 
+    /**
+     * VISTA V3 — líně načti ČSFD hodnocení pro JEDEN řádek (volá řádek při zobrazení). Drahé
+     * (Wikidata + ČSFD scrape/PoW) → jen viditelné řádky, výsledek (i null) se nezahazuje, aby se
+     * neopakoval scrape. Cache uvnitř `CsfdRepository` (prefs TTL) drží i mezi sezeními.
+     */
+    fun loadCsfdRating(item: MediaItem) {
+        val key = item.traktId
+        if (_csfdRatings.value.containsKey(key) || key in csfdInFlight) return
+        csfdInFlight += key
+        viewModelScope.launch {
+            val rating = runCatching {
+                csfdRepository.getRating(item.imdbId ?: "", item.tmdbId, item.title, item.year ?: 0)
+            }.getOrNull()
+            _csfdRatings.update { it + (key to rating) }
+            csfdInFlight -= key
+        }
+    }
+
     private fun load(tab: WatchlistTab) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val rawItems = if (tab == WatchlistTab.MOVIES) {
-                    authorizedTraktApi.fetchSyncMoviesWatchlist().map { it.toMovieMediaItem() }
+                val syncItems = if (tab == WatchlistTab.MOVIES) {
+                    authorizedTraktApi.fetchSyncMoviesWatchlist()
                 } else {
-                    authorizedTraktApi.fetchSyncShowsWatchlist().map { it.toShowMediaItem() }
+                    authorizedTraktApi.fetchSyncShowsWatchlist()
+                }
+                // VISTA V3: zachyť čas přidání (listed_at) pro řazení „Naposledy přidané".
+                listedAtMap = syncItems.mapNotNull { si ->
+                    si.getTraktId()?.let { it to si.lastListedMillis() }
+                }.toMap()
+                val rawItems = syncItems.map {
+                    if (tab == WatchlistTab.MOVIES) it.toMovieMediaItem() else it.toShowMediaItem()
                 }
                 val enriched = coroutineScope {
                     rawItems.map { item ->
@@ -288,7 +323,8 @@ class WatchlistViewModel @Inject constructor(
             result = result.filter { it.matchesQuery(query) }
         }
         result = when (sort) {
-            WatchlistSort.DEFAULT -> result
+            // VISTA V3: „Naposledy přidané" = sestupně podle Trakt listed_at (dřív bez řazení).
+            WatchlistSort.DEFAULT -> result.sortedByDescending { listedAtMap[it.traktId] ?: 0L }
             WatchlistSort.TITLE -> result.sortedBy { it.title.lowercase() }
             WatchlistSort.YEAR_DESC -> result.sortedByDescending { it.year ?: Int.MIN_VALUE }
             WatchlistSort.YEAR_ASC -> result.sortedBy { it.year ?: Int.MAX_VALUE }
