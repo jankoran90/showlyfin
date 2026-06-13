@@ -104,7 +104,7 @@ class DetailViewModel @Inject constructor(
                 isLoadingStreams = false,
                 streams = emptyList(),
                 // SIEVE S3: připomeň zdroj, který pro tenhle film posledně fungoval (pin v pickeru).
-                rememberedSource = workingSourceStore.get(item.imdbId)?.stream,
+                rememberedSource = workingSourceStore.get(item.imdbId, item.tmdbId)?.stream,
                 pendingWorkingConfirm = null,
                 streamError = null,
                 isResolvingStream = false,
@@ -394,7 +394,7 @@ class DetailViewModel @Inject constructor(
         val stream = st.pendingWorkingConfirm ?: return
         val imdb = st.item?.imdbId
         val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
-        workingSourceStore.save(imdb, title, stream)
+        workingSourceStore.save(imdb, st.item?.tmdbId, title, stream)
         _uiState.update { it.copy(rememberedSource = stream, pendingWorkingConfirm = null) }
     }
 
@@ -403,7 +403,7 @@ class DetailViewModel @Inject constructor(
 
     /** Zapomenout připnutý fungující zdroj (zdroj přestal fungovat / chce vybrat jiný). */
     fun forgetWorkingSource() {
-        workingSourceStore.clear(_uiState.value.item?.imdbId)
+        workingSourceStore.clear(_uiState.value.item?.imdbId, _uiState.value.item?.tmdbId)
         _uiState.update { it.copy(rememberedSource = null) }
     }
 

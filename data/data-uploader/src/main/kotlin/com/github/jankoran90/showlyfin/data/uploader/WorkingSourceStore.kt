@@ -1,23 +1,32 @@
 package com.github.jankoran90.showlyfin.data.uploader
 
-import android.content.SharedPreferences
+import android.content.Context
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import com.google.gson.Gson
+import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import javax.inject.Inject
-import javax.inject.Named
 import javax.inject.Singleton
 
 /**
  * Plan SIEVE (SHW-38, S2): paměť zdroje, který pro daný film reálně fungoval.
  *
- * Když uživatel po pár minutách potvrdí „tohle sedí 👍", uložíme přesně ten Stremio/RD zdroj
- * (klíč = imdbId filmu). Příště ho Detail připne nahoru pickeru jako „⭐ Naposledy fungovalo"
- * a nabídne 1-tap přehrání / poslání na TV (FERRY) — bez opětovného tápání mezi necachovanými
- * torrenty a ukázkami. Persistujeme do kanonických `traktPreferences` (stejné jako ostatní stav).
+ * Když uživatel po pár minutách potvrdí „tohle sedí 👍", uložíme přesně ten Stremio/RD zdroj.
+ * Příště ho Detail připne nahoru pickeru jako „⭐ Naposledy fungovalo" a nabídne 1-tap přehrání /
+ * poslání na TV (FERRY).
+ *
+ * KLÍČOVÁNÍ (root cause 2026-06-13, device log): primárně podle **tmdbId**, protože to je k dispozici
+ * VŽDY — při ukládání i při studeném načtení detailu. `imdbId` se u položek z doporučení/TMDB dohledá
+ * až o chvíli později (`load()` četl `get("")` → nic), kdežto uložení proběhlo později s imdb už
+ * dohledaným → klíče se rozešly a paměť „mizela" po restartu. tmdb klíč to spojí; imdb je sekundární.
+ *
+ * ÚLOŽIŠTĚ: **vlastní** SharedPreferences soubor (`sieve_working_sources`), NE sdílené `trakt_prefs` —
+ * `TraktTokenProvider.revokeToken()` dělá `edit().clear()`, který by jinak při odhlášení Traktu smetl
+ * i naši paměť.
  */
 data class WorkingSource(
     val imdb: String = "",
+    val tmdb: Long = 0L,
     val title: String = "",
     val stream: UploaderStream = UploaderStream(),
     val savedAtMs: Long = 0L,
@@ -25,38 +34,55 @@ data class WorkingSource(
 
 @Singleton
 class WorkingSourceStore @Inject constructor(
-    @Named("traktPreferences") private val prefs: SharedPreferences,
+    @ApplicationContext context: Context,
     private val gson: Gson,
 ) {
-    private fun key(imdb: String) = "sieve_working_$imdb"
+    private val prefs = context.getSharedPreferences("sieve_working_sources", Context.MODE_PRIVATE)
 
-    fun get(imdb: String?): WorkingSource? {
-        if (imdb.isNullOrBlank()) return null
-        val raw = prefs.getString(key(imdb), null)
-        if (raw == null) {
-            Timber.i("[SIEVE] get %s → nic uloženého", imdb)
-            return null
-        }
+    private fun imdbKey(imdb: String) = "sieve_working_$imdb"
+    private fun tmdbKey(tmdb: Long) = "sieve_working_tmdb_$tmdb"
+
+    private fun parse(raw: String?, where: String): WorkingSource? {
+        if (raw == null) return null
         val rec = runCatching { gson.fromJson(raw, WorkingSource::class.java) }
-            .onFailure { Timber.w(it, "[SIEVE] parse working source failed for $imdb") }
+            .onFailure { Timber.w(it, "[SIEVE] parse working source failed ($where)") }
             .getOrNull()
         val s = rec?.stream
         val hasId = s != null && (s.cometPath != null || s.infoHash != null || !s.url.isNullOrBlank())
-        Timber.i("[SIEVE] get %s → raw=%dB parsed=%b hasId=%b name=%s", imdb, raw.length, rec != null, hasId, s?.name ?: s?.description ?: "?")
+        Timber.i("[SIEVE] get %s → raw=%dB parsed=%b hasId=%b", where, raw.length, rec != null, hasId)
         return if (hasId) rec else null
     }
 
-    fun save(imdb: String?, title: String, stream: UploaderStream) {
-        if (imdb.isNullOrBlank()) return
-        val record = WorkingSource(imdb = imdb, title = title, stream = stream, savedAtMs = System.currentTimeMillis())
-        // commit() (synchronně) místo apply() — kritická uživatelská akce, ať se zaručeně zapíše na
-        // disk dřív, než appku případně zabije/aktualizuje (paměť MUSÍ přežít restart i update).
-        val ok = prefs.edit().putString(key(imdb), gson.toJson(record)).commit()
-        Timber.i("[SIEVE] uložen fungující zdroj pro %s (%s) commit=%b", imdb, stream.name ?: stream.description ?: "?", ok)
+    /** Načte uložený zdroj — zkusí tmdb klíč (spolehlivý při studeném startu), pak imdb. */
+    fun get(imdb: String?, tmdb: Long?): WorkingSource? {
+        if (tmdb != null && tmdb > 0L) {
+            parse(prefs.getString(tmdbKey(tmdb), null), "tmdb=$tmdb")?.let { return it }
+        }
+        if (!imdb.isNullOrBlank()) {
+            parse(prefs.getString(imdbKey(imdb), null), "imdb=$imdb")?.let { return it }
+        }
+        return null
     }
 
-    fun clear(imdb: String?) {
-        if (imdb.isNullOrBlank()) return
-        prefs.edit().remove(key(imdb)).apply()
+    fun save(imdb: String?, tmdb: Long?, title: String, stream: UploaderStream) {
+        if (imdb.isNullOrBlank() && (tmdb == null || tmdb <= 0L)) return
+        val record = WorkingSource(
+            imdb = imdb.orEmpty(), tmdb = tmdb ?: 0L, title = title, stream = stream,
+            savedAtMs = System.currentTimeMillis(),
+        )
+        val json = gson.toJson(record)
+        // commit() (synchronně) — kritická akce, ať se zaručeně zapíše dřív, než appku zabije/aktualizuje.
+        val ok = prefs.edit().apply {
+            if (tmdb != null && tmdb > 0L) putString(tmdbKey(tmdb), json)
+            if (!imdb.isNullOrBlank()) putString(imdbKey(imdb), json)
+        }.commit()
+        Timber.i("[SIEVE] uložen zdroj imdb=%s tmdb=%s (%s) commit=%b", imdb, tmdb, stream.name ?: stream.description ?: "?", ok)
+    }
+
+    fun clear(imdb: String?, tmdb: Long?) {
+        prefs.edit().apply {
+            if (tmdb != null && tmdb > 0L) remove(tmdbKey(tmdb))
+            if (!imdb.isNullOrBlank()) remove(imdbKey(imdb))
+        }.apply()
     }
 }
