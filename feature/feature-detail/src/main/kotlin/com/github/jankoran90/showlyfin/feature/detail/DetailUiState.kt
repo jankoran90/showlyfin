@@ -76,6 +76,11 @@ data class DetailUiState(
     val isCastingToTv: Boolean = false,
     val castToTvResult: com.github.jankoran90.showlyfin.data.jellyfin.CastResult? = null,
     val streamStrict: Boolean = true,   // "Přesné hledání" vs "Vše" (per-search)
+    // Plan SIEVE (SHW-38): paměť fungujícího zdroje.
+    // rememberedSource = uložený „naposledy fungovalo" pro tento film (pin v pickeru, S3).
+    // pendingWorkingConfirm = stream, který se právě přehrál a nabízíme „Tohle sedí? 👍" (S2).
+    val rememberedSource: com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream? = null,
+    val pendingWorkingConfirm: com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream? = null,
     val showDownloadMenu: Boolean = false,
     val showSdilejPicker: Boolean = false,
     val isLoadingSdilej: Boolean = false,

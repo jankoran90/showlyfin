@@ -49,6 +49,7 @@ class DetailViewModel @Inject constructor(
     private val tokenProvider: TokenProvider,
     private val uploaderDs: UploaderRemoteDataSource,
     private val naTv: NaTvService,
+    private val workingSourceStore: com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -102,6 +103,9 @@ class DetailViewModel @Inject constructor(
                 showStreamPicker = false,
                 isLoadingStreams = false,
                 streams = emptyList(),
+                // SIEVE S3: připomeň zdroj, který pro tenhle film posledně fungoval (pin v pickeru).
+                rememberedSource = workingSourceStore.get(item.imdbId)?.stream,
+                pendingWorkingConfirm = null,
                 streamError = null,
                 isResolvingStream = false,
                 showDownloadMenu = false,
@@ -376,6 +380,33 @@ class DetailViewModel @Inject constructor(
 
     fun dismissStreamPicker() = _uiState.update { it.copy(showStreamPicker = false) }
 
+    // Plan SIEVE (SHW-38) S2 — paměť fungujícího zdroje.
+    private fun sameSource(a: UploaderStream?, b: UploaderStream?): Boolean {
+        if (a == null || b == null) return false
+        val ka = a.cometPath ?: a.infoHash ?: a.url
+        val kb = b.cometPath ?: b.infoHash ?: b.url
+        return ka != null && ka == kb
+    }
+
+    /** Uživatel potvrdil „tohle sedí 👍" → ulož zdroj jako fungující pro tento film + připni ho. */
+    fun confirmWorkingSource() {
+        val st = _uiState.value
+        val stream = st.pendingWorkingConfirm ?: return
+        val imdb = st.item?.imdbId
+        val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
+        workingSourceStore.save(imdb, title, stream)
+        _uiState.update { it.copy(rememberedSource = stream, pendingWorkingConfirm = null) }
+    }
+
+    /** Skryj nabídku „tohle sedí?" (uživatel ji odmítl nebo to byl špatný zdroj). */
+    fun dismissWorkingConfirm() = _uiState.update { it.copy(pendingWorkingConfirm = null) }
+
+    /** Zapomenout připnutý fungující zdroj (zdroj přestal fungovat / chce vybrat jiný). */
+    fun forgetWorkingSource() {
+        workingSourceStore.clear(_uiState.value.item?.imdbId)
+        _uiState.update { it.copy(rememberedSource = null) }
+    }
+
     /** Plan FERRY (SHW-37): zvolený stream pošli na TV (yellyfin) místo lokálního přehrání. */
     fun castStreamToTv(stream: UploaderStream) = playStream(stream, CastTarget.TV)
 
@@ -383,6 +414,11 @@ class DetailViewModel @Inject constructor(
     fun playStream(stream: UploaderStream, target: CastTarget = CastTarget.LOCAL) {
         if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
         lastPlayedStream = stream   // CASCADE Fáze 4: zapamatuj pro případný auto-advance po chybě přehrávání
+        // SIEVE S2: po lokálním přehrání nabídneme „tohle sedí? 👍" (po návratu na Detail), ať si
+        // appka zapamatuje, který zdroj reálně fungoval. Nenabízíme u zdroje, který už je uložený.
+        if (target == CastTarget.LOCAL && !sameSource(stream, _uiState.value.rememberedSource)) {
+            _uiState.update { it.copy(pendingWorkingConfirm = stream) }
+        }
         val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: _uiState.value.item?.title.orEmpty()
         // CZ titulky query (Fáze E): orig+cz název, rok, runtime, release+fps zvoleného streamu.

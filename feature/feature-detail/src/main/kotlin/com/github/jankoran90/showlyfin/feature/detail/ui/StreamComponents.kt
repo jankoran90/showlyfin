@@ -16,8 +16,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -194,6 +196,52 @@ internal fun StreamRow(
     }
 }
 
+// SIEVE S3: zvýrazněný „naposledy fungovalo" zdroj nahoře pickeru.
+@Composable
+private fun RememberedSourceRow(
+    stream: UploaderStream,
+    toTv: Boolean,
+    onPlay: () -> Unit,
+    onForget: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+            .clickable(onClick = onPlay)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF5A623), modifier = Modifier.height(22.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Naposledy fungovalo",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            val name = (stream.description?.takeIf { looksLikeRelease(it) } ?: stream.name ?: stream.description)
+                ?.replace("\n", " ")?.trim()?.ifBlank { null } ?: "Uložený zdroj"
+            Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val badge = qualityBadge(stream.quality)
+            if (badge.isNotBlank()) {
+                Text(badge, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Icon(
+            if (toTv) Icons.Default.Tv else Icons.Default.PlayArrow,
+            contentDescription = if (toTv) "Přehrát na TV" else "Přehrát",
+        )
+        Icon(
+            Icons.Default.Close,
+            contentDescription = "Zapomenout zdroj",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.height(20.dp).clickable(onClick = onForget),
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun StreamPickerSheet(
@@ -209,6 +257,8 @@ internal fun StreamPickerSheet(
     onCastToTv: (UploaderStream) -> Unit = {},
     isCasting: Boolean = false,
     runtimeMin: Int? = null,
+    rememberedSource: UploaderStream? = null,
+    onForgetRemembered: () -> Unit = {},
 ) {
     // Plan FERRY (SHW-37): cíl přehrání — telefon (lokální MPV) nebo TV (yellyfin). Per-otevření.
     var toTv by remember { mutableStateOf(false) }
@@ -239,6 +289,16 @@ internal fun StreamPickerSheet(
                 label = { Text("Na TV") },
                 leadingIcon = { Icon(Icons.Default.Tv, contentDescription = null, Modifier.height(18.dp)) },
             )
+        }
+        // SIEVE S3: připnutý zdroj, který pro tenhle film naposledy fungoval — 1-tap přehrát / na TV.
+        rememberedSource?.let { rs ->
+            RememberedSourceRow(
+                stream = rs,
+                toTv = toTv,
+                onPlay = { if (!busy) { if (toTv) onCastToTv(rs) else onPlay(rs) } },
+                onForget = onForgetRemembered,
+            )
+            HorizontalDivider()
         }
         when {
             isLoading -> SheetCenter { CircularProgressIndicator() }

@@ -47,7 +47,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -173,6 +175,19 @@ fun DetailScreen(
             onCastToTv = { viewModel.castStreamToTv(it) },
             isCasting = uiState.isCastingToTv,
             runtimeMin = uiState.movieDetails?.runtime,
+            rememberedSource = uiState.rememberedSource,
+            onForgetRemembered = { viewModel.forgetWorkingSource() },
+        )
+    }
+    // SIEVE S2: po lokálním přehrání Stremio zdroje se zeptej, jestli sedl → zapamatuj fungující zdroj.
+    uiState.pendingWorkingConfirm?.let { stream ->
+        val srcName = (stream.name ?: stream.description)?.replace("\n", " ")?.trim()?.ifBlank { null } ?: "tento zdroj"
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissWorkingConfirm() },
+            title = { Text("Fungoval tenhle zdroj?") },
+            text = { Text("Byl to správný film? Zapamatuju si ho a příště ti ho u tohoto filmu nabídnu rovnou nahoře — i pro přehrání na TV.\n\n$srcName") },
+            confirmButton = { TextButton(onClick = { viewModel.confirmWorkingSource() }) { Text("Ano, zapamatovat ⭐") } },
+            dismissButton = { TextButton(onClick = { viewModel.dismissWorkingConfirm() }) { Text("Ne") } },
         )
     }
     if (uiState.showDownloadMenu) {
