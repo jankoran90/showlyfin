@@ -172,6 +172,7 @@ fun DetailScreen(
             isProbing = uiState.isProbingStreams,
             onCastToTv = { viewModel.castStreamToTv(it) },
             isCasting = uiState.isCastingToTv,
+            runtimeMin = uiState.movieDetails?.runtime,
         )
     }
     if (uiState.showDownloadMenu) {

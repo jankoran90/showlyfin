@@ -51,6 +51,38 @@ private val RELEASE_HINT = Regex(
 )
 internal fun looksLikeRelease(s: String): Boolean = s.isNotBlank() && RELEASE_HINT.containsMatchIn(s)
 
+// Plan SIEVE (SHW-38, S1): zdravost zdroje pro picker.
+//  READY    = cachované na RD → hraje hned (✅)
+//  DOWNLOAD = legit film, ale necachované → RD musí stáhnout (⏬, tvůj případ „dlouhé čekání")
+//  SUSPECT  = pravděpodobný junk: ukázka / making-of / sample / trailer / drobný klip (⚠️)
+internal enum class StreamHealth { READY, DOWNLOAD, SUSPECT }
+
+// Slova v názvu souboru, která prozradí, že to NENÍ celovečerní film (tvůj případ 2 — „film o filmu").
+private val JUNK_HINT = Regex(
+    """(?i)\b(sample|trailer|teaser|promo|making[\s._-]?of|behind[\s._-]?the[\s._-]?scenes|featurette|extras?|bonus|deleted[\s._-]?scenes|recap|preview|sneak[\s._-]?peek|uk[áa]zka|upout[áa]vka)\b""",
+)
+
+/**
+ * Klasifikuje zdroj. `runtimeMin` = délka filmu z TMDB (null u seriálů / když neznámá) — používá se jen
+ * pro detekci podezřele krátkých klipů, ať se legitimní krátké epizody seriálu omylem neskryjí.
+ */
+internal fun streamHealth(stream: UploaderStream, runtimeMin: Int?): StreamHealth {
+    val text = listOfNotNull(stream.name, stream.description).joinToString(" ")
+    val q = stream.quality
+    // 1) Klíčová slova v názvu = junk vždy (sample/trailer/making-of…).
+    if (JUNK_HINT.containsMatchIn(text)) return StreamHealth.SUSPECT
+    // 2) Drobounká velikost (<0,12 GB) = klip/sample bez ohledu na typ.
+    val size = q.sizeGB
+    if (size != null && size in 0.0001..0.12) return StreamHealth.SUSPECT
+    // 3) Kontext filmu (runtime známé): výrazně kratší než film, nebo malá velikost na celovečerák.
+    if (runtimeMin != null && runtimeMin > 0) {
+        val durMin = q.durationS?.let { it / 60.0 }
+        if (durMin != null && durMin > 0 && durMin < runtimeMin * 0.5) return StreamHealth.SUSPECT
+        if (size != null && size in 0.0001..0.30) return StreamHealth.SUSPECT
+    }
+    return if (q.rdReady || q.rdSaved) StreamHealth.READY else StreamHealth.DOWNLOAD
+}
+
 internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
     q.resolution?.let { add(it) }
     q.videoCodec?.let { add(if (q.hdr) "$it HDR" else it) }
@@ -92,6 +124,7 @@ internal fun StreamRow(
     trailingIcon: @Composable () -> Unit,
     onClick: () -> Unit,
     showSourceBadge: Boolean = false,
+    health: StreamHealth = StreamHealth.READY,
 ) {
     Row(
         Modifier
@@ -101,7 +134,16 @@ internal fun StreamRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (showSourceBadge) SourceBadge(stream)
+        // SIEVE S1: u podezřelých zdrojů (ukázka/making-of) varovný odznak ⚠️ místo zdrojového.
+        if (health == StreamHealth.SUSPECT) {
+            Box(
+                Modifier
+                    .background(Color(0xFFB23A3A), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text("⚠️ ukázka?", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
+            }
+        } else if (showSourceBadge) SourceBadge(stream)
         Column(Modifier.weight(1f)) {
             // Release filename viditelně — u Comet zdrojů je v `description` (behaviorHints.filename),
             // u rdSearch/saved v `name`. Bereme to, co vypadá jako release (rozlišení/rok/grupa),
@@ -166,9 +208,12 @@ internal fun StreamPickerSheet(
     isProbing: Boolean = false,
     onCastToTv: (UploaderStream) -> Unit = {},
     isCasting: Boolean = false,
+    runtimeMin: Int? = null,
 ) {
     // Plan FERRY (SHW-37): cíl přehrání — telefon (lokální MPV) nebo TV (yellyfin). Per-otevření.
     var toTv by remember { mutableStateOf(false) }
+    // SIEVE S1: rozbalit i podezřelé (ukázka/making-of/necachované klipy) — ruční kontrola.
+    var showSuspect by remember { mutableStateOf(false) }
     val busy = isResolving || isCasting
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetHeader("Stream přes Stremio", Icons.Default.PlayArrow)
@@ -198,20 +243,64 @@ internal fun StreamPickerSheet(
         when {
             isLoading -> SheetCenter { CircularProgressIndicator() }
             error != null && streams.isEmpty() -> SheetMessage(error)
-            else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
-                items(streams, key = { it.cometPath ?: it.infoHash ?: it.url ?: it.name.orEmpty() }) { s ->
-                    StreamRow(
-                        stream = s,
-                        trailingIcon = {
-                            Icon(
-                                if (toTv) Icons.Default.Tv else Icons.Default.PlayArrow,
-                                contentDescription = if (toTv) "Přehrát na TV" else "Přehrát",
+            else -> {
+                // SIEVE S1: rozděl zdroje na čisté (✅ hraje hned / ⏬ stáhnout) a podezřelé (⚠️ ukázka/junk).
+                // Čisté řadíme „hraje hned" první. Podezřelé schované za expanderem = ruční kontrola.
+                val classified = remember(streams, runtimeMin) {
+                    streams.map { it to streamHealth(it, runtimeMin) }
+                }
+                val clean = classified.filter { it.second != StreamHealth.SUSPECT }
+                    .sortedBy { if (it.second == StreamHealth.READY) 0 else 1 }
+                val suspect = classified.filter { it.second == StreamHealth.SUSPECT }
+                val streamKey: (UploaderStream) -> String = { it.cometPath ?: it.infoHash ?: it.url ?: it.name.orEmpty() }
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
+                    items(clean, key = { streamKey(it.first) }) { (s, h) ->
+                        StreamRow(
+                            stream = s,
+                            trailingIcon = {
+                                Icon(
+                                    if (toTv) Icons.Default.Tv else Icons.Default.PlayArrow,
+                                    contentDescription = if (toTv) "Přehrát na TV" else "Přehrát",
+                                )
+                            },
+                            onClick = { if (!busy) { if (toTv) onCastToTv(s) else onPlay(s) } },
+                            showSourceBadge = true,
+                            health = h,
+                        )
+                        HorizontalDivider()
+                    }
+                    if (suspect.isNotEmpty()) {
+                        item(key = "sieve-suspect-toggle") {
+                            Text(
+                                text = if (showSuspect) "Skrýt podezřelé zdroje" else "⚠️ Zobrazit i podezřelé (${suspect.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showSuspect = !showSuspect }
+                                    .padding(horizontal = 20.dp, vertical = 14.dp),
                             )
-                        },
-                        onClick = { if (!busy) { if (toTv) onCastToTv(s) else onPlay(s) } },
-                        showSourceBadge = true,
-                    )
-                    HorizontalDivider()
+                            HorizontalDivider()
+                        }
+                        if (showSuspect) {
+                            items(suspect, key = { streamKey(it.first) }) { (s, h) ->
+                                StreamRow(
+                                    stream = s,
+                                    trailingIcon = {
+                                        Icon(
+                                            if (toTv) Icons.Default.Tv else Icons.Default.PlayArrow,
+                                            contentDescription = if (toTv) "Přehrát na TV" else "Přehrát",
+                                        )
+                                    },
+                                    onClick = { if (!busy) { if (toTv) onCastToTv(s) else onPlay(s) } },
+                                    showSourceBadge = true,
+                                    health = h,
+                                )
+                                HorizontalDivider()
+                            }
+                        }
+                    }
                 }
             }
         }
