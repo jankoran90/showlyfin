@@ -277,14 +277,19 @@ class DetailViewModel @Inject constructor(
     }
 
     private suspend fun loadWatchlistMembership(item: MediaItem) {
-        if (tokenProvider.getToken() == null || item.traktId == 0L) return
+        if (tokenProvider.getToken() == null) return
+        // WINNOW: tituly z pásu režisér/studio nemají traktId → členství poznáme i podle tmdbId.
+        if (item.traktId == 0L && item.tmdbId == null) return
         runCatching {
             val list = if (item.type == MediaType.MOVIE) {
                 authorizedTrakt.fetchSyncMoviesWatchlist()
             } else {
                 authorizedTrakt.fetchSyncShowsWatchlist()
             }
-            list.any { it.getTraktId() == item.traktId }
+            list.any {
+                (item.traktId != 0L && it.getTraktId() == item.traktId) ||
+                    (item.tmdbId != null && it.getTmdbId() == item.tmdbId)
+            }
         }.getOrNull()?.let { inWl ->
             _uiState.update { it.copy(isInWatchlist = inWl) }
         }
@@ -292,12 +297,18 @@ class DetailViewModel @Inject constructor(
 
     fun toggleWatchlist() {
         val item = _uiState.value.item ?: return
-        if (tokenProvider.getToken() == null || item.traktId == 0L) return
+        if (tokenProvider.getToken() == null) return
         if (_uiState.value.isTogglingWatchlist) return
+        // WINNOW (SHW-41): nesmí padnout na traktId==0 — tituly z pásu „od stejného režiséra/studia"
+        // nesou jen tmdbId. Sestavíme položku z čehokoli, co máme (trakt/tmdb/imdb); Trakt to přijme.
+        val exportItem = SyncExportItem.fromIds(item.traktId, item.tmdbId, item.imdbId)
+        if (exportItem == null) {
+            timber.log.Timber.w("[Watchlist] toggle: žádné použitelné id (trakt/tmdb/imdb) pro '${item.title}'")
+            return
+        }
         val currentlyIn = _uiState.value.isInWatchlist
         _uiState.update { it.copy(isTogglingWatchlist = true) }
         viewModelScope.launch {
-            val exportItem = SyncExportItem.create(item.traktId)
             val request = if (item.type == MediaType.MOVIE) {
                 SyncExportRequest(movies = listOf(exportItem))
             } else {
