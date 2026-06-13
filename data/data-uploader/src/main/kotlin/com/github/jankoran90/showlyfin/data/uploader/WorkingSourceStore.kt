@@ -32,18 +32,27 @@ class WorkingSourceStore @Inject constructor(
 
     fun get(imdb: String?): WorkingSource? {
         if (imdb.isNullOrBlank()) return null
-        val raw = prefs.getString(key(imdb), null) ?: return null
-        return runCatching { gson.fromJson(raw, WorkingSource::class.java) }
+        val raw = prefs.getString(key(imdb), null)
+        if (raw == null) {
+            Timber.i("[SIEVE] get %s → nic uloženého", imdb)
+            return null
+        }
+        val rec = runCatching { gson.fromJson(raw, WorkingSource::class.java) }
             .onFailure { Timber.w(it, "[SIEVE] parse working source failed for $imdb") }
             .getOrNull()
-            ?.takeIf { it.stream.cometPath != null || it.stream.infoHash != null || !it.stream.url.isNullOrBlank() }
+        val s = rec?.stream
+        val hasId = s != null && (s.cometPath != null || s.infoHash != null || !s.url.isNullOrBlank())
+        Timber.i("[SIEVE] get %s → raw=%dB parsed=%b hasId=%b name=%s", imdb, raw.length, rec != null, hasId, s?.name ?: s?.description ?: "?")
+        return if (hasId) rec else null
     }
 
     fun save(imdb: String?, title: String, stream: UploaderStream) {
         if (imdb.isNullOrBlank()) return
         val record = WorkingSource(imdb = imdb, title = title, stream = stream, savedAtMs = System.currentTimeMillis())
-        prefs.edit().putString(key(imdb), gson.toJson(record)).apply()
-        Timber.i("[SIEVE] uložen fungující zdroj pro $imdb (${stream.name ?: stream.description})")
+        // commit() (synchronně) místo apply() — kritická uživatelská akce, ať se zaručeně zapíše na
+        // disk dřív, než appku případně zabije/aktualizuje (paměť MUSÍ přežít restart i update).
+        val ok = prefs.edit().putString(key(imdb), gson.toJson(record)).commit()
+        Timber.i("[SIEVE] uložen fungující zdroj pro %s (%s) commit=%b", imdb, stream.name ?: stream.description ?: "?", ok)
     }
 
     fun clear(imdb: String?) {
