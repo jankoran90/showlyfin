@@ -155,9 +155,18 @@ class DetailViewModel @Inject constructor(
                 directorMovies = null,
                 studioName = null,
                 studioMovies = null,
+                // ENSEMBLE (SHW-45): reset sekce Tvůrci
+                directors = emptyList(),
+                writers = emptyList(),
+                cinematographers = emptyList(),
+                showPersonSheet = false,
+                personSheetName = null,
+                personSheetLoading = false,
+                personFilmography = null,
                 showCollections = prefs.getBoolean("detail_show_collections", true),
                 showDirector = prefs.getBoolean("detail_show_director", true),
                 showStudio = prefs.getBoolean("detail_show_studio", true),
+                showCreators = prefs.getBoolean("detail_show_creators", true),
                 plotCollapsedLines = prefs.getInt("detail_plot_lines", 5),
                 error = null,
             )
@@ -256,17 +265,54 @@ class DetailViewModel @Inject constructor(
 
     private suspend fun loadCast(item: MediaItem) {
         val tmdbId = item.tmdbId ?: return
-        runCatching {
-            val people = if (item.type == MediaType.MOVIE) {
-                tmdbApi.fetchMoviePeople(tmdbId)
-            } else {
-                tmdbApi.fetchShowPeople(tmdbId)
-            }
-            people[com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson.Type.CAST].orEmpty().take(20)
-        }.getOrNull()?.let { cast ->
-            _uiState.update { it.copy(cast = cast) }
+        val people = runCatching {
+            if (item.type == MediaType.MOVIE) tmdbApi.fetchMoviePeople(tmdbId)
+            else tmdbApi.fetchShowPeople(tmdbId)
+        }.getOrNull() ?: return
+        val cast = people[com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson.Type.CAST].orEmpty().take(20)
+        // ENSEMBLE (SHW-45): z crew vytáhni Režii / Scénář / Kameru (místo hudby). job (film) i jobs (TV agg).
+        val crew = people[com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson.Type.CREW].orEmpty()
+        _uiState.update {
+            it.copy(
+                cast = cast,
+                directors = crewByRole(crew, dept = "Directing", jobs = setOf("director")),
+                writers = crewByRole(crew, dept = "Writing", jobs = setOf("writer", "screenplay", "story", "author", "novel")),
+                cinematographers = crewByRole(crew, dept = "Camera", jobs = setOf("director of photography", "cinematography", "cinematographer")),
+            )
         }
     }
+
+    /** ENSEMBLE: vyber z crew lidi dané role (podle department NEBO konkrétního job/jobs), dedup dle id, max 5. */
+    private fun crewByRole(
+        crew: List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson>,
+        dept: String,
+        jobs: Set<String>,
+    ): List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson> {
+        fun matches(p: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson): Boolean {
+            if (p.department?.equals(dept, ignoreCase = true) == true) return true
+            if (p.job != null && jobs.any { it.equals(p.job, ignoreCase = true) }) return true
+            return p.jobs?.any { j -> j.job != null && jobs.any { it.equals(j.job, ignoreCase = true) } } == true
+        }
+        return crew.filter { it.id > 0 && matches(it) }
+            .distinctBy { it.id }
+            .take(5)
+    }
+
+    /**
+     * ENSEMBLE (SHW-45): klik na osobu (herec/režie/scénář/kamera) → její tvorba jako VALIDNÍ karty.
+     * `discoverMoviesByPerson` → `moviesToCollection` (CollectionPart nese tmdbId → karta se otevře správně).
+     */
+    fun openPersonFilmography(person: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson) {
+        if (person.id <= 0) return
+        _uiState.update { it.copy(showPersonSheet = true, personSheetName = person.name, personSheetLoading = true, personFilmography = null) }
+        viewModelScope.launch {
+            val movies = runCatching { tmdbApi.discoverMoviesByPerson(person.id) }.getOrDefault(emptyList())
+            val coll = moviesToCollection(person.name ?: "Tvorba", movies, _uiState.value.item?.tmdbId ?: -1L)
+            _uiState.update { it.copy(personSheetLoading = false, personFilmography = coll) }
+        }
+    }
+
+    fun closePersonSheet() = _uiState.update { it.copy(showPersonSheet = false, personFilmography = null, personSheetName = null) }
 
     /** Sekce „Od stejného režiséra" + „Od stejného studia" (TMDB, jen filmy). Univerzální (v knihovně i mimo). */
     private suspend fun loadRelated(item: MediaItem) {

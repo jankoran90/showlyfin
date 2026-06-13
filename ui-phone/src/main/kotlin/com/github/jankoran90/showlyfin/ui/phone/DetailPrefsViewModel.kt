@@ -15,6 +15,7 @@ data class DetailPrefsState(
     val showCollections: Boolean = true,
     val showDirector: Boolean = true,
     val showStudio: Boolean = true,
+    val showCreators: Boolean = true,   // ENSEMBLE (SHW-45): sekce „Tvůrci"
     val plotLines: Int = 5,   // počet řádků popisu ve sbaleném stavu (0 = bez omezení)
 )
 
@@ -32,6 +33,7 @@ class DetailPrefsViewModel @Inject constructor(
         showCollections = prefs.getBoolean(KEY_COLLECTIONS, true),
         showDirector = prefs.getBoolean(KEY_DIRECTOR, true),
         showStudio = prefs.getBoolean(KEY_STUDIO, true),
+        showCreators = prefs.getBoolean(KEY_CREATORS, true),
         plotLines = prefs.getInt(KEY_PLOT_LINES, 5),
     )
 
@@ -39,6 +41,7 @@ class DetailPrefsViewModel @Inject constructor(
     fun setCollections(value: Boolean) = put(KEY_COLLECTIONS) { _state.update { s -> s.copy(showCollections = value) }; value }
     fun setDirector(value: Boolean) = put(KEY_DIRECTOR) { _state.update { s -> s.copy(showDirector = value) }; value }
     fun setStudio(value: Boolean) = put(KEY_STUDIO) { _state.update { s -> s.copy(showStudio = value) }; value }
+    fun setCreators(value: Boolean) = put(KEY_CREATORS) { _state.update { s -> s.copy(showCreators = value) }; value }
     fun setPlotLines(value: Int) {
         _state.update { s -> s.copy(plotLines = value) }
         prefs.edit().putInt(KEY_PLOT_LINES, value).apply()
@@ -53,6 +56,7 @@ class DetailPrefsViewModel @Inject constructor(
         private const val KEY_COLLECTIONS = "detail_show_collections"
         private const val KEY_DIRECTOR = "detail_show_director"
         private const val KEY_STUDIO = "detail_show_studio"
+        private const val KEY_CREATORS = "detail_show_creators"
         private const val KEY_PLOT_LINES = "detail_plot_lines"
         val PLOT_LINE_OPTIONS = listOf(3, 5, 8, 10, 0)   // 0 = bez omezení
     }

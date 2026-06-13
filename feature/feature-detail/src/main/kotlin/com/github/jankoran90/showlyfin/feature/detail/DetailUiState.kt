@@ -103,10 +103,20 @@ data class DetailUiState(
     val directorMovies: MediaCollection? = null,
     val studioName: String? = null,
     val studioMovies: MediaCollection? = null,
+    // Plan ENSEMBLE (SHW-45): sekce „Tvůrci" — pás herců + Režie/Scénář/Kamera. Klik na osobu →
+    // její tvorba (filmografie) jako validní karty (`personFilmography`, nese tmdbId).
+    val directors: List<TmdbPerson> = emptyList(),
+    val writers: List<TmdbPerson> = emptyList(),
+    val cinematographers: List<TmdbPerson> = emptyList(),
+    val showPersonSheet: Boolean = false,
+    val personSheetName: String? = null,
+    val personSheetLoading: Boolean = false,
+    val personFilmography: MediaCollection? = null,
     // Volitelné sekce (Nastavení → Detail z knihovny)
     val showCollections: Boolean = true,
     val showDirector: Boolean = true,
     val showStudio: Boolean = true,
+    val showCreators: Boolean = true,
     // Počet řádků popisu ve sbaleném stavu (Nastavení). 0 = bez omezení.
     val plotCollapsedLines: Int = 5,
 )

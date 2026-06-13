@@ -526,6 +526,7 @@ private fun DetailModeSection(
             if (s.rich) {
                 Spacer(Modifier.height(8.dp))
                 Text("Zobrazit sekce:", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+                DetailSectionCheckRow("Tvůrci (herci, režie, scénář, kamera)", s.showCreators) { viewModel.setCreators(it) }
                 DetailSectionCheckRow("Kolekce", s.showCollections) { viewModel.setCollections(it) }
                 DetailSectionCheckRow("Od stejného režiséra", s.showDirector) { viewModel.setDirector(it) }
                 DetailSectionCheckRow("Od stejného studia", s.showStudio) { viewModel.setStudio(it) }

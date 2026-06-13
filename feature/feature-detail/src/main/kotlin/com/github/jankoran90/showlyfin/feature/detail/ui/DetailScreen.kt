@@ -231,6 +231,16 @@ fun DetailScreen(
             onDismiss = { showReviewsSheet = false },
         )
     }
+    // Plan ENSEMBLE (SHW-45): tvorba zvolené osoby (klik na herce/režii/scénář/kameru).
+    if (uiState.showPersonSheet) {
+        PersonFilmographySheet(
+            name = uiState.personSheetName,
+            loading = uiState.personSheetLoading,
+            collection = uiState.personFilmography,
+            onPartClick = { part -> viewModel.closePersonSheet(); onCollectionPartClick?.invoke(part) },
+            onDismiss = { viewModel.closePersonSheet() },
+        )
+    }
     if (uiState.showGallery) {
         CsfdGalleryDialog(
             urls = uiState.csfdGallery,
@@ -485,6 +495,17 @@ fun DetailScreen(
                 onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
                 onRemoveRemembered = { viewModel.removeRememberedSource() },
             )
+
+            // Plan ENSEMBLE (SHW-45): sekce „Tvůrci" (pás herců + Režie/Scénář/Kamera) NAD kolekcemi.
+            if (uiState.showCreators) {
+                CreatorsSection(
+                    cast = uiState.cast,
+                    directors = uiState.directors,
+                    writers = uiState.writers,
+                    cinematographers = uiState.cinematographers,
+                    onPersonClick = { viewModel.openPersonFilmography(it) },
+                )
+            }
 
             val mergedCollection = uiState.mergedCollection ?: uiState.collection?.let { coll ->
                 MediaCollection(
