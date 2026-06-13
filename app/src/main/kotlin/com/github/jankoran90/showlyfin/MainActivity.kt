@@ -130,6 +130,15 @@ class MainActivity : ComponentActivity() {
             val code = uri.getQueryParameter("code") ?: return
             traktAuthManager.onAuthCode(code)
         }
+        // VERDICT: proklik z doporučovače (claude-voice) na detail filmu podle TMDb id.
+        if (uri.scheme == "showlyfin" && uri.host == "detail") {
+            val tmdb = uri.getQueryParameter("tmdb")?.toLongOrNull() ?: return
+            ListenNavSignal.requestOpenDetail(
+                tmdb,
+                uri.getQueryParameter("title") ?: "",
+                uri.getQueryParameter("year")?.toIntOrNull(),
+            )
+        }
     }
 
     private fun maybeShowUpdateDialogFromIntent(intent: Intent?) {

@@ -33,4 +33,17 @@ object ListenNavSignal {
     fun requestOpenOvladac() {
         _openOvladac.value = _openOvladac.value + 1
     }
+
+    /** VERDICT (claude-voice doporučovač): proklik `showlyfin://detail?tmdb=` → phone shell otevře
+     *  detail filmu podle TMDb id. Payload + seq (retrigger i při stejném tmdb / opakovaném prokliku). */
+    data class DetailRequest(val seq: Long, val tmdb: Long, val title: String, val year: Int?)
+
+    private var detailSeq = 0L
+    private val _openDetail = MutableStateFlow<DetailRequest?>(null)
+    val openDetail = _openDetail.asStateFlow()
+
+    fun requestOpenDetail(tmdb: Long, title: String = "", year: Int? = null) {
+        detailSeq += 1
+        _openDetail.value = DetailRequest(detailSeq, tmdb, title, year)
+    }
 }

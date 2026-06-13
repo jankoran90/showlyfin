@@ -277,6 +277,29 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             }
         }
 
+        // VERDICT: proklik z doporučovače `showlyfin://detail?tmdb=` → otevři detail filmu.
+        // Stejná stub-cesta jako onCollectionPartClick (detail se hydratuje z tmdbId).
+        val openDetailReq by ListenNavSignal.openDetail.collectAsStateWithLifecycle()
+        LaunchedEffect(openDetailReq) {
+            val req = openDetailReq ?: return@LaunchedEffect
+            currentDestination = Destination.Detail(
+                MediaItem(
+                    traktId = 0L,
+                    tmdbId = req.tmdb,
+                    imdbId = null,
+                    title = req.title,
+                    year = req.year,
+                    overview = null,
+                    rating = null,
+                    genres = null,
+                    type = MediaType.MOVIE,
+                    posterPath = null,
+                    backdropPath = null,
+                ),
+                parent = bottomTab,
+            )
+        }
+
         val onCollectionPartClick: (CollectionPart) -> Unit = { part ->
             val jfId = part.jellyfinId
             val tmdb = part.tmdbId
