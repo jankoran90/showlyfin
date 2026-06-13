@@ -574,7 +574,11 @@ class DetailViewModel @Inject constructor(
             val result = naTv.castFerry(jfUrl, jfToken, url, title, subs)
             // Po úspěšném spuštění na TV přepni appku rovnou na sekci „Ovladač" (parita s JF knihovnou
             // přes NaTvCoordinator) → telefon se hned stává dálkovým ovladačem běžícího streamu.
-            if (result == CastResult.SENT) ListenNavSignal.requestOpenOvladac()
+            // + zapamatuj cast (externí stream není JF NowPlaying) → Ovladač ukáže titul místo „Nic nehraje".
+            if (result == CastResult.SENT) {
+                ListenNavSignal.setFerryCast(title)
+                ListenNavSignal.requestOpenOvladac()
+            }
             _uiState.update {
                 it.copy(isCastingToTv = false, isResolvingStream = false, showStreamPicker = result != CastResult.SENT, castToTvResult = result)
             }

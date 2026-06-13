@@ -34,6 +34,25 @@ object ListenNavSignal {
         _openOvladac.value = _openOvladac.value + 1
     }
 
+    /**
+     * FERRY/BATON: externí stream (RD/Stremio) puštěný na TV NENÍ Jellyfin položka → JF session
+     * hlásí `NowPlayingItem=null`, takže Ovladač by ukázal „Nic nehraje". Showlyfin si proto
+     * pamatuje, co naposledy castnul na TV, a Ovladač to zobrazí jako běžící titul + ovládá ho.
+     * Vyčistí se při Stop z Ovladače nebo po TTL (film může běžet hodiny → velkorysé).
+     */
+    data class FerryCast(val title: String, val startedAtMs: Long)
+
+    private val _ferryCast = MutableStateFlow<FerryCast?>(null)
+    val ferryCast = _ferryCast.asStateFlow()
+
+    fun setFerryCast(title: String) {
+        _ferryCast.value = FerryCast(title, System.currentTimeMillis())
+    }
+
+    fun clearFerryCast() {
+        _ferryCast.value = null
+    }
+
     /** VERDICT (claude-voice doporučovač): proklik `showlyfin://detail?tmdb=` → phone shell otevře
      *  detail filmu podle TMDb id. Payload + seq (retrigger i při stejném tmdb / opakovaném prokliku). */
     data class DetailRequest(val seq: Long, val tmdb: Long, val title: String, val year: Int?)

@@ -133,7 +133,7 @@ fun OvladacScreen(
                 else "Dostupné: " + state.sessions.joinToString { it.deviceName },
             )
 
-            else -> NowPlaying(state.current!!, state.coverUrl, onOpenDetail, vm)
+            else -> NowPlaying(state.current!!, state.coverUrl, state.externalTitle, onOpenDetail, vm)
         }
 
         // PILOT: virtuální D-pad „dálkáč" v dolní části — navigace nativního UI na TV.
@@ -201,6 +201,7 @@ private fun DeviceSwitcher(
 private fun NowPlaying(
     s: JellyfinSessionSummary,
     coverUrl: String?,
+    externalTitle: String?,
     onOpenDetail: (String) -> Unit,
     vm: OvladacViewModel,
 ) {
@@ -237,12 +238,19 @@ private fun NowPlaying(
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        s.nowPlayingTitle ?: "Nic nehraje",
+                        s.nowPlayingTitle ?: externalTitle ?: "Nic nehraje",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (s.nowPlayingTitle == null && externalTitle != null) {
+                        Text(
+                            "Externí stream na TV",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     val sub = s.nowPlayingSubtitle
                     if (!sub.isNullOrBlank()) {
                         Text(

@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.ui.phone
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.maestro.AvrController
@@ -54,6 +55,8 @@ class OvladacViewModel @Inject constructor(
         val avrVolumeStep: Int = 3,
         /** Probíhající akce napájení sestavy (zapínám/vypínám…), null = nic. */
         val sceneStatus: String? = null,
+        /** FERRY/BATON: titul externího streamu běžícího na TV (když JF NowPlaying chybí). null = běžný JF obsah / nic. */
+        val externalTitle: String? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -106,6 +109,7 @@ class OvladacViewModel @Inject constructor(
                 current = current,
                 selectedId = current?.sessionId,
                 coverUrl = cover,
+                externalTitle = externalTitleFor(current),
                 avrEnabled = avrCfg != null,
                 avrReachable = avrStatus?.reachable ?: false,
                 avrVolume = avrStatus?.volume ?: it.avrVolume,
@@ -113,6 +117,19 @@ class OvladacViewModel @Inject constructor(
                 avrVolumeStep = avrVolumeStepPref(),
             )
         }
+    }
+
+    /**
+     * FERRY/BATON: když na boxu (Yellyfin) běží externí stream, JF nehlásí NowPlaying → vrátíme
+     * naposledy castnutý titul, ať Ovladač neukáže „Nic nehraje". Jen pro Yellyfin session bez
+     * NowPlaying a jen po dobu TTL (film může běžet hodiny).
+     */
+    private fun externalTitleFor(current: JellyfinSessionSummary?): String? {
+        if (current == null || current.nowPlayingTitle != null) return null
+        val isYellyfin = "${current.client.orEmpty()} ${current.deviceName}".lowercase().contains("yellyfin")
+        if (!isYellyfin) return null
+        val fc = ListenNavSignal.ferryCast.value ?: return null
+        return if (System.currentTimeMillis() - fc.startedAtMs < EXTERNAL_TTL_MS) fc.title else null
     }
 
     /** Vrátí host AVR pokud je ovládání hlasitosti přes AVR povolené a IP vyplněná, jinak null. */
@@ -201,7 +218,10 @@ class OvladacViewModel @Inject constructor(
         prefs.getString("avr_volume_step", "").orEmpty().trim().toIntOrNull()?.coerceIn(1, 20) ?: 3
 
     fun playPause() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "PlayPause") }
-    fun stopPlayback() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "Stop") }
+    fun stopPlayback() {
+        ListenNavSignal.clearFerryCast()
+        command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "Stop") }
+    }
 
     // --- PILOT: virtuální D-pad — navigace nativním UI na TV přes Jellyfin GeneralCommand.
     // Yellyfin na boxu je přeloží na injektnuté D-pad klávesy (viz RemoteControlReceiver).
@@ -297,5 +317,6 @@ class OvladacViewModel @Inject constructor(
         const val POWER_ON_VOL_DELAY_MS = 800L
         const val SCENE_RESULT_MS = 3_500L
         const val TICKS_PER_MS = 10_000L
+        const val EXTERNAL_TTL_MS = 6 * 60 * 60 * 1000L // 6 h — externí stream může běžet dlouho
     }
 }
