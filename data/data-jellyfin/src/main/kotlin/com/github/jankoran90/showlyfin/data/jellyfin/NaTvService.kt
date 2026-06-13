@@ -308,18 +308,24 @@ class NaTvService @Inject constructor(
         videoUrl: String,
         title: String,
         subtitles: List<FerrySubtitle> = emptyList(),
+        reportUrl: String? = null,
     ): CastResult {
         if (baseUrl.isBlank() || token.isBlank()) return CastResult.NO_CREDS
         if (videoUrl.isBlank()) return CastResult.FAILED
         val target = pickWatchSession(getSessions(baseUrl, token)) ?: return CastResult.NO_SESSION
-        val payload = buildFerryPayload(videoUrl, title, subtitles)
+        val payload = buildFerryPayload(videoUrl, title, subtitles, reportUrl)
         val ok = sendGeneralCommand(baseUrl, token, target.sessionId, "SendString", mapOf("String" to payload))
         Timber.i("[FERRY] cast → %s subs=%d ok=%b", target.deviceName, subtitles.size, ok)
         return if (ok) CastResult.SENT else CastResult.FAILED
     }
 
-    /** Sestaví `FERRY1:{url,title,subs:[{u,l,n}]}` — schéma parsuje yellyfin `parseFerryPayload`. */
-    private fun buildFerryPayload(url: String, title: String, subtitles: List<FerrySubtitle>): String {
+    /** Sestaví `FERRY1:{url,title,subs:[{u,l,n}],report}` — schéma parsuje yellyfin `parseFerryPayload`. */
+    private fun buildFerryPayload(
+        url: String,
+        title: String,
+        subtitles: List<FerrySubtitle>,
+        reportUrl: String? = null,
+    ): String {
         val subs = JSONArray()
         subtitles.forEach { s ->
             if (s.url.isNotBlank()) {
@@ -334,8 +340,31 @@ class NaTvService @Inject constructor(
             put("url", url)
             put("title", title)
             put("subs", subs)
+            reportUrl?.takeIf { it.isNotBlank() }?.let { put("report", it) }
         }
         return "FERRY1:$json"
+    }
+
+    /**
+     * BATON: přečte pozici externího streamu hlášenou boxem (`/api/ferry/state`). null = nehraje/stale.
+     * URL si staví volající (showlyfin) z uploader base+key — stejná jako kam box reportuje.
+     */
+    suspend fun getFerryState(progressUrl: String): FerryState? = withContext(Dispatchers.IO) {
+        if (progressUrl.isBlank()) return@withContext null
+        runCatching {
+            val request = Request.Builder().url(progressUrl).get().build()
+            httpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                val json = JSONObject(resp.body?.string().orEmpty())
+                if (!json.optBoolean("active", false)) return@use null
+                FerryState(
+                    title = json.optString("title"),
+                    positionMs = json.optLong("positionMs", 0L),
+                    durationMs = json.optLong("durationMs", 0L),
+                    paused = json.optBoolean("paused", false),
+                )
+            }
+        }.getOrNull()
     }
 
     private suspend fun post(url: String): Boolean = withContext(Dispatchers.IO) {
@@ -348,6 +377,14 @@ class NaTvService @Inject constructor(
         ok
     }
 }
+
+/** BATON: stav externího streamu hlášený boxem (pro posuvník v Ovladači). */
+data class FerryState(
+    val title: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val paused: Boolean,
+)
 
 data class JellyfinSessionSummary(
     val sessionId: String,

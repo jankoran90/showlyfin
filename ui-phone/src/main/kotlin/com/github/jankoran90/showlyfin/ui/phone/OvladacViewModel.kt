@@ -57,6 +57,10 @@ class OvladacViewModel @Inject constructor(
         val sceneStatus: String? = null,
         /** FERRY/BATON: titul externího streamu běžícího na TV (když JF NowPlaying chybí). null = běžný JF obsah / nic. */
         val externalTitle: String? = null,
+        /** FERRY/BATON: poster castnutého filmu (cover v Ovladači jako u knihovny). */
+        val externalPosterUrl: String? = null,
+        /** FERRY/BATON: TMDb id castnutého filmu → klik na cover vrátí na kartu filmu. */
+        val externalTmdb: Long? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -96,8 +100,21 @@ class OvladacViewModel @Inject constructor(
             return
         }
         val sessions = naTv.getSessions(c.url, c.token)
-        val current = sessions.firstOrNull { it.sessionId == userSelectedId }
+        var current = sessions.firstOrNull { it.sessionId == userSelectedId }
             ?: naTv.pickWatchSession(sessions)
+        // BATON: externí stream (FERRY) — box nehlásí JF NowPlaying. Když na boxu běží náš cast,
+        // dotáhni pozici/délku/stav z `/api/ferry/state` a vlož do `current` → posuvník + scrub fungují.
+        val fc = activeFerryCastFor(current)
+        val ferrySt = fc?.reportUrl?.let { naTv.getFerryState(it) }
+        if (ferrySt != null && current != null) {
+            current = current.copy(
+                positionTicks = ferrySt.positionMs * TICKS_PER_MS,
+                runtimeTicks = ferrySt.durationMs * TICKS_PER_MS,
+                isPlaying = !ferrySt.paused,
+                isPaused = ferrySt.paused,
+                canSeek = ferrySt.durationMs > 0L,
+            )
+        }
         val cover = current?.itemId?.let { naTv.imageUrl(c.url, c.token, it, current.imageTag) }
         val avrCfg = avrConfig()
         val avrStatus = avrCfg?.let { avr.status(it) }
@@ -109,7 +126,9 @@ class OvladacViewModel @Inject constructor(
                 current = current,
                 selectedId = current?.sessionId,
                 coverUrl = cover,
-                externalTitle = externalTitleFor(current),
+                externalTitle = if (fc != null) (ferrySt?.title?.takeIf { t -> t.isNotBlank() } ?: fc.title) else null,
+                externalPosterUrl = fc?.posterUrl,
+                externalTmdb = fc?.tmdbId,
                 avrEnabled = avrCfg != null,
                 avrReachable = avrStatus?.reachable ?: false,
                 avrVolume = avrStatus?.volume ?: it.avrVolume,
@@ -120,16 +139,22 @@ class OvladacViewModel @Inject constructor(
     }
 
     /**
-     * FERRY/BATON: když na boxu (Yellyfin) běží externí stream, JF nehlásí NowPlaying → vrátíme
-     * naposledy castnutý titul, ať Ovladač neukáže „Nic nehraje". Jen pro Yellyfin session bez
-     * NowPlaying a jen po dobu TTL (film může běžet hodiny).
+     * FERRY/BATON: když na boxu (Yellyfin) běží náš externí stream, JF nehlásí NowPlaying → vrátíme
+     * zapamatovaný cast (titul/cover/tmdb/report URL), ať Ovladač neukáže „Nic nehraje" a může číst
+     * pozici. Jen pro Yellyfin session bez NowPlaying a po dobu TTL (film může běžet hodiny).
      */
-    private fun externalTitleFor(current: JellyfinSessionSummary?): String? {
+    private fun activeFerryCastFor(current: JellyfinSessionSummary?): ListenNavSignal.FerryCast? {
         if (current == null || current.nowPlayingTitle != null) return null
         val isYellyfin = "${current.client.orEmpty()} ${current.deviceName}".lowercase().contains("yellyfin")
         if (!isYellyfin) return null
         val fc = ListenNavSignal.ferryCast.value ?: return null
-        return if (System.currentTimeMillis() - fc.startedAtMs < EXTERNAL_TTL_MS) fc.title else null
+        return if (System.currentTimeMillis() - fc.startedAtMs < EXTERNAL_TTL_MS) fc else null
+    }
+
+    /** Klik na cover externího streamu → vrať se na kartu filmu (detail / RD sekce). */
+    fun openCastDetail() {
+        val fc = ListenNavSignal.ferryCast.value ?: return
+        fc.tmdbId?.let { ListenNavSignal.requestOpenDetail(it, fc.title) }
     }
 
     /** Vrátí host AVR pokud je ovládání hlasitosti přes AVR povolené a IP vyplněná, jinak null. */

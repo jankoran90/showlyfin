@@ -571,12 +571,20 @@ class DetailViewModel @Inject constructor(
             val jfUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
             val jfToken = prefs.getString("jellyfin_token", "").orEmpty()
             val subs = runCatching { buildTvSubtitles() }.getOrDefault(emptyList())
-            val result = naTv.castFerry(jfUrl, jfToken, url, title, subs)
+            // BATON: endpoint pro hlášení pozice — box sem reportuje, Ovladač čte (posuvník). Stejný key
+            // jako u titulek (samonosná URL bez cookie).
+            val item = _uiState.value.item
+            val reportUrl = if (uploaderBaseUrl.isNotBlank() && uploaderCookie.isNotBlank()) {
+                "${uploaderBaseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(uploaderCookie, "UTF-8")}"
+            } else null
+            val result = naTv.castFerry(jfUrl, jfToken, url, title, subs, reportUrl)
             // Po úspěšném spuštění na TV přepni appku rovnou na sekci „Ovladač" (parita s JF knihovnou
             // přes NaTvCoordinator) → telefon se hned stává dálkovým ovladačem běžícího streamu.
-            // + zapamatuj cast (externí stream není JF NowPlaying) → Ovladač ukáže titul místo „Nic nehraje".
+            // + zapamatuj cast (externí stream není JF NowPlaying) → Ovladač ukáže titul/cover + pozici.
             if (result == CastResult.SENT) {
-                ListenNavSignal.setFerryCast(title)
+                val poster = (item?.posterPath ?: _uiState.value.movieDetails?.poster_path)
+                    ?.let { "https://image.tmdb.org/t/p/w342$it" }
+                ListenNavSignal.setFerryCast(title, poster, item?.tmdbId, reportUrl)
                 ListenNavSignal.requestOpenOvladac()
             }
             _uiState.update {

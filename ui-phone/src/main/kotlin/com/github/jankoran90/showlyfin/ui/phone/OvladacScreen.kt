@@ -133,7 +133,7 @@ fun OvladacScreen(
                 else "Dostupné: " + state.sessions.joinToString { it.deviceName },
             )
 
-            else -> NowPlaying(state.current!!, state.coverUrl, state.externalTitle, onOpenDetail, vm)
+            else -> NowPlaying(state.current!!, state.coverUrl, state.externalTitle, state.externalPosterUrl, onOpenDetail, vm)
         }
 
         // PILOT: virtuální D-pad „dálkáč" v dolní části — navigace nativního UI na TV.
@@ -202,6 +202,7 @@ private fun NowPlaying(
     s: JellyfinSessionSummary,
     coverUrl: String?,
     externalTitle: String?,
+    externalPosterUrl: String?,
     onOpenDetail: (String) -> Unit,
     vm: OvladacViewModel,
 ) {
@@ -211,18 +212,22 @@ private fun NowPlaying(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp)) {
-            val coverItemId = s.itemId
+            val jfCover = if (coverUrl != null && s.itemId != null) coverUrl else null
+            // JF položka → cover z knihovny (klik = detail v knihovně). Externí stream → poster z TMDB
+            // (klik = vrať na kartu filmu / RD sekci). U knihovny i streamu stejný vzhled.
+            val effectiveCover = jfCover ?: externalPosterUrl
             Row {
-                // Cover → proklik na detail v knihovně.
-                if (coverUrl != null && coverItemId != null) {
+                if (effectiveCover != null) {
                     AsyncImage(
-                        model = coverUrl,
-                        contentDescription = s.nowPlayingTitle,
+                        model = effectiveCover,
+                        contentDescription = s.nowPlayingTitle ?: externalTitle,
                         modifier = Modifier
                             .width(96.dp)
                             .aspectRatio(2f / 3f)
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { onOpenDetail(coverItemId) },
+                            .clickable {
+                                if (jfCover != null && s.itemId != null) onOpenDetail(s.itemId!!) else vm.openCastDetail()
+                            },
                     )
                     Spacer(Modifier.width(14.dp))
                 }

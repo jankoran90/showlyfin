@@ -40,13 +40,27 @@ object ListenNavSignal {
      * pamatuje, co naposledy castnul na TV, a Ovladač to zobrazí jako běžící titul + ovládá ho.
      * Vyčistí se při Stop z Ovladače nebo po TTL (film může běžet hodiny → velkorysé).
      */
-    data class FerryCast(val title: String, val startedAtMs: Long)
+    data class FerryCast(
+        val title: String,
+        val startedAtMs: Long,
+        /** Poster filmu (TMDB) — Ovladač ho ukáže jako cover (jako u knihovny). */
+        val posterUrl: String? = null,
+        /** TMDb id → klik na cover v Ovladači vrátí na kartu filmu (detail / RD sekce). */
+        val tmdbId: Long? = null,
+        /** Endpoint, kam box hlásí pozici a odkud ji Ovladač čte (`/api/ferry/state?key=`). */
+        val reportUrl: String? = null,
+    )
 
     private val _ferryCast = MutableStateFlow<FerryCast?>(null)
     val ferryCast = _ferryCast.asStateFlow()
 
-    fun setFerryCast(title: String) {
-        _ferryCast.value = FerryCast(title, System.currentTimeMillis())
+    fun setFerryCast(
+        title: String,
+        posterUrl: String? = null,
+        tmdbId: Long? = null,
+        reportUrl: String? = null,
+    ) {
+        _ferryCast.value = FerryCast(title, System.currentTimeMillis(), posterUrl, tmdbId, reportUrl)
     }
 
     fun clearFerryCast() {
