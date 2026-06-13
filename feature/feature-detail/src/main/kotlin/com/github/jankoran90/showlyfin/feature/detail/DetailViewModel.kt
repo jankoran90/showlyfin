@@ -466,13 +466,22 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * Plan WINNOW (item 2, BEZPEČNĚ): po „zapamatovat zdroj" smaž z RD účtu jen torrenty, které
-     * appka zkoušela pro TENTO film v této relaci (`attemptedRdHashes`) — kromě právě zapamatovaného.
-     * Nikdy nesáhne na nesouvisející torrenty (žádný fuzzy match podle názvu). Best-effort, tiché.
+     * Plan WINNOW (item 2, BEZPEČNĚ): trigger = uživatel potvrdil „zapamatovat torrent".
+     * Smaž z RD účtu VŠECHNY ostatní verze TOHOTO filmu — kandidáti = co appka zkoušela
+     * (`attemptedRdHashes`) ∪ všechny zdroje, co Comet pro film nabídl (`uiState.streams`) —
+     * KROMĚ právě zapamatovaného. Zapamatovaný chráníme TROJITĚ: (1) ze seznamu verzí ho
+     * vyřadíme přes `sameSource` (cometPath/infoHash/url) ještě před výpočtem hashů,
+     * (2) odfiltrujeme `keepHash`, (3) backend `keep` znovu vyloučí. Mažeme jen podle hashů
+     * tohoto filmu → nikdy nesáhne na nesouvisející torrenty. Best-effort, tiché.
      */
     private fun cleanupRdKeepingSource(keep: UploaderStream) {
         val keepHash = streamRdHash(keep)
-        val others = attemptedRdHashes.filter { it != keepHash }.distinct()
+        val filmHashes = _uiState.value.streams
+            .filterNot { sameSource(it, keep) }   // vazba se zapamatovaným: ten ze seznamu vyřaď
+            .mapNotNull { streamRdHash(it) }
+        val others = (attemptedRdHashes + filmHashes)
+            .filter { it != keepHash }
+            .distinct()
         if (others.isEmpty() || uploaderBaseUrl.isBlank()) return
         viewModelScope.launch {
             runCatching { uploaderDs.rdCleanup(uploaderBaseUrl, uploaderCookie, keepHash, others) }
