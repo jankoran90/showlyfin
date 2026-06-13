@@ -33,4 +33,8 @@ data class DiscoverUiState(
     val parentalLockedAgeRating: com.github.jankoran90.showlyfin.core.domain.AgeRating? = null,
     val sessionAgeOverride: com.github.jankoran90.showlyfin.core.domain.AgeRating? = null,
     val isTraktLoggedIn: Boolean = false,
+    // VISTA V2b — stránkování Objevit (Trakt page). „Doporučené" Trakt nestránkuje → canLoadMore=false.
+    val page: Int = 1,
+    val isLoadingMore: Boolean = false,
+    val canLoadMore: Boolean = false,
 )

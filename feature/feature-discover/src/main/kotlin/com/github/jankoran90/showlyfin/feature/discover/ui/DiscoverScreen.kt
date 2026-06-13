@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -95,6 +96,18 @@ fun DiscoverScreen(
                 prevIndex = index
                 prevOffset = offset
             }
+    }
+
+    // VISTA V2b: nekonečné stránkování Objevit — když dojedeš k posledním řádkům, dotáhni další stránku.
+    LaunchedEffect(gridState, uiState.canLoadMore, isSearchMode) {
+        snapshotFlow {
+            val info = gridState.layoutInfo
+            (info.visibleItemsInfo.lastOrNull()?.index ?: 0) to info.totalItemsCount
+        }.collect { (lastVisible, total) ->
+            if (!isSearchMode && uiState.canLoadMore && total > 0 && lastVisible >= total - 6) {
+                viewModel.loadMore()
+            }
+        }
     }
 
     var genresMenuOpen by remember { mutableStateOf(false) }
@@ -213,6 +226,15 @@ fun DiscoverScreen(
                                 inLibrary = inLibrary,
                                 watched = watched,
                             )
+                        }
+                        // VISTA V2b: indikátor dotahování další stránky (přes celou šířku mřížky).
+                        if (!isSearchMode && uiState.isLoadingMore) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Box(
+                                    Modifier.fillMaxSize().padding(16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) { CircularProgressIndicator(Modifier.size(28.dp)) }
+                            }
                         }
                     }
                 }

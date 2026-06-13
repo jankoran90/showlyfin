@@ -16,13 +16,13 @@ interface TraktMoviesService {
     suspend fun fetchMovie(@Path("traktSlug") traktSlug: String): Movie
 
     @GET("movies/popular?extended=full")
-    suspend fun fetchPopularMovies(@Query("genres") genres: String, @Query("certifications") certifications: String, @Query("limit") limit: Int): List<Movie>
+    suspend fun fetchPopularMovies(@Query("genres") genres: String, @Query("certifications") certifications: String, @Query("limit") limit: Int, @Query("page") page: Int): List<Movie>
 
     @GET("movies/trending?extended=full")
-    suspend fun fetchTrendingMovies(@Query("genres") genres: String, @Query("certifications") certifications: String, @Query("limit") limit: Int): List<MovieResult>
+    suspend fun fetchTrendingMovies(@Query("genres") genres: String, @Query("certifications") certifications: String, @Query("limit") limit: Int, @Query("page") page: Int): List<MovieResult>
 
     @GET("movies/anticipated?extended=full")
-    suspend fun fetchAnticipatedMovies(@Query("genres") genres: String, @Query("certifications") certifications: String, @Query("limit") limit: Int): List<MovieResult>
+    suspend fun fetchAnticipatedMovies(@Query("genres") genres: String, @Query("certifications") certifications: String, @Query("limit") limit: Int, @Query("page") page: Int): List<MovieResult>
 
     @GET("movies/recommended/weekly?extended=full")
     suspend fun fetchRecommendedMovies(@Query("genres") genres: String, @Query("certifications") certifications: String, @Query("limit") limit: Int): List<MovieResult>

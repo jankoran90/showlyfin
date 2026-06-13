@@ -55,6 +55,7 @@ class DiscoverViewModel @Inject constructor(
 
     private var searchJob: Job? = null
     private var rdMatchJob: Job? = null
+    private var loadJob: Job? = null   // VISTA V2b: aktivní load/loadMore (cancel při přepnutí tab/filtr)
 
     init {
         val loggedIn = tokenProvider.getToken() != null
@@ -237,6 +238,8 @@ class DiscoverViewModel @Inject constructor(
     }
 
     companion object {
+        private const val PAGE_SIZE = 40            // VISTA V2b: položek na stránku Objevit (Trakt limit+page)
+        private const val RECOMMENDED_LIMIT = 60    // Doporučené Trakt nestránkuje → jednorázově víc
         private val CHILDREN_ALLOWED_GENRES = setOf(
             "family", "animation", "rodinné", "rodinný", "animovaný", "animovaný film",
             "kids", "children", "dětský",
@@ -382,8 +385,9 @@ class DiscoverViewModel @Inject constructor(
     }
 
     private fun load(tab: DiscoverTab, filter: DiscoverFilter) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null, page = 1, canLoadMore = false, isLoadingMore = false) }
             try {
                 if (filter == DiscoverFilter.RECOMMENDED && tokenProvider.getToken() == null) {
                     _uiState.update {
@@ -396,55 +400,8 @@ class DiscoverViewModel @Inject constructor(
                     }
                     return@launch
                 }
-                val rawItems = when (tab to filter) {
-                    DiscoverTab.MOVIES to DiscoverFilter.TRENDING ->
-                        traktApi.fetchTrendingMovies("", "", 40).map { it.toMediaItem() }
-                    DiscoverTab.MOVIES to DiscoverFilter.POPULAR ->
-                        traktApi.fetchPopularMovies("", "", 40).map { it.toMediaItem() }
-                    DiscoverTab.MOVIES to DiscoverFilter.ANTICIPATED ->
-                        traktApi.fetchAnticipatedMovies("", "", 40).map { it.toMediaItem() }
-                    DiscoverTab.MOVIES to DiscoverFilter.RECOMMENDED ->
-                        authorizedTraktApi.fetchRecommendedMovies(40).map { it.toMediaItem() }
-                    DiscoverTab.SHOWS to DiscoverFilter.TRENDING ->
-                        traktApi.fetchTrendingShows("", "", 40).map { it.toMediaItem() }
-                    DiscoverTab.SHOWS to DiscoverFilter.POPULAR ->
-                        traktApi.fetchPopularShows("", "", 40).map { it.toMediaItem() }
-                    DiscoverTab.SHOWS to DiscoverFilter.ANTICIPATED ->
-                        traktApi.fetchAnticipatedShows("", "", 40).map { it.toMediaItem() }
-                    DiscoverTab.SHOWS to DiscoverFilter.RECOMMENDED ->
-                        authorizedTraktApi.fetchRecommendedShows(40).map { it.toMediaItem() }
-                    else -> emptyList()
-                }
-                val enriched = coroutineScope {
-                    rawItems.map { item ->
-                        async {
-                            val tmdbId = item.tmdbId ?: return@async item
-                            if (tab == DiscoverTab.MOVIES) {
-                                val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
-                                val translationDeferred = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
-                                val details = detailsDeferred.await()
-                                val translation = translationDeferred.await()
-                                item.copy(
-                                    posterPath = details?.poster_path,
-                                    backdropPath = details?.backdrop_path,
-                                    titleCz = translation?.title?.takeIf { it.isNotBlank() },
-                                    overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
-                                )
-                            } else {
-                                val detailsDeferred = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
-                                val translationDeferred = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
-                                val details = detailsDeferred.await()
-                                val translation = translationDeferred.await()
-                                item.copy(
-                                    posterPath = details?.poster_path,
-                                    backdropPath = details?.backdrop_path,
-                                    titleCz = translation?.name?.takeIf { it.isNotBlank() },
-                                    overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
-                                )
-                            }
-                        }
-                    }.awaitAll()
-                }
+                val rawItems = fetchPage(tab, filter, 1)
+                val enriched = enrich(rawItems, tab)
                 val state = _uiState.value
                 val filtered = applyFilters(enriched, state.filters, state)
                 _uiState.update {
@@ -453,13 +410,108 @@ class DiscoverViewModel @Inject constructor(
                         items = filtered,
                         availableGenres = mergeGenres(it.availableGenres, enriched),
                         isLoading = false,
+                        page = 1,
+                        // „Doporučené" Trakt nestránkuje; jinak plná stránka ⇒ čekej další.
+                        canLoadMore = filter != DiscoverFilter.RECOMMENDED && rawItems.size >= PAGE_SIZE,
                     )
                 }
                 if (_uiState.value.rdOnly) computeRdMatch()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba načítání") }
             }
         }
+    }
+
+    /** VISTA V2b: dotáhni další stránku Objevit a APPENDni (dedupe podle traktId). */
+    fun loadMore() {
+        val s = _uiState.value
+        if (s.isLoading || s.isLoadingMore || !s.canLoadMore) return
+        if (s.searchQuery.isNotBlank()) return   // paging jen pro discover, ne pro vyhledávání
+        val tab = s.activeTab
+        val filter = s.activeFilter
+        val nextPage = s.page + 1
+        loadJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true) }
+            try {
+                val rawNew = fetchPage(tab, filter, nextPage)
+                val existingIds = _uiState.value.rawItems.map { "${it.type}_${it.traktId}" }.toSet()
+                val freshRaw = rawNew.filter { "${it.type}_${it.traktId}" !in existingIds }
+                val enrichedNew = enrich(freshRaw, tab)
+                _uiState.update {
+                    val mergedRaw = it.rawItems + enrichedNew
+                    it.copy(
+                        rawItems = mergedRaw,
+                        items = applyFilters(mergedRaw, it.filters, it),
+                        availableGenres = mergeGenres(it.availableGenres, enrichedNew),
+                        isLoadingMore = false,
+                        page = nextPage,
+                        canLoadMore = rawNew.size >= PAGE_SIZE,
+                    )
+                }
+                if (_uiState.value.rdOnly) computeRdMatch()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Timber.w(e, "[Discover] loadMore failed")
+                _uiState.update { it.copy(isLoadingMore = false) }
+            }
+        }
+    }
+
+    /** Stránka syrových položek pro daný tab+filtr. „Doporučené" jen na page 1 (Trakt nestránkuje). */
+    private suspend fun fetchPage(tab: DiscoverTab, filter: DiscoverFilter, page: Int): List<MediaItem> =
+        when (tab to filter) {
+            DiscoverTab.MOVIES to DiscoverFilter.TRENDING ->
+                traktApi.fetchTrendingMovies("", "", PAGE_SIZE, page).map { it.toMediaItem() }
+            DiscoverTab.MOVIES to DiscoverFilter.POPULAR ->
+                traktApi.fetchPopularMovies("", "", PAGE_SIZE, page).map { it.toMediaItem() }
+            DiscoverTab.MOVIES to DiscoverFilter.ANTICIPATED ->
+                traktApi.fetchAnticipatedMovies("", "", PAGE_SIZE, page).map { it.toMediaItem() }
+            DiscoverTab.MOVIES to DiscoverFilter.RECOMMENDED ->
+                if (page == 1) authorizedTraktApi.fetchRecommendedMovies(RECOMMENDED_LIMIT).map { it.toMediaItem() } else emptyList()
+            DiscoverTab.SHOWS to DiscoverFilter.TRENDING ->
+                traktApi.fetchTrendingShows("", "", PAGE_SIZE, page).map { it.toMediaItem() }
+            DiscoverTab.SHOWS to DiscoverFilter.POPULAR ->
+                traktApi.fetchPopularShows("", "", PAGE_SIZE, page).map { it.toMediaItem() }
+            DiscoverTab.SHOWS to DiscoverFilter.ANTICIPATED ->
+                traktApi.fetchAnticipatedShows("", "", PAGE_SIZE, page).map { it.toMediaItem() }
+            DiscoverTab.SHOWS to DiscoverFilter.RECOMMENDED ->
+                if (page == 1) authorizedTraktApi.fetchRecommendedShows(RECOMMENDED_LIMIT).map { it.toMediaItem() } else emptyList()
+            else -> emptyList()
+        }
+
+    /** TMDB obohacení (poster/backdrop + CZ titulek/popis) paralelně. */
+    private suspend fun enrich(items: List<MediaItem>, tab: DiscoverTab): List<MediaItem> = coroutineScope {
+        items.map { item ->
+            async {
+                val tmdbId = item.tmdbId ?: return@async item
+                if (tab == DiscoverTab.MOVIES) {
+                    val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
+                    val translationDeferred = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
+                    val details = detailsDeferred.await()
+                    val translation = translationDeferred.await()
+                    item.copy(
+                        posterPath = details?.poster_path,
+                        backdropPath = details?.backdrop_path,
+                        titleCz = translation?.title?.takeIf { it.isNotBlank() },
+                        overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
+                    )
+                } else {
+                    val detailsDeferred = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
+                    val translationDeferred = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
+                    val details = detailsDeferred.await()
+                    val translation = translationDeferred.await()
+                    item.copy(
+                        posterPath = details?.poster_path,
+                        backdropPath = details?.backdrop_path,
+                        titleCz = translation?.name?.takeIf { it.isNotBlank() },
+                        overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
+                    )
+                }
+            }
+        }.awaitAll()
     }
 
     private fun mergeGenres(existing: List<String>, items: List<MediaItem>): List<String> {

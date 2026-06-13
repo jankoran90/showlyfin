@@ -12,9 +12,9 @@ interface TraktRemoteDataSource {
     // Shows
     suspend fun fetchShow(traktId: Long): Show
     suspend fun fetchShow(traktSlug: String): Show
-    suspend fun fetchPopularShows(genres: String, networks: String, limit: Int): List<Show>
-    suspend fun fetchTrendingShows(genres: String, networks: String, limit: Int): List<Show>
-    suspend fun fetchAnticipatedShows(genres: String, networks: String, limit: Int): List<Show>
+    suspend fun fetchPopularShows(genres: String, networks: String, limit: Int, page: Int): List<Show>
+    suspend fun fetchTrendingShows(genres: String, networks: String, limit: Int, page: Int): List<Show>
+    suspend fun fetchAnticipatedShows(genres: String, networks: String, limit: Int, page: Int): List<Show>
     suspend fun fetchRelatedShows(traktId: Long, addToLimit: Int): List<Show>
     suspend fun fetchShowTranslations(traktId: Long, code: String): List<Translation>
     suspend fun fetchNextEpisode(traktId: Long): Episode?
@@ -26,9 +26,9 @@ interface TraktRemoteDataSource {
     // Movies
     suspend fun fetchMovie(traktId: Long): Movie
     suspend fun fetchMovie(traktSlug: String): Movie
-    suspend fun fetchPopularMovies(genres: String, certifications: String, limit: Int): List<Movie>
-    suspend fun fetchTrendingMovies(genres: String, certifications: String, limit: Int): List<Movie>
-    suspend fun fetchAnticipatedMovies(genres: String, certifications: String, limit: Int): List<Movie>
+    suspend fun fetchPopularMovies(genres: String, certifications: String, limit: Int, page: Int): List<Movie>
+    suspend fun fetchTrendingMovies(genres: String, certifications: String, limit: Int, page: Int): List<Movie>
+    suspend fun fetchAnticipatedMovies(genres: String, certifications: String, limit: Int, page: Int): List<Movie>
     suspend fun fetchRecommendedMovies(genres: String, certifications: String, limit: Int): List<Movie>
     suspend fun fetchRelatedMovies(traktId: Long, addToLimit: Int): List<Movie>
     suspend fun fetchMovieComments(traktId: Long, limit: Int): List<Comment>

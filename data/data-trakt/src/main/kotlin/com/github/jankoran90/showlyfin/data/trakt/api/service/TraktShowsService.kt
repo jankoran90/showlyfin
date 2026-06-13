@@ -18,13 +18,13 @@ interface TraktShowsService {
     suspend fun fetchShow(@Path("traktSlug") traktSlug: String): Show
 
     @GET("shows/popular?extended=full")
-    suspend fun fetchPopularShows(@Query("genres") genres: String, @Query("networks") networks: String, @Query("limit") limit: Int): List<Show>
+    suspend fun fetchPopularShows(@Query("genres") genres: String, @Query("networks") networks: String, @Query("limit") limit: Int, @Query("page") page: Int): List<Show>
 
     @GET("shows/trending?extended=full")
-    suspend fun fetchTrendingShows(@Query("genres") genres: String, @Query("networks") networks: String, @Query("limit") limit: Int): List<ShowResult>
+    suspend fun fetchTrendingShows(@Query("genres") genres: String, @Query("networks") networks: String, @Query("limit") limit: Int, @Query("page") page: Int): List<ShowResult>
 
     @GET("shows/anticipated?extended=full")
-    suspend fun fetchAnticipatedShows(@Query("genres") genres: String, @Query("networks") networks: String, @Query("limit") limit: Int): List<ShowResult>
+    suspend fun fetchAnticipatedShows(@Query("genres") genres: String, @Query("networks") networks: String, @Query("limit") limit: Int, @Query("page") page: Int): List<ShowResult>
 
     @GET("shows/{traktId}/related?extended=full")
     suspend fun fetchRelatedShows(@Path("traktId") traktId: Long, @Query("limit") limit: Int): List<Show>

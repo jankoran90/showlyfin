@@ -22,23 +22,23 @@ internal class TraktApi(
     override suspend fun fetchMovie(traktId: Long) = moviesService.fetchMovie(traktId)
     override suspend fun fetchMovie(traktSlug: String) = moviesService.fetchMovie(traktSlug)
 
-    override suspend fun fetchPopularShows(genres: String, networks: String, limit: Int) =
-        showsService.fetchPopularShows(genres, networks, limit)
+    override suspend fun fetchPopularShows(genres: String, networks: String, limit: Int, page: Int) =
+        showsService.fetchPopularShows(genres, networks, limit, page)
 
-    override suspend fun fetchPopularMovies(genres: String, certifications: String, limit: Int) =
-        moviesService.fetchPopularMovies(genres, certifications, limit)
+    override suspend fun fetchPopularMovies(genres: String, certifications: String, limit: Int, page: Int) =
+        moviesService.fetchPopularMovies(genres, certifications, limit, page)
 
-    override suspend fun fetchTrendingShows(genres: String, networks: String, limit: Int): List<Show> =
-        showsService.fetchTrendingShows(genres, networks, limit).map { it.show!! }
+    override suspend fun fetchTrendingShows(genres: String, networks: String, limit: Int, page: Int): List<Show> =
+        showsService.fetchTrendingShows(genres, networks, limit, page).map { it.show!! }
 
-    override suspend fun fetchTrendingMovies(genres: String, certifications: String, limit: Int) =
-        moviesService.fetchTrendingMovies(genres, certifications, limit).map { it.movie!! }
+    override suspend fun fetchTrendingMovies(genres: String, certifications: String, limit: Int, page: Int) =
+        moviesService.fetchTrendingMovies(genres, certifications, limit, page).map { it.movie!! }
 
-    override suspend fun fetchAnticipatedShows(genres: String, networks: String, limit: Int): List<Show> =
-        showsService.fetchAnticipatedShows(genres, networks, limit).map { it.show!! }
+    override suspend fun fetchAnticipatedShows(genres: String, networks: String, limit: Int, page: Int): List<Show> =
+        showsService.fetchAnticipatedShows(genres, networks, limit, page).map { it.show!! }
 
-    override suspend fun fetchAnticipatedMovies(genres: String, certifications: String, limit: Int): List<Movie> =
-        moviesService.fetchAnticipatedMovies(genres, certifications, limit).map { it.movie!! }
+    override suspend fun fetchAnticipatedMovies(genres: String, certifications: String, limit: Int, page: Int): List<Movie> =
+        moviesService.fetchAnticipatedMovies(genres, certifications, limit, page).map { it.movie!! }
 
     override suspend fun fetchRecommendedMovies(genres: String, certifications: String, limit: Int): List<Movie> =
         moviesService.fetchRecommendedMovies(genres, certifications, limit).map { it.movie!! }
