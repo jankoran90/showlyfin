@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.csfd.CsfdScraper
@@ -571,6 +572,9 @@ class DetailViewModel @Inject constructor(
             val jfToken = prefs.getString("jellyfin_token", "").orEmpty()
             val subs = runCatching { buildTvSubtitles() }.getOrDefault(emptyList())
             val result = naTv.castFerry(jfUrl, jfToken, url, title, subs)
+            // Po úspěšném spuštění na TV přepni appku rovnou na sekci „Ovladač" (parita s JF knihovnou
+            // přes NaTvCoordinator) → telefon se hned stává dálkovým ovladačem běžícího streamu.
+            if (result == CastResult.SENT) ListenNavSignal.requestOpenOvladac()
             _uiState.update {
                 it.copy(isCastingToTv = false, isResolvingStream = false, showStreamPicker = result != CastResult.SENT, castToTvResult = result)
             }
