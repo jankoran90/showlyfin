@@ -88,6 +88,12 @@ internal class UploaderApi(
         return service.rdDelete("$base/api/stremio/rd/delete", cookie, UploaderRdDeleteRequest(hashes = hashes)).deleted
     }
 
+    override suspend fun rdPurgeOrphans(baseUrl: String, sessionCookie: String): Int {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.rdPurgeOrphans("$base/api/stremio/rd/purge-orphans", cookie).deleted
+    }
+
     override suspend fun rdProgress(baseUrl: String, sessionCookie: String, torrentId: String, fileIdx: Int): UploaderRdProgressResponse {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

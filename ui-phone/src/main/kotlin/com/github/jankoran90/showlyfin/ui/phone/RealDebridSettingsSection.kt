@@ -118,6 +118,18 @@ fun RealDebridSection(
                         Text("Smazat vše z RealDebridu (${ui.rdItems.size})")
                     }
                 }
+                // Úklid „duchů": odrestrikované odkazy bez torrentu (RD je nechává po každém přehrání).
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { viewModel.purgeOrphans() }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Vyčistit zbytky (duchy)")
+                }
+                Text(
+                    "Smaže staré přímé odkazy na RealDebridu, které zůstaly po přehrávání a nemají už film.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.5f),
+                )
             }
         }
     }

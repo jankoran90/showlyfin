@@ -134,5 +134,22 @@ class RealDebridViewModel @Inject constructor(
         }
     }
 
+    /** Ruční úklid „duchů" — odrestrikované odkazy na RD bez torrentu (RD je nechává po přehrání). */
+    fun purgeOrphans() {
+        if (baseUrl.isBlank()) return
+        _uiState.update { it.copy(loading = true, message = null) }
+        viewModelScope.launch {
+            runCatching { uploaderDs.rdPurgeOrphans(baseUrl, cookie) }
+                .onSuccess { n ->
+                    _uiState.update { it.copy(loading = false, message = if (n > 0) "Vyčištěno duchů: $n" else "Žádní duchové") }
+                    load(force = true)
+                }
+                .onFailure { e ->
+                    Timber.w(e, "[LEDGER] purgeOrphans selhal")
+                    _uiState.update { it.copy(loading = false, error = e.message ?: "Úklid selhal") }
+                }
+        }
+    }
+
     fun clearMessage() = _uiState.update { it.copy(message = null, error = null) }
 }

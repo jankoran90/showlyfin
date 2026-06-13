@@ -16,6 +16,7 @@ interface UploaderService {
     // Plan LEDGER (SHW-43) — správa RD účtu z Nastavení
     @GET suspend fun rdList(@Url url: String, @Header("Cookie") cookie: String): UploaderRdListResponse
     @POST suspend fun rdDelete(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderRdDeleteRequest): UploaderRdCleanupResponse
+    @POST suspend fun rdPurgeOrphans(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderRdDeleteRequest = UploaderRdDeleteRequest()): UploaderRdCleanupResponse
     @POST suspend fun rdMatch(@Url url: String, @Header("Cookie") cookie: String, @Body request: RdMatchRequest): RdMatchResponse
     @GET suspend fun getRdLibrary(@Url url: String, @Header("Cookie") cookie: String): RdLibraryResponse
     @GET suspend fun getStreamFilter(@Url url: String, @Header("Cookie") cookie: String): StreamFilterPrefs

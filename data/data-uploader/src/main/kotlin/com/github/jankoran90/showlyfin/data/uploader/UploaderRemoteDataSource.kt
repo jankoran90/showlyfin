@@ -16,6 +16,7 @@ interface UploaderRemoteDataSource {
     // Plan LEDGER (SHW-43): správa RD účtu z Nastavení — seznam všeho na RD + ruční/hromadné mazání.
     suspend fun rdList(baseUrl: String, sessionCookie: String, force: Boolean = false): List<UploaderRdSavedItem>
     suspend fun rdDelete(baseUrl: String, sessionCookie: String, hashes: List<String>): Int
+    suspend fun rdPurgeOrphans(baseUrl: String, sessionCookie: String): Int
     suspend fun rdMatch(baseUrl: String, sessionCookie: String, items: List<RdMatchItem>): List<Int>
     suspend fun getRdLibrary(baseUrl: String, sessionCookie: String): RdLibraryResponse
     suspend fun getStreamFilter(baseUrl: String, sessionCookie: String): StreamFilterPrefs
