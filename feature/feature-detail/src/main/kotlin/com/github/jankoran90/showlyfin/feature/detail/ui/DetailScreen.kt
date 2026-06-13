@@ -440,6 +440,9 @@ fun DetailScreen(
                 inWatchlist = uiState.isInWatchlist,
                 isTogglingWatchlist = uiState.isTogglingWatchlist,
                 onWatchlist = { viewModel.toggleWatchlist() },
+                hasRemembered = uiState.rememberedSource != null,
+                onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playStream(it) } },
+                onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
             )
 
             val mergedCollection = uiState.mergedCollection ?: uiState.collection?.let { coll ->
@@ -502,6 +505,9 @@ private fun DetailActionRow(
     inWatchlist: Boolean,
     isTogglingWatchlist: Boolean,
     onWatchlist: () -> Unit,
+    hasRemembered: Boolean = false,
+    onPlayRemembered: () -> Unit = {},
+    onCastRemembered: () -> Unit = {},
 ) {
     FlowRow(
         modifier = Modifier
@@ -525,6 +531,18 @@ private fun DetailActionRow(
                 }
             }
         } else {
+            // SIEVE S3b: po „zapamatovat" má detail rovnou tlačítka na uložený fungující zdroj —
+            // přehrát zde / na TV jedním ťuknutím, bez otevírání výběru zdrojů.
+            if (hasRemembered) {
+                Button(onClick = onPlayRemembered, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
+                    Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                    Text("⭐ Přehrát zde")
+                }
+                Button(onClick = onCastRemembered, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
+                    Icon(Icons.Default.Cast, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                    Text("⭐ Na TV")
+                }
+            }
             // Mimo knihovnu → akvizice / stream
             AssistChip(
                 onClick = onDownload,

@@ -202,17 +202,22 @@ class NaTvService @Inject constructor(
     }
 
     /**
-     * Vybere cílovou session pro „Ovladač".
-     * Priorita: Wolphin/Yellyfin TV klient s běžícím přehráváním → jakákoli Wolphin/Yellyfin →
-     * aktivní s now-playing → první aktivní → první.
+     * Vybere cílovou session pro „Ovladač" / FERRY cast.
+     * Priorita: **náš `Yellyfin` klient PRVNÍ** (jediný má FERRY přijímač + DPAD injektor) → teprve pak
+     * upstream Wolphin/Wholphin → now-playing → aktivní → první. Bez té priority cast občas trefil
+     * Wholphin (starší/upstream appka bez FERRY), který payload `FERRY1:…` jen zobrazil jako text.
      */
     fun pickWatchSession(sessions: List<JellyfinSessionSummary>): JellyfinSessionSummary? {
         if (sessions.isEmpty()) return null
+        fun isYellyfin(s: JellyfinSessionSummary): Boolean =
+            "${s.client.orEmpty()} ${s.deviceName}".lowercase().contains("yellyfin")
         fun isWolphin(s: JellyfinSessionSummary): Boolean {
             val hay = "${s.client.orEmpty()} ${s.deviceName}".lowercase()
             return hay.contains("wolphin") || hay.contains("wholphin") || hay.contains("yellyfin")
         }
-        return sessions.firstOrNull { isWolphin(it) && it.nowPlayingTitle != null }
+        return sessions.firstOrNull { isYellyfin(it) && it.nowPlayingTitle != null }
+            ?: sessions.firstOrNull { isYellyfin(it) }
+            ?: sessions.firstOrNull { isWolphin(it) && it.nowPlayingTitle != null }
             ?: sessions.firstOrNull { isWolphin(it) }
             ?: sessions.firstOrNull { it.nowPlayingTitle != null }
             ?: sessions.firstOrNull { it.isActive }
