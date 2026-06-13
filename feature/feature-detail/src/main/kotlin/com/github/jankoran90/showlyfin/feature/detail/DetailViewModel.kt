@@ -414,11 +414,6 @@ class DetailViewModel @Inject constructor(
     fun playStream(stream: UploaderStream, target: CastTarget = CastTarget.LOCAL) {
         if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
         lastPlayedStream = stream   // CASCADE Fáze 4: zapamatuj pro případný auto-advance po chybě přehrávání
-        // SIEVE S2: po lokálním přehrání nabídneme „tohle sedí? 👍" (po návratu na Detail), ať si
-        // appka zapamatuje, který zdroj reálně fungoval. Nenabízíme u zdroje, který už je uložený.
-        if (target == CastTarget.LOCAL && !sameSource(stream, _uiState.value.rememberedSource)) {
-            _uiState.update { it.copy(pendingWorkingConfirm = stream) }
-        }
         val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: _uiState.value.item?.title.orEmpty()
         // CZ titulky query (Fáze E): orig+cz název, rok, runtime, release+fps zvoleného streamu.
@@ -549,8 +544,17 @@ class DetailViewModel @Inject constructor(
     /** Resolvnutá URL → cíl: lokální přehrávač (telefon) nebo odeslání na TV (FERRY). */
     private fun deliver(url: String, title: String, target: CastTarget) {
         when (target) {
-            CastTarget.LOCAL -> _uiState.update {
-                it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title)
+            CastTarget.LOCAL -> {
+                // SIEVE S2: až teď (přehrávač se reálně spouští) nabídneme „tohle sedí? 👍" — po návratu
+                // na Detail. Nenabízíme u zdroje, který je už uložený jako fungující (žádné opakování).
+                val confirm = lastPlayedStream?.takeIf { !sameSource(it, _uiState.value.rememberedSource) }
+                _uiState.update {
+                    it.copy(
+                        isResolvingStream = false, showStreamPicker = false,
+                        pendingPlaybackUrl = url, pendingPlaybackTitle = title,
+                        pendingWorkingConfirm = confirm,
+                    )
+                }
             }
             CastTarget.TV -> castToTv(url, title)
         }
