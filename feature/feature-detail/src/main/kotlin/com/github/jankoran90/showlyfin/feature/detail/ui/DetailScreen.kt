@@ -260,6 +260,29 @@ fun DetailScreen(
             return@Scaffold
         }
 
+        // VISTA V4: detail se nenačetl (typicky výpadek sítě) → srozumitelná hláška + „Zkusit znovu",
+        // místo prázdného/zaseknutého detailu (dřív se ukázal i starý film z race).
+        if (uiState.error != null && uiState.movieDetails == null && uiState.showDetails == null && !uiState.isLoading) {
+            Box(
+                Modifier.fillMaxSize().padding(paddingValues),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp),
+                ) {
+                    Text(
+                        uiState.error ?: "Detail se nepodařilo načíst.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Button(onClick = { viewModel.retry() }) { Text("Zkusit znovu") }
+                }
+            }
+            return@Scaffold
+        }
+
         val scrollState = rememberScrollState()
         Column(
             Modifier

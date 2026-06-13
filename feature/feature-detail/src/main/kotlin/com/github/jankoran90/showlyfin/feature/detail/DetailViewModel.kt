@@ -64,6 +64,19 @@ class DetailViewModel @Inject constructor(
 
     private var rdPollJob: Job? = null
 
+    // VISTA V4 (id-robustnost): rozdělaný `load()`. Při překliku karta→karta ho zrušíme,
+    // aby pozdě doběhlé coroutiny předchozího filmu (`item = item.copy(...)`) nepřepsaly
+    // stav nově otevřeného → jinak detail „visí na původním filmu".
+    private var loadJob: Job? = null
+
+    /** Týž titul? Stub z pásu nese jen `tmdbId` (trakt 0, imdb null), proto OR přes všechna id. */
+    private fun MediaItem.isSameAs(other: MediaItem): Boolean {
+        if (traktId != 0L && traktId == other.traktId) return true
+        if (tmdbId != null && tmdbId == other.tmdbId) return true
+        if (!imdbId.isNullOrBlank() && imdbId == other.imdbId) return true
+        return false
+    }
+
     // CASCADE Fáze 4: poslední přehrávaný stream z pickeru → po chybě přehrávání víme,
     // odkud v seznamu `streams` pokračovat dalším kandidátem (v UŽIVATELOVĚ pořadí, bez přeřazování).
     private var lastPlayedStream: UploaderStream? = null
@@ -73,13 +86,24 @@ class DetailViewModel @Inject constructor(
     // nikdy nesáhneme na nesouvisející torrenty. Reset při načtení jiného filmu (`load`).
     private val attemptedRdHashes = LinkedHashSet<String>()
 
-    fun load(item: MediaItem) {
+    fun load(item: MediaItem) = load(item, force = false)
+
+    /** VISTA V4: znovunačtení po síťové chybě (obejde dedup guard). */
+    fun retry() {
+        val item = _uiState.value.item ?: return
+        load(item, force = true)
+    }
+
+    private fun load(item: MediaItem, force: Boolean) {
         val current = _uiState.value.item
-        if (current != null) {
+        if (!force && current != null) {
             val sameTrakt = current.traktId != 0L && current.traktId == item.traktId
             val sameTmdb = current.tmdbId != null && item.tmdbId != null && current.tmdbId == item.tmdbId
             if (sameTrakt || sameTmdb) return
         }
+        // VISTA V4: zruš rozdělaný load předchozího filmu → jeho pozdě doběhlé coroutiny
+        // nepřepíšou stav nově otevřeného (konec race „visí na původním").
+        loadJob?.cancel()
         lastPlayedStream = null
         attemptedRdHashes.clear()
         _uiState.update {
@@ -138,11 +162,12 @@ class DetailViewModel @Inject constructor(
                 error = null,
             )
         }
-        viewModelScope.launch { loadJellyfinOwned(item) }
-        viewModelScope.launch { loadWatchlistMembership(item) }
-        viewModelScope.launch { loadCast(item) }
-        viewModelScope.launch { loadRelated(item) }
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
+            launch { loadJellyfinOwned(item) }
+            launch { loadWatchlistMembership(item) }
+            launch { loadCast(item) }
+            launch { loadRelated(item) }
+            launch {
             try {
                 val tmdbId = item.tmdbId
                 var resolvedCzTitle: String? = item.titleCz?.takeIf { it.isNotBlank() }
@@ -155,8 +180,11 @@ class DetailViewModel @Inject constructor(
                             val translation = translationDeferred.await()
                             val tmdbCzTitle = translation?.title?.takeIf { it.isNotBlank() }
                             if (tmdbCzTitle != null) resolvedCzTitle = tmdbCzTitle
-                            _uiState.update {
-                                it.copy(
+                            // VISTA V4: pojistka proti micro-window — pokud uživatel mezitím
+                            // překlikl na jiný film, NEpřepisuj (nepřevracej detail na původní).
+                            _uiState.update { st ->
+                                if (st.item?.isSameAs(item) != true) st
+                                else st.copy(
                                     movieDetails = details,
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
@@ -186,8 +214,9 @@ class DetailViewModel @Inject constructor(
                             val translation = translationDeferred.await()
                             val tmdbCzTitle = translation?.name?.takeIf { it.isNotBlank() }
                             if (tmdbCzTitle != null) resolvedCzTitle = tmdbCzTitle
-                            _uiState.update {
-                                it.copy(
+                            _uiState.update { st ->
+                                if (st.item?.isSameAs(item) != true) st
+                                else st.copy(
                                     showDetails = details,
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
@@ -203,10 +232,26 @@ class DetailViewModel @Inject constructor(
                 if (item.type == MediaType.MOVIE) {
                     loadCsfd(item, resolvedCzTitle)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e   // překlik na jiný film → zrušený load, NEhlas jako chybu
             } catch (e: Throwable) {
-                _uiState.update { it.copy(isLoading = false, isCsfdLoading = false, error = e.message) }
+                // VISTA V4: chybu drž jen pro stále zobrazený film; síťový výpadek → srozumitelná hláška.
+                _uiState.update { st ->
+                    if (st.item?.isSameAs(item) != true) st
+                    else st.copy(isLoading = false, isCsfdLoading = false, error = friendlyLoadError(e))
+                }
+            }
             }
         }
+    }
+
+    /** VISTA V4: síťové výpadky přelož na lidskou hlášku (jinak `UnknownHostException` apod.). */
+    private fun friendlyLoadError(e: Throwable): String = when (e) {
+        is java.net.UnknownHostException,
+        is java.net.ConnectException,
+        is java.net.SocketTimeoutException,
+        is java.io.IOException -> "Nepodařilo se načíst detail — zkontroluj připojení."
+        else -> e.message ?: "Detail se nepodařilo načíst."
     }
 
     private suspend fun loadCast(item: MediaItem) {
