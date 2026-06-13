@@ -76,6 +76,18 @@ internal class UploaderApi(
         return service.rdCleanup("$base/api/stremio/rd/cleanup", cookie, UploaderRdCleanupRequest(keep = keepHash, hashes = hashes)).deleted
     }
 
+    override suspend fun rdList(baseUrl: String, sessionCookie: String, force: Boolean): List<UploaderRdSavedItem> {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.rdList("$base/api/stremio/rd/list?force=$force", cookie).items
+    }
+
+    override suspend fun rdDelete(baseUrl: String, sessionCookie: String, hashes: List<String>): Int {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.rdDelete("$base/api/stremio/rd/delete", cookie, UploaderRdDeleteRequest(hashes = hashes)).deleted
+    }
+
     override suspend fun rdProgress(baseUrl: String, sessionCookie: String, torrentId: String, fileIdx: Int): UploaderRdProgressResponse {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

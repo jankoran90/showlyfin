@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -45,6 +46,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.AlertDialog
@@ -481,6 +483,7 @@ fun DetailScreen(
                 hasRemembered = uiState.rememberedSource != null,
                 onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playStream(it) } },
                 onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
+                onRemoveRemembered = { viewModel.removeRememberedSource() },
             )
 
             val mergedCollection = uiState.mergedCollection ?: uiState.collection?.let { coll ->
@@ -546,6 +549,7 @@ private fun DetailActionRow(
     hasRemembered: Boolean = false,
     onPlayRemembered: () -> Unit = {},
     onCastRemembered: () -> Unit = {},
+    onRemoveRemembered: () -> Unit = {},
 ) {
     FlowRow(
         modifier = Modifier
@@ -579,6 +583,10 @@ private fun DetailActionRow(
                 Button(onClick = onCastRemembered, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
                     Icon(Icons.Default.Cast, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                     Text("⭐ Na TV")
+                }
+                // Plan LEDGER (SHW-43): odstranit zapamatovaný zdroj — zruší pin + smaže z RD účtu.
+                OutlinedIconButton(onClick = onRemoveRemembered, modifier = Modifier.tvFocusable(shape = CircleShape)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Odstranit zapamatovaný zdroj", tint = MaterialTheme.colorScheme.error)
                 }
             }
             // Mimo knihovnu → akvizice / stream

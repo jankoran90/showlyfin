@@ -499,6 +499,23 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(rememberedSource = null) }
     }
 
+    /**
+     * Plan LEDGER (SHW-43): u zapamatovaného filmu „odstranit" = zruš pin A smaž jeho torrent
+     * z RD účtu (na rozdíl od [forgetWorkingSource], které jen zapomene pin). Best-effort, tiché.
+     */
+    fun removeRememberedSource() {
+        val remembered = _uiState.value.rememberedSource
+        forgetWorkingSource()
+        val hash = remembered?.let { streamRdHash(it) }
+        if (hash != null && uploaderBaseUrl.isNotBlank()) {
+            viewModelScope.launch {
+                runCatching { uploaderDs.rdDelete(uploaderBaseUrl, uploaderCookie, listOf(hash)) }
+                    .onSuccess { n -> timber.log.Timber.i("[LEDGER] zapamatovaný zdroj odstraněn z RD: %d (hash=%s)", n, hash) }
+                    .onFailure { e -> timber.log.Timber.w(e, "[LEDGER] RD delete zapamatovaného selhal") }
+            }
+        }
+    }
+
     /** Plan FERRY (SHW-37): zvolený stream pošli na TV (yellyfin) místo lokálního přehrání. */
     fun castStreamToTv(stream: UploaderStream) = playStream(stream, CastTarget.TV)
 

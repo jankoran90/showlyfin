@@ -85,4 +85,37 @@ class WorkingSourceStore @Inject constructor(
             if (!imdb.isNullOrBlank()) remove(imdbKey(imdb))
         }.apply()
     }
+
+    /**
+     * Plan LEDGER (SHW-43): všechny zapamatované zdroje pro správu v Nastavení.
+     * Záznam je uložen pod DVĚMA klíči (`tmdb` i `imdb`) → projdeme všechny prefs klíče a
+     * dedupujeme podle identity filmu (tmdb→imdb→hash streamu), ať se jeden film neukáže 2×.
+     * Řazeno od nejnovějšího uložení.
+     */
+    fun getAll(): List<WorkingSource> {
+        val seen = HashSet<String>()
+        val out = ArrayList<WorkingSource>()
+        for ((key, value) in prefs.all) {
+            if (!key.startsWith("sieve_working_")) continue
+            val rec = parse(value as? String, key) ?: continue
+            val s = rec.stream
+            val identity = when {
+                rec.tmdb > 0L -> "tmdb:${rec.tmdb}"
+                rec.imdb.isNotBlank() -> "imdb:${rec.imdb}"
+                else -> "hash:${s.cometPath ?: s.infoHash ?: s.url ?: key}"
+            }
+            if (seen.add(identity)) out.add(rec)
+        }
+        return out.sortedByDescending { it.savedAtMs }
+    }
+
+    /** Plan LEDGER: RD info_hash zapamatovaného zdroje (infoHash, jinak 1. segment cometPath), lowercase. */
+    fun rdHashOf(s: UploaderStream): String? {
+        s.infoHash?.takeIf { it.isNotBlank() }?.let { return it.lowercase() }
+        val cp = s.cometPath?.trim().orEmpty()
+        if (cp.isNotBlank()) {
+            return cp.trim('/').substringBefore('?').substringBefore('/').lowercase().takeIf { it.isNotBlank() }
+        }
+        return null
+    }
 }

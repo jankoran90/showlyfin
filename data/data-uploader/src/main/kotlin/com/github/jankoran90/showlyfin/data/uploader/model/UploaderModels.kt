@@ -105,6 +105,23 @@ data class UploaderRdCleanupResponse(
     val deleted: Int = 0,
 )
 
+// Plan LEDGER (SHW-43): správa RealDebridu v Nastavení — seznam všeho na RD účtu + mazání.
+data class UploaderRdSavedItem(
+    val hash: String = "",
+    @SerializedName("torrent_id") val torrentId: String? = null,
+    val filename: String = "",
+    val status: String = "",
+    val bytes: Long = 0L,
+)
+
+data class UploaderRdListResponse(
+    val items: List<UploaderRdSavedItem> = emptyList(),
+)
+
+data class UploaderRdDeleteRequest(
+    @SerializedName("hashes") val hashes: List<String> = emptyList(),
+)
+
 data class UploaderRdProgressResponse(
     @SerializedName("torrent_id") val torrentId: String = "",
     val status: String = "",

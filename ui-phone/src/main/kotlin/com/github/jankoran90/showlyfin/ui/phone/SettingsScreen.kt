@@ -290,6 +290,14 @@ fun SettingsScreen(
           }
         }
 
+        // Plan LEDGER (SHW-43) — správa RealDebridu (seznam účtu + zapamatované + mazání).
+        // Vlastní VM v bloku (anti-monolit), gated stejně jako Streamování (admin creds).
+        if (!credLocked) {
+            CollapsibleSettingsSection("RealDebrid", expanded) {
+                RealDebridSection()
+            }
+        }
+
         CollapsibleSettingsSection("Vzhled", expanded) {
             // Plan WARDEN W2: ne-admin user vidí Vzhled jen pokud ho šablona nezamkla (lock-mapa).
             if (isAdmin || ProfileConfig.LockKeys.APPEARANCE !in uiState.lockedKeys) {
