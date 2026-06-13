@@ -12,6 +12,7 @@ interface UploaderService {
     @POST suspend fun rdAdd(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderRdAddRequest): UploaderRdAddResponse
     @GET suspend fun rdProgress(@Url url: String, @Header("Cookie") cookie: String): UploaderRdProgressResponse
     @GET suspend fun rdSearch(@Url url: String, @Header("Cookie") cookie: String): UploaderStreamsResponse
+    @POST suspend fun rdCleanup(@Url url: String, @Header("Cookie") cookie: String, @Body request: UploaderRdCleanupRequest): UploaderRdCleanupResponse
     @POST suspend fun rdMatch(@Url url: String, @Header("Cookie") cookie: String, @Body request: RdMatchRequest): RdMatchResponse
     @GET suspend fun getRdLibrary(@Url url: String, @Header("Cookie") cookie: String): RdLibraryResponse
     @GET suspend fun getStreamFilter(@Url url: String, @Header("Cookie") cookie: String): StreamFilterPrefs

@@ -190,6 +190,21 @@ fun DetailScreen(
             dismissButton = { TextButton(onClick = { viewModel.dismissWorkingConfirm() }) { Text("Ne") } },
         )
     }
+    // Plan WINNOW (SHW-41, item 1): titul blokovaný na RD (DMCA) → jasný dialog místo tichého skoku.
+    uiState.blockedDmcaMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { viewModel.consumeBlockedDmca() },
+            title = { Text("Titul je blokovaný (DMCA)") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.consumeBlockedDmca()
+                    onStremio?.invoke(displayItem)
+                }) { Text("Otevřít ve Stremiu") }
+            },
+            dismissButton = { TextButton(onClick = { viewModel.consumeBlockedDmca() }) { Text("Zavřít") } },
+        )
+    }
     if (uiState.showDownloadMenu) {
         DownloadMenuSheet(
             onSdilej = { viewModel.openSdilejPicker() },

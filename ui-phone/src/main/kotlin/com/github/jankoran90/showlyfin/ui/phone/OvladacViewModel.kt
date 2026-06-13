@@ -85,13 +85,38 @@ class OvladacViewModel @Inject constructor(
 
     private var pollJob: Job? = null
     private var userSelectedId: String? = null
+    // WINNOW item 4: identita posledního externího castu, na který jsme re-aplikovali uložený styl.
+    // Při NOVÉM castu (jiný film) znovu pošleme styl na box, ať uživatel nemusí nastavovat pokaždé.
+    private var lastReappliedCastKey: String? = null
 
     init {
         // CONSOLE: načti uložené barevné pozice titulků (přežijí restart; po fixu revokeToken i Trakt logout).
         val slots = (0 until 4).map { i ->
             prefs.getInt("sub_color_slot_$i", DEFAULT_COLOR_SLOTS[i])
         }
-        _state.update { it.copy(subColorSlots = slots) }
+        // WINNOW item 4: načti i uložený STYL titulků/obrazu (poměr, velikost, pozice, barva), ať
+        // přežije nový film/cast — dřív se resetoval na default a uživatel ho musel pokaždé nastavovat.
+        val d = UiState()
+        _state.update {
+            it.copy(
+                subColorSlots = slots,
+                displayResizeMode = prefs.getString(PK_RESIZE, d.displayResizeMode) ?: d.displayResizeMode,
+                subFontSizeSp = prefs.getInt(PK_FONT, d.subFontSizeSp),
+                subBottomMarginPct = prefs.getInt(PK_MARGIN, d.subBottomMarginPct),
+                subColorArgb = prefs.getInt(PK_COLOR, -1).takeIf { c -> c != -1 },
+            )
+        }
+    }
+
+    /** WINNOW item 4: pošle uložený styl titulků/obrazu na box (re-aplikace při novém externím castu). */
+    private fun reapplyDisplayConfig() {
+        val s = _state.value
+        sendDisplayConfig(
+            resizeMode = s.displayResizeMode,
+            subFontSizeSp = s.subFontSizeSp,
+            subColorArgb = s.subColorArgb,
+            subBottomMarginPct = s.subBottomMarginPct,
+        )
     }
 
     fun start() {
@@ -169,6 +194,14 @@ class OvladacViewModel @Inject constructor(
                 avrMuted = if (avrStatus?.reachable == true) avrStatus.muted else it.avrMuted,
                 avrVolumeStep = avrVolumeStepPref(),
             )
+        }
+        // WINNOW item 4: nový externí cast (jiný film) → re-aplikuj uložený styl titulků/obrazu na box.
+        val castKey = fc?.let { it.tmdbId?.toString() ?: it.title }
+        if (castKey != null && castKey != lastReappliedCastKey) {
+            lastReappliedCastKey = castKey
+            reapplyDisplayConfig()
+        } else if (fc == null) {
+            lastReappliedCastKey = null
         }
     }
 
@@ -352,30 +385,34 @@ class OvladacViewModel @Inject constructor(
     /** Poměr obrazu na TV: "fit" | "zoom" | "fill". */
     fun setResizeMode(mode: String) {
         _state.update { it.copy(displayResizeMode = mode) }
+        prefs.edit().putString(PK_RESIZE, mode).apply()   // WINNOW item 4: přežije nový film/cast
         sendDisplayConfig(resizeMode = mode)
     }
     /** Změní velikost titulků o [delta] sp (rozsah 12..60) a pošle na box. */
     fun nudgeSubFontSize(delta: Int) {
         val v = (_state.value.subFontSizeSp + delta).coerceIn(12, 60)
         _state.update { it.copy(subFontSizeSp = v) }
+        prefs.edit().putInt(PK_FONT, v).apply()
         sendDisplayConfig(subFontSizeSp = v)
     }
     /** Posune titulky nahoru/dolů o [delta] % výšky (rozsah 0..40) a pošle na box. */
     fun nudgeSubMargin(delta: Int) {
         val v = (_state.value.subBottomMarginPct + delta).coerceIn(0, 40)
         _state.update { it.copy(subBottomMarginPct = v) }
+        prefs.edit().putInt(PK_MARGIN, v).apply()
         sendDisplayConfig(subBottomMarginPct = v)
     }
     /** Nastaví barvu titulků (ARGB) a pošle na box. */
     fun setSubColor(argb: Int) {
         _state.update { it.copy(subColorArgb = argb) }
+        prefs.edit().putInt(PK_COLOR, argb).apply()
         sendDisplayConfig(subColorArgb = argb)
     }
     /** Uloží vybranou barvu na pozici [slot] (0..3), aplikuje ji a zapamatuje napříč restarty. */
     fun saveColorToSlot(slot: Int, argb: Int) {
         if (slot !in 0..3) return
         val slots = _state.value.subColorSlots.toMutableList().also { it[slot] = argb }
-        prefs.edit().putInt("sub_color_slot_$slot", argb).apply()
+        prefs.edit().putInt("sub_color_slot_$slot", argb).putInt(PK_COLOR, argb).apply()
         _state.update { it.copy(subColorSlots = slots, subColorArgb = argb) }
         sendDisplayConfig(subColorArgb = argb)
     }
@@ -428,6 +465,11 @@ class OvladacViewModel @Inject constructor(
         const val SCENE_RESULT_MS = 3_500L
         const val TICKS_PER_MS = 10_000L
         const val EXTERNAL_TTL_MS = 6 * 60 * 60 * 1000L // 6 h — externí stream může běžet dlouho
+        // WINNOW item 4: prefs klíče pro perzistenci stylu titulků/obrazu (mimo barevné sloty).
+        const val PK_RESIZE = "console_resize_mode"
+        const val PK_FONT = "console_sub_font_sp"
+        const val PK_MARGIN = "console_sub_margin_pct"
+        const val PK_COLOR = "console_sub_color_argb"
         val DEFAULT_COLOR_SLOTS = listOf(
             0xFFFFFFFF.toInt(), // bílá
             0xFFFFEB3B.toInt(), // žlutá

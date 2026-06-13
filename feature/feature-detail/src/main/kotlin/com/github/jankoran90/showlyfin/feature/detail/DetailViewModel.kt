@@ -26,6 +26,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.CsfdPlotResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderCaptureRequest
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.model.UUID
 import javax.inject.Inject
 import javax.inject.Named
@@ -66,6 +68,11 @@ class DetailViewModel @Inject constructor(
     // odkud v seznamu `streams` pokračovat dalším kandidátem (v UŽIVATELOVĚ pořadí, bez přeřazování).
     private var lastPlayedStream: UploaderStream? = null
 
+    // Plan WINNOW (SHW-41, item 2): RD hashe, které appka zkoušela pro TENTO film v této relaci.
+    // Při „zapamatovat zdroj" smažeme z RD účtu jen tyto (kromě zapamatovaného) → bezpečný úklid,
+    // nikdy nesáhneme na nesouvisející torrenty. Reset při načtení jiného filmu (`load`).
+    private val attemptedRdHashes = LinkedHashSet<String>()
+
     fun load(item: MediaItem) {
         val current = _uiState.value.item
         if (current != null) {
@@ -74,6 +81,7 @@ class DetailViewModel @Inject constructor(
             if (sameTrakt || sameTmdb) return
         }
         lastPlayedStream = null
+        attemptedRdHashes.clear()
         _uiState.update {
             it.copy(
                 item = item,
@@ -118,6 +126,7 @@ class DetailViewModel @Inject constructor(
                 pendingPlaybackUrl = null,
                 pendingPlaybackTitle = "",
                 requestStremioFallback = false,
+                blockedDmcaMessage = null,
                 directorName = null,
                 directorMovies = null,
                 studioName = null,
@@ -397,6 +406,23 @@ class DetailViewModel @Inject constructor(
         val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
         workingSourceStore.save(imdb, st.item?.tmdbId, title, stream)
         _uiState.update { it.copy(rememberedSource = stream, pendingWorkingConfirm = null) }
+        cleanupRdKeepingSource(stream)
+    }
+
+    /**
+     * Plan WINNOW (item 2, BEZPEČNĚ): po „zapamatovat zdroj" smaž z RD účtu jen torrenty, které
+     * appka zkoušela pro TENTO film v této relaci (`attemptedRdHashes`) — kromě právě zapamatovaného.
+     * Nikdy nesáhne na nesouvisející torrenty (žádný fuzzy match podle názvu). Best-effort, tiché.
+     */
+    private fun cleanupRdKeepingSource(keep: UploaderStream) {
+        val keepHash = streamRdHash(keep)
+        val others = attemptedRdHashes.filter { it != keepHash }.distinct()
+        if (others.isEmpty() || uploaderBaseUrl.isBlank()) return
+        viewModelScope.launch {
+            runCatching { uploaderDs.rdCleanup(uploaderBaseUrl, uploaderCookie, keepHash, others) }
+                .onSuccess { n -> timber.log.Timber.i("[WINNOW] RD úklid: smazáno %d torrentů (keep=%s, kandidátů=%d)", n, keepHash, others.size) }
+                .onFailure { e -> timber.log.Timber.w(e, "[WINNOW] RD úklid selhal") }
+        }
     }
 
     /** Skryj nabídku „tohle sedí?" (uživatel ji odmítl nebo to byl špatný zdroj). */
@@ -451,7 +477,9 @@ class DetailViewModel @Inject constructor(
                 sizeGB = stream.quality.sizeGB,
             )
         }
-        // 1) přímá url (Ready (RD)) → hraj rovnou.
+        // WINNOW item 2: zapamatuj RD hash tohoto pokusu (bezpečný úklid při „zapamatovat zdroj").
+        streamRdHash(stream)?.let { attemptedRdHashes.add(it) }
+        // 1) přímá url (Ready (RD)) → hraj rovnou (deliver napřed ověří, že to není návnada).
         if (!direct.isNullOrBlank()) {
             timber.log.Timber.i("[Stremio] play direct url addon=${stream.addon}")
             deliver(direct, title, target)
@@ -463,7 +491,7 @@ class DetailViewModel @Inject constructor(
             viewModelScope.launch {
                 runCatching { uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, cometPath, resolveCtx) }
                     .onSuccess { url -> deliver(url, title, target) }
-                    .onFailure { e -> timber.log.Timber.w(e, "[Stremio] comet resolve FAILED"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
+                    .onFailure { e -> handleResolveFailure(e, "[Stremio] comet resolve FAILED") }
             }
             return
         }
@@ -473,7 +501,7 @@ class DetailViewModel @Inject constructor(
             viewModelScope.launch {
                 runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, stream.fileIdx, resolveCtx) }
                     .onSuccess { url -> deliver(url, title, target) }
-                    .onFailure { e -> timber.log.Timber.w(e, "[Stremio] saved resolve FAILED infoHash=$infoHash"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
+                    .onFailure { e -> handleResolveFailure(e, "[Stremio] saved resolve FAILED infoHash=$infoHash") }
             }
             return
         }
@@ -499,8 +527,7 @@ class DetailViewModel @Inject constructor(
             val add = runCatching {
                 uploaderDs.rdAdd(uploaderBaseUrl, uploaderCookie, stream.infoHash, stream.fileIdx, stream.cometPath)
             }.getOrElse { e ->
-                timber.log.Timber.w(e, "[RD] add FAILED infoHash=${stream.infoHash} comet=${!stream.cometPath.isNullOrBlank()}")
-                _uiState.update { it.copy(rdDownload = null, streamError = e.message ?: "RD: přidání torrentu selhalo", requestStremioFallback = true) }
+                handleResolveFailure(e, "[RD] add FAILED infoHash=${stream.infoHash} comet=${!stream.cometPath.isNullOrBlank()}")
                 return@launch
             }
             if (add.error != null || add.torrentId.isBlank()) {
@@ -547,8 +574,47 @@ class DetailViewModel @Inject constructor(
     fun consumeAutoAdvanceInfo() = _uiState.update { it.copy(autoAdvanceInfo = null) }
     fun consumeCastResult() = _uiState.update { it.copy(castToTvResult = null) }
 
-    /** Resolvnutá URL → cíl: lokální přehrávač (telefon) nebo odeslání na TV (FERRY). */
+    /**
+     * Plan WINNOW (SHW-41, item 1b): než URL doručíme, ověř, že to není NÁVNADA — Comet/RD běžně
+     * vrací „cached" položky, které se tváří jako film (deklarovaná velikost i 20 GB), ale reálně
+     * servírují jen ~stovky KB (decoy). Takový zdroj ExoPlayer „přehraje" a hned skončí → matoucí.
+     * Range-dotaz na skutečnou velikost; pod prahem → přeskoč na další kandidáta (CASCADE).
+     */
     private fun deliver(url: String, title: String, target: CastTarget) {
+        _uiState.update { it.copy(isResolvingStream = true) }
+        viewModelScope.launch {
+            val size = probePlayableSize(url)
+            if (size != null && size in 1 until MIN_PLAYABLE_BYTES) {
+                timber.log.Timber.w("[WINNOW] zdroj je návnada (%d B < %d) → přeskakuji", size, MIN_PLAYABLE_BYTES)
+                advancePastSource("Zdroj je jen ukázka/nefunkční, zkouším další", target)
+                return@launch
+            }
+            deliverNow(url, title, target)
+        }
+    }
+
+    /** Range 0-1 dotaz → skutečná velikost obsahu v bajtech (Content-Range/Content-Length). null = neznámo. */
+    private suspend fun probePlayableSize(url: String): Long? = withContext(Dispatchers.IO) {
+        runCatching {
+            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("Range", "bytes=0-1")
+                connectTimeout = 8_000; readTimeout = 8_000
+                instanceFollowRedirects = true
+            }
+            try {
+                val code = conn.responseCode
+                when {
+                    code == 206 -> conn.getHeaderField("Content-Range")?.substringAfterLast('/')?.toLongOrNull()
+                    code in 200..299 -> conn.getHeaderField("Content-Length")?.toLongOrNull()
+                    else -> null
+                }
+            } finally { conn.disconnect() }
+        }.getOrNull()
+    }
+
+    /** Resolvnutá URL → cíl: lokální přehrávač (telefon) nebo odeslání na TV (FERRY). */
+    private fun deliverNow(url: String, title: String, target: CastTarget) {
         when (target) {
             CastTarget.LOCAL -> {
                 // SIEVE S2: až teď (přehrávač se reálně spouští) nabídneme „tohle sedí? 👍" — po návratu
@@ -635,33 +701,74 @@ class DetailViewModel @Inject constructor(
      * v UŽIVATELOVĚ pořadí (`streams` je už seřazený dle jeho `fallbackOrder` — NEPŘEŘAZUJEME!).
      * Po vyčerpání kandidátů spadni na Stremio (původní chování).
      */
-    fun onPlaybackFailed(errorCode: String) {
+    fun onPlaybackFailed(errorCode: String) =
+        advancePastSource("Zdroj nešel přehrát, zkouším další", CastTarget.LOCAL)
+
+    /**
+     * Přeskoč na DALŠÍ okamžitě hratelný kandidát v UŽIVATELOVĚ pořadí (direct url / cached RD).
+     * Volá CASCADE auto-advance po chybě přehrávání i WINNOW po detekci návnady. Cíl ([target])
+     * se zachová, aby přeskočení při castu na TV pokračovalo zase na TV (ne lokálně).
+     * Pure-downloadable přeskakujeme — auto-retry nemá tiše spustit víceminutový RD download.
+     */
+    private fun advancePastSource(message: String, target: CastTarget) {
         val list = _uiState.value.streams
         val prev = lastPlayedStream
         val curIdx = if (prev != null) list.indexOf(prev) else -1
-        // Další OKAMŽITĚ hratelný kandidát v UŽIVATELOVĚ pořadí (direct url / cached RD).
-        // Pure-downloadable přeskakujeme — auto-retry nemá tiše spustit vícеminutový RD download.
         val nextIdx = ((curIdx + 1) until list.size).firstOrNull { i ->
             val s = list[i]
             !s.url.isNullOrBlank() || s.quality.rdReady || s.quality.rdSaved
         } ?: -1
         if (nextIdx >= 0) {
             val next = list[nextIdx]
-            timber.log.Timber.i("[CASCADE] auto-advance po chybě přehrávání code=$errorCode → zdroj ${nextIdx + 1}/${list.size} '${next.name ?: next.description}'")
+            timber.log.Timber.i("[CASCADE] advance → zdroj ${nextIdx + 1}/${list.size} '${next.name ?: next.description}' ($message)")
             _uiState.update {
                 it.copy(
                     isResolvingStream = false,
                     rdDownload = null,
                     streamError = null,
                     requestStremioFallback = false,
-                    autoAdvanceInfo = "Zdroj nešel přehrát, zkouším další (${nextIdx + 1}/${list.size})…",
+                    autoAdvanceInfo = "$message (${nextIdx + 1}/${list.size})…",
                 )
             }
-            playStream(next)
+            playStream(next, target)
         } else {
-            timber.log.Timber.w("[CASCADE] auto-advance: žádný další hratelný zdroj (z idx=$curIdx/${list.size}) code=$errorCode → Stremio fallback")
+            timber.log.Timber.w("[CASCADE] advance: žádný další hratelný zdroj (z idx=$curIdx/${list.size}) → Stremio fallback")
             _uiState.update { it.copy(isResolvingStream = false, rdDownload = null, requestStremioFallback = true) }
         }
+    }
+
+    /**
+     * Plan WINNOW (item 1): sjednocené ošetření selhání resolve/RD-add. HTTP 451 = titul je na
+     * RealDebridu blokovaný (DMCA) → jasný dialog místo TICHÉHO skoku do externí Stremio appky.
+     * Ostatní chyby = původní chování (hláška + nabídka Stremia).
+     */
+    private fun handleResolveFailure(e: Throwable, logMsg: String) {
+        timber.log.Timber.w(e, logMsg)
+        val is451 = e is com.github.jankoran90.showlyfin.data.uploader.model.StreamBlockedException
+        _uiState.update {
+            if (is451) it.copy(
+                isResolvingStream = false,
+                rdDownload = null,
+                blockedDmcaMessage = "Tenhle titul je na RealDebridu blokovaný (DMCA) — žádný dostupný zdroj nejde přehrát napřímo. Zkus jiný release, nebo titul otevři přímo ve Stremiu.",
+            ) else it.copy(
+                isResolvingStream = false,
+                rdDownload = null,
+                streamError = e.message ?: "RD resolve selhal",
+                requestStremioFallback = true,
+            )
+        }
+    }
+
+    fun consumeBlockedDmca() = _uiState.update { it.copy(blockedDmcaMessage = null) }
+
+    /** Stream → RD info_hash (infoHash, jinak první segment cometPath), lowercase. null = nemá. */
+    private fun streamRdHash(stream: UploaderStream): String? {
+        stream.infoHash?.takeIf { it.isNotBlank() }?.let { return it.lowercase() }
+        val cp = stream.cometPath?.trim().orEmpty()
+        if (cp.isNotBlank()) {
+            return cp.trim('/').substringBefore('?').substringBefore('/').lowercase().takeIf { it.isNotBlank() }
+        }
+        return null
     }
 
     // ── Stáhnout menu (Sdílej.cz + Smart Remux) ────────────────────────────────
@@ -880,6 +987,9 @@ class DetailViewModel @Inject constructor(
     private companion object {
         // Kolik titulkových kandidátů poslat na TV (MPV je nasideloaduje, výběr na TV = F3).
         const val MAX_TV_SUBTITLES = 3
+        // WINNOW item 1b: minimální reálná velikost přehrávatelného filmu/epizody (30 MB). Pod tím
+        // je to návnada/decoy (Comet/RD servíruje ~stovky KB navzdory deklarované velikosti).
+        const val MIN_PLAYABLE_BYTES = 30_000_000L
     }
 }
 

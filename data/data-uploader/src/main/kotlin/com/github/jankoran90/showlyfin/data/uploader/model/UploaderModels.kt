@@ -91,6 +91,20 @@ data class UploaderRdAddResponse(
     val error: String? = null,
 )
 
+// Plan WINNOW (SHW-41, item 1): titul je na RealDebridu blokovaný (DMCA, HTTP 451). Doménová
+// výjimka, ať feature vrstva nemusí znát retrofit (data-uploader drží retrofit jako implementation).
+class StreamBlockedException(message: String = "Zdroj je na RealDebridu blokovaný (DMCA).") : Exception(message)
+
+// Plan WINNOW (SHW-41, item 2): bezpečný úklid RD — smaž `hashes` kromě `keep`.
+data class UploaderRdCleanupRequest(
+    @SerializedName("keep") val keep: String? = null,
+    @SerializedName("hashes") val hashes: List<String> = emptyList(),
+)
+
+data class UploaderRdCleanupResponse(
+    val deleted: Int = 0,
+)
+
 data class UploaderRdProgressResponse(
     @SerializedName("torrent_id") val torrentId: String = "",
     val status: String = "",

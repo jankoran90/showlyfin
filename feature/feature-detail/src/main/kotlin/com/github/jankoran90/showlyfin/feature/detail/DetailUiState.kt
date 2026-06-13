@@ -91,6 +91,9 @@ data class DetailUiState(
     val pendingPlaybackTitle: String = "",
     val pendingSubtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null,
     val requestStremioFallback: Boolean = false,
+    // Plan WINNOW (SHW-41): zdroj je na RealDebridu blokovaný (DMCA, HTTP 451) — místo tichého skoku
+    // do externí Stremio appky ukážeme jasný dialog s vysvětlením + volbou „otevřít ve Stremiu".
+    val blockedDmcaMessage: String? = null,
     // CASCADE Fáze 4: krátká info hláška při auto-advance po chybě přehrávání ("zkouším další zdroj…")
     val autoAdvanceInfo: String? = null,
     // RD caching progress (Fáze F) — necachovaný torrent se nahrává na RealDebrid

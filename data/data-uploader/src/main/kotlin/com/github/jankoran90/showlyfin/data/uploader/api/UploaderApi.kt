@@ -28,6 +28,14 @@ internal class UploaderApi(
     private fun UploaderResolveContext?.toQuality(): UploaderResolveQuality? =
         this?.let { if (it.resolution == null && it.sizeGB == null) null else UploaderResolveQuality(it.resolution, it.sizeGB) }
 
+    // Plan WINNOW (item 1): HTTP 451 z backendu = DMCA → přehoď na doménovou výjimku, ať feature
+    // vrstva pozná „blokováno" bez závislosti na retrofitu.
+    private suspend fun <T> mapBlocked(block: suspend () -> T): T = try {
+        block()
+    } catch (e: HttpException) {
+        if (e.code() == 451) throw StreamBlockedException() else throw e
+    }
+
     override suspend fun getProbedStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int?, episode: Int?): List<UploaderStream> {
         val base = baseUrl.trimEnd('/')
         var url = "$base/api/stremio/streams_probe/$mediaType/$imdbId"
@@ -39,27 +47,33 @@ internal class UploaderApi(
     override suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int, ctx: UploaderResolveContext?): String {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(
+        val resp = mapBlocked { service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(
             infoHash = infoHash, fileIdx = fileIdx,
             imdb = ctx?.imdb, mediaType = ctx?.mediaType, season = ctx?.season, episode = ctx?.episode, quality = ctx.toQuality(),
-        ))
+        )) }
         return resp.url ?: throw IllegalStateException(resp.error ?: "RD resolve nevrátil URL")
     }
 
     override suspend fun resolveCometStream(baseUrl: String, sessionCookie: String, cometPath: String, ctx: UploaderResolveContext?): String {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        val resp = service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(
+        val resp = mapBlocked { service.resolveStream("$base/api/stremio/resolve", cookie, UploaderResolveRequest(
             cometPath = cometPath,
             imdb = ctx?.imdb, mediaType = ctx?.mediaType, season = ctx?.season, episode = ctx?.episode, quality = ctx.toQuality(),
-        ))
+        )) }
         return resp.url ?: throw IllegalStateException(resp.error ?: "RD resolve nevrátil URL")
     }
 
     override suspend fun rdAdd(baseUrl: String, sessionCookie: String, infoHash: String?, fileIdx: Int, cometPath: String?): UploaderRdAddResponse {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        return service.rdAdd("$base/api/stremio/rd/add", cookie, UploaderRdAddRequest(infoHash = infoHash, fileIdx = fileIdx, cometPath = cometPath))
+        return mapBlocked { service.rdAdd("$base/api/stremio/rd/add", cookie, UploaderRdAddRequest(infoHash = infoHash, fileIdx = fileIdx, cometPath = cometPath)) }
+    }
+
+    override suspend fun rdCleanup(baseUrl: String, sessionCookie: String, keepHash: String?, hashes: List<String>): Int {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.rdCleanup("$base/api/stremio/rd/cleanup", cookie, UploaderRdCleanupRequest(keep = keepHash, hashes = hashes)).deleted
     }
 
     override suspend fun rdProgress(baseUrl: String, sessionCookie: String, torrentId: String, fileIdx: Int): UploaderRdProgressResponse {
