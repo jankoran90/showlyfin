@@ -72,6 +72,9 @@ data class DetailUiState(
     val streams: List<com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream> = emptyList(),
     val streamError: String? = null,
     val isResolvingStream: Boolean = false,
+    // Plan FERRY (SHW-37): odesílání zvoleného streamu na TV (yellyfin) + výsledná hláška.
+    val isCastingToTv: Boolean = false,
+    val castToTvResult: com.github.jankoran90.showlyfin.data.jellyfin.CastResult? = null,
     val streamStrict: Boolean = true,   // "Přesné hledání" vs "Vše" (per-search)
     val showDownloadMenu: Boolean = false,
     val showSdilejPicker: Boolean = false,

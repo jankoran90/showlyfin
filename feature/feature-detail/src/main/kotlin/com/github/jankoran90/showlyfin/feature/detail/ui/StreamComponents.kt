@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,6 +31,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.github.jankoran90.showlyfin.feature.detail.RdDownloadState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -159,7 +164,12 @@ internal fun StreamPickerSheet(
     onPlay: (UploaderStream) -> Unit,
     onDismiss: () -> Unit,
     isProbing: Boolean = false,
+    onCastToTv: (UploaderStream) -> Unit = {},
+    isCasting: Boolean = false,
 ) {
+    // Plan FERRY (SHW-37): cíl přehrání — telefon (lokální MPV) nebo TV (yellyfin). Per-otevření.
+    var toTv by remember { mutableStateOf(false) }
+    val busy = isResolving || isCasting
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetHeader("Stream přes Stremio", Icons.Default.PlayArrow)
         // Přepínač Přesné / Vše (per-search) — „Vše" pro málo dostupné filmy (víc výsledků).
@@ -171,6 +181,20 @@ internal fun StreamPickerSheet(
             FilterChip(selected = strict, onClick = { onStrictChange(true) }, label = { Text("Přesné") })
             FilterChip(selected = !strict, onClick = { onStrictChange(false) }, label = { Text("Vše") })
         }
+        // Cíl přehrání: Tady (telefon) / Na TV (yellyfin přes FERRY).
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilterChip(selected = !toTv, onClick = { toTv = false }, label = { Text("Přehrát tady") })
+            FilterChip(
+                selected = toTv,
+                onClick = { toTv = true },
+                label = { Text("Na TV") },
+                leadingIcon = { Icon(Icons.Default.Tv, contentDescription = null, Modifier.height(18.dp)) },
+            )
+        }
         when {
             isLoading -> SheetCenter { CircularProgressIndicator() }
             error != null && streams.isEmpty() -> SheetMessage(error)
@@ -178,12 +202,27 @@ internal fun StreamPickerSheet(
                 items(streams, key = { it.cometPath ?: it.infoHash ?: it.url ?: it.name.orEmpty() }) { s ->
                     StreamRow(
                         stream = s,
-                        trailingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát") },
-                        onClick = { if (!isResolving) onPlay(s) },
+                        trailingIcon = {
+                            Icon(
+                                if (toTv) Icons.Default.Tv else Icons.Default.PlayArrow,
+                                contentDescription = if (toTv) "Přehrát na TV" else "Přehrát",
+                            )
+                        },
+                        onClick = { if (!busy) { if (toTv) onCastToTv(s) else onPlay(s) } },
                         showSourceBadge = true,
                     )
                     HorizontalDivider()
                 }
+            }
+        }
+        if (isCasting) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CircularProgressIndicator(Modifier.height(20.dp))
+                Text("Posílám na TV…", style = MaterialTheme.typography.bodySmall)
             }
         }
         // Plan CASCADE Fáze 3: probe běží na pozadí — testuje další zdroje na RD (mrtvé/blokované zahodí).

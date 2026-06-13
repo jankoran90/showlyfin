@@ -9,7 +9,10 @@ import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.csfd.CsfdScraper
+import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
+import com.github.jankoran90.showlyfin.data.jellyfin.FerrySubtitle
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
+import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.jellyfin.normalizeBoxSetName
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection
@@ -45,6 +48,7 @@ class DetailViewModel @Inject constructor(
     private val authorizedTrakt: AuthorizedTraktRemoteDataSource,
     private val tokenProvider: TokenProvider,
     private val uploaderDs: UploaderRemoteDataSource,
+    private val naTv: NaTvService,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -372,8 +376,11 @@ class DetailViewModel @Inject constructor(
 
     fun dismissStreamPicker() = _uiState.update { it.copy(showStreamPicker = false) }
 
-    /** Klik na konkrétní stream → přímé url / RD resolve → předá URL navigaci k přehrání. */
-    fun playStream(stream: UploaderStream) {
+    /** Plan FERRY (SHW-37): zvolený stream pošli na TV (yellyfin) místo lokálního přehrání. */
+    fun castStreamToTv(stream: UploaderStream) = playStream(stream, CastTarget.TV)
+
+    /** Klik na konkrétní stream → přímé url / RD resolve → předá URL [target] (telefon / TV). */
+    fun playStream(stream: UploaderStream, target: CastTarget = CastTarget.LOCAL) {
         if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
         lastPlayedStream = stream   // CASCADE Fáze 4: zapamatuj pro případný auto-advance po chybě přehrávání
         val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
@@ -410,7 +417,7 @@ class DetailViewModel @Inject constructor(
         // 1) přímá url (Ready (RD)) → hraj rovnou.
         if (!direct.isNullOrBlank()) {
             timber.log.Timber.i("[Stremio] play direct url addon=${stream.addon}")
-            _uiState.update { it.copy(showStreamPicker = false, pendingPlaybackUrl = direct, pendingPlaybackTitle = title) }
+            deliver(direct, title, target)
             return
         }
         // 2) cached Comet (rdReady) → rychlý resolve na RD direct (302) bez progress baru.
@@ -418,7 +425,7 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
             viewModelScope.launch {
                 runCatching { uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, cometPath, resolveCtx) }
-                    .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
+                    .onSuccess { url -> deliver(url, title, target) }
                     .onFailure { e -> timber.log.Timber.w(e, "[Stremio] comet resolve FAILED"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
             }
             return
@@ -428,21 +435,21 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
             viewModelScope.launch {
                 runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, stream.fileIdx, resolveCtx) }
-                    .onSuccess { url -> _uiState.update { it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title) } }
+                    .onSuccess { url -> deliver(url, title, target) }
                     .onFailure { e -> timber.log.Timber.w(e, "[Stremio] saved resolve FAILED infoHash=$infoHash"); _uiState.update { it.copy(isResolvingStream = false, streamError = e.message ?: "RD resolve selhal", requestStremioFallback = true) } }
             }
             return
         }
         // 4) necachovaný torrent (infoHash / uncached Comet) → async add na RD + progress bar (Fáze F).
         if (!cometPath.isNullOrBlank() || !infoHash.isNullOrBlank()) {
-            startRdDownload(stream, title)
+            startRdDownload(stream, title, target)
             return
         }
         _uiState.update { it.copy(streamError = "Stream nemá URL, cometPath ani infoHash.") }
     }
 
     /** Necachovaný torrent: přidá na RD a pollí progress, dokud se nestáhne → pak přehraje (Fáze F). */
-    private fun startRdDownload(stream: UploaderStream, title: String) {
+    private fun startRdDownload(stream: UploaderStream, title: String, target: CastTarget = CastTarget.LOCAL) {
         rdPollJob?.cancel()
         _uiState.update {
             it.copy(
@@ -480,9 +487,11 @@ class DetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(rdDownload = it.rdDownload?.copy(status = p.status, progress = p.progress, speedBytesPerSec = p.speed, seeders = p.seeders))
                 }
-                if (p.status == "downloaded" && !p.url.isNullOrBlank()) {
+                val readyUrl = p.url
+                if (p.status == "downloaded" && !readyUrl.isNullOrBlank()) {
                     timber.log.Timber.i("[RD] downloaded → play torrent=${add.torrentId}")
-                    _uiState.update { it.copy(rdDownload = null, pendingPlaybackUrl = p.url, pendingPlaybackTitle = title) }
+                    _uiState.update { it.copy(rdDownload = null) }
+                    deliver(readyUrl, title, target)
                     return@launch
                 }
                 delay(2500)
@@ -499,6 +508,65 @@ class DetailViewModel @Inject constructor(
     fun consumePlayback() = _uiState.update { it.copy(pendingPlaybackUrl = null, pendingPlaybackTitle = "", pendingSubtitleQuery = null) }
     fun consumeStremioFallback() = _uiState.update { it.copy(requestStremioFallback = false) }
     fun consumeAutoAdvanceInfo() = _uiState.update { it.copy(autoAdvanceInfo = null) }
+    fun consumeCastResult() = _uiState.update { it.copy(castToTvResult = null) }
+
+    /** Resolvnutá URL → cíl: lokální přehrávač (telefon) nebo odeslání na TV (FERRY). */
+    private fun deliver(url: String, title: String, target: CastTarget) {
+        when (target) {
+            CastTarget.LOCAL -> _uiState.update {
+                it.copy(isResolvingStream = false, showStreamPicker = false, pendingPlaybackUrl = url, pendingPlaybackTitle = title)
+            }
+            CastTarget.TV -> castToTv(url, title)
+        }
+    }
+
+    /**
+     * Plan FERRY: pošle resolvnutou URL + CZ titulky na běžící yellyfin session na TV.
+     * Titulky jsou best-effort (selhání nebrání přehrání). Výsledek → hláška v UI.
+     */
+    private fun castToTv(url: String, title: String) {
+        _uiState.update { it.copy(isCastingToTv = true, streamError = null) }
+        viewModelScope.launch {
+            val jfUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
+            val jfToken = prefs.getString("jellyfin_token", "").orEmpty()
+            val subs = runCatching { buildTvSubtitles() }.getOrDefault(emptyList())
+            val result = naTv.castFerry(jfUrl, jfToken, url, title, subs)
+            _uiState.update {
+                it.copy(isCastingToTv = false, isResolvingStream = false, showStreamPicker = result != CastResult.SENT, castToTvResult = result)
+            }
+        }
+    }
+
+    /** Stáhne CZ titulkové kandidáty a sestaví box-dostupné SRT URL (`?key=<session>`) pro TV. */
+    private suspend fun buildTvSubtitles(): List<FerrySubtitle> {
+        val q = _uiState.value.pendingSubtitleQuery ?: return emptyList()
+        if (uploaderBaseUrl.isBlank()) return emptyList()
+        val resp = runCatching {
+            uploaderDs.getSubtitles(
+                uploaderBaseUrl, uploaderCookie, q.imdb, q.title, q.origTitle, q.year, q.season, q.episode, q.release, q.fps,
+            )
+        }.getOrNull() ?: return emptyList()
+        val runtime = _uiState.value.movieDetails?.runtime ?: 0
+        val base = uploaderBaseUrl.trimEnd('/')
+        val keyParam = java.net.URLEncoder.encode(uploaderCookie, "UTF-8")
+        // Pošli top kandidáty (nejlepší první) → yellyfin/MPV je nasideloaduje, výběr titulku na TV (F3).
+        return resp.subtitles.asSequence()
+            .filter { it.id.isNotBlank() }
+            .take(MAX_TV_SUBTITLES)
+            .mapIndexed { i, c ->
+                val params = buildList {
+                    q.season?.takeIf { it > 0 }?.let { add("season=$it") }
+                    q.episode?.takeIf { it > 0 }?.let { add("episode=$it") }
+                    runtime.takeIf { it > 0 }?.let { add("runtime=$it") }
+                    add("key=$keyParam")
+                }.joinToString("&")
+                FerrySubtitle(
+                    url = "$base/api/subtitles/download/${c.id}?$params",
+                    language = c.lang.takeIf { it.isNotBlank() } ?: "cs",
+                    label = c.release.takeIf { it.isNotBlank() } ?: c.title.takeIf { it.isNotBlank() } ?: "CZ titulky ${i + 1}",
+                )
+            }.toList()
+    }
 
     /**
      * CASCADE Fáze 4 — auto-advance po chybě přehrávání v ExoPlayeru.
@@ -747,4 +815,12 @@ class DetailViewModel @Inject constructor(
         }
         return runCatching { csfdScraper.scrapeReviews(csfdId) }.getOrDefault(emptyList())
     }
+
+    private companion object {
+        // Kolik titulkových kandidátů poslat na TV (MPV je nasideloaduje, výběr na TV = F3).
+        const val MAX_TV_SUBTITLES = 3
+    }
 }
+
+/** Plan FERRY: kam doručit resolvnutý stream — lokální přehrávač telefonu, nebo TV (yellyfin). */
+enum class CastTarget { LOCAL, TV }

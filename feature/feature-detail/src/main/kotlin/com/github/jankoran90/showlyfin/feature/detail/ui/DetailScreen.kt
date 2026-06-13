@@ -142,6 +142,19 @@ fun DetailScreen(
             viewModel.consumeAutoAdvanceInfo()
         }
     }
+    // Plan FERRY (SHW-37): výsledek odeslání na TV → toast
+    LaunchedEffect(uiState.castToTvResult) {
+        uiState.castToTvResult?.let {
+            val msg = when (it) {
+                com.github.jankoran90.showlyfin.data.jellyfin.CastResult.SENT -> "Odesláno na TV ▶"
+                com.github.jankoran90.showlyfin.data.jellyfin.CastResult.NO_SESSION -> "Žádná TV neběží — zapni Yellyfin na boxu (Ovladač)."
+                com.github.jankoran90.showlyfin.data.jellyfin.CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení)."
+                com.github.jankoran90.showlyfin.data.jellyfin.CastResult.FAILED -> "Odeslání na TV selhalo."
+            }
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            viewModel.consumeCastResult()
+        }
+    }
 
     uiState.rdDownload?.let { rd ->
         RdDownloadDialog(state = rd, onCancel = { viewModel.cancelRdDownload() })
@@ -157,6 +170,8 @@ fun DetailScreen(
             onPlay = { viewModel.playStream(it) },
             onDismiss = { viewModel.dismissStreamPicker() },
             isProbing = uiState.isProbingStreams,
+            onCastToTv = { viewModel.castStreamToTv(it) },
+            isCasting = uiState.isCastingToTv,
         )
     }
     if (uiState.showDownloadMenu) {

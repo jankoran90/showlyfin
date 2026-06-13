@@ -291,6 +291,48 @@ class NaTvService @Inject constructor(
         sendGeneralCommand(baseUrl, token, sessionId, "SetAudioStreamIndex",
             mapOf("Index" to index.toString()))
 
+    /**
+     * Plan FERRY (SHW-37): pošle běžící yellyfin session na TV příkaz „přehraj externí URL + titulky".
+     * Payload `FERRY1:{json}` protlačíme přes `SendString` GeneralCommand (server přeposílá libovolný
+     * řetězec; yellyfin `RemoteControlReceiver` ho rozpozná a otevře interní MPV). Cílovou session
+     * vybere [pickWatchSession] (Wolphin/Yellyfin); když žádná neběží → [CastResult.NO_SESSION].
+     */
+    suspend fun castFerry(
+        baseUrl: String,
+        token: String,
+        videoUrl: String,
+        title: String,
+        subtitles: List<FerrySubtitle> = emptyList(),
+    ): CastResult {
+        if (baseUrl.isBlank() || token.isBlank()) return CastResult.NO_CREDS
+        if (videoUrl.isBlank()) return CastResult.FAILED
+        val target = pickWatchSession(getSessions(baseUrl, token)) ?: return CastResult.NO_SESSION
+        val payload = buildFerryPayload(videoUrl, title, subtitles)
+        val ok = sendGeneralCommand(baseUrl, token, target.sessionId, "SendString", mapOf("String" to payload))
+        Timber.i("[FERRY] cast → %s subs=%d ok=%b", target.deviceName, subtitles.size, ok)
+        return if (ok) CastResult.SENT else CastResult.FAILED
+    }
+
+    /** Sestaví `FERRY1:{url,title,subs:[{u,l,n}]}` — schéma parsuje yellyfin `parseFerryPayload`. */
+    private fun buildFerryPayload(url: String, title: String, subtitles: List<FerrySubtitle>): String {
+        val subs = JSONArray()
+        subtitles.forEach { s ->
+            if (s.url.isNotBlank()) {
+                subs.put(JSONObject().apply {
+                    put("u", s.url)
+                    s.language?.takeIf { it.isNotBlank() }?.let { put("l", it) }
+                    s.label?.takeIf { it.isNotBlank() }?.let { put("n", it) }
+                })
+            }
+        }
+        val json = JSONObject().apply {
+            put("url", url)
+            put("title", title)
+            put("subs", subs)
+        }
+        return "FERRY1:$json"
+    }
+
     private suspend fun post(url: String): Boolean = withContext(Dispatchers.IO) {
         val body = "".toRequestBody("application/json".toMediaType())
         val request = Request.Builder().url(url).post(body).build()
@@ -328,3 +370,13 @@ data class JellyfinSessionSummary(
 )
 
 data class StreamTrack(val index: Int, val label: String)
+
+/** Plan FERRY: jeden titulkový kandidát poslaný na TV (box-dostupná SRT URL). */
+data class FerrySubtitle(
+    val url: String,
+    val language: String? = null,
+    val label: String? = null,
+)
+
+/** Výsledek odeslání FERRY příkazu na TV — pro hlášku v UI. */
+enum class CastResult { SENT, NO_SESSION, NO_CREDS, FAILED }
