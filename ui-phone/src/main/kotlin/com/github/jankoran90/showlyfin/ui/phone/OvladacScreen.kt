@@ -46,6 +46,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -136,6 +139,13 @@ fun OvladacScreen(
             else -> NowPlaying(state.current!!, state.coverUrl, state.externalTitle, state.externalPosterUrl, onOpenDetail, vm)
         }
 
+        // CONSOLE: nastavení obrazu/titulků TV streamu — jen pro externí (RD/Stremio) přehrávání,
+        // kde to box (yellyfin ExternalPlaybackPage) umí aplikovat na PlayerView.
+        if (state.isExternal && state.current != null) {
+            Spacer(Modifier.height(12.dp))
+            DisplaySettingsCard(state, vm)
+        }
+
         // PILOT: virtuální D-pad „dálkáč" v dolní části — navigace nativního UI na TV.
         // Viditelný i bez session (power tlačítko umí sestavu zapnout).
         if (!state.noCreds) {
@@ -175,6 +185,97 @@ private fun SystemPowerCard(sceneStatus: String?, vm: OvladacViewModel) {
                 Spacer(Modifier.height(6.dp))
                 Text(sceneStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+/**
+ * CONSOLE (SHW-39): nastavení obrazu a titulků běžícího externího streamu na TV (z telefonu).
+ * Posílá se na box přes FERRYCFG kanál; box aplikuje na PlayerView/ExoPlayer. Sbalitelné.
+ */
+@Composable
+private fun DisplaySettingsCard(state: OvladacViewModel.UiState, vm: OvladacViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Subtitles, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Obraz a titulky", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                Text(if (expanded) "Skrýt" else "Upravit", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            if (expanded) {
+                Spacer(Modifier.height(12.dp))
+                // Poměr obrazu.
+                Text("Obraz", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(4.dp))
+                val modes = listOf("fit" to "Přizpůsobit", "zoom" to "Vyplnit (zoom)", "fill" to "Roztáhnout")
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    modes.forEachIndexed { i, (key, label) ->
+                        SegmentedButton(
+                            selected = state.displayResizeMode == key,
+                            onClick = { vm.setResizeMode(key) },
+                            shape = SegmentedButtonDefaults.itemShape(i, modes.size),
+                        ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                // Velikost titulků.
+                StepperRow("Velikost titulků", "${state.subFontSizeSp}", { vm.nudgeSubFontSize(-2) }, { vm.nudgeSubFontSize(2) })
+                Spacer(Modifier.height(8.dp))
+                // Pozice (svislý posun).
+                StepperRow("Pozice titulků", "${state.subBottomMarginPct} %", { vm.nudgeSubMargin(-2) }, { vm.nudgeSubMargin(2) })
+                Spacer(Modifier.height(12.dp))
+                // Barva titulků.
+                Text("Barva titulků", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val swatches = listOf(
+                        0xFFFFFFFF.toInt() to "Bílá",
+                        0xFFFFEB3B.toInt() to "Žlutá",
+                        0xFF00E5FF.toInt() to "Azurová",
+                        0xFF76FF03.toInt() to "Zelená",
+                    )
+                    swatches.forEach { (argb, desc) ->
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(androidx.compose.ui.graphics.Color(argb))
+                                .clickable { vm.setSubColor(argb) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (state.subColorArgb == argb) {
+                                Icon(Icons.Filled.Add, desc, Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color.Black)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Časový posun titulků (sync) zatím jen v přehrávači na telefonu — na TV připravujeme.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepperRow(label: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FilledTonalIconButton(onClick = onMinus) { Icon(Icons.Filled.Remove, "Snížit") }
+            Text(value, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+            FilledTonalIconButton(onClick = onPlus) { Icon(Icons.Filled.Add, "Zvýšit") }
         }
     }
 }

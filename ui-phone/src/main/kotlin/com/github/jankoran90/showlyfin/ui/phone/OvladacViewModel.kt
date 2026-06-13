@@ -61,6 +61,13 @@ class OvladacViewModel @Inject constructor(
         val externalPosterUrl: String? = null,
         /** FERRY/BATON: TMDb id castnutého filmu → klik na cover vrátí na kartu filmu. */
         val externalTmdb: Long? = null,
+        /** CONSOLE: běží externí stream (FERRY) → ukázat panel nastavení obrazu/titulků. */
+        val isExternal: Boolean = false,
+        /** CONSOLE: lokální stav panelu nastavení (poslané na box). */
+        val displayResizeMode: String = "fit",
+        val subFontSizeSp: Int = 28,
+        val subBottomMarginPct: Int = 5,
+        val subColorArgb: Int? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -113,6 +120,12 @@ class OvladacViewModel @Inject constructor(
                 isPlaying = !ferrySt.paused,
                 isPaused = ferrySt.paused,
                 canSeek = ferrySt.durationMs > 0L,
+                // CONSOLE: externí stream nemá JF MediaStreams → stopy bere z FERRY reportu boxu,
+                // ať Ovladač umí přepínat titulky/audio i u RD/Stremio streamů (jako u knihovny).
+                subtitleTracks = ferrySt.subtitleTracks,
+                audioTracks = ferrySt.audioTracks,
+                currentSubtitleIndex = ferrySt.currentSubtitleIndex,
+                currentAudioIndex = ferrySt.currentAudioIndex,
             )
         }
         val cover = current?.itemId?.let { naTv.imageUrl(c.url, c.token, it, current.imageTag) }
@@ -129,9 +142,12 @@ class OvladacViewModel @Inject constructor(
                 externalTitle = if (fc != null) (ferrySt?.title?.takeIf { t -> t.isNotBlank() } ?: fc.title) else null,
                 externalPosterUrl = fc?.posterUrl,
                 externalTmdb = fc?.tmdbId,
+                isExternal = fc != null,
                 avrEnabled = avrCfg != null,
                 avrReachable = avrStatus?.reachable ?: false,
-                avrVolume = avrStatus?.volume ?: it.avrVolume,
+                // Priorita: živé čtení AVR → poslední známá → výchozí z Nastavení (`avr_default_volume`).
+                // eISCP MVLQSTN je nespolehlivá → bez defaultu by bar v externím režimu visel na „—".
+                avrVolume = avrStatus?.volume ?: it.avrVolume ?: avrDefaultVolume(),
                 avrMuted = if (avrStatus?.reachable == true) avrStatus.muted else it.avrMuted,
                 avrVolumeStep = avrVolumeStepPref(),
             )
@@ -168,7 +184,7 @@ class OvladacViewModel @Inject constructor(
         _state.update {
             it.copy(
                 avrReachable = s.reachable,
-                avrVolume = s.volume ?: it.avrVolume,
+                avrVolume = s.volume ?: it.avrVolume ?: avrDefaultVolume(),
                 avrMuted = if (s.reachable) s.muted else it.avrMuted,
             )
         }
@@ -317,6 +333,42 @@ class OvladacViewModel @Inject constructor(
     }
     fun setSubtitle(index: Int) = command { c, id -> naTv.setSubtitleIndex(c.url, c.token, id, index) }
     fun setAudio(index: Int) = command { c, id -> naTv.setAudioIndex(c.url, c.token, id, index) }
+
+    // --- CONSOLE (SHW-39): nastavení obrazu/titulků externího přehrávače z Ovladače.
+    /** Poměr obrazu na TV: "fit" | "zoom" | "fill". */
+    fun setResizeMode(mode: String) {
+        _state.update { it.copy(displayResizeMode = mode) }
+        sendDisplayConfig(resizeMode = mode)
+    }
+    /** Změní velikost titulků o [delta] sp (rozsah 12..60) a pošle na box. */
+    fun nudgeSubFontSize(delta: Int) {
+        val v = (_state.value.subFontSizeSp + delta).coerceIn(12, 60)
+        _state.update { it.copy(subFontSizeSp = v) }
+        sendDisplayConfig(subFontSizeSp = v)
+    }
+    /** Posune titulky nahoru/dolů o [delta] % výšky (rozsah 0..40) a pošle na box. */
+    fun nudgeSubMargin(delta: Int) {
+        val v = (_state.value.subBottomMarginPct + delta).coerceIn(0, 40)
+        _state.update { it.copy(subBottomMarginPct = v) }
+        sendDisplayConfig(subBottomMarginPct = v)
+    }
+    /** Nastaví barvu titulků (ARGB) a pošle na box. */
+    fun setSubColor(argb: Int) {
+        _state.update { it.copy(subColorArgb = argb) }
+        sendDisplayConfig(subColorArgb = argb)
+    }
+
+    private fun sendDisplayConfig(
+        resizeMode: String? = null,
+        subFontSizeSp: Int? = null,
+        subColorArgb: Int? = null,
+        subBottomMarginPct: Int? = null,
+    ) {
+        viewModelScope.launch {
+            val c = creds() ?: return@launch
+            naTv.castFerryConfig(c.url, c.token, resizeMode, subFontSizeSp, subColorArgb, subBottomMarginPct)
+        }
+    }
 
     private fun command(block: suspend (Creds, String) -> Boolean) {
         viewModelScope.launch {

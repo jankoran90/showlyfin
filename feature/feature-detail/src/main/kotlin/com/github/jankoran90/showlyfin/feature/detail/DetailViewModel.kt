@@ -418,14 +418,19 @@ class DetailViewModel @Inject constructor(
         val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: _uiState.value.item?.title.orEmpty()
         // CZ titulky query (Fáze E): orig+cz název, rok, runtime, release+fps zvoleného streamu.
+        // BATON regrese: query stavíme VŽDY (dřív gate `if imdb != null` → při castu z doporučení je
+        // imdbId ještě prázdné, dohledá se z TMDB později, stejný root cause jako SIEVE → query null →
+        // `subs:[]` na TV). Backend hledá i bez imdb (podle title/origTitle/year); prázdné imdb řeší
+        // API klient placeholderem. Postavíme když máme aspoň název.
         val st = _uiState.value
-        val imdbForSub = st.item?.imdbId
-        if (!imdbForSub.isNullOrBlank()) {
+        val subTitle = st.tmdbCzTitle?.takeIf { t -> t.isNotBlank() } ?: st.item?.title.orEmpty()
+        val subOrig = st.item?.title.orEmpty()
+        if (subTitle.isNotBlank() || subOrig.isNotBlank()) {
             _uiState.update {
                 it.copy(pendingSubtitleQuery = com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery(
-                    imdb = imdbForSub,
-                    title = st.tmdbCzTitle?.takeIf { t -> t.isNotBlank() } ?: st.item?.title.orEmpty(),
-                    origTitle = st.item?.title.orEmpty(),
+                    imdb = st.item?.imdbId.orEmpty(),
+                    title = subTitle,
+                    origTitle = subOrig,
                     year = st.item?.year,
                     release = stream.name ?: stream.description,
                     fps = stream.quality.fps,

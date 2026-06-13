@@ -493,7 +493,10 @@ internal class UploaderApi(
             if (!release.isNullOrBlank()) add("release=${enc(release)}")
             if (fps != null && fps > 0.0) add("fps=$fps")
         }
-        val url = "$base/api/subtitles/$imdbId?" + params.joinToString("&")
+        // Prázdné imdb (cast z doporučení, kde se imdb dohledá z TMDB až později) → placeholder, ať
+        // route `/api/subtitles/{imdb}` matchne; backend pak hledá podle title/origTitle/year (any_imdb=false).
+        val imdbSeg = imdbId.takeIf { it.isNotBlank() } ?: "_"
+        val url = "$base/api/subtitles/$imdbSeg?" + params.joinToString("&")
         return service.getSubtitles(url, cookie)
     }
 

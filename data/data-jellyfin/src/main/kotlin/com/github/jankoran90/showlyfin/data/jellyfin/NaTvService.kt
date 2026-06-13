@@ -357,14 +357,61 @@ class NaTvService @Inject constructor(
                 if (!resp.isSuccessful) return@use null
                 val json = JSONObject(resp.body?.string().orEmpty())
                 if (!json.optBoolean("active", false)) return@use null
+                // CONSOLE: box hlásí i seznam stop (titulky/audio) + aktuální výběr → Ovladač je vystaví.
+                val tracks = json.optJSONObject("tracks")
+                val subs = parseFerryTracks(tracks?.optJSONArray("text"))
+                val auds = parseFerryTracks(tracks?.optJSONArray("audio"))
                 FerryState(
                     title = json.optString("title"),
                     positionMs = json.optLong("positionMs", 0L),
                     durationMs = json.optLong("durationMs", 0L),
                     paused = json.optBoolean("paused", false),
+                    subtitleTracks = subs.tracks,
+                    audioTracks = auds.tracks,
+                    currentSubtitleIndex = subs.selected,
+                    currentAudioIndex = auds.selected,
                 )
             }
         }.getOrNull()
+    }
+
+    private data class ParsedFerryTracks(val tracks: List<StreamTrack>, val selected: Int)
+
+    /** CONSOLE: pole stop {i,label,sel} → [StreamTrack] (index = ordinál) + index právě vybrané (-1 = žádná). */
+    private fun parseFerryTracks(arr: JSONArray?): ParsedFerryTracks {
+        if (arr == null) return ParsedFerryTracks(emptyList(), -1)
+        val out = mutableListOf<StreamTrack>()
+        var selected = -1
+        for (i in 0 until arr.length()) {
+            val t = arr.optJSONObject(i) ?: continue
+            val idx = t.optInt("i", i)
+            out += StreamTrack(idx, t.optString("label").takeIf { it.isNotBlank() } ?: "Stopa $idx")
+            if (t.optBoolean("sel", false)) selected = idx
+        }
+        return ParsedFerryTracks(out, selected)
+    }
+
+    /**
+     * Plan CONSOLE (SHW-39): pošle běžícímu externímu přehrávači nastavení obrazu/titulků (poměr stran,
+     * styl titulků) přes SEND_STRING payload `FERRYCFG1:{json}`. Jen vyplněná pole se aplikují.
+     */
+    suspend fun castFerryConfig(
+        baseUrl: String,
+        token: String,
+        resizeMode: String? = null,
+        subFontSizeSp: Int? = null,
+        subColorArgb: Int? = null,
+        subBottomMarginPct: Int? = null,
+    ): Boolean {
+        if (baseUrl.isBlank() || token.isBlank()) return false
+        val target = pickWatchSession(getSessions(baseUrl, token)) ?: return false
+        val json = JSONObject().apply {
+            resizeMode?.takeIf { it.isNotBlank() }?.let { put("resizeMode", it) }
+            subFontSizeSp?.let { put("subFontSizeSp", it) }
+            subColorArgb?.let { put("subColorArgb", it) }
+            subBottomMarginPct?.let { put("subBottomMarginPct", it) }
+        }
+        return sendGeneralCommand(baseUrl, token, target.sessionId, "SendString", mapOf("String" to "FERRYCFG1:$json"))
     }
 
     private suspend fun post(url: String): Boolean = withContext(Dispatchers.IO) {
@@ -384,6 +431,11 @@ data class FerryState(
     val positionMs: Long,
     val durationMs: Long,
     val paused: Boolean,
+    /** CONSOLE: stopy titulků/audio externího přehrávače (ordinál = index pro Set*StreamIndex). */
+    val subtitleTracks: List<StreamTrack> = emptyList(),
+    val audioTracks: List<StreamTrack> = emptyList(),
+    val currentSubtitleIndex: Int = -1,
+    val currentAudioIndex: Int = -1,
 )
 
 data class JellyfinSessionSummary(
