@@ -23,11 +23,16 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.UUID
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -64,7 +69,18 @@ class HistoryViewModel @Inject constructor(
     private val jellyfinLibraryService: JellyfinLibraryService,
     private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val viewModeStore: ViewModeStore,
 ) : ViewModel() {
+
+    // VANTAGE (SHW-48): per-sekce volba zobrazení (mřížka/seznam) — Historie výchozí mřížka.
+    val viewMode: StateFlow<ViewMode> = viewModeStore.modes
+        .map { m -> if (m[ViewModeStore.SECTION_HISTORY] == ViewModeStore.LIST) ViewMode.LIST else ViewMode.GRID }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
+
+    fun toggleViewMode() {
+        val next = if (viewMode.value == ViewMode.GRID) ViewModeStore.LIST else ViewModeStore.GRID
+        viewModeStore.set(ViewModeStore.SECTION_HISTORY, next)
+    }
 
     /**
      * VISTA V1 — surová (NEobohacená) historie: položka + čas posledního zhlédnutí (epoch ms).

@@ -26,11 +26,16 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import javax.inject.Inject
 
 @HiltViewModel
@@ -44,7 +49,18 @@ class WatchlistViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val csfdRepository: CsfdRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val viewModeStore: ViewModeStore,
 ) : ViewModel() {
+
+    // VANTAGE (SHW-48): per-sekce volba zobrazení — Chci vidět výchozí SEZNAM (řádky s popisem).
+    val viewMode: StateFlow<ViewMode> = viewModeStore.modes
+        .map { m -> if (m[ViewModeStore.SECTION_WATCHLIST] == ViewModeStore.GRID) ViewMode.GRID else ViewMode.LIST }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.LIST)
+
+    fun toggleViewMode() {
+        val next = if (viewMode.value == ViewMode.LIST) ViewModeStore.GRID else ViewModeStore.LIST
+        viewModeStore.set(ViewModeStore.SECTION_WATCHLIST, next)
+    }
 
     private val _rawItems = MutableStateFlow<List<MediaItem>>(emptyList())
     private var lockedRating: AgeRating? = null

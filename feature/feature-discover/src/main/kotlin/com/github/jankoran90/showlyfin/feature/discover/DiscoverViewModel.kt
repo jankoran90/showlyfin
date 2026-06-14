@@ -25,10 +25,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import org.jellyfin.sdk.model.UUID
 import timber.log.Timber
 import javax.inject.Inject
@@ -45,10 +50,21 @@ class DiscoverViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val viewModeStore: ViewModeStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DiscoverUiState())
     val uiState: StateFlow<DiscoverUiState> = _uiState.asStateFlow()
+
+    // VANTAGE (SHW-48): per-sekce volba zobrazení (mřížka/seznam) — Objevit výchozí mřížka.
+    val viewMode: StateFlow<ViewMode> = viewModeStore.modes
+        .map { m -> if (m[ViewModeStore.SECTION_DISCOVER] == ViewModeStore.LIST) ViewMode.LIST else ViewMode.GRID }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
+
+    fun toggleViewMode() {
+        val next = if (viewMode.value == ViewMode.GRID) ViewModeStore.LIST else ViewModeStore.GRID
+        viewModeStore.set(ViewModeStore.SECTION_DISCOVER, next)
+    }
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""

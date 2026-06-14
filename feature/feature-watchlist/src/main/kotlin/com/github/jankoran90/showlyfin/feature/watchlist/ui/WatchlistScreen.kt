@@ -24,6 +24,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
@@ -50,8 +54,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.core.ui.MediaRow
 import com.github.jankoran90.showlyfin.core.ui.SectionBar
 import com.github.jankoran90.showlyfin.core.ui.SectionSortChip
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.watchlist.WatchProgress
@@ -72,14 +79,21 @@ fun WatchlistScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val csfdRatings by viewModel.csfdRatings.collectAsStateWithLifecycle()
+    val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
 
     Column(modifier = modifier.fillMaxSize()) {
-        // Hlavička (Filmy/Seriály + hledání + filtry) se skrývá při scrollu dolů — stejně jako v Objevit.
-        val headerVisible by rememberScrollHeaderVisibility(
+        // Hlavička se skrývá při scrollu — z aktivního scroll stavu (seznam / mřížka).
+        val listHeaderVisible by rememberScrollHeaderVisibility(
             { listState.firstVisibleItemIndex },
             { listState.firstVisibleItemScrollOffset },
         )
+        val gridHeaderVisible by rememberScrollHeaderVisibility(
+            { gridState.firstVisibleItemIndex },
+            { gridState.firstVisibleItemScrollOffset },
+        )
+        val headerVisible = if (viewMode == ViewMode.GRID) gridHeaderVisible else listHeaderVisible
         AnimatedVisibility(
             visible = headerVisible,
             enter = fadeIn(tween(180)) + expandVertically(tween(180)),
@@ -94,6 +108,8 @@ fun WatchlistScreen(
                 searchQuery = if (uiState.isLoggedIn) uiState.searchQuery else null,
                 onSearchQueryChange = { viewModel.setSearchQuery(it) },
                 searchPlaceholder = "Hledat (česky i originál)…",
+                viewMode = viewMode,
+                onToggleViewMode = { viewModel.toggleViewMode() },
                 chips = if (showChips) {
                     {
                         watchlistChips(
@@ -169,8 +185,34 @@ fun WatchlistScreen(
                     )
                 }
             }
+            // VANTAGE A: Chci vidět = seznam (řádky s popisem) NEBO mřížka karet, dle přepínače v liště.
+            viewMode == ViewMode.GRID -> {
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(minSize = 110.dp),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
+                        val jellyfinId = item.imdbId?.let { uiState.imdbToJellyfin[it] }
+                            ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
+                        val inLibrary = jellyfinId != null
+                            || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
+                        val watched = (item.imdbId?.let { uiState.watchedImdbIds.contains(it) } ?: false)
+                            || (item.tmdbId?.let { uiState.watchedTmdbIds.contains(it) } ?: false)
+                            || uiState.watchedTraktIds.contains(item.traktId)
+                        MediaCard(
+                            item = item,
+                            onClick = { onItemClick(item, jellyfinId) },
+                            inLibrary = inLibrary,
+                            watched = watched,
+                        )
+                    }
+                }
+            }
             else -> {
-                // VISTA V3: „Chci vidět" jako řádky (cover + titulek/rok/ČSFD/popis), ne mřížka karet.
+                // VISTA V3: „Chci vidět" jako řádky (cover + titulek/rok/ČSFD/popis), kanonická MediaRow.
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -187,12 +229,14 @@ fun WatchlistScreen(
                             || uiState.watchedTraktIds.contains(item.traktId)
                         // Líně načti ČSFD hodnocení jen pro skutečně zobrazený řádek.
                         LaunchedEffect(item.traktId) { viewModel.loadCsfdRating(item) }
-                        WatchlistRow(
+                        MediaRow(
                             item = item,
                             csfdRating = csfdRatings[item.traktId],
                             inLibrary = inLibrary,
                             watched = watched,
-                            progress = if (item.type == MediaType.SHOW) progressData else null,
+                            progressText = if (item.type == MediaType.SHOW) {
+                                progressData?.let { "${it.watchedEpisodes}/${it.totalEpisodes} epizod" }
+                            } else null,
                             onClick = { onItemClick(item, jellyfinId) },
                         )
                     }

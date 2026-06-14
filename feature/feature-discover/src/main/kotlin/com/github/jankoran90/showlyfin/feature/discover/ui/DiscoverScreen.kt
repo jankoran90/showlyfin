@@ -14,9 +14,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -58,8 +61,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.core.ui.MediaRow
 import com.github.jankoran90.showlyfin.core.ui.SectionBar
 import com.github.jankoran90.showlyfin.core.ui.SectionSortChip
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
+import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverSort
@@ -74,10 +80,17 @@ fun DiscoverScreen(
     viewModel: DiscoverViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val isSearchMode = uiState.searchQuery.isNotBlank()
 
     val gridState = rememberLazyGridState()
-    var isHeaderVisible by remember { mutableStateOf(true) }
+    val listState = rememberLazyListState()
+    // VANTAGE A: hlavička se skrývá při scrollu — z aktivního scroll stavu (mřížka / seznam).
+    var gridHeaderVisible by remember { mutableStateOf(true) }
+    val listHeaderVisible by rememberScrollHeaderVisibility(
+        { listState.firstVisibleItemIndex }, { listState.firstVisibleItemScrollOffset },
+    )
+    val isHeaderVisible = if (viewMode == ViewMode.LIST) listHeaderVisible else gridHeaderVisible
     LaunchedEffect(gridState) {
         var prevIndex = 0
         var prevOffset = 0
@@ -90,9 +103,9 @@ fun DiscoverScreen(
                     offset > prevOffset + 4 -> -1
                     else -> 0
                 }
-                if (index == 0 && offset < 60) isHeaderVisible = true
-                else if (direction == 1) isHeaderVisible = true
-                else if (direction == -1) isHeaderVisible = false
+                if (index == 0 && offset < 60) gridHeaderVisible = true
+                else if (direction == 1) gridHeaderVisible = true
+                else if (direction == -1) gridHeaderVisible = false
                 prevIndex = index
                 prevOffset = offset
             }
@@ -105,6 +118,17 @@ fun DiscoverScreen(
             (info.visibleItemsInfo.lastOrNull()?.index ?: 0) to info.totalItemsCount
         }.collect { (lastVisible, total) ->
             if (!isSearchMode && uiState.canLoadMore && total > 0 && lastVisible >= total - 6) {
+                viewModel.loadMore()
+            }
+        }
+    }
+    // VANTAGE A: totéž stránkování pro seznamový režim.
+    LaunchedEffect(listState, uiState.canLoadMore, isSearchMode) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            (info.visibleItemsInfo.lastOrNull()?.index ?: 0) to info.totalItemsCount
+        }.collect { (lastVisible, total) ->
+            if (!isSearchMode && uiState.canLoadMore && total > 0 && lastVisible >= total - 4) {
                 viewModel.loadMore()
             }
         }
@@ -139,6 +163,8 @@ fun DiscoverScreen(
                     searchQuery = uiState.searchQuery,
                     onSearchQueryChange = { viewModel.onSearchQueryChange(it) },
                     searchPlaceholder = "Hledat filmy a seriály…",
+                    viewMode = viewMode,
+                    onToggleViewMode = { viewModel.toggleViewMode() },
                     chips = {
                         discoverChips(
                             uiState = uiState,
@@ -196,6 +222,36 @@ fun DiscoverScreen(
                         text = uiState.error ?: "Chyba",
                         modifier = Modifier.padding(16.dp),
                     )
+                }
+            } else if (viewMode == ViewMode.LIST) {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(items, key = { "${it.type}_${it.traktId}" }) { item ->
+                        val jellyfinId = item.imdbId?.let { uiState.imdbToJellyfin[it] }
+                            ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
+                        val inLibrary = jellyfinId != null
+                            || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
+                        val watched = (item.imdbId?.let { uiState.watchedImdbIds.contains(it) } ?: false)
+                            || (item.tmdbId?.let { uiState.watchedTmdbIds.contains(it) } ?: false)
+                            || uiState.watchedTraktIds.contains(item.traktId)
+                        MediaRow(
+                            item = item,
+                            onClick = { onItemClick(item, jellyfinId) },
+                            inLibrary = inLibrary,
+                            watched = watched,
+                        )
+                    }
+                    if (!isSearchMode && uiState.isLoadingMore) {
+                        item {
+                            Box(
+                                Modifier.fillMaxWidth().padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) { CircularProgressIndicator(Modifier.size(28.dp)) }
+                        }
+                    }
                 }
             } else {
                 val animKey = "${uiState.activeTab.name}_${uiState.activeFilter.name}_${isSearchMode}"

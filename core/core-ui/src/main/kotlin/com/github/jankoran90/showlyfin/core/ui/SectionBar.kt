@@ -10,9 +10,11 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AssistChip
@@ -22,9 +24,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,6 +55,9 @@ fun SectionBar(
     searchQuery: String? = null,
     onSearchQueryChange: (String) -> Unit = {},
     searchPlaceholder: String = "Hledat…",
+    // VANTAGE (SHW-48): přepínač mřížka/seznam jako PRVNÍ prvek lišty. null = skrytý (např. „Na RD").
+    viewMode: ViewMode? = null,
+    onToggleViewMode: () -> Unit = {},
     chips: (LazyListScope.() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -85,27 +87,28 @@ fun SectionBar(
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             )
-        } else if (hasSegments || hasSearch || chips != null) {
+        } else if (viewMode != null || hasSegments || hasSearch || chips != null) {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Plan STRATA: Filmy/Seriály (resp. pohledy) = segment přímo v liště místo horní tab-lišty.
-                if (hasSegments) {
+                // VANTAGE A: přepínač zobrazení (mřížka/seznam) jako PRVNÍ prvek lišty.
+                if (viewMode != null) {
                     item {
-                        SingleChoiceSegmentedButtonRow {
-                            segments!!.forEachIndexed { index, label ->
-                                SegmentedButton(
-                                    selected = selectedSegment == index,
-                                    onClick = { onSegmentSelected(index) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = index, count = segments.size),
-                                    modifier = Modifier.tvFocusable(),
-                                ) { Text(label) }
-                            }
+                        val toList = viewMode == ViewMode.GRID
+                        IconButton(onClick = onToggleViewMode, modifier = Modifier.tvFocusable()) {
+                            Icon(
+                                imageVector = if (toList) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                                contentDescription = if (toList) "Zobrazit jako seznam" else "Zobrazit jako mřížku",
+                            )
                         }
                     }
+                }
+                // VANTAGE B: Filmy/Seriály (resp. pohledy) = dropdown (dřív segmenty) přímo v liště.
+                if (hasSegments) {
+                    item { SegmentDropdown(segments = segments!!, selected = selectedSegment, onSelect = onSegmentSelected) }
                 }
                 if (hasSearch) {
                     item {
@@ -124,6 +127,31 @@ fun SectionBar(
                     }
                 }
                 chips?.invoke(this)
+            }
+        }
+    }
+}
+
+/** VANTAGE B (SHW-48): Filmy/Seriály (resp. pohledy) jako rozbalovací menu místo segmentů. */
+@Composable
+private fun SegmentDropdown(segments: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        AssistChip(
+            onClick = { open = true },
+            label = { Text(segments.getOrElse(selected) { segments.firstOrNull().orEmpty() }) },
+            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+            modifier = Modifier.tvFocusable(),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            segments.forEachIndexed { index, label ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = { onSelect(index); open = false },
+                    trailingIcon = if (index == selected) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else null,
+                )
             }
         }
     }

@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -38,7 +41,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
+import com.github.jankoran90.showlyfin.core.ui.MediaRow
 import com.github.jankoran90.showlyfin.core.ui.SectionBar
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
 
 /**
@@ -52,13 +57,20 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
+    val listState = rememberLazyListState()
 
     Column(modifier = modifier.fillMaxSize()) {
-        val headerVisible by rememberScrollHeaderVisibility(
+        val gridHeaderVisible by rememberScrollHeaderVisibility(
             { gridState.firstVisibleItemIndex },
             { gridState.firstVisibleItemScrollOffset },
         )
+        val listHeaderVisible by rememberScrollHeaderVisibility(
+            { listState.firstVisibleItemIndex },
+            { listState.firstVisibleItemScrollOffset },
+        )
+        val headerVisible = if (viewMode == ViewMode.LIST) listHeaderVisible else gridHeaderVisible
         AnimatedVisibility(
             visible = headerVisible,
             enter = fadeIn(tween(180)) + expandVertically(tween(180)),
@@ -71,6 +83,8 @@ fun HistoryScreen(
                 searchQuery = if (uiState.isLoggedIn) uiState.searchQuery else null,
                 onSearchQueryChange = { viewModel.setSearchQuery(it) },
                 searchPlaceholder = "Hledat (česky i originál)…",
+                viewMode = viewMode,
+                onToggleViewMode = { viewModel.toggleViewMode() },
             )
         }
 
@@ -80,6 +94,35 @@ fun HistoryScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             uiState.items.isEmpty() && uiState.searchQuery.isBlank() -> EmptyHistory()
             uiState.items.isEmpty() -> CenteredText("Nic nenalezeno pro „${uiState.searchQuery}\"")
+            // VANTAGE A: Historie = mřížka karet NEBO seznam řádků, dle přepínače v liště.
+            viewMode == ViewMode.LIST -> LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(uiState.items, key = { "${it.type}_${it.traktId}" }) { item ->
+                    val jellyfinId = item.imdbId?.let { uiState.imdbToJellyfin[it] }
+                        ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
+                    val inLibrary = jellyfinId != null
+                        || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
+                    MediaRow(
+                        item = item,
+                        onClick = { onItemClick(item, jellyfinId) },
+                        inLibrary = inLibrary,
+                        watched = true,
+                    )
+                }
+                if (uiState.hasMore) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            TextButton(onClick = { viewModel.loadMore() }) { Text("Načíst dalších 20") }
+                        }
+                    }
+                }
+            }
             else -> LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(minSize = 110.dp),
