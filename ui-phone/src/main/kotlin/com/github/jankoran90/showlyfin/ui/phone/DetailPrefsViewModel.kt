@@ -2,6 +2,8 @@ package com.github.jankoran90.showlyfin.ui.phone
 
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
+import com.github.jankoran90.showlyfin.feature.detail.DETAIL_ACTION_KEYS
+import com.github.jankoran90.showlyfin.feature.detail.parseActionOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +19,7 @@ data class DetailPrefsState(
     val showStudio: Boolean = true,
     val showCreators: Boolean = true,   // ENSEMBLE (SHW-45): sekce „Tvůrci"
     val plotLines: Int = 5,   // počet řádků popisu ve sbaleném stavu (0 = bez omezení)
+    val actionOrder: List<String> = DETAIL_ACTION_KEYS,   // CANVAS A: pořadí akčních tlačítek
 )
 
 /** Nastavení detailu obsahu z knihovny (jednoduchý vs bohatý + volitelné sekce). */
@@ -35,6 +38,7 @@ class DetailPrefsViewModel @Inject constructor(
         showStudio = prefs.getBoolean(KEY_STUDIO, true),
         showCreators = prefs.getBoolean(KEY_CREATORS, true),
         plotLines = prefs.getInt(KEY_PLOT_LINES, 5),
+        actionOrder = parseActionOrder(prefs.getString(KEY_ACTION_ORDER, null)),
     )
 
     fun setRich(value: Boolean) = put(KEY_RICH) { _state.update { s -> s.copy(rich = value) }; value }
@@ -45,6 +49,12 @@ class DetailPrefsViewModel @Inject constructor(
     fun setPlotLines(value: Int) {
         _state.update { s -> s.copy(plotLines = value) }
         prefs.edit().putInt(KEY_PLOT_LINES, value).apply()
+    }
+
+    /** CANVAS A/E: změna pořadí akčních tlačítek detailu (Nastavení, šipky ▲▼). */
+    fun setActionOrder(order: List<String>) {
+        _state.update { s -> s.copy(actionOrder = order) }
+        prefs.edit().putString(KEY_ACTION_ORDER, order.joinToString(",")).apply()
     }
 
     private inline fun put(key: String, block: () -> Boolean) {
@@ -58,6 +68,8 @@ class DetailPrefsViewModel @Inject constructor(
         private const val KEY_STUDIO = "detail_show_studio"
         private const val KEY_CREATORS = "detail_show_creators"
         private const val KEY_PLOT_LINES = "detail_plot_lines"
-        val PLOT_LINE_OPTIONS = listOf(3, 5, 8, 10, 0)   // 0 = bez omezení
+        private const val KEY_ACTION_ORDER = "detail_action_order"
+        // CANVAS A5: větší rozsah řádků popisu (3–25) + „bez omezení" (0).
+        val PLOT_LINE_OPTIONS = listOf(3, 5, 8, 10, 15, 20, 25, 0)   // 0 = bez omezení
     }
 }

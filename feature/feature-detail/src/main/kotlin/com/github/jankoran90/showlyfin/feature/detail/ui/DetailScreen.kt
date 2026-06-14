@@ -264,18 +264,6 @@ fun DetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
                     }
                 },
-                actions = {
-                    // COMPASS C2 (SHW-44): hvězda Oblíbené (jen filmy — kategorie „Filmy").
-                    if (uiState.item?.type == MediaType.MOVIE) {
-                        IconButton(onClick = { viewModel.toggleFavorite() }, modifier = Modifier.tvFocusable(shape = CircleShape)) {
-                            Icon(
-                                imageVector = if (uiState.isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                contentDescription = "Oblíbené",
-                                tint = if (uiState.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
         },
@@ -320,10 +308,12 @@ fun DetailScreen(
                 .verticalScroll(scrollState),
         ) {
             // ── HERO: fanart s cover posterem + názvem + rokem + ČSFD% zarovnanými dolů do stínu ──
-            // Klik na fanart (i poster/info) → fullscreen ČSFD galerie (F3, lazy load).
+            // CANVAS A: klik na COVER (poster) → galerie; klik na ČSFD badge → recenze; kompaktní
+            // kulatá akční lišta nahoře vpravo (u Oblíbených).
             val backdropUrl = displayItem.backdropUrl()
             val posterUrl = displayItem.posterUrl()
             val hasGallery = uiState.csfdId != null && uiState.uploaderConfigured
+            val hasReviews = uiState.csfdReviews.isNotEmpty()
             // Žánry — zobrazují se v hero sloupci pod rokem, vedle cover artu (max 3 v řadě).
             val genres = uiState.movieDetails?.genres?.map { it.name }
                 ?: uiState.showDetails?.genres?.map { it.name }
@@ -334,8 +324,7 @@ fun DetailScreen(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 200.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .then(if (hasGallery) Modifier.clickable { viewModel.openGallery() }.tvFocusable(shape = RoundedCornerShape(0.dp)) else Modifier),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 if (backdropUrl != null) {
                     AsyncImage(
@@ -370,7 +359,9 @@ fun DetailScreen(
                                 .width(96.dp)
                                 .aspectRatio(2f / 3f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                // CANVAS A1: klik na cover = galerie (zrušeno samostatné tlačítko Galerie).
+                                .then(if (hasGallery) Modifier.clickable { viewModel.openGallery() }.tvFocusable(shape = RoundedCornerShape(8.dp)) else Modifier),
                         ) {
                             AsyncImage(
                                 model = posterUrl,
@@ -400,7 +391,15 @@ fun DetailScreen(
                             // ČSFD hodnocení v % (místo TMDB); fallback na hvězdičkové hodnocení, když ČSFD chybí
                             val csfdRating = uiState.csfdRating
                             if (csfdRating != null) {
-                                CsfdRatingBadge(rating = csfdRating, big = true)
+                                // CANVAS A2: klik na ČSFD badge = recenze (zrušeno samostatné tlačítko).
+                                CsfdRatingBadge(
+                                    rating = csfdRating,
+                                    big = true,
+                                    modifier = if (hasReviews) Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { showReviewsSheet = true }
+                                        .tvFocusable(shape = RoundedCornerShape(6.dp)) else Modifier,
+                                )
                             } else {
                                 displayItem.rating?.let { rating ->
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -425,6 +424,27 @@ fun DetailScreen(
                         }
                     }
                 }
+                // CANVAS A3/A4: kompaktní kulatá akční lišta nahoře vpravo (u Oblíbených),
+                // pořadí konfigurovatelné v Nastavení. Neodsazuje horní lištu (overlay nad fanartem).
+                DetailActionBar(
+                    order = uiState.actionOrder,
+                    isMovie = uiState.item?.type == MediaType.MOVIE,
+                    isFavorite = uiState.isFavorite,
+                    onFavorite = { viewModel.toggleFavorite() },
+                    inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
+                    hasRemembered = uiState.rememberedSource != null,
+                    onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
+                    onNaTv = onNaTv?.let { cb -> { cb(displayItem, uiState.ownedJellyfinId) } },
+                    onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playStream(it) } },
+                    onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
+                    onRemoveRemembered = { viewModel.removeRememberedSource() },
+                    onStremio = { viewModel.openStreamPicker() },
+                    onDownload = { viewModel.openDownloadMenu() },
+                    inWatchlist = uiState.isInWatchlist,
+                    isTogglingWatchlist = uiState.isTogglingWatchlist,
+                    onWatchlist = { viewModel.toggleWatchlist() },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                )
             }
             Spacer(Modifier.height(16.dp))
 
@@ -477,41 +497,8 @@ fun DetailScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
-            // ── ČSFD akce (galerie + recenze) — vystředěné pod plot, nad akčními tlačítky ──
-            if (hasGallery || uiState.csfdReviews.isNotEmpty()) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (hasGallery) {
-                            OutlinedButton(onClick = { viewModel.openGallery() }, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
-                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                                Text("Galerie")
-                            }
-                        }
-                        if (uiState.csfdReviews.isNotEmpty()) {
-                            OutlinedButton(onClick = { showReviewsSheet = true }, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
-                                Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                                Text("ČSFD recenze (${uiState.csfdReviews.size})")
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-
-            DetailActionRow(
-                inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
-                onPlayNaTv = onNaTv?.let { cb -> { cb(displayItem, uiState.ownedJellyfinId) } },
-                onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
-                onStream = { viewModel.openStreamPicker() },
-                onDownload = { viewModel.openDownloadMenu() },
-                inWatchlist = uiState.isInWatchlist,
-                isTogglingWatchlist = uiState.isTogglingWatchlist,
-                onWatchlist = { viewModel.toggleWatchlist() },
-                hasRemembered = uiState.rememberedSource != null,
-                onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playStream(it) } },
-                onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
-                onRemoveRemembered = { viewModel.removeRememberedSource() },
-            )
+            // CANVAS A: akce (Galerie přes cover, ČSFD recenze přes badge, Přehrát/Na TV/Stremio/
+            // Stáhnout/Oblíbené/Chci vidět) jsou v kompaktní kulaté liště v hero (viz DetailActionBar výše).
 
             // Plan ENSEMBLE (SHW-45): sekce „Tvůrci" (pás herců + Režie/Scénář/Kamera) NAD kolekcemi.
             if (uiState.showCreators) {
@@ -573,91 +560,92 @@ fun DetailScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * CANVAS (SHW-47) A3/A4: kompaktní kulatá akční lišta v hero (u Oblíbených). Pořadí podle
+ * [order] (konfigurovatelné v Nastavení); každá akce se ukáže jen když dává v daném kontextu smysl
+ * (v knihovně = Přehrát zde / Na TV; mimo = Stremio / Stáhnout; ⭐ zapamatovaný zdroj = Přehrát/Na TV).
+ */
 @Composable
-private fun DetailActionRow(
+private fun DetailActionBar(
+    order: List<String>,
+    isMovie: Boolean,
+    isFavorite: Boolean,
+    onFavorite: () -> Unit,
     inLibrary: Boolean,
-    onPlayNaTv: (() -> Unit)?,
+    hasRemembered: Boolean,
     onPlayHere: (() -> Unit)?,
-    onStream: () -> Unit,
+    onNaTv: (() -> Unit)?,
+    onPlayRemembered: () -> Unit,
+    onCastRemembered: () -> Unit,
+    onRemoveRemembered: () -> Unit,
+    onStremio: () -> Unit,
     onDownload: () -> Unit,
     inWatchlist: Boolean,
     isTogglingWatchlist: Boolean,
     onWatchlist: () -> Unit,
-    hasRemembered: Boolean = false,
-    onPlayRemembered: () -> Unit = {},
-    onCastRemembered: () -> Unit = {},
-    onRemoveRemembered: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
-    FlowRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        order.forEach { key ->
+            when (key) {
+                "favorite" -> if (isMovie) {
+                    HeroAction(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "Oblíbené", onFavorite, active = isFavorite)
+                }
+                "play" -> {
+                    val cb = if (inLibrary) onPlayHere else if (hasRemembered) onPlayRemembered else null
+                    if (cb != null) HeroAction(Icons.Default.PhoneAndroid, "Přehrát zde", cb)
+                }
+                "tv" -> {
+                    val cb = if (inLibrary) onNaTv else if (hasRemembered) onCastRemembered else null
+                    if (cb != null) HeroAction(Icons.Default.Cast, "Přehrát na TV", cb)
+                }
+                "stremio" -> if (!inLibrary) HeroAction(Icons.Default.PlayArrow, "Stremio", onStremio)
+                "download" -> if (!inLibrary) HeroAction(Icons.Default.Download, "Stáhnout", onDownload)
+                "watchlist" -> HeroAction(
+                    if (inWatchlist) Icons.Default.Check else Icons.Default.Add,
+                    if (inWatchlist) "V seznamu" else "Chci vidět",
+                    onWatchlist, active = inWatchlist, loading = isTogglingWatchlist,
+                )
+            }
+        }
+        // Odebrání zapamatovaného zdroje (mimo lištu/pořadí, jen když je co odebrat).
+        if (!inLibrary && hasRemembered) {
+            HeroAction(Icons.Default.Delete, "Odebrat zapamatovaný zdroj", onRemoveRemembered, danger = true)
+        }
+    }
+}
+
+/** Jedno kulaté akční tlačítko v hero — tmavý scrim kroužek + ikona (čitelné na fanartu). */
+@Composable
+private fun HeroAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    desc: String,
+    onClick: () -> Unit,
+    active: Boolean = false,
+    danger: Boolean = false,
+    loading: Boolean = false,
+) {
+    Box(
+        Modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.45f))
+            .clickable(onClick = onClick)
+            .tvFocusable(shape = CircleShape),
+        contentAlignment = Alignment.Center,
     ) {
-        if (inLibrary) {
-            // Film je v Jellyfin knihovně → přehrávání
-            if (onPlayNaTv != null) {
-                Button(onClick = onPlayNaTv, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
-                    Icon(Icons.Default.Cast, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                    Text("Přehrát Na TV")
-                }
-            }
-            if (onPlayHere != null) {
-                Button(onClick = onPlayHere, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
-                    Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                    Text("V tomto zařízení")
-                }
-            }
+        if (loading) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
         } else {
-            // SIEVE S3b: po „zapamatovat" má detail rovnou tlačítka na uložený fungující zdroj —
-            // přehrát zde / na TV jedním ťuknutím, bez otevírání výběru zdrojů.
-            if (hasRemembered) {
-                Button(onClick = onPlayRemembered, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
-                    Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                    Text("⭐ Přehrát zde")
-                }
-                Button(onClick = onCastRemembered, modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50))) {
-                    Icon(Icons.Default.Cast, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                    Text("⭐ Na TV")
-                }
-                // Plan LEDGER (SHW-43): odstranit zapamatovaný zdroj — zruší pin + smaže z RD účtu.
-                OutlinedIconButton(onClick = onRemoveRemembered, modifier = Modifier.tvFocusable(shape = CircleShape)) {
-                    Icon(Icons.Default.Delete, contentDescription = "Odstranit zapamatovaný zdroj", tint = MaterialTheme.colorScheme.error)
-                }
-            }
-            // Mimo knihovnu → akvizice / stream
-            AssistChip(
-                onClick = onDownload,
-                label = { Text("Stáhnout") },
-                leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
-                modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50)),
-            )
-            AssistChip(
-                onClick = onStream,
-                label = { Text("Stremio") },
-                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-                modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50)),
+            Icon(
+                imageVector = icon,
+                contentDescription = desc,
+                tint = when {
+                    danger -> MaterialTheme.colorScheme.error
+                    active -> MaterialTheme.colorScheme.primary
+                    else -> Color.White
+                },
             )
         }
-        FilterChip(
-            selected = inWatchlist,
-            onClick = onWatchlist,
-            enabled = !isTogglingWatchlist,
-            modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50)),
-            label = { Text(if (inWatchlist) "V seznamu" else "Chci vidět") },
-            leadingIcon = {
-                if (isTogglingWatchlist) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(
-                        if (inWatchlist) Icons.Default.Check else Icons.Default.Add,
-                        contentDescription = null,
-                    )
-                }
-            },
-        )
     }
-    Spacer(Modifier.height(8.dp))
 }

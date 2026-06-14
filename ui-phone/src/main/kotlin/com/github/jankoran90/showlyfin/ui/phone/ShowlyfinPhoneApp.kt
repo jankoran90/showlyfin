@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.ui.phone
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,11 +39,16 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -378,6 +384,23 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         // COMPASS C1: spodní lišta zrušena → měříme jen výšku MiniPlayeru, ať obsah nezmizí za ním.
         val measuredBottomPx = remember { mutableFloatStateOf(0f) }
 
+        // CANVAS F (GLIDE Fáze 2): skrývání horní lišty (search) při scrollu dolů, návrat při scrollu nahoru.
+        var topBarVisible by remember { mutableStateOf(true) }
+        val hideBarOnScroll = remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y < -3f) topBarVisible = false
+                    else if (available.y > 3f) topBarVisible = true
+                    return Offset.Zero
+                }
+            }
+        }
+        // Po přepnutí sekce/obrazovky vždy ukaž lištu (ať nezůstane schovaná z minula).
+        LaunchedEffect(currentDestination) { topBarVisible = true }
+        // CANVAS F2: zachování scrollu/pozice obrazovek napříč navigací (LazyGrid/List state je saveable;
+        // VM jsou activity-scoped → data zůstávají, restoruje se jen pozice scrollu).
+        val stateHolder = rememberSaveableStateHolder()
+
         BackHandler(enabled = isSubScreen) {
             val current = currentDestination
             currentDestination = when (current) {
@@ -429,10 +452,12 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             containerColor = Color(0xFF0D0D1A),
             topBar = {
                 if (!isTv && !isSubScreen) {
-                    AppTopBar(
-                        onMenuClick = { scope.launch { drawerState.open() } },
-                        onSearchClick = { scope.launch { snackbarHostState.showSnackbar("Hledání bude brzy") } },
-                    )
+                    AnimatedVisibility(visible = topBarVisible) {
+                        AppTopBar(
+                            onMenuClick = { scope.launch { drawerState.open() } },
+                            onSearchClick = { scope.launch { snackbarHostState.showSnackbar("Hledání bude brzy") } },
+                        )
+                    }
                 }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -464,7 +489,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 Box(modifier = Modifier
                     .fillMaxSize()
                     .padding(bottom = effectiveBottomDp)
+                    .nestedScroll(hideBarOnScroll)
                 ) {
+            stateHolder.SaveableStateProvider(currentDestination.toString()) {
             when (val dest = currentDestination) {
                 is Destination.Hlavni -> MainScreen(
                     visibleSubsections = visibleSubsections,
@@ -726,6 +753,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     onBack = { currentDestination = Destination.Uploader },
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
             }
                 }
 

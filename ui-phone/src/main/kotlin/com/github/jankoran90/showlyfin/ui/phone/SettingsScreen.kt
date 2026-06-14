@@ -543,6 +543,25 @@ private fun DetailModeSection(
                     )
                 }
             }
+            // CANVAS A/E: pořadí akčních tlačítek v hero detailu (šipky ▲▼).
+            Spacer(Modifier.height(12.dp))
+            Text("Pořadí akčních tlačítek na detailu:", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+            Spacer(Modifier.height(4.dp))
+            val actionLabels = mapOf(
+                "favorite" to "Oblíbené", "play" to "Přehrát zde", "tv" to "Na TV",
+                "stremio" to "Stremio", "download" to "Stáhnout", "watchlist" to "Chci vidět",
+            )
+            s.actionOrder.forEachIndexed { i, key ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${i + 1}. ${actionLabels[key] ?: key}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    IconButton(onClick = { viewModel.setActionOrder(s.actionOrder.moved(i, i - 1)) }, enabled = i > 0) {
+                        Icon(Icons.Default.KeyboardArrowUp, "Nahoru", tint = Color.White)
+                    }
+                    IconButton(onClick = { viewModel.setActionOrder(s.actionOrder.moved(i, i + 1)) }, enabled = i < s.actionOrder.lastIndex) {
+                        Icon(Icons.Default.KeyboardArrowDown, "Dolů", tint = Color.White)
+                    }
+                }
+            }
         }
     }
 }
@@ -1177,8 +1196,9 @@ private val SUBSECTION_ORDER_LABELS = mapOf(
 )
 
 /**
- * Plan STRATA Fáze E — znovupoužitelný editor pořadí (drag&drop) pro seznam klíčů s popiskem.
- * [orderedKeys] = aktuální pořadí; [onReorder] dostane NOVÉ pořadí klíčů. Skryje se pro <2 položky.
+ * Plan STRATA Fáze E + CANVAS (SHW-47) E — editor pořadí seznamu klíčů s popiskem, přeskládávání
+ * **šipkami ▲▼** (drag&drop se na telefonu pral se scrollem). [orderedKeys] = aktuální pořadí;
+ * [onReorder] dostane NOVÉ pořadí klíčů. Skryje se pro <2 položky.
  */
 @Composable
 private fun OrderEditor(
@@ -1189,27 +1209,18 @@ private fun OrderEditor(
 ) {
     if (orderedKeys.size < 2) return
     Text(title, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
-    ReorderColumn(
-        items = orderedKeys,
-        key = { it },
-        onMove = { from, to -> onReorder(orderedKeys.moved(from, to)) },
-    ) { keyItem, dragging, handle ->
+    orderedKeys.forEachIndexed { i, keyItem ->
         Row(
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    if (dragging) Color.White.copy(alpha = 0.08f) else Color.Transparent,
-                    RoundedCornerShape(8.dp),
-                )
-                .padding(vertical = 8.dp, horizontal = 4.dp),
+            Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // GLIDE: tah JEN za úchyt ☰ → nepere se se scrollem stránky (dřív byl handle na celém řádku).
-            Box(handle.padding(vertical = 6.dp, horizontal = 4.dp)) {
-                Icon(Icons.Default.Menu, contentDescription = "Přesunout", tint = Color.White.copy(alpha = 0.6f))
-            }
-            Spacer(Modifier.width(8.dp))
             Text(label(keyItem), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            IconButton(onClick = { onReorder(orderedKeys.moved(i, i - 1)) }, enabled = i > 0) {
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Nahoru", tint = Color.White)
+            }
+            IconButton(onClick = { onReorder(orderedKeys.moved(i, i + 1)) }, enabled = i < orderedKeys.lastIndex) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Dolů", tint = Color.White)
+            }
         }
     }
     Spacer(Modifier.height(12.dp))

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -18,17 +19,24 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,7 +45,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.CollectionGrid
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
@@ -173,11 +184,16 @@ private fun CrewRow(label: String, people: List<TmdbPerson>, kind: FavoriteKind?
     }
 }
 
+/** CANVAS (SHW-47) D: řazení filmografie. */
+enum class FilmographySort { YEAR, RATING, POPULARITY }
+
 /**
- * Plan ENSEMBLE: spodní list s tvorbou (filmografií) zvolené osoby. Karty nesou tmdbId,
- * takže klik otevře platný detail přes [onPartClick] (stejná navigace jako kolekce).
+ * Plan ENSEMBLE + CANVAS (SHW-47) C/D: tvorba (filmografie) zvolené osoby jako **celoobrazovkový,
+ * scrollovatelný** seznam (mřížka karet ve stylu Objevit, ne vytahovací okno) s řazením
+ * (rok ↓ default / hodnocení / oblíbenost, směr přepínatelný). Karty nesou tmdbId → klik otevře
+ * platný detail přes [onPartClick]. Plnoobrazovkový `Dialog` (feature-detail nemá activity-compose
+ * → Back řeší Dialog nativně).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PersonFilmographySheet(
     name: String?,
@@ -189,49 +205,89 @@ fun PersonFilmographySheet(
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 120.dp)
-                .padding(bottom = 24.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = name?.takeIf { it.isNotBlank() }?.let { "Tvorba — $it" } ?: "Tvorba",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                if (canFavorite) {
-                    IconButton(onClick = onToggleFavorite) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = "Oblíbené",
-                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+    var sort by remember { mutableStateOf(FilmographySort.YEAR) }
+    var descending by remember { mutableStateOf(true) }
+    val parts = remember(collection, sort, descending) {
+        val list = collection?.parts.orEmpty()
+        val asc = when (sort) {
+            FilmographySort.YEAR -> list.sortedBy { it.year?.take(4)?.toIntOrNull() ?: 0 }
+            FilmographySort.RATING -> list.sortedBy { it.rating ?: 0f }
+            FilmographySort.POPULARITY -> list.sortedBy { it.popularity ?: 0f }
+        }
+        if (descending) asc.asReversed() else asc
+    }
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                    }
+                    Text(
+                        text = name?.takeIf { it.isNotBlank() }?.let { "Tvorba — $it" } ?: "Tvorba",
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (canFavorite) {
+                        IconButton(onClick = onToggleFavorite) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                contentDescription = "Oblíbené",
+                                tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
-            }
-            when {
-                loading -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SortChip("Rok", FilmographySort.YEAR, sort, descending) { s, d -> sort = s; descending = d }
+                    SortChip("Hodnocení", FilmographySort.RATING, sort, descending) { s, d -> sort = s; descending = d }
+                    SortChip("Oblíbenost", FilmographySort.POPULARITY, sort, descending) { s, d -> sort = s; descending = d }
                 }
-                collection == null || collection.parts.isEmpty() -> Text(
-                    "Pro tuto osobu nemáme žádné filmy.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(16.dp),
-                )
-                else -> CollectionSection(
-                    collection = collection,
-                    excludeKey = null,
-                    onPartClick = onPartClick,
-                )
+                when {
+                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                    else -> CollectionGrid(
+                        parts = parts,
+                        onPartClick = onPartClick,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
+}
+
+/** Chip řazení — klik na nevybraný = nastaví (default sestupně); klik na vybraný = přepne směr ↓/↑. */
+@Composable
+private fun SortChip(
+    label: String,
+    value: FilmographySort,
+    current: FilmographySort,
+    descending: Boolean,
+    onSelect: (FilmographySort, Boolean) -> Unit,
+) {
+    val selected = current == value
+    FilterChip(
+        selected = selected,
+        onClick = { if (selected) onSelect(value, !descending) else onSelect(value, true) },
+        label = { Text(label) },
+        trailingIcon = if (selected) {
+            {
+                Icon(
+                    imageVector = if (descending) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                    contentDescription = if (descending) "Sestupně" else "Vzestupně",
+                )
+            }
+        } else null,
+    )
 }

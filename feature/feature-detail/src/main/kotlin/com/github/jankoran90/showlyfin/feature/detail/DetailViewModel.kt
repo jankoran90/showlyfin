@@ -173,6 +173,7 @@ class DetailViewModel @Inject constructor(
                 showStudio = prefs.getBoolean("detail_show_studio", true),
                 showCreators = prefs.getBoolean("detail_show_creators", true),
                 plotCollapsedLines = prefs.getInt("detail_plot_lines", 5),
+                actionOrder = parseActionOrder(prefs.getString("detail_action_order", null)),
                 error = null,
             )
         }
@@ -321,7 +322,8 @@ class DetailViewModel @Inject constructor(
         }
         viewModelScope.launch {
             val movies = runCatching { tmdbApi.discoverMoviesByPerson(person.id) }.getOrDefault(emptyList())
-            val coll = moviesToCollection(person.name ?: "Tvorba", movies, _uiState.value.item?.tmdbId ?: -1L)
+            // CANVAS C: celoobrazovková Tvorba → víc položek (60) než řádkové kolekce (20).
+            val coll = moviesToCollection(person.name ?: "Tvorba", movies, _uiState.value.item?.tmdbId ?: -1L, limit = 60)
             _uiState.update { it.copy(personSheetLoading = false, personFilmography = coll) }
         }
     }
@@ -399,10 +401,11 @@ class DetailViewModel @Inject constructor(
         name: String,
         movies: List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSearchMovieItem>,
         excludeTmdbId: Long,
+        limit: Int = 20,
     ): MediaCollection? {
         val parts = movies
             .filter { it.id != excludeTmdbId && !it.poster_path.isNullOrBlank() }
-            .take(20)
+            .take(limit)
             .map { m ->
                 CollectionPart(
                     key = "tmdb_${m.id}",
@@ -412,6 +415,10 @@ class DetailViewModel @Inject constructor(
                     posterUrl = m.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
                     year = m.release_date?.take(4),
                     watched = _uiState.value.watchedTmdbIds.contains(m.id),
+                    // CANVAS D: data pro řazení (hodnocení/oblíbenost) + žánrové štítky na kartě.
+                    rating = m.vote_average,
+                    popularity = m.popularity,
+                    genres = com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(m.genre_ids, isShow = false),
                 )
             }
         return if (parts.isEmpty()) null else MediaCollection(name = name, parts = parts)

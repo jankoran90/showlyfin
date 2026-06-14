@@ -126,4 +126,16 @@ data class DetailUiState(
     val showCreators: Boolean = true,
     // Počet řádků popisu ve sbaleném stavu (Nastavení). 0 = bez omezení.
     val plotCollapsedLines: Int = 5,
+    // CANVAS (SHW-47) A: pořadí akčních tlačítek na detailu (konfigurovatelné v Nastavení).
+    val actionOrder: List<String> = DETAIL_ACTION_KEYS,
 )
+
+/** CANVAS (SHW-47) A: klíče akčních tlačítek na detailu (kulatá lišta nahoře) + výchozí pořadí. */
+val DETAIL_ACTION_KEYS = listOf("favorite", "play", "tv", "stremio", "download", "watchlist")
+
+/** Parsuj uložené pořadí (CSV) → doplň chybějící klíče na konec, zahoď neznámé. */
+fun parseActionOrder(raw: String?): List<String> {
+    if (raw.isNullOrBlank()) return DETAIL_ACTION_KEYS
+    val saved = raw.split(",").map { it.trim() }.filter { it in DETAIL_ACTION_KEYS }
+    return (saved + DETAIL_ACTION_KEYS.filter { it !in saved }).distinct()
+}

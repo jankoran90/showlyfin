@@ -52,7 +52,7 @@ class OblibeniViewModel @Inject constructor(
     private fun toCollection(name: String, movies: List<TmdbSearchMovieItem>): MediaCollection? {
         val parts = movies
             .filter { !it.poster_path.isNullOrBlank() }
-            .take(30)
+            .take(60)
             .map { m ->
                 CollectionPart(
                     key = "tmdb_${m.id}",
@@ -61,6 +61,9 @@ class OblibeniViewModel @Inject constructor(
                     title = m.title ?: "",
                     posterUrl = m.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
                     year = m.release_date?.take(4),
+                    rating = m.vote_average,
+                    popularity = m.popularity,
+                    genres = com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(m.genre_ids, isShow = false),
                 )
             }
         return if (parts.isEmpty()) null else MediaCollection(name = name, parts = parts)
