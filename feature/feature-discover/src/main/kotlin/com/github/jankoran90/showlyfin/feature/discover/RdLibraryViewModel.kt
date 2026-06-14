@@ -70,7 +70,7 @@ class RdLibraryViewModel @Inject constructor(
                             imdbId = rd.imdbId,
                             title = rd.title,
                             year = rd.year,
-                            overview = null,
+                            overview = rd.overview,
                             rating = null,
                             genres = null,
                             type = MediaType.MOVIE,

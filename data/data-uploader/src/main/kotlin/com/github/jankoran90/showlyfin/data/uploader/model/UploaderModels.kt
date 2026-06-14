@@ -155,6 +155,7 @@ data class RdLibraryItem(
     @SerializedName("imdb_id") val imdbId: String? = null,
     val title: String = "",
     val year: Int? = null,
+    val overview: String? = null,
     @SerializedName("poster_path") val posterPath: String? = null,
     val type: String = "movie",
 )
