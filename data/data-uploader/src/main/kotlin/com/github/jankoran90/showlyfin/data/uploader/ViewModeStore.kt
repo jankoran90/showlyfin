@@ -38,5 +38,6 @@ class ViewModeStore @Inject constructor(
         const val SECTION_DISCOVER = "discover"
         const val SECTION_WATCHLIST = "watchlist"
         const val SECTION_HISTORY = "history"
+        const val SECTION_RD = "rd"
     }
 }
