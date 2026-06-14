@@ -6,11 +6,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -137,24 +134,13 @@ private fun PosterShimmer(modifier: Modifier = Modifier) {
     )
 }
 
-@Composable
-private fun GenrePill(text: String) {
-    Box(
-        Modifier
-            .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 5.dp, vertical = 1.dp),
-    ) {
-        Text(text, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1)
-    }
-}
-
 /**
  * Kanonická poster karta. Plakát vyplní kartu (2:3, plakát „top-left"), spodní scrim nese
- * řádek [titulek · rok · ČSFD] a pod ním ≤4 žánrové štítky. Výška = poměr 2:3 (řádek mřížky beze změny).
+ * řádek [titulek · rok · ČSFD]. Výška = poměr 2:3 (řádek mřížky beze změny).
+ * (VANTAGE F: žánrové štítky z karet odebrány — žánry se řeší na detailu, sekce „Tvůrci".)
  *
- * [csfdRating] = známé hodnocení (jinak se líně dotáhne přes [imdbId]/[tmdbId]); [genres] = ≤4 štítky.
+ * [csfdRating] = známé hodnocení (jinak se líně dotáhne přes [imdbId]/[tmdbId]).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PosterCard(
     posterUrl: String?,
@@ -168,14 +154,12 @@ fun PosterCard(
     tmdbId: Long? = null,
     csfdYear: Int? = null,
     enableCsfd: Boolean = true,
-    genres: List<String> = emptyList(),
     inLibrary: Boolean = false,
     watched: Boolean = false,
     progress: Float? = null,
 ) {
     val lazyRating = rememberCsfdCardRating(imdbId, tmdbId, title, csfdYear)
     val rating = csfdRating ?: (if (enableCsfd) lazyRating else null)
-    val shownGenres = genres.take(4)
 
     Card(
         onClick = onClick,
@@ -210,8 +194,8 @@ fun PosterCard(
             if (watched) {
                 WatchedBadge(modifier = Modifier.align(Alignment.TopStart))
             }
-            // ── Spodní scrim: [titulek · rok · ČSFD] + ≤4 žánr štítky ──
-            Column(
+            // ── Spodní scrim: [titulek · rok · ČSFD] ──
+            Box(
                 Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
@@ -219,7 +203,6 @@ fun PosterCard(
                         Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)))
                     )
                     .padding(horizontal = 6.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -243,15 +226,6 @@ fun PosterCard(
                     if (rating != null) {
                         Spacer(Modifier.padding(horizontal = 2.dp))
                         CsfdMiniBadge(rating = rating)
-                    }
-                }
-                if (shownGenres.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                        maxLines = 2,
-                    ) {
-                        shownGenres.forEach { GenrePill(it) }
                     }
                 }
             }

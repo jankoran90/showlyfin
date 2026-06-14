@@ -144,6 +144,24 @@ private fun Destination.JellyfinLibrary.toRef() = JellyfinLibraryRef(
     parentItemType = parentItemType,
 )
 
+/** VANTAGE D2: lidský název sekce, ze které se otevřel detail (text u šipky Zpět na detailu).
+ *  Detail→detail (proklik kolekcí) projde řetězcem rodičů k původní sekci. */
+private fun Destination.sectionLabel(activeSubsection: String?): String = when (this) {
+    is Destination.Detail -> parent.sectionLabel(activeSubsection)
+    is Destination.JellyfinDetail -> parent.sectionLabel(activeSubsection)
+    Destination.Hlavni -> when (activeSubsection) {
+        ProfileConfig.Sections.KNIHOVNA -> "Knihovna"
+        ProfileConfig.Sections.CHCI_VIDET -> "Chci vidět"
+        ProfileConfig.Sections.OBJEVIT -> "Objevit"
+        ProfileConfig.Sections.HISTORIE -> "Historie"
+        ProfileConfig.Sections.NA_RD -> "Na RD"
+        else -> "Sleduj"
+    }
+    Destination.Oblibeni -> "Oblíbení"
+    Destination.Listen -> "Poslech"
+    else -> "Zpět"
+}
+
 private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>) = Destination.JellyfinLibrary(
     libraryId = libraryId,
     libraryName = libraryName,
@@ -666,6 +684,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.Detail -> DetailScreen(
                     item = dest.item,
                     onBack = { currentDestination = dest.parent },
+                    sectionTitle = dest.parent.sectionLabel(mainSubsection),
                     onSmartDetect = { item ->
                         currentDestination = Destination.SmartDetect(
                             imdbId = item.imdbId ?: "",

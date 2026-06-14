@@ -68,8 +68,13 @@ fun CreatorsSection(
     writers: List<TmdbPerson>,
     cinematographers: List<TmdbPerson>,
     onPersonClick: (TmdbPerson, FavoriteKind?) -> Unit,
+    // VANTAGE D4: žánry jako druhý sloupec vedle Režie/Scénář/Kamera (stejný design jako crew řádky).
+    // [onGenreClick] zatím null = neproklikávací; později žánr × režisér (handoff VANTAGE).
+    genres: List<String> = emptyList(),
+    onGenreClick: ((String) -> Unit)? = null,
 ) {
-    if (cast.isEmpty() && directors.isEmpty() && writers.isEmpty() && cinematographers.isEmpty()) return
+    if (cast.isEmpty() && directors.isEmpty() && writers.isEmpty() &&
+        cinematographers.isEmpty() && genres.isEmpty()) return
 
     Spacer(Modifier.height(12.dp))
     Text(
@@ -89,19 +94,58 @@ fun CreatorsSection(
         }
     }
 
-    // Jemné řádky pod pásem — Režie / Scénář / Kamera.
+    // Jemné řádky pod pásem — Režie / Scénář / Kamera vlevo, Žánry jako druhý sloupec vpravo.
     val rows = listOf<Triple<String, List<TmdbPerson>, FavoriteKind?>>(
         Triple("Režie", directors, FavoriteKind.DIRECTOR),
         Triple("Scénář", writers, null),
         Triple("Kamera", cinematographers, null),
     ).filter { it.second.isNotEmpty() }
-    if (rows.isNotEmpty()) {
+    val hasCrew = rows.isNotEmpty()
+    val hasGenres = genres.isNotEmpty()
+    if (hasCrew || hasGenres) {
         Spacer(Modifier.height(10.dp))
-        Column(Modifier.padding(horizontal = 16.dp)) {
-            rows.forEach { (label, people, kind) -> CrewRow(label = label, people = people, kind = kind, onPersonClick = onPersonClick) }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (hasCrew) {
+                Column(Modifier.weight(1f)) {
+                    rows.forEach { (label, people, kind) -> CrewRow(label = label, people = people, kind = kind, onPersonClick = onPersonClick) }
+                }
+            }
+            if (hasGenres) {
+                Column(Modifier.weight(1f)) { GenreRow(genres = genres, onGenreClick = onGenreClick) }
+            }
         }
     }
     Spacer(Modifier.height(12.dp))
+}
+
+/** VANTAGE D4: žánry ve stejném designu jako [CrewRow] — label „Žánry" + seznam žánrů pod sebou.
+ *  [onGenreClick] zatím null (neproklikávací) → barva jako neutrální text; až bude klik = primary. */
+@Composable
+private fun GenreRow(genres: List<String>, onGenreClick: ((String) -> Unit)?) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Text(
+            "Žánry ",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            modifier = Modifier.width(64.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            genres.forEach { g ->
+                Text(
+                    g.replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (onGenreClick != null) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                    modifier = (if (onGenreClick != null) Modifier.clickable { onGenreClick(g) } else Modifier)
+                        .padding(vertical = 1.dp),
+                )
+            }
+        }
+    }
 }
 
 @Composable

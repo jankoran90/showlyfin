@@ -7,7 +7,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaType
 
 /**
  * Karta filmu/seriálu v Objevit gridu — deleguje na kanonickou [PosterCard] (CANVAS B, UNISON).
- * ČSFD hodnocení se líně dotáhne per karta; žánry z [MediaItem.genres] (≤4 štítky).
+ * ČSFD hodnocení se líně dotáhne per karta. (VANTAGE F: žánry na kartách zrušeny.)
  */
 @Composable
 fun MediaCard(
@@ -28,7 +28,6 @@ fun MediaCard(
         imdbId = item.imdbId,
         tmdbId = item.tmdbId,
         csfdYear = item.year,
-        genres = item.genres.orEmpty(),
         inLibrary = inLibrary,
         watched = watched,
         progress = progress,

@@ -5,8 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,7 +37,6 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -96,11 +93,12 @@ private fun czechDisplayTitle(tmdbCzTitle: String?, csfdTitle: String?, original
         ?: csfdTitle?.takeIf { it.isNotBlank() }
         ?: original
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
     item: MediaItem,
     onBack: () -> Unit,
+    sectionTitle: String = "",
     onSmartDetect: ((MediaItem) -> Unit)? = null,
     onNaTv: ((MediaItem, jellyfinId: String?) -> Unit)? = null,
     onStremio: ((MediaItem) -> Unit)? = null,
@@ -258,11 +256,33 @@ fun DetailScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(displayTitle, maxLines = 1) },
+                // VANTAGE D2: text u šipky Zpět = NÁZEV SEKCE odkud jdu (ne název filmu).
+                title = { Text(sectionTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.tvFocusable(shape = CircleShape)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
                     }
+                },
+                // VANTAGE D1: akční tlačítka NAD fanart do horní lišty vpravo (kulaté ikony).
+                actions = {
+                    DetailActionBar(
+                        order = uiState.actionOrder,
+                        isMovie = uiState.item?.type == MediaType.MOVIE,
+                        isFavorite = uiState.isFavorite,
+                        onFavorite = { viewModel.toggleFavorite() },
+                        inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
+                        hasRemembered = uiState.rememberedSource != null,
+                        onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
+                        onNaTv = onNaTv?.let { cb -> { cb(displayItem, uiState.ownedJellyfinId) } },
+                        onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playStream(it) } },
+                        onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
+                        onRemoveRemembered = { viewModel.removeRememberedSource() },
+                        onStremio = { viewModel.openStreamPicker() },
+                        onDownload = { viewModel.openDownloadMenu() },
+                        inWatchlist = uiState.isInWatchlist,
+                        isTogglingWatchlist = uiState.isTogglingWatchlist,
+                        onWatchlist = { viewModel.toggleWatchlist() },
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
@@ -314,7 +334,7 @@ fun DetailScreen(
             val posterUrl = displayItem.posterUrl()
             val hasGallery = uiState.csfdId != null && uiState.uploaderConfigured
             val hasReviews = uiState.csfdReviews.isNotEmpty()
-            // Žánry — zobrazují se v hero sloupci pod rokem, vedle cover artu (max 3 v řadě).
+            // Žánry — předávají se do sekce „Tvůrci" jako druhý sloupec (VANTAGE D4), z fanartu pryč.
             val genres = uiState.movieDetails?.genres?.map { it.name }
                 ?: uiState.showDetails?.genres?.map { it.name }
                 ?: displayItem.genres
@@ -345,13 +365,14 @@ fun DetailScreen(
                         )
                     )
                 )
-                Row(
+                // VANTAGE D3: cover art nahoře, pod ním řádek [název · rok · ČSFD] dole ve stínu
+                // (akční tlačítka přesunuta do horní lišty; žánry do sekce „Tvůrci").
+                Column(
                     Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.Bottom,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (posterUrl != null) {
                         Box(
@@ -371,80 +392,45 @@ fun DetailScreen(
                             )
                         }
                     }
-                    Column(Modifier.weight(1f)) {
+                    // [název · rok · ČSFD] v JEDNOM řádku
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         Text(
                             text = displayTitle,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
-                            maxLines = 3,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
                         )
-                        Spacer(Modifier.height(6.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            displayItem.year?.let {
-                                Text("$it", style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.85f))
-                            }
-                            // ČSFD hodnocení v % (místo TMDB); fallback na hvězdičkové hodnocení, když ČSFD chybí
-                            val csfdRating = uiState.csfdRating
-                            if (csfdRating != null) {
-                                // CANVAS A2: klik na ČSFD badge = recenze (zrušeno samostatné tlačítko).
-                                CsfdRatingBadge(
-                                    rating = csfdRating,
-                                    big = true,
-                                    modifier = if (hasReviews) Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .clickable { showReviewsSheet = true }
-                                        .tvFocusable(shape = RoundedCornerShape(6.dp)) else Modifier,
-                                )
-                            } else {
-                                displayItem.rating?.let { rating ->
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
-                                        Text("%.1f".format(rating), style = MaterialTheme.typography.titleMedium, color = Color.White)
-                                    }
-                                }
-                            }
+                        displayItem.year?.let {
+                            Text("$it", style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.85f))
                         }
-                        // ── Žánrové štítky pod rokem, vedle cover artu — max 3 vedle sebe, zbytek na další řádek ──
-                        if (!genres.isNullOrEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                maxItemsInEachRow = 3,
-                            ) {
-                                genres.forEach { genre ->
-                                    AssistChip(onClick = {}, label = { Text(genre, style = MaterialTheme.typography.labelSmall) })
+                        // ČSFD hodnocení v % (místo TMDB); fallback na hvězdičkové hodnocení, když ČSFD chybí.
+                        val csfdRating = uiState.csfdRating
+                        if (csfdRating != null) {
+                            // CANVAS A2: klik na ČSFD badge = recenze (zrušeno samostatné tlačítko).
+                            CsfdRatingBadge(
+                                rating = csfdRating,
+                                big = true,
+                                modifier = if (hasReviews) Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { showReviewsSheet = true }
+                                    .tvFocusable(shape = RoundedCornerShape(6.dp)) else Modifier,
+                            )
+                        } else {
+                            displayItem.rating?.let { rating ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
+                                    Text("%.1f".format(rating), style = MaterialTheme.typography.titleMedium, color = Color.White)
                                 }
                             }
                         }
                     }
                 }
-                // CANVAS A3/A4: kompaktní kulatá akční lišta nahoře vpravo (u Oblíbených),
-                // pořadí konfigurovatelné v Nastavení. Neodsazuje horní lištu (overlay nad fanartem).
-                DetailActionBar(
-                    order = uiState.actionOrder,
-                    isMovie = uiState.item?.type == MediaType.MOVIE,
-                    isFavorite = uiState.isFavorite,
-                    onFavorite = { viewModel.toggleFavorite() },
-                    inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
-                    hasRemembered = uiState.rememberedSource != null,
-                    onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
-                    onNaTv = onNaTv?.let { cb -> { cb(displayItem, uiState.ownedJellyfinId) } },
-                    onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playStream(it) } },
-                    onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
-                    onRemoveRemembered = { viewModel.removeRememberedSource() },
-                    onStremio = { viewModel.openStreamPicker() },
-                    onDownload = { viewModel.openDownloadMenu() },
-                    inWatchlist = uiState.isInWatchlist,
-                    isTogglingWatchlist = uiState.isTogglingWatchlist,
-                    onWatchlist = { viewModel.toggleWatchlist() },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                )
             }
             Spacer(Modifier.height(16.dp))
 
@@ -508,6 +494,8 @@ fun DetailScreen(
                     writers = uiState.writers,
                     cinematographers = uiState.cinematographers,
                     onPersonClick = { person, kind -> viewModel.openPersonFilmography(person, kind) },
+                    // VANTAGE D4: žánry z fanartu sem jako druhý sloupec (proklik žánr×režisér = později).
+                    genres = genres.orEmpty(),
                 )
             }
 

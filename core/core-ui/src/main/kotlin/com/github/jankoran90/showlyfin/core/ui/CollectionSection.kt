@@ -112,7 +112,6 @@ private fun CollectionPartCard(part: CollectionPart, onClick: () -> Unit, modifi
         modifier = modifier,
         tmdbId = part.tmdbId,
         csfdYear = part.year?.take(4)?.toIntOrNull(),
-        genres = part.genres,
         inLibrary = part.jellyfinId != null,
         watched = part.watched,
     )
