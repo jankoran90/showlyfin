@@ -40,6 +40,7 @@ dependencies {
     implementation(project(":data:data-uploader"))
     implementation(project(":data:data-abs"))
     implementation(project(":data:data-maestro"))
+    implementation(project(":data:data-csfd"))   // CANVAS B: ČSFD hodnocení per karta (provider)
     implementation(libs.hilt.android)
     implementation(libs.timber)
     implementation(libs.coil.compose)

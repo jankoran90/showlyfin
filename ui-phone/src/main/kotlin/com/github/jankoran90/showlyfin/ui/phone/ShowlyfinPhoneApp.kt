@@ -32,6 +32,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +61,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
+import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
@@ -256,6 +258,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         var mainSubsection by remember(profileKey) { mutableStateOf(initialSubsection) }
         val context = LocalContext.current
         val naTvCoordinator: NaTvCoordinator = hiltViewModel()
+        // CANVAS B: poskytovatel ČSFD hodnocení pro karty (líně + cache) → LocalCsfdRatingProvider.
+        val cardCsfd: CardCsfdViewModel = hiltViewModel()
         val snackbarHostState = remember { SnackbarHostState() }
 
         LaunchedEffect(Unit) {
@@ -431,6 +435,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             }
         }
 
+        CompositionLocalProvider(LocalCsfdRatingProvider provides cardCsfd) {
         ModalNavigationDrawer(
             drawerState = drawerState,
             gesturesEnabled = !isTv && !isSubScreen,
@@ -778,6 +783,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 }
                 }
             }
+        }
         }
         }
     }
