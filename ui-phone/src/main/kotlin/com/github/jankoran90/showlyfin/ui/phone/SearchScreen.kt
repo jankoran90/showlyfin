@@ -68,6 +68,7 @@ import androidx.compose.runtime.LaunchedEffect
 private val PERSON_ROLES = listOf(
     FavoriteKind.ACTOR to "Herec",
     FavoriteKind.DIRECTOR to "Režisér",
+    FavoriteKind.WRITER to "Scénárista",
     FavoriteKind.PRODUCER to "Producent",
     FavoriteKind.COMPOSER to "Skladatel",
 )
@@ -338,6 +339,7 @@ private fun StarBadge(filled: Boolean, onClick: () -> Unit, modifier: Modifier =
 private fun departmentToKind(dep: String?): FavoriteKind? = when (dep?.lowercase()) {
     "acting" -> FavoriteKind.ACTOR
     "directing" -> FavoriteKind.DIRECTOR
+    "writing" -> FavoriteKind.WRITER
     "production" -> FavoriteKind.PRODUCER
     "sound" -> FavoriteKind.COMPOSER
     else -> null

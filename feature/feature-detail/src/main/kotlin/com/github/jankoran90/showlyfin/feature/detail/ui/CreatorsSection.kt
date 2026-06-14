@@ -106,8 +106,8 @@ fun CreatorsSection(
     // Pod rozbaleným popisem: jemné řádky Scénář / Kamera vlevo + Žánry vpravo (režie je v pásu výše).
     if (detailsVisible) {
         val rows = listOf<Triple<String, List<TmdbPerson>, FavoriteKind?>>(
-            Triple("Scénář", writers, null),
-            Triple("Kamera", cinematographers, null),
+            Triple("Scénář", writers, FavoriteKind.WRITER),
+            Triple("Kamera", cinematographers, null), // kameramani zatím bez kategorie Oblíbených
         ).filter { it.second.isNotEmpty() }
         val hasCrew = rows.isNotEmpty()
         val hasGenres = genres.isNotEmpty()

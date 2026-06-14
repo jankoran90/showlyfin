@@ -50,6 +50,7 @@ private val CATEGORIES = listOf(
     FavoriteKind.MOVIE to "Filmy",
     FavoriteKind.ACTOR to "Herci",
     FavoriteKind.DIRECTOR to "Režiséři",
+    FavoriteKind.WRITER to "Scénáristé",
     FavoriteKind.PRODUCER to "Producenti",
     FavoriteKind.COMPOSER to "Skladatelé",
     FavoriteKind.COMPANY to "Vydavatelství",
@@ -259,9 +260,10 @@ private fun EmptyState(kind: FavoriteKind, modifier: Modifier = Modifier) {
         FavoriteKind.MOVIE -> "Filmy přidáš hvězdičkou ⭐ na detailu filmu."
         FavoriteKind.ACTOR -> "Herce přidáš u filmu — ťukni na herce v sekci Tvůrci a dej ⭐."
         FavoriteKind.DIRECTOR -> "Režiséry přidáš u filmu — ťukni na režii v sekci Tvůrci a dej ⭐."
-        FavoriteKind.PRODUCER -> "Producenty přidáš přes vyhledávání (brzy)."
-        FavoriteKind.COMPOSER -> "Skladatele přidáš přes vyhledávání (brzy)."
-        FavoriteKind.COMPANY -> "Vydavatelství přidáš přes vyhledávání (brzy)."
+        FavoriteKind.WRITER -> "Scénáristy přidáš u filmu — ťukni na scénář v sekci Tvůrci a dej ⭐, nebo přes hledání."
+        FavoriteKind.PRODUCER -> "Producenty přidáš přes vyhledávání (hvězda → role)."
+        FavoriteKind.COMPOSER -> "Skladatele přidáš přes vyhledávání (hvězda → role)."
+        FavoriteKind.COMPANY -> "Vydavatelství přidáš přes vyhledávání (hvězda)."
     }
     Box(modifier.padding(32.dp), contentAlignment = Alignment.Center) {
         Text(

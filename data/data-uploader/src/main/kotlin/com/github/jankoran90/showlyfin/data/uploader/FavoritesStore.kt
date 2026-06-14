@@ -11,8 +11,8 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** COMPASS C2 (SHW-44) — kategorie Oblíbených (přesně dle zadání usera). */
-enum class FavoriteKind { MOVIE, ACTOR, DIRECTOR, PRODUCER, COMPOSER, COMPANY }
+/** COMPASS C2 (SHW-44) — kategorie Oblíbených (dle zadání usera; WRITER = scénáristé doplněn C3). */
+enum class FavoriteKind { MOVIE, ACTOR, DIRECTOR, WRITER, PRODUCER, COMPOSER, COMPANY }
 
 /**
  * COMPASS C2 (SHW-44) — jedna položka v Oblíbených. [id] = tmdbId (film / osoba / vydavatelství),

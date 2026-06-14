@@ -342,6 +342,7 @@ class DetailViewModel @Inject constructor(
         when (kind) {
             FavoriteKind.ACTOR -> return PersonRole.ACTING
             FavoriteKind.DIRECTOR -> return PersonRole.DIRECTING
+            FavoriteKind.WRITER -> return PersonRole.WRITING
             FavoriteKind.PRODUCER -> return PersonRole.PRODUCING
             FavoriteKind.COMPOSER -> return PersonRole.COMPOSING
             else -> {}

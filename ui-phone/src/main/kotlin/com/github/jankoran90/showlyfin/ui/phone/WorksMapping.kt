@@ -15,6 +15,7 @@ import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 internal fun favoriteKindToRole(kind: FavoriteKind): PersonRole = when (kind) {
     FavoriteKind.ACTOR -> PersonRole.ACTING
     FavoriteKind.DIRECTOR -> PersonRole.DIRECTING
+    FavoriteKind.WRITER -> PersonRole.WRITING
     FavoriteKind.PRODUCER -> PersonRole.PRODUCING
     FavoriteKind.COMPOSER -> PersonRole.COMPOSING
     else -> PersonRole.GENERIC

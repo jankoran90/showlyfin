@@ -478,16 +478,21 @@ fun DetailScreen(
                 )
             }
             if (plotOverflow || plotExpanded || hasRevealableDetails) {
+                // Kompaktní šipka (ne 48dp IconButton) — ať pod ní nezbývá zbytečná mezera před „Tvůrci".
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    IconButton(onClick = { plotExpanded = !plotExpanded }, modifier = Modifier.tvFocusable(shape = CircleShape)) {
-                        Icon(
-                            imageVector = if (plotExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = if (plotExpanded) "Sbalit" else "Zobrazit víc",
-                        )
-                    }
+                    Icon(
+                        imageVector = if (plotExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (plotExpanded) "Sbalit" else "Zobrazit víc",
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { plotExpanded = !plotExpanded }
+                            .tvFocusable(shape = CircleShape)
+                            .padding(4.dp)
+                            .size(28.dp),
+                    )
                 }
             }
-            if (!plot.isNullOrBlank()) Spacer(Modifier.height(12.dp))
+            if (!plot.isNullOrBlank()) Spacer(Modifier.height(4.dp))
 
             // CANVAS A: akce (Galerie přes cover, ČSFD recenze přes badge, Přehrát/Na TV/Stremio/
             // Stáhnout/Oblíbené/Chci vidět) jsou v kompaktní kulaté liště v hero (viz DetailActionBar výše).
