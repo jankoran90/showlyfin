@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -74,6 +75,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
@@ -239,6 +241,9 @@ fun DetailScreen(
             collection = uiState.personFilmography,
             onPartClick = { part -> viewModel.closePersonSheet(); onCollectionPartClick?.invoke(part) },
             onDismiss = { viewModel.closePersonSheet() },
+            canFavorite = uiState.personSheetKind != null,
+            isFavorite = uiState.isPersonFavorite,
+            onToggleFavorite = { viewModel.togglePersonFavorite() },
         )
     }
     if (uiState.showGallery) {
@@ -257,6 +262,18 @@ fun DetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.tvFocusable(shape = CircleShape)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                    }
+                },
+                actions = {
+                    // COMPASS C2 (SHW-44): hvězda Oblíbené (jen filmy — kategorie „Filmy").
+                    if (uiState.item?.type == MediaType.MOVIE) {
+                        IconButton(onClick = { viewModel.toggleFavorite() }, modifier = Modifier.tvFocusable(shape = CircleShape)) {
+                            Icon(
+                                imageVector = if (uiState.isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                contentDescription = "Oblíbené",
+                                tint = if (uiState.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -503,7 +520,7 @@ fun DetailScreen(
                     directors = uiState.directors,
                     writers = uiState.writers,
                     cinematographers = uiState.cinematographers,
-                    onPersonClick = { viewModel.openPersonFilmography(it) },
+                    onPersonClick = { person, kind -> viewModel.openPersonFilmography(person, kind) },
                 )
             }
 

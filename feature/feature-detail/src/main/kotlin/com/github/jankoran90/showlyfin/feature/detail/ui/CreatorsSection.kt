@@ -17,8 +17,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -37,6 +42,7 @@ import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson
+import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 
 /**
  * Plan ENSEMBLE (SHW-45) — sekce „Tvůrci" na detailu (nad kolekcemi).
@@ -50,7 +56,7 @@ fun CreatorsSection(
     directors: List<TmdbPerson>,
     writers: List<TmdbPerson>,
     cinematographers: List<TmdbPerson>,
-    onPersonClick: (TmdbPerson) -> Unit,
+    onPersonClick: (TmdbPerson, FavoriteKind?) -> Unit,
 ) {
     if (cast.isEmpty() && directors.isEmpty() && writers.isEmpty() && cinematographers.isEmpty()) return
 
@@ -68,20 +74,20 @@ fun CreatorsSection(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(cast) { person -> ActorChip(person = person, onClick = { onPersonClick(person) }) }
+            items(cast) { person -> ActorChip(person = person, onClick = { onPersonClick(person, FavoriteKind.ACTOR) }) }
         }
     }
 
     // Jemné řádky pod pásem — Režie / Scénář / Kamera.
-    val rows = listOf(
-        "Režie" to directors,
-        "Scénář" to writers,
-        "Kamera" to cinematographers,
+    val rows = listOf<Triple<String, List<TmdbPerson>, FavoriteKind?>>(
+        Triple("Režie", directors, FavoriteKind.DIRECTOR),
+        Triple("Scénář", writers, null),
+        Triple("Kamera", cinematographers, null),
     ).filter { it.second.isNotEmpty() }
     if (rows.isNotEmpty()) {
         Spacer(Modifier.height(10.dp))
         Column(Modifier.padding(horizontal = 16.dp)) {
-            rows.forEach { (label, people) -> CrewRow(label = label, people = people, onPersonClick = onPersonClick) }
+            rows.forEach { (label, people, kind) -> CrewRow(label = label, people = people, kind = kind, onPersonClick = onPersonClick) }
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -143,7 +149,7 @@ private fun ActorChip(person: TmdbPerson, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CrewRow(label: String, people: List<TmdbPerson>, onPersonClick: (TmdbPerson) -> Unit) {
+private fun CrewRow(label: String, people: List<TmdbPerson>, kind: FavoriteKind?, onPersonClick: (TmdbPerson, FavoriteKind?) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
         Text(
             "$label ",
@@ -159,7 +165,7 @@ private fun CrewRow(label: String, people: List<TmdbPerson>, onPersonClick: (Tmd
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .clickable { onPersonClick(p) }
+                        .clickable { onPersonClick(p, kind) }
                         .padding(vertical = 1.dp),
                 )
             }
@@ -179,6 +185,9 @@ fun PersonFilmographySheet(
     collection: MediaCollection?,
     onPartClick: (CollectionPart) -> Unit,
     onDismiss: () -> Unit,
+    canFavorite: Boolean = false,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -188,11 +197,25 @@ fun PersonFilmographySheet(
                 .heightIn(min = 120.dp)
                 .padding(bottom = 24.dp),
         ) {
-            Text(
-                text = name?.takeIf { it.isNotBlank() }?.let { "Tvorba — $it" } ?: "Tvorba",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = name?.takeIf { it.isNotBlank() }?.let { "Tvorba — $it" } ?: "Tvorba",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                if (canFavorite) {
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            contentDescription = "Oblíbené",
+                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             when {
                 loading -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()

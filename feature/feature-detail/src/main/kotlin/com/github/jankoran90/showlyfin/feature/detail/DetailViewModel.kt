@@ -53,6 +53,7 @@ class DetailViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val naTv: NaTvService,
     private val workingSourceStore: com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore,
+    private val favoritesStore: com.github.jankoran90.showlyfin.data.uploader.FavoritesStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -138,6 +139,10 @@ class DetailViewModel @Inject constructor(
                 streams = emptyList(),
                 // SIEVE S3: připomeň zdroj, který pro tenhle film posledně fungoval (pin v pickeru).
                 rememberedSource = workingSourceStore.get(item.imdbId, item.tmdbId)?.stream,
+                // COMPASS C2: je tento film v Oblíbených?
+                isFavorite = item.tmdbId?.let {
+                    favoritesStore.isFavorite(com.github.jankoran90.showlyfin.data.uploader.FavoriteKind.MOVIE, it)
+                } ?: false,
                 pendingWorkingConfirm = null,
                 streamError = null,
                 isResolvingStream = false,
@@ -302,9 +307,18 @@ class DetailViewModel @Inject constructor(
      * ENSEMBLE (SHW-45): klik na osobu (herec/režie/scénář/kamera) → její tvorba jako VALIDNÍ karty.
      * `discoverMoviesByPerson` → `moviesToCollection` (CollectionPart nese tmdbId → karta se otevře správně).
      */
-    fun openPersonFilmography(person: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson) {
+    fun openPersonFilmography(
+        person: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson,
+        kind: com.github.jankoran90.showlyfin.data.uploader.FavoriteKind? = null,
+    ) {
         if (person.id <= 0) return
-        _uiState.update { it.copy(showPersonSheet = true, personSheetName = person.name, personSheetLoading = true, personFilmography = null) }
+        val fav = kind != null && favoritesStore.isFavorite(kind, person.id)
+        _uiState.update {
+            it.copy(
+                showPersonSheet = true, personSheetName = person.name, personSheetLoading = true,
+                personFilmography = null, personSheetPerson = person, personSheetKind = kind, isPersonFavorite = fav,
+            )
+        }
         viewModelScope.launch {
             val movies = runCatching { tmdbApi.discoverMoviesByPerson(person.id) }.getOrDefault(emptyList())
             val coll = moviesToCollection(person.name ?: "Tvorba", movies, _uiState.value.item?.tmdbId ?: -1L)
@@ -312,7 +326,43 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    fun closePersonSheet() = _uiState.update { it.copy(showPersonSheet = false, personFilmography = null, personSheetName = null) }
+    fun closePersonSheet() = _uiState.update {
+        it.copy(
+            showPersonSheet = false, personFilmography = null, personSheetName = null,
+            personSheetPerson = null, personSheetKind = null, isPersonFavorite = false,
+        )
+    }
+
+    /** COMPASS C2 (SHW-44): přidat/odebrat tento film do/z Oblíbených. */
+    fun toggleFavorite() {
+        val item = _uiState.value.item ?: return
+        val tmdb = item.tmdbId ?: return
+        val raw = _uiState.value.movieDetails?.poster_path ?: item.posterPath
+        val poster = raw?.let { if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w185$it" }
+        val now = favoritesStore.toggle(
+            com.github.jankoran90.showlyfin.data.uploader.FavoriteItem(
+                kind = com.github.jankoran90.showlyfin.data.uploader.FavoriteKind.MOVIE,
+                id = tmdb,
+                name = _uiState.value.tmdbCzTitle ?: item.title,
+                imageUrl = poster,
+                year = item.year,
+            )
+        )
+        _uiState.update { it.copy(isFavorite = now) }
+    }
+
+    /** COMPASS C2 (SHW-44): přidat/odebrat osobu ze sheetu (herec/režisér) do/z Oblíbených. */
+    fun togglePersonFavorite() {
+        val person = _uiState.value.personSheetPerson ?: return
+        val kind = _uiState.value.personSheetKind ?: return
+        val img = person.profile_path?.let { "https://image.tmdb.org/t/p/w185$it" }
+        val now = favoritesStore.toggle(
+            com.github.jankoran90.showlyfin.data.uploader.FavoriteItem(
+                kind = kind, id = person.id, name = person.name ?: "", imageUrl = img,
+            )
+        )
+        _uiState.update { it.copy(isPersonFavorite = now) }
+    }
 
     /** Sekce „Od stejného režiséra" + „Od stejného studia" (TMDB, jen filmy). Univerzální (v knihovně i mimo). */
     private suspend fun loadRelated(item: MediaItem) {

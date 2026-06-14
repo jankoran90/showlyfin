@@ -112,6 +112,13 @@ data class DetailUiState(
     val personSheetName: String? = null,
     val personSheetLoading: Boolean = false,
     val personFilmography: MediaCollection? = null,
+    // COMPASS C2 (SHW-44): otevřená osoba v sheetu + její kategorie Oblíbených (null = nelze přidat,
+    // např. scénárista/kameraman bez vlastní kategorie) + zda je už oblíbená.
+    val personSheetPerson: TmdbPerson? = null,
+    val personSheetKind: com.github.jankoran90.showlyfin.data.uploader.FavoriteKind? = null,
+    val isPersonFavorite: Boolean = false,
+    // COMPASS C2 (SHW-44): tento film je v Oblíbených (hvězda v app-baru).
+    val isFavorite: Boolean = false,
     // Volitelné sekce (Nastavení → Detail z knihovny)
     val showCollections: Boolean = true,
     val showDirector: Boolean = true,

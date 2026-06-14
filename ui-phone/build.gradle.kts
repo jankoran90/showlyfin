@@ -27,6 +27,7 @@ dependencies {
     implementation(project(":core:core-data"))
     implementation(project(":core:core-network"))
     implementation(project(":data:data-trakt"))
+    implementation(project(":data:data-tmdb"))
     implementation(project(":data:data-jellyfin"))
     implementation(project(":feature:feature-discover"))
     implementation(project(":feature:feature-watchlist"))

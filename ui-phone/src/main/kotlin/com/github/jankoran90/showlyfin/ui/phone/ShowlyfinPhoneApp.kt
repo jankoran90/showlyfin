@@ -555,6 +555,24 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Oblibeni -> OblibeniScreen(
+                    onOpenDetail = { tmdb, title ->
+                        currentDestination = Destination.Detail(
+                            MediaItem(
+                                traktId = 0L,
+                                tmdbId = tmdb,
+                                imdbId = null,
+                                title = title,
+                                year = null,
+                                overview = null,
+                                rating = null,
+                                genres = null,
+                                type = MediaType.MOVIE,
+                                posterPath = null,
+                                backdropPath = null,
+                            ),
+                            parent = Destination.Oblibeni,
+                        )
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Ovladac -> OvladacScreen(
