@@ -30,14 +30,26 @@ class CardCsfdViewModel @Inject constructor(
         imdbId: String?, tmdbId: Long?, title: String, year: Int?, fallback: String?,
     ): String? {
         // 1) Český TMDB překlad (jako detail) — jen když je opravdu česky.
-        val tmdbCz = tmdbId?.let {
-            runCatching { tmdb.fetchMovieTranslation(it, "cs")?.overview }.getOrNull()
-        }?.takeIf { it.isNotBlank() }
+        val translation = tmdbId?.let {
+            runCatching { tmdb.fetchMovieTranslation(it, "cs") }.getOrNull()
+        }
+        val tmdbCz = translation?.overview?.takeIf { it.isNotBlank() }
         if (looksCzech(tmdbCz)) return tmdbCz
-        // 2) ČSFD popis (stejný zdroj jako detail; csfdId i přes tmdb/title/Wikidata).
-        val csfdPlot = runCatching {
-            csfd.getCsfdId(imdbId.orEmpty(), tmdbId, title, year ?: 0)?.let { csfd.getCzechPlot(it) }
-        }.getOrNull()?.takeIf { it.isNotBlank() }
+        // 2) ČSFD popis (stejný zdroj jako detail). csfdId resolvuj jako detail loadCsfd:
+        //    nejdřív ČESKÝ název (z TMDB překladu) → originální → bez názvu (jen wikidata/imdb).
+        //    U cizojazyčných filmů ČSFD title-search vyžaduje český název (anglický nenajde).
+        val czTitle = translation?.title?.takeIf { it.isNotBlank() }
+        var csfdId: Long? = null
+        for (t in listOfNotNull(czTitle, title.takeIf { it.isNotBlank() })) {
+            csfdId = runCatching { csfd.getCsfdId(imdbId.orEmpty(), tmdbId, t, year ?: 0) }.getOrNull()
+            if (csfdId != null) break
+        }
+        if (csfdId == null) {
+            csfdId = runCatching { csfd.getCsfdId(imdbId.orEmpty(), tmdbId, "", year ?: 0) }.getOrNull()
+        }
+        val csfdPlot = csfdId?.let {
+            runCatching { csfd.getCzechPlot(it) }.getOrNull()
+        }?.takeIf { it.isNotBlank() }
         if (csfdPlot != null) return csfdPlot
         // 3) Jakýkoli TMDB cs překlad, jinak fallback z položky.
         return tmdbCz ?: fallback
