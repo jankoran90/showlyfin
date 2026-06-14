@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
@@ -18,13 +17,15 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsRemote
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -36,22 +37,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
@@ -85,11 +82,12 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfilePickerScree
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ServerSetupScreen
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
 
-private sealed interface Destination {
-    // Bottom tabs
+internal sealed interface Destination {
+    // COMPASS C1: top-level cíle drawer (drawer = jediná nav, spodní lišta zrušena)
     data object Hlavni : Destination   // label „Sleduj"
     data object Ovladac : Destination  // RELAY — sekce Ovladač
     data object Listen : Destination   // label „Poslech"
+    data object Oblibeni : Destination // COMPASS — sekce Oblíbení
     data object Settings : Destination
     data object Admin : Destination     // Plan HELM — admin destinace (jen pro admin profil)
 
@@ -124,7 +122,7 @@ private sealed interface Destination {
     data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination, val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null) : Destination
 }
 
-private data class JellyfinLibraryRef(
+internal data class JellyfinLibraryRef(
     val libraryId: String,
     val libraryName: String,
     val collectionType: String?,
@@ -146,13 +144,14 @@ private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>
     ancestors = ancestors,
 )
 
+// COMPASS C1: top-level cíle (drawer); jméno ponecháno kvůli minimální změně. „isSubScreen" = mimo ně.
 private val bottomTabs = listOf(
-    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Settings, Destination.Admin,
+    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Oblibeni, Destination.Settings, Destination.Admin,
 )
 
 /** FUSE F1: jedna definice navigačních cílů → vykreslí se buď ve spodní liště (telefon),
  * nebo ve fokus railu (TV). */
-private data class ShellNavItem(
+internal data class ShellNavItem(
     val dest: Destination,
     val icon: ImageVector,
     val label: String,
@@ -361,6 +360,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     ProfileConfig.Sections.POSLECH -> if (poslechVisible) add(ShellNavItem(Destination.Listen, Icons.Default.Headphones, "Poslech"))
                 }
             }
+            // COMPASS: Oblíbení vlastní top-level cíl (mezi sekcemi a správou).
+            add(ShellNavItem(Destination.Oblibeni, Icons.Default.Star, "Oblíbení"))
             add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
             // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.
             if (gateState.activeProfile?.isAdmin == true) {
@@ -369,19 +370,10 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         }
 
         val density = LocalDensity.current
-        val measuredBarHeightPx = remember { mutableFloatStateOf(with(density) { 80.dp.toPx() }) }
-        val bottomBarOffsetPx = remember { mutableFloatStateOf(0f) }
-        LaunchedEffect(currentDestination) { bottomBarOffsetPx.floatValue = 0f }
-
-        val nestedScrollConnection = remember {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    val newOffset = (bottomBarOffsetPx.floatValue - available.y).coerceIn(0f, measuredBarHeightPx.floatValue)
-                    bottomBarOffsetPx.floatValue = newOffset
-                    return Offset.Zero
-                }
-            }
-        }
+        val scope = rememberCoroutineScope()
+        val drawerState = rememberDrawerState(DrawerValue.Closed)
+        // COMPASS C1: spodní lišta zrušena → měříme jen výšku MiniPlayeru, ať obsah nezmizí za ním.
+        val measuredBottomPx = remember { mutableFloatStateOf(0f) }
 
         BackHandler(enabled = isSubScreen) {
             val current = currentDestination
@@ -413,15 +405,39 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             }
         }
 
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = !isTv && !isSubScreen,
+            drawerContent = {
+                if (!isTv) {
+                    AppDrawer(
+                        items = navItems,
+                        selected = bottomTab,
+                        onSelect = { dest ->
+                            bottomTab = dest
+                            currentDestination = dest
+                            scope.launch { drawerState.close() }
+                        },
+                    )
+                }
+            },
+        ) {
         Scaffold(
             containerColor = Color(0xFF0D0D1A),
+            topBar = {
+                if (!isTv && !isSubScreen) {
+                    AppTopBar(
+                        onMenuClick = { scope.launch { drawerState.open() } },
+                        onSearchClick = { scope.launch { snackbarHostState.showSnackbar("Hledání bude brzy") } },
+                    )
+                }
+            },
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { paddingValues ->
-            val effectiveBottomDp = if ((isSubScreen && !isListenDetailSub) || isTv) {
-                0.dp
-            } else {
-                with(density) { (measuredBarHeightPx.floatValue - bottomBarOffsetPx.floatValue).coerceAtLeast(0f).toDp() }
-            }
+            val showMiniColumn = if (isTv) !isSubScreen else (!isSubScreen || isListenDetailSub)
+            val effectiveBottomDp = if (showMiniColumn) {
+                with(density) { measuredBottomPx.floatValue.toDp() }
+            } else 0.dp
             Row(modifier = Modifier
                 .fillMaxSize()
                 .padding(top = paddingValues.calculateTopPadding())
@@ -444,7 +460,6 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Box(modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(nestedScrollConnection)
                     .padding(bottom = effectiveBottomDp)
                 ) {
             when (val dest = currentDestination) {
@@ -537,6 +552,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Admin -> AdminScreen(
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.Oblibeni -> OblibeniScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Ovladac -> OvladacScreen(
@@ -689,13 +707,14 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             }
                 }
 
-                if (!isTv && (!isSubScreen || isListenDetailSub)) {
+                // COMPASS C1: spodní navigační lišta zrušena (nav je v levém draweru). Zůstává jen
+                // MiniPlayer ukotvený dole; měříme jeho výšku pro spodní padding obsahu (phone i TV).
+                if (showMiniColumn) {
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .onSizeChanged { measuredBarHeightPx.floatValue = it.height.toFloat() }
-                            .offset { IntOffset(0, bottomBarOffsetPx.floatValue.roundToInt()) },
+                            .onSizeChanged { measuredBottomPx.floatValue = it.height.toFloat() },
                     ) {
                         MiniPlayer(
                             onExpand = {
@@ -705,35 +724,11 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             },
                             isListenSection = bottomTab is Destination.Listen,
                         )
-                        // Nav bar jen na hlavních tabech; v podsekci Poslechu (isListenDetailSub) jen MiniPlayer.
-                        if (!isSubScreen) {
-                            NavigationBar(containerColor = Color(0xFF1A1A2E)) {
-                                navItems.forEach { item ->
-                                    NavigationBarItem(
-                                        selected = bottomTab == item.dest,
-                                        onClick = { bottomTab = item.dest; currentDestination = item.dest },
-                                        icon = { Icon(item.icon, contentDescription = null) },
-                                        label = { Text(item.label) },
-                                    )
-                                }
-                            }
-                        }
                     }
-                }
-                // FUSE F1: na TV není spodní lišta (nav je v railu) — mini-player drží dole.
-                if (isTv && !isSubScreen) {
-                    MiniPlayer(
-                        onExpand = {
-                            currentDestination = Destination.AudiobookPlayer(
-                                itemId = null, fromStart = false, parent = currentDestination,
-                            )
-                        },
-                        isListenSection = bottomTab is Destination.Listen,
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
                 }
                 }
             }
+        }
         }
     }
 }
