@@ -99,7 +99,7 @@ fun JellyfinLibraryItemsScreen(
 
     Scaffold(
         modifier = modifier,
-        containerColor = Color(0xFF0D0D1A),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(state.libraryName.ifBlank { libraryName }, color = Color.White) },
@@ -112,7 +112,7 @@ fun JellyfinLibraryItemsScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1A1A2E)),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             )
         },
     ) { padding ->

@@ -59,7 +59,7 @@ fun WatchedBadge(modifier: Modifier = Modifier) {
     Box(
         modifier
             .padding(4.dp)
-            .background(androidx.compose.ui.graphics.Color(0xFF1F1F2E).copy(alpha = 0.85f), CircleShape)
+            .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f), CircleShape)
             .padding(4.dp),
     ) {
         Icon(
@@ -75,7 +75,7 @@ fun WatchedBadge(modifier: Modifier = Modifier) {
 fun WatchedTitleBadge(modifier: Modifier = Modifier) {
     Box(
         modifier
-            .background(androidx.compose.ui.graphics.Color(0xFF1F1F2E).copy(alpha = 0.85f), CircleShape)
+            .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f), CircleShape)
             .padding(2.dp),
     ) {
         Icon(

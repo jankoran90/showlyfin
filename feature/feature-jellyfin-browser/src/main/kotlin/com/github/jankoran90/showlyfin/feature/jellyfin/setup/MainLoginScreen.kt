@@ -57,7 +57,7 @@ fun MainLoginScreen(
         }
     }
 
-    Box(modifier.fillMaxSize().background(Color(0xFF07071A))) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,

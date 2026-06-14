@@ -79,7 +79,7 @@ fun EpisodePickerScreen(
 
     Scaffold(
         modifier = modifier,
-        containerColor = Color(0xFF0D0D1A),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(state.seriesName.ifBlank { seriesName }, color = Color.White, maxLines = 1) },
@@ -88,7 +88,7 @@ fun EpisodePickerScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1A1A2E)),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             )
         },
     ) { padding ->
@@ -130,7 +130,7 @@ private fun EpisodeItemRow(ep: EpisodeRow, onClick: () -> Unit) {
     val base = Modifier
         .fillMaxWidth()
         .clip(RoundedCornerShape(10.dp))
-        .background(if (ep.isNextUp) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color(0xFF15152B))
+        .background(if (ep.isNextUp) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant)
     val withBorder = if (ep.isNextUp) {
         base.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp))
     } else {

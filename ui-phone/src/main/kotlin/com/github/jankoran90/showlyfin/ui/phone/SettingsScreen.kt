@@ -129,7 +129,7 @@ fun SettingsScreen(
             // Jellyfin sekce
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Jellyfin", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -170,7 +170,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(16.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text("Profil", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -204,7 +204,7 @@ fun SettingsScreen(
             // Trakt sekce
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Trakt", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -261,7 +261,7 @@ fun SettingsScreen(
           } else {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Uploader", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -394,7 +394,7 @@ fun SettingsScreen(
 private fun ProfileHeader(profile: ProfileEntity?, onSwitch: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -441,7 +441,7 @@ private fun ProfileHeader(profile: ProfileEntity?, onSwitch: () -> Unit) {
 private fun LockedByAdminNote() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -501,7 +501,7 @@ private fun DetailModeSection(
     val s by viewModel.state.collectAsStateWithLifecycle()
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Detail z knihovny", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -584,7 +584,7 @@ private fun UploaderSection(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Uploader", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -618,7 +618,7 @@ private fun AbsSection(
     // Plan VAULT — jen stav + playback toggle. Přihlášení ABS se spravuje v sekci Správa.
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Audiobookshelf", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -656,7 +656,7 @@ private fun ListenSettingsCard(uiState: SettingsUiState, vm: SettingsViewModel) 
     val s = uiState.listen
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             ListenGroupTitle("Přehrávání")
@@ -921,7 +921,7 @@ private fun UpdateSection() {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Aktualizace", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -992,7 +992,7 @@ internal fun ProfilesSection(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Profily", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -1294,7 +1294,7 @@ private fun ProfileAuthoringBlock(
     var open by remember(profile.id) { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(
@@ -1816,7 +1816,7 @@ private fun TemplateEditorBlock(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(
@@ -2127,7 +2127,7 @@ private fun DebugSection(liveLogging: Boolean, onLiveLogging: (Boolean) -> Unit)
     var statusText by remember { mutableStateOf<String?>(null) }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Debug / Logy", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -2226,7 +2226,7 @@ private fun StremioFilterSection(
     onToggleFallback: (String, Boolean) -> Unit,
     onReload: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E))) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(Modifier.padding(16.dp)) {
             Text("Stremio / Comet výsledky", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(Modifier.height(12.dp))

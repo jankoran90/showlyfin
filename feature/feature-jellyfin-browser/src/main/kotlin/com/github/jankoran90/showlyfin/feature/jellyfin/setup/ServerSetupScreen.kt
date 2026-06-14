@@ -58,7 +58,7 @@ fun ServerSetupScreen(
         if (state.stage == SetupStage.DONE) onDone()
     }
 
-    Box(modifier.fillMaxSize().background(Color(0xFF07071A))) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         when (state.stage) {
             SetupStage.URL -> UrlStage(
                 isLoading = state.isLoading,
@@ -175,7 +175,7 @@ private fun UserAvatarCard(user: PublicUserInfo, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF13132B)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(

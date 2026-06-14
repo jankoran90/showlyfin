@@ -80,7 +80,7 @@ fun AdminScreen(
     Column(modifier.fillMaxSize().tvOverscan()) {
         ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
-            containerColor = Color(0xFF1A1A2E),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = Color.White,
             edgePadding = 8.dp,
         ) {
@@ -238,7 +238,7 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
     val activeName = uiState.profiles.firstOrNull { it.id == uiState.activeProfileId }?.name ?: "—"
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Trakt — profil: $activeName", style = MaterialTheme.typography.titleMedium, color = Color.White)

@@ -15,21 +15,39 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+// UNISON kanon (sjednoceno s claude-voice 2026-06-14, „velmi čistý") — AMOLED čistě černá base +
+// oranžový akcent (default), neutrální šedé plochy, bílá/šedá text. ŽÁDNÁ navy/modrý nádech.
+// Tohle je JEDINÝ zdroj barev appky; feature kód NIKDY nedeklaruje Color(0x…), jen čte z colorScheme.
+private val Black = Color(0xFF000000)        // base pozadí (AMOLED)
+private val Surface = Color(0xFF121212)      // bloky / karty
+private val SurfaceHigh = Color(0xFF1E1E1E)  // zvýšené plochy (karty, top bary, nav, dialogy)
+private val Orange = Color(0xFFFF7A1A)       // primární akcent
+private val OrangeDim = Color(0xFFC85E12)    // ztlumený akcent / sekundární
+private val OnDark = Color(0xFFEDEDED)       // primární text
+private val OnDarkDim = Color(0xFF9E9E9E)    // sekundární text
+private val OutlineGrey = Color(0xFF2E2E2E)  // jemné okraje / linky
+private val ErrorRed = Color(0xFFFF6B5E)     // chyba
+
 private val ShowlyfinDarkColors = darkColorScheme(
-    primary = Color(0xFFFF7A1A),
-    onPrimary = Color(0xFF1A0900),
-    primaryContainer = Color(0xFF8A3C00),
-    onPrimaryContainer = Color(0xFFFFE4D2),
-    secondary = Color(0xFFED1C24),
-    onSecondary = Color.White,
-    tertiary = Color(0xFFFFB088),
-    background = Color(0xFF07071A),
-    onBackground = Color(0xFFF2F2F8),
-    surface = Color(0xFF13132B),
-    onSurface = Color(0xFFF2F2F8),
-    surfaceVariant = Color(0xFF1E1E3A),
-    onSurfaceVariant = Color(0xFFBFBFD6),
-    outline = Color(0xFF4A4A66),
+    primary = Orange,
+    onPrimary = Black,
+    primaryContainer = OrangeDim,
+    onPrimaryContainer = OnDark,
+    secondary = OrangeDim,
+    onSecondary = Black,
+    tertiary = Orange,
+    background = Black,
+    onBackground = OnDark,
+    surface = Surface,
+    onSurface = OnDark,
+    surfaceVariant = SurfaceHigh,
+    onSurfaceVariant = OnDarkDim,
+    surfaceContainer = SurfaceHigh,
+    surfaceContainerHigh = SurfaceHigh,
+    outline = OutlineGrey,
+    outlineVariant = OutlineGrey,
+    error = ErrorRed,
+    onError = Black,
 )
 
 private val ShowlyfinLightColors = lightColorScheme(

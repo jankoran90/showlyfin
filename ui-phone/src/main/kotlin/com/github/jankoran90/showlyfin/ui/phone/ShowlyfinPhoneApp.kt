@@ -476,7 +476,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             },
         ) {
         Scaffold(
-            containerColor = Color(0xFF0D0D1A),
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 if (!isTv && !isSubScreen) {
                     AnimatedVisibility(visible = topBarVisible) {
@@ -500,7 +500,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             ) {
                 // FUSE F1: na TV fokus rail vlevo místo spodní lišty (D-pad navigace).
                 if (isTv && !isSubScreen) {
-                    NavigationRail(containerColor = Color(0xFF1A1A2E)) {
+                    NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
                         navItems.forEach { item ->
                             NavigationRailItem(
                                 selected = bottomTab == item.dest,

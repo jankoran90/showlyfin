@@ -24,15 +24,17 @@ fun ListenExpressiveTheme(content: @Composable () -> Unit) {
         secondary = Color(0xFFD9C2A0),
         onSecondary = Color(0xFF3A2D14),
         tertiary = Color(0xFF9CC7FF),
-        background = Color(0xFF0D0D1A),
-        onBackground = Color(0xFFEDEDF2),
-        surface = Color(0xFF14141F),
-        onSurface = Color(0xFFEDEDF2),
-        surfaceVariant = Color(0xFF26263A),
-        onSurfaceVariant = Color(0xFFB9B9C7),
-        surfaceContainer = Color(0xFF1A1A2E),
-        surfaceContainerHigh = Color(0xFF22223A),
-        outline = Color(0xFF49495C),
+        // UNISON kanon: AMOLED čistě černá base + neutrální šedé plochy (sjednoceno s claude-voice /
+        // PhoneShowlyfinTheme). Warm amber akcent Poslechu zůstává jako identita sekce, navy pryč.
+        background = Color(0xFF000000),
+        onBackground = Color(0xFFEDEDED),
+        surface = Color(0xFF121212),
+        onSurface = Color(0xFFEDEDED),
+        surfaceVariant = Color(0xFF1E1E1E),
+        onSurfaceVariant = Color(0xFF9E9E9E),
+        surfaceContainer = Color(0xFF1E1E1E),
+        surfaceContainerHigh = Color(0xFF1E1E1E),
+        outline = Color(0xFF2E2E2E),
     )
     MaterialTheme(colorScheme = colors, content = content)
 }

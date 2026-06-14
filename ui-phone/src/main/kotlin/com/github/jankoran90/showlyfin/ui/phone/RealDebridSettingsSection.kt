@@ -67,7 +67,7 @@ fun RealDebridSection(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             // ── Hlavička: nadpis + obnovit ──
@@ -138,7 +138,7 @@ fun RealDebridSection(
         Spacer(Modifier.height(16.dp))
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Column(Modifier.padding(16.dp)) {
                 Text("Zapamatované zdroje ⭐", style = MaterialTheme.typography.titleMedium, color = Color.White)

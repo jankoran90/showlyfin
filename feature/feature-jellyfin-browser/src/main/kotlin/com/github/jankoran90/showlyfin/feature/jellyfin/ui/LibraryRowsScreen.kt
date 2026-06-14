@@ -67,7 +67,7 @@ fun LibraryRowsScreen(
     Box(
         modifier
             .fillMaxSize()
-            .background(Color(0xFF0D0D1A)),
+            .background(MaterialTheme.colorScheme.background),
     ) {
         when {
             state.isLoading && state.rows.isEmpty() ->
