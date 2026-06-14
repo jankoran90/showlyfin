@@ -195,7 +195,11 @@ fun PlaybackScreen(
             .setSeekForwardIncrementMs(5_000)
             .build().apply {
                 trackSelectionParameters = trackSelectionParameters.buildUpon()
-                    .setPreferredTextLanguage("cs")
+                    // Titulky kreslíme VLASTNÍM overlayem (externí .srt z titulky.com, s offsetem/stylem).
+                    // Vestavěné text stopy (často cizojazyčné — viděné ruské) nesmí přehrávač renderovat
+                    // sám, jinak se zobrazí ZÁROVEŇ s našimi. Vypneme celý text renderer; přepínání jde
+                    // přes naše CC menu. (Box/yellyfin se chová stejně — ignoruje vestavěné.)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                     .build()
             }
     }
