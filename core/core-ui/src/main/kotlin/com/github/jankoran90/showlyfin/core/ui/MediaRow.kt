@@ -143,9 +143,13 @@ fun MediaRow(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            val description = item.overviewCz?.takeIf { it.isNotBlank() }
+            // Český popis = stejný fallback jako detail (TMDB cs → ČSFD), líně per řádek.
+            val fallback = item.overviewCz?.takeIf { it.isNotBlank() }
                 ?: item.overview?.takeIf { it.isNotBlank() }
-            if (description != null) {
+            val description = rememberCzechOverview(
+                item.imdbId, item.tmdbId, item.title, item.year, fallback,
+            )
+            if (!description.isNullOrBlank()) {
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
