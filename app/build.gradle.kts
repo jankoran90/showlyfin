@@ -28,11 +28,15 @@ android {
         applicationId = "com.github.jankoran90.showlyfin"
         minSdk = 23
         targetSdk = 36
-        versionCode = 194
-        versionName = "1.45.68"
+        versionCode = 195
+        versionName = "1.45.69"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // TEMPO Fáze C: NextLib přináší nativní FFmpeg .so. Omezíme ABI na reálná zařízení
+        // (arm64 = Pixel/moderní, v7a = starší rodinné telefony), x86 emulátor ABI vynecháme → menší APK.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
 
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"${System.getenv("TRAKT_CLIENT_ID") ?: ""}\"")
         buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"${System.getenv("TRAKT_CLIENT_SECRET") ?: ""}\"")

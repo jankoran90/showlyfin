@@ -38,6 +38,9 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.datasource)
     implementation(libs.androidx.media3.database)
+    // TEMPO Fáze C: FFmpeg SW audio dekodér (DTS/DTS-HD core/TrueHD) — telefonní přehrávač „to go".
+    // NIKDY do yellyfinu na boxu (ten drží passthrough DTS-HD do AVR).
+    implementation(libs.nextlib.media3ext)
     implementation(libs.jellyfin.sdk)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

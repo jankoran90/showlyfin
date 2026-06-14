@@ -10,6 +10,8 @@ retrofit = "2.11.0"
 kotlinxSerializationJson = "1.11.0"
 coil = "3.4.0"
 media3 = "1.10.1"
+# TEMPO Fáze C: prebuilt FFmpeg dekodér pro media3 (DTS/DTS-HD core/TrueHD na telefonu). Verze = <media3>-<nextlib>.
+nextlibMedia3ext = "1.10.0-0.12.1"
 coreKtx = "1.18.0"
 appcompat = "1.7.1"
 lifecycleRuntimeKtx = "2.10.0"
@@ -62,6 +64,7 @@ androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.re
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-media3-datasource = { group = "androidx.media3", name = "media3-datasource", version.ref = "media3" }
 androidx-media3-database = { group = "androidx.media3", name = "media3-database", version.ref = "media3" }
+nextlib-media3ext = { group = "io.github.anilbeesetti", name = "nextlib-media3ext", version.ref = "nextlibMedia3ext" }
 
 androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }

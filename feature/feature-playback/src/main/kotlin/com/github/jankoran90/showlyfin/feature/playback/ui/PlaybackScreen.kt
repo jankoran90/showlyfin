@@ -90,9 +90,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
@@ -178,6 +180,15 @@ fun PlaybackScreen(
             .setBufferDurationsMs(60_000, 300_000, 5_000, 10_000)
             .build()
         ExoPlayer.Builder(context)
+            // TEMPO Fáze C: FFmpeg SW dekodér (NextLib) pro DTS/DTS-HD core/TrueHD, které Pixel/telefon
+            // nemá v HW → jinak u REMUXů ticho. EXTENSION_RENDERER_MODE_ON = HW dekodér má přednost
+            // (AAC/AC3/EAC3), ffmpeg jen vyplní díry → šetří CPU/baterii. JEN telefon (showlyfin),
+            // NIKDY box (yellyfin drží passthrough DTS-HD do AVR).
+            .setRenderersFactory(
+                NextRenderersFactory(context.applicationContext)
+                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                    .setEnableDecoderFallback(true)
+            )
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setLoadControl(loadControl)
             .setSeekBackIncrementMs(5_000)
