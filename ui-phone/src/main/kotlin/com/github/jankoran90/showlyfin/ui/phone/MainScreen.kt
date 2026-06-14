@@ -47,9 +47,14 @@ fun MainScreen(
     modifier: Modifier = Modifier,
     visibleSubsections: List<String> = emptyList(),
     initialSubsection: String? = null,
+    onSubsectionChange: (String) -> Unit = {},
 ) {
-    val tabs = ALL_SUBSECTIONS
-        .filter { visibleSubsections.isEmpty() || it.first in visibleSubsections }
+    // GLIDE: respektuj POŘADÍ podsekcí z profilu — `visibleSubsections` je už seřazené dle
+    // subsectionOrder (ShowlyfinPhoneApp → orderedSubsections). Dřív se tu pořadí ZAHODILO
+    // (filtr nad natvrdo seřazeným ALL_SUBSECTIONS) → uživatelský reorder se nikdy neprojevil.
+    val labels = ALL_SUBSECTIONS.toMap()
+    val tabs: List<Pair<String, String>> = visibleSubsections
+        .mapNotNull { key -> labels[key]?.let { key to it } }
         .ifEmpty { ALL_SUBSECTIONS }
     // Plan PROFILES Fáze 4: „hlavní" podsekce profilu otevřená jako první (jinak Knihovna).
     val initialPage = initialSubsection
@@ -57,6 +62,11 @@ fun MainScreen(
         ?.takeIf { it >= 0 } ?: 0
     val pagerState = rememberPagerState(initialPage = initialPage) { tabs.size }
     val scope = rememberCoroutineScope()
+    // GLIDE: hlas nahoru aktivní podsekci → Zpět z detailu přistane zpátky na téhle záložce
+    // (dřív se MainScreen znovu vytvořil a spadl na první/výchozí podsekci).
+    androidx.compose.runtime.LaunchedEffect(pagerState.currentPage, tabs) {
+        tabs.getOrNull(pagerState.currentPage)?.let { onSubsectionChange(it.first) }
+    }
 
     Column(modifier.fillMaxSize()) {
         TabRow(

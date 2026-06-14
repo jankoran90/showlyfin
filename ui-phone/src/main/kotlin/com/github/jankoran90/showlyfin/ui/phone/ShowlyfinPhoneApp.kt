@@ -245,6 +245,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         val profileKey = gateState.activeProfile?.id
         var currentDestination by remember(profileKey) { mutableStateOf<Destination>(startBottomTab) }
         var bottomTab by remember(profileKey) { mutableStateOf<Destination>(startBottomTab) }
+        // GLIDE: zapamatuj aktivní podsekci „Sleduj" napříč navigací → Zpět z detailu se vrátí na ni
+        // (ne na výchozí záložku). Aktualizuje MainScreen přes onSubsectionChange.
+        var mainSubsection by remember(profileKey) { mutableStateOf(initialSubsection) }
         val context = LocalContext.current
         val naTvCoordinator: NaTvCoordinator = hiltViewModel()
         val snackbarHostState = remember { SnackbarHostState() }
@@ -465,7 +468,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             when (val dest = currentDestination) {
                 is Destination.Hlavni -> MainScreen(
                     visibleSubsections = visibleSubsections,
-                    initialSubsection = initialSubsection,
+                    initialSubsection = mainSubsection,
+                    onSubsectionChange = { mainSubsection = it },
                     onTraktItemClick = { item ->
                         bottomTab = Destination.Hlavni
                         currentDestination = Destination.Detail(item, parent = Destination.Hlavni)

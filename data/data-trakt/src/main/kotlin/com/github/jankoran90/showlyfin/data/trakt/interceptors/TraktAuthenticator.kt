@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.data.trakt.interceptors
 
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
+import com.github.jankoran90.showlyfin.data.trakt.token.TokenRefreshException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Authenticator
@@ -19,10 +20,13 @@ class TraktAuthenticator @Inject constructor(
 
     @Synchronized
     override fun authenticate(route: Route?, response: Response): Request? {
-        val token = tokenProvider.getToken()
+        val token = tokenProvider.getToken() ?: return null
         if (isAlreadyRefreshed(response, token)) {
             return response.request.newBuilder().header("Authorization", "Bearer $token").build()
         }
+        // GLIDE — po dočasném selhání obnovy (429/síť) nezkoušej hned znovu, jinak vznikne bouře
+        // paralelních refresh volání → Trakt vrátí 429 → kaskáda → odhlášení. Počkej na cooldown.
+        if (tokenProvider.isInRefreshCooldown()) return null
         return runBlocking(Dispatchers.IO) {
             try {
                 Timber.d("Refreshing tokens...")
@@ -30,10 +34,21 @@ class TraktAuthenticator @Inject constructor(
                 tokenProvider.saveTokens(newToken.access_token, newToken.refresh_token, newToken.expires_in, newToken.created_at)
                 response.request.newBuilder().header("Authorization", "Bearer ${newToken.access_token}").build()
             } catch (error: Throwable) {
-                if (error !is CancellationException && error.message != "Canceled") {
-                    tokenProvider.revokeToken()
-                    null
-                } else null
+                when {
+                    error is CancellationException || error.message == "Canceled" -> null
+                    // GLIDE — dočasná chyba (429/5xx/síť): token NEMAZAT (cooldown řeší provider),
+                    // jen toto volání selže. Dřív se tu volalo revokeToken() = odhlášení z Traktu.
+                    error is TokenRefreshException && !error.isAuthFailure -> {
+                        Timber.w("Trakt: obnova tokenu dočasně selhala (${error.message}) — token ponechán.")
+                        null
+                    }
+                    // Definitivní (neplatný refresh_token) → odhlásit z Traktu.
+                    else -> {
+                        Timber.w("Trakt: refresh_token neplatný → odhlášení.")
+                        tokenProvider.revokeToken()
+                        null
+                    }
+                }
             }
         }
     }

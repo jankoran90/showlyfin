@@ -1,6 +1,6 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
@@ -21,10 +21,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.zIndex
 
 /**
- * Plan STRATA Fáze E — drag&drop reorder pro KRÁTKÉ seznamy (sekce/podsekce/knihovny) v obyčejném
- * [Column] (ne Lazy). Long-press na řádku → tažení; při překročení poloviny výšky sousedního řádku
- * se zavolá [onMove] (živý swap). Bez externí knihovny. [handle] aplikuj na prvek, který má reagovat
- * na long-press tah (typicky celý řádek nebo úchyt ☰).
+ * Plan STRATA Fáze E / GLIDE — drag&drop reorder pro KRÁTKÉ seznamy (sekce/podsekce/knihovny) v
+ * obyčejném [Column] (ne Lazy). [handle] aplikuj **jen na úchyt ☰** (ne na celý řádek): tah za úchyt
+ * začne okamžitě a gesto se zkonzumuje, takže se NEPERE s rodičovským scrollem stránky (dřív byl
+ * handle na celém řádku + long-press → drag spouštěl zároveň scroll). Po překročení poloviny výšky
+ * sousedního řádku se zavolá [onMove] (živý swap). Bez externí knihovny.
  */
 @Composable
 fun <T> ReorderColumn(
@@ -49,7 +50,7 @@ fun <T> ReorderColumn(
                     .graphicsLayer { translationY = if (dragging) dragOffset else 0f },
             ) {
                 val handle = Modifier.pointerInput(items.size, key(item)) {
-                    detectDragGesturesAfterLongPress(
+                    detectDragGestures(
                         onDragStart = {
                             draggedIndex = index
                             dragOffset = 0f
@@ -61,8 +62,8 @@ fun <T> ReorderColumn(
                             change.consume()
                             dragOffset += amount.y
                             val cur = draggedIndex
-                            if (cur < 0) return@detectDragGesturesAfterLongPress
-                            val h = heights[cur] ?: return@detectDragGesturesAfterLongPress
+                            if (cur < 0) return@detectDragGestures
+                            val h = heights[cur] ?: return@detectDragGestures
                             when {
                                 dragOffset > h / 2f && cur < items.lastIndex -> {
                                     onMove(cur, cur + 1); draggedIndex = cur + 1; dragOffset -= h

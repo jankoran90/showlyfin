@@ -36,9 +36,17 @@ internal class TraktTokenProvider(
         private const val KEY_REFRESH_TOKEN = "TRAKT_REFRESH_TOKEN"
         private const val KEY_TOKEN_CREATED_AT = "TRAKT_ACCESS_TOKEN_TIMESTAMP"
         private const val KEY_TOKEN_EXPIRES_AT = "TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP"
+        // GLIDE — po dočasném selhání obnovy počkej, než zkusíš znovu (rozbije 429 bouři).
+        private const val REFRESH_COOLDOWN_MS = 60_000L
     }
 
     private var token: String? = null
+
+    // GLIDE — cooldown po dočasném selhání obnovy (429/5xx/síť), ať neběží bouře refresh volání.
+    @Volatile
+    private var refreshCooldownUntil = 0L
+
+    override fun isInRefreshCooldown(): Boolean = System.currentTimeMillis() < refreshCooldownUntil
 
     override fun getToken(): String? {
         if (token == null) token = sharedPreferences.getString(KEY_ACCESS_TOKEN, null)
@@ -70,6 +78,7 @@ internal class TraktTokenProvider(
     }
 
     override fun shouldRefresh(): Boolean {
+        if (isInRefreshCooldown()) return false
         val nowMillis = System.currentTimeMillis()
         val tokenCreatedAt = sharedPreferences.getLong(KEY_TOKEN_CREATED_AT, 0L)
         val tokenExpiresAt = sharedPreferences.getLong(KEY_TOKEN_EXPIRES_AT, 0L)
@@ -100,14 +109,22 @@ internal class TraktTokenProvider(
         return suspendCancellableCoroutine {
             val callback = object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
-                    it.resumeWithException(Error("Refresh token call failed. $e"))
+                    // GLIDE — síťová chyba = DOČASNÉ → cooldown, NE auth failure (token ponecháme).
+                    refreshCooldownUntil = System.currentTimeMillis() + REFRESH_COOLDOWN_MS
+                    it.resumeWithException(TokenRefreshException("Refresh token call failed. $e", isAuthFailure = false))
                 }
                 override fun onResponse(call: Call, response: Response) {
                     if (response.isSuccessful) {
+                        refreshCooldownUntil = 0L
                         val result = gson.fromJson(response.body!!.string(), OAuthResponse::class.java)
                         it.resume(result)
                     } else {
-                        it.resumeWithException(Error("Refresh token call failed. ${response.code}"))
+                        // GLIDE — 400/401 = neplatný refresh_token (definitivní → smí odhlásit);
+                        // 429/5xx = rate-limit/server (DOČASNÉ → cooldown, token ponecháme).
+                        val code = response.code
+                        val authFailure = code == 400 || code == 401
+                        if (!authFailure) refreshCooldownUntil = System.currentTimeMillis() + REFRESH_COOLDOWN_MS
+                        it.resumeWithException(TokenRefreshException("Refresh token call failed. $code", authFailure))
                     }
                     response.closeQuietly()
                 }

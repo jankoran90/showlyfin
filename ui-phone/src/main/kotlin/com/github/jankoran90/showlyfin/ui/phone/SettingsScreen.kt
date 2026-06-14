@@ -1197,7 +1197,6 @@ private fun OrderEditor(
         Row(
             Modifier
                 .fillMaxWidth()
-                .then(handle)
                 .background(
                     if (dragging) Color.White.copy(alpha = 0.08f) else Color.Transparent,
                     RoundedCornerShape(8.dp),
@@ -1205,8 +1204,11 @@ private fun OrderEditor(
                 .padding(vertical = 8.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Default.Menu, contentDescription = "Přesunout", tint = Color.White.copy(alpha = 0.5f))
-            Spacer(Modifier.width(12.dp))
+            // GLIDE: tah JEN za úchyt ☰ → nepere se se scrollem stránky (dřív byl handle na celém řádku).
+            Box(handle.padding(vertical = 6.dp, horizontal = 4.dp)) {
+                Icon(Icons.Default.Menu, contentDescription = "Přesunout", tint = Color.White.copy(alpha = 0.6f))
+            }
+            Spacer(Modifier.width(8.dp))
             Text(label(keyItem), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
         }
     }
@@ -1361,19 +1363,9 @@ private fun ProfileAuthoringBlock(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                // — Pořadí sekcí a podsekcí (Plan STRATA Fáze E, drag&drop — podrž a táhni) —
-                OrderEditor(
-                    title = "Pořadí sekcí (podrž a táhni)",
-                    orderedKeys = cfg.orderedSections(),
-                    label = { NAV_ORDER_LABELS[it] ?: it },
-                    onReorder = { newOrder -> onUpdateConfig(profile.id) { c -> c.copy(sectionOrder = newOrder) } },
-                )
-                OrderEditor(
-                    title = "Pořadí podsekcí Sleduj",
-                    orderedKeys = cfg.orderedSubsections(),
-                    label = { SUBSECTION_ORDER_LABELS[it] ?: it },
-                    onReorder = { newOrder -> onUpdateConfig(profile.id) { c -> c.copy(subsectionOrder = newOrder) } },
-                )
+                // GLIDE: pořadí sekcí/podsekcí se řeší VÝHRADNĚ v profilu (Nastavení → „Pořadí sekcí"),
+                // ne v adminu — ať se profilové a admin pořadí nepere. Admin smí pořadí jen ZAMKNOUT
+                // (LockKeys.ORDER), ne ho tu sám editovat.
 
                 // — Knihovny Jellyfin: whitelist (Plan HELM; nic = všechny) —
                 if (jellyfinLibraries.isNotEmpty()) {
@@ -1886,19 +1878,8 @@ private fun TemplateEditorBlock(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                // Pořadí sekcí/podsekcí (Plan STRATA Fáze E) — šablona předvyplní pořadí profilu při přiřazení.
-                OrderEditor(
-                    title = "Pořadí sekcí (podrž a táhni)",
-                    orderedKeys = cfg.orderedSections(),
-                    label = { NAV_ORDER_LABELS[it] ?: it },
-                    onReorder = { newOrder -> cfg = cfg.copy(sectionOrder = newOrder) },
-                )
-                OrderEditor(
-                    title = "Pořadí podsekcí Sleduj",
-                    orderedKeys = cfg.orderedSubsections(),
-                    label = { SUBSECTION_ORDER_LABELS[it] ?: it },
-                    onReorder = { newOrder -> cfg = cfg.copy(subsectionOrder = newOrder) },
-                )
+                // GLIDE: pořadí řeší profil (Nastavení), ne šablona/admin — editor pořadí tu odebrán,
+                // ať se pořadí z víc míst nepere.
 
                 Text("Žánry", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
                 OutlinedTextField(
