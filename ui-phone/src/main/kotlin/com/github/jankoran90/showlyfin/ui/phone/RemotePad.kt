@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.ui.phone
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -180,7 +181,7 @@ private fun ArrowButton(
 @Composable
 private fun PowerButton(on: Boolean, onClick: () -> Unit) {
     // Stavová barva (semantická výjimka z token palety): červená = TV vypnutá, zelená = běží.
-    val color = if (on) Color(0xFF43A047) else Color(0xFFE53935)
+    val color = if (on) ShowlyfinStatus.Success else ShowlyfinStatus.Danger
     Box(
         modifier = Modifier
             .size(48.dp)

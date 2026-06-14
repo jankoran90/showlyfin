@@ -18,6 +18,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-domain"))
+    implementation(project(":core:core-ui"))
     implementation(project(":data:data-uploader"))
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

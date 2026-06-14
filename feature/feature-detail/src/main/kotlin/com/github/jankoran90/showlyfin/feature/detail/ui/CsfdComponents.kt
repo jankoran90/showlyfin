@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.detail.ui
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -42,7 +43,7 @@ import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
 
-private val CsfdRed = Color(0xFFBA0305)
+private val CsfdRed = ShowlyfinStatus.CsfdHigh
 
 // ── AMOLED dark amber paleta pro sheet recenzí (vysoký kontrast na černé) ──
 private val AmoledBg = Color(0xFF000000)            // pravá černá (AMOLED)

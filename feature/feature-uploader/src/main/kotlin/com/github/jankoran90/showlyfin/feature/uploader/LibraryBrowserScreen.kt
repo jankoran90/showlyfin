@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.uploader
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -112,7 +113,7 @@ private fun LibraryItemList(library: String, items: List<LibraryItem>, onItemCli
                         Row {
                             if (item.hasNfo) Badge("NFO")
                             if (item.hasPoster) Badge("Poster")
-                            if (!item.complete) Badge("!", color = Color(0xFFFFC107))
+                            if (!item.complete) Badge("!", color = ShowlyfinStatus.Warn)
                         }
                     }
                 }
@@ -123,7 +124,7 @@ private fun LibraryItemList(library: String, items: List<LibraryItem>, onItemCli
 }
 
 @Composable
-private fun Badge(text: String, color: Color = Color(0xFF4CAF50)) {
+private fun Badge(text: String, color: Color = ShowlyfinStatus.Success) {
     Text(
         text, style = MaterialTheme.typography.labelSmall, color = color,
         modifier = Modifier.padding(end = 4.dp),

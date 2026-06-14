@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.uploader
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -188,9 +189,9 @@ private fun SessionContent(
 @Composable
 private fun FileQueueCard(item: TmmFileQueueItem, onReviewClick: () -> Unit) {
     val statusColor = when (item.file.status) {
-        "needs_review" -> Color(0xFFFFC107)
-        "confirmed" -> Color(0xFF4CAF50)
-        "moved" -> Color(0xFF2196F3)
+        "needs_review" -> ShowlyfinStatus.Warn
+        "confirmed" -> ShowlyfinStatus.Success
+        "moved" -> ShowlyfinStatus.Info
         "error" -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -210,14 +211,14 @@ private fun FileQueueCard(item: TmmFileQueueItem, onReviewClick: () -> Unit) {
                 Text("${item.file.downloadPct.toInt()}%", style = MaterialTheme.typography.labelSmall)
             }
             item.file.confirmedMatch?.let {
-                Text("✓ ${it.title} (${it.year})", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50))
+                Text("✓ ${it.title} (${it.year})", style = MaterialTheme.typography.bodySmall, color = ShowlyfinStatus.Success)
             }
             item.file.error?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
             if (item.file.status == "needs_review") {
                 Spacer(Modifier.height(4.dp))
-                Text("Klikni pro potvrzení → ", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFC107))
+                Text("Klikni pro potvrzení → ", style = MaterialTheme.typography.labelSmall, color = ShowlyfinStatus.Warn)
             }
         }
     }

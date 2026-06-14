@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.ui.phone
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import android.content.Intent
 import android.net.Uri
@@ -276,7 +277,7 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
                         onClick = { viewModel.startTraktDeviceLogin() },
                         enabled = uiState.traktUserCode == null,
                         modifier = Modifier.fillMaxWidth().tvFocusable(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFED1C24)),
+                        colors = ButtonDefaults.buttonColors(containerColor = ShowlyfinStatus.Danger),
                     ) { Text(if (uiState.traktUserCode == null) "Přihlásit přes Trakt" else "Čekám na potvrzení…") }
                     uiState.traktStatus?.let {
                         Spacer(Modifier.height(8.dp))
@@ -289,7 +290,7 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
                     Button(
                         onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Config.traktAuthorizeUrl))) },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFED1C24)),
+                        colors = ButtonDefaults.buttonColors(containerColor = ShowlyfinStatus.Danger),
                     ) { Text("Přihlásit přes Trakt") }
                 }
             }

@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.remux
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,7 +70,7 @@ fun RemuxHistoryScreen(
                                 Text(session.title.ifBlank { session.imdbId }, style = MaterialTheme.typography.bodyMedium)
                                 Text(session.createdAt, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 val statusColor = when (session.status) {
-                                    "done_final" -> Color(0xFF4CAF50)
+                                    "done_final" -> ShowlyfinStatus.Success
                                     "error" -> MaterialTheme.colorScheme.error
                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 }

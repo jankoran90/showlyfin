@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.uploader
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -145,7 +146,7 @@ fun LibraryDetailScreen(
                                     AsyncImage(model = opt.thumb.ifBlank { opt.url }, contentDescription = null,
                                         modifier = Modifier.size(60.dp, 90.dp).padding(4.dp).clip(RoundedCornerShape(4.dp))
                                             .clickable { viewModel.selectArtwork("poster", opt.url) })
-                                    if (isSelected) Icon(Icons.Default.Check, null, tint = Color(0xFF4CAF50), modifier = Modifier.align(Alignment.TopEnd).size(16.dp))
+                                    if (isSelected) Icon(Icons.Default.Check, null, tint = ShowlyfinStatus.Success, modifier = Modifier.align(Alignment.TopEnd).size(16.dp))
                                 }
                             }
                         }
@@ -162,7 +163,7 @@ fun LibraryDetailScreen(
                                     AsyncImage(model = opt.thumb.ifBlank { opt.url }, contentDescription = null,
                                         modifier = Modifier.size(120.dp, 70.dp).padding(4.dp).clip(RoundedCornerShape(4.dp))
                                             .clickable { viewModel.selectArtwork("backdrop", opt.url) })
-                                    if (isSelected) Icon(Icons.Default.Check, null, tint = Color(0xFF4CAF50), modifier = Modifier.align(Alignment.TopEnd).size(16.dp))
+                                    if (isSelected) Icon(Icons.Default.Check, null, tint = ShowlyfinStatus.Success, modifier = Modifier.align(Alignment.TopEnd).size(16.dp))
                                 }
                             }
                         }
@@ -217,11 +218,11 @@ fun LibraryDetailScreen(
 @Composable
 private fun StatusChips(uiState: LibraryDetailUiState) {
     val chips = buildList {
-        if (uiState.item?.hasNfo == true) add("NFO" to Color(0xFF4CAF50))
-        if (uiState.item?.hasPoster == true) add("Poster" to Color(0xFF4CAF50))
-        if (uiState.item?.hasFanart == true) add("Fanart" to Color(0xFF4CAF50))
-        if (uiState.item?.complete == false) add("!" to Color(0xFFFFC107))
-        if (uiState.item?.watched == true) add("✓ Shlédnuto" to Color(0xFF2196F3))
+        if (uiState.item?.hasNfo == true) add("NFO" to ShowlyfinStatus.Success)
+        if (uiState.item?.hasPoster == true) add("Poster" to ShowlyfinStatus.Success)
+        if (uiState.item?.hasFanart == true) add("Fanart" to ShowlyfinStatus.Success)
+        if (uiState.item?.complete == false) add("!" to ShowlyfinStatus.Warn)
+        if (uiState.item?.watched == true) add("✓ Shlédnuto" to ShowlyfinStatus.Info)
     }
     Row { chips.forEach { (text, color) -> Text(text, style = MaterialTheme.typography.labelSmall, color = color, modifier = Modifier.padding(end = 4.dp)) } }
 }

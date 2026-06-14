@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.jellyfin.ui
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -191,7 +192,7 @@ private fun EpisodeItemRow(ep: EpisodeRow, onClick: () -> Unit) {
             Icon(
                 Icons.Default.CheckCircle,
                 contentDescription = "Zhlédnuto",
-                tint = Color(0xFF2E7D32),
+                tint = ShowlyfinStatus.SuccessDim,
                 modifier = Modifier.width(22.dp),
             )
         } else {

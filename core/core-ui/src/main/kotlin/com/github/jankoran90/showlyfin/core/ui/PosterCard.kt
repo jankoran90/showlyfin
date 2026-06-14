@@ -52,8 +52,8 @@ import java.util.concurrent.ConcurrentHashMap
 private val PosterCardShape = RoundedCornerShape(14.dp)
 
 // ČSFD badge barvy = JEDINÝ zdroj pravdy (UNISON). <70 % = pastelově modrá střední světlost.
-private val CsfdHighBg = Color(0xFFBA0305)   // stejná červená jako detail (CsfdComponents)
-private val CsfdLowBg = Color(0xFF5E86B0)    // pastelově modrá, střední světlost (slabší filmy)
+private val CsfdHighBg = ShowlyfinStatus.CsfdHigh   // stejná červená jako detail (CsfdComponents)
+private val CsfdLowBg = ShowlyfinStatus.CsfdLow    // pastelově modrá, střední světlost (slabší filmy)
 private fun csfdBg(rating: Int): Color = if (rating < 70) CsfdLowBg else CsfdHighBg
 
 /** Líný per-karta poskytovatel ČSFD hodnocení (provádí ho ui vrstva přes CsfdRepository). */

@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.remux
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -158,9 +159,9 @@ private fun ConfirmContent(
 @Composable
 private fun SourceBadge(stream: UploaderStream) {
     val (label, color) = when {
-        stream.quality.rdReady -> "RD ✓" to androidx.compose.ui.graphics.Color(0xFF2E7D32)
-        stream.infoHash != null -> "Torrent" to androidx.compose.ui.graphics.Color(0xFF1565C0)
-        else -> "Addon" to androidx.compose.ui.graphics.Color(0xFFB23A3A)
+        stream.quality.rdReady -> "RD ✓" to ShowlyfinStatus.SuccessDim
+        stream.infoHash != null -> "Torrent" to ShowlyfinStatus.SourceTorrent
+        else -> "Addon" to ShowlyfinStatus.SourceAddon
     }
     Box(
         Modifier
@@ -298,7 +299,7 @@ private fun DoneContent(onBack: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("✓", style = MaterialTheme.typography.displayLarge, color = Color(0xFF4CAF50))
+        Text("✓", style = MaterialTheme.typography.displayLarge, color = ShowlyfinStatus.Success)
         Spacer(Modifier.height(16.dp))
         Text("Remux dokončen!", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(24.dp))

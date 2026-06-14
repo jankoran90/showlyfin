@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.remux
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -65,7 +66,7 @@ fun RemuxProgressScreen(
                     Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Zpět") }
                 }
                 uiState.isDone -> {
-                    Text("✓", style = MaterialTheme.typography.displayLarge, color = Color(0xFF4CAF50))
+                    Text("✓", style = MaterialTheme.typography.displayLarge, color = ShowlyfinStatus.Success)
                     Spacer(Modifier.height(16.dp))
                     Text("Remux dokončen!", style = MaterialTheme.typography.titleLarge)
                     Spacer(Modifier.height(24.dp))

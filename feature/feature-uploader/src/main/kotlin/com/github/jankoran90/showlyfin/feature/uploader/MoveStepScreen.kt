@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.uploader
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,7 +78,7 @@ fun MoveStepScreen(
                 item {
                     Spacer(Modifier.height(16.dp))
                     if (uiState.isMoved) {
-                        Text("✓ Přesunuto do: ${uiState.movedLibrary}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4CAF50))
+                        Text("✓ Přesunuto do: ${uiState.movedLibrary}", style = MaterialTheme.typography.bodyMedium, color = ShowlyfinStatus.Success)
                     }
                 }
             }

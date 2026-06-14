@@ -1,4 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.detail.ui
+import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -103,12 +104,12 @@ internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
 @Composable
 private fun SourceBadge(stream: UploaderStream) {
     val (label, color) = when {
-        stream.quality.rdSaved -> "💾 RD" to Color(0xFF6A1B9A)         // už uložené na RD (DebridSearch) — hraje hned
-        stream.quality.rdReady -> "RD ✓" to Color(0xFF2E7D32)          // cached — hraje hned
-        stream.quality.rdDownloadable -> "RD ⬇" to Color(0xFFE08915)   // necachované — RD stáhne
-        !stream.cometPath.isNullOrBlank() -> "RD" to Color(0xFF2E7D32)
-        stream.infoHash != null -> "Torrent" to Color(0xFF1565C0)
-        else -> "Addon" to Color(0xFFB23A3A)
+        stream.quality.rdSaved -> "💾 RD" to ShowlyfinStatus.SourceRdSaved         // už uložené na RD (DebridSearch) — hraje hned
+        stream.quality.rdReady -> "RD ✓" to ShowlyfinStatus.SuccessDim          // cached — hraje hned
+        stream.quality.rdDownloadable -> "RD ⬇" to ShowlyfinStatus.SourceRdDownload   // necachované — RD stáhne
+        !stream.cometPath.isNullOrBlank() -> "RD" to ShowlyfinStatus.SuccessDim
+        stream.infoHash != null -> "Torrent" to ShowlyfinStatus.SourceTorrent
+        else -> "Addon" to ShowlyfinStatus.SourceAddon
     }
     Box(
         Modifier
@@ -140,7 +141,7 @@ internal fun StreamRow(
         if (health == StreamHealth.SUSPECT) {
             Box(
                 Modifier
-                    .background(Color(0xFFB23A3A), RoundedCornerShape(6.dp))
+                    .background(ShowlyfinStatus.SourceAddon, RoundedCornerShape(6.dp))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text("⚠️ ukázka?", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.SemiBold)
