@@ -162,7 +162,8 @@ internal fun StreamRow(
                 text = releaseText,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                maxLines = 2,
+                // Celý release filename — klidně na 3 řádky (user chce vidět přesný release).
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
             // Druhotná informace (to z name/description, co není release filename) — když přidává hodnotu.
