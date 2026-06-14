@@ -41,14 +41,18 @@ class PlaybackViewModel @Inject constructor(
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     private var query: SubtitleQuery? = null
+    // PICKUP: klíč pozice je oddělený od `query` (titulky), protože resume musí fungovat i BEZ imdb.
+    private var resumeKey: String? = null
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
     fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null) {
         // PICKUP: u externích streamů (Stremio/RD) si pozici pamatujeme lokálně (Jellyfin ji řeší přes
-        // server). Klíč = stejný stabilní sourceKey (imdb [+ s/e]) jako u titulků. Když existuje uložená
-        // pozice, vyplníme resumePositionMs → přehrávač nabídne dialog „Pokračovat / Od začátku".
+        // server). Titulky vyžadují imdb (gate beze změny), ALE resume klíčujeme přes resumeKeyOf, který
+        // má fallback na název+rok — obsah z Objevit/doporučení má imdb zatím prázdné (TMDB ho dohledá
+        // později), takže gate na imdb by resume tiše vypnul (pozice se neuloží → dialog se nikdy nenabídne).
         query = subtitleQuery?.takeIf { it.imdb.isNotBlank() }
-        val savedResume = query?.let { prefs.getLong("resume_${sourceKey(it)}", 0L) } ?: 0L
+        resumeKey = subtitleQuery?.let { resumeKeyOf(it) }
+        val savedResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
         _state.update {
             it.copy(
                 isLoading = false, title = title, streamUrl = url,
@@ -63,7 +67,7 @@ class PlaybackViewModel @Inject constructor(
     /** PICKUP: ulož/aktualizuj pozici externího streamu pro pozdější „Pokračovat".
      *  Ukládá jen smysluplný úsek (od ~5 s); v posledních 30 s = dokoukáno → resume zahodí. */
     fun saveExternalPosition(positionMs: Long, durationMs: Long) {
-        val key = query?.let { sourceKey(it) } ?: return
+        val key = resumeKey ?: return
         when {
             durationMs > 0L && positionMs >= durationMs - 30_000L ->
                 prefs.edit().remove("resume_$key").apply()
@@ -185,6 +189,17 @@ class PlaybackViewModel @Inject constructor(
     private fun sourceKey(q: SubtitleQuery): String {
         val se = if (q.season != null && q.episode != null) "_s${q.season}e${q.episode}" else ""
         return "${q.imdb}$se"
+    }
+
+    /** PICKUP: stabilní klíč pozice přehrávání. Když máme imdb, použij ho (sdílí klíč s budoucí TV
+     *  resume, PICKUP F2). Bez imdb fallback na normalizovaný název+rok, ať resume funguje i pro
+     *  obsah z Objevit/doporučení (imdb dohledán z TMDB až později). Plné sjednocení napříč VM =
+     *  `ResumeStore` v PICKUP F2; tady minimální robustní varianta pro telefon. */
+    private fun resumeKeyOf(q: SubtitleQuery): String {
+        val base = if (q.imdb.isNotBlank()) q.imdb
+        else "t:" + q.origTitle.ifBlank { q.title }.lowercase().filter { it.isLetterOrDigit() }.take(40) + (q.year ?: 0)
+        val se = if (q.season != null && q.episode != null) "_s${q.season}e${q.episode}" else ""
+        return "$base$se"
     }
     private fun loadSourceOffset(key: String): Long = prefs.getLong("sub_off_$key", 0L)
     private fun saveSourceOffset(key: String, ms: Long) = prefs.edit().putLong("sub_off_$key", ms).apply()

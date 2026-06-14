@@ -60,28 +60,30 @@ class AudiobookPlayerViewModel @Inject constructor(
         openedFor = key
         viewModelScope.launch {
             runCatching {
+                // Index stažených čteme JEDNOU do val (dřív se volalo 2× — guard + !! — a souběžná
+                // změna indexu mezi voláními mohla hodit NPE → tiché selhání přehrávání v runCatching).
+                val offlineBook = if (episodeId == null) audiobookDownloads.offlineAudiobookPlayback(itemId) else null
+                val localEpisode = if (episodeId != null) downloadManager.localFile(episodeId) else null
                 when {
                     // Stažená audiokniha: hraj z lokálních souborů (offline). Když jsme online, vezmi
                     // server session kvůli resume pozici + syncu, ale URL stop přepiš na lokální (dle
                     // indexu); když server selže (offline) → čistě lokální session.
-                    episodeId == null && audiobookDownloads.offlineAudiobookPlayback(itemId) != null -> {
-                        val offline = audiobookDownloads.offlineAudiobookPlayback(itemId)!!
+                    offlineBook != null -> {
                         val server = runCatching { repo.startPlayback(itemId) }.getOrNull()
                         if (server != null) {
-                            val localByIndex = offline.tracks.associateBy { it.index }
+                            val localByIndex = offlineBook.tracks.associateBy { it.index }
                             server.copy(tracks = server.tracks.map { t -> localByIndex[t.index]?.let { t.copy(url = it.url) } ?: t })
                         } else {
-                            offline
+                            offlineBook
                         }
                     }
                     episodeId == null -> repo.startPlayback(itemId)
                     // Stažená epizoda: hraj z lokálního souboru (funguje offline). Když jsme online,
                     // přesto otevřeme server session kvůli resume pozici + syncu, ale audio URL
                     // přepíšeme na lokální soubor; když server selže (offline) → čistě lokální session.
-                    downloadManager.localFile(episodeId) != null -> {
-                        val local = downloadManager.localFile(episodeId)!!
+                    localEpisode != null -> {
                         val server = runCatching { repo.startEpisodePlayback(itemId, episodeId) }.getOrNull()
-                        server?.copy(tracks = listOf(server.tracks.first().copy(url = Uri.fromFile(local).toString())))
+                        server?.copy(tracks = listOf(server.tracks.first().copy(url = Uri.fromFile(localEpisode).toString())))
                             ?: downloadManager.offlinePlayback(episodeId)
                             ?: error("Stažený soubor epizody chybí.")
                     }
