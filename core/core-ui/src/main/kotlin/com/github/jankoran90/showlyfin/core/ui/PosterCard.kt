@@ -66,11 +66,17 @@ interface CsfdRatingProvider {
 
 val LocalCsfdRatingProvider = staticCompositionLocalOf<CsfdRatingProvider?> { null }
 
-// Procesní cache (klíč = tmdb/imdb). Hodnota null = „dotaženo, ČSFD nemá" → znovu nestahovat.
-private val csfdCardCache = ConcurrentHashMap<String, Int?>()
+// Procesní cache (klíč = tmdb/imdb). ConcurrentHashMap NEDOVOLÍ null hodnotu → pro „dotaženo,
+// ČSFD nemá" ukládáme sentinel CSFD_NONE (dřív se ukládalo null → ConcurrentHashMap.put NPE → pád).
+private const val CSFD_NONE = -1
+private val csfdCardCache = ConcurrentHashMap<String, Int>()
 
 private fun csfdKey(tmdbId: Long?, imdbId: String?): String? =
     tmdbId?.let { "t$it" } ?: imdbId?.takeIf { it.isNotBlank() }?.let { "i$it" }
+
+/** Cache → rating (sentinel CSFD_NONE = dotaženo bez hodnocení → vrať null). */
+private fun cachedCsfdRating(key: String?): Int? =
+    key?.let { csfdCardCache[it] }?.takeIf { it != CSFD_NONE }
 
 /**
  * ČSFD hodnocení pro kartu — z procesní cache, jinak líně dotáhne přes [LocalCsfdRatingProvider]
@@ -80,12 +86,12 @@ private fun csfdKey(tmdbId: Long?, imdbId: String?): String? =
 fun rememberCsfdCardRating(imdbId: String?, tmdbId: Long?, title: String, year: Int?): Int? {
     val key = csfdKey(tmdbId, imdbId)
     val provider = LocalCsfdRatingProvider.current
-    var rating by remember(key) { mutableStateOf(key?.let { csfdCardCache[it] }) }
+    var rating by remember(key) { mutableStateOf(cachedCsfdRating(key)) }
     LaunchedEffect(key, provider) {
         if (key == null || provider == null) return@LaunchedEffect
-        if (csfdCardCache.containsKey(key)) { rating = csfdCardCache[key]; return@LaunchedEffect }
+        if (csfdCardCache.containsKey(key)) { rating = cachedCsfdRating(key); return@LaunchedEffect }
         val r = runCatching { provider.rating(imdbId, tmdbId, title, year) }.getOrNull()
-        csfdCardCache[key] = r
+        csfdCardCache[key] = r ?: CSFD_NONE
         rating = r
     }
     return rating
