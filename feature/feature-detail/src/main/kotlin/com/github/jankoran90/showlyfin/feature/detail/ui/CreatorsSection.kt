@@ -68,10 +68,13 @@ fun CreatorsSection(
     writers: List<TmdbPerson>,
     cinematographers: List<TmdbPerson>,
     onPersonClick: (TmdbPerson, FavoriteKind?) -> Unit,
-    // VANTAGE D4: žánry jako druhý sloupec vedle Režie/Scénář/Kamera (stejný design jako crew řádky).
+    // VANTAGE D4: žánry jako druhý sloupec vedle Scénář/Kamera (stejný design jako crew řádky).
     // [onGenreClick] zatím null = neproklikávací; později žánr × režisér (handoff VANTAGE).
     genres: List<String> = emptyList(),
     onGenreClick: ((String) -> Unit)? = null,
+    // VANTAGE (SHW-48): Scénář/Kamera + žánry se odhalí jen při rozbaleném popisu (default skryté);
+    // pás herců + režisérů je VŽDY vidět.
+    detailsVisible: Boolean = true,
 ) {
     if (cast.isEmpty() && directors.isEmpty() && writers.isEmpty() &&
         cinematographers.isEmpty() && genres.isEmpty()) return
@@ -83,38 +86,45 @@ fun CreatorsSection(
         modifier = Modifier.padding(horizontal = 16.dp),
     )
 
-    if (cast.isNotEmpty()) {
+    // Pás portrétů — režiséři jako PRVNÍ (role „Režie", proklik = režijní tvorba), pak herci. VŽDY vidět.
+    if (cast.isNotEmpty() || directors.isNotEmpty()) {
         Spacer(Modifier.height(8.dp))
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(cast) { person -> ActorChip(person = person, onClick = { onPersonClick(person, FavoriteKind.ACTOR) }) }
+            items(directors) { person ->
+                ActorChip(person = person, roleOverride = "Režie", onClick = { onPersonClick(person, FavoriteKind.DIRECTOR) })
+            }
+            items(cast) { person ->
+                ActorChip(person = person, onClick = { onPersonClick(person, FavoriteKind.ACTOR) })
+            }
         }
     }
 
-    // Jemné řádky pod pásem — Režie / Scénář / Kamera vlevo, Žánry jako druhý sloupec vpravo.
-    val rows = listOf<Triple<String, List<TmdbPerson>, FavoriteKind?>>(
-        Triple("Režie", directors, FavoriteKind.DIRECTOR),
-        Triple("Scénář", writers, null),
-        Triple("Kamera", cinematographers, null),
-    ).filter { it.second.isNotEmpty() }
-    val hasCrew = rows.isNotEmpty()
-    val hasGenres = genres.isNotEmpty()
-    if (hasCrew || hasGenres) {
-        Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (hasCrew) {
-                Column(Modifier.weight(1f)) {
-                    rows.forEach { (label, people, kind) -> CrewRow(label = label, people = people, kind = kind, onPersonClick = onPersonClick) }
+    // Pod rozbaleným popisem: jemné řádky Scénář / Kamera vlevo + Žánry vpravo (režie je v pásu výše).
+    if (detailsVisible) {
+        val rows = listOf<Triple<String, List<TmdbPerson>, FavoriteKind?>>(
+            Triple("Scénář", writers, null),
+            Triple("Kamera", cinematographers, null),
+        ).filter { it.second.isNotEmpty() }
+        val hasCrew = rows.isNotEmpty()
+        val hasGenres = genres.isNotEmpty()
+        if (hasCrew || hasGenres) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (hasCrew) {
+                    Column(Modifier.weight(1f)) {
+                        rows.forEach { (label, people, kind) -> CrewRow(label = label, people = people, kind = kind, onPersonClick = onPersonClick) }
+                    }
                 }
-            }
-            if (hasGenres) {
-                Column(Modifier.weight(1f)) { GenreRow(genres = genres, onGenreClick = onGenreClick) }
+                if (hasGenres) {
+                    Column(Modifier.weight(1f)) { GenreRow(genres = genres, onGenreClick = onGenreClick) }
+                }
             }
         }
     }
@@ -149,8 +159,8 @@ private fun GenreRow(genres: List<String>, onGenreClick: ((String) -> Unit)?) {
 }
 
 @Composable
-private fun ActorChip(person: TmdbPerson, onClick: () -> Unit) {
-    val character = person.character ?: person.roles?.firstOrNull()?.character
+private fun ActorChip(person: TmdbPerson, onClick: () -> Unit, roleOverride: String? = null) {
+    val character = roleOverride ?: person.character ?: person.roles?.firstOrNull()?.character
     Column(
         modifier = Modifier
             .width(84.dp)
@@ -243,6 +253,8 @@ fun PersonFilmographySheet(
     name: String?,
     loading: Boolean,
     collection: MediaCollection?,
+    // VANTAGE (SHW-48): rolový titulek listu (Herecká tvorba / Režie / Hudba …); null = „Tvorba".
+    roleLabel: String? = null,
     onPartClick: (CollectionPart) -> Unit,
     onDismiss: () -> Unit,
     canFavorite: Boolean = false,
@@ -272,7 +284,9 @@ fun PersonFilmographySheet(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
                     }
                     Text(
-                        text = name?.takeIf { it.isNotBlank() }?.let { "Tvorba — $it" } ?: "Tvorba",
+                        text = (roleLabel?.takeIf { it.isNotBlank() } ?: "Tvorba").let { prefix ->
+                            name?.takeIf { it.isNotBlank() }?.let { "$prefix — $it" } ?: prefix
+                        },
                         style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

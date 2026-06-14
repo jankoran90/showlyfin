@@ -16,7 +16,11 @@ import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.jellyfin.normalizeBoxSetName
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import com.github.jankoran90.showlyfin.data.tmdb.model.PersonRole
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson
+import com.github.jankoran90.showlyfin.data.tmdb.model.czLabel
+import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportItem
 import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportRequest
@@ -309,29 +313,57 @@ class DetailViewModel @Inject constructor(
      * `discoverMoviesByPerson` → `moviesToCollection` (CollectionPart nese tmdbId → karta se otevře správně).
      */
     fun openPersonFilmography(
-        person: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson,
-        kind: com.github.jankoran90.showlyfin.data.uploader.FavoriteKind? = null,
+        person: TmdbPerson,
+        kind: FavoriteKind? = null,
     ) {
         if (person.id <= 0) return
         val fav = kind != null && favoritesStore.isFavorite(kind, person.id)
+        val role = personRole(person, kind)
         _uiState.update {
             it.copy(
                 showPersonSheet = true, personSheetName = person.name, personSheetLoading = true,
-                personFilmography = null, personSheetPerson = person, personSheetKind = kind, isPersonFavorite = fav,
+                personFilmography = null, personSheetPerson = person, personSheetKind = kind,
+                personSheetRoleLabel = role.czLabel(), isPersonFavorite = fav,
             )
         }
         viewModelScope.launch {
-            val movies = runCatching { tmdbApi.discoverMoviesByPerson(person.id) }.getOrDefault(emptyList())
+            // VANTAGE (SHW-48): rolově konkrétní tvorba (režisér → režíroval, herec → hrál, skladatel → hudba …)
+            // místo generického `with_people` (cast i crew dohromady).
+            val movies = runCatching { tmdbApi.moviesByPersonRole(person.id, role) }.getOrDefault(emptyList())
             // CANVAS C: celoobrazovková Tvorba → víc položek (60) než řádkové kolekce (20).
             val coll = moviesToCollection(person.name ?: "Tvorba", movies, _uiState.value.item?.tmdbId ?: -1L, limit = 60)
             _uiState.update { it.copy(personSheetLoading = false, personFilmography = coll) }
         }
     }
 
+    /** Role osoby pro rolově konkrétní tvorbu — z [FavoriteKind] (Oblíbené / herec / režie) nebo
+     *  z TMDB `department`/`job` (scénárista / kameraman bez vlastní kategorie Oblíbených). */
+    private fun personRole(person: TmdbPerson, kind: FavoriteKind?): PersonRole {
+        when (kind) {
+            FavoriteKind.ACTOR -> return PersonRole.ACTING
+            FavoriteKind.DIRECTOR -> return PersonRole.DIRECTING
+            FavoriteKind.PRODUCER -> return PersonRole.PRODUCING
+            FavoriteKind.COMPOSER -> return PersonRole.COMPOSING
+            else -> {}
+        }
+        val dept = person.department
+        val jobs = listOfNotNull(person.job) + person.jobs?.mapNotNull { it.job }.orEmpty()
+        fun jobHas(vararg s: String) = jobs.any { j -> s.any { j.contains(it, ignoreCase = true) } }
+        return when {
+            jobHas("Director of Photography", "Cinematograph") || dept.equals("Camera", true) -> PersonRole.CINEMATOGRAPHY
+            jobHas("Director") || dept.equals("Directing", true) -> PersonRole.DIRECTING
+            dept.equals("Writing", true) || jobHas("Writer", "Screenplay", "Story") -> PersonRole.WRITING
+            dept.equals("Production", true) || jobHas("Producer") -> PersonRole.PRODUCING
+            jobHas("Composer", "Music") || dept.equals("Sound", true) -> PersonRole.COMPOSING
+            person.character != null -> PersonRole.ACTING
+            else -> PersonRole.GENERIC
+        }
+    }
+
     fun closePersonSheet() = _uiState.update {
         it.copy(
             showPersonSheet = false, personFilmography = null, personSheetName = null,
-            personSheetPerson = null, personSheetKind = null, isPersonFavorite = false,
+            personSheetPerson = null, personSheetKind = null, personSheetRoleLabel = null, isPersonFavorite = false,
         )
     }
 

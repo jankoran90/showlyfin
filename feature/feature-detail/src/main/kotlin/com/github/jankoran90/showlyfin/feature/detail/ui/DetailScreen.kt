@@ -237,6 +237,7 @@ fun DetailScreen(
             name = uiState.personSheetName,
             loading = uiState.personSheetLoading,
             collection = uiState.personFilmography,
+            roleLabel = uiState.personSheetRoleLabel,
             onPartClick = { part -> viewModel.closePersonSheet(); onCollectionPartClick?.invoke(part) },
             onDismiss = { viewModel.closePersonSheet() },
             canFavorite = uiState.personSheetKind != null,
@@ -451,6 +452,11 @@ fun DetailScreen(
                 else -> { plot = tmdbOverview?.takeIf { it.isNotBlank() }; plotSource = null }
             }
 
+            // VANTAGE (SHW-48): šipka rozbalení popisu odhalí i blok Tvůrci (Scénář/Kamera + žánry).
+            // Pás herců + režisérů je vidět vždy; šipka se ukáže i u krátkého/chybějícího popisu,
+            // pokud je co odhalit.
+            val hasRevealableDetails = uiState.showCreators &&
+                (uiState.writers.isNotEmpty() || uiState.cinematographers.isNotEmpty() || !genres.isNullOrEmpty())
             if (!plot.isNullOrBlank()) {
                 if (plotSource != null) {
                     Text(
@@ -470,18 +476,18 @@ fun DetailScreen(
                     onTextLayout = { if (limitActive) plotOverflow = it.hasVisualOverflow },
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
-                if (plotOverflow || plotExpanded) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        IconButton(onClick = { plotExpanded = !plotExpanded }, modifier = Modifier.tvFocusable(shape = CircleShape)) {
-                            Icon(
-                                imageVector = if (plotExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = if (plotExpanded) "Sbalit popis" else "Zobrazit celý popis",
-                            )
-                        }
+            }
+            if (plotOverflow || plotExpanded || hasRevealableDetails) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    IconButton(onClick = { plotExpanded = !plotExpanded }, modifier = Modifier.tvFocusable(shape = CircleShape)) {
+                        Icon(
+                            imageVector = if (plotExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (plotExpanded) "Sbalit" else "Zobrazit víc",
+                        )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
             }
+            if (!plot.isNullOrBlank()) Spacer(Modifier.height(12.dp))
 
             // CANVAS A: akce (Galerie přes cover, ČSFD recenze přes badge, Přehrát/Na TV/Stremio/
             // Stáhnout/Oblíbené/Chci vidět) jsou v kompaktní kulaté liště v hero (viz DetailActionBar výše).
@@ -496,6 +502,8 @@ fun DetailScreen(
                     onPersonClick = { person, kind -> viewModel.openPersonFilmography(person, kind) },
                     // VANTAGE D4: žánry z fanartu sem jako druhý sloupec (proklik žánr×režisér = později).
                     genres = genres.orEmpty(),
+                    // VANTAGE (SHW-48): Scénář/Kamera + žánry skryté, odhalí je rozbalení popisu.
+                    detailsVisible = plotExpanded,
                 )
             }
 

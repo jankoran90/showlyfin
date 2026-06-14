@@ -138,6 +138,7 @@ internal fun OblibeniScreen(
             name = sheet.name,
             loading = sheet.loading,
             collection = sheet.collection,
+            roleLabel = sheet.roleLabel,
             onPartClick = { part ->
                 part.tmdbId?.let { onOpenDetail(it, part.title) }
                 vm.closeSheet()

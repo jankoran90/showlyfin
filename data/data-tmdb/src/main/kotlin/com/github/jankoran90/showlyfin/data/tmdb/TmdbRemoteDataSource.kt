@@ -22,4 +22,8 @@ interface TmdbRemoteDataSource {
     suspend fun searchShows(query: String, language: String = "cs-CZ"): List<TmdbSearchShowItem>
     suspend fun discoverMoviesByPerson(personId: Long, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
     suspend fun discoverMoviesByCompany(companyId: Long, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
+
+    /** VANTAGE (SHW-48): rolově konkrétní tvorba osoby (režisér → režíroval, herec → hrál, …)
+     *  přes `/person/{id}/movie_credits`. [PersonRole.GENERIC] → fallback `discoverMoviesByPerson`. */
+    suspend fun moviesByPersonRole(personId: Long, role: PersonRole, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
 }

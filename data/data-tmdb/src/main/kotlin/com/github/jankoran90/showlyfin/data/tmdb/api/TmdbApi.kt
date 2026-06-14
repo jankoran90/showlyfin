@@ -106,4 +106,34 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
             if (companyId <= 0) emptyList()
             else service.discoverMovies(withCompanies = companyId.toString(), language = language).results
         } catch (e: Throwable) { emptyList() }
+
+    override suspend fun moviesByPersonRole(personId: Long, role: PersonRole, language: String): List<TmdbSearchMovieItem> =
+        try {
+            when {
+                personId <= 0 -> emptyList()
+                // Neznámá role → původní chování (cast i crew dohromady přes with_people).
+                role == PersonRole.GENERIC ->
+                    service.discoverMovies(withPeople = personId.toString(), language = language).results
+                else -> {
+                    val credits = service.fetchPersonMovieCredits(personId, language)
+                    val raw = if (role == PersonRole.ACTING) credits.cast
+                    else credits.crew.filter { roleMatches(role, it.department, it.job) }
+                    raw.map { it.toMovieItem() }.distinctBy { it.id }
+                }
+            }
+        } catch (e: Throwable) { emptyList() }
+
+    /** Sedí TMDB `job`/`department` kreditu na požadovanou [PersonRole]. */
+    private fun roleMatches(role: PersonRole, department: String?, job: String?): Boolean {
+        fun jobHas(vararg s: String) = job != null && s.any { job.contains(it, ignoreCase = true) }
+        fun dept(d: String) = department.equals(d, ignoreCase = true)
+        return when (role) {
+            PersonRole.DIRECTING -> jobHas("Director") && !jobHas("of Photography") || dept("Directing")
+            PersonRole.WRITING -> dept("Writing") || jobHas("Writer", "Screenplay", "Story", "Author")
+            PersonRole.CINEMATOGRAPHY -> jobHas("Director of Photography", "Cinematograph") || dept("Camera")
+            PersonRole.PRODUCING -> dept("Production") || jobHas("Producer")
+            PersonRole.COMPOSING -> jobHas("Composer", "Music") || dept("Sound") && jobHas("Music")
+            PersonRole.ACTING, PersonRole.GENERIC -> false
+        }
+    }
 }

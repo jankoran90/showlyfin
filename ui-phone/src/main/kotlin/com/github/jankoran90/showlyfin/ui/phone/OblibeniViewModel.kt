@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import com.github.jankoran90.showlyfin.data.tmdb.model.PersonRole
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSearchMovieItem
+import com.github.jankoran90.showlyfin.data.tmdb.model.czLabel
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
@@ -37,11 +39,20 @@ class OblibeniViewModel @Inject constructor(
     /** Otevři tvorbu osoby (filmografie) nebo vydavatelství (produkce). */
     fun openWorks(item: FavoriteItem) {
         if (item.id <= 0L) return
-        _sheet.value = WorksSheetState(open = true, name = item.name, loading = true)
+        // VANTAGE (SHW-48): role z kategorie Oblíbeného → rolově konkrétní tvorba + rolový titulek
+        // (režisér → režíroval, herec → hrál, skladatel → hudba …). Vydavatelství = produkce studia.
+        val role = when (item.kind) {
+            FavoriteKind.ACTOR -> PersonRole.ACTING
+            FavoriteKind.DIRECTOR -> PersonRole.DIRECTING
+            FavoriteKind.PRODUCER -> PersonRole.PRODUCING
+            FavoriteKind.COMPOSER -> PersonRole.COMPOSING
+            else -> PersonRole.GENERIC
+        }
+        _sheet.value = WorksSheetState(open = true, name = item.name, loading = true, roleLabel = role.czLabel())
         viewModelScope.launch {
             val movies = runCatching {
                 if (item.kind == FavoriteKind.COMPANY) tmdb.discoverMoviesByCompany(item.id)
-                else tmdb.discoverMoviesByPerson(item.id)
+                else tmdb.moviesByPersonRole(item.id, role)
             }.getOrDefault(emptyList())
             _sheet.value = _sheet.value.copy(loading = false, collection = toCollection(item.name, movies))
         }
@@ -76,4 +87,6 @@ data class WorksSheetState(
     val name: String? = null,
     val loading: Boolean = false,
     val collection: MediaCollection? = null,
+    // VANTAGE (SHW-48): rolový titulek listu (Herecká tvorba / Režie / Hudba …).
+    val roleLabel: String? = null,
 )

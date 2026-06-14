@@ -28,6 +28,12 @@ interface TmdbService {
     @GET("person/{tmdbId}")
     suspend fun fetchPersonDetails(@Path("tmdbId") tmdbId: Long): TmdbPerson
 
+    @GET("person/{tmdbId}/movie_credits")
+    suspend fun fetchPersonMovieCredits(
+        @Path("tmdbId") tmdbId: Long,
+        @Query("language") language: String = "cs-CZ",
+    ): TmdbPersonMovieCredits
+
     @GET("person/{tmdbId}/translations")
     suspend fun fetchPersonTranslation(@Path("tmdbId") tmdbId: Long): TmdbTranslationResponse
 
