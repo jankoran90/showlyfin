@@ -78,8 +78,14 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -193,6 +199,12 @@ fun PlaybackScreen(
     var failureReported by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var currentSubtitle by remember { mutableStateOf<String?>(null) }
+    // TEMPO (SHW-49): výběr zvukové stopy v lokálním přehrávači. Telefon (ExoPlayer bez FFmpeg dekodéru)
+    // neumí DTS/DTS-HD/TrueHD → `isTrackSupported` říká autoritativně, co reálně hraje. Když je vybraná
+    // stopa nepodporovaná a existuje podporovaná (např. AC3 vedle DTS-HD), přepneme; když žádná, hlásíme.
+    var showAudioMenu by remember { mutableStateOf(false) }
+    var audioTracks by remember { mutableStateOf<List<AudioTrackOption>>(emptyList()) }
+    var audioNotice by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
     // TV: panel titulků je touch-only, na TV ho zpřístupníme D-padem (otevření Up/Menu + fokus do panelu).
     val isTv = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
@@ -312,8 +324,57 @@ fun PlaybackScreen(
         }
     }
 
+    // TEMPO: vyber audio stopu (override) — telefon ji pak hraje, pokud ji umí dekódovat.
+    val applyAudio: (AudioTrackOption) -> Unit = { opt ->
+        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(opt.group, opt.trackIndex))
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            .build()
+    }
+    // TEMPO: sleduj stopy přehrávače → seznam audio stop (+ co telefon umí) + auto-fallback na podporovanou.
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                val opts = tracks.groups
+                    .filter { it.type == C.TRACK_TYPE_AUDIO }
+                    .flatMap { g ->
+                        (0 until g.length).map { i ->
+                            AudioTrackOption(
+                                group = g.mediaTrackGroup,
+                                trackIndex = i,
+                                label = audioTrackLabel(g.getTrackFormat(i), i),
+                                supported = g.isTrackSupported(i),
+                                selected = g.isTrackSelected(i),
+                            )
+                        }
+                    }
+                audioTracks = opts
+                val selected = opts.firstOrNull { it.selected }
+                if (opts.isNotEmpty() && (selected == null || !selected.supported)) {
+                    val better = opts.firstOrNull { it.supported }
+                    if (better != null && !better.selected) {
+                        applyAudio(better)
+                        audioNotice = "Přepnuto na zvuk: ${better.label} (telefon neumí původní stopu)"
+                    } else if (better == null) {
+                        audioNotice = "Telefon neumí přehrát zvuk tohoto zdroje (DTS-HD/TrueHD) — zkus přehrát na TV."
+                    }
+                }
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose { exoPlayer.removeListener(listener) }
+    }
+    // TEMPO: hlášku o zvuku po chvíli skryj.
+    LaunchedEffect(audioNotice) {
+        if (audioNotice != null) { delay(6000); audioNotice = null }
+    }
+
     BackHandler {
-        if (showSubtitleMenu) showSubtitleMenu = false else onBack()
+        when {
+            showAudioMenu -> showAudioMenu = false
+            showSubtitleMenu -> showSubtitleMenu = false
+            else -> onBack()
+        }
     }
 
     Box(
@@ -544,8 +605,25 @@ fun PlaybackScreen(
                                     color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
-                                // CC ikona titulků
+                                // Zvuková stopa + CC ikona titulků
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // TEMPO: výběr audio stopy — ukaž, jen když je z čeho vybírat / něco telefon neumí.
+                                    if (audioTracks.size > 1 || audioTracks.any { !it.supported }) {
+                                        val audioProblem = audioTracks.none { it.selected && it.supported }
+                                        Text(
+                                            text = "🔊",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier
+                                                .border(
+                                                    1.dp,
+                                                    if (audioProblem) Color(0xFFFFB300) else Color.White.copy(alpha = 0.5f),
+                                                    RoundedCornerShape(4.dp),
+                                                )
+                                                .clickable { showAudioMenu = true; controlsVisible = true }
+                                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                    }
                                     if (state.subtitlesLoading) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(18.dp),
@@ -583,6 +661,30 @@ fun PlaybackScreen(
                             onClose = { showSubtitleMenu = false },
                             firstItemFocusRequester = if (isTv) menuFocusRequester else null,
                             modifier = Modifier.align(Alignment.CenterEnd),
+                        )
+                    }
+
+                    // TEMPO: panel výběru zvukové stopy.
+                    if (showAudioMenu) {
+                        AudioTrackPanel(
+                            tracks = audioTracks,
+                            onSelect = { applyAudio(it); showAudioMenu = false },
+                            onClose = { showAudioMenu = false },
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                        )
+                    }
+
+                    // TEMPO: krátká hláška o automatickém přepnutí / nepřehratelném zvuku.
+                    audioNotice?.let { txt ->
+                        Text(
+                            text = txt,
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 24.dp)
+                                .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
                         )
                     }
 
@@ -795,4 +897,82 @@ private fun Modifier.tvFocusBorder(shape: Shape): Modifier {
             color = if (focused) Color.White else Color.Transparent,
             shape = shape,
         )
+}
+
+/** TEMPO (SHW-49): jedna zvuková stopa pro výběr v lokálním přehrávači (supported = telefon ji umí dekódovat). */
+private data class AudioTrackOption(
+    val group: TrackGroup,
+    val trackIndex: Int,
+    val label: String,
+    val supported: Boolean,
+    val selected: Boolean,
+)
+
+/** TEMPO: panel výběru zvukové stopy. Nepodporované stopy (DTS-HD/TrueHD na telefonu) jsou označené. */
+@Composable
+private fun AudioTrackPanel(
+    tracks: List<AudioTrackOption>,
+    onSelect: (AudioTrackOption) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(360.dp)
+            .padding(vertical = 12.dp, horizontal = 16.dp)
+            .background(Color.Black.copy(alpha = 0.92f), RoundedCornerShape(12.dp))
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Zvuk", color = Color.White, style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = onClose, modifier = Modifier.tvFocusBorder(RoundedCornerShape(8.dp))) { Text("Hotovo") }
+        }
+        if (tracks.isNotEmpty() && tracks.none { it.supported }) {
+            Text(
+                "⚠ Telefon neumí žádnou zvukovou stopu tohoto zdroje (DTS-HD/TrueHD). Přehraj ho na TV.",
+                color = Color(0xFFFFB74D), style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        }
+        tracks.forEach { t ->
+            SubtitleRow(
+                label = t.label,
+                sub = if (!t.supported) "telefon neumí přehrát" else "",
+                selected = t.selected,
+                onClick = { onSelect(t) },
+            )
+        }
+    }
+}
+
+/** TEMPO: čitelný popis zvukové stopy (jazyk · kodek · kanály). */
+private fun audioTrackLabel(f: Format, i: Int): String {
+    val lang = f.language?.takeIf { it.isNotBlank() && !it.equals("und", true) }?.uppercase()
+    val parts = listOfNotNull(lang, audioCodecName(f), f.channelCount.takeIf { it > 0 }?.let { channelLabel(it) })
+    return parts.joinToString(" · ").ifBlank { f.label ?: "Stopa ${i + 1}" }
+}
+
+/** TEMPO: lidský název audio kodeku z MIME (pro odlišení DTS-HD/TrueHD od AC3/AAC). */
+private fun audioCodecName(f: Format): String? = when (f.sampleMimeType) {
+    MimeTypes.AUDIO_AC3 -> "Dolby Digital"
+    MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "Dolby Digital+"
+    MimeTypes.AUDIO_TRUEHD -> "TrueHD"
+    MimeTypes.AUDIO_DTS -> "DTS"
+    MimeTypes.AUDIO_DTS_HD -> "DTS-HD"
+    MimeTypes.AUDIO_DTS_EXPRESS -> "DTS Express"
+    MimeTypes.AUDIO_AAC -> "AAC"
+    MimeTypes.AUDIO_OPUS -> "Opus"
+    MimeTypes.AUDIO_FLAC -> "FLAC"
+    MimeTypes.AUDIO_MPEG, MimeTypes.AUDIO_MPEG_L2 -> "MP3"
+    else -> f.sampleMimeType?.substringAfter('/')?.uppercase()
+}
+
+private fun channelLabel(c: Int): String = when (c) {
+    1 -> "Mono"; 2 -> "Stereo"; 6 -> "5.1"; 7 -> "6.1"; 8 -> "7.1"; else -> "${c}ch"
 }

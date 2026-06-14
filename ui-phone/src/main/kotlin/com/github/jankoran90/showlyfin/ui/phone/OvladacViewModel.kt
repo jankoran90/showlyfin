@@ -78,6 +78,12 @@ class OvladacViewModel @Inject constructor(
         val subColorSlots: List<Int> = DEFAULT_COLOR_SLOTS,
         /** CONSOLE: časový posun titulků na TV v ms (− = dřív, + = později). */
         val subOffsetMs: Int = 0,
+        /**
+         * TEMPO: přeškálování časů titulků poměrem FPS (1.0 = synchronní). Když jsou titulky natočené
+         * pro jiné snímkování než video (např. PAL 25 vs 23,976 film), konstantní posun nestačí — časy
+         * se musí násobit `subFps/videoFps`. Ephemerální (per-release, neukládá se přes nový cast).
+         */
+        val subFpsScale: Double = 1.0,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -110,6 +116,8 @@ class OvladacViewModel @Inject constructor(
 
     /** WINNOW item 4: pošle uložený styl titulků/obrazu na box (re-aplikace při novém externím castu). */
     private fun reapplyDisplayConfig() {
+        // TEMPO: nový cast = nový release → FPS přeškálování zpět na synchronní (box je čerstvý na 1.0).
+        _state.update { it.copy(subFpsScale = 1.0) }
         val s = _state.value
         sendDisplayConfig(
             resizeMode = s.displayResizeMode,
@@ -427,16 +435,27 @@ class OvladacViewModel @Inject constructor(
         sendDisplayConfig(subOffsetMs = 0)
     }
 
+    /**
+     * TEMPO: nastav přeškálování titulků dle FPS (poměr `subFps/videoFps`). 1.0 = synchronní (vypnuto).
+     * Box re-timestampuje SRT (násobí časy) a reloadne na aktuální pozici. Kombinuje se s posunem.
+     */
+    fun setSubFpsScale(scale: Double) {
+        val v = scale.coerceIn(0.5, 2.0)
+        _state.update { it.copy(subFpsScale = v) }
+        sendDisplayConfig(subFpsScale = v)
+    }
+
     private fun sendDisplayConfig(
         resizeMode: String? = null,
         subFontSizeSp: Int? = null,
         subColorArgb: Int? = null,
         subBottomMarginPct: Int? = null,
         subOffsetMs: Int? = null,
+        subFpsScale: Double? = null,
     ) {
         viewModelScope.launch {
             val c = creds() ?: return@launch
-            naTv.castFerryConfig(c.url, c.token, resizeMode, subFontSizeSp, subColorArgb, subBottomMarginPct, subOffsetMs)
+            naTv.castFerryConfig(c.url, c.token, resizeMode, subFontSizeSp, subColorArgb, subBottomMarginPct, subOffsetMs, subFpsScale)
         }
     }
 

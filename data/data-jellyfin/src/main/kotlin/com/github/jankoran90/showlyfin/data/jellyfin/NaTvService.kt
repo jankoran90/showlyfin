@@ -403,6 +403,7 @@ class NaTvService @Inject constructor(
         subColorArgb: Int? = null,
         subBottomMarginPct: Int? = null,
         subOffsetMs: Int? = null,
+        subFpsScale: Double? = null,
     ): Boolean {
         if (baseUrl.isBlank() || token.isBlank()) return false
         val target = pickWatchSession(getSessions(baseUrl, token)) ?: return false
@@ -412,6 +413,8 @@ class NaTvService @Inject constructor(
             subColorArgb?.let { put("subColorArgb", it) }
             subBottomMarginPct?.let { put("subBottomMarginPct", it) }
             subOffsetMs?.let { put("subOffsetMs", it) }
+            // TEMPO: poměr FPS pro přeškálování časů titulků na boxu (1.0 = synchronní).
+            subFpsScale?.let { put("subFpsScale", it) }
         }
         return sendGeneralCommand(baseUrl, token, target.sessionId, "SendString", mapOf("String" to "FERRYCFG1:$json"))
     }

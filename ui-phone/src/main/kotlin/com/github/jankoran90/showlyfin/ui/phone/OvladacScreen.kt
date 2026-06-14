@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -196,7 +198,7 @@ private fun SystemPowerCard(sceneStatus: String?, vm: OvladacViewModel) {
  * CONSOLE (SHW-39): nastavení obrazu a titulků běžícího externího streamu na TV (z telefonu).
  * Posílá se na box přes FERRYCFG kanál; box aplikuje na PlayerView/ExoPlayer. Sbalitelné.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun DisplaySettingsCard(state: OvladacViewModel.UiState, vm: OvladacViewModel) {
     var expanded by remember { mutableStateOf(false) }
@@ -283,6 +285,32 @@ private fun DisplaySettingsCard(state: OvladacViewModel.UiState, vm: OvladacView
                         FilledTonalIconButton(onClick = { vm.nudgeSubOffset(-100) }) { Icon(Icons.Filled.Remove, "Titulky dřív") }
                         TextButton(onClick = { vm.resetSubOffset() }) { Text("0") }
                         FilledTonalIconButton(onClick = { vm.nudgeSubOffset(100) }) { Icon(Icons.Filled.Add, "Titulky později") }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                // TEMPO: snímkování titulků — když titulky postupně utíkají (jsou v jiném FPS než video,
+                // typicky PAL 25 vs film 23,976), konstantní posun nestačí → přeškálovat časy poměrem FPS.
+                Text("Snímkování titulků", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    if (state.subFpsScale == 1.0) "Když titulky postupně utíkají (jiné FPS než video)"
+                    else "přeškálováno ×%.4f".format(state.subFpsScale),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                val fpsPresets = listOf(
+                    "Synchronní" to 1.0,
+                    "25→23,976" to 25.0 / 23.976,
+                    "23,976→25" to 23.976 / 25.0,
+                    "24→25" to 24.0 / 25.0,
+                    "25→24" to 25.0 / 24.0,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    fpsPresets.forEach { (label, scale) ->
+                        FilterChip(
+                            selected = kotlin.math.abs(state.subFpsScale - scale) < 0.0005,
+                            onClick = { vm.setSubFpsScale(scale) },
+                            label = { Text(label) },
+                        )
                     }
                 }
             }
