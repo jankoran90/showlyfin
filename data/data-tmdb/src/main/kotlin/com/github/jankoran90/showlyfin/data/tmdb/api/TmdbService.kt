@@ -70,6 +70,18 @@ interface TmdbService {
         @Query("language") language: String = "cs-CZ",
     ): TmdbSearchShowResponse
 
+    // COMPASS C3 (SHW-44) — hledání lidí a vydavatelství.
+    @GET("search/person?include_adult=false")
+    suspend fun searchPeople(
+        @Query("query") query: String,
+        @Query("language") language: String = "cs-CZ",
+    ): TmdbSearchPersonResponse
+
+    @GET("search/company")
+    suspend fun searchCompanies(
+        @Query("query") query: String,
+    ): TmdbSearchCompanyResponse
+
     @GET("discover/movie?include_adult=false&sort_by=popularity.desc")
     suspend fun discoverMovies(
         @Query("with_people") withPeople: String? = null,

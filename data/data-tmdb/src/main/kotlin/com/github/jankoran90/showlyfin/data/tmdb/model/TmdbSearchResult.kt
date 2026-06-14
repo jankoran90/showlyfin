@@ -37,3 +37,31 @@ data class TmdbSearchShowItem(
     val popularity: Float? = null,
     val genre_ids: List<Int>? = null,
 )
+
+// COMPASS C3 (SHW-44) — univerzální hledání nad lidmi a vydavatelstvími (`/search/person`,
+// `/search/company`). Doplňuje add-source pro kategorie Oblíbených Producenti/Skladatelé/Vydavatelství.
+data class TmdbSearchPersonResponse(
+    val page: Int? = null,
+    val results: List<TmdbSearchPersonItem> = emptyList(),
+)
+
+data class TmdbSearchPersonItem(
+    val id: Long,
+    val name: String? = null,
+    val profile_path: String? = null,
+    /** Acting / Directing / Production / Sound / Writing … — určuje výchozí roli při přidání do Oblíbených. */
+    val known_for_department: String? = null,
+    val popularity: Float? = null,
+)
+
+data class TmdbSearchCompanyResponse(
+    val page: Int? = null,
+    val results: List<TmdbSearchCompanyItem> = emptyList(),
+)
+
+data class TmdbSearchCompanyItem(
+    val id: Long,
+    val name: String? = null,
+    val logo_path: String? = null,
+    val origin_country: String? = null,
+)

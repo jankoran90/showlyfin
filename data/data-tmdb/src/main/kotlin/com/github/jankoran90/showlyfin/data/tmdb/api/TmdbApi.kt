@@ -95,6 +95,18 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
             else service.searchShows(query, language).results
         } catch (e: Throwable) { emptyList() }
 
+    override suspend fun searchPeople(query: String, language: String): List<TmdbSearchPersonItem> =
+        try {
+            if (query.isBlank()) emptyList()
+            else service.searchPeople(query, language).results
+        } catch (e: Throwable) { emptyList() }
+
+    override suspend fun searchCompanies(query: String): List<TmdbSearchCompanyItem> =
+        try {
+            if (query.isBlank()) emptyList()
+            else service.searchCompanies(query).results
+        } catch (e: Throwable) { emptyList() }
+
     override suspend fun discoverMoviesByPerson(personId: Long, language: String): List<TmdbSearchMovieItem> =
         try {
             if (personId <= 0) emptyList()

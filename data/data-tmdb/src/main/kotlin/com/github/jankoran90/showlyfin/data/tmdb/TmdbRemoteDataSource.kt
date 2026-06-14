@@ -20,6 +20,10 @@ interface TmdbRemoteDataSource {
     suspend fun fetchCollection(collectionId: Long): TmdbCollection?
     suspend fun searchMovies(query: String, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
     suspend fun searchShows(query: String, language: String = "cs-CZ"): List<TmdbSearchShowItem>
+
+    /** COMPASS C3 (SHW-44) — univerzální hledání lidí a vydavatelství. */
+    suspend fun searchPeople(query: String, language: String = "cs-CZ"): List<TmdbSearchPersonItem>
+    suspend fun searchCompanies(query: String): List<TmdbSearchCompanyItem>
     suspend fun discoverMoviesByPerson(personId: Long, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
     suspend fun discoverMoviesByCompany(companyId: Long, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
 

@@ -102,6 +102,9 @@ internal sealed interface Destination {
     // Uploader — už není tab lišty, otevírá se z Nastavení
     data object Uploader : Destination
 
+    // COMPASS C3 — univerzální hledání (sub-screen, otevírá se z horního pole)
+    data object Search : Destination
+
     // Poslech sub-screens
     data class AudiobookDetail(val itemId: String, val parent: Destination) : Destination
     data class PodcastDetail(val itemId: String, val parent: Destination) : Destination
@@ -158,6 +161,7 @@ private fun Destination.sectionLabel(activeSubsection: String?): String = when (
         else -> "Sleduj"
     }
     Destination.Oblibeni -> "Oblíbení"
+    Destination.Search -> "Hledání"
     Destination.Listen -> "Poslech"
     else -> "Zpět"
 }
@@ -478,7 +482,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     AnimatedVisibility(visible = topBarVisible) {
                         AppTopBar(
                             onMenuClick = { scope.launch { drawerState.open() } },
-                            onSearchClick = { scope.launch { snackbarHostState.showSnackbar("Hledání bude brzy") } },
+                            onSearchClick = { currentDestination = Destination.Search },
                         )
                     }
                 }
@@ -627,6 +631,28 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             parent = Destination.Oblibeni,
                         )
                     },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.Search -> SearchScreen(
+                    onOpenDetail = { tmdb, title, isShow ->
+                        currentDestination = Destination.Detail(
+                            MediaItem(
+                                traktId = 0L,
+                                tmdbId = tmdb,
+                                imdbId = null,
+                                title = title,
+                                year = null,
+                                overview = null,
+                                rating = null,
+                                genres = null,
+                                type = if (isShow) MediaType.SHOW else MediaType.MOVIE,
+                                posterPath = null,
+                                backdropPath = null,
+                            ),
+                            parent = Destination.Search,
+                        )
+                    },
+                    onBack = { currentDestination = bottomTab },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Ovladac -> OvladacScreen(
