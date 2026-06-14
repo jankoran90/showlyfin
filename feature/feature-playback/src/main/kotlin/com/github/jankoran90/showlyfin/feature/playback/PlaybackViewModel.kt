@@ -44,15 +44,31 @@ class PlaybackViewModel @Inject constructor(
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
     fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null) {
+        // PICKUP: u externích streamů (Stremio/RD) si pozici pamatujeme lokálně (Jellyfin ji řeší přes
+        // server). Klíč = stejný stabilní sourceKey (imdb [+ s/e]) jako u titulků. Když existuje uložená
+        // pozice, vyplníme resumePositionMs → přehrávač nabídne dialog „Pokračovat / Od začátku".
+        query = subtitleQuery?.takeIf { it.imdb.isNotBlank() }
+        val savedResume = query?.let { prefs.getLong("resume_${sourceKey(it)}", 0L) } ?: 0L
         _state.update {
             it.copy(
                 isLoading = false, title = title, streamUrl = url,
-                positionMs = 0L, resumePositionMs = 0L,
+                positionMs = 0L, resumePositionMs = savedResume,
             )
         }
-        if (subtitleQuery != null && subtitleQuery.imdb.isNotBlank() && uploaderBaseUrl.isNotBlank()) {
-            query = subtitleQuery
+        if (query != null && uploaderBaseUrl.isNotBlank()) {
             loadSubtitles()
+        }
+    }
+
+    /** PICKUP: ulož/aktualizuj pozici externího streamu pro pozdější „Pokračovat".
+     *  Ukládá jen smysluplný úsek (od ~5 s); v posledních 30 s = dokoukáno → resume zahodí. */
+    fun saveExternalPosition(positionMs: Long, durationMs: Long) {
+        val key = query?.let { sourceKey(it) } ?: return
+        when {
+            durationMs > 0L && positionMs >= durationMs - 30_000L ->
+                prefs.edit().remove("resume_$key").apply()
+            positionMs >= 5_000L ->
+                prefs.edit().putLong("resume_$key", positionMs).apply()
         }
     }
 

@@ -253,6 +253,8 @@ fun PlaybackScreen(
         }
         exoPlayer.addListener(listener)
         onDispose {
+            // PICKUP: ulož finální pozici externího streamu před uvolněním přehrávače.
+            if (externalUrl != null) viewModel.saveExternalPosition(exoPlayer.currentPosition, exoPlayer.duration)
             view.keepScreenOn = false
             exoPlayer.removeListener(listener)
             exoPlayer.release()
@@ -313,6 +315,15 @@ fun PlaybackScreen(
                 null
             }
             delay(100)
+        }
+    }
+    // PICKUP: u externích streamů (Stremio/RD) průběžně ukládej pozici pro pozdější „Pokračovat".
+    // (Jellyfin řeší resume přes server.) Save i v onDispose pro případ rychlého odchodu.
+    LaunchedEffect(resumeDecided, externalUrl) {
+        if (!resumeDecided || externalUrl == null) return@LaunchedEffect
+        while (true) {
+            delay(5000)
+            viewModel.saveExternalPosition(exoPlayer.currentPosition, exoPlayer.duration)
         }
     }
     // auto-hide controls (ne když je otevřený panel titulků)
