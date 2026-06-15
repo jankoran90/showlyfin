@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.playback.service
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.SharedPreferences
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -14,7 +15,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
+import dagger.hilt.android.AndroidEntryPoint
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * MARQUEE (SHW-57): hostí ExoPlayer pro **filmový** přehrávač jako [MediaSessionService], takže ho
@@ -30,13 +35,21 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
  * dál + ovládání v notifikaci/na zámku (controller se odpojí, služba zůstane foreground a hraje).
  * Tlačítko Zpět v přehrávači = konec → UI pošle [ACTION_STOP] → stop + stopSelf.
  */
+@AndroidEntryPoint
 @OptIn(UnstableApi::class)
 class MoviePlayerService : MediaSessionService() {
 
+    @Inject @Named("traktPreferences") lateinit var prefs: SharedPreferences
+
     private var session: MediaSession? = null
+
+    /** Plan EVEN — DRC/normalizér FILMU. Default VYP; jen telefon (na TV hraje box = passthrough). */
+    private var audioBoost: AudioBoost? = null
 
     override fun onCreate() {
         super.onCreate()
+        // Plan EVEN — pinneme stabilní audio session id pro připojení filmového DRC (jen telefon).
+        val audioSessionId = C.generateAudioSessionIdV21(this)
         val player = ExoPlayer.Builder(this)
             // TEMPO Fáze C: FFmpeg SW dekodér (NextLib) pro DTS/DTS-HD core/TrueHD, které telefon nemá
             // v HW → jinak u REMUXů ticho. EXTENSION_RENDERER_MODE_ON = HW dekodér má přednost, ffmpeg
@@ -71,6 +84,13 @@ class MoviePlayerService : MediaSessionService() {
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                     .build()
             }
+        // Plan EVEN — filmové DRC je opt-in (default VYP). Když je zapnuté, připojí se na session id
+        // TOHOTO přehrávače = jen telefon. Na TV běží yellyfin/box → passthrough do AVR se nedotkne.
+        player.setAudioSessionId(audioSessionId)
+        val drcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0)
+        if (drcLevel > 0) {
+            audioBoost = AudioBoost(audioSessionId).also { it.apply(drcLevel, AudioBoost.Profile.MOVIE) }
+        }
         session = MediaSession.Builder(this, player)
             // Media3 vyžaduje v rámci JEDNOHO procesu UNIKÁTNÍ session ID. Audioknihová
             // AudiobookPlayerService drží MediaLibrarySession s výchozím prázdným ID ("") → bez
@@ -126,6 +146,8 @@ class MoviePlayerService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        audioBoost?.release()
+        audioBoost = null
         session?.run {
             player.release()
             release()

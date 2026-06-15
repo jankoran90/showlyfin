@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -10,6 +11,8 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
+import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
@@ -70,6 +73,8 @@ data class SettingsUiState(
     val streamFilter: StreamFilterPrefs? = null,
     val streamFilterLoading: Boolean = false,
     val streamFilterError: String? = null,
+    // Plan EVEN — DRC/normalizér filmu (0 Vyp default / 1 Mírná / 2 Střední / 3 Noční); jen telefon.
+    val movieDrcLevel: Int = 0,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
     // Plan MAESTRO — ovládání domácí sestavy (AVR hlasitost + scéna „spustit z vypnuté TV").
@@ -112,6 +117,7 @@ data class ListenSettings(
     val defaultSpeed: Float = 1f,
     val autoAdvanceQueue: Boolean = true,
     val autoMarkFinished: Boolean = true,
+    val drcLevel: Int = 2,
     val continuePodcastAfterQueue: Boolean = false,
     val persistQueue: Boolean = true,
     val downloadWifiOnly: Boolean = false,
@@ -236,7 +242,12 @@ class SettingsViewModel @Inject constructor(
 
     init {
         refreshJellyfinState()
-        _uiState.update { it.copy(traktLoggedIn = traktAuthManager.isLoggedIn()) }
+        _uiState.update {
+            it.copy(
+                traktLoggedIn = traktAuthManager.isLoggedIn(),
+                movieDrcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0),
+            )
+        }
         viewModelScope.launch {
             traktAuthManager.authCodeFlow.collect { code ->
                 _uiState.update { it.copy(isLoading = true, error = null) }
@@ -349,6 +360,7 @@ class SettingsViewModel @Inject constructor(
         defaultSpeed = absPrefs.defaultSpeed,
         autoAdvanceQueue = absPrefs.autoAdvanceQueue,
         autoMarkFinished = absPrefs.autoMarkFinished,
+        drcLevel = absPrefs.listenDrcLevel,
         continuePodcastAfterQueue = absPrefs.continuePodcastAfterQueue,
         persistQueue = absPrefs.persistQueue,
         downloadWifiOnly = absPrefs.downloadWifiOnly,
@@ -396,6 +408,21 @@ class SettingsViewModel @Inject constructor(
     fun setDefaultSpeed(v: Float) = updateListen { defaultSpeed = v }
     fun setAutoAdvanceQueue(v: Boolean) = updateListen { autoAdvanceQueue = v }
     fun setAutoMarkFinished(v: Boolean) = updateListen { autoMarkFinished = v }
+
+    /** Plan EVEN — úroveň DRC/normalizéru poslechu + živé přepnutí běžícího přehrávače. */
+    fun setListenDrcLevel(v: Int) {
+        updateListen { listenDrcLevel = v }
+        appContext.sendBroadcast(
+            Intent(ListenNavSignal.ACTION_LISTEN_DRC_CHANGED).setPackage(appContext.packageName),
+        )
+    }
+
+    /** Plan EVEN — úroveň DRC/normalizéru FILMU (jen telefon). Projeví se při příštím přehrání filmu. */
+    fun setMovieDrcLevel(v: Int) {
+        val lvl = v.coerceIn(0, 3)
+        prefs.edit().putInt(AudioBoost.MOVIE_DRC_KEY, lvl).apply()
+        _uiState.update { it.copy(movieDrcLevel = lvl) }
+    }
     fun setContinuePodcastAfterQueue(v: Boolean) = updateListen { continuePodcastAfterQueue = v }
     fun setPersistQueue(v: Boolean) = updateListen { persistQueue = v }
     fun setDownloadWifiOnly(v: Boolean) = updateListen { downloadWifiOnly = v }

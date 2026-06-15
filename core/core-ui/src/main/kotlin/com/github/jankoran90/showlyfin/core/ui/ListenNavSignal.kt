@@ -19,6 +19,9 @@ object ListenNavSignal {
     /** Broadcast: AudiobookPlayerService -> app obnovi Poslouchej widget pri zmene prehravani. */
     const val ACTION_LISTEN_STATE_CHANGED = "com.github.jankoran90.showlyfin.LISTEN_STATE_CHANGED"
 
+    /** Plan EVEN: Nastavení -> AudiobookPlayerService přepne úroveň DRC/normalizéru za běhu (live). */
+    const val ACTION_LISTEN_DRC_CHANGED = "com.github.jankoran90.showlyfin.LISTEN_DRC_CHANGED"
+
     private val _openListen = MutableStateFlow(0L)
     val openListen = _openListen.asStateFlow()
 

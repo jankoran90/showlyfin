@@ -69,6 +69,16 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_AUTO_ADVANCE, true)
         set(value) = prefs.edit { putBoolean(KEY_AUTO_ADVANCE, value) }
 
+    /**
+     * Plan EVEN — hlasitostní vyrovnání / DRC normalizér poslechu.
+     * 0 = Vyp, 1 = Mírná, 2 = Střední (default), 3 = Silná, 4 = Noční.
+     * Vyrovná tiché vs. hlasité epizody/kapitoly (DynamicsProcessing kompresor + limiter + boost).
+     * Default ON (úroveň Střední) — explicitní přání usera, tiché kapitoly v poslechu.
+     */
+    var listenDrcLevel: Int
+        get() = prefs.getInt(KEY_DRC_LEVEL, 2)
+        set(value) = prefs.edit { putInt(KEY_DRC_LEVEL, value.coerceIn(0, 4)) }
+
     /** Na konci epizody ji automaticky označit jako dokončenou na serveru. */
     var autoMarkFinished: Boolean
         get() = prefs.getBoolean(KEY_AUTO_MARK_FINISHED, true)
@@ -251,6 +261,7 @@ class AbsPreferences @Inject constructor(
         private const val KEY_LAST_BOOK_SPEED = "listen_last_book_speed"
         private const val KEY_LAST_PODCAST_SPEED = "listen_last_podcast_speed"
         private const val KEY_AUTO_ADVANCE = "listen_auto_advance"
+        private const val KEY_DRC_LEVEL = "listen_drc_level"
         private const val KEY_AUTO_MARK_FINISHED = "listen_auto_mark_finished"
         private const val KEY_CONTINUE_PODCAST = "listen_continue_podcast"
         private const val KEY_PERSIST_QUEUE = "listen_persist_queue"

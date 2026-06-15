@@ -278,6 +278,23 @@ fun SettingsScreen(
                 }
             }
             Spacer(Modifier.height(16.dp))
+            // Plan EVEN — DRC/normalizér filmu (opt-in, default Vyp). Jen telefon (na TV passthrough).
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    ListenGroupTitle("Hlasitost a vyrovnání (film)")
+                    ListenInfoText("Krotí hlasité přestřelky (např. na noc) a jemně zvedá dialogy. Výchozí vypnuto. Platí jen pro přehrávání v telefonu — přehrávání na TV (přes box) se nedotkne, passthrough do AVR zůstane. Projeví se při příštím spuštění filmu.")
+                    ListenChipRow(
+                        title = "Úroveň",
+                        options = listOf("Vyp" to 0, "Mírná" to 1, "Střední" to 2, "Noční" to 3),
+                        selected = uiState.movieDrcLevel,
+                        onSelect = { viewModel.setMovieDrcLevel(it) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
             StremioFilterSection(
                 sf = uiState.streamFilter,
                 loading = uiState.streamFilterLoading,
@@ -676,6 +693,16 @@ private fun ListenSettingsCard(uiState: SettingsUiState, vm: SettingsViewModel) 
             )
             ListenSwitchRow("Auto-přehrát další z fronty", "Po dokončení epizody přejít na další ve frontě.", s.autoAdvanceQueue) { vm.setAutoAdvanceQueue(it) }
             ListenSwitchRow("Označit dokončené na konci", "Na konci epizody ji na serveru označit jako přehranou.", s.autoMarkFinished) { vm.setAutoMarkFinished(it) }
+
+            // Plan EVEN — DRC normalizér / booster poslechu.
+            ListenGroupTitle("Hlasitost a vyrovnání")
+            ListenInfoText("Vyrovná tiché a hlasité epizody/kapitoly a zvedne potichu nahraný obsah (auto DRC + normalizér). Vyšší úroveň = plošší dynamika. „Noční“ navíc krotí špičky pro tichý poslech. Mění se i za běhu přehrávání.")
+            ListenChipRow(
+                title = "Úroveň",
+                options = listOf("Vyp" to 0, "Mírná" to 1, "Střední" to 2, "Silná" to 3, "Noční" to 4),
+                selected = s.drcLevel,
+                onSelect = { vm.setListenDrcLevel(it) },
+            )
 
             ListenGroupTitle("Fronta")
             ListenSwitchRow("Pokračovat v podcastu", "Po vyprázdnění fronty přehrát další nepřehranou epizodu téhož podcastu.", s.continuePodcastAfterQueue) { vm.setContinuePodcastAfterQueue(it) }

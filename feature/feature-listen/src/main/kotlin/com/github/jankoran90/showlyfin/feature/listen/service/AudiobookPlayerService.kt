@@ -1,9 +1,13 @@
 package com.github.jankoran90.showlyfin.feature.listen.service
 
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
+import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -16,6 +20,7 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
@@ -63,6 +68,16 @@ class AudiobookPlayerService : MediaLibraryService() {
     private var metaJob: Job? = null
     private var sleepJob: Job? = null
 
+    /** Plan EVEN — DRC/normalizér napojený na audio session id přehrávače. */
+    private var audioBoost: AudioBoost? = null
+
+    /** Reaguje na změnu úrovně DRC v Nastavení → přepne efekt za běhu. */
+    private val drcReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            audioBoost?.apply(absPrefs.listenDrcLevel, AudioBoost.Profile.LISTEN)
+        }
+    }
+
     /** Cache položek vrácených v onGetChildren (pro onGetItem). Přístup jen z main threadu. */
     private val itemCache = HashMap<String, MediaItem>()
 
@@ -99,6 +114,9 @@ class AudiobookPlayerService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        // Plan EVEN — pinneme stabilní audio session id, aby na něj šel deterministicky připojit
+        // DRC/normalizér (DynamicsProcessing/LoudnessEnhancer).
+        val audioSessionId = C.generateAudioSessionIdV21(this)
         val exo = ExoPlayer.Builder(this)
             .setHandleAudioBecomingNoisy(true)
             // Android Auto ukáže ±10 s seek tlačítka (BACK/FORWARD sloty hned vedle play/pause)
@@ -113,6 +131,16 @@ class AudiobookPlayerService : MediaLibraryService() {
                 /* handleAudioFocus = */ true,
             )
             .build()
+        // Session id se v media3 nastavuje na instanci (Builder ho nemá) — pinneme ho před přehráním,
+        // ať na něj jde deterministicky připojit DRC/normalizér.
+        exo.setAudioSessionId(audioSessionId)
+        audioBoost = AudioBoost(audioSessionId).also { it.apply(absPrefs.listenDrcLevel, AudioBoost.Profile.LISTEN) }
+        ContextCompat.registerReceiver(
+            this,
+            drcReceiver,
+            IntentFilter(ListenNavSignal.ACTION_LISTEN_DRC_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) { startSync(); startMetaTicker() } else { stopSync(); stopMetaTicker(); syncNow() }
@@ -579,6 +607,9 @@ class AudiobookPlayerService : MediaLibraryService() {
 
     override fun onDestroy() {
         syncNow()
+        runCatching { unregisterReceiver(drcReceiver) }
+        audioBoost?.release()
+        audioBoost = null
         session?.run {
             player.release()
             release()
