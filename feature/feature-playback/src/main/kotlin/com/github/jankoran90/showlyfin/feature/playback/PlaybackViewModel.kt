@@ -7,11 +7,15 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleCandidate
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
+import com.github.jankoran90.showlyfin.data.uploader.subtitle.SubtitleTranslationStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
@@ -32,6 +36,7 @@ class PlaybackViewModel @Inject constructor(
     private val deviceInfo: DeviceInfo,
     @Named("traktPreferences") private val prefs: SharedPreferences,
     private val uploaderDs: UploaderRemoteDataSource,
+    private val translateStore: SubtitleTranslationStore,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -44,6 +49,9 @@ class PlaybackViewModel @Inject constructor(
     private var query: SubtitleQuery? = null
     // PICKUP: klíč pozice je oddělený od `query` (titulky), protože resume musí fungovat i BEZ imdb.
     private var resumeKey: String? = null
+    // LINGUA Fáze 3: klíč běžícího/dřívějšího AI překladu + observer sdíleného store (worker na pozadí).
+    private var translateKey: String? = null
+    private var translateObserveJob: Job? = null
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
     fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null) {
@@ -67,6 +75,8 @@ class PlaybackViewModel @Inject constructor(
                 canTranslateAi = false, aiTranslating = false, aiTranslateError = null,
             )
         }
+        // Nový film → zruš observer překladu z minulého (ať jeho Done/Error nepřepíše tenhle film).
+        translateObserveJob?.cancel(); translateObserveJob = null; translateKey = null
         if (query != null && uploaderBaseUrl.isNotBlank()) {
             loadSubtitles()
         }
@@ -99,15 +109,15 @@ class PlaybackViewModel @Inject constructor(
                 _state.update { it.copy(subtitlesLoading = false, subtitleError = e.message ?: "Titulky nedostupné") }
                 return@launch
             }
-            _state.update {
-                it.copy(
-                    subtitlesLoading = false, subtitleCandidates = resp.subtitles,
-                    // LINGUA: 0 CZ titulků + máme imdb → nabídni AI překlad jako poslední zálohu.
-                    canTranslateAi = resp.subtitles.isEmpty() && q.imdb.isNotBlank(),
-                )
-            }
+            _state.update { it.copy(subtitlesLoading = false, subtitleCandidates = resp.subtitles) }
             timber.log.Timber.i("[Titulky] ${resp.subtitles.size} CZ kandidátů, best=${resp.best}")
-            if (resp.subtitles.isEmpty()) return@launch
+            // LINGUA: 0 CZ titulků + máme imdb → AI překlad jako poslední záloha. Fáze 3: dřív
+            // přeložené (persistované) nasaď sám = „nezmizí nikdy"; jinak nabídni tlačítko a pozoruj
+            // překlad běžící na pozadí (worker přežije odchod z přehrávače).
+            if (resp.subtitles.isEmpty()) {
+                if (q.imdb.isNotBlank()) setupAiTranslation(q)
+                return@launch
+            }
 
             // Per-source: aplikuj uložený offset (před výběrem, ať se .srt zapíše s ním) + vyber uloženou stopu.
             val key = sourceKey(q)
@@ -162,47 +172,76 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
-    /** LINGUA Fáze 2: AI překlad EN→CS, když nejsou žádné CZ titulky (poslední záloha). Async —
-     *  backend job + poll (plný film trvá pár minut). Po dokončení přidá AI stopu mezi kandidáty a
-     *  rovnou ji vybere; selhání/timeout → `aiTranslateError`. Cache na serveru = podruhé hned hotovo. */
+    /** LINGUA Fáze 3: připrav AI překlad pro film bez CZ titulků. Když už byl jednou přeložen
+     *  (persistováno), nasaď češtinu **sám bez ptaní** (auto-nasazení po návratu = „nezmizí nikdy").
+     *  Jinak nabídni tlačítko a pozoruj sdílený store — překlad běží ve workeru NA POZADÍ, takže
+     *  doběhne i po odchodu z přehrávače a tady ho jen převezmeme, je-li obrazovka ještě otevřená. */
+    private fun setupAiTranslation(q: SubtitleQuery) {
+        val key = translateStore.keyOf(q.imdb, q.season, q.episode)
+        translateKey = key
+        val doneId = translateStore.doneSubId(key)
+        if (doneId != null) {
+            timber.log.Timber.i("[Lingua] film už přeložen ($key) → nasazuji AI češtinu automaticky")
+            applyAiSubtitle(doneId)
+            return
+        }
+        _state.update { it.copy(canTranslateAi = true) }
+        observeTranslation(key)
+    }
+
+    /** Přidá AI českou stopu mezi kandidáty (není-li už) a vybere ji. Idempotentní. */
+    private fun applyAiSubtitle(subId: String) {
+        val existing = _state.value.subtitleCandidates.indexOfFirst { it.id == subId }
+        if (existing >= 0) {
+            _state.update { it.copy(aiTranslating = false, canTranslateAi = false) }
+            if (_state.value.selectedSubtitleIndex != existing) selectSubtitle(existing)
+            return
+        }
+        val aiCand = SubtitleCandidate(id = subId, title = "AI překlad (čeština)", lang = "cs", imdbMatch = true)
+        val newList = _state.value.subtitleCandidates + aiCand
+        _state.update { it.copy(aiTranslating = false, canTranslateAi = false, subtitleCandidates = newList) }
+        timber.log.Timber.i("[Lingua] AI stopa nasazena $subId")
+        selectSubtitle(newList.lastIndex)
+    }
+
+    /** Sleduje sdílený store (worker na pozadí ho plní) pro daný film a promítá stav do UI. */
+    private fun observeTranslation(key: String) {
+        translateObserveJob?.cancel()
+        translateObserveJob = viewModelScope.launch {
+            translateStore.jobs
+                .map { it[key] }
+                .distinctUntilChanged()
+                .collect { st ->
+                    if (translateKey != key) return@collect
+                    when (st) {
+                        is SubtitleTranslationStore.State.Running ->
+                            _state.update { it.copy(aiTranslating = true, aiTranslateError = null) }
+                        is SubtitleTranslationStore.State.Done -> applyAiSubtitle(st.subId)
+                        is SubtitleTranslationStore.State.Error ->
+                            _state.update { it.copy(aiTranslating = false, aiTranslateError = st.message) }
+                        null -> Unit
+                    }
+                }
+        }
+    }
+
+    /** Uživatel ťukl na „Přeložit do češtiny (AI)" → zařadí překlad NA POZADÍ (přežije odchod
+     *  z přehrávače) + dá vědět notifikací, až je hotovo. UI převezme výsledek přes [observeTranslation]. */
     fun translateSubtitlesAi() {
         val q = query ?: return
         if (q.imdb.isBlank() || _state.value.aiTranslating) return
-        _state.update { it.copy(aiTranslating = true, aiTranslateError = null) }
-        viewModelScope.launch {
-            val started = runCatching {
-                uploaderDs.startSubtitleTranslate(uploaderBaseUrl, uploaderCookie, q.imdb, q.season, q.episode)
-            }.getOrElse { e ->
-                timber.log.Timber.w(e, "[Lingua] start překladu selhal imdb=${q.imdb}")
-                _state.update { it.copy(aiTranslating = false, aiTranslateError = e.message ?: "Překlad se nepodařilo spustit") }
-                return@launch
-            }
-            val jobId = started.jobId.ifBlank { started.subId }
-            var status = started.status
-            var subId = started.subId
-            var err = started.error
-            var waitedMs = 0L
-            while (status == "running" && jobId.isNotBlank() && waitedMs < 360_000L) {  // až 6 min
-                kotlinx.coroutines.delay(3000L)
-                waitedMs += 3000L
-                val s = runCatching {
-                    uploaderDs.getSubtitleTranslateStatus(uploaderBaseUrl, uploaderCookie, jobId)
-                }.getOrNull() ?: continue
-                status = s.status; subId = s.subId; err = s.error
-            }
-            if (status == "done" && subId.isNotBlank()) {
-                val aiCand = SubtitleCandidate(id = subId, title = "AI překlad (čeština)", lang = "cs", imdbMatch = true)
-                val newList = _state.value.subtitleCandidates + aiCand
-                _state.update { it.copy(aiTranslating = false, canTranslateAi = false, subtitleCandidates = newList) }
-                timber.log.Timber.i("[Lingua] překlad hotový ${q.imdb} → $subId, vybírám AI stopu")
-                selectSubtitle(newList.lastIndex)
-            } else {
-                val msg = err ?: if (status == "running") "Překlad trvá déle než obvykle — zkus to za chvíli znovu"
-                                 else "Překlad se nezdařil"
-                _state.update { it.copy(aiTranslating = false, aiTranslateError = msg) }
-                timber.log.Timber.w("[Lingua] překlad neúspěšný ${q.imdb} status=$status err=$err")
-            }
+        val base = uploaderBaseUrl
+        if (base.isBlank()) {
+            _state.update { it.copy(aiTranslateError = "Není nastavený server pro titulky") }
+            return
         }
+        val key = translateStore.keyOf(q.imdb, q.season, q.episode)
+        translateKey = key
+        _state.update { it.copy(aiTranslating = true, aiTranslateError = null) }
+        translateStore.setRunning(key)
+        observeTranslation(key)
+        translateStore.enqueueTranslate(appContext, base, uploaderCookie, q.imdb, _state.value.title, q.season, q.episode)
+        timber.log.Timber.i("[Lingua] překlad zařazen na pozadí ${q.imdb}")
     }
 
     // ── Styl titulků ─────────────────────────────────────────────────────────
