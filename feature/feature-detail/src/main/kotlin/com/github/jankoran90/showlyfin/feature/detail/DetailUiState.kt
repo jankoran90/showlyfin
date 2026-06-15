@@ -94,6 +94,10 @@ data class DetailUiState(
     // Plan WINNOW (SHW-41): zdroj je na RealDebridu blokovaný (DMCA, HTTP 451) — místo tichého skoku
     // do externí Stremio appky ukážeme jasný dialog s vysvětlením + volbou „otevřít ve Stremiu".
     val blockedDmcaMessage: String? = null,
+    // REPRISE (SHW-54): přehrávač (Media3) nezvládl KONTEJNER/KODEK souboru (např. Criterion MKV se
+    // zlib-komprimovanou stopou — `ContentCompAlgo 0`). Místo tichého skoku do externí Stremio appky
+    // ukážeme jasný dialog: zkus jiný release (hraje i na TV + s našimi titulky) / otevři ve Stremiu.
+    val incompatibleFormatMessage: String? = null,
     // CASCADE Fáze 4: krátká info hláška při auto-advance po chybě přehrávání ("zkouším další zdroj…")
     val autoAdvanceInfo: String? = null,
     // RD caching progress (Fáze F) — necachovaný torrent se nahrává na RealDebrid

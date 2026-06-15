@@ -207,6 +207,29 @@ fun DetailScreen(
             dismissButton = { TextButton(onClick = { viewModel.consumeBlockedDmca() }) { Text("Zavřít") } },
         )
     }
+    // REPRISE (SHW-54): soubor nejde přehrát kvůli kontejneru/kodeku (Criterion MKV se zlib stopou apod.)
+    // → jasný dialog místo tichého skoku do Stremia. „Zkusit jiný zdroj" otevře výběr v režimu Vše
+    // (strict=false) → ukáže všechny alternativy (zdrojů bývá dost, jen necacheované).
+    uiState.incompatibleFormatMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { viewModel.consumeIncompatibleFormat() },
+            title = { Text("Soubor nejde přehrát") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.consumeIncompatibleFormat()
+                    viewModel.setStreamStrict(false)
+                    viewModel.openStreamPicker()
+                }) { Text("Zkusit jiný zdroj") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    viewModel.consumeIncompatibleFormat()
+                    onStremio?.invoke(displayItem)
+                }) { Text("Otevřít ve Stremiu") }
+            },
+        )
+    }
     if (uiState.showDownloadMenu) {
         DownloadMenuSheet(
             onSdilej = { viewModel.openSdilejPicker() },

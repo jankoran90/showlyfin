@@ -160,6 +160,7 @@ class DetailViewModel @Inject constructor(
                 pendingPlaybackTitle = "",
                 requestStremioFallback = false,
                 blockedDmcaMessage = null,
+                incompatibleFormatMessage = null,
                 directorName = null,
                 directorMovies = null,
                 studioName = null,
@@ -920,7 +921,16 @@ class DetailViewModel @Inject constructor(
      * Po vyčerpání kandidátů spadni na Stremio (původní chování).
      */
     fun onPlaybackFailed(errorCode: String) =
-        advancePastSource("Zdroj nešel přehrát, zkouším další", CastTarget.LOCAL)
+        advancePastSource("Zdroj nešel přehrát, zkouším další", CastTarget.LOCAL, formatErrorCode = errorCode)
+
+    /**
+     * REPRISE (SHW-54): chyba přehrávače je v KONTEJNERU/KODEKU souboru (ne mrtvý zdroj / síť)?
+     * `ERROR_CODE_PARSING_*` = vadný/nekompatibilní kontejner (např. Criterion MKV se zlib-komprimovanou
+     * stopou `ContentCompAlgo 0`), `ERROR_CODE_DECOD*` = nepodporovaný kodek. U těchto NEskákat tiše
+     * do Stremia — soubor je nehratelný, ale zdrojů bývá víc → nabídnout jiný release.
+     */
+    private fun isFormatError(code: String): Boolean =
+        code.startsWith("ERROR_CODE_PARSING_") || code.startsWith("ERROR_CODE_DECOD")
 
     /**
      * Přeskoč na DALŠÍ okamžitě hratelný kandidát v UŽIVATELOVĚ pořadí (direct url / cached RD).
@@ -928,7 +938,7 @@ class DetailViewModel @Inject constructor(
      * se zachová, aby přeskočení při castu na TV pokračovalo zase na TV (ne lokálně).
      * Pure-downloadable přeskakujeme — auto-retry nemá tiše spustit víceminutový RD download.
      */
-    private fun advancePastSource(message: String, target: CastTarget) {
+    private fun advancePastSource(message: String, target: CastTarget, formatErrorCode: String? = null) {
         val list = _uiState.value.streams
         val prev = lastPlayedStream
         val curIdx = if (prev != null) list.indexOf(prev) else -1
@@ -949,6 +959,17 @@ class DetailViewModel @Inject constructor(
                 )
             }
             playStream(next, target)
+        } else if (formatErrorCode != null && isFormatError(formatErrorCode)) {
+            // REPRISE (SHW-54): Media3 selhal na KONTEJNERU/KODEKU (ne mrtvý zdroj) a žádný další
+            // cached zdroj není → soubor je nehratelný (např. Criterion MKV se zlib stopou). Tichý skok
+            // do Stremia mate ("vyskočí Stremio") → jasný dialog: zkus jiný release (zdrojů bývá víc,
+            // jen necacheované — viz Old Joy: 25 zdrojů, jen 1 cached = ten nehratelný).
+            timber.log.Timber.w("[REPRISE] $formatErrorCode = nehratelný kontejner/kodek, žádný další cached zdroj → dialog 'zkus jiný release' (z idx=$curIdx/${list.size})")
+            _uiState.update { it.copy(
+                isResolvingStream = false,
+                rdDownload = null,
+                incompatibleFormatMessage = "Tenhle soubor přehrávač neumí přehrát (nekompatibilní kontejner nebo kodek — třeba MKV s komprimovanou stopou, časté u Criterion / anime ripů).\n\nZdrojů bývá víc — zkus jiný release. Většina hraje i na TV a s našimi titulky; jen je často potřeba ho nejdřív stáhnout na RealDebrid.",
+            ) }
         } else {
             timber.log.Timber.w("[CASCADE] advance: žádný další hratelný zdroj (z idx=$curIdx/${list.size}) → Stremio fallback")
             _uiState.update { it.copy(isResolvingStream = false, rdDownload = null, requestStremioFallback = true) }
@@ -978,6 +999,8 @@ class DetailViewModel @Inject constructor(
     }
 
     fun consumeBlockedDmca() = _uiState.update { it.copy(blockedDmcaMessage = null) }
+
+    fun consumeIncompatibleFormat() = _uiState.update { it.copy(incompatibleFormatMessage = null) }
 
     /** Stream → RD info_hash (infoHash, jinak první segment cometPath), lowercase. null = nemá. */
     private fun streamRdHash(stream: UploaderStream): String? {
