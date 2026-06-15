@@ -6,6 +6,9 @@ data class PlaybackUiState(
     val isLoading: Boolean = true,
     val title: String = "",
     val streamUrl: String? = null,
+    // MARQUEE: plakát do systémové notifikace / na zámek. Jellyfin = odvozen z JF serveru v load();
+    // externí (Stremio/RD) = TMDB plakát protažený z Detailu přes loadExternal().
+    val posterUrl: String? = null,
     val positionMs: Long = 0L,
     val resumePositionMs: Long = 0L,
     val error: String? = null,

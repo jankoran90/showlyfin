@@ -140,11 +140,17 @@ private val SUBTITLE_COLORS = listOf(
 
 // Titulky NErenderuje ExoPlayer — kreslíme je vlastním overlayem (viz SubtitleOverlay),
 // aby šel posun/přepnutí stopy aplikovat okamžitě bez re-prepare videa (žádný rebuffer).
-private fun buildMediaItem(url: String, title: String): MediaItem =
+private fun buildMediaItem(url: String, title: String, posterUrl: String?): MediaItem =
     MediaItem.Builder()
         .setUri(url)
-        // MARQUEE: název do systémové notifikace / na zámek (MediaController ho předá službě).
-        .setMediaMetadata(MediaMetadata.Builder().setTitle(title.ifBlank { "Přehrávání" }).build())
+        // MARQUEE: název + plakát do systémové notifikace / na zámek (MediaController je předá službě;
+        // remote plakát natáhne média notifikace sama přes svůj bitmap loader).
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title.ifBlank { "Přehrávání" })
+                .setArtworkUri(posterUrl?.let(Uri::parse))
+                .build(),
+        )
         .build()
 
 @OptIn(UnstableApi::class)
@@ -155,6 +161,8 @@ fun PlaybackScreen(
     externalUrl: String? = null,
     externalTitle: String = "",
     subtitleQuery: SubtitleQuery? = null,
+    // MARQUEE: plakát do notifikace u externích streamů (Stremio/RD); Jellyfin si ho odvodí ViewModel.
+    externalPosterUrl: String? = null,
     onBack: () -> Unit,
     // CASCADE Fáze 4: externí stream (Stremio/RD) selhal v ExoPlayeru → zkus dalšího kandidáta
     // místo zobrazení chyby. Volá se jen u externalUrl (Jellyfin přehrávání kandidáty nemá).
@@ -162,7 +170,7 @@ fun PlaybackScreen(
     viewModel: PlaybackViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(itemId, externalUrl) {
-        if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery)
+        if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl)
         else viewModel.load(itemId, positionMs)
     }
 
@@ -273,7 +281,7 @@ fun PlaybackScreen(
         val url = state.streamUrl ?: return@LaunchedEffect
         val c = controller ?: return@LaunchedEffect
         timber.log.Timber.i("[Playback] setMediaItem external=${externalUrl != null} url=${url.take(90)}")
-        c.setMediaItem(buildMediaItem(url, state.title))
+        c.setMediaItem(buildMediaItem(url, state.title, state.posterUrl))
         c.prepare()
         if (state.resumePositionMs <= 0L) {
             resumeDecided = true

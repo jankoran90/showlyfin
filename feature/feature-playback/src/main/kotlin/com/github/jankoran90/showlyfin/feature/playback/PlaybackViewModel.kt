@@ -54,7 +54,7 @@ class PlaybackViewModel @Inject constructor(
     private var translateObserveJob: Job? = null
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
-    fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null) {
+    fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null, posterUrl: String? = null) {
         // PICKUP: u externích streamů (Stremio/RD) si pozici pamatujeme lokálně (Jellyfin ji řeší přes
         // server). Titulky vyžadují imdb (gate beze změny), ALE resume klíčujeme přes resumeKeyOf, který
         // má fallback na název+rok — obsah z Objevit/doporučení má imdb zatím prázdné (TMDB ho dohledá
@@ -68,7 +68,7 @@ class PlaybackViewModel @Inject constructor(
         // si vzápětí nastaví subtitlesLoading=true a naplní vlastní kandidáty.
         _state.update {
             it.copy(
-                isLoading = false, title = title, streamUrl = url,
+                isLoading = false, title = title, streamUrl = url, posterUrl = posterUrl,
                 positionMs = 0L, resumePositionMs = savedResume,
                 subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                 subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
@@ -379,6 +379,8 @@ class PlaybackViewModel @Inject constructor(
                         isLoading = false,
                         title = title,
                         streamUrl = streamUrl,
+                        // MARQUEE: plakát filmu/seriálu z Jellyfinu do systémové notifikace.
+                        posterUrl = "$serverUrl/Items/$itemId/Images/Primary?api_key=$token",
                         positionMs = positionMs,
                         resumePositionMs = resumeMs,
                     )

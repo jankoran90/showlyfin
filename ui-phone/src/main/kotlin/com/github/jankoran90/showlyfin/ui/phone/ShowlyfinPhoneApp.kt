@@ -131,7 +131,7 @@ internal sealed interface Destination {
     data class JellyfinDetail(val itemId: String, val parent: Destination) : Destination
     data class EpisodePicker(val seriesId: String, val seriesName: String, val parent: Destination) : Destination
     data class JellyfinPlayback(val itemId: String, val parent: JellyfinDetail) : Destination
-    data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination, val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null) : Destination
+    data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination, val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null, val posterUrl: String? = null) : Destination
 }
 
 internal data class JellyfinLibraryRef(
@@ -735,7 +735,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         }
                     },
                     onPlayStreamUrl = { url, title, subQuery ->
-                        currentDestination = Destination.Player(itemId = null, externalUrl = url, title = title, parent = dest, subtitleQuery = subQuery)
+                        currentDestination = Destination.Player(itemId = null, externalUrl = url, title = title, parent = dest, subtitleQuery = subQuery, posterUrl = dest.item.posterUrl())
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -748,6 +748,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         externalUrl = dest.externalUrl,
                         externalTitle = dest.title,
                         subtitleQuery = dest.subtitleQuery,
+                        externalPosterUrl = dest.posterUrl,
                         onBack = { currentDestination = dest.parent },
                         onPlaybackFailed = { code ->
                             currentDestination = dest.parent   // pop na Detail, kde žije candidate list
