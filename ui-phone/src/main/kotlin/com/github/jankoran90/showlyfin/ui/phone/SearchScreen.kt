@@ -142,6 +142,36 @@ internal fun SearchScreen(
             }
         }
 
+        // COMPASS C4 (SHW-44): řazení vzestup/sestup dle kritéria. Kritéria filtrovaná dle rozsahu
+        // (rok/hodnocení jen u filmů/seriálů), směr přepíná tlačítko ▲/▼; vše klientsky (bez další sítě).
+        if (state.results.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 2.dp),
+                ) {
+                    items(SearchSort.entries.filter { it.appliesTo(state.scope) }) { sort ->
+                        FilterChip(
+                            selected = state.sortBy == sort,
+                            onClick = { vm.onSortChange(sort) },
+                            label = { Text(sort.label) },
+                        )
+                    }
+                }
+                IconButton(onClick = { vm.toggleSortDirection() }) {
+                    Text(
+                        text = if (state.sortDesc) "▼" else "▲",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
+            }
+        }
+
         when {
             state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
             state.query.isBlank() -> CenteredHint("Začni psát a hledej napříč filmy, seriály, lidmi a vydavatelstvími.")
