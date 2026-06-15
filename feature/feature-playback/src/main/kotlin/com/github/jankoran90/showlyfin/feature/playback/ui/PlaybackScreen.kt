@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.playback.ui
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
@@ -81,21 +82,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
-import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
+import com.github.jankoran90.showlyfin.feature.playback.service.MoviePlayerService
+import com.google.common.util.concurrent.MoreExecutors
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
 import kotlinx.coroutines.delay
@@ -141,8 +140,12 @@ private val SUBTITLE_COLORS = listOf(
 
 // Titulky NErenderuje ExoPlayer — kreslíme je vlastním overlayem (viz SubtitleOverlay),
 // aby šel posun/přepnutí stopy aplikovat okamžitě bez re-prepare videa (žádný rebuffer).
-private fun buildMediaItem(url: String): MediaItem =
-    MediaItem.Builder().setUri(url).build()
+private fun buildMediaItem(url: String, title: String): MediaItem =
+    MediaItem.Builder()
+        .setUri(url)
+        // MARQUEE: název do systémové notifikace / na zámek (MediaController ho předá službě).
+        .setMediaMetadata(MediaMetadata.Builder().setTitle(title.ifBlank { "Přehrávání" }).build())
+        .build()
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -167,42 +170,12 @@ fun PlaybackScreen(
     val context = LocalContext.current
     val view = LocalView.current
 
-    val exoPlayer = remember {
-        val upstream = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(30_000)
-            .setReadTimeoutMs(30_000)
-            .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
-        // DefaultDataSource umí file:// (sideload .srt z cacheDir) i http(s) (video přes naši UA factory).
-        // Bez tohoto by se titulkový file:// načítal HTTP factory → selhal → titulky se nezobrazí.
-        val dataSourceFactory = DefaultDataSource.Factory(context, upstream)
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(60_000, 300_000, 5_000, 10_000)
-            .build()
-        ExoPlayer.Builder(context)
-            // TEMPO Fáze C: FFmpeg SW dekodér (NextLib) pro DTS/DTS-HD core/TrueHD, které Pixel/telefon
-            // nemá v HW → jinak u REMUXů ticho. EXTENSION_RENDERER_MODE_ON = HW dekodér má přednost
-            // (AAC/AC3/EAC3), ffmpeg jen vyplní díry → šetří CPU/baterii. JEN telefon (showlyfin),
-            // NIKDY box (yellyfin drží passthrough DTS-HD do AVR).
-            .setRenderersFactory(
-                NextRenderersFactory(context.applicationContext)
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-                    .setEnableDecoderFallback(true)
-            )
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-            .setLoadControl(loadControl)
-            .setSeekBackIncrementMs(5_000)
-            .setSeekForwardIncrementMs(5_000)
-            .build().apply {
-                trackSelectionParameters = trackSelectionParameters.buildUpon()
-                    // Titulky kreslíme VLASTNÍM overlayem (externí .srt z titulky.com, s offsetem/stylem).
-                    // Vestavěné text stopy (často cizojazyčné — viděné ruské) nesmí přehrávač renderovat
-                    // sám, jinak se zobrazí ZÁROVEŇ s našimi. Vypneme celý text renderer; přepínání jde
-                    // přes naše CC menu. (Box/yellyfin se chová stejně — ignoruje vestavěné.)
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                    .build()
-            }
-    }
+    // MARQUEE (SHW-57): přehrávač drží MoviePlayerService (MediaSessionService) → ovládání z
+    // notifikace/zámku/sluchátek (stejně jako audioknihy). Napojíme se přes MediaController, který
+    // se připojuje asynchronně — než je hotový, je `controller == null` a efekty čekají.
+    // Stavbu ExoPlayeru (NextLib FFmpeg dekodér, dataSource s UA, loadControl, vypnutý text renderer)
+    // dělá služba v onCreate; tady jen řídíme přes Player rozhraní controlleru.
+    var controller by remember { mutableStateOf<MediaController?>(null) }
 
     var isPlaying by remember { mutableStateOf(true) }
     var position by remember { mutableLongStateOf(0L) }
@@ -238,6 +211,8 @@ fun PlaybackScreen(
 
     DisposableEffect(Unit) {
         view.keepScreenOn = true
+        val token = SessionToken(context, ComponentName(context, MoviePlayerService::class.java))
+        val future = MediaController.Builder(context, token).buildAsync()
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -251,13 +226,24 @@ fun PlaybackScreen(
                 }
             }
         }
-        exoPlayer.addListener(listener)
+        future.addListener({
+            runCatching { future.get() }.getOrNull()?.let { c ->
+                c.addListener(listener)
+                isPlaying = c.isPlaying
+                controller = c
+            }
+        }, MoreExecutors.directExecutor())
         onDispose {
-            // PICKUP: ulož finální pozici externího streamu před uvolněním přehrávače.
-            if (externalUrl != null) viewModel.saveExternalPosition(exoPlayer.currentPosition, exoPlayer.duration)
+            // PICKUP: ulož finální pozici externího streamu. Přehrávač NEuvolňujeme — drží ho služba,
+            // takže navigace jinam v appce hraje dál na pozadí (controller jen odpojíme). Skutečné
+            // ukončení (Zpět) řeší exitPlayback() → ACTION_STOP službě.
+            controller?.let { c ->
+                if (externalUrl != null) viewModel.saveExternalPosition(c.currentPosition, c.duration)
+                c.removeListener(listener)
+            }
             view.keepScreenOn = false
-            exoPlayer.removeListener(listener)
-            exoPlayer.release()
+            MediaController.releaseFuture(future)
+            controller = null
         }
     }
 
@@ -283,33 +269,36 @@ fun PlaybackScreen(
 
     // Media prepare — jen video. Titulky kreslíme sami (overlay), takže se MediaItem
     // už nikdy nepřestavuje kvůli titulkům (žádný rebuffer při posunu / přepnutí stopy).
-    LaunchedEffect(state.streamUrl) {
+    LaunchedEffect(state.streamUrl, controller) {
         val url = state.streamUrl ?: return@LaunchedEffect
+        val c = controller ?: return@LaunchedEffect
         timber.log.Timber.i("[Playback] setMediaItem external=${externalUrl != null} url=${url.take(90)}")
-        exoPlayer.setMediaItem(buildMediaItem(url))
-        exoPlayer.prepare()
+        c.setMediaItem(buildMediaItem(url, state.title))
+        c.prepare()
         if (state.resumePositionMs <= 0L) {
             resumeDecided = true
-            exoPlayer.playWhenReady = true
+            c.playWhenReady = true
         }
     }
 
     // position/duration poll
-    LaunchedEffect(resumeDecided) {
+    LaunchedEffect(resumeDecided, controller) {
         if (!resumeDecided) return@LaunchedEffect
+        val c = controller ?: return@LaunchedEffect
         while (true) {
-            position = exoPlayer.currentPosition
-            duration = exoPlayer.duration.coerceAtLeast(0L)
+            position = c.currentPosition
+            duration = c.duration.coerceAtLeast(0L)
             delay(500)
         }
     }
     // Aktivní titulek — vlastní render. Offset se aplikuje live (t = pozice − offset).
-    LaunchedEffect(resumeDecided) {
+    LaunchedEffect(resumeDecided, controller) {
         if (!resumeDecided) return@LaunchedEffect
+        val c = controller ?: return@LaunchedEffect
         while (true) {
             val s = viewModel.state.value
             currentSubtitle = if (s.selectedSubtitleIndex >= 0 && s.subtitleCues.isNotEmpty()) {
-                val t = exoPlayer.currentPosition - s.subtitleStyle.offsetMs
+                val t = c.currentPosition - s.subtitleStyle.offsetMs
                 s.subtitleCues.firstOrNull { t in it.startMs..it.endMs }?.text
             } else {
                 null
@@ -319,11 +308,12 @@ fun PlaybackScreen(
     }
     // PICKUP: u externích streamů (Stremio/RD) průběžně ukládej pozici pro pozdější „Pokračovat".
     // (Jellyfin řeší resume přes server.) Save i v onDispose pro případ rychlého odchodu.
-    LaunchedEffect(resumeDecided, externalUrl) {
+    LaunchedEffect(resumeDecided, externalUrl, controller) {
         if (!resumeDecided || externalUrl == null) return@LaunchedEffect
+        val c = controller ?: return@LaunchedEffect
         while (true) {
             delay(5000)
-            viewModel.saveExternalPosition(exoPlayer.currentPosition, exoPlayer.duration)
+            viewModel.saveExternalPosition(c.currentPosition, c.duration)
         }
     }
     // auto-hide controls (ne když je otevřený panel titulků)
@@ -352,13 +342,16 @@ fun PlaybackScreen(
 
     // TEMPO: vyber audio stopu (override) — telefon ji pak hraje, pokud ji umí dekódovat.
     val applyAudio: (AudioTrackOption) -> Unit = { opt ->
-        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-            .setOverrideForType(TrackSelectionOverride(opt.group, opt.trackIndex))
-            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-            .build()
+        controller?.let { c ->
+            c.trackSelectionParameters = c.trackSelectionParameters.buildUpon()
+                .setOverrideForType(TrackSelectionOverride(opt.group, opt.trackIndex))
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                .build()
+        }
     }
     // TEMPO: sleduj stopy přehrávače → seznam audio stop (+ co telefon umí) + auto-fallback na podporovanou.
-    DisposableEffect(exoPlayer) {
+    DisposableEffect(controller) {
+        val c = controller ?: return@DisposableEffect onDispose { }
         val listener = object : Player.Listener {
             override fun onTracksChanged(tracks: Tracks) {
                 val opts = tracks.groups
@@ -387,19 +380,30 @@ fun PlaybackScreen(
                 }
             }
         }
-        exoPlayer.addListener(listener)
-        onDispose { exoPlayer.removeListener(listener) }
+        c.addListener(listener)
+        onDispose { c.removeListener(listener) }
     }
     // TEMPO: hlášku o zvuku po chvíli skryj.
     LaunchedEffect(audioNotice) {
         if (audioNotice != null) { delay(6000); audioNotice = null }
     }
 
+    // MARQUEE: skutečné opuštění přehrávače → ukonči přehrávání a zastav službu (notifikace zmizí).
+    // (Navigace jinam BEZ Zpět = controller se uvolní v onDispose, ale služba hraje dál na pozadí.)
+    val exitPlayback: () -> Unit = {
+        runCatching {
+            context.startService(
+                Intent(context, MoviePlayerService::class.java).setAction(MoviePlayerService.ACTION_STOP),
+            )
+        }
+        onBack()
+    }
+
     BackHandler {
         when {
             showAudioMenu -> showAudioMenu = false
             showSubtitleMenu -> showSubtitleMenu = false
-            else -> onBack()
+            else -> exitPlayback()
         }
     }
 
@@ -432,9 +436,9 @@ fun PlaybackScreen(
                                 when {
                                     menuAtStart -> showSubtitleMenu = false
                                     !visibleAtStart -> controlsVisible = true   // první dotek jen odhalí
-                                    startX < w / 3f -> { exoPlayer.seekBack(); controlsVisible = true }
-                                    startX > w / 3f * 2f -> { exoPlayer.seekForward(); controlsVisible = true }
-                                    else -> { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play(); controlsVisible = true }
+                                    startX < w / 3f -> { controller?.seekBack(); controlsVisible = true }
+                                    startX > w / 3f * 2f -> { controller?.seekForward(); controlsVisible = true }
+                                    else -> { controller?.let { if (it.isPlaying) it.pause() else it.play() }; controlsVisible = true }
                                 }
                             }
                             break
@@ -483,17 +487,18 @@ fun PlaybackScreen(
             ) {
                 Text(state.error!!, color = Color.White, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = onBack) { Text("Zpět") }
+                Button(onClick = exitPlayback) { Text("Zpět") }
             }
             else -> {
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
-                            player = exoPlayer
                             useController = false
                             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                         }
                     },
+                    // controller se připojí asynchronně → přiřaď ho do PlayerView, až je hotový.
+                    update = { it.player = controller },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -526,7 +531,7 @@ fun PlaybackScreen(
                             }) { Text("Otevřít v jiné aplikaci") }
                             Spacer(Modifier.height(8.dp))
                         }
-                        Button(onClick = onBack) { Text("Zpět") }
+                        Button(onClick = exitPlayback) { Text("Zpět") }
                     }
                 }
 
@@ -544,13 +549,13 @@ fun PlaybackScreen(
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Button(onClick = {
-                                exoPlayer.seekTo(state.resumePositionMs)
-                                exoPlayer.playWhenReady = true
+                                controller?.seekTo(state.resumePositionMs)
+                                controller?.playWhenReady = true
                                 resumeDecided = true
                             }) { Text("Pokračovat (${fmtTime(state.resumePositionMs)})") }
                             Button(onClick = {
-                                exoPlayer.seekTo(0L)
-                                exoPlayer.playWhenReady = true
+                                controller?.seekTo(0L)
+                                controller?.playWhenReady = true
                                 resumeDecided = true
                             }) { Text("Od začátku") }
                         }
@@ -568,10 +573,10 @@ fun PlaybackScreen(
                                     .onKeyEvent { ev ->
                                         if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
                                         when (ev.key) {
-                                            Key.DirectionLeft -> { exoPlayer.seekBack(); controlsVisible = true; true }
-                                            Key.DirectionRight -> { exoPlayer.seekForward(); controlsVisible = true; true }
+                                            Key.DirectionLeft -> { controller?.seekBack(); controlsVisible = true; true }
+                                            Key.DirectionRight -> { controller?.seekForward(); controlsVisible = true; true }
                                             Key.DirectionCenter, Key.Enter, Key.Spacebar -> {
-                                                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                                controller?.let { if (it.isPlaying) it.pause() else it.play() }
                                                 controlsVisible = true; true
                                             }
                                             // Up / Menu = otevři panel titulků (na TV jediná cesta k němu)
@@ -609,7 +614,7 @@ fun PlaybackScreen(
                                 else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(0f)),
                                 onValueChange = { scrubbing = true; scrubValue = it; controlsVisible = true },
                                 onValueChangeFinished = {
-                                    exoPlayer.seekTo(scrubValue.toLong())
+                                    controller?.seekTo(scrubValue.toLong())
                                     position = scrubValue.toLong()
                                     scrubbing = false
                                 },
