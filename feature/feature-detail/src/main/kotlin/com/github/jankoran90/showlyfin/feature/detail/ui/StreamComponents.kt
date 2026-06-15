@@ -90,7 +90,7 @@ internal fun streamHealth(stream: UploaderStream, runtimeMin: Int?): StreamHealt
 }
 
 /**
- * CONDUIT (SHW-56): patří zdroj do cesty „CZ dabing"? = zvuk CZ/SK. Sdílej zdroj s NEDETEKOVANÝM
+ * CONDUIT (SHW-58): patří zdroj do cesty „CZ dabing"? = zvuk CZ/SK. Sdílej zdroj s NEDETEKOVANÝM
  * audiem → default CZ dabing (sdílej.cz je český zdroj, hledá se dle CZ názvu). Vše ostatní
  * (vč. neznámého audia u torrentu) → Originál (+ české titulky).
  */
@@ -472,7 +472,7 @@ internal fun RdDownloadDialog(state: RdDownloadState, onCancel: () -> Unit) {
 }
 
 /**
- * CONDUIT (SHW-56): rozcestník po ťuknutí na ▶ Přehrát — vyber cestu zvuku, pak se otevře filtrovaný
+ * CONDUIT (SHW-58): rozcestník po ťuknutí na ▶ Přehrát — vyber cestu zvuku, pak se otevře filtrovaný
  * stream picker. CZ dabing = český dabing (sdílej.cz + CZ/SK torrenty); Originál = původní znění + CZ titulky.
  * Počty se dopočítávají živě, jak zdroje dobíhají (`isLoading` ukáže spinner, dokud je 0).
  */

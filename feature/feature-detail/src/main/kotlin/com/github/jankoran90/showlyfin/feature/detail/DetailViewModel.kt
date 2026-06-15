@@ -513,7 +513,7 @@ class DetailViewModel @Inject constructor(
 
     private fun mediaTypeStr(item: MediaItem) = if (item.type == MediaType.MOVIE) "movie" else "series"
 
-    /** CONDUIT (SHW-56): ▶ Přehrát — nejdřív rozcestník CZ dabing / Originál, pak filtrovaný picker. */
+    /** CONDUIT (SHW-58): ▶ Přehrát — nejdřív rozcestník CZ dabing / Originál, pak filtrovaný picker. */
     fun openStreamPathChooser() {
         val item = _uiState.value.item ?: return
         val imdb = item.imdbId
@@ -572,7 +572,7 @@ class DetailViewModel @Inject constructor(
                 if (rdMode == "search" || rdMode == "both") {
                     async { runCatching { uploaderDs.rdSearch(uploaderBaseUrl, uploaderCookie, item.title, item.year) }.getOrDefault(emptyList()) }
                 } else null
-            // CONDUIT (SHW-56): české úložiště (sdílej.cz) paralelně — sloučí se do seznamu, do cesty
+            // CONDUIT (SHW-58): české úložiště (sdílej.cz) paralelně — sloučí se do seznamu, do cesty
             // CZ dabing / Originál se rozřadí dle audia (isCzDub) až v UI filtru. Hraje přes náš proxy.
             val sdilejDeferred = async {
                 runCatching {
@@ -905,7 +905,7 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * CONDUIT (SHW-56): `sdilej://<file_id>/<slug>` → samonosná proxy URL na náš backend (auth `?key=`,
+     * CONDUIT (SHW-58): `sdilej://<file_id>/<slug>` → samonosná proxy URL na náš backend (auth `?key=`,
      * stejně jako titulky/ferry). Backend resolvne přímý odkaz a přepošle bajty s Range → ExoPlayer
      * seek + WINNOW probe; funguje i pro MPV na TV (box nemá sdílej login). slug je URL-safe (`[a-z0-9-]`).
      */

@@ -163,7 +163,7 @@ fun DetailScreen(
     uiState.rdDownload?.let { rd ->
         RdDownloadDialog(state = rd, onCancel = { viewModel.cancelRdDownload() })
     }
-    // CONDUIT (SHW-56): rozcestník po ▶ Přehrát — vyber cestu zvuku, pak filtrovaný picker.
+    // CONDUIT (SHW-58): rozcestník po ▶ Přehrát — vyber cestu zvuku, pak filtrovaný picker.
     if (uiState.showStreamPathChooser) {
         StreamPathChooserSheet(
             czCount = uiState.streams.count { isCzDub(it) },

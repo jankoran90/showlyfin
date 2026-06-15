@@ -21,7 +21,7 @@ data class RdDownloadState(
     val title: String = "",
 )
 
-/** CONDUIT (SHW-56): cesta výběru zvuku v rozcestníku „Přehrát" — český dabing vs původní znění + CZ titulky. */
+/** CONDUIT (SHW-58): cesta výběru zvuku v rozcestníku „Přehrát" — český dabing vs původní znění + CZ titulky. */
 enum class StreamAudioPath { CZ_DUB, ORIGINAL }
 
 data class DetailArgs(
@@ -69,7 +69,7 @@ data class DetailUiState(
     val cast: List<TmdbPerson> = emptyList(),
     // Stream / Stáhnout hub
     val uploaderConfigured: Boolean = false,
-    // CONDUIT (SHW-56): rozcestník „Přehrát" → CZ dabing / Originál, pak filtrovaný stream picker.
+    // CONDUIT (SHW-58): rozcestník „Přehrát" → CZ dabing / Originál, pak filtrovaný stream picker.
     val showStreamPathChooser: Boolean = false,
     val streamAudioPath: StreamAudioPath? = null,
     val showStreamPicker: Boolean = false,
