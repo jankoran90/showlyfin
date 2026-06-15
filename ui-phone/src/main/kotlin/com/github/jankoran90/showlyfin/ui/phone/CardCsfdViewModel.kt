@@ -27,31 +27,42 @@ class CardCsfdViewModel @Inject constructor(
         csfd.getRating(imdbId.orEmpty(), tmdbId, title, year ?: 0)
 
     override suspend fun overview(
-        imdbId: String?, tmdbId: Long?, title: String, year: Int?, fallback: String?,
+        imdbId: String?, tmdbId: Long?, title: String, titleCz: String?, year: Int?, fallback: String?,
     ): String? {
         // 1) Český TMDB překlad (jako detail) — jen když je opravdu česky.
         val translation = tmdbId?.let {
             runCatching { tmdb.fetchMovieTranslation(it, "cs") }.getOrNull()
         }
         val tmdbCz = translation?.overview?.takeIf { it.isNotBlank() }
-        if (looksCzech(tmdbCz)) return tmdbCz
         // 2) ČSFD popis (stejný zdroj jako detail). csfdId resolvuj jako detail loadCsfd:
-        //    nejdřív ČESKÝ název (z TMDB překladu) → originální → bez názvu (jen wikidata/imdb).
+        //    nejdřív ČESKÝ název (TMDB překlad → titleCz z položky) → originální → bez názvu.
         //    U cizojazyčných filmů ČSFD title-search vyžaduje český název (anglický nenajde).
-        val czTitle = translation?.title?.takeIf { it.isNotBlank() }
+        val titles = listOfNotNull(
+            translation?.title?.takeIf { it.isNotBlank() },
+            titleCz?.takeIf { it.isNotBlank() && it != title },
+            title.takeIf { it.isNotBlank() },
+        )
         var csfdId: Long? = null
-        for (t in listOfNotNull(czTitle, title.takeIf { it.isNotBlank() })) {
-            csfdId = runCatching { csfd.getCsfdId(imdbId.orEmpty(), tmdbId, t, year ?: 0) }.getOrNull()
-            if (csfdId != null) break
-        }
-        if (csfdId == null) {
-            csfdId = runCatching { csfd.getCsfdId(imdbId.orEmpty(), tmdbId, "", year ?: 0) }.getOrNull()
+        if (!looksCzech(tmdbCz)) {
+            for (t in titles) {
+                csfdId = runCatching { csfd.getCsfdId(imdbId.orEmpty(), tmdbId, t, year ?: 0) }.getOrNull()
+                if (csfdId != null) break
+            }
+            if (csfdId == null) {
+                csfdId = runCatching { csfd.getCsfdId(imdbId.orEmpty(), tmdbId, "", year ?: 0) }.getOrNull()
+            }
         }
         val csfdPlot = csfdId?.let {
             runCatching { csfd.getCzechPlot(it) }.getOrNull()
         }?.takeIf { it.isNotBlank() }
+        android.util.Log.i(
+            "SHGOVR",
+            "tmdb=$tmdbId t='$title' tCz='$titleCz' transT='${translation?.title}' " +
+                "tmdbCzCzech=${looksCzech(tmdbCz)} csfdId=$csfdId plot=${csfdPlot != null}",
+        )
+        // Priorita jako detail: český TMDB → ČSFD → jakýkoli TMDB → fallback.
+        if (looksCzech(tmdbCz)) return tmdbCz
         if (csfdPlot != null) return csfdPlot
-        // 3) Jakýkoli TMDB cs překlad, jinak fallback z položky.
         return tmdbCz ?: fallback
     }
 }

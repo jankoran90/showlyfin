@@ -147,7 +147,7 @@ fun MediaRow(
             val fallback = item.overviewCz?.takeIf { it.isNotBlank() }
                 ?: item.overview?.takeIf { it.isNotBlank() }
             val description = rememberCzechOverview(
-                item.imdbId, item.tmdbId, item.title, item.year, fallback,
+                item.imdbId, item.tmdbId, item.title, item.titleCz, item.year, fallback,
             )
             if (!description.isNullOrBlank()) {
                 Text(
