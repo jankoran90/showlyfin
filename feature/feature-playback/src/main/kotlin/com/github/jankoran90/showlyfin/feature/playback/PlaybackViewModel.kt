@@ -59,9 +59,12 @@ class PlaybackViewModel @Inject constructor(
         // server). Titulky vyžadují imdb (gate beze změny), ALE resume klíčujeme přes resumeKeyOf, který
         // má fallback na název+rok — obsah z Objevit/doporučení má imdb zatím prázdné (TMDB ho dohledá
         // později), takže gate na imdb by resume tiše vypnul (pozice se neuloží → dialog se nikdy nenabídne).
-        query = subtitleQuery?.takeIf { it.imdb.isNotBlank() }
+        // CONDUIT (SHW-58): u dabovaného zdroje (autoSearch=false) NEhledáme titulky, ale resume klíč
+        // držíme dál (resume musí fungovat i bez titulků).
+        query = subtitleQuery?.takeIf { it.imdb.isNotBlank() && it.autoSearch }
         resumeKey = subtitleQuery?.let { resumeKeyOf(it) }
         val savedResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
+        timber.log.Timber.i("[PICKUP] loadExternal resumeKey=%s saved=%d autoSearch=%s url=%s", resumeKey, savedResume, subtitleQuery?.autoSearch, url.take(70))
         // Nový stream → VŽDY vyhoď titulky z předchozího filmu. Bez tohohle by film bez vlastních
         // titulků (0 kandidátů / prázdné imdb → loadSubtitles se brzy vrátí) dál promítal cues
         // z minule přehraného filmu = „české titulky na úplně jiný film" (Old Joy). loadSubtitles

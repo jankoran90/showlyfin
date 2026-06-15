@@ -537,4 +537,7 @@ data class SubtitleQuery(
     val release: String? = null, // release zvoleného streamu (pro match)
     val fps: Double? = null,
     val runtime: Int? = null,
+    // CONDUIT (SHW-58): false u českého dabingu (sdílej/CZ audio) → NEhledat automaticky titulky
+    // (film je dabovaný), ALE zachovat zbytek pro resume klíč (`resumeKeyOf`). Ruční výběr titulků dál jde.
+    val autoSearch: Boolean = true,
 )

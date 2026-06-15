@@ -711,6 +711,13 @@ class DetailViewModel @Inject constructor(
         val st = _uiState.value
         val subTitle = st.tmdbCzTitle?.takeIf { t -> t.isNotBlank() } ?: st.item?.title.orEmpty()
         val subOrig = st.item?.title.orEmpty()
+        // CONDUIT (SHW-58): český dabing (CZ/SK audio nebo sdílej bez detekce) → NEhledat automaticky
+        // titulky (film je dabovaný), ale `SubtitleQuery` postavíme dál (drží resume klíč `resumeKeyOf`).
+        // Drž v synchru s `isCzDub` v StreamComponents.kt (stejné kritérium).
+        val czDub = run {
+            val lang = stream.quality.audioLanguage?.uppercase()
+            lang == "CZ" || lang == "SK" || (stream.url?.startsWith("sdilej://") == true && lang == null)
+        }
         if (subTitle.isNotBlank() || subOrig.isNotBlank()) {
             _uiState.update {
                 it.copy(pendingSubtitleQuery = com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery(
@@ -721,6 +728,7 @@ class DetailViewModel @Inject constructor(
                     release = stream.name ?: stream.description,
                     fps = stream.quality.fps,
                     runtime = st.movieDetails?.runtime,
+                    autoSearch = !czDub,
                 ))
             }
         }
@@ -954,6 +962,7 @@ class DetailViewModel @Inject constructor(
     /** Stáhne CZ titulkové kandidáty a sestaví box-dostupné SRT URL (`?key=<session>`) pro TV. */
     private suspend fun buildTvSubtitles(): List<FerrySubtitle> {
         val q = _uiState.value.pendingSubtitleQuery ?: return emptyList()
+        if (!q.autoSearch) return emptyList()   // CONDUIT: dabovaný zdroj → na TV taky bez auto-titulků
         if (uploaderBaseUrl.isBlank()) return emptyList()
         val resp = runCatching {
             uploaderDs.getSubtitles(
