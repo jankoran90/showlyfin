@@ -684,6 +684,7 @@ fun PlaybackScreen(
                             onColor = { viewModel.setColor(it) },
                             onPosition = { viewModel.setBottomPadding(it) },
                             onNudge = { viewModel.nudgeOffset(it) },
+                            onTranslateAi = { viewModel.translateSubtitlesAi() },
                             onClose = { showSubtitleMenu = false },
                             firstItemFocusRequester = if (isTv) menuFocusRequester else null,
                             modifier = Modifier.align(Alignment.CenterEnd),
@@ -776,6 +777,7 @@ private fun SubtitleSettingsPanel(
     onColor: (Int) -> Unit,
     onPosition: (Float) -> Unit,
     onNudge: (Long) -> Unit,
+    onTranslateAi: () -> Unit,
     onClose: () -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
@@ -808,10 +810,16 @@ private fun SubtitleSettingsPanel(
         )
         state.subtitleCandidates.forEachIndexed { i, c ->
             val rel = c.release.ifBlank { c.title }
+            // Zdroj titulku z prefixu id (CAPTION/LINGUA): titulky.com → počet stažení; OS/AI → název zdroje.
+            val src = when {
+                c.id.startsWith("os_") -> "OpenSubtitles"
+                c.id.startsWith("ai_") -> "AI překlad"
+                else -> ""
+            }
             val meta = buildString {
                 if (c.imdbMatch) append("✓ ")
                 if (c.fps > 0) append("${c.fps} fps · ")
-                append("${c.downloads}×")
+                if (src.isNotBlank()) append(src) else append("${c.downloads}×")
             }
             SubtitleRow(
                 label = rel,
@@ -826,6 +834,40 @@ private fun SubtitleSettingsPanel(
                 color = Color(0xFFFFB74D), style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp),
             )
+        }
+
+        // LINGUA Fáze 2 — AI překlad EN→CS, když nejsou žádné CZ titulky (poslední záloha).
+        if (state.canTranslateAi || state.aiTranslating || state.aiTranslateError != null) {
+            if (state.aiTranslating) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFFFFBF00))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Překládám titulky… (chvíli to potrvá)", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .tvFocusBorder(RoundedCornerShape(6.dp))
+                        .clickable(onClick = onTranslateAi)
+                        .padding(vertical = 8.dp, horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("🌐", color = Color.White)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Přeložit do češtiny (AI)", color = Color(0xFFFFBF00), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            state.aiTranslateError ?: "Žádné české titulky — přeložím anglické přes AI",
+                            color = if (state.aiTranslateError != null) Color(0xFFEF5350) else Color.White.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))

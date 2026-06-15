@@ -16,6 +16,10 @@ data class PlaybackUiState(
     val subtitleCues: List<SubtitleCue> = emptyList(), // naparsované cue aktuální stopy (renderujeme sami)
     val subtitleRuntimeOk: String = "-",         // "1"/"0"/"-" — sedí délka na film
     val subtitleError: String? = null,
+    // ── AI překlad titulků EN→CS (Plan LINGUA Fáze 2) — poslední záloha, když 0 CZ titulků ───
+    val canTranslateAi: Boolean = false,         // 0 CZ kandidátů + máme imdb → nabídni tlačítko
+    val aiTranslating: Boolean = false,          // běží async překlad (spinner)
+    val aiTranslateError: String? = null,
     // ── Styl / nastavení titulků (persistované) ──────────────────────────────
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
 )

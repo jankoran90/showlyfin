@@ -551,4 +551,25 @@ internal class UploaderApi(
         val runtimeOk = resp.headers()["X-Sub-RuntimeOk"] ?: "-"
         return SubtitleDownload(bytes = body.bytes(), lastTsSec = lastTs, runtimeOk = runtimeOk)
     }
+
+    override suspend fun startSubtitleTranslate(
+        baseUrl: String, sessionCookie: String, imdbId: String, season: Int?, episode: Int?,
+    ): SubtitleTranslateJob {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val params = buildList {
+            if (season != null && episode != null) { add("season=$season"); add("episode=$episode") }
+        }
+        var url = "$base/api/subtitles/translate/$imdbId"
+        if (params.isNotEmpty()) url += "?" + params.joinToString("&")
+        return service.startSubtitleTranslate(url, cookie)
+    }
+
+    override suspend fun getSubtitleTranslateStatus(
+        baseUrl: String, sessionCookie: String, jobId: String,
+    ): SubtitleTranslateJob {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.getSubtitleTranslateStatus("$base/api/subtitles/translate/status/$jobId", cookie)
+    }
 }

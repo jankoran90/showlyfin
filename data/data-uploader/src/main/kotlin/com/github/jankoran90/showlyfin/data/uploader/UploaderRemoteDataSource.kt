@@ -104,6 +104,14 @@ interface UploaderRemoteDataSource {
         baseUrl: String, sessionCookie: String, titulkyId: String,
         season: Int? = null, episode: Int? = null, runtime: Int? = null,
     ): SubtitleDownload
+    // Plan LINGUA Fáze 2 — async AI překlad EN→CS (poslední záloha když 0 CZ titulků)
+    suspend fun startSubtitleTranslate(
+        baseUrl: String, sessionCookie: String, imdbId: String,
+        season: Int? = null, episode: Int? = null,
+    ): SubtitleTranslateJob
+    suspend fun getSubtitleTranslateStatus(
+        baseUrl: String, sessionCookie: String, jobId: String,
+    ): SubtitleTranslateJob
 
     // ČSFD popis + recenze přes backend (server zvládá Anubis anti-bot; csfdId se páruje on-device přes Wikidata)
     suspend fun getCsfdPlot(baseUrl: String, sessionCookie: String, csfdId: Long): CsfdPlotResponse

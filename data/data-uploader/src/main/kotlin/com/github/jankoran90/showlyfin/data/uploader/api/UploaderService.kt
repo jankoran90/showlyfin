@@ -42,6 +42,9 @@ interface UploaderService {
     // Titulky.com CZ titulky (Fáze E)
     @GET suspend fun getSubtitles(@Url url: String, @Header("Cookie") cookie: String): SubtitlesResponse
     @GET @Streaming suspend fun downloadSubtitle(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    // Plan LINGUA Fáze 2 — async AI překlad EN→CS (start + poll status)
+    @POST suspend fun startSubtitleTranslate(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
+    @GET suspend fun getSubtitleTranslateStatus(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
 
     // ČSFD popis + recenze (scrape na backendu, server zvládá Anubis)
     @GET suspend fun getCsfdPlot(@Url url: String, @Header("Cookie") cookie: String): CsfdPlotResponse

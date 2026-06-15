@@ -510,6 +510,15 @@ data class SubtitlesResponse(
     @SerializedName("best") val best: Int = -1,
 )
 
+/** Plan LINGUA Fáze 2 — async AI překlad titulků EN→CS. status: running|done|error|unknown.
+ *  subId (= ai_<hash>) je při `done` rovnou download id (`/api/subtitles/download/{subId}`). */
+data class SubtitleTranslateJob(
+    @SerializedName("job_id") val jobId: String = "",
+    @SerializedName("status") val status: String = "",
+    @SerializedName("sub_id") val subId: String = "",
+    @SerializedName("error") val error: String? = null,
+)
+
 /** Stažený .srt (UTF-8) + ověření délky proti filmu (z hlaviček backendu). Ne-síťový holder. */
 data class SubtitleDownload(
     val bytes: ByteArray,
