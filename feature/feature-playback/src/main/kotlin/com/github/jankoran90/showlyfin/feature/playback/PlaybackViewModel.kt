@@ -53,10 +53,16 @@ class PlaybackViewModel @Inject constructor(
         query = subtitleQuery?.takeIf { it.imdb.isNotBlank() }
         resumeKey = subtitleQuery?.let { resumeKeyOf(it) }
         val savedResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
+        // Nový stream → VŽDY vyhoď titulky z předchozího filmu. Bez tohohle by film bez vlastních
+        // titulků (0 kandidátů / prázdné imdb → loadSubtitles se brzy vrátí) dál promítal cues
+        // z minule přehraného filmu = „české titulky na úplně jiný film" (Old Joy). loadSubtitles
+        // si vzápětí nastaví subtitlesLoading=true a naplní vlastní kandidáty.
         _state.update {
             it.copy(
                 isLoading = false, title = title, streamUrl = url,
                 positionMs = 0L, resumePositionMs = savedResume,
+                subtitleCues = emptyList(), selectedSubtitleIndex = -1,
+                subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
             )
         }
         if (query != null && uploaderBaseUrl.isNotBlank()) {
