@@ -55,11 +55,6 @@ class CardCsfdViewModel @Inject constructor(
         val csfdPlot = csfdId?.let {
             runCatching { csfd.getCzechPlot(it) }.getOrNull()
         }?.takeIf { it.isNotBlank() }
-        android.util.Log.i(
-            "SHGOVR",
-            "tmdb=$tmdbId t='$title' tCz='$titleCz' transT='${translation?.title}' " +
-                "tmdbCzCzech=${looksCzech(tmdbCz)} csfdId=$csfdId plot=${csfdPlot != null}",
-        )
         // Priorita jako detail: český TMDB → ČSFD → jakýkoli TMDB → fallback.
         if (looksCzech(tmdbCz)) return tmdbCz
         if (csfdPlot != null) return csfdPlot
