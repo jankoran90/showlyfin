@@ -20,6 +20,7 @@ object ShowlyfinStatus {
     val SourceRdDownload = Color(0xFFE08915) // necachované, RD stáhne
     val SourceTorrent = Color(0xFF1565C0)    // torrent
     val SourceAddon = Color(0xFFB23A3A)      // jiný addon / fallback
+    val SourceCzHost = Color(0xFFEA7B1B)     // 🇨🇿 české úložiště (sdílej.cz) — přímý stream přes proxy (oranžová = preference usera)
 
     // ČSFD hodnocení
     val CsfdHigh = Color(0xFFBA0305)         // silné hodnocení (červená ČSFD)

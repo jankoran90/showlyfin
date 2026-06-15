@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.github.jankoran90.showlyfin.feature.detail.RdDownloadState
+import com.github.jankoran90.showlyfin.feature.detail.StreamAudioPath
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -83,7 +84,21 @@ internal fun streamHealth(stream: UploaderStream, runtimeMin: Int?): StreamHealt
         if (durMin != null && durMin > 0 && durMin < runtimeMin * 0.5) return StreamHealth.SUSPECT
         if (size != null && size in 0.0001..0.30) return StreamHealth.SUSPECT
     }
+    // CONDUIT: přímo přehrávatelný file-host (sdílej přes náš proxy) hraje hned = READY.
+    if (stream.url?.startsWith("sdilej://") == true) return StreamHealth.READY
     return if (q.rdReady || q.rdSaved) StreamHealth.READY else StreamHealth.DOWNLOAD
+}
+
+/**
+ * CONDUIT (SHW-56): patří zdroj do cesty „CZ dabing"? = zvuk CZ/SK. Sdílej zdroj s NEDETEKOVANÝM
+ * audiem → default CZ dabing (sdílej.cz je český zdroj, hledá se dle CZ názvu). Vše ostatní
+ * (vč. neznámého audia u torrentu) → Originál (+ české titulky).
+ */
+internal fun isCzDub(stream: UploaderStream): Boolean {
+    val lang = stream.quality.audioLanguage?.uppercase()
+    if (lang == "CZ" || lang == "SK") return true
+    if (stream.url?.startsWith("sdilej://") == true && lang == null) return true
+    return false
 }
 
 internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
@@ -104,6 +119,7 @@ internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
 @Composable
 private fun SourceBadge(stream: UploaderStream) {
     val (label, color) = when {
+        stream.url?.startsWith("sdilej://") == true -> "🇨🇿 sdílej" to ShowlyfinStatus.SourceCzHost  // CONDUIT: české úložiště, stream přes proxy
         stream.quality.rdSaved -> "💾 RD" to ShowlyfinStatus.SourceRdSaved         // už uložené na RD (DebridSearch) — hraje hned
         stream.quality.rdReady -> "RD ✓" to ShowlyfinStatus.SuccessDim          // cached — hraje hned
         stream.quality.rdDownloadable -> "RD ⬇" to ShowlyfinStatus.SourceRdDownload   // necachované — RD stáhne
@@ -261,6 +277,8 @@ internal fun StreamPickerSheet(
     runtimeMin: Int? = null,
     rememberedSource: UploaderStream? = null,
     onForgetRemembered: () -> Unit = {},
+    pathLabel: String? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     // Plan FERRY (SHW-37): cíl přehrání — telefon (lokální MPV) nebo TV (yellyfin). Per-otevření.
     var toTv by remember { mutableStateOf(false) }
@@ -268,7 +286,13 @@ internal fun StreamPickerSheet(
     var showSuspect by remember { mutableStateOf(false) }
     val busy = isResolving || isCasting
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        SheetHeader("Stream přes Stremio", Icons.Default.PlayArrow)
+        // CONDUIT: hlavička dle zvolené cesty (CZ dabing / Originál); jinak původní popisek.
+        SheetHeader(pathLabel?.let { "Přehrát · $it" } ?: "Stream přes Stremio", Icons.Default.PlayArrow)
+        if (onBack != null) {
+            TextButton(onClick = onBack, modifier = Modifier.padding(horizontal = 8.dp)) {
+                Text("← Změnit dabing / originál")
+            }
+        }
         // Přepínač Přesné / Vše (per-search) — „Vše" pro málo dostupné filmy (víc výsledků).
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -445,6 +469,56 @@ internal fun RdDownloadDialog(state: RdDownloadState, onCancel: () -> Unit) {
             TextButton(onClick = onCancel) { Text("Zrušit") }
         },
     )
+}
+
+/**
+ * CONDUIT (SHW-56): rozcestník po ťuknutí na ▶ Přehrát — vyber cestu zvuku, pak se otevře filtrovaný
+ * stream picker. CZ dabing = český dabing (sdílej.cz + CZ/SK torrenty); Originál = původní znění + CZ titulky.
+ * Počty se dopočítávají živě, jak zdroje dobíhají (`isLoading` ukáže spinner, dokud je 0).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun StreamPathChooserSheet(
+    czCount: Int,
+    origCount: Int,
+    isLoading: Boolean,
+    onChoose: (StreamAudioPath) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        SheetHeader("Přehrát", Icons.Default.PlayArrow)
+        StreamPathRow(
+            title = "CZ dabing",
+            subtitle = "Český dabing · sdílej.cz + CZ/SK zdroje",
+            count = czCount, isLoading = isLoading,
+            onClick = { onChoose(StreamAudioPath.CZ_DUB) },
+        )
+        HorizontalDivider()
+        StreamPathRow(
+            title = "Originál",
+            subtitle = "Původní znění + české titulky",
+            count = origCount, isLoading = isLoading,
+            onClick = { onChoose(StreamAudioPath.ORIGINAL) },
+        )
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun StreamPathRow(title: String, subtitle: String, count: Int, isLoading: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(Icons.Default.PlayArrow, contentDescription = null)
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (isLoading && count == 0) CircularProgressIndicator(Modifier.height(18.dp))
+        else Text("$count", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

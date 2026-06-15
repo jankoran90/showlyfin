@@ -163,9 +163,31 @@ fun DetailScreen(
     uiState.rdDownload?.let { rd ->
         RdDownloadDialog(state = rd, onCancel = { viewModel.cancelRdDownload() })
     }
+    // CONDUIT (SHW-56): rozcestník po ▶ Přehrát — vyber cestu zvuku, pak filtrovaný picker.
+    if (uiState.showStreamPathChooser) {
+        StreamPathChooserSheet(
+            czCount = uiState.streams.count { isCzDub(it) },
+            origCount = uiState.streams.count { !isCzDub(it) },
+            isLoading = uiState.isLoadingStreams || uiState.isProbingStreams,
+            onChoose = { viewModel.chooseStreamPath(it) },
+            onDismiss = { viewModel.dismissStreamPathChooser() },
+        )
+    }
     if (uiState.showStreamPicker) {
+        val path = uiState.streamAudioPath
+        // CONDUIT: filtr seznamu dle zvolené cesty (null = REPRISE „zkusit jiný zdroj" → vše).
+        val pathStreams = when (path) {
+            com.github.jankoran90.showlyfin.feature.detail.StreamAudioPath.CZ_DUB -> uiState.streams.filter { isCzDub(it) }
+            com.github.jankoran90.showlyfin.feature.detail.StreamAudioPath.ORIGINAL -> uiState.streams.filterNot { isCzDub(it) }
+            null -> uiState.streams
+        }
+        val pathLabel = when (path) {
+            com.github.jankoran90.showlyfin.feature.detail.StreamAudioPath.CZ_DUB -> "CZ dabing"
+            com.github.jankoran90.showlyfin.feature.detail.StreamAudioPath.ORIGINAL -> "Originál + CZ titulky"
+            null -> null
+        }
         StreamPickerSheet(
-            streams = uiState.streams,
+            streams = pathStreams,
             isLoading = uiState.isLoadingStreams,
             isResolving = uiState.isResolvingStream,
             error = uiState.streamError,
@@ -179,6 +201,8 @@ fun DetailScreen(
             runtimeMin = uiState.movieDetails?.runtime,
             rememberedSource = uiState.rememberedSource,
             onForgetRemembered = { viewModel.forgetWorkingSource() },
+            pathLabel = pathLabel,
+            onBack = if (path != null) { { viewModel.backToStreamPathChooser() } } else null,
         )
     }
     // SIEVE S2: po lokálním přehrání Stremio zdroje se zeptej, jestli sedl → zapamatuj fungující zdroj.
@@ -301,7 +325,7 @@ fun DetailScreen(
                         onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playStream(it) } },
                         onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
                         onRemoveRemembered = { viewModel.removeRememberedSource() },
-                        onStremio = { viewModel.openStreamPicker() },
+                        onStremio = { viewModel.openStreamPathChooser() },
                         onDownload = { viewModel.openDownloadMenu() },
                         inWatchlist = uiState.isInWatchlist,
                         isTogglingWatchlist = uiState.isTogglingWatchlist,
@@ -623,7 +647,7 @@ private fun DetailActionBar(
                     val cb = if (inLibrary) onNaTv else if (hasRemembered) onCastRemembered else null
                     if (cb != null) HeroAction(Icons.Default.Cast, "Přehrát na TV", cb)
                 }
-                "stremio" -> if (!inLibrary) HeroAction(Icons.Default.PlayArrow, "Stremio", onStremio)
+                "stremio" -> if (!inLibrary) HeroAction(Icons.Default.PlayArrow, "Přehrát", onStremio)
                 "download" -> if (!inLibrary) HeroAction(Icons.Default.Download, "Stáhnout", onDownload)
                 "watchlist" -> HeroAction(
                     if (inWatchlist) Icons.Default.Check else Icons.Default.Add,

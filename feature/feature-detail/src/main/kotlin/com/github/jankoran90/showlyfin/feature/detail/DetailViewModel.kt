@@ -513,6 +513,31 @@ class DetailViewModel @Inject constructor(
 
     private fun mediaTypeStr(item: MediaItem) = if (item.type == MediaType.MOVIE) "movie" else "series"
 
+    /** CONDUIT (SHW-56): ▶ Přehrát — nejdřív rozcestník CZ dabing / Originál, pak filtrovaný picker. */
+    fun openStreamPathChooser() {
+        val item = _uiState.value.item ?: return
+        val imdb = item.imdbId
+        if (imdb.isNullOrBlank() || uploaderBaseUrl.isBlank()) {
+            timber.log.Timber.w("[CONDUIT] chooser blocked: imdbBlank=${imdb.isNullOrBlank()} baseUrlBlank=${uploaderBaseUrl.isBlank()}")
+            _uiState.update { it.copy(showStreamPicker = true, streamAudioPath = null, streamError = "Uploader není nastaven nebo film nemá IMDB ID.") }
+            return
+        }
+        _uiState.update { it.copy(showStreamPathChooser = true, streamAudioPath = null) }
+        loadStreams()
+    }
+
+    /** CONDUIT: zvolená cesta (audio) → zavři rozcestník, otevři filtrovaný stream picker. */
+    fun chooseStreamPath(path: StreamAudioPath) {
+        _uiState.update { it.copy(streamAudioPath = path, showStreamPathChooser = false, showStreamPicker = true) }
+    }
+
+    /** CONDUIT: zpět z pickeru na rozcestník cest (změna dabing/originál). */
+    fun backToStreamPathChooser() {
+        _uiState.update { it.copy(showStreamPicker = false, showStreamPathChooser = true) }
+    }
+
+    fun dismissStreamPathChooser() = _uiState.update { it.copy(showStreamPathChooser = false) }
+
     /** ▶ Stream — otevře picker se Stremio streamy (jen přehrávání). */
     fun openStreamPicker() {
         val item = _uiState.value.item ?: return
@@ -522,7 +547,8 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(showStreamPicker = true, streamError = "Uploader není nastaven nebo film nemá IMDB ID.") }
             return
         }
-        _uiState.update { it.copy(showStreamPicker = true) }
+        // CONDUIT: přímé otevření (REPRISE „zkusit jiný zdroj") → cesta null = ukázat všechny zdroje.
+        _uiState.update { it.copy(showStreamPicker = true, streamAudioPath = null) }
         loadStreams()
     }
 
@@ -546,36 +572,51 @@ class DetailViewModel @Inject constructor(
                 if (rdMode == "search" || rdMode == "both") {
                     async { runCatching { uploaderDs.rdSearch(uploaderBaseUrl, uploaderCookie, item.title, item.year) }.getOrDefault(emptyList()) }
                 } else null
+            // CONDUIT (SHW-56): české úložiště (sdílej.cz) paralelně — sloučí se do seznamu, do cesty
+            // CZ dabing / Originál se rozřadí dle audia (isCzDub) až v UI filtru. Hraje přes náš proxy.
+            val sdilejDeferred = async {
+                runCatching {
+                    uploaderDs.getSdillejStreams(
+                        uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb,
+                        item.title, _uiState.value.tmdbCzTitle ?: item.title, item.year,
+                    )
+                }.getOrDefault(emptyList())
+            }
             // Backend vrací už seřazené (rdSaved → cached → CZ/SK → fallbackOrder) a ořezané dle prefs.
             runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, strict = strict) }
                 .onSuccess { list ->
                     val saved = savedDeferred?.await().orEmpty()
+                    val sdilej = sdilejDeferred.await()
                     val savedHashes = saved.mapNotNull { it.infoHash?.lowercase() }.toSet()
                     val combined = saved + list.filterNot { (it.infoHash?.lowercase() ?: "") in savedHashes }
-                    timber.log.Timber.i("[Stremio] streams=${list.size} rdSearch=${saved.size} strict=$strict (cached=${list.count { it.quality.rdReady }} dl=${list.count { it.quality.rdDownloadable }}) imdb=$imdb")
-                    // Plan CASCADE Fáze 3: během probu ukaž JEN ověřené instant (rdSaved/rdReady),
-                    // zbytek se reálně testuje (addMagnet) → po probu nahradíme jen smysluplnými.
-                    val instantNow = combined.filter { it.quality.rdSaved || it.quality.rdReady }
+                    timber.log.Timber.i("[Stremio] streams=${list.size} rdSearch=${saved.size} sdilej=${sdilej.size} strict=$strict (cached=${list.count { it.quality.rdReady }} dl=${list.count { it.quality.rdDownloadable }}) imdb=$imdb")
+                    // Plan CASCADE Fáze 3: během probu ukaž JEN ověřené instant (rdSaved/rdReady) + sdílej
+                    // (hraje přes proxy hned), zbytek se reálně testuje (addMagnet) → po probu nahradíme.
+                    val instantNow = combined.filter { it.quality.rdSaved || it.quality.rdReady } + sdilej
                     _uiState.update { it.copy(isLoadingStreams = false, isProbingStreams = true, streams = instantNow, streamError = null) }
                     viewModelScope.launch {
                         runCatching { uploaderDs.getProbedStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb) }
                             .onSuccess { probed ->
                                 timber.log.Timber.i("[Stremio] probe → ${probed.size} smysluplných (instant=${probed.count { it.quality.rdSaved || it.quality.rdReady }} dl=${probed.count { it.quality.rdDownloadable }})")
-                                val finalList = if (probed.isNotEmpty()) probed else combined
+                                // CONDUIT: sdílej (instant, přes proxy) drž v seznamu i po probu — probe vrací jen torrent/RD.
+                                val finalList = (if (probed.isNotEmpty()) probed else combined) + sdilej
                                 val err = if (finalList.isEmpty()) "Žádný funkční zdroj nenalezen." else null
                                 _uiState.update { it.copy(isProbingStreams = false, streams = finalList, streamError = err) }
                             }
                             .onFailure { e ->
                                 timber.log.Timber.w(e, "[Stremio] probe FAILED imdb=$imdb → fallback na neprobnuty seznam")
-                                val err = if (combined.isEmpty()) "Žádné streamy nenalezeny." else null
-                                _uiState.update { it.copy(isProbingStreams = false, streams = combined, streamError = err) }
+                                val fb = combined + sdilej
+                                val err = if (fb.isEmpty()) "Žádné streamy nenalezeny." else null
+                                _uiState.update { it.copy(isProbingStreams = false, streams = fb, streamError = err) }
                             }
                     }
                 }
                 .onFailure { e ->
                     timber.log.Timber.w(e, "[Stremio] getStreams FAILED imdb=$imdb url=$uploaderBaseUrl")
                     val saved = savedDeferred?.await().orEmpty()
-                    if (saved.isNotEmpty()) _uiState.update { it.copy(isLoadingStreams = false, streams = saved, streamError = null) }
+                    val sdilej = sdilejDeferred.await()
+                    val fb = saved + sdilej
+                    if (fb.isNotEmpty()) _uiState.update { it.copy(isLoadingStreams = false, streams = fb, streamError = null) }
                     else _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") }
                 }
         }
@@ -698,6 +739,18 @@ class DetailViewModel @Inject constructor(
         }
         // WINNOW item 2: zapamatuj RD hash tohoto pokusu (bezpečný úklid při „zapamatovat zdroj").
         streamRdHash(stream)?.let { attemptedRdHashes.add(it) }
+        // 0) CONDUIT: české úložiště (sdilej://) → přehraj přes náš proxy (samonosná ?key= URL, funguje
+        //    i na TV, kde box nemá sdílej login). MUSÍ být PŘED přímou url — sdilej:// je taky `direct`.
+        if (direct != null && direct.startsWith("sdilej://")) {
+            val proxy = buildSdilejProxyUrl(direct)
+            if (proxy != null) {
+                timber.log.Timber.i("[sdilej] play přes proxy $direct")
+                deliver(proxy, title, target)
+            } else {
+                _uiState.update { it.copy(streamError = "Neplatné sdilej:// URL.") }
+            }
+            return
+        }
         // 1) přímá url (Ready (RD)) → hraj rovnou (deliver napřed ověří, že to není návnada).
         if (!direct.isNullOrBlank()) {
             timber.log.Timber.i("[Stremio] play direct url addon=${stream.addon}")
@@ -849,6 +902,21 @@ class DetailViewModel @Inject constructor(
             }
             CastTarget.TV -> castToTv(url, title)
         }
+    }
+
+    /**
+     * CONDUIT (SHW-56): `sdilej://<file_id>/<slug>` → samonosná proxy URL na náš backend (auth `?key=`,
+     * stejně jako titulky/ferry). Backend resolvne přímý odkaz a přepošle bajty s Range → ExoPlayer
+     * seek + WINNOW probe; funguje i pro MPV na TV (box nemá sdílej login). slug je URL-safe (`[a-z0-9-]`).
+     */
+    private fun buildSdilejProxyUrl(sdilejUrl: String): String? {
+        if (uploaderBaseUrl.isBlank()) return null
+        val rest = sdilejUrl.removePrefix("sdilej://")
+        val parts = rest.split("/", limit = 2)
+        if (parts.size < 2 || parts[0].isBlank() || parts[1].isBlank()) return null
+        val base = uploaderBaseUrl.trimEnd('/')
+        val key = java.net.URLEncoder.encode(uploaderCookie, "UTF-8")
+        return "$base/api/sdilej/stream/${parts[0]}/${parts[1]}?key=$key"
     }
 
     /**
