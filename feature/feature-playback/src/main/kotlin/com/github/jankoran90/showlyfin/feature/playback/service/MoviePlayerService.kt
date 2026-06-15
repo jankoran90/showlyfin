@@ -72,6 +72,11 @@ class MoviePlayerService : MediaSessionService() {
                     .build()
             }
         session = MediaSession.Builder(this, player)
+            // Media3 vyžaduje v rámci JEDNOHO procesu UNIKÁTNÍ session ID. Audioknihová
+            // AudiobookPlayerService drží MediaLibrarySession s výchozím prázdným ID ("") → bez
+            // vlastního ID by se obě session srazily ("Session ID must be unique. ID=") a služba by
+            // spadla už v onCreate → pád při přehrávání čehokoliv (RD/Jellyfin/NaVýbornou).
+            .setId("showlyfin_movie")
             .apply { contentActivityPendingIntent()?.let { setSessionActivity(it) } }
             .build()
     }
