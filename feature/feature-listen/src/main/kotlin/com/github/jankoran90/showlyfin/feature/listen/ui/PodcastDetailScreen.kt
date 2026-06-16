@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -76,6 +77,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus
 import com.github.jankoran90.showlyfin.data.abs.model.FeedEpisode
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
+import com.github.jankoran90.showlyfin.core.ui.ShareLinks
 import com.github.jankoran90.showlyfin.feature.listen.FindEpisodesState
 import com.github.jankoran90.showlyfin.feature.listen.PodcastDetailViewModel
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
@@ -126,6 +128,14 @@ fun PodcastDetailScreen(
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                        }
+                    },
+                    actions = {
+                        val pTitle = state.detail?.podcast?.title ?: "Podcast"
+                        IconButton(onClick = {
+                            ShareLinks.share(context, pTitle, ShareLinks.podcast(itemId))
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Sdílet")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -182,6 +192,10 @@ fun PodcastDetailScreen(
             onDownload = { viewModel.downloadEpisode(ep); actionEpisode = null },
             onCancelDownload = { viewModel.cancelDownload(ep.id); actionEpisode = null },
             onDeleteDownload = { viewModel.deleteDownload(ep.id); actionEpisode = null },
+            onShare = {
+                ShareLinks.share(context, ep.title, ShareLinks.episode(itemId, ep.id))
+                actionEpisode = null
+            },
         )
     }
 
@@ -499,6 +513,7 @@ private fun EpisodeActionSheet(
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onDeleteDownload: () -> Unit,
+    onShare: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Text(
@@ -528,6 +543,7 @@ private fun EpisodeActionSheet(
             DownloadStatus.NONE ->
                 ActionRow(Icons.Default.Download, "Stáhnout pro offline", onDownload)
         }
+        ActionRow(Icons.Default.Share, "Sdílet epizodu", onShare)
         Box(Modifier.height(12.dp))
     }
 }

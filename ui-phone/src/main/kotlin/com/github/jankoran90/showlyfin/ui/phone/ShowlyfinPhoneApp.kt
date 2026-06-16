@@ -344,6 +344,18 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             )
         }
 
+        // BEAM (SHW-63): sdílený odkaz `showlyfin://listen?type=…` → přepni na Poslech a otevři plochu.
+        val openListenItemReq by ListenNavSignal.openListenItem.collectAsStateWithLifecycle()
+        LaunchedEffect(openListenItemReq) {
+            val req = openListenItemReq ?: return@LaunchedEffect
+            bottomTab = Destination.Listen
+            currentDestination = when (req.type) {
+                "audiobook" -> Destination.AudiobookDetail(req.id, parent = Destination.Listen)
+                "yt" -> Destination.YoutubeChannel(handle = req.id, title = req.title, parent = Destination.Listen)
+                else -> Destination.PodcastDetail(req.id, parent = Destination.Listen)
+            }
+        }
+
         val onCollectionPartClick: (CollectionPart) -> Unit = { part ->
             val jfId = part.jellyfinId
             val tmdb = part.tmdbId

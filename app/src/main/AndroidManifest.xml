@@ -50,6 +50,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="showlyfin" android:host="trakt" />
                 <data android:scheme="showlyfin" android:host="detail" />
+                <!-- BEAM (SHW-63): sdílené odkazy na Poslech (podcast/audiokniha/epizoda/YouTube) -->
+                <data android:scheme="showlyfin" android:host="listen" />
             </intent-filter>
         </activity>
 

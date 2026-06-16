@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -45,11 +46,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.ShareLinks
 import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDetail
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadState
@@ -82,6 +85,15 @@ fun AudiobookDetailScreen(
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                        }
+                    },
+                    actions = {
+                        val ctx = LocalContext.current
+                        val bTitle = state.detail?.book?.title ?: "Audiokniha"
+                        IconButton(onClick = {
+                            ShareLinks.share(ctx, bTitle, ShareLinks.audiobook(itemId))
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Sdílet")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

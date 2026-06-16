@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -39,12 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.ShareLinks
 import com.github.jankoran90.showlyfin.feature.listen.YoutubeChannelViewModel
 
 /**
@@ -63,6 +66,7 @@ fun YoutubeChannelScreen(
     viewModel: YoutubeChannelViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     LaunchedEffect(channel) { viewModel.load(channel) }
 
@@ -74,6 +78,14 @@ fun YoutubeChannelScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                    }
+                },
+                actions = {
+                    val chTitle = state.channelTitle ?: channelTitle
+                    IconButton(onClick = {
+                        ShareLinks.share(context, chTitle, ShareLinks.youtube(channel, chTitle))
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Sdílet kanál")
                     }
                 },
             )
@@ -108,6 +120,10 @@ fun YoutubeChannelScreen(
                         description = ep.description,
                         onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
                         onAudio = { viewModel.playAudio(ep); onOpenAudioPlayer() },
+                        onShare = {
+                            val chTitle = state.channelTitle ?: channelTitle
+                            ShareLinks.share(context, ep.title, ShareLinks.youtube(channel, chTitle, v = ep.id))
+                        },
                     )
                 }
             }
@@ -124,6 +140,7 @@ private fun EpisodeRow(
     description: String?,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
+    onShare: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column {
@@ -179,6 +196,9 @@ private fun EpisodeRow(
             OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("Poslech", Modifier.padding(start = 6.dp))
+            }
+            IconButton(onClick = onShare) {
+                Icon(Icons.Default.Share, contentDescription = "Sdílet epizodu", modifier = Modifier.size(20.dp))
             }
         }
     }

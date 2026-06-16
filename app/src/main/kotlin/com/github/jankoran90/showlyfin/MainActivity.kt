@@ -139,6 +139,21 @@ class MainActivity : ComponentActivity() {
                 uri.getQueryParameter("year")?.toIntOrNull(),
             )
         }
+        // BEAM (SHW-63): sdílený odkaz na Poslech → otevři příslušnou plochu (podcast/audiokniha/YouTube).
+        if (uri.scheme == "showlyfin" && uri.host == "listen") {
+            when (uri.getQueryParameter("type")) {
+                "podcast", "audiobook" -> uri.getQueryParameter("id")?.let {
+                    ListenNavSignal.requestOpenListenItem(uri.getQueryParameter("type")!!, it)
+                }
+                // Epizoda → otevři detail rodičovského podcastu (id = ABS itemId podcastu).
+                "episode" -> uri.getQueryParameter("id")?.let {
+                    ListenNavSignal.requestOpenListenItem("podcast", it)
+                }
+                "yt" -> uri.getQueryParameter("channel")?.let {
+                    ListenNavSignal.requestOpenListenItem("yt", it, uri.getQueryParameter("title") ?: "")
+                }
+            }
+        }
     }
 
     private fun maybeShowUpdateDialogFromIntent(intent: Intent?) {

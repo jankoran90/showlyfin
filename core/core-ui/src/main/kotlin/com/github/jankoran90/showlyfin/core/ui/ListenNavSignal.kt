@@ -82,4 +82,21 @@ object ListenNavSignal {
         detailSeq += 1
         _openDetail.value = DetailRequest(detailSeq, tmdb, title, year)
     }
+
+    /**
+     * BEAM (SHW-63): sdílený odkaz `showlyfin://listen?type=…` → phone shell otevře příslušnou
+     * Poslech plochu. [type]: "podcast"/"audiobook" (id = ABS itemId) | "yt" (id = handle kanálu,
+     * title = název kanálu). Epizoda se mapuje na "podcast" rodiče (otevře detail podcastu). seq =
+     * retrigger i při opakovaném prokliku stejného odkazu.
+     */
+    data class ListenOpenRequest(val seq: Long, val type: String, val id: String, val title: String = "")
+
+    private var listenOpenSeq = 0L
+    private val _openListenItem = MutableStateFlow<ListenOpenRequest?>(null)
+    val openListenItem = _openListenItem.asStateFlow()
+
+    fun requestOpenListenItem(type: String, id: String, title: String = "") {
+        listenOpenSeq += 1
+        _openListenItem.value = ListenOpenRequest(listenOpenSeq, type, id, title)
+    }
 }
