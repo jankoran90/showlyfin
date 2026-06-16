@@ -22,6 +22,7 @@ dependencies {
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-network"))
     implementation(project(":data:data-abs"))
+    implementation(project(":data:data-uploader")) // TUNER (SHW-62): YouTube podcast feed/stream
     implementation(libs.hilt.android)
     implementation(libs.timber)
     ksp(libs.hilt.compiler)

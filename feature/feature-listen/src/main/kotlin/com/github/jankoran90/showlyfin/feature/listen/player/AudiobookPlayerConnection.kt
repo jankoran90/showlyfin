@@ -284,6 +284,71 @@ class AudiobookPlayerConnection @Inject constructor(
         }
     }
 
+    /**
+     * TUNER (SHW-62): přehraj přímou audio URL (YouTube podcast) přes stejný přehrávač jako ABS
+     * podcasty — mini-player, notifikace, zámek, běh na pozadí, rychlost, sleep. BEZ ABS session
+     * (KEY_SESSION_ID prázdný → service neskáče sync na ABS; žádný auto-mark/fronta).
+     * [mediaId] např. "yt:<videoId>" (unikátní). [startMs] = resume pozice (zatím 0).
+     */
+    fun playDirect(
+        url: String,
+        title: String,
+        author: String?,
+        coverUrl: String?,
+        durationSec: Double,
+        mediaId: String,
+        startMs: Long = 0L,
+    ) {
+        currentEpisode = null          // ne ABS epizoda → onPlaybackEnded() nic neudělá
+        advancing = false
+        _chapters.value = emptyList()
+        bookTitle = title
+        bookAuthor = author
+        _state.update {
+            it.copy(
+                isActive = true, title = title, author = author, coverUrl = coverUrl, guest = null,
+                durationMs = (durationSec * 1000).toLong(),
+                isPodcastEpisode = true, currentItemId = null, currentEpisodeId = null,
+            )
+        }
+        withController { c ->
+            // Persist pozici ODCHÁZEJÍCÍ ABS položky (přepnutí z knihy/epizody na YouTube).
+            val outExtras = c.currentMediaItem?.mediaMetadata?.extras
+            val outSession = outExtras?.getString(AudiobookPlayerService.KEY_SESSION_ID)
+            if (!outSession.isNullOrBlank()) {
+                val outDur = outExtras.getDouble(AudiobookPlayerService.KEY_DURATION_SEC)
+                val outPos = bookPosMs(c) / 1000.0
+                scope.launch { repo.syncProgress(outSession, outPos, 0.0, outDur) }
+            }
+            val artwork = coverUrl?.let(Uri::parse)
+            val extras = Bundle().apply {
+                // KEY_SESSION_ID schválně NEnastaveno → service.syncNow() se přeskočí (žádný ABS sync).
+                putDouble(AudiobookPlayerService.KEY_DURATION_SEC, durationSec)
+                putDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC, 0.0)
+                putString(AudiobookPlayerService.KEY_BOOK_TITLE, title)
+                author?.let { putString(AudiobookPlayerService.KEY_BOOK_AUTHOR, it) }
+            }
+            val item = MediaItem.Builder()
+                .setUri(url)
+                .setMediaId(mediaId)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(title)
+                        .setArtist(author)
+                        .setArtworkUri(artwork)
+                        .setExtras(extras)
+                        .build(),
+                )
+                .build()
+            c.setMediaItems(listOf(item))
+            c.prepare()
+            val targetSpeed = if (prefs.rememberSpeed) prefs.lastPodcastSpeed else prefs.defaultSpeed
+            c.setPlaybackSpeed(targetSpeed.coerceIn(0.5f, 3.5f))
+            if (startMs > 0) c.seekTo(startMs)
+            c.playWhenReady = true
+        }
+    }
+
     /** Pozice v čase CELÉ knihy = offset aktuálního souboru + pozice v něm. */
     private fun bookPosMs(c: MediaController): Long {
         val offSec = c.currentMediaItem?.mediaMetadata?.extras

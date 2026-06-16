@@ -103,4 +103,7 @@ interface UploaderService {
     @GET suspend fun getRemuxSession(@Url url: String, @Header("Cookie") cookie: String): RemuxSession
     @DELETE suspend fun deleteRemuxSession(@Url url: String, @Header("Cookie") cookie: String): Any
     @POST suspend fun reDetectRemuxSession(@Url url: String, @Header("Cookie") cookie: String): RemuxReDetectResponse
+
+    // TUNER (SHW-62) — YouTube podcast feed (proxy na antenna; jen metadata)
+    @GET suspend fun getYtFeed(@Url url: String, @Header("Cookie") cookie: String): YtChannelFeed
 }

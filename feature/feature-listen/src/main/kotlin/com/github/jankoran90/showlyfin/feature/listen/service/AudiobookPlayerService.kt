@@ -675,7 +675,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         val p = player ?: return
         val item = p.currentMediaItem ?: return
         val extras = item.mediaMetadata.extras ?: return
-        val sessionId = extras.getString(KEY_SESSION_ID) ?: return
+        val sessionId = extras.getString(KEY_SESSION_ID)?.takeIf { it.isNotBlank() } ?: return  // TUNER: YouTube = bez ABS session
         val durationSec = extras.getDouble(KEY_DURATION_SEC)
         val trackOffsetSec = extras.getDouble(KEY_TRACK_OFFSET_SEC)
         // Pozice v čase CELÉ knihy = offset aktuálního souboru + pozice v něm.

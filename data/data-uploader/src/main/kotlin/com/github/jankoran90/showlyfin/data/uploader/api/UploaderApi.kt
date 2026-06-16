@@ -8,6 +8,7 @@ import com.google.gson.JsonParser
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
+import java.net.URLEncoder
 
 internal class UploaderApi(
     private val service: UploaderService,
@@ -571,5 +572,19 @@ internal class UploaderApi(
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
         return service.getSubtitleTranslateStatus("$base/api/subtitles/translate/status/$jobId", cookie)
+    }
+
+    // TUNER (SHW-62) — YouTube podcast streaming
+    override suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int): YtChannelFeed {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val ch = URLEncoder.encode(channel, "UTF-8")
+        return service.getYtFeed("$base/api/yt/feed?channel=$ch&limit=$limit", cookie)
+    }
+
+    override fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String): String {
+        val base = baseUrl.trimEnd('/')
+        val key = URLEncoder.encode(sessionCookie, "UTF-8")
+        return "$base/api/yt/stream/$videoId?kind=$kind&key=$key"
     }
 }

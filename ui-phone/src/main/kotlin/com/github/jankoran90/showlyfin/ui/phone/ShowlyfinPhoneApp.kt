@@ -76,6 +76,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookPlayerScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDetailScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.YoutubeChannelScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxHistoryScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxPickerScreen
@@ -114,6 +115,9 @@ internal sealed interface Destination {
     data class AudiobookDetail(val itemId: String, val parent: Destination) : Destination
     data class PodcastDetail(val itemId: String, val parent: Destination) : Destination
     data class AudiobookPlayer(val itemId: String?, val fromStart: Boolean, val startSec: Double? = null, val episodeId: String? = null, val parent: Destination) : Destination
+
+    // TUNER (SHW-62) — YouTube kanál jako podcast (video+audio streaming)
+    data class YoutubeChannel(val handle: String, val title: String, val parent: Destination) : Destination
 
     // Sub-screens
     data class Detail(val item: MediaItem, val parent: Destination) : Destination
@@ -461,6 +465,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.AudiobookDetail -> current.parent
                 is Destination.PodcastDetail -> current.parent
                 is Destination.AudiobookPlayer -> current.parent
+                is Destination.YoutubeChannel -> current.parent
                 else -> bottomTab
             }
         }
@@ -702,6 +707,28 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         currentDestination = Destination.AudiobookPlayer(
                             itemId = itemId, fromStart = false, episodeId = episodeId,
                             parent = Destination.Listen,
+                        )
+                    },
+                    onOpenYoutube = {
+                        bottomTab = Destination.Listen
+                        currentDestination = Destination.YoutubeChannel(
+                            handle = "@hovoryzezeme", title = "Hovory ze země", parent = Destination.Listen,
+                        )
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.YoutubeChannel -> YoutubeChannelScreen(
+                    channel = dest.handle,
+                    channelTitle = dest.title,
+                    onBack = { currentDestination = dest.parent },
+                    onPlayVideo = { url, title, poster ->
+                        currentDestination = Destination.Player(
+                            itemId = null, externalUrl = url, title = title, parent = dest, posterUrl = poster,
+                        )
+                    },
+                    onOpenAudioPlayer = {
+                        currentDestination = Destination.AudiobookPlayer(
+                            itemId = null, fromStart = false, parent = dest,
                         )
                     },
                     modifier = Modifier.fillMaxSize(),

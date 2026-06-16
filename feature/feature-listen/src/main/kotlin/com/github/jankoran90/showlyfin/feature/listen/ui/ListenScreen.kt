@@ -70,6 +70,7 @@ fun ListenScreen(
     onOpenBook: (itemId: String) -> Unit,
     onOpenPodcast: (itemId: String) -> Unit,
     onPlayEpisode: (itemId: String, episodeId: String) -> Unit,
+    onOpenYoutube: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ListenViewModel = hiltViewModel(),
 ) {
@@ -122,6 +123,7 @@ fun ListenScreen(
                                 state, viewModel, onOpenPodcast,
                                 downloadCount = downloads.size,
                                 onOpenDownloads = { showDownloads = true },
+                                onOpenYoutube = onOpenYoutube,
                             )
                         }
                     }
@@ -197,17 +199,28 @@ private fun PodcastsContent(
     onOpenPodcast: (String) -> Unit,
     downloadCount: Int,
     onOpenDownloads: () -> Unit,
+    onOpenYoutube: () -> Unit,
 ) {
     // Plan CASTAWAY — „Stažené epizody" musí zůstat dostupné i offline / při chybě načtení podcastů,
     // proto je chip nad obsahovou částí (ne uvnitř úspěšné větve).
     Column(Modifier.fillMaxSize()) {
-        if (downloadCount > 0) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // TUNER (SHW-62): vstup na YouTube podcasty (zatím Hovory ze země)
             AssistChip(
-                onClick = onOpenDownloads,
-                label = { Text("Stažené epizody · $downloadCount") },
-                leadingIcon = { Icon(Icons.Default.DownloadDone, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                onClick = onOpenYoutube,
+                label = { Text("YouTube podcasty") },
+                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)) },
             )
+            if (downloadCount > 0) {
+                AssistChip(
+                    onClick = onOpenDownloads,
+                    label = { Text("Stažené · $downloadCount") },
+                    leadingIcon = { Icon(Icons.Default.DownloadDone, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                )
+            }
         }
         when {
             state.isLoading && state.podcasts.isEmpty() ->

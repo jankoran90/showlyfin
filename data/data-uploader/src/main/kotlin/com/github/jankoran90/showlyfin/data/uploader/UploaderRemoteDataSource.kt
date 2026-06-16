@@ -117,4 +117,9 @@ interface UploaderRemoteDataSource {
     suspend fun getCsfdPlot(baseUrl: String, sessionCookie: String, csfdId: Long): CsfdPlotResponse
     suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem>
     suspend fun getCsfdGallery(baseUrl: String, sessionCookie: String, csfdId: Long): List<String>
+
+    // TUNER (SHW-62) — YouTube podcast (streaming): feed + samonosné stream URL (?key=, jako sdilej/titulky)
+    suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int = 30): YtChannelFeed
+    /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio". */
+    fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String): String
 }
