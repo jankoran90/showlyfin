@@ -1,8 +1,11 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
+import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -21,13 +24,20 @@ import javax.inject.Named
  * TUNER (SHW-62): YouTube kanál jako podcast — seznam epizod (streaming přes backend api/yt),
  * přehrání VIDEO (callback → externí přehrávač) nebo AUDIO (náš poslechový přehrávač přes [playDirect]).
  * Žádné stahování na server.
+ *
+ * LEVER (SHW-61) L3: AUDIO epizodu lze stáhnout DO TELEFONU (offline) přes sdílený
+ * [OfflineDownloadManager] (`TYPE_PODCAST`) z proxy `/api/yt/stream/{id}?kind=audio`.
  */
 @HiltViewModel
 class YoutubeChannelViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val connection: AudiobookPlayerConnection,
+    private val offline: OfflineDownloadManager,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
+
+    /** Stav offline stahování epizod (badge / akce v menu). Klíč = [episodeKey]. */
+    val offlineStates = offline.states
 
     data class UiState(
         val isLoading: Boolean = false,
@@ -70,18 +80,26 @@ class YoutubeChannelViewModel @Inject constructor(
     /** URL pro externí (video) přehrávač — byte-proxy přes backend. */
     fun videoUrl(ep: YtEpisode): String = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "video")
 
-    /** Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session. */
+    /** Stabilní klíč epizody pro frontu i offline index. */
+    fun episodeKey(ep: YtEpisode): String = "yt:${ep.id}"
+
+    /**
+     * Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session.
+     * L3: stažená epizoda hraje z lokálního `file://` souboru (offline + šetří mobilní data).
+     */
     private fun toQueued(ep: YtEpisode): QueuedEpisode {
         val channel = _state.value.channelTitle
+        val key = episodeKey(ep)
+        val localUrl = offline.localVideo(key)?.let { Uri.fromFile(it).toString() }
         return QueuedEpisode(
             itemId = loadedFor ?: "yt",
-            episodeId = "yt:${ep.id}",
+            episodeId = key,
             title = ep.title,
             coverUrl = ep.thumbnail,
             description = ep.description,
             podcastTitle = channel,
             direct = DirectAudio(
-                url = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                url = localUrl ?: uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
                 durationSec = ep.duration ?: 0.0,
                 author = channel,
             ),
@@ -93,4 +111,23 @@ class YoutubeChannelViewModel @Inject constructor(
 
     /** Přidá YouTube epizodu do fronty (atFront = hned po aktuální, jinak na konec). */
     fun enqueue(ep: YtEpisode, atFront: Boolean) = connection.enqueue(toQueued(ep), atFront)
+
+    /** L3: stáhni AUDIO epizodu do telefonu (offline) přes proxy `/api/yt/stream?kind=audio`. */
+    fun download(ep: YtEpisode) {
+        offline.enqueue(
+            OfflineRequest(
+                key = episodeKey(ep),
+                title = ep.title,
+                subtitle = _state.value.channelTitle,
+                type = OfflineRequest.TYPE_PODCAST,
+                sourceLabel = "YouTube",
+                videoUrl = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                posterUrl = ep.thumbnail,
+                durationSec = ep.duration ?: 0.0,
+            ),
+        )
+    }
+
+    /** L3: smaž staženou epizodu z telefonu. */
+    fun deleteOffline(ep: YtEpisode) = offline.delete(episodeKey(ep))
 }

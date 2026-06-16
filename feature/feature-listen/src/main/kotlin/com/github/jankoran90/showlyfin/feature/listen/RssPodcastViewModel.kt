@@ -1,7 +1,10 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
+import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -19,12 +22,19 @@ import javax.inject.Inject
  * PRESET (SHW-65): RSS podcast jako zdroj Poslechu — seznam epizod z feedu (přímé audio enclosure URL),
  * přehrání přes náš poslechový přehrávač ([playDirect] = mini-player, pozadí, zámek, rychlost, sleep).
  * Žádné stahování na server (na rozdíl od ABS) → sedí do filozofie nezávislosti.
+ *
+ * LEVER (SHW-61) L3: epizodu lze stáhnout DO TELEFONU (offline „na chatu bez wifi") přes sdílený
+ * [OfflineDownloadManager] (`TYPE_PODCAST`). Stažená epizoda se přehraje z lokálního `file://` souboru.
  */
 @HiltViewModel
 class RssPodcastViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
     private val connection: AudiobookPlayerConnection,
+    private val offline: OfflineDownloadManager,
 ) : ViewModel() {
+
+    /** Stav offline stahování epizod (badge / akce v menu). Klíč = [episodeKey]. */
+    val offlineStates = offline.states
 
     data class UiState(
         val isLoading: Boolean = false,
@@ -58,18 +68,26 @@ class RssPodcastViewModel @Inject constructor(
         }
     }
 
-    /** Mapování RSS epizody na položku fronty (LEVER): přímá enclosure URL, bez ABS session. */
+    /** Stabilní klíč epizody pro frontu i offline index. */
+    fun episodeKey(ep: RssEpisode): String = "rss:${ep.id}"
+
+    /**
+     * Mapování RSS epizody na položku fronty (LEVER): přímá enclosure URL, bez ABS session.
+     * L3: když je epizoda STAŽENÁ, hraj z lokálního `file://` souboru (offline + šetří data).
+     */
     private fun toQueued(ep: RssEpisode, fallbackTitle: String): QueuedEpisode {
         val podcast = _state.value.title ?: fallbackTitle
+        val key = episodeKey(ep)
+        val localUrl = offline.localVideo(key)?.let { Uri.fromFile(it).toString() }
         return QueuedEpisode(
             itemId = loadedFor ?: "rss",
-            episodeId = "rss:${ep.id}",
+            episodeId = key,
             title = ep.title.ifBlank { fallbackTitle },
             coverUrl = ep.image ?: _state.value.image,
             description = ep.description,
             podcastTitle = podcast,
             direct = DirectAudio(
-                url = ep.audioUrl,
+                url = localUrl ?: ep.audioUrl,
                 durationSec = parseDurationSec(ep.duration),
                 author = podcast,
             ),
@@ -83,6 +101,27 @@ class RssPodcastViewModel @Inject constructor(
     /** Přidá RSS epizodu do fronty (atFront = hned po aktuální, jinak na konec). */
     fun enqueue(ep: RssEpisode, fallbackTitle: String, atFront: Boolean) =
         connection.enqueue(toQueued(ep, fallbackTitle), atFront)
+
+    /** L3: stáhni epizodu do telefonu (offline). Idempotentní (už stažené/stahující se přeskočí). */
+    fun download(ep: RssEpisode, fallbackTitle: String) {
+        if (ep.audioUrl.isBlank()) return
+        val podcast = _state.value.title ?: fallbackTitle
+        offline.enqueue(
+            OfflineRequest(
+                key = episodeKey(ep),
+                title = ep.title.ifBlank { fallbackTitle },
+                subtitle = podcast,
+                type = OfflineRequest.TYPE_PODCAST,
+                sourceLabel = "Podcast",
+                videoUrl = ep.audioUrl,
+                posterUrl = ep.image ?: _state.value.image,
+                durationSec = parseDurationSec(ep.duration),
+            ),
+        )
+    }
+
+    /** L3: smaž staženou epizodu z telefonu. */
+    fun deleteOffline(ep: RssEpisode) = offline.delete(episodeKey(ep))
 }
 
 /** itunes:duration → sekundy. Podporuje "HH:MM:SS", "MM:SS" i čisté sekundy. */

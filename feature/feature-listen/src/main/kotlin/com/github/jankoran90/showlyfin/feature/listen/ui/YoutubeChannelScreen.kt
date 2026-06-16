@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -51,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.ui.ShareLinks
+import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
 import com.github.jankoran90.showlyfin.feature.listen.YoutubeChannelViewModel
 
@@ -70,6 +72,7 @@ fun YoutubeChannelScreen(
     viewModel: YoutubeChannelViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var actionEpisode by remember { mutableStateOf<YtEpisode?>(null) }
 
@@ -123,6 +126,7 @@ fun YoutubeChannelScreen(
                         durationSec = ep.duration,
                         uploadDate = ep.uploadDate,
                         description = ep.description,
+                        downloaded = offlineStates[viewModel.episodeKey(ep)]?.status == OfflineStatus.DOWNLOADED,
                         onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
                         onAudio = { viewModel.playAudio(ep); onOpenAudioPlayer() },
                         onMore = { actionEpisode = ep },
@@ -147,6 +151,12 @@ fun YoutubeChannelScreen(
                     val chTitle = state.channelTitle ?: channelTitle
                     ShareLinks.share(context, ep.title, ShareLinks.youtube(channel, chTitle, v = ep.id))
                 },
+                offlineDownloadAction(
+                    status = offlineStates[viewModel.episodeKey(ep)]?.status ?: OfflineStatus.NONE,
+                    progress = offlineStates[viewModel.episodeKey(ep)]?.progress ?: 0f,
+                    onDownload = { viewModel.download(ep) },
+                    onDelete = { viewModel.deleteOffline(ep) },
+                ),
             ),
             onDismiss = { actionEpisode = null },
         )
@@ -160,6 +170,7 @@ private fun EpisodeRow(
     durationSec: Double?,
     uploadDate: String?,
     description: String?,
+    downloaded: Boolean,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
     onMore: () -> Unit,
@@ -184,13 +195,23 @@ private fun EpisodeRow(
                 )
                 val meta = listOfNotNull(formatDate(uploadDate), durationSec?.let { formatDuration(it) })
                     .joinToString(" · ")
-                if (meta.isNotBlank()) {
-                    Text(
-                        meta,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (downloaded) {
+                        Icon(
+                            Icons.Default.DownloadDone,
+                            contentDescription = "Staženo do telefonu",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                        )
+                    }
+                    if (meta.isNotBlank()) {
+                        Text(
+                            meta,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
             }
         }

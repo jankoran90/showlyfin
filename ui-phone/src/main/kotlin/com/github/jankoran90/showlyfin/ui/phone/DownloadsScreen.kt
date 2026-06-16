@@ -40,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
+import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import java.io.File
 import java.util.Locale
@@ -55,12 +56,16 @@ fun DownloadsScreen(
     modifier: Modifier = Modifier,
     viewModel: DownloadsViewModel = hiltViewModel(),
 ) {
-    val downloads by viewModel.downloads.collectAsStateWithLifecycle()
+    val allDownloads by viewModel.downloads.collectAsStateWithLifecycle()
     val states by viewModel.states.collectAsStateWithLifecycle()
 
-    // Probíhající/čekající/selhalá stahování (z indexu ještě nejsou).
+    // LEVER L3: audio podcasty (Poslech) sem nepatří — jsou ve „Stažené" v Poslechu.
+    val downloads = allDownloads.filterNot { it.type == OfflineRequest.TYPE_PODCAST }
+
+    // Probíhající/čekající/selhalá stahování (z indexu ještě nejsou) — bez audio podcastů.
     val active = states.entries
         .filter { it.value.status == OfflineStatus.DOWNLOADING || it.value.status == OfflineStatus.QUEUED || it.value.status == OfflineStatus.FAILED }
+        .filterNot { viewModel.isPodcast(it.key) }
         .sortedBy { it.key }
 
     val used = remember(downloads) { viewModel.usedBytes() }

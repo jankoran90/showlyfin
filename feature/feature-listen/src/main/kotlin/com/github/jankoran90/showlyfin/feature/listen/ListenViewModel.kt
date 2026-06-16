@@ -8,19 +8,30 @@ import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
+import android.net.Uri
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.toAudiobook
+import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
+import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
+import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
+import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
+import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
@@ -28,6 +39,8 @@ class ListenViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val downloadManager: EpisodeDownloadManager,
     private val audiobookDownloads: AudiobookDownloadManager,
+    private val offline: OfflineDownloadManager,
+    private val connection: AudiobookPlayerConnection,
     private val connectivity: ConnectivityObserver,
     private val profileRepository: ProfileRepository,
     private val sourcesRepo: PodcastSourcesRepository,
@@ -68,11 +81,50 @@ class ListenViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ListenUiState())
     val uiState = _uiState.asStateFlow()
 
-    /** Všechny stažené epizody (správa offline stažení). */
+    /** Všechny stažené ABS epizody (správa offline stažení). */
     val downloads = downloadManager.downloads
 
+    /**
+     * LEVER (SHW-61) L3: stažené RSS/YouTube podcasty (generický offline manager, `TYPE_PODCAST`).
+     * Drží se i offline → „na chatu bez wifi" je najdeš v sekci Stažené a pustíš z lokálního souboru.
+     */
+    val offlinePodcasts: StateFlow<List<OfflineDownload>> = offline.downloads
+        .map { list -> list.filter { it.type == OfflineRequest.TYPE_PODCAST } }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            offline.downloads.value.filter { it.type == OfflineRequest.TYPE_PODCAST },
+        )
+
     fun deleteDownload(episodeId: String) = downloadManager.delete(episodeId)
-    fun deleteAllDownloads() = downloadManager.deleteAll()
+
+    /** „Smazat vše" v sekci Stažené (Poslech) = ABS epizody i stažené RSS/YT podcasty (ne filmy). */
+    fun deleteAllDownloads() {
+        downloadManager.deleteAll()
+        offline.deleteAll(setOf(OfflineRequest.TYPE_PODCAST))
+    }
+
+    /** L3: smaž stažený podcast (RSS/YT) z telefonu. */
+    fun deleteOfflinePodcast(key: String) = offline.delete(key)
+
+    /** L3: přehraj stažený podcast offline z lokálního `file://` souboru přes poslechový přehrávač. */
+    fun playOfflinePodcast(dl: OfflineDownload) {
+        val file = File(dl.videoPath).takeIf { it.exists() } ?: return
+        connection.playDirectEpisode(
+            QueuedEpisode(
+                itemId = "offline",
+                episodeId = dl.key,
+                title = dl.title,
+                coverUrl = dl.posterPath ?: dl.posterUrl,
+                podcastTitle = dl.subtitle,
+                direct = DirectAudio(
+                    url = Uri.fromFile(file).toString(),
+                    durationSec = dl.durationSec,
+                    author = dl.subtitle,
+                ),
+            ),
+        )
+    }
 
     init {
         // Plan VAULT — refresh řízený configem aktivního profilu, ne jen vznikem VM. StateFlow emitne

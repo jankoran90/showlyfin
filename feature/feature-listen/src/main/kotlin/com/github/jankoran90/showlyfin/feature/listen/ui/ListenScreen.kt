@@ -77,6 +77,7 @@ fun ListenScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val downloads by viewModel.downloads.collectAsStateWithLifecycle()
+    val podcastDownloads by viewModel.offlinePodcasts.collectAsStateWithLifecycle()
     var showDownloads by remember { mutableStateOf(false) }
 
     // PRESET (SHW-65) — po návratu z Nastavení převezmi případně změněné pořadí v Poslechu.
@@ -128,7 +129,7 @@ fun ListenScreen(
                                 ListenMode.BOOKS -> BooksContent(state, viewModel, onOpenBook)
                                 ListenMode.PODCASTS -> PodcastsContent(
                                     state, viewModel, onOpenPodcast,
-                                    downloadCount = downloads.size,
+                                    downloadCount = downloads.size + podcastDownloads.size,
                                     onOpenDownloads = { showDownloads = true },
                                     onOpenSource = onOpenSource,
                                 )
@@ -143,9 +144,12 @@ fun ListenScreen(
     if (showDownloads) {
         DownloadsSheet(
             downloads = downloads,
+            podcastDownloads = podcastDownloads,
             onDismiss = { showDownloads = false },
             onPlay = { dl -> onPlayEpisode(dl.itemId, dl.episodeId); showDownloads = false },
+            onPlayPodcast = { dl -> viewModel.playOfflinePodcast(dl); showDownloads = false },
             onDelete = { viewModel.deleteDownload(it) },
+            onDeletePodcast = { viewModel.deleteOfflinePodcast(it) },
             onDeleteAll = { viewModel.deleteAllDownloads(); showDownloads = false },
         )
     }
@@ -324,85 +328,111 @@ private fun LibraryChips(
     }
 }
 
-/** Správa offline stažení: seznam stažených epizod (klik = přehrát offline) + smazat / smazat vše. */
+/**
+ * Správa offline stažení Poslechu: ABS epizody + stažené RSS/YouTube podcasty (LEVER L3) v jednom
+ * seznamu — klik = přehrát offline, koš = smazat, „Smazat vše" = obojí (NE filmy).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DownloadsSheet(
     downloads: List<EpisodeDownload>,
+    podcastDownloads: List<com.github.jankoran90.showlyfin.data.offline.OfflineDownload>,
     onDismiss: () -> Unit,
     onPlay: (EpisodeDownload) -> Unit,
+    onPlayPodcast: (com.github.jankoran90.showlyfin.data.offline.OfflineDownload) -> Unit,
     onDelete: (String) -> Unit,
+    onDeletePodcast: (String) -> Unit,
     onDeleteAll: () -> Unit,
 ) {
+    val total = downloads.size + podcastDownloads.size
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Stažené epizody · ${downloads.size}",
+                "Stažené · $total",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
-            if (downloads.isNotEmpty()) {
+            if (total > 0) {
                 TextButton(onClick = onDeleteAll) { Text("Smazat vše") }
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-        if (downloads.isEmpty()) {
+        if (total == 0) {
             Text(
-                "Žádné stažené epizody.",
+                "Žádné stažené epizody.\nStáhni je v detailu podcastu přes ⋮ → Stáhnout do telefonu.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(20.dp),
             )
         } else {
             LazyColumn(Modifier.height(420.dp)) {
-                columnItems(downloads, key = { it.episodeId }) { dl ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { onPlay(dl) }
-                            .padding(horizontal = 20.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp),
-                        )
-                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text(
-                                dl.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            val meta = buildList {
-                                dl.podcastTitle?.let { add(it) }
-                                if (dl.sizeBytes > 0) add(formatSize(dl.sizeBytes))
-                            }.joinToString(" · ")
-                            if (meta.isNotBlank()) {
-                                Text(
-                                    meta,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
-                        }
-                        IconButton(onClick = { onDelete(dl.episodeId) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Smazat stažení", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+                columnItems(downloads, key = { "abs_${it.episodeId}" }) { dl ->
+                    val meta = buildList {
+                        dl.podcastTitle?.let { add(it) }
+                        if (dl.sizeBytes > 0) add(formatSize(dl.sizeBytes))
+                    }.joinToString(" · ")
+                    DownloadEntryRow(dl.title, meta, onPlay = { onPlay(dl) }, onDelete = { onDelete(dl.episodeId) })
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                }
+                columnItems(podcastDownloads, key = { "off_${it.key}" }) { dl ->
+                    val meta = buildList {
+                        dl.subtitle?.let { add(it) }
+                        add(dl.sourceLabel)
+                        if (dl.sizeBytes > 0) add(formatSize(dl.sizeBytes))
+                    }.joinToString(" · ")
+                    DownloadEntryRow(dl.title, meta, onPlay = { onPlayPodcast(dl) }, onDelete = { onDeletePodcast(dl.key) })
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                 }
             }
         }
         Box(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun DownloadEntryRow(
+    title: String,
+    meta: String,
+    onPlay: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onPlay() }
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Default.PlayArrow,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (meta.isNotBlank()) {
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Default.Delete, contentDescription = "Smazat stažení", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

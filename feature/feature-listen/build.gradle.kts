@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":core:core-network"))
     implementation(project(":data:data-abs"))
     implementation(project(":data:data-uploader")) // TUNER (SHW-62): YouTube podcast feed/stream
+    implementation(project(":data:data-offline")) // LEVER (SHW-61) L3: offline stažení podcastů/YT do telefonu
     implementation(libs.hilt.android)
     implementation(libs.timber)
     ksp(libs.hilt.compiler)

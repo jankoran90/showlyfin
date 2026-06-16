@@ -235,6 +235,17 @@ class OfflineDownloadManager @Inject constructor(
         refreshDownloads()
     }
 
+    /**
+     * LEVER (SHW-61) L3: smaže jen stažení daných [types] (FILMY/EPIZODY vs. PODCASTY sdílí jeden
+     * manager → „Smazat vše" v jedné sekci nesmí smazat druhou). Ostatní typy nechá být.
+     */
+    fun deleteAll(types: Set<String>) {
+        index.values.filter { it.type in types }.map { it.key }.forEach { delete(it) }
+    }
+
+    /** Typ položky (z indexu nebo z čekajícího requestu) — pro typové filtrování sekcí. */
+    fun typeOf(key: String): String? = index[key]?.type ?: requests[key]?.type
+
     /** Uloží pozici přehrávání stažené položky (offline resume). */
     fun updateResume(key: String, positionMs: Long) {
         val dl = index[key] ?: return
@@ -252,6 +263,9 @@ class OfflineDownloadManager @Inject constructor(
 
     /** Součet velikostí stažených položek. */
     fun usedBytes(): Long = index.values.sumOf { it.sizeBytes }
+
+    /** Součet velikostí stažených položek daných [types] (per-sekce „Zabráno"). */
+    fun usedBytes(types: Set<String>): Long = index.values.filter { it.type in types }.sumOf { it.sizeBytes }
 
     /** Málo místa = pod prahem (default 2 GB) → UI varuje. */
     fun isLowOnSpace(thresholdBytes: Long = 2L * 1024 * 1024 * 1024): Boolean = freeBytes() < thresholdBytes

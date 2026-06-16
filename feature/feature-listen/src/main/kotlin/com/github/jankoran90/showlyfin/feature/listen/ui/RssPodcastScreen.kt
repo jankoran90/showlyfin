@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.RssPodcastViewModel
 
@@ -65,6 +67,7 @@ fun RssPodcastScreen(
     viewModel: RssPodcastViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
     LaunchedEffect(feedUrl) { viewModel.load(feedUrl) }
     var actionEpisode by remember { mutableStateOf<RssEpisode?>(null) }
     val fallbackTitle = state.title ?: title
@@ -109,6 +112,7 @@ fun RssPodcastScreen(
                         date = ep.date,
                         duration = ep.duration,
                         description = ep.description,
+                        downloaded = offlineStates[viewModel.episodeKey(ep)]?.status == OfflineStatus.DOWNLOADED,
                         onPlay = { viewModel.playAudio(ep, fallbackTitle); onOpenAudioPlayer() },
                         onMore = { actionEpisode = ep },
                     )
@@ -131,6 +135,12 @@ fun RssPodcastScreen(
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
                     viewModel.enqueue(ep, fallbackTitle, atFront = false)
                 },
+                offlineDownloadAction(
+                    status = offlineStates[viewModel.episodeKey(ep)]?.status ?: OfflineStatus.NONE,
+                    progress = offlineStates[viewModel.episodeKey(ep)]?.progress ?: 0f,
+                    onDownload = { viewModel.download(ep, fallbackTitle) },
+                    onDelete = { viewModel.deleteOffline(ep) },
+                ),
             ),
             onDismiss = { actionEpisode = null },
         )
@@ -144,6 +154,7 @@ private fun RssEpisodeRow(
     date: String?,
     duration: String?,
     description: String?,
+    downloaded: Boolean,
     onPlay: () -> Unit,
     onMore: () -> Unit,
 ) {
@@ -162,13 +173,23 @@ private fun RssEpisodeRow(
             Column(Modifier.padding(start = 12.dp)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 val meta = listOfNotNull(formatRssDate(date), formatRssDuration(duration)).joinToString(" · ")
-                if (meta.isNotBlank()) {
-                    Text(
-                        meta,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (downloaded) {
+                        Icon(
+                            Icons.Default.DownloadDone,
+                            contentDescription = "Staženo do telefonu",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                        )
+                    }
+                    if (meta.isNotBlank()) {
+                        Text(
+                            meta,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
             }
         }

@@ -43,6 +43,13 @@ data class OfflineRequest(
     companion object {
         const val TYPE_MOVIE = "movie"
         const val TYPE_EPISODE = "episode"
+
+        /**
+         * LEVER (SHW-61) L3: stažená audio epizoda (RSS / YouTube podcast) do telefonu pro offline
+         * poslech. Přehrává se přes poslechový přehrávač ([AudiobookPlayerConnection.playDirect] s
+         * `file://`), NE přes video přehrávač — proto filmová sekce „Stažené" tento typ odfiltruje.
+         */
+        const val TYPE_PODCAST = "podcast"
     }
 }
 

@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -19,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 
 /**
  * LEVER (SHW-61): jedna položka sjednoceného akčního menu epizody Poslechu (Přehrát / Do fronty /
@@ -57,6 +62,26 @@ fun ListenEpisodeActionSheet(
         }
         Box(Modifier.height(12.dp))
     }
+}
+
+/**
+ * LEVER (SHW-61) L3: položka „Stáhnout / Smazat do telefonu" dle aktuálního [status] offline stažení.
+ * Stahuje-se/čeká = zšedlá s průběhem (jen informace), staženo = nabídne smazání.
+ */
+fun offlineDownloadAction(
+    status: OfflineStatus,
+    progress: Float,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit,
+): ListenEpisodeAction = when (status) {
+    OfflineStatus.DOWNLOADED ->
+        ListenEpisodeAction(Icons.Default.DownloadDone, "Smazat z telefonu", onClick = onDelete)
+    OfflineStatus.DOWNLOADING ->
+        ListenEpisodeAction(Icons.Default.Downloading, "Stahuje se… ${(progress * 100).toInt()} %", enabled = false) {}
+    OfflineStatus.QUEUED ->
+        ListenEpisodeAction(Icons.Default.Download, "Čeká na stažení…", enabled = false) {}
+    else ->
+        ListenEpisodeAction(Icons.Default.Download, "Stáhnout do telefonu", onClick = onDownload)
 }
 
 @Composable

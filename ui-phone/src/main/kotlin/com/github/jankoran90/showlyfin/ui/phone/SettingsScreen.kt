@@ -249,6 +249,8 @@ fun SettingsScreen(
         CollapsibleSettingsSection("Poslech", expanded) {
             // PRESET (SHW-65) — pořadí v Poslechu (Audioknihy/Podcasty + knihovny pod nimi), společné pro zařízení.
             com.github.jankoran90.showlyfin.feature.listen.ui.ListenOrderSettingsSection()
+            // LEVER (SHW-61) L5 — stažené podcasty/YouTube do telefonu (offline na chatu): místo + smazat vše.
+            com.github.jankoran90.showlyfin.feature.listen.ui.ListenOfflineSettingsSection()
             // Plan STRATA Fáze I — Poslech = JEN volby přehrávání; přihlášení ABS je v „Připojení a účty".
             if (uiState.absConfigured) {
                 ListenSettingsCard(uiState, viewModel)
