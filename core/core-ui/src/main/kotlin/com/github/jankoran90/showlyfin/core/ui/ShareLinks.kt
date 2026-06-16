@@ -5,15 +5,15 @@ import android.content.Intent
 import java.net.URLEncoder
 
 /**
- * BEAM (SHW-63): sdílení Poslech položek ostatním showlyfin uživatelům. Vyrobí `showlyfin://listen…`
- * deep-link (příjemce s appkou si ho otevře PŘÍMO v Poslechu — viz [ListenNavSignal.openListenItem]
- * + handler v MainActivity/phone shellu) a otevře systémové sdílení (ACTION_SEND, text+odkaz).
- *
- * Pozn.: některé messengery custom scheme `showlyfin://` automaticky nepodtrhnou — odkaz funguje po
- * ťuknutí / zkopírování; případný https redirect je možné rozšíření (known gap).
+ * BEAM (SHW-63) + CLASP (SHW-66): sdílení Poslech položek ostatním showlyfin uživatelům.
+ * Vyrobí **https App Link** `https://upload.jankoran.cz/s/listen?…` — messengery (WhatsApp/Messenger/SMS)
+ * ho udělají KLIKACÍ (custom scheme `showlyfin://` nepodtrhnou), příjemce s appkou ho přes Android
+ * App Links otevře PŘÍMO v Poslechu (ověření přes /.well-known/assetlinks.json na serveru); bez appky
+ * / bez ověření landing stránka přesměruje na `showlyfin://` (fallback). Handler = MainActivity (parsuje
+ * https i starší showlyfin:// kvůli zpětné kompatibilitě). [ListenNavSignal.openListenItem].
  */
 object ShareLinks {
-    private const val BASE = "showlyfin://listen"
+    private const val BASE = "https://upload.jankoran.cz/s/listen"
 
     fun podcast(itemId: String) = "$BASE?type=podcast&id=${enc(itemId)}"
     fun audiobook(itemId: String) = "$BASE?type=audiobook&id=${enc(itemId)}"

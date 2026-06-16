@@ -158,22 +158,30 @@ class MainActivity : ComponentActivity() {
             ListenNavSignal.requestOpenListen()
         }
         val uri = intent.data ?: return
-        if (uri.scheme == "showlyfin" && uri.host == "trakt") {
-            val code = uri.getQueryParameter("code") ?: return
-            traktAuthManager.onAuthCode(code)
-        }
-        // VERDICT: proklik z doporučovače (claude-voice) na detail filmu podle TMDb id.
-        if (uri.scheme == "showlyfin" && uri.host == "detail") {
-            val tmdb = uri.getQueryParameter("tmdb")?.toLongOrNull() ?: return
-            ListenNavSignal.requestOpenDetail(
-                tmdb,
-                uri.getQueryParameter("title") ?: "",
-                uri.getQueryParameter("year")?.toIntOrNull(),
-            )
-        }
-        // BEAM (SHW-63): sdílený odkaz na Poslech → otevři příslušnou plochu (podcast/audiokniha/YouTube).
-        if (uri.scheme == "showlyfin" && uri.host == "listen") {
-            when (uri.getQueryParameter("type")) {
+        // CLASP (SHW-66): cíl odkazu z OBOU tvarů — `showlyfin://<host>?…` (legacy/OAuth) i nový https
+        // App Link `https://upload.jankoran.cz/s/<kind>?…` (messenger-klikací). Query params jsou shodné.
+        val target = when {
+            uri.scheme == "showlyfin" -> uri.host
+            uri.scheme == "https" && uri.host == "upload.jankoran.cz" &&
+                uri.pathSegments.firstOrNull() == "s" -> uri.pathSegments.getOrNull(1)
+            else -> null
+        } ?: return
+        when (target) {
+            "trakt" -> {
+                val code = uri.getQueryParameter("code") ?: return
+                traktAuthManager.onAuthCode(code)
+            }
+            // VERDICT: proklik z doporučovače (claude-voice) na detail filmu podle TMDb id.
+            "detail" -> {
+                val tmdb = uri.getQueryParameter("tmdb")?.toLongOrNull() ?: return
+                ListenNavSignal.requestOpenDetail(
+                    tmdb,
+                    uri.getQueryParameter("title") ?: "",
+                    uri.getQueryParameter("year")?.toIntOrNull(),
+                )
+            }
+            // BEAM (SHW-63): sdílený odkaz na Poslech → otevři plochu (podcast/audiokniha/epizoda/YouTube).
+            "listen" -> when (uri.getQueryParameter("type")) {
                 "podcast", "audiobook" -> uri.getQueryParameter("id")?.let {
                     ListenNavSignal.requestOpenListenItem(uri.getQueryParameter("type")!!, it)
                 }

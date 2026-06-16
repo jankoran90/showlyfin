@@ -53,6 +53,17 @@
                 <!-- BEAM (SHW-63): sdílené odkazy na Poslech (podcast/audiokniha/epizoda/YouTube) -->
                 <data android:scheme="showlyfin" android:host="listen" />
             </intent-filter>
+            <!-- CLASP (SHW-66): https App Links — sdílené odkazy klikací v messengerech, otevřou se
+                 přímo v appce (ověření přes https://upload.jankoran.cz/.well-known/assetlinks.json). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="upload.jankoran.cz"
+                    android:pathPrefix="/s/" />
+            </intent-filter>
         </activity>
 
         <!-- RELAY — domácí widgety (Glance) -->
