@@ -58,11 +58,30 @@ class DetailViewModel @Inject constructor(
     private val naTv: NaTvService,
     private val workingSourceStore: com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore,
     private val favoritesStore: com.github.jankoran90.showlyfin.data.uploader.FavoritesStore,
+    private val offlineManager: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DetailUiState())
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
+
+    init {
+        // NOMAD (SHW-60): zrcadli stav offline stažení TOHOTO titulu do uiState (badge v menu Stáhnout).
+        viewModelScope.launch {
+            offlineManager.states.collect { map ->
+                val key = currentOfflineKey()
+                _uiState.update { it.copy(offlineState = key?.let { k -> map[k] } ?: com.github.jankoran90.showlyfin.data.offline.OfflineState()) }
+            }
+        }
+    }
+
+    /** NOMAD: klíč offline stažení pro aktuální titul — slice jen FILMY z knihovny (JF). */
+    private fun currentOfflineKey(): String? {
+        val s = _uiState.value
+        val jfId = s.ownedJellyfinId ?: return null
+        if (s.item?.type != MediaType.MOVIE) return null
+        return "jf_$jfId"
+    }
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
@@ -1094,6 +1113,43 @@ class DetailViewModel @Inject constructor(
     fun openDownloadMenu() = _uiState.update { it.copy(showDownloadMenu = true) }
     fun dismissDownloadMenu() = _uiState.update { it.copy(showDownloadMenu = false) }
 
+    /** NOMAD (SHW-60): stáhnout TENTO film z Jellyfin knihovny do telefonu (offline „na chatu"). */
+    fun downloadCurrentToDevice() {
+        val s = _uiState.value
+        val item = s.item ?: return
+        val jfId = s.ownedJellyfinId
+        if (jfId == null || item.type != MediaType.MOVIE) {
+            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahování do telefonu zatím jen pro filmy z knihovny.") }
+            return
+        }
+        val serverUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
+        val token = prefs.getString("jellyfin_token", "").orEmpty()
+        if (serverUrl.isBlank() || token.isBlank()) {
+            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Jellyfin není přihlášený.") }
+            return
+        }
+        offlineManager.enqueue(
+            com.github.jankoran90.showlyfin.data.offline.OfflineRequest(
+                key = "jf_$jfId",
+                title = item.title,
+                subtitle = item.year?.toString(),
+                type = com.github.jankoran90.showlyfin.data.offline.OfflineRequest.TYPE_MOVIE,
+                sourceLabel = "Knihovna",
+                videoUrl = "$serverUrl/Videos/$jfId/stream?static=true&api_key=$token",
+                posterUrl = "$serverUrl/Items/$jfId/Images/Primary?api_key=$token",
+                imdb = item.imdbId,
+                tmdb = item.tmdbId?.toInt(),
+            ),
+        )
+        _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahuji do telefonu — sleduj v sekci Stažené.") }
+    }
+
+    /** NOMAD: smaž offline stažení tohoto titulu (z menu Stáhnout, když je už staženo). */
+    fun deleteOfflineCurrent() {
+        currentOfflineKey()?.let { offlineManager.delete(it) }
+        _uiState.update { it.copy(showDownloadMenu = false) }
+    }
+
     /** Stáhnout → Sdílej.cz: seznam souborů z sdilej.cz k zachycení do knihovny. */
     fun openSdilejPicker() {
         val item = _uiState.value.item ?: return
@@ -1171,6 +1227,11 @@ class DetailViewModel @Inject constructor(
                 boxSetByTmdbCollection = owned.boxSetByTmdbCollection,
                 boxSetByNormalizedName = owned.boxSetByNormalizedName,
                 jellyfinCollection = jfCollection,
+                // NOMAD: badge offline stažení hned po načtení knihovny (film).
+                offlineState = matchedJellyfinId
+                    ?.takeIf { item.type == MediaType.MOVIE }
+                    ?.let { offlineManager.stateFor("jf_$it") }
+                    ?: com.github.jankoran90.showlyfin.data.offline.OfflineState(),
             )
         }
         recomputeMergedCollection(item)

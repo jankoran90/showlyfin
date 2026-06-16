@@ -163,14 +163,20 @@ fun PlaybackScreen(
     subtitleQuery: SubtitleQuery? = null,
     // MARQUEE: plakát do notifikace u externích streamů (Stremio/RD); Jellyfin si ho odvodí ViewModel.
     externalPosterUrl: String? = null,
+    // NOMAD (SHW-60): offline přehrání staženého souboru z telefonu (file://) + lokální .srt + resume klíč.
+    localVideoPath: String? = null,
+    localSubtitlePath: String? = null,
+    localPosterPath: String? = null,
+    offlineKey: String = "",
     onBack: () -> Unit,
     // CASCADE Fáze 4: externí stream (Stremio/RD) selhal v ExoPlayeru → zkus dalšího kandidáta
     // místo zobrazení chyby. Volá se jen u externalUrl (Jellyfin přehrávání kandidáty nemá).
     onPlaybackFailed: ((String) -> Unit)? = null,
     viewModel: PlaybackViewModel = hiltViewModel(),
 ) {
-    LaunchedEffect(itemId, externalUrl) {
-        if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl)
+    LaunchedEffect(itemId, externalUrl, localVideoPath) {
+        if (localVideoPath != null) viewModel.loadLocal(localVideoPath, localSubtitlePath, externalTitle, offlineKey, localPosterPath)
+        else if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl)
         else viewModel.load(itemId, positionMs)
     }
 
@@ -246,7 +252,7 @@ fun PlaybackScreen(
             // takže navigace jinam v appce hraje dál na pozadí (controller jen odpojíme). Skutečné
             // ukončení (Zpět) řeší exitPlayback() → ACTION_STOP službě.
             controller?.let { c ->
-                if (externalUrl != null) viewModel.saveExternalPosition(c.currentPosition, c.duration)
+                if (externalUrl != null || localVideoPath != null) viewModel.saveExternalPosition(c.currentPosition, c.duration)
                 c.removeListener(listener)
             }
             view.keepScreenOn = false
@@ -316,8 +322,8 @@ fun PlaybackScreen(
     }
     // PICKUP: u externích streamů (Stremio/RD) průběžně ukládej pozici pro pozdější „Pokračovat".
     // (Jellyfin řeší resume přes server.) Save i v onDispose pro případ rychlého odchodu.
-    LaunchedEffect(resumeDecided, externalUrl, controller) {
-        if (!resumeDecided || externalUrl == null) return@LaunchedEffect
+    LaunchedEffect(resumeDecided, externalUrl, localVideoPath, controller) {
+        if (!resumeDecided || (externalUrl == null && localVideoPath == null)) return@LaunchedEffect
         val c = controller ?: return@LaunchedEffect
         while (true) {
             delay(5000)

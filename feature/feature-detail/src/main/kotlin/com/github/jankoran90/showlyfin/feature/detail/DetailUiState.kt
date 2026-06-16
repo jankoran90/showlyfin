@@ -140,6 +140,8 @@ data class DetailUiState(
     val plotCollapsedLines: Int = 5,
     // CANVAS (SHW-47) A: pořadí akčních tlačítek na detailu (konfigurovatelné v Nastavení).
     val actionOrder: List<String> = DETAIL_ACTION_KEYS,
+    // NOMAD (SHW-60): stav offline stažení TOHOTO titulu do telefonu (jen filmy z knihovny — slice).
+    val offlineState: com.github.jankoran90.showlyfin.data.offline.OfflineState = com.github.jankoran90.showlyfin.data.offline.OfflineState(),
 )
 
 /** CANVAS (SHW-47) A: klíče akčních tlačítek na detailu (kulatá lišta nahoře) + výchozí pořadí. */

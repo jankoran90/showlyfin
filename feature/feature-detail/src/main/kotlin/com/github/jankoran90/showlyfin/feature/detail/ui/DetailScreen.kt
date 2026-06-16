@@ -256,6 +256,11 @@ fun DetailScreen(
     }
     if (uiState.showDownloadMenu) {
         DownloadMenuSheet(
+            canDevice = uiState.isOwnedInLibrary && displayItem.type == MediaType.MOVIE,
+            offlineState = uiState.offlineState,
+            showServerOptions = !uiState.isOwnedInLibrary,
+            onDevice = { viewModel.downloadCurrentToDevice() },
+            onDeleteDevice = { viewModel.deleteOfflineCurrent() },
             onSdilej = { viewModel.openSdilejPicker() },
             onSmartRemux = { viewModel.dismissDownloadMenu(); onSmartDetect?.invoke(displayItem) },
             onDismiss = { viewModel.dismissDownloadMenu() },
@@ -648,7 +653,9 @@ private fun DetailActionBar(
                     if (cb != null) HeroAction(Icons.Default.Cast, "Přehrát na TV", cb)
                 }
                 "stremio" -> if (!inLibrary) HeroAction(Icons.Default.PlayArrow, "Přehrát", onStremio)
-                "download" -> if (!inLibrary) HeroAction(Icons.Default.Download, "Stáhnout", onDownload)
+                // NOMAD (SHW-60): „Stáhnout" si drží VLASTNÍ logiku (u streamů je download ≠ play); v jeho
+                // menu je volba „Do telefonu (offline)". Přehrání staženého souboru řeší PLAY akce (onPlayHere).
+                "download" -> HeroAction(Icons.Default.Download, "Stáhnout", onDownload)
                 "watchlist" -> HeroAction(
                     if (inWatchlist) Icons.Default.Check else Icons.Default.Add,
                     if (inWatchlist) "V seznamu" else "Chci vidět",

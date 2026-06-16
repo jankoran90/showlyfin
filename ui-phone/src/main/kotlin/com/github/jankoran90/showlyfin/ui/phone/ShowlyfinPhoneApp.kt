@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -106,6 +107,9 @@ internal sealed interface Destination {
     // COMPASS C3 — univerzální hledání (sub-screen, otevírá se z horního pole)
     data object Search : Destination
 
+    // NOMAD (SHW-60) — sekce „Stažené" (offline obsah v telefonu)
+    data object Downloads : Destination
+
     // Poslech sub-screens
     data class AudiobookDetail(val itemId: String, val parent: Destination) : Destination
     data class PodcastDetail(val itemId: String, val parent: Destination) : Destination
@@ -131,7 +135,7 @@ internal sealed interface Destination {
     data class JellyfinDetail(val itemId: String, val parent: Destination) : Destination
     data class EpisodePicker(val seriesId: String, val seriesName: String, val parent: Destination) : Destination
     data class JellyfinPlayback(val itemId: String, val parent: JellyfinDetail) : Destination
-    data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination, val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null, val posterUrl: String? = null) : Destination
+    data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination, val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null, val posterUrl: String? = null, val localVideoPath: String? = null, val localSubtitlePath: String? = null, val localPosterPath: String? = null, val offlineKey: String = "") : Destination
 }
 
 internal data class JellyfinLibraryRef(
@@ -163,6 +167,7 @@ private fun Destination.sectionLabel(activeSubsection: String?): String = when (
     }
     Destination.Oblibeni -> "Oblíbení"
     Destination.Search -> "Hledání"
+    Destination.Downloads -> "Stažené"
     Destination.Listen -> "Poslech"
     else -> "Zpět"
 }
@@ -177,7 +182,7 @@ private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>
 
 // COMPASS C1: top-level cíle (drawer); jméno ponecháno kvůli minimální změně. „isSubScreen" = mimo ně.
 private val bottomTabs = listOf(
-    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Oblibeni, Destination.Settings, Destination.Admin,
+    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Oblibeni, Destination.Downloads, Destination.Settings, Destination.Admin,
 )
 
 /** FUSE F1: jedna definice navigačních cílů → vykreslí se buď ve spodní liště (telefon),
@@ -398,6 +403,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             }
             // COMPASS: Oblíbení vlastní top-level cíl (mezi sekcemi a správou).
             add(ShellNavItem(Destination.Oblibeni, Icons.Default.Star, "Oblíbení"))
+            // NOMAD (SHW-60): offline „Stažené" jako vlastní top-level cíl.
+            add(ShellNavItem(Destination.Downloads, Icons.Default.Download, "Stažené"))
             add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
             // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.
             if (gateState.activeProfile?.isAdmin == true) {
@@ -659,6 +666,21 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     onBack = { currentDestination = bottomTab },
                     modifier = Modifier.fillMaxSize(),
                 )
+                is Destination.Downloads -> DownloadsScreen(
+                    onPlay = { dl ->
+                        currentDestination = Destination.Player(
+                            itemId = null,
+                            externalUrl = null,
+                            title = dl.title,
+                            parent = Destination.Downloads,
+                            localVideoPath = dl.videoPath,
+                            localSubtitlePath = dl.subtitlePath,
+                            localPosterPath = dl.posterPath,
+                            offlineKey = dl.key,
+                        )
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
                 is Destination.Ovladac -> OvladacScreen(
                     onOpenDetail = { itemId ->
                         bottomTab = Destination.Ovladac
@@ -749,6 +771,10 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         externalTitle = dest.title,
                         subtitleQuery = dest.subtitleQuery,
                         externalPosterUrl = dest.posterUrl,
+                        localVideoPath = dest.localVideoPath,
+                        localSubtitlePath = dest.localSubtitlePath,
+                        localPosterPath = dest.localPosterPath,
+                        offlineKey = dest.offlineKey,
                         onBack = { currentDestination = dest.parent },
                         onPlaybackFailed = { code ->
                             currentDestination = dest.parent   // pop na Detail, kde žije candidate list

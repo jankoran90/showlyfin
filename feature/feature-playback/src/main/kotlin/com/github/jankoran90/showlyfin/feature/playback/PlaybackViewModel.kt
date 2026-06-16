@@ -85,6 +85,35 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
+    /**
+     * NOMAD (SHW-60): offline přehrání STAŽENÉHO souboru z telefonu (file://) + případně lokální .srt.
+     * Žádná síť — resume klíčujeme přes [offlineKey] do stejných `resume_` prefs jako externí streamy
+     * (saveExternalPosition se postará o průběžné ukládání), takže „Pokračovat / Od začátku" funguje i offline.
+     */
+    fun loadLocal(videoPath: String, subtitlePath: String?, title: String, offlineKey: String, posterPath: String? = null) {
+        query = null
+        resumeKey = offlineKey.takeIf { it.isNotBlank() }
+        val savedResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
+        val videoUri = android.net.Uri.fromFile(java.io.File(videoPath)).toString()
+        val posterUri = posterPath?.let { android.net.Uri.fromFile(java.io.File(it)).toString() }
+        translateObserveJob?.cancel(); translateObserveJob = null; translateKey = null
+        _state.update {
+            it.copy(
+                isLoading = false, title = title, streamUrl = videoUri, posterUrl = posterUri,
+                positionMs = 0L, resumePositionMs = savedResume,
+                subtitleCues = emptyList(), selectedSubtitleIndex = -1,
+                subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
+                canTranslateAi = false, aiTranslating = false, aiTranslateError = null,
+            )
+        }
+        if (subtitlePath != null) {
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val cues = runCatching { parseSrt(java.io.File(subtitlePath).readBytes()) }.getOrDefault(emptyList())
+                if (cues.isNotEmpty()) _state.update { it.copy(subtitleCues = cues, selectedSubtitleIndex = 0) }
+            }
+        }
+    }
+
     /** PICKUP: ulož/aktualizuj pozici externího streamu pro pozdější „Pokračovat".
      *  Ukládá jen smysluplný úsek (od ~5 s); v posledních 30 s = dokoukáno → resume zahodí. */
     fun saveExternalPosition(positionMs: Long, durationMs: Long) {

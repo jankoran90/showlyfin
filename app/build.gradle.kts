@@ -28,8 +28,8 @@ android {
         applicationId = "com.github.jankoran90.showlyfin"
         minSdk = 23
         targetSdk = 36
-        versionCode = 216
-        versionName = "1.45.90"
+        versionCode = 217
+        versionName = "1.45.91"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -99,6 +99,7 @@ dependencies {
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-uploader"))
     implementation(project(":data:data-abs"))
+    implementation(project(":data:data-offline"))
 
     implementation(project(":feature:feature-remux"))
     implementation(project(":feature:feature-uploader"))

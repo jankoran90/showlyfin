@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStreamQuality
 
@@ -524,15 +525,32 @@ private fun StreamPathRow(title: String, subtitle: String, count: Int, isLoading
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DownloadMenuSheet(
+    canDevice: Boolean,
+    offlineState: com.github.jankoran90.showlyfin.data.offline.OfflineState,
+    showServerOptions: Boolean,
+    onDevice: () -> Unit,
+    onDeleteDevice: () -> Unit,
     onSdilej: () -> Unit,
     onSmartRemux: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetHeader("Stáhnout", Icons.Default.Download)
-        MenuRow("Sdílej.cz", "Stáhnout přímý soubor do knihovny", Icons.Default.Download, onSdilej)
-        HorizontalDivider()
-        MenuRow("Smart Remux (4K + CZ audio)", "Automaticky složí 4K video + CZ audio", Icons.Default.Build, onSmartRemux)
+        // NOMAD (SHW-60): stažení do telefonu (offline „na chatu") — slice jen filmy z knihovny.
+        if (canDevice) {
+            when (offlineState.status) {
+                OfflineStatus.DOWNLOADED -> MenuRow("Staženo v telefonu", "Smazat stažený soubor", Icons.Default.Download, onDeleteDevice)
+                OfflineStatus.DOWNLOADING -> MenuRow("Stahuje se… ${(offlineState.progress * 100).toInt()} %", "Průběh v sekci Stažené", Icons.Default.Download) {}
+                OfflineStatus.QUEUED -> MenuRow("Čeká ve frontě…", "Průběh v sekci Stažené", Icons.Default.Download) {}
+                else -> MenuRow("Do telefonu (offline)", "Stáhnout film do telefonu na chatu bez wifi", Icons.Default.Download, onDevice)
+            }
+            if (showServerOptions) HorizontalDivider()
+        }
+        if (showServerOptions) {
+            MenuRow("Sdílej.cz", "Stáhnout přímý soubor do knihovny", Icons.Default.Download, onSdilej)
+            HorizontalDivider()
+            MenuRow("Smart Remux (4K + CZ audio)", "Automaticky složí 4K video + CZ audio", Icons.Default.Build, onSmartRemux)
+        }
         Spacer(Modifier.height(16.dp))
     }
 }

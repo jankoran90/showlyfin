@@ -37,6 +37,7 @@ include(":data:data-csfd")
 include(":data:data-uploader")
 include(":data:data-abs")
 include(":data:data-maestro")
+include(":data:data-offline")
 
 // Features
 include(":feature:feature-discover")

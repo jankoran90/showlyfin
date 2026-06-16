@@ -24,6 +24,7 @@ dependencies {
     implementation(project(":data:data-csfd"))
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-uploader"))
+    implementation(project(":data:data-offline"))   // NOMAD (SHW-60): stáhnout film z knihovny do telefonu
     implementation(libs.jellyfin.sdk)
     implementation(libs.timber)
     implementation(libs.hilt.android)
