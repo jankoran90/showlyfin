@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
+import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,17 +58,31 @@ class RssPodcastViewModel @Inject constructor(
         }
     }
 
-    /** Spustí epizodu v našem poslechovém přehrávači (přímá enclosure URL, bez stahování). */
-    fun playAudio(ep: RssEpisode, fallbackTitle: String) {
-        connection.playDirect(
-            url = ep.audioUrl,
+    /** Mapování RSS epizody na položku fronty (LEVER): přímá enclosure URL, bez ABS session. */
+    private fun toQueued(ep: RssEpisode, fallbackTitle: String): QueuedEpisode {
+        val podcast = _state.value.title ?: fallbackTitle
+        return QueuedEpisode(
+            itemId = loadedFor ?: "rss",
+            episodeId = "rss:${ep.id}",
             title = ep.title.ifBlank { fallbackTitle },
-            author = _state.value.title ?: fallbackTitle,
             coverUrl = ep.image ?: _state.value.image,
-            durationSec = parseDurationSec(ep.duration),
-            mediaId = "rss:${ep.id}",
+            description = ep.description,
+            podcastTitle = podcast,
+            direct = DirectAudio(
+                url = ep.audioUrl,
+                durationSec = parseDurationSec(ep.duration),
+                author = podcast,
+            ),
         )
     }
+
+    /** Spustí epizodu v našem poslechovém přehrávači (přímá enclosure URL, bez stahování) + do fronty. */
+    fun playAudio(ep: RssEpisode, fallbackTitle: String) =
+        connection.playDirectEpisode(toQueued(ep, fallbackTitle))
+
+    /** Přidá RSS epizodu do fronty (atFront = hned po aktuální, jinak na konec). */
+    fun enqueue(ep: RssEpisode, fallbackTitle: String, atFront: Boolean) =
+        connection.enqueue(toQueued(ep, fallbackTitle), atFront)
 }
 
 /** itunes:duration → sekundy. Podporuje "HH:MM:SS", "MM:SS" i čisté sekundy. */

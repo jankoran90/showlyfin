@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
+import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,16 +70,27 @@ class YoutubeChannelViewModel @Inject constructor(
     /** URL pro externí (video) přehrávač — byte-proxy přes backend. */
     fun videoUrl(ep: YtEpisode): String = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "video")
 
-    /** Spustí AUDIO režim v našem poslechovém přehrávači (mini-player, pozadí, zámek). */
-    fun playAudio(ep: YtEpisode) {
-        val url = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio")
-        connection.playDirect(
-            url = url,
+    /** Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session. */
+    private fun toQueued(ep: YtEpisode): QueuedEpisode {
+        val channel = _state.value.channelTitle
+        return QueuedEpisode(
+            itemId = loadedFor ?: "yt",
+            episodeId = "yt:${ep.id}",
             title = ep.title,
-            author = _state.value.channelTitle,
             coverUrl = ep.thumbnail,
-            durationSec = ep.duration ?: 0.0,
-            mediaId = "yt:${ep.id}",
+            description = ep.description,
+            podcastTitle = channel,
+            direct = DirectAudio(
+                url = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                durationSec = ep.duration ?: 0.0,
+                author = channel,
+            ),
         )
     }
+
+    /** Spustí AUDIO režim v našem poslechovém přehrávači (mini-player, pozadí, zámek) + do fronty. */
+    fun playAudio(ep: YtEpisode) = connection.playDirectEpisode(toQueued(ep))
+
+    /** Přidá YouTube epizodu do fronty (atFront = hned po aktuální, jinak na konec). */
+    fun enqueue(ep: YtEpisode, atFront: Boolean) = connection.enqueue(toQueued(ep), atFront)
 }

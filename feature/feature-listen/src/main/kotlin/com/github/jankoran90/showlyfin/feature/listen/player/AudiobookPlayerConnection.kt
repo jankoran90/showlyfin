@@ -83,6 +83,7 @@ class AudiobookPlayerConnection @Inject constructor(
             val arr = JSONArray(json)
             (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
+                val directObj = o.optJSONObject("direct")
                 QueuedEpisode(
                     itemId = o.getString("itemId"),
                     episodeId = o.getString("episodeId"),
@@ -91,6 +92,13 @@ class AudiobookPlayerConnection @Inject constructor(
                     guest = if (o.isNull("guest")) null else o.optString("guest").takeIf { it.isNotBlank() },
                     description = if (o.isNull("description")) null else o.optString("description").takeIf { it.isNotBlank() },
                     podcastTitle = if (o.isNull("podcastTitle")) null else o.optString("podcastTitle").takeIf { it.isNotBlank() },
+                    direct = directObj?.let {
+                        DirectAudio(
+                            url = it.optString("url"),
+                            durationSec = it.optDouble("durationSec", 0.0),
+                            author = if (it.isNull("author")) null else it.optString("author").takeIf { a -> a.isNotBlank() },
+                        )
+                    }?.takeIf { it.url.isNotBlank() },
                 )
             }
         }.getOrElse { emptyList() }
@@ -108,7 +116,16 @@ class AudiobookPlayerConnection @Inject constructor(
                     .put("coverUrl", q.coverUrl ?: JSONObject.NULL)
                     .put("guest", q.guest ?: JSONObject.NULL)
                     .put("description", q.description ?: JSONObject.NULL)
-                    .put("podcastTitle", q.podcastTitle ?: JSONObject.NULL),
+                    .put("podcastTitle", q.podcastTitle ?: JSONObject.NULL)
+                    .put(
+                        "direct",
+                        q.direct?.let {
+                            JSONObject()
+                                .put("url", it.url)
+                                .put("durationSec", it.durationSec)
+                                .put("author", it.author ?: JSONObject.NULL)
+                        } ?: JSONObject.NULL,
+                    ),
             )
         }
         prefs.queueJson = arr.toString()
@@ -298,17 +315,24 @@ class AudiobookPlayerConnection @Inject constructor(
         durationSec: Double,
         mediaId: String,
         startMs: Long = 0L,
+        episode: QueuedEpisode? = null,
     ) {
-        currentEpisode = null          // ne ABS epizoda → onPlaybackEnded() nic neudělá
+        // LEVER (SHW-61): RSS/YT epizoda smí žít ve frontě (auto-advance) — když [episode] != null,
+        // sledujeme ji jako aktuální a zařadíme do fronty (jako playBook u ABS). Bez [episode] = staré
+        // chování (jednorázové přehrání bez fronty/auto-advance).
+        currentEpisode = episode
         advancing = false
+        if (episode != null && _queue.value.none { it.episodeId == episode.episodeId }) {
+            setQueue(listOf(episode) + _queue.value)
+        }
         _chapters.value = emptyList()
         bookTitle = title
         bookAuthor = author
         _state.update {
             it.copy(
-                isActive = true, title = title, author = author, coverUrl = coverUrl, guest = null,
+                isActive = true, title = title, author = author, coverUrl = coverUrl, guest = episode?.guest,
                 durationMs = (durationSec * 1000).toLong(),
-                isPodcastEpisode = true, currentItemId = null, currentEpisodeId = null,
+                isPodcastEpisode = true, currentItemId = episode?.itemId, currentEpisodeId = episode?.episodeId,
             )
         }
         withController { c ->
@@ -504,14 +528,36 @@ class AudiobookPlayerConnection @Inject constructor(
         if (idx > 0) moveQueueItem(idx, 0)
     }
 
-    /** Přehraj konkrétní epizodu z fronty hned (klik v seznamu). NEodebírá ji z fronty. */
-    fun playQueued(episode: QueuedEpisode) {
+    /**
+     * LEVER (SHW-61): sjednocené spuštění položky fronty bez ohledu na typ zdroje — RSS/YouTube
+     * (`direct`) přes přímou URL ([playDirect]), klasická ABS epizoda přes ABS play session.
+     */
+    private fun startEpisode(episode: QueuedEpisode) {
+        val d = episode.direct
+        if (d != null) {
+            playDirect(
+                url = d.url,
+                title = episode.title,
+                author = d.author,
+                coverUrl = episode.coverUrl,
+                durationSec = d.durationSec,
+                mediaId = episode.episodeId,
+                episode = episode,
+            )
+            return
+        }
         scope.launch {
             runCatching { repo.startEpisodePlayback(episode.itemId, episode.episodeId) }
                 .onSuccess { pb -> playBook(pb, fromStart = false, episode = episode, itemId = episode.itemId) }
                 .onFailure { Timber.w(it, "[Listen] přehrání epizody z fronty selhalo") }
         }
     }
+
+    /** Přehraj konkrétní epizodu z fronty hned (klik v seznamu). NEodebírá ji z fronty. */
+    fun playQueued(episode: QueuedEpisode) = startEpisode(episode)
+
+    /** Přehraj přímou RSS/YouTube epizodu HNED + zařaď do fronty (auto-advance). Vstup z VM. */
+    fun playDirectEpisode(episode: QueuedEpisode) = startEpisode(episode)
 
     /** Přeskoč na další epizodu ve frontě za aktuální (skip ▶). No-op když žádná není. */
     fun playNextInQueue() {
@@ -540,11 +586,14 @@ class AudiobookPlayerConnection @Inject constructor(
         advancing = true
         currentEpisode = null
 
-        if (prefs.autoMarkFinished) {
-            scope.launch { repo.setEpisodeFinished(ended.itemId, ended.episodeId, true) }
-        }
-        if (prefs.deleteDownloadAfterFinish && downloads.localFile(ended.episodeId) != null) {
-            downloads.delete(ended.episodeId)
+        // ABS-specifické operace jen u ABS epizod (RSS/YT `direct` nemá ABS server stav ani stažení).
+        if (ended.direct == null) {
+            if (prefs.autoMarkFinished) {
+                scope.launch { repo.setEpisodeFinished(ended.itemId, ended.episodeId, true) }
+            }
+            if (prefs.deleteDownloadAfterFinish && downloads.localFile(ended.episodeId) != null) {
+                downloads.delete(ended.episodeId)
+            }
         }
 
         // Sleep „do konce epizody" → zastav, nepokračuj.
@@ -563,17 +612,16 @@ class AudiobookPlayerConnection @Inject constructor(
         if (!prefs.autoAdvanceQueue) { advancing = false; return }
 
         if (next != null) {
-            scope.launch {
-                runCatching { repo.startEpisodePlayback(next.itemId, next.episodeId) }
-                    .onSuccess { pb -> playBook(pb, fromStart = false, episode = next, itemId = next.itemId) }
-                    .onFailure { Timber.w(it, "[Listen] auto-advance fronty selhal") }
-                advancing = false
-            }
+            // Sjednocené spuštění (ABS i RSS/YT). currentEpisode je teď null → případný další
+            // STATE_ENDED během přepnutí se v onPlaybackEnded zahodí; startEpisode nastaví nový.
+            startEpisode(next)
+            advancing = false
             return
         }
 
-        // Fronta prázdná → volitelně pokračuj další nepřehranou epizodou téhož podcastu.
-        if (prefs.continuePodcastAfterQueue) {
+        // Fronta prázdná → volitelně pokračuj další nepřehranou epizodou téhož podcastu (jen ABS;
+        // RSS/YT nemá serverový seznam navazujících epizod).
+        if (ended.direct == null && prefs.continuePodcastAfterQueue) {
             scope.launch {
                 val detail = runCatching { repo.getPodcastDetail(ended.itemId) }.getOrNull()
                 val nextEp = detail?.episodes?.firstOrNull { !it.isFinished && it.id != ended.episodeId }

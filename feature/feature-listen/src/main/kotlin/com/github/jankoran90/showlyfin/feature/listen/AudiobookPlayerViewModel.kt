@@ -123,12 +123,16 @@ class AudiobookPlayerViewModel @Inject constructor(
     fun clearAll() = connection.clearAll()
     fun moveQueueItem(from: Int, to: Int) = connection.moveQueueItem(from, to)
     fun moveQueuedToFront(episodeId: String) = connection.moveToFront(episodeId)
-    fun downloadQueued(ep: QueuedEpisode) = downloadManager.downloadByIds(ep.itemId, ep.episodeId, ep.title, ep.coverUrl)
+    /** Stáhnout položku fronty offline. ABS přes server; RSS/YT (`direct`) zatím no-op (L3 = NOMAD). */
+    fun downloadQueued(ep: QueuedEpisode) {
+        if (ep.direct != null) return
+        downloadManager.downloadByIds(ep.itemId, ep.episodeId, ep.title, ep.coverUrl)
+    }
 
     /** Akce swipe doprava ve frontě dle nastavení (0=stáhnout, 1=přehrát, 2=na začátek). */
     fun onQueueSwipeAction(ep: QueuedEpisode, action: Int) = when (action) {
         1 -> connection.playQueued(ep)
         2 -> connection.moveToFront(ep.episodeId)
-        else -> downloadManager.downloadByIds(ep.itemId, ep.episodeId, ep.title, ep.coverUrl)
+        else -> downloadQueued(ep)
     }
 }
