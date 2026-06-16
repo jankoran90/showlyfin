@@ -429,8 +429,15 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             // NOMAD (SHW-60): offline „Stažené" jako vlastní top-level cíl.
             add(ShellNavItem(Destination.Downloads, Icons.Default.Download, "Stažené"))
             add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
-            // PRESET (SHW-65) — správa zdrojů Poslechu (YouTube/RSS) z postranního menu, nad „Správa".
-            add(ShellNavItem(Destination.SourceManager, Icons.Default.Podcasts, "Zdroje podcastů"))
+            // PRESET (SHW-65) — správa zdrojů Poslechu z postranního menu jen pro SPRÁVCE + účet yellman
+            // (profil „Honza") — rozhodnutí usera 2026-06-16: rodinné zdroje nesmí měnit ostatní profily.
+            val isSourcesOwner = gateState.activeProfile?.let { p ->
+                p.isAdmin && (p.name.trim().equals("Honza", ignoreCase = true) ||
+                    p.name.trim().equals("yellman", ignoreCase = true))
+            } == true
+            if (isSourcesOwner) {
+                add(ShellNavItem(Destination.SourceManager, Icons.Default.Podcasts, "Zdroje podcastů"))
+            }
             // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.
             if (gateState.activeProfile?.isAdmin == true) {
                 add(ShellNavItem(Destination.Admin, Icons.Default.AdminPanelSettings, "Správa"))
