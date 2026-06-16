@@ -4,6 +4,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.Podcast
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 
 /** Přepínač obsahu poslechové sekce. */
 enum class ListenMode { BOOKS, PODCASTS }
@@ -13,6 +14,8 @@ data class ListenUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val mode: ListenMode = ListenMode.BOOKS,
+    // PRESET (SHW-65) — pořadí v Poslechu (společné pro zařízení): Audioknihy první?
+    val booksFirst: Boolean = true,
     // Plan CASTAWAY — offline režim
     val isOffline: Boolean = false,
     val downloadedBookIds: Set<String> = emptySet(),
@@ -25,6 +28,8 @@ data class ListenUiState(
     val selectedPodcastLibraryId: String? = null,
     val podcasts: List<Podcast> = emptyList(),
     val podcastsLoaded: Boolean = false,
+    // PRESET (SHW-65) — vlastní zdroje (YouTube/RSS) sdílené ze serveru, splynou se sekcí Podcasty
+    val customSources: List<PodcastSource> = emptyList(),
 )
 
 data class AudiobookDetailUiState(

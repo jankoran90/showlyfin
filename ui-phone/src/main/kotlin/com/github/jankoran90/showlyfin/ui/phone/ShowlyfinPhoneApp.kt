@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsRemote
@@ -77,6 +78,8 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDetailScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.YoutubeChannelScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.RssPodcastScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxHistoryScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxPickerScreen
@@ -118,6 +121,10 @@ internal sealed interface Destination {
 
     // TUNER (SHW-62) — YouTube kanál jako podcast (video+audio streaming)
     data class YoutubeChannel(val handle: String, val title: String, val parent: Destination) : Destination
+
+    // PRESET (SHW-65) — správce zdrojů Poslechu (drawer nad adminem) + RSS podcast obrazovka
+    data object SourceManager : Destination
+    data class RssPodcast(val feedUrl: String, val title: String, val parent: Destination) : Destination
 
     // Sub-screens
     data class Detail(val item: MediaItem, val parent: Destination) : Destination
@@ -186,7 +193,7 @@ private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>
 
 // COMPASS C1: top-level cíle (drawer); jméno ponecháno kvůli minimální změně. „isSubScreen" = mimo ně.
 private val bottomTabs = listOf(
-    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Oblibeni, Destination.Downloads, Destination.Settings, Destination.Admin,
+    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Oblibeni, Destination.Downloads, Destination.SourceManager, Destination.Settings, Destination.Admin,
 )
 
 /** FUSE F1: jedna definice navigačních cílů → vykreslí se buď ve spodní liště (telefon),
@@ -422,6 +429,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             // NOMAD (SHW-60): offline „Stažené" jako vlastní top-level cíl.
             add(ShellNavItem(Destination.Downloads, Icons.Default.Download, "Stažené"))
             add(ShellNavItem(Destination.Settings, Icons.Default.Settings, "Nastavení"))
+            // PRESET (SHW-65) — správa zdrojů Poslechu (YouTube/RSS) z postranního menu, nad „Správa".
+            add(ShellNavItem(Destination.SourceManager, Icons.Default.Podcasts, "Zdroje podcastů"))
             // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.
             if (gateState.activeProfile?.isAdmin == true) {
                 add(ShellNavItem(Destination.Admin, Icons.Default.AdminPanelSettings, "Správa"))
@@ -478,6 +487,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.PodcastDetail -> current.parent
                 is Destination.AudiobookPlayer -> current.parent
                 is Destination.YoutubeChannel -> current.parent
+                is Destination.RssPodcast -> current.parent
                 else -> bottomTab
             }
         }
@@ -725,6 +735,29 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         bottomTab = Destination.Listen
                         currentDestination = Destination.YoutubeChannel(
                             handle = "@hovoryzezeme", title = "Hovory ze země", parent = Destination.Listen,
+                        )
+                    },
+                    onOpenSource = { src ->
+                        // PRESET (SHW-65) — vlastní zdroj z Podcastů: YouTube → kanál, RSS → epizody podcastu.
+                        bottomTab = Destination.Listen
+                        currentDestination = if (src.type == "youtube") {
+                            Destination.YoutubeChannel(handle = src.ref, title = src.title, parent = Destination.Listen)
+                        } else {
+                            Destination.RssPodcast(feedUrl = src.ref, title = src.title, parent = Destination.Listen)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.SourceManager -> SourceManagerScreen(
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is Destination.RssPodcast -> RssPodcastScreen(
+                    feedUrl = dest.feedUrl,
+                    title = dest.title,
+                    onBack = { currentDestination = dest.parent },
+                    onOpenAudioPlayer = {
+                        currentDestination = Destination.AudiobookPlayer(
+                            itemId = null, fromStart = false, parent = dest,
                         )
                     },
                     modifier = Modifier.fillMaxSize(),

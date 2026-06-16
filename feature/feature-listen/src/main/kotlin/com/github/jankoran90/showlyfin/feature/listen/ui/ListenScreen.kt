@@ -43,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,12 +72,16 @@ fun ListenScreen(
     onOpenPodcast: (itemId: String) -> Unit,
     onPlayEpisode: (itemId: String, episodeId: String) -> Unit,
     onOpenYoutube: () -> Unit,
+    onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ListenViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val downloads by viewModel.downloads.collectAsStateWithLifecycle()
     var showDownloads by remember { mutableStateOf(false) }
+
+    // PRESET (SHW-65) — po návratu z Nastavení převezmi případně změněné pořadí v Poslechu.
+    LaunchedEffect(Unit) { viewModel.reloadOrderPrefs() }
 
     ListenExpressiveTheme {
         Box(
@@ -89,42 +94,47 @@ fun ListenScreen(
                     "Poslech zatím není nastaven.\nPřihlas se k Audiobookshelf serveru v Nastavení → Poslech (Audiobookshelf).",
                 )
             } else {
-                val pagerState = rememberPagerState(
-                    initialPage = if (state.mode == ListenMode.PODCASTS) 1 else 0,
-                ) { 2 }
-                val scope = rememberCoroutineScope()
-                // Swipe ⇄ přepíná režim (a tím i načítání dat).
-                LaunchedEffect(pagerState.currentPage) {
-                    viewModel.setMode(if (pagerState.currentPage == 1) ListenMode.PODCASTS else ListenMode.BOOKS)
+                // PRESET (SHW-65) — pořadí záložek dle nastavení (Audioknihy / Podcasty první).
+                val modes = remember(state.booksFirst) {
+                    if (state.booksFirst) listOf(ListenMode.BOOKS, ListenMode.PODCASTS)
+                    else listOf(ListenMode.PODCASTS, ListenMode.BOOKS)
                 }
-                Column(Modifier.fillMaxSize()) {
-                    if (state.isOffline) OfflineBanner()
-                    SingleChoiceSegmentedButtonRow(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    ) {
-                        SegmentedButton(
-                            selected = pagerState.currentPage == 0,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        ) { Text("Audioknihy") }
-                        SegmentedButton(
-                            selected = pagerState.currentPage == 1,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        ) { Text("Podcasty") }
+                key(state.booksFirst) {
+                    val pagerState = rememberPagerState(
+                        initialPage = modes.indexOf(state.mode).coerceAtLeast(0),
+                    ) { modes.size }
+                    val scope = rememberCoroutineScope()
+                    // Swipe ⇄ přepíná režim (a tím i načítání dat).
+                    LaunchedEffect(pagerState.currentPage) {
+                        viewModel.setMode(modes[pagerState.currentPage])
                     }
+                    Column(Modifier.fillMaxSize()) {
+                        if (state.isOffline) OfflineBanner()
+                        SingleChoiceSegmentedButtonRow(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            modes.forEachIndexed { i, m ->
+                                SegmentedButton(
+                                    selected = pagerState.currentPage == i,
+                                    onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
+                                    shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
+                                ) { Text(if (m == ListenMode.BOOKS) "Audioknihy" else "Podcasty") }
+                            }
+                        }
 
-                    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-                        when (page) {
-                            0 -> BooksContent(state, viewModel, onOpenBook)
-                            else -> PodcastsContent(
-                                state, viewModel, onOpenPodcast,
-                                downloadCount = downloads.size,
-                                onOpenDownloads = { showDownloads = true },
-                                onOpenYoutube = onOpenYoutube,
-                            )
+                        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                            when (modes[page]) {
+                                ListenMode.BOOKS -> BooksContent(state, viewModel, onOpenBook)
+                                ListenMode.PODCASTS -> PodcastsContent(
+                                    state, viewModel, onOpenPodcast,
+                                    downloadCount = downloads.size,
+                                    onOpenDownloads = { showDownloads = true },
+                                    onOpenYoutube = onOpenYoutube,
+                                    onOpenSource = onOpenSource,
+                                )
+                            }
                         }
                     }
                 }
@@ -200,6 +210,7 @@ private fun PodcastsContent(
     downloadCount: Int,
     onOpenDownloads: () -> Unit,
     onOpenYoutube: () -> Unit,
+    onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
 ) {
     // Plan CASTAWAY — „Stažené epizody" musí zůstat dostupné i offline / při chybě načtení podcastů,
     // proto je chip nad obsahovou částí (ne uvnitř úspěšné větve).
@@ -222,11 +233,14 @@ private fun PodcastsContent(
                 )
             }
         }
+        // PRESET (SHW-65) — vlastní zdroje (YouTube/RSS) splynou s Podcasty: jsou nezávislé na ABS,
+        // proto se obsah ukáže, i když ABS podcasty chybí (offline / prázdná knihovna).
+        val hasContent = state.podcasts.isNotEmpty() || state.customSources.isNotEmpty()
         when {
-            state.isLoading && state.podcasts.isEmpty() ->
+            state.isLoading && !hasContent ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 
-            state.isOffline && state.podcasts.isEmpty() ->
+            state.isOffline && !hasContent ->
                 CenteredMessage(
                     if (downloadCount > 0) {
                         "Offline — online seznam podcastů není dostupný.\nStažené epizody najdeš nahoře."
@@ -235,7 +249,7 @@ private fun PodcastsContent(
                     },
                 )
 
-            state.error != null && state.podcasts.isEmpty() -> CenteredMessage(state.error)
+            state.error != null && !hasContent -> CenteredMessage(state.error)
 
             else -> {
                 if (state.podcastLibraries.size > 1) {
@@ -245,8 +259,8 @@ private fun PodcastsContent(
                         onSelect = viewModel::selectPodcastLibrary,
                     )
                 }
-                if (state.podcasts.isEmpty() && !state.isLoading) {
-                    CenteredMessage("V této knihovně zatím nejsou žádné podcasty.")
+                if (!hasContent && !state.isLoading) {
+                    CenteredMessage("V této knihovně zatím nejsou žádné podcasty.\nVlastní zdroje přidáš v postranním menu → Zdroje podcastů.")
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 150.dp),
@@ -255,6 +269,10 @@ private fun PodcastsContent(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
+                        // Vlastní zdroje (YouTube/RSS) nahoře — sdílené ze serveru, nezávislé na vybrané knihovně.
+                        items(state.customSources, key = { "src:${it.id}" }) { src ->
+                            SourceCard(source = src, onClick = { onOpenSource(src) })
+                        }
                         items(state.podcasts, key = { it.id }) { podcast ->
                             PodcastCard(podcast = podcast, onClick = { onOpenPodcast(podcast.id) })
                         }

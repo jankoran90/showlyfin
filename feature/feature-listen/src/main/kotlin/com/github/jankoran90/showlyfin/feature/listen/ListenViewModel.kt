@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.network.ConnectivityObserver
+import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.toAudiobook
+import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +30,17 @@ class ListenViewModel @Inject constructor(
     private val audiobookDownloads: AudiobookDownloadManager,
     private val connectivity: ConnectivityObserver,
     private val profileRepository: ProfileRepository,
+    private val sourcesRepo: PodcastSourcesRepository,
+    private val absPrefs: AbsPreferences,
 ) : ViewModel() {
+
+    /** PRESET (SHW-65) — seřaď knihovny dle ručního pořadí ([order] = ID knihoven); neznámé na konec. */
+    private fun List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>.ordered(order: List<String>):
+        List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary> {
+        if (order.isEmpty()) return this
+        val idx = order.withIndex().associate { (i, id) -> id to i }
+        return sortedBy { idx[it.id] ?: Int.MAX_VALUE }
+    }
 
     /**
      * Profilový whitelist ABS knihoven (Plan PROFILES Fáze 4E). null = bez omezení (vidět vše).
@@ -96,8 +108,42 @@ class ListenViewModel @Inject constructor(
                 if (online && (_uiState.value.podcastsLoaded || _uiState.value.mode == ListenMode.PODCASTS)) {
                     loadPodcastLibraries()
                 }
+                // PRESET — vlastní zdroje (sdílené ze serveru) jsou nezávislé na ABS; načti při návratu online.
+                if (online) loadSources()
             }
             .launchIn(viewModelScope)
+
+        // PRESET (SHW-65) — reaktivně zrcadli sdílený seznam zdrojů do UI (přidání/odebrání kdekoli se
+        // okamžitě projeví v sekci Podcasty). Nezávislé na ABS přihlášení.
+        sourcesRepo.sources
+            .onEach { srcs -> _uiState.update { it.copy(customSources = srcs) } }
+            .launchIn(viewModelScope)
+        loadSources()
+        _uiState.update { it.copy(booksFirst = absPrefs.listenBooksFirst) }
+    }
+
+    /** PRESET — načti/obnov sdílený seznam vlastních zdrojů (YouTube/RSS) ze serveru. */
+    fun loadSources() {
+        viewModelScope.launch { sourcesRepo.refresh() }
+    }
+
+    /**
+     * PRESET (SHW-65) — znovu načti pořadí Poslechu z Nastavení (po návratu z Nastavení) a přeřaď
+     * už načtené knihovny. Volá ListenScreen při vstupu.
+     */
+    fun reloadOrderPrefs() {
+        _uiState.update {
+            it.copy(
+                booksFirst = absPrefs.listenBooksFirst,
+                libraries = it.libraries.ordered(absPrefs.audiobookLibraryOrder),
+                podcastLibraries = it.podcastLibraries.ordered(absPrefs.podcastLibraryOrder),
+            )
+        }
+    }
+
+    /** PRESET — odeber vlastní zdroj ze sdíleného store (projeví se u celé rodiny). */
+    fun removeSource(id: String) {
+        viewModelScope.launch { sourcesRepo.remove(id) }
     }
 
     /** Stažené audioknihy jako UI police (Plan CASTAWAY CA-2). */
@@ -133,7 +179,7 @@ class ListenViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isConfigured = true, isLoading = true, isOffline = false, error = null) }
-            runCatching { repo.getAudiobookLibraries().applyProfileWhitelist() }
+            runCatching { repo.getAudiobookLibraries().applyProfileWhitelist().ordered(absPrefs.audiobookLibraryOrder) }
                 .onSuccess { libs ->
                     if (libs.isEmpty()) {
                         _uiState.update { it.copy(isLoading = false, libraries = emptyList(), books = downloadedBooks()) }
@@ -162,8 +208,9 @@ class ListenViewModel @Inject constructor(
     fun setMode(mode: ListenMode) {
         if (mode == _uiState.value.mode) return
         _uiState.update { it.copy(mode = mode, error = null) }
-        if (mode == ListenMode.PODCASTS && !_uiState.value.podcastsLoaded) {
-            loadPodcastLibraries()
+        if (mode == ListenMode.PODCASTS) {
+            if (!_uiState.value.podcastsLoaded) loadPodcastLibraries()
+            loadSources()   // PRESET — obnov vlastní zdroje při vstupu do Podcastů (mohly přibýt z jiného telefonu)
         }
     }
 
@@ -195,7 +242,7 @@ class ListenViewModel @Inject constructor(
         if (!repo.isConfigured) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            runCatching { repo.getPodcastLibraries().applyProfileWhitelist() }
+            runCatching { repo.getPodcastLibraries().applyProfileWhitelist().ordered(absPrefs.podcastLibraryOrder) }
                 .onSuccess { libs ->
                     if (libs.isEmpty()) {
                         _uiState.update {

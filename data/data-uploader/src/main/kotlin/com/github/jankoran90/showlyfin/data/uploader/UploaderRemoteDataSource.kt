@@ -124,4 +124,12 @@ interface UploaderRemoteDataSource {
     fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String): String
     /** Pre-warm resolve cache (best-effort) — rychlejší start přehrávání. */
     suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String)
+
+    // PRESET (SHW-65) — dynamický správce zdrojů Poslechu: sdílený store + hledání podle názvu + RSS epizody
+    suspend fun listSources(baseUrl: String, sessionCookie: String): List<PodcastSource>
+    suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?): List<PodcastSource>
+    suspend fun removeSource(baseUrl: String, sessionCookie: String, id: String): List<PodcastSource>
+    suspend fun searchSources(baseUrl: String, sessionCookie: String, query: String, type: String = "all", limit: Int = 8): List<SourceSearchResult>
+    /** RSS podcast feed → epizody (přímé audio enclosure URL — ExoPlayer hraje rovnou, nic se neukládá). */
+    suspend fun getRssFeed(baseUrl: String, sessionCookie: String, feedUrl: String, limit: Int = 50): RssFeed
 }

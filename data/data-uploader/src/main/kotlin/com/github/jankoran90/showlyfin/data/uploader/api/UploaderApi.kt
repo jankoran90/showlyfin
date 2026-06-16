@@ -593,4 +593,26 @@ internal class UploaderApi(
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
         runCatching { service.getYtResolve("$base/api/yt/resolve?video_id=$videoId&kind=$kind", cookie) }
     }
+
+    // PRESET (SHW-65) — správce zdrojů Poslechu (sdílený store + hledání + RSS feed)
+    private fun cookieOf(sessionCookie: String) = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+
+    override suspend fun listSources(baseUrl: String, sessionCookie: String): List<PodcastSource> =
+        service.listSources("${baseUrl.trimEnd('/')}/api/sources", cookieOf(sessionCookie)).sources
+
+    override suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?): List<PodcastSource> =
+        service.addSource("${baseUrl.trimEnd('/')}/api/sources", cookieOf(sessionCookie), AddSourceRequest(type, ref, title, thumbnail)).sources
+
+    override suspend fun removeSource(baseUrl: String, sessionCookie: String, id: String): List<PodcastSource> =
+        service.removeSource("${baseUrl.trimEnd('/')}/api/sources/${URLEncoder.encode(id, "UTF-8")}", cookieOf(sessionCookie)).sources
+
+    override suspend fun searchSources(baseUrl: String, sessionCookie: String, query: String, type: String, limit: Int): List<SourceSearchResult> {
+        val q = URLEncoder.encode(query, "UTF-8")
+        return service.searchSources("${baseUrl.trimEnd('/')}/api/sources/search?q=$q&type=$type&limit=$limit", cookieOf(sessionCookie)).results
+    }
+
+    override suspend fun getRssFeed(baseUrl: String, sessionCookie: String, feedUrl: String, limit: Int): RssFeed {
+        val u = URLEncoder.encode(feedUrl, "UTF-8")
+        return service.getRssFeed("${baseUrl.trimEnd('/')}/api/rss/feed?url=$u&limit=$limit", cookieOf(sessionCookie))
+    }
 }

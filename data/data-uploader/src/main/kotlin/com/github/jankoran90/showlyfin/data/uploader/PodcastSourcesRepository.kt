@@ -1,0 +1,68 @@
+package com.github.jankoran90.showlyfin.data.uploader
+
+import android.content.SharedPreferences
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
+import com.github.jankoran90.showlyfin.data.uploader.model.RssFeed
+import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import timber.log.Timber
+import javax.inject.Inject
+import javax.inject.Named
+import javax.inject.Singleton
+
+/**
+ * PRESET (SHW-65): sdílený seznam ZDROJŮ Poslechu (YouTube kanály + RSS podcasty) uložený NA SERVERU
+ * (přidám na jednom telefonu → vidí celá rodina). Jeden zdroj pravdy pro appku = [sources] StateFlow,
+ * který reaktivně čtou [ListenViewModel] (render v sekci Podcasty) i AddSourceViewModel (po přidání/
+ * odebrání rovnou aktualizuje flow → seznam se přepíše bez ručního refreshe).
+ *
+ * Zdroj pravdy je SERVER (ne lokální prefs) → držíme jen poslední fetch; baseUrl/cookie čteme ze
+ * sdílených `traktPreferences` (klíče `uploader_*`, stejně jako TUNER YouTube cesta).
+ */
+@Singleton
+class PodcastSourcesRepository @Inject constructor(
+    private val remote: UploaderRemoteDataSource,
+    @param:Named("traktPreferences") private val prefs: SharedPreferences,
+) {
+    private val _sources = MutableStateFlow<List<PodcastSource>>(emptyList())
+    val sources = _sources.asStateFlow()
+
+    private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+    val isConfigured: Boolean get() = baseUrl.isNotBlank() && cookie.isNotBlank()
+
+    /** Znovu načte sdílený seznam ze serveru. Bez přihlášení k uploaderu → prázdný (žádná chyba). */
+    suspend fun refresh() {
+        if (!isConfigured) { _sources.value = emptyList(); return }
+        runCatching { remote.listSources(baseUrl, cookie) }
+            .onSuccess { _sources.value = it }
+            .onFailure { Timber.w(it, "[PRESET] načtení zdrojů selhalo") }
+    }
+
+    /** Přidá zdroj (sdíleně na server) a aktualizuje flow. Vrací true při úspěchu. */
+    suspend fun add(type: String, ref: String, title: String, thumbnail: String?): Boolean {
+        if (!isConfigured) return false
+        return runCatching { remote.addSource(baseUrl, cookie, type, ref, title, thumbnail) }
+            .onSuccess { _sources.value = it }
+            .onFailure { Timber.w(it, "[PRESET] přidání zdroje selhalo") }
+            .isSuccess
+    }
+
+    /** Odebere zdroj ze sdíleného store a aktualizuje flow. */
+    suspend fun remove(id: String): Boolean {
+        if (!isConfigured) return false
+        return runCatching { remote.removeSource(baseUrl, cookie, id) }
+            .onSuccess { _sources.value = it }
+            .onFailure { Timber.w(it, "[PRESET] odebrání zdroje selhalo") }
+            .isSuccess
+    }
+
+    /** Hledání zdroje podle názvu (YouTube + CZ podcasty). [type] = all|youtube|rss. */
+    suspend fun search(query: String, type: String): List<SourceSearchResult> =
+        remote.searchSources(baseUrl, cookie, query, type)
+
+    /** Epizody RSS podcastu (přímé audio enclosure URL). */
+    suspend fun loadRss(feedUrl: String, limit: Int = 50): RssFeed =
+        remote.getRssFeed(baseUrl, cookie, feedUrl, limit)
+}

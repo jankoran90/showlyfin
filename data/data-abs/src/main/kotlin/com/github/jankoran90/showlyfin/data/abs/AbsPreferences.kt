@@ -212,6 +212,23 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_SHOW_SLEEP_BTN, true)
         set(value) = prefs.edit { putBoolean(KEY_SHOW_SLEEP_BTN, value) }
 
+    // ──────────────── Pořadí v Poslechu (PRESET SHW-65, společné pro zařízení) ────────────────
+
+    /** Zobrazit v Poslechu nejdřív Audioknihy (true) nebo Podcasty (false). */
+    var listenBooksFirst: Boolean
+        get() = prefs.getBoolean(KEY_BOOKS_FIRST, true)
+        set(value) = prefs.edit { putBoolean(KEY_BOOKS_FIRST, value) }
+
+    /** Ruční pořadí knihoven audioknih (ID knihoven). Prázdné = pořadí ze serveru. */
+    var audiobookLibraryOrder: List<String>
+        get() = prefs.getString(KEY_BOOK_LIB_ORDER, "").orEmpty().split("\n").filter { it.isNotBlank() }
+        set(value) = prefs.edit { putString(KEY_BOOK_LIB_ORDER, value.joinToString("\n")) }
+
+    /** Ruční pořadí knihoven podcastů (ID knihoven). Prázdné = pořadí ze serveru. */
+    var podcastLibraryOrder: List<String>
+        get() = prefs.getString(KEY_PODCAST_LIB_ORDER, "").orEmpty().split("\n").filter { it.isNotBlank() }
+        set(value) = prefs.edit { putString(KEY_PODCAST_LIB_ORDER, value.joinToString("\n")) }
+
     // ──────────────── Synchronizace ────────────────
 
     /** Interval syncu pozice na ABS server v sekundách. */
@@ -255,6 +272,9 @@ class AbsPreferences @Inject constructor(
         private const val KEY_TOKEN = "abs_token"
         private const val KEY_DEVICE = "abs_device_id"
         private const val KEY_HIDE_FINISHED = "listen_hide_finished"
+        private const val KEY_BOOKS_FIRST = "listen_books_first"
+        private const val KEY_BOOK_LIB_ORDER = "listen_book_lib_order"
+        private const val KEY_PODCAST_LIB_ORDER = "listen_podcast_lib_order"
         private const val KEY_SKIP_SECONDS = "listen_skip_seconds"
         private const val KEY_REMEMBER_SPEED = "listen_remember_speed"
         private const val KEY_DEFAULT_SPEED = "listen_default_speed"

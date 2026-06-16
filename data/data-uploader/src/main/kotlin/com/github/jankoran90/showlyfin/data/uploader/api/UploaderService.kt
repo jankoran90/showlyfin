@@ -108,4 +108,11 @@ interface UploaderService {
     @GET suspend fun getYtFeed(@Url url: String, @Header("Cookie") cookie: String): YtChannelFeed
     // TUNER — pre-warm resolve cache (rychlejší start přehrávání nejnovějších epizod)
     @GET suspend fun getYtResolve(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+
+    // PRESET (SHW-65) — dynamický správce zdrojů Poslechu (sdílený store + hledání + RSS feed)
+    @GET suspend fun listSources(@Url url: String, @Header("Cookie") cookie: String): SourcesResponse
+    @POST suspend fun addSource(@Url url: String, @Header("Cookie") cookie: String, @Body request: AddSourceRequest): SourcesResponse
+    @DELETE suspend fun removeSource(@Url url: String, @Header("Cookie") cookie: String): SourcesResponse
+    @GET suspend fun searchSources(@Url url: String, @Header("Cookie") cookie: String): SourceSearchResponse
+    @GET suspend fun getRssFeed(@Url url: String, @Header("Cookie") cookie: String): RssFeed
 }
