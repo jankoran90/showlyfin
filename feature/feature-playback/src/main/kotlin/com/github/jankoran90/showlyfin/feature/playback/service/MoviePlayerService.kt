@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -15,6 +16,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.github.jankoran90.showlyfin.core.domain.InstallGuard
 import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
@@ -87,6 +89,12 @@ class MoviePlayerService : MediaSessionService() {
         // Plan EVEN — filmové DRC je opt-in (default VYP). Když je zapnuté, připojí se na session id
         // TOHOTO přehrávače = jen telefon. Na TV běží yellyfin/box → passthrough do AVR se nedotkne.
         player.setAudioSessionId(audioSessionId)
+        // EVERGREEN — tichá auto-instalace na pozadí nesmí utnout běžící film (i se zhasnutou obrazovkou).
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                InstallGuard.playbackActive = isPlaying
+            }
+        })
         val drcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0)
         if (drcLevel > 0) {
             audioBoost = AudioBoost(audioSessionId).also { it.apply(drcLevel, AudioBoost.Profile.MOVIE) }
@@ -146,6 +154,7 @@ class MoviePlayerService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        InstallGuard.playbackActive = false
         audioBoost?.release()
         audioBoost = null
         session?.run {

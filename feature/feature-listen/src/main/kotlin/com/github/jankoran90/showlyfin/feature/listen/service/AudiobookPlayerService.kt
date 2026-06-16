@@ -20,6 +20,7 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import com.github.jankoran90.showlyfin.core.domain.InstallGuard
 import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
@@ -144,6 +145,8 @@ class AudiobookPlayerService : MediaLibraryService() {
         exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) { startSync(); startMetaTicker() } else { stopSync(); stopMetaTicker(); syncNow() }
+                // EVERGREEN — tichá auto-instalace na pozadí nesmí utnout poslech (i se zhasnutou obrazovkou).
+                InstallGuard.playbackActive = isPlaying
                 notifyListenWidget()
             }
             override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
@@ -607,6 +610,7 @@ class AudiobookPlayerService : MediaLibraryService() {
 
     override fun onDestroy() {
         syncNow()
+        InstallGuard.playbackActive = false
         runCatching { unregisterReceiver(drcReceiver) }
         audioBoost?.release()
         audioBoost = null

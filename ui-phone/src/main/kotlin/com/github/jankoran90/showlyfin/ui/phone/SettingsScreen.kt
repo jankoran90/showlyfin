@@ -110,6 +110,10 @@ fun SettingsScreen(
         ProfileHeader(profile = activeHeaderProfile, onSwitch = { viewModel.logoutProfile() })
         Spacer(Modifier.height(16.dp))
 
+        // EVERGREEN (SHW-64) — sekce Aktualizace volně NAHOŘE (hned vidět): verze, stav, konfigurace.
+        UpdateSection()
+        Spacer(Modifier.height(16.dp))
+
         // Plan PROFILES Fáze 4E: ne-admin (dětský) profil MÁ přístup do Nastavení (vzhled, poslech…),
         // jen NE do správy profilů a admin sekce omezení/práv (ty jsou gated `isAdmin` níže).
         if (!isAdmin) {
@@ -391,8 +395,7 @@ fun SettingsScreen(
         }
 
         CollapsibleSettingsSection("Systém", expanded) {
-            UpdateSection()
-            Spacer(Modifier.height(16.dp))
+            // EVERGREEN (SHW-64) — sekce Aktualizace přesunuta volně NAHORU (hned za hlavičku profilu).
             DebugSection(
                 liveLogging = uiState.liveLogging,
                 onLiveLogging = { viewModel.setLiveLogging(it) },
@@ -933,7 +936,12 @@ private fun UpdateSection() {
     val launcher = LocalUpdateLauncher.current
     var isChecking by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf<String?>(null) }
-    val lastCheck = launcher.lastCheckAt()
+    var lastCheck by remember { mutableStateOf(launcher.lastCheckAt()) }
+    var available by remember { mutableStateOf(launcher.availableVersion()) }
+    // EVERGREEN (SHW-64) — konfigurace auto-aktualizací (kategorický blok „Aktualizace").
+    var autoUpdate by remember { mutableStateOf(launcher.isAutoUpdateEnabled()) }
+    var silentInstall by remember { mutableStateOf(launcher.isSilentInstall()) }
+    var wifiOnly by remember { mutableStateOf(launcher.isWifiOnly()) }
     val lastText = if (lastCheck > 0L) {
         SimpleDateFormat("d.M.yyyy HH:mm", Locale("cs", "CZ")).format(Date(lastCheck))
     } else "—"
@@ -964,6 +972,27 @@ private fun UpdateSection() {
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.6f),
             )
+
+            // Stav: nová verze připravená k instalaci.
+            available?.let { ver ->
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Nová verze $ver k dispozici",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        launcher.installNow()
+                        statusText = "Instaluji $ver…"
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Aktualizovat nyní")
+                }
+            }
+
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = {
@@ -971,8 +1000,10 @@ private fun UpdateSection() {
                     statusText = "Kontroluji…"
                     launcher.checkNow { result ->
                         isChecking = false
+                        lastCheck = launcher.lastCheckAt()
+                        available = launcher.availableVersion()
                         statusText = when (result) {
-                            is UpdateCheckResult.Available -> "Nová verze ${result.tagName} — dialog otevřen"
+                            is UpdateCheckResult.Available -> "Nová verze ${result.tagName} k dispozici"
                             UpdateCheckResult.UpToDate -> "Máte nejnovější verzi"
                             UpdateCheckResult.Failed -> "Kontrola selhala (zkontrolujte připojení)"
                         }
@@ -987,6 +1018,25 @@ private fun UpdateSection() {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
             }
+
+            Spacer(Modifier.height(8.dp))
+            ListenSwitchRow(
+                title = "Automatické aktualizace",
+                subtitle = "Novou verzi stáhne sám na pozadí",
+                checked = autoUpdate,
+            ) { autoUpdate = it; launcher.setAutoUpdateEnabled(it) }
+            if (autoUpdate) {
+                ListenSwitchRow(
+                    title = "Tichá instalace",
+                    subtitle = "Nainstaluje bez ťuknutí, když appku zrovna nepoužíváš",
+                    checked = silentInstall,
+                ) { silentInstall = it; launcher.setSilentInstall(it) }
+            }
+            ListenSwitchRow(
+                title = "Jen na Wi-Fi",
+                subtitle = "Aktualizace stahovat jen na Wi-Fi",
+                checked = wifiOnly,
+            ) { wifiOnly = it; launcher.setWifiOnly(it) }
         }
     }
 }

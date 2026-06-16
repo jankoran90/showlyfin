@@ -16,6 +16,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.github.jankoran90.showlyfin.MainActivity
 import com.github.jankoran90.showlyfin.R
+import com.github.jankoran90.showlyfin.ShowlyfinApp
+import com.github.jankoran90.showlyfin.core.domain.InstallGuard
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
@@ -32,15 +34,39 @@ class UpdateCheckWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        val ctx = applicationContext
         val checker = UpdateChecker()
-        val manifest = checker.fetchManifest(applicationContext)
-        UpdatePreferences.storeCheckAt(applicationContext)
+        val manifest = checker.fetchManifest(ctx)
+        UpdatePreferences.storeCheckAt(ctx)
         if (manifest == null) return Result.retry()
         if (!checker.isUpdateAvailable(manifest)) {
-            UpdatePreferences.clearAvailable(applicationContext)
+            UpdatePreferences.clearAvailable(ctx)
             return Result.success()
         }
-        UpdatePreferences.storeAvailable(applicationContext, manifest)
+        UpdatePreferences.storeAvailable(ctx, manifest)
+
+        // EVERGREEN (SHW-64) — auto-update vypnut → jen notifikuj (ruční instalace z Nastavení / dialogu).
+        if (!UpdatePreferences.isAutoUpdateEnabled(ctx)) {
+            notifyUpdate(manifest.versionName)
+            return Result.success()
+        }
+
+        // Stáhni novou verzi sám (na pozadí). Když selže, notifikuj a zkus příště.
+        val apk = checker.downloadApk(ctx, manifest) { }
+        if (apk == null) {
+            notifyUpdate(manifest.versionName)
+            return Result.retry()
+        }
+
+        // Tichá instalace jen když se nic neutne: appka NENÍ v popředí a nic nehraje (i se zhaslou
+        // obrazovkou — MediaSession na pozadí). Jinak nech na ruční instalaci a zkus příští cyklus.
+        val canSilent = UpdatePreferences.isSilentInstallEnabled(ctx) &&
+            !ShowlyfinApp.isInForeground &&
+            !InstallGuard.playbackActive
+        if (canSilent && ApkInstaller.install(ctx, apk)) {
+            // Instalace běží asynchronně; výsledek (vč. fallbacku na dialog) řeší InstallResultReceiver.
+            return Result.success()
+        }
         notifyUpdate(manifest.versionName)
         return Result.success()
     }
@@ -76,15 +102,20 @@ class UpdateCheckWorker(
 
     companion object {
         fun enqueue(context: Context) {
+            // EVERGREEN — „jen na Wi-Fi" = UNMETERED, jinak libovolné připojení. UPDATE (ne KEEP), aby se
+            // změna toggle „jen Wi-Fi" propsala do constraintu (MainActivity volá enqueue při startu;
+            // setWifiOnly re-enqueue hned). 6 h = svižnější doručení než dřívějších 12 h.
+            val networkType =
+                if (UpdatePreferences.isWifiOnly(context)) NetworkType.UNMETERED else NetworkType.CONNECTED
             val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiredNetworkType(networkType)
                 .setRequiresBatteryNotLow(true)
                 .build()
-            val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(12, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(6, TimeUnit.HOURS)
                 .setConstraints(constraints)
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
         }
     }
 }

@@ -21,6 +21,7 @@ import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
 import com.github.jankoran90.showlyfin.debug.DebugCaptureGestureHost
 import com.github.jankoran90.showlyfin.debug.DebugCaptureManager
+import com.github.jankoran90.showlyfin.services.ApkInstaller
 import com.github.jankoran90.showlyfin.services.EXTRA_OPEN_UPDATE_DIALOG
 import com.github.jankoran90.showlyfin.services.UpdateCheckWorker
 import com.github.jankoran90.showlyfin.services.UpdateChecker
@@ -73,6 +74,37 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun lastCheckAt(): Long = UpdatePreferences.lastCheckAt(applicationContext)
+
+            // EVERGREEN (SHW-64) — stav nové verze + ruční instalace + konfigurace z Nastavení.
+            override fun availableVersion(): String? =
+                UpdatePreferences.read(applicationContext)?.versionName
+
+            override fun installNow() {
+                val pending = UpdatePreferences.read(applicationContext) ?: return
+                lifecycleScope.launch {
+                    val checker = UpdateChecker()
+                    val apk = checker.downloadApk(applicationContext, pending.toManifest()) {}
+                    if (apk != null && !ApkInstaller.install(applicationContext, apk)) {
+                        // Tichá instalace neprošla → klasický systémový installer dialog.
+                        runCatching { startActivity(checker.buildInstallIntent(applicationContext, apk)) }
+                    }
+                }
+            }
+
+            override fun isAutoUpdateEnabled(): Boolean =
+                UpdatePreferences.isAutoUpdateEnabled(applicationContext)
+            override fun setAutoUpdateEnabled(value: Boolean) =
+                UpdatePreferences.setAutoUpdateEnabled(applicationContext, value)
+            override fun isSilentInstall(): Boolean =
+                UpdatePreferences.isSilentInstallEnabled(applicationContext)
+            override fun setSilentInstall(value: Boolean) =
+                UpdatePreferences.setSilentInstallEnabled(applicationContext, value)
+            override fun isWifiOnly(): Boolean = UpdatePreferences.isWifiOnly(applicationContext)
+            override fun setWifiOnly(value: Boolean) {
+                UpdatePreferences.setWifiOnly(applicationContext, value)
+                // Propíše „jen Wi-Fi" do constraintu periodické kontroly hned (ne až po restartu).
+                UpdateCheckWorker.enqueue(applicationContext)
+            }
         }
 
         val debugLauncher = object : DebugCaptureLauncher {

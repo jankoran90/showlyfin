@@ -5,6 +5,18 @@ import androidx.compose.runtime.compositionLocalOf
 interface UpdateLauncher {
     fun checkNow(onResult: (UpdateCheckResult) -> Unit)
     fun lastCheckAt(): Long
+
+    // Plan EVERGREEN (SHW-64) — stav + ruční instalace + konfigurace auto-aktualizací z Nastavení.
+    /** versionName připravené nové verze, nebo null když je appka aktuální. */
+    fun availableVersion(): String? = null
+    /** Stáhni a nainstaluj připravenou novou verzi hned (otevře dialog / tichou instalaci). */
+    fun installNow() {}
+    fun isAutoUpdateEnabled(): Boolean = true
+    fun setAutoUpdateEnabled(value: Boolean) {}
+    fun isSilentInstall(): Boolean = true
+    fun setSilentInstall(value: Boolean) {}
+    fun isWifiOnly(): Boolean = false
+    fun setWifiOnly(value: Boolean) {}
 }
 
 sealed class UpdateCheckResult {

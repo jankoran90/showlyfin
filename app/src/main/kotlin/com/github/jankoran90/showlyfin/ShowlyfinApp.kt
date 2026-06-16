@@ -1,11 +1,13 @@
 package com.github.jankoran90.showlyfin
 
+import android.app.Activity
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.os.Bundle
 import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
@@ -45,6 +47,37 @@ class ShowlyfinApp : Application() {
         // RELAY — periodická obnova domácích widgetů (no-op když žádný není na ploše).
         WidgetRefreshWorker.schedule(this)
         registerListenWidgetRefresh()
+        registerForegroundTracking()
+    }
+
+    /**
+     * EVERGREEN (SHW-64) — sleduje, jestli je appka v popředí, aby tichá auto-instalace nové verze
+     * nikdy neshodila aktivně používanou obrazovku. Bez extra závislosti (počítáme started aktivity).
+     */
+    private fun registerForegroundTracking() {
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private var started = 0
+            override fun onActivityStarted(activity: Activity) {
+                started++
+                isInForeground = true
+            }
+            override fun onActivityStopped(activity: Activity) {
+                started--
+                if (started <= 0) isInForeground = false
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
+    }
+
+    companion object {
+        /** True dokud je aspoň jedna aktivita appky v popředí (viz [registerForegroundTracking]). */
+        @Volatile
+        var isInForeground: Boolean = false
+            private set
     }
 
     /** RELAY — AudiobookPlayerService broadcastne zmenu prehravani -> obnovime Poslouchej widget. */
