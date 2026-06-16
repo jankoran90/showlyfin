@@ -44,8 +44,12 @@ class AudiobookPlayerConnection @Inject constructor(
     private val repo: AbsRepository,
     private val prefs: AbsPreferences,
     private val downloads: EpisodeDownloadManager,
+    private val resumeStore: DirectResumeStore,
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    /** L2b: throttle pro periodický zápis resume pozice direct epizod (RSS/YT) z [pushState]. */
+    private var lastDirectSaveMs = 0L
 
     private var controller: MediaController? = null
     private var pending: ((MediaController) -> Unit)? = null
@@ -224,6 +228,17 @@ class AudiobookPlayerConnection @Inject constructor(
                 queueSwipeAction = prefs.queueSwipeAction,
             )
         }
+
+        // L2b: periodicky ulož pozici DIRECT epizody (RSS/YT) do lokálního resume storu (ekvivalent
+        // serverového ABS progresu). Throttle ~4 s, ať netlučeme do SharedPreferences každých 500 ms.
+        val ep = currentEpisode
+        if (ep?.direct != null && ep.episodeId.isNotBlank()) {
+            val now = System.currentTimeMillis()
+            if (now - lastDirectSaveMs >= DIRECT_SAVE_INTERVAL_MS) {
+                lastDirectSaveMs = now
+                resumeStore.save(ep.episodeId, pos, bookDurationMs)
+            }
+        }
     }
 
     fun playBook(
@@ -261,6 +276,9 @@ class AudiobookPlayerConnection @Inject constructor(
                 val outDur = outExtras.getDouble(AudiobookPlayerService.KEY_DURATION_SEC)
                 val outPos = bookPosMs(c) / 1000.0
                 scope.launch { repo.syncProgress(outSession, outPos, 0.0, outDur) }
+            } else if (outSession.isNullOrBlank()) {
+                // L2b: odcházející DIRECT epizoda (RSS/YT) → ulož resume pozici lokálně.
+                saveOutgoingDirectResume(c, outExtras)
             }
             val artwork = pb.coverUrl?.let(Uri::parse)
             val items = pb.tracks.map { t ->
@@ -343,6 +361,9 @@ class AudiobookPlayerConnection @Inject constructor(
                 val outDur = outExtras.getDouble(AudiobookPlayerService.KEY_DURATION_SEC)
                 val outPos = bookPosMs(c) / 1000.0
                 scope.launch { repo.syncProgress(outSession, outPos, 0.0, outDur) }
+            } else {
+                // L2b: odcházející DIRECT epizoda (RSS/YT) → ulož resume pozici lokálně před přepnutím.
+                saveOutgoingDirectResume(c, outExtras)
             }
             val artwork = coverUrl?.let(Uri::parse)
             val extras = Bundle().apply {
@@ -378,6 +399,14 @@ class AudiobookPlayerConnection @Inject constructor(
         val offSec = c.currentMediaItem?.mediaMetadata?.extras
             ?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0
         return (offSec * 1000).toLong() + c.currentPosition.coerceAtLeast(0L)
+    }
+
+    /** L2b: ulož resume pozici odcházející DIRECT epizody (RSS/YT). `mediaId` = `episodeKey` z VM. */
+    private fun saveOutgoingDirectResume(c: MediaController, outExtras: Bundle?) {
+        val mediaId = c.currentMediaItem?.mediaId
+        if (mediaId.isNullOrBlank()) return
+        val durMs = ((outExtras?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0) * 1000).toLong()
+        resumeStore.save(mediaId, bookPosMs(c), durMs)
     }
 
     /** Skok na pozici v čase celé knihy — najde správný soubor a posun v něm. */
@@ -542,6 +571,7 @@ class AudiobookPlayerConnection @Inject constructor(
                 coverUrl = episode.coverUrl,
                 durationSec = d.durationSec,
                 mediaId = episode.episodeId,
+                startMs = resumeStore.get(episode.episodeId)?.posMs ?: 0L, // L2b: navázat na uloženou pozici
                 episode = episode,
             )
             return
@@ -594,6 +624,9 @@ class AudiobookPlayerConnection @Inject constructor(
             if (prefs.deleteDownloadAfterFinish && downloads.localFile(ended.episodeId) != null) {
                 downloads.delete(ended.episodeId)
             }
+        } else {
+            // L2b: direct epizoda dohraná → zahoď resume (žádné „Pokračovat" na konci).
+            resumeStore.clear(ended.episodeId)
         }
 
         // Sleep „do konce epizody" → zastav, nepokračuj.
@@ -636,5 +669,10 @@ class AudiobookPlayerConnection @Inject constructor(
             return
         }
         advancing = false
+    }
+
+    private companion object {
+        /** L2b: minimální interval mezi zápisy resume pozice direct epizody (ms). */
+        const val DIRECT_SAVE_INTERVAL_MS = 4_000L
     }
 }

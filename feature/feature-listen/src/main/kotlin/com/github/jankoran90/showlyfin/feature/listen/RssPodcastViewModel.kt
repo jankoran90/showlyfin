@@ -9,6 +9,7 @@ import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,10 +32,17 @@ class RssPodcastViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
+    resumeStore: DirectResumeStore,
 ) : ViewModel() {
 
     /** Stav offline stahování epizod (badge / akce v menu). Klíč = [episodeKey]. */
     val offlineStates = offline.states
+
+    /** L2b: stav přehrávače (aktuální epizoda + živá pozice) → zvýraznění řádku + ikona hraje/pauza. */
+    val playerState = connection.state
+
+    /** L2b: uložené pozice direct epizod (mediaId=[episodeKey]) → progres + „Pokračovat" u nehrané. */
+    val resumeMarks = resumeStore.marks
 
     data class UiState(
         val isLoading: Boolean = false,

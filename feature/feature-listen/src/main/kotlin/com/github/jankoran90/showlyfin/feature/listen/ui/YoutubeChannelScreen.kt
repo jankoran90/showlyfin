@@ -14,14 +14,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tv
@@ -30,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -45,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +80,8 @@ fun YoutubeChannelScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
+    val playerState by viewModel.playerState.collectAsStateWithLifecycle()
+    val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
     val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var actionEpisode by remember { mutableStateOf<YtEpisode?>(null) }
@@ -131,15 +138,35 @@ fun YoutubeChannelScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(state.episodes, key = { it.id }) { ep ->
+                    val key = viewModel.episodeKey(ep)
+                    val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
+                    val mark = resumeMarks[key]
+                    val progress: Float? = when {
+                        isCurrent && playerState.durationMs > 0 ->
+                            (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
+                        mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
+                        else -> null
+                    }
+                    val canResume = !isCurrent && mark != null
+                    val remainingLabel = if (canResume && mark.durMs > 0)
+                        "zbývá ${formatDuration((mark.durMs - mark.posMs).coerceAtLeast(0L) / 1000.0)}" else null
                     EpisodeRow(
                         title = ep.title,
                         thumbnail = ep.thumbnail,
                         durationSec = ep.duration,
                         uploadDate = ep.uploadDate,
                         description = ep.description,
-                        downloaded = offlineStates[viewModel.episodeKey(ep)]?.status == OfflineStatus.DOWNLOADED,
+                        downloaded = offlineStates[key]?.status == OfflineStatus.DOWNLOADED,
+                        isCurrent = isCurrent,
+                        isPlaying = isCurrent && playerState.isPlaying,
+                        progress = progress,
+                        canResume = canResume,
+                        remainingLabel = remainingLabel,
                         onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
-                        onAudio = { viewModel.playAudio(ep); onOpenAudioPlayer() },
+                        onAudio = {
+                            if (isCurrent) onOpenAudioPlayer()
+                            else { viewModel.playAudio(ep); onOpenAudioPlayer() }
+                        },
                         onMore = { actionEpisode = ep },
                     )
                 }
@@ -186,12 +213,24 @@ private fun EpisodeRow(
     uploadDate: String?,
     description: String?,
     downloaded: Boolean,
+    isCurrent: Boolean,
+    isPlaying: Boolean,
+    progress: Float?,
+    canResume: Boolean,
+    remainingLabel: String?,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
     onMore: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Column {
+    val accent = MaterialTheme.colorScheme.primary
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isCurrent) accent.copy(alpha = 0.12f) else Color.Transparent)
+            .padding(if (isCurrent) 6.dp else 0.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
                 model = thumbnail,
@@ -207,8 +246,9 @@ private fun EpisodeRow(
                     title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
+                    color = if (isCurrent) accent else MaterialTheme.colorScheme.onBackground,
                 )
-                val meta = listOfNotNull(formatDate(uploadDate), durationSec?.let { formatDuration(it) })
+                val meta = listOfNotNull(formatDate(uploadDate), durationSec?.let { formatDuration(it) }, remainingLabel)
                     .joinToString(" · ")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (downloaded) {
@@ -227,6 +267,14 @@ private fun EpisodeRow(
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
+                }
+                if (progress != null) {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 6.dp),
+                        color = accent,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
                 }
             }
         }
@@ -251,9 +299,15 @@ private fun EpisodeRow(
                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("Video", Modifier.padding(start = 6.dp))
             }
+            val (audioIcon, audioLabel) = when {
+                isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
+                isCurrent -> Icons.Default.Pause to "Pozastaveno"
+                canResume -> Icons.Default.PlayArrow to "Pokračovat"
+                else -> Icons.Default.Headphones to "Poslech"
+            }
             OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Poslech", Modifier.padding(start = 6.dp))
+                Icon(audioIcon, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(audioLabel, Modifier.padding(start = 6.dp))
             }
             IconButton(onClick = onMore) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
