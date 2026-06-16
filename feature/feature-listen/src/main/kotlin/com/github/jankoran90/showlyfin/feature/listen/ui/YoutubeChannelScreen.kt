@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -73,10 +75,19 @@ fun YoutubeChannelScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
+    val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var actionEpisode by remember { mutableStateOf<YtEpisode?>(null) }
 
     LaunchedEffect(channel) { viewModel.load(channel) }
+
+    // L4 (LEVER): výsledek castu na TV → jednorázový Toast.
+    LaunchedEffect(castMessage) {
+        castMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.consumeCastMessage()
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -141,6 +152,10 @@ fun YoutubeChannelScreen(
         ListenEpisodeActionSheet(
             title = ep.title,
             actions = listOf(
+                // L4 (LEVER): VIDEO verze epizody na TV/box (jako film). U YouTube vždy dostupné (video).
+                ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV") {
+                    viewModel.castVideoToTv(ep)
+                },
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, atFront = true)
                 },

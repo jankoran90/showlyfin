@@ -4,6 +4,8 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
+import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
@@ -33,11 +35,18 @@ class YoutubeChannelViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
+    private val naTv: NaTvService,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     /** Stav offline stahování epizod (badge / akce v menu). Klíč = [episodeKey]. */
     val offlineStates = offline.states
+
+    /** L4: jednorázová hláška po pokusu o cast na TV (Toast v obrazovce, pak [consumeCastMessage]). */
+    private val _castMessage = MutableStateFlow<String?>(null)
+    val castMessage = _castMessage.asStateFlow()
+
+    fun consumeCastMessage() { _castMessage.value = null }
 
     data class UiState(
         val isLoading: Boolean = false,
@@ -130,4 +139,27 @@ class YoutubeChannelViewModel @Inject constructor(
 
     /** L3: smaž staženou epizodu z telefonu. */
     fun deleteOffline(ep: YtEpisode) = offline.delete(episodeKey(ep))
+
+    /**
+     * L4 (LEVER): pošle VIDEO verzi epizody na běžící yellyfin session na TV/boxu (FERRY cast),
+     * stejně jako film z Detailu. Bez titulků (YouTube video), bez „telefon = ovladač" (polish).
+     * Výsledek → jednorázová [castMessage] (Toast v obrazovce).
+     */
+    fun castVideoToTv(ep: YtEpisode) {
+        viewModelScope.launch {
+            val jfUrl = prefs.getString("jellyfin_server_url", "") ?: ""
+            val jfToken = prefs.getString("jellyfin_token", "") ?: ""
+            val reportUrl = if (baseUrl.isNotBlank() && cookie.isNotBlank()) {
+                "${baseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
+            } else null
+            val result = naTv.castFerry(jfUrl, jfToken, videoUrl(ep), ep.title, emptyList(), reportUrl)
+            Timber.i("[LEVER] cast YouTube video → TV: %s result=%s", ep.title, result)
+            _castMessage.value = when (result) {
+                CastResult.SENT -> "Spuštěno na TV: ${ep.title}"
+                CastResult.NO_SESSION -> "Na TV nikdo nehraje — otevři Showlyfin/Jellyfin na televizi a zkus znovu."
+                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Připojení a účty)."
+                CastResult.FAILED -> "Nepodařilo se spustit na TV."
+            }
+        }
+    }
 }
