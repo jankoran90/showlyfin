@@ -142,8 +142,6 @@ private fun EpisodeRow(
                     title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 val meta = listOfNotNull(formatDate(uploadDate), durationSec?.let { formatDuration(it) })
                     .joinToString(" · ")
