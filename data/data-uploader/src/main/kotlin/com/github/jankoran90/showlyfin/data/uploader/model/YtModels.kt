@@ -17,4 +17,5 @@ data class YtEpisode(
     val thumbnail: String? = null,
     val duration: Double? = null,
     @SerializedName("upload_date") val uploadDate: String? = null,
+    val description: String? = null,
 )

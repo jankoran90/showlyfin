@@ -52,6 +52,10 @@ class YoutubeChannelViewModel @Inject constructor(
                     _state.update {
                         it.copy(isLoading = false, channelTitle = feed.channel, episodes = feed.entries)
                     }
+                    // Pre-warm: resolvni audio nejnovějších pár epizod → start přehrávání pak ~okamžitý.
+                    feed.entries.take(3).forEach { ep ->
+                        viewModelScope.launch { runCatching { uploaderDs.warmYt(baseUrl, cookie, ep.id, "audio") } }
+                    }
                 }
                 .onFailure {
                     Timber.w(it, "[TUNER] načtení YouTube feedu selhalo")

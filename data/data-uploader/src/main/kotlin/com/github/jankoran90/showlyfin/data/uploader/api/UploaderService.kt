@@ -106,4 +106,6 @@ interface UploaderService {
 
     // TUNER (SHW-62) — YouTube podcast feed (proxy na antenna; jen metadata)
     @GET suspend fun getYtFeed(@Url url: String, @Header("Cookie") cookie: String): YtChannelFeed
+    // TUNER — pre-warm resolve cache (rychlejší start přehrávání nejnovějších epizod)
+    @GET suspend fun getYtResolve(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
 }

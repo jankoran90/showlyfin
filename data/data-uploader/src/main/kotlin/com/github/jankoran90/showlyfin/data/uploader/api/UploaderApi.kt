@@ -587,4 +587,10 @@ internal class UploaderApi(
         val key = URLEncoder.encode(sessionCookie, "UTF-8")
         return "$base/api/yt/stream/$videoId?kind=$kind&key=$key"
     }
+
+    override suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        runCatching { service.getYtResolve("$base/api/yt/resolve?video_id=$videoId&kind=$kind", cookie) }
+    }
 }

@@ -28,9 +28,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,6 +104,8 @@ fun YoutubeChannelScreen(
                         title = ep.title,
                         thumbnail = ep.thumbnail,
                         durationSec = ep.duration,
+                        uploadDate = ep.uploadDate,
+                        description = ep.description,
                         onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
                         onAudio = { viewModel.playAudio(ep); onOpenAudioPlayer() },
                     )
@@ -114,9 +120,12 @@ private fun EpisodeRow(
     title: String,
     thumbnail: String?,
     durationSec: Double?,
+    uploadDate: String?,
+    description: String?,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
@@ -136,15 +145,30 @@ private fun EpisodeRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                durationSec?.let {
+                val meta = listOfNotNull(formatDate(uploadDate), durationSec?.let { formatDuration(it) })
+                    .joinToString(" · ")
+                if (meta.isNotBlank()) {
                     Text(
-                        formatDuration(it),
+                        meta,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
             }
+        }
+        if (!description.isNullOrBlank()) {
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .clickable { expanded = !expanded },
+            )
         }
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -168,4 +192,14 @@ private fun formatDuration(sec: Double): String {
     val m = (total % 3600) / 60
     val s = total % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+}
+
+/** "YYYY-MM-DD" → "D. M. YYYY" (null/neúplné → null). */
+private fun formatDate(d: String?): String? {
+    if (d.isNullOrBlank()) return null
+    val p = d.take(10).split("-")
+    if (p.size != 3) return null
+    val day = p[2].toIntOrNull() ?: return null
+    val mon = p[1].toIntOrNull() ?: return null
+    return "$day. $mon. ${p[0]}"
 }

@@ -122,4 +122,6 @@ interface UploaderRemoteDataSource {
     suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int = 30): YtChannelFeed
     /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio". */
     fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String): String
+    /** Pre-warm resolve cache (best-effort) — rychlejší start přehrávání. */
+    suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String)
 }
