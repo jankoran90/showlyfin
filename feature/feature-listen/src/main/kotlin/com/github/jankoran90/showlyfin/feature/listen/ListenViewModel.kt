@@ -116,7 +116,12 @@ class ListenViewModel @Inject constructor(
         // PRESET (SHW-65) — reaktivně zrcadli sdílený seznam zdrojů do UI (přidání/odebrání kdekoli se
         // okamžitě projeví v sekci Podcasty). Nezávislé na ABS přihlášení.
         sourcesRepo.sources
-            .onEach { srcs -> _uiState.update { it.copy(customSources = srcs) } }
+            // PRESET FIX: vlastní zdroje řaď ABECEDNĚ dle názvu (ne v pořadí přidání — joe rogan
+            // se jinak lepil nahoru jako poslední přidaný). Diakritika-insensitivně.
+            .onEach { srcs ->
+                val sorted = srcs.sortedBy { it.title.lowercase(java.util.Locale("cs")) }
+                _uiState.update { it.copy(customSources = sorted) }
+            }
             .launchIn(viewModelScope)
         loadSources()
         _uiState.update { it.copy(booksFirst = absPrefs.listenBooksFirst) }
