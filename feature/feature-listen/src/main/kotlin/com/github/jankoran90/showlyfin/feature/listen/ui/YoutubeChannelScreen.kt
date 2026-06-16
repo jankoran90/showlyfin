@@ -16,7 +16,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,6 +51,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.ui.ShareLinks
+import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
 import com.github.jankoran90.showlyfin.feature.listen.YoutubeChannelViewModel
 
 /**
@@ -67,6 +71,7 @@ fun YoutubeChannelScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var actionEpisode by remember { mutableStateOf<YtEpisode?>(null) }
 
     LaunchedEffect(channel) { viewModel.load(channel) }
 
@@ -120,14 +125,31 @@ fun YoutubeChannelScreen(
                         description = ep.description,
                         onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
                         onAudio = { viewModel.playAudio(ep); onOpenAudioPlayer() },
-                        onShare = {
-                            val chTitle = state.channelTitle ?: channelTitle
-                            ShareLinks.share(context, ep.title, ShareLinks.youtube(channel, chTitle, v = ep.id))
-                        },
+                        onMore = { actionEpisode = ep },
                     )
                 }
             }
         }
+    }
+
+    // LEVER (SHW-61) L2: sjednocené akční menu epizody (Do fronty / Sdílet) jako u ABS/RSS.
+    actionEpisode?.let { ep ->
+        ListenEpisodeActionSheet(
+            title = ep.title,
+            actions = listOf(
+                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
+                    viewModel.enqueue(ep, atFront = true)
+                },
+                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
+                    viewModel.enqueue(ep, atFront = false)
+                },
+                ListenEpisodeAction(Icons.Default.Share, "Sdílet epizodu") {
+                    val chTitle = state.channelTitle ?: channelTitle
+                    ShareLinks.share(context, ep.title, ShareLinks.youtube(channel, chTitle, v = ep.id))
+                },
+            ),
+            onDismiss = { actionEpisode = null },
+        )
     }
 }
 
@@ -140,7 +162,7 @@ private fun EpisodeRow(
     description: String?,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
-    onShare: () -> Unit,
+    onMore: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column {
@@ -197,8 +219,8 @@ private fun EpisodeRow(
                 Icon(Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("Poslech", Modifier.padding(start = 6.dp))
             }
-            IconButton(onClick = onShare) {
-                Icon(Icons.Default.Share, contentDescription = "Sdílet epizodu", modifier = Modifier.size(20.dp))
+            IconButton(onClick = onMore) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
             }
         }
     }

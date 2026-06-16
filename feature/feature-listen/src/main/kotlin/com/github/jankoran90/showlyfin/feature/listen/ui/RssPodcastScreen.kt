@@ -17,7 +17,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -43,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.RssPodcastViewModel
 
 /**
@@ -61,6 +66,8 @@ fun RssPodcastScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(feedUrl) { viewModel.load(feedUrl) }
+    var actionEpisode by remember { mutableStateOf<RssEpisode?>(null) }
+    val fallbackTitle = state.title ?: title
 
     Scaffold(
         modifier = modifier,
@@ -102,11 +109,31 @@ fun RssPodcastScreen(
                         date = ep.date,
                         duration = ep.duration,
                         description = ep.description,
-                        onPlay = { viewModel.playAudio(ep, state.title ?: title); onOpenAudioPlayer() },
+                        onPlay = { viewModel.playAudio(ep, fallbackTitle); onOpenAudioPlayer() },
+                        onMore = { actionEpisode = ep },
                     )
                 }
             }
         }
+    }
+
+    // LEVER (SHW-61) L2: sjednocené akční menu epizody (Přehrát / Do fronty) jako u ABS/YouTube.
+    actionEpisode?.let { ep ->
+        ListenEpisodeActionSheet(
+            title = ep.title.ifBlank { fallbackTitle },
+            actions = listOf(
+                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
+                    viewModel.playAudio(ep, fallbackTitle); onOpenAudioPlayer()
+                },
+                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
+                    viewModel.enqueue(ep, fallbackTitle, atFront = true)
+                },
+                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
+                    viewModel.enqueue(ep, fallbackTitle, atFront = false)
+                },
+            ),
+            onDismiss = { actionEpisode = null },
+        )
     }
 }
 
@@ -118,6 +145,7 @@ private fun RssEpisodeRow(
     duration: String?,
     description: String?,
     onPlay: () -> Unit,
+    onMore: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column {
@@ -157,10 +185,17 @@ private fun RssEpisodeRow(
                     .clickable { expanded = !expanded },
             )
         }
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            FilledTonalButton(onClick = onPlay, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("Poslech", Modifier.padding(start = 6.dp))
+            }
+            IconButton(onClick = onMore) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
             }
         }
     }
