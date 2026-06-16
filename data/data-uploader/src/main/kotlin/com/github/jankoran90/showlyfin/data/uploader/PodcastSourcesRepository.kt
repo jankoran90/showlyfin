@@ -36,7 +36,7 @@ class PodcastSourcesRepository @Inject constructor(
     suspend fun refresh() {
         if (!isConfigured) { _sources.value = emptyList(); return }
         runCatching { remote.listSources(baseUrl, cookie) }
-            .onSuccess { _sources.value = it }
+            .onSuccess { _sources.value = it.normalized() }
             .onFailure { Timber.w(it, "[PRESET] načtení zdrojů selhalo") }
     }
 
@@ -44,7 +44,7 @@ class PodcastSourcesRepository @Inject constructor(
     suspend fun add(type: String, ref: String, title: String, thumbnail: String?): Boolean {
         if (!isConfigured) return false
         return runCatching { remote.addSource(baseUrl, cookie, type, ref, title, thumbnail) }
-            .onSuccess { _sources.value = it }
+            .onSuccess { _sources.value = it.normalized() }
             .onFailure { Timber.w(it, "[PRESET] přidání zdroje selhalo") }
             .isSuccess
     }
@@ -53,7 +53,7 @@ class PodcastSourcesRepository @Inject constructor(
     suspend fun remove(id: String): Boolean {
         if (!isConfigured) return false
         return runCatching { remote.removeSource(baseUrl, cookie, id) }
-            .onSuccess { _sources.value = it }
+            .onSuccess { _sources.value = it.normalized() }
             .onFailure { Timber.w(it, "[PRESET] odebrání zdroje selhalo") }
             .isSuccess
     }
@@ -61,8 +61,25 @@ class PodcastSourcesRepository @Inject constructor(
     /** Hledání zdroje podle názvu (YouTube + CZ podcasty). [type] = all|youtube|rss. */
     suspend fun search(query: String, type: String): List<SourceSearchResult> =
         remote.searchSources(baseUrl, cookie, query, type)
+            .map { it.copy(thumbnail = it.thumbnail.httpsUrl()) }
 
     /** Epizody RSS podcastu (přímé audio enclosure URL). */
     suspend fun loadRss(feedUrl: String, limit: Int = 50): RssFeed =
-        remote.getRssFeed(baseUrl, cookie, feedUrl, limit)
+        remote.getRssFeed(baseUrl, cookie, feedUrl, limit).let { feed ->
+            feed.copy(
+                image = feed.image.httpsUrl(),
+                episodes = feed.episodes.map { it.copy(image = it.image.httpsUrl()) },
+            )
+        }
 }
+
+/**
+ * Protocol-relative `//host/...` → `https:`. yt3/RSS thumbnaily chodí často bez schématu, Coil je pak
+ * nenačte (prázdný cover zdroje). Obranná normalizace — backend (uploader/antenna) už normalizuje, tohle
+ * je pojistka pro stará/cachovaná data. PRESET FIX 2.
+ */
+private fun String?.httpsUrl(): String? =
+    if (this != null && startsWith("//")) "https:$this" else this
+
+private fun List<PodcastSource>.normalized(): List<PodcastSource> =
+    map { it.copy(thumbnail = it.thumbnail.httpsUrl()) }

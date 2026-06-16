@@ -71,7 +71,6 @@ fun ListenScreen(
     onOpenBook: (itemId: String) -> Unit,
     onOpenPodcast: (itemId: String) -> Unit,
     onPlayEpisode: (itemId: String, episodeId: String) -> Unit,
-    onOpenYoutube: () -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ListenViewModel = hiltViewModel(),
@@ -131,7 +130,6 @@ fun ListenScreen(
                                     state, viewModel, onOpenPodcast,
                                     downloadCount = downloads.size,
                                     onOpenDownloads = { showDownloads = true },
-                                    onOpenYoutube = onOpenYoutube,
                                     onOpenSource = onOpenSource,
                                 )
                             }
@@ -209,7 +207,6 @@ private fun PodcastsContent(
     onOpenPodcast: (String) -> Unit,
     downloadCount: Int,
     onOpenDownloads: () -> Unit,
-    onOpenYoutube: () -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
 ) {
     // Plan CASTAWAY — „Stažené epizody" musí zůstat dostupné i offline / při chybě načtení podcastů,
@@ -219,12 +216,8 @@ private fun PodcastsContent(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // TUNER (SHW-62): vstup na YouTube podcasty (zatím Hovory ze země)
-            AssistChip(
-                onClick = onOpenYoutube,
-                label = { Text("YouTube podcasty") },
-                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            )
+            // PRESET (SHW-65): YouTube i RSS jsou teď zdroje v Podcastech (SourceCard) — samostatný
+            // chip „YouTube podcasty" zrušen jako redundantní. YouTube kanál se otevře přes svůj zdroj.
             if (downloadCount > 0) {
                 AssistChip(
                     onClick = onOpenDownloads,

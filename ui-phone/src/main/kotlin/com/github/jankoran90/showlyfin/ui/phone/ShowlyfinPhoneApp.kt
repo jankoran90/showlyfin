@@ -738,12 +738,6 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             parent = Destination.Listen,
                         )
                     },
-                    onOpenYoutube = {
-                        bottomTab = Destination.Listen
-                        currentDestination = Destination.YoutubeChannel(
-                            handle = "@hovoryzezeme", title = "Hovory ze země", parent = Destination.Listen,
-                        )
-                    },
                     onOpenSource = { src ->
                         // PRESET (SHW-65) — vlastní zdroj z Podcastů: YouTube → kanál, RSS → epizody podcastu.
                         bottomTab = Destination.Listen
