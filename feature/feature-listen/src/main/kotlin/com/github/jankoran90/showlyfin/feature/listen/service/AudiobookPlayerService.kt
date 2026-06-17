@@ -326,26 +326,21 @@ class AudiobookPlayerService : MediaLibraryService() {
                     }
                 }
             }
-            // CRUISE: direct epizoda custom zdroje (`direct:<sourceId>|<episodeId>`) bez URI → najdi v cache
-            // (browse ji uložil i s URI) nebo dohraj z feedu (cold resume bez procházení).
+            // CRUISE: direct epizoda custom zdroje (`direct:<sourceId>|<episodeId>`) → načti CELOU frontu
+            // epizod zdroje (skip ⏮⏭ na předchozí/další epizodu + auto-navázání), spusť od tapnuté.
             if (mediaItems.size == 1 && first != null &&
                 first.localConfiguration == null && first.mediaId.startsWith(PREFIX_DIRECT)
             ) {
-                val cached = itemCache[first.mediaId]
-                if (cached?.localConfiguration != null) {
-                    return Futures.immediateFuture(
-                        MediaSession.MediaItemsWithStartPosition(
-                            mutableListOf(cached), 0, startPositionMs.coerceAtLeast(0L),
-                        ),
-                    )
-                }
                 val rest = first.mediaId.removePrefix(PREFIX_DIRECT).split("|", limit = 2)
                 if (rest.size == 2) {
                     return future {
-                        val item = resolveDirectEpisode(rest[0], rest[1])
-                        MediaSession.MediaItemsWithStartPosition(
-                            (if (item != null) mutableListOf(item) else mediaItems), 0, 0L,
-                        )
+                        val items = directSourceEpisodes(rest[0])
+                        if (items.isEmpty()) {
+                            MediaSession.MediaItemsWithStartPosition(mediaItems, 0, startPositionMs.coerceAtLeast(0L))
+                        } else {
+                            val idx = items.indexOfFirst { it.mediaId == first.mediaId }.coerceAtLeast(0)
+                            MediaSession.MediaItemsWithStartPosition(items.toMutableList(), idx, 0L)
+                        }
                     }
                 }
             }
@@ -367,15 +362,13 @@ class AudiobookPlayerService : MediaLibraryService() {
                 val itemId = first.mediaId.removePrefix(PREFIX_BOOK)
                 return future { trackItems(repo.startPlayback(itemId).also { currentPlayback = it }).toMutableList() }
             }
-            // CRUISE: direct epizoda custom zdroje → cache (s URI) nebo dohrání z feedu.
+            // CRUISE: direct epizoda custom zdroje → celá fronta epizod zdroje (skip ⏮⏭ + auto-navázání).
             if (mediaItems.size == 1 && first != null &&
                 first.localConfiguration == null && first.mediaId.startsWith(PREFIX_DIRECT)
             ) {
-                val cached = itemCache[first.mediaId]
-                if (cached?.localConfiguration != null) return Futures.immediateFuture(mutableListOf(cached))
                 val rest = first.mediaId.removePrefix(PREFIX_DIRECT).split("|", limit = 2)
                 if (rest.size == 2) {
-                    return future { resolveDirectEpisode(rest[0], rest[1])?.let { mutableListOf(it) } ?: mediaItems }
+                    return future { directSourceEpisodes(rest[0]).ifEmpty { mediaItems }.toMutableList() }
                 }
             }
             return Futures.immediateFuture(mediaItems)
@@ -499,13 +492,18 @@ class AudiobookPlayerService : MediaLibraryService() {
         return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
     }
 
-    /** CRUISE: dohrání direct epizody při cache-miss (cold resume bez procházení) — najde zdroj + epizodu. */
-    private suspend fun resolveDirectEpisode(sourceId: String, episodeId: String): MediaItem? {
+    /**
+     * CRUISE: CELÁ fronta epizod zdroje jako přehratelné direct položky (S URI). Při přehrávání z Android
+     * Auto se tím epizoda nepouští samostatně, ale jako playlist → AA dostane skip ⏮⏭ (předchozí/další
+     * EPIZODA, jedno ťuknutí — dlouhý stisk AA neumí) + auto-navázání další epizody; převíjení ±N vedle
+     * Play zůstává (sdílený seek increment jako u audioknih). Funguje i pro cold resume (refresh+feed).
+     */
+    private suspend fun directSourceEpisodes(sourceId: String): List<MediaItem> {
         val src = sourcesRepo.sources.value.firstOrNull { it.id == sourceId }
             ?: run { sourcesRepo.refresh(); sourcesRepo.sources.value.firstOrNull { it.id == sourceId } }
-            ?: return null
-        val ep = sourcesRepo.loadEpisodes(src).firstOrNull { it.id == episodeId } ?: return null
-        return directEpisodeItem(sourceId, ep).also { itemCache[it.mediaId] = it }
+            ?: return emptyList()
+        return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
+            .also { items -> items.forEach { itemCache[it.mediaId] = it } }
     }
 
     /** Rozposlouchané a nedokončené knihy napříč knihovnami. */
