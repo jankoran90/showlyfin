@@ -47,6 +47,27 @@ class AudiobookPlayerViewModel @Inject constructor(
     private var openedFor: String? = null
 
     /**
+     * PERCH (SHW-69): kam vede klik na cover v přehrávači = seznam dílů RODIČOVSKÉHO pořadu/knihy
+     * právě hrané epizody. Typ + identifikátor odvodíme ze stavu connectionu (sdílený napříč zdroji):
+     *  - `currentEpisodeId` `rss:…` → RSS/NaVýbornou (itemId = feedUrl), `yt:…` → YouTube (itemId = handle)
+     *  - jinak ABS audiokniha. (ABS podcasty už nepoužíváme — podcasty jedou přes RSS/YT/NaVýbornou;
+     *    větev [ListenSourceTarget.Podcast] je tu jen jako defenzivní fallback.)
+     * Title (jen fallback nadpis, obrazovka si název dotáhne z feedu) = autor/pořad, jinak titulek epizody.
+     */
+    fun currentSourceTarget(): ListenSourceTarget? {
+        val s = connection.state.value
+        val itemId = s.currentItemId?.takeIf { it.isNotBlank() } ?: return null
+        val title = s.author?.takeIf { it.isNotBlank() } ?: s.title
+        val epId = s.currentEpisodeId
+        return when {
+            epId != null && epId.startsWith("rss:") -> ListenSourceTarget.Rss(itemId, title)
+            epId != null && epId.startsWith("yt:") -> ListenSourceTarget.Youtube(itemId, title)
+            s.isPodcastEpisode -> ListenSourceTarget.Podcast(itemId)
+            else -> ListenSourceTarget.Audiobook(itemId)
+        }
+    }
+
+    /**
      * Spustí přehrávání knihy nebo podcast epizody. [episodeId] != null = podcast epizoda
      * (single track, bez kapitol). [startSec] != null = skok na začátek vybrané kapitoly.
      * Pokud už totéž hraje (Activity-scoped VM), kapitolu řešíme přímým seekem bez restartu.

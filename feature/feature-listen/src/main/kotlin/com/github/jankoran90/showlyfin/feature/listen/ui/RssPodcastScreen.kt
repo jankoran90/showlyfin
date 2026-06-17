@@ -72,7 +72,8 @@ fun RssPodcastScreen(
     title: String,
     onBack: () -> Unit,
     onOpenAudioPlayer: () -> Unit,
-    onPlayVideo: (jfItemId: String, title: String) -> Unit,
+    // REWIND (SHW-68): resumeKey = episodeKey(ep) — sdílený klíč s audio řádkem → resume/progres videa.
+    onPlayVideo: (jfItemId: String, title: String, resumeKey: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: RssPodcastViewModel = hiltViewModel(),
 ) {
@@ -80,6 +81,7 @@ fun RssPodcastScreen(
     val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
+    val videoResumeMarks by viewModel.videoResumeMarks.collectAsStateWithLifecycle()
     val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(feedUrl) { viewModel.load(feedUrl) }
@@ -129,16 +131,20 @@ fun RssPodcastScreen(
                 items(state.episodes, key = { it.id }) { ep ->
                     val key = viewModel.episodeKey(ep)
                     val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
-                    val mark = resumeMarks[key]
+                    // REWIND (SHW-68): video resume má přednost (sdílený klíč = „poslední vyhrává"),
+                    // jinak audio resume → progres + „Pokračovat" funguje i u VIDEO epizody.
+                    val markPos = videoResumeMarks[key]?.posMs ?: resumeMarks[key]?.posMs
+                    val markDur = videoResumeMarks[key]?.durMs ?: resumeMarks[key]?.durMs
                     val progress: Float? = when {
                         isCurrent && playerState.durationMs > 0 ->
                             (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
-                        mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
+                        markPos != null && markDur != null && markDur > 0 ->
+                            (markPos.toFloat() / markDur).coerceIn(0f, 1f)
                         else -> null
                     }
-                    val canResume = !isCurrent && mark != null
-                    val remainingLabel = if (canResume && mark.durMs > 0)
-                        "zbývá ${formatClock((mark.durMs - mark.posMs).coerceAtLeast(0L))}" else null
+                    val canResume = !isCurrent && markPos != null
+                    val remainingLabel = if (!isCurrent && markPos != null && markDur != null && markDur > 0)
+                        "zbývá ${formatClock((markDur - markPos).coerceAtLeast(0L))}" else null
                     RssEpisodeRow(
                         title = ep.title,
                         image = ep.image ?: state.image,
@@ -157,7 +163,7 @@ fun RssPodcastScreen(
                             if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep, fallbackTitle)
                             onOpenAudioPlayer()
                         },
-                        onVideo = { ep.jfItemId?.let { onPlayVideo(it, ep.title.ifBlank { fallbackTitle }) } },
+                        onVideo = { ep.jfItemId?.let { onPlayVideo(it, ep.title.ifBlank { fallbackTitle }, key) } },
                         onMore = { actionEpisode = ep },
                     )
                 }
@@ -176,7 +182,7 @@ fun RssPodcastScreen(
                 // EXODUS E2: video epizoda (v JF knihovně) → přehrát video / poslat na TV.
                 ep.jfItemId?.let {
                     ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
-                        onPlayVideo(it, ep.title.ifBlank { fallbackTitle })
+                        onPlayVideo(it, ep.title.ifBlank { fallbackTitle }, viewModel.episodeKey(ep))
                     }
                 },
                 ep.jfItemId?.let {

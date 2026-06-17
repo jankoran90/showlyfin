@@ -80,6 +80,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDetailScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.YoutubeChannelScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.RssPodcastScreen
+import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxHistoryScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxPickerScreen
@@ -146,7 +147,7 @@ internal sealed interface Destination {
     data class JellyfinDetail(val itemId: String, val parent: Destination) : Destination
     data class EpisodePicker(val seriesId: String, val seriesName: String, val parent: Destination) : Destination
     data class JellyfinPlayback(val itemId: String, val parent: JellyfinDetail) : Destination
-    data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination, val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null, val posterUrl: String? = null, val localVideoPath: String? = null, val localSubtitlePath: String? = null, val localPosterPath: String? = null, val offlineKey: String = "") : Destination
+    data class Player(val itemId: String?, val externalUrl: String?, val title: String, val parent: Destination, val subtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null, val posterUrl: String? = null, val localVideoPath: String? = null, val localSubtitlePath: String? = null, val localPosterPath: String? = null, val offlineKey: String = "", val resumeKey: String? = null) : Destination
 }
 
 internal data class JellyfinLibraryRef(
@@ -762,9 +763,11 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         )
                     },
                     // EXODUS E2: video epizody NaVýbornou = JF knihovní položka → standardní přehrávač.
-                    onPlayVideo = { jfItemId, videoTitle ->
+                    // REWIND (SHW-68): resumeKey = klíč epizody (sdílený s audio řádkem) → resume/progres videa.
+                    onPlayVideo = { jfItemId, videoTitle, resumeKey ->
                         currentDestination = Destination.Player(
                             itemId = jfItemId, externalUrl = null, title = videoTitle, parent = dest,
+                            resumeKey = resumeKey,
                         )
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -810,6 +813,16 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     startSec = dest.startSec,
                     episodeId = dest.episodeId,
                     onBack = { currentDestination = dest.parent },
+                    // PERCH (SHW-69): klik na cover → seznam dílů rodiče právě hraného (napříč zdroji
+                    // Poslechu). Zpět ze seznamu → návrat do přehrávače (parent = tato destinace).
+                    onOpenSource = { target ->
+                        currentDestination = when (target) {
+                            is ListenSourceTarget.Audiobook -> Destination.AudiobookDetail(target.itemId, parent = dest)
+                            is ListenSourceTarget.Podcast -> Destination.PodcastDetail(target.itemId, parent = dest)
+                            is ListenSourceTarget.Rss -> Destination.RssPodcast(target.feedUrl, target.title, parent = dest)
+                            is ListenSourceTarget.Youtube -> Destination.YoutubeChannel(target.handle, target.title, parent = dest)
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Detail -> DetailScreen(
@@ -854,6 +867,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         localSubtitlePath = dest.localSubtitlePath,
                         localPosterPath = dest.localPosterPath,
                         offlineKey = dest.offlineKey,
+                        resumeKey = dest.resumeKey,
                         onBack = { currentDestination = dest.parent },
                         onPlaybackFailed = { code ->
                             currentDestination = dest.parent   // pop na Detail, kde žije candidate list

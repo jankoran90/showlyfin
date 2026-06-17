@@ -168,6 +168,8 @@ fun PlaybackScreen(
     localSubtitlePath: String? = null,
     localPosterPath: String? = null,
     offlineKey: String = "",
+    // REWIND (SHW-68): klíč lokálního resume pro JF-item VIDEO (NaVýbornou video → sdílený s RSS epizodou).
+    resumeKey: String? = null,
     onBack: () -> Unit,
     // CASCADE Fáze 4: externí stream (Stremio/RD) selhal v ExoPlayeru → zkus dalšího kandidáta
     // místo zobrazení chyby. Volá se jen u externalUrl (Jellyfin přehrávání kandidáty nemá).
@@ -177,7 +179,7 @@ fun PlaybackScreen(
     LaunchedEffect(itemId, externalUrl, localVideoPath) {
         if (localVideoPath != null) viewModel.loadLocal(localVideoPath, localSubtitlePath, externalTitle, offlineKey, localPosterPath)
         else if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl)
-        else viewModel.load(itemId, positionMs)
+        else viewModel.load(itemId, positionMs, resumeKey)
     }
 
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -253,6 +255,7 @@ fun PlaybackScreen(
             // ukončení (Zpět) řeší exitPlayback() → ACTION_STOP službě.
             controller?.let { c ->
                 if (externalUrl != null || localVideoPath != null) viewModel.saveExternalPosition(c.currentPosition, c.duration)
+                else viewModel.saveVideoPosition(c.currentPosition, c.duration) // REWIND: JF-item video lokálně
                 c.removeListener(listener)
             }
             view.keepScreenOn = false
@@ -320,14 +323,16 @@ fun PlaybackScreen(
             delay(100)
         }
     }
-    // PICKUP: u externích streamů (Stremio/RD) průběžně ukládej pozici pro pozdější „Pokračovat".
-    // (Jellyfin řeší resume přes server.) Save i v onDispose pro případ rychlého odchodu.
+    // PICKUP/REWIND: průběžně ukládej pozici pro pozdější „Pokračovat" — externí/offline streamy lokálně
+    // přes saveExternalPosition; JF-item VIDEO přes saveVideoPosition (showlyfin nereportuje JF progress
+    // na server → resume videa děláme lokálně; no-op u filmu bez resumeKey). Save i v onDispose.
     LaunchedEffect(resumeDecided, externalUrl, localVideoPath, controller) {
-        if (!resumeDecided || (externalUrl == null && localVideoPath == null)) return@LaunchedEffect
+        if (!resumeDecided) return@LaunchedEffect
         val c = controller ?: return@LaunchedEffect
         while (true) {
             delay(5000)
-            viewModel.saveExternalPosition(c.currentPosition, c.duration)
+            if (externalUrl != null || localVideoPath != null) viewModel.saveExternalPosition(c.currentPosition, c.duration)
+            else viewModel.saveVideoPosition(c.currentPosition, c.duration)
         }
     }
     // auto-hide controls (ne když je otevřený panel titulků)

@@ -91,6 +91,8 @@ fun AudiobookPlayerScreen(
     modifier: Modifier = Modifier,
     startSec: Double? = null,
     episodeId: String? = null,
+    // PERCH (SHW-69): klik na cover → seznam dílů rodičovského pořadu/knihy (cíl odvodí VM ze zdroje).
+    onOpenSource: (com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget) -> Unit = {},
     viewModel: AudiobookPlayerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -177,13 +179,16 @@ fun AudiobookPlayerScreen(
             }
 
             // Cover — menší, ať zbyde místo na seznam.
+            // PERCH (SHW-69): klik na cover skočí na seznam dílů rodičovského pořadu/knihy (tah dolů
+            // dál sbalí přehrávač — gesta koexistují: vertikální tah konzumuje collapseDrag, ťuk projde).
             Box(
                 Modifier
                     .fillMaxWidth(0.42f)
                     .aspectRatio(1f)
                     .then(collapseDrag)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { viewModel.currentSourceTarget()?.let(onOpenSource) },
                 contentAlignment = Alignment.Center,
             ) {
                 if (state.coverUrl != null) {

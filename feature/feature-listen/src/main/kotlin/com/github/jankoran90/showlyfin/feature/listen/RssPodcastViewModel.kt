@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
+import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
@@ -38,6 +39,7 @@ class RssPodcastViewModel @Inject constructor(
     private val offline: OfflineDownloadManager,
     private val naTv: NaTvService,
     resumeStore: DirectResumeStore,
+    videoResumeStore: VideoResumeStore,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -47,8 +49,11 @@ class RssPodcastViewModel @Inject constructor(
     /** L2b: stav přehrávače (aktuální epizoda + živá pozice) → zvýraznění řádku + ikona hraje/pauza. */
     val playerState = connection.state
 
-    /** L2b: uložené pozice direct epizod (mediaId=[episodeKey]) → progres + „Pokračovat" u nehrané. */
+    /** L2b: uložené pozice direct (audio) epizod (mediaId=[episodeKey]) → progres + „Pokračovat" u nehrané. */
     val resumeMarks = resumeStore.marks
+
+    /** REWIND (SHW-68): uložené pozice VIDEA (sdílený klíč = [episodeKey]) → progres + „Pokračovat" u video epizody. */
+    val videoResumeMarks = videoResumeStore.marks
 
     /** EXODUS E2: jednorázová hláška po pokusu o cast videa na TV (Toast v obrazovce). */
     private val _castMessage = MutableStateFlow<String?>(null)

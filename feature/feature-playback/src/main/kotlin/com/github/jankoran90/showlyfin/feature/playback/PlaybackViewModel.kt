@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleCandidate
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
@@ -37,6 +38,7 @@ class PlaybackViewModel @Inject constructor(
     @Named("traktPreferences") private val prefs: SharedPreferences,
     private val uploaderDs: UploaderRemoteDataSource,
     private val translateStore: SubtitleTranslationStore,
+    private val videoResumeStore: VideoResumeStore,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -49,6 +51,9 @@ class PlaybackViewModel @Inject constructor(
     private var query: SubtitleQuery? = null
     // PICKUP: klíč pozice je oddělený od `query` (titulky), protože resume musí fungovat i BEZ imdb.
     private var resumeKey: String? = null
+    // REWIND (SHW-68): klíč lokálního resume VIDEA (JF-item playback). Předaný z volajícího (NaVýbornou
+    // video → sdílený klíč s RSS epizodou). Null = neukládáme lokálně (např. film z Detailu = jen server).
+    private var videoResumeKey: String? = null
     // LINGUA Fáze 3: klíč běžícího/dřívějšího AI překladu + observer sdíleného store (worker na pozadí).
     private var translateKey: String? = null
     private var translateObserveJob: Job? = null
@@ -112,6 +117,14 @@ class PlaybackViewModel @Inject constructor(
                 if (cues.isNotEmpty()) _state.update { it.copy(subtitleCues = cues, selectedSubtitleIndex = 0) }
             }
         }
+    }
+
+    /** REWIND (SHW-68): ulož/aktualizuj pozici JF-item VIDEA lokálně (per [videoResumeKey]). Showlyfin
+     *  nehlásí JF progress zpět na server → video resume děláme lokálně (jako external streamy).
+     *  No-op bez klíče (film z Detailu → jen serverový resume, beze změny chování). */
+    fun saveVideoPosition(positionMs: Long, durationMs: Long) {
+        val key = videoResumeKey ?: return
+        videoResumeStore.save(key, positionMs, durationMs)
     }
 
     /** PICKUP: ulož/aktualizuj pozici externího streamu pro pozdější „Pokračovat".
@@ -361,7 +374,9 @@ class PlaybackViewModel @Inject constructor(
         return cues
     }
 
-    fun load(itemId: String, positionMs: Long) {
+    fun load(itemId: String, positionMs: Long, resumeKey: String? = null) {
+        // REWIND: klíč lokálního video resume (NaVýbornou video sdílí klíč s RSS epizodou; null = jen server).
+        videoResumeKey = resumeKey
         _state.update { it.copy(isLoading = true) }
         viewModelScope.launch {
             val serverUrl = prefs.getString("jellyfin_server_url", "") ?: ""
@@ -402,7 +417,9 @@ class PlaybackViewModel @Inject constructor(
                 }
 
                 val userResumeMs = (playItem?.userData?.playbackPositionTicks ?: 0L) / 10_000L
-                val resumeMs = if (positionMs > 0L) positionMs else userResumeMs
+                // REWIND: vezmi pozdější ze serverového (jiný klient / box) a lokálního resume (telefon).
+                val localResumeMs = resumeKey?.let { videoResumeStore.get(it)?.posMs } ?: 0L
+                val resumeMs = if (positionMs > 0L) positionMs else maxOf(userResumeMs, localResumeMs)
 
                 val streamUrl = "$serverUrl/Videos/$playItemId/stream?static=true&api_key=$token"
 
