@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.data.uploader
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.RssFeed
+import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -71,6 +72,42 @@ class PodcastSourcesRepository @Inject constructor(
                 episodes = feed.episodes.map { it.copy(image = it.image.httpsUrl()) },
             )
         }
+
+    /**
+     * CRUISE (SHW-70): epizody libovolného zdroje (YouTube/RSS/NaVýbornou) jako přehratelné [SourceEpisode]
+     * s PŘÍMOU stream URL — pro Android Auto browse strom (a sdílitelné jinde). Datová vrstva vlastní
+     * stavbu URL: YouTube = proxy `/api/yt/stream?kind=audio`, RSS = přímá enclosure `audioUrl`.
+     */
+    suspend fun loadEpisodes(source: PodcastSource, limit: Int = 50): List<SourceEpisode> {
+        if (!isConfigured) return emptyList()
+        return runCatching {
+            when (source.type) {
+                "youtube" -> remote.getYtFeed(baseUrl, cookie, source.ref, limit).entries.map { ep ->
+                    SourceEpisode(
+                        id = ep.id,
+                        title = ep.title,
+                        subtitle = source.title,
+                        streamUrl = remote.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                        imageUrl = (ep.thumbnail ?: source.thumbnail).httpsUrl(),
+                        date = ep.uploadDate,
+                    )
+                }
+                else -> loadRss(source.ref, limit).let { feed ->
+                    feed.episodes.map { ep ->
+                        SourceEpisode(
+                            id = ep.id,
+                            title = ep.title,
+                            subtitle = source.title,
+                            streamUrl = ep.audioUrl,
+                            imageUrl = ep.image ?: feed.image ?: source.thumbnail,
+                            date = ep.date,
+                        )
+                    }
+                }
+            }
+        }.onFailure { Timber.w(it, "[CRUISE] načtení epizod zdroje '%s' selhalo", source.title) }
+            .getOrDefault(emptyList())
+    }
 }
 
 /**

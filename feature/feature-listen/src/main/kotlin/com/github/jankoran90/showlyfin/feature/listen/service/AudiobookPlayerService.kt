@@ -28,6 +28,9 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.Podcast
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
+import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
+import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.R
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
@@ -61,6 +64,9 @@ class AudiobookPlayerService : MediaLibraryService() {
 
     @Inject lateinit var repo: AbsRepository
     @Inject lateinit var absPrefs: com.github.jankoran90.showlyfin.data.abs.AbsPreferences
+
+    /** CRUISE (SHW-70): custom zdroje Poslechu (YouTube/RSS/NaVýbornou) do Android Auto browse stromu. */
+    @Inject lateinit var sourcesRepo: PodcastSourcesRepository
 
     private var session: MediaLibrarySession? = null
     private var player: ExoPlayer? = null
@@ -235,24 +241,23 @@ class AudiobookPlayerService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            if (!repo.isConfigured) {
-                return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
-            }
             // Kapitoly aktuální knihy se počítají lokálně (bez síťě).
             if (parentId == NODE_CHAPTERS) {
                 val items = chapterItems()
                 items.forEach { itemCache[it.mediaId] = it }
                 return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
             }
+            // CRUISE: ABS větve gateujeme jednotlivě (ne blanket) — custom zdroje (Podcasty) jedou i bez ABS.
             return future {
                 val children: List<MediaItem> = when {
                     parentId == ROOT_ID -> rootChildren()
-                    parentId == NODE_CONTINUE -> continueBooks()
-                    parentId == NODE_BOOKS -> bookSection()
+                    parentId == NODE_CONTINUE -> if (repo.isConfigured) continueBooks() else emptyList()
+                    parentId == NODE_BOOKS -> if (repo.isConfigured) bookSection() else emptyList()
                     parentId == NODE_PODCASTS -> podcastSection()
-                    parentId.startsWith(PREFIX_LIB) -> libraryBooks(parentId.removePrefix(PREFIX_LIB))
-                    parentId.startsWith(PREFIX_PLIB) -> libraryPodcasts(parentId.removePrefix(PREFIX_PLIB))
-                    parentId.startsWith(PREFIX_PODCAST) -> podcastEpisodes(parentId.removePrefix(PREFIX_PODCAST))
+                    parentId.startsWith(PREFIX_SRC) -> sourceEpisodes(parentId.removePrefix(PREFIX_SRC))
+                    parentId.startsWith(PREFIX_LIB) -> if (repo.isConfigured) libraryBooks(parentId.removePrefix(PREFIX_LIB)) else emptyList()
+                    parentId.startsWith(PREFIX_PLIB) -> if (repo.isConfigured) libraryPodcasts(parentId.removePrefix(PREFIX_PLIB)) else emptyList()
+                    parentId.startsWith(PREFIX_PODCAST) -> if (repo.isConfigured) podcastEpisodes(parentId.removePrefix(PREFIX_PODCAST)) else emptyList()
                     else -> emptyList()
                 }
                 Timber.i("[AUTO] children parent='%s' → %d: %s", parentId, children.size,
@@ -321,6 +326,29 @@ class AudiobookPlayerService : MediaLibraryService() {
                     }
                 }
             }
+            // CRUISE: direct epizoda custom zdroje (`direct:<sourceId>|<episodeId>`) bez URI → najdi v cache
+            // (browse ji uložil i s URI) nebo dohraj z feedu (cold resume bez procházení).
+            if (mediaItems.size == 1 && first != null &&
+                first.localConfiguration == null && first.mediaId.startsWith(PREFIX_DIRECT)
+            ) {
+                val cached = itemCache[first.mediaId]
+                if (cached?.localConfiguration != null) {
+                    return Futures.immediateFuture(
+                        MediaSession.MediaItemsWithStartPosition(
+                            mutableListOf(cached), 0, startPositionMs.coerceAtLeast(0L),
+                        ),
+                    )
+                }
+                val rest = first.mediaId.removePrefix(PREFIX_DIRECT).split("|", limit = 2)
+                if (rest.size == 2) {
+                    return future {
+                        val item = resolveDirectEpisode(rest[0], rest[1])
+                        MediaSession.MediaItemsWithStartPosition(
+                            (if (item != null) mutableListOf(item) else mediaItems), 0, 0L,
+                        )
+                    }
+                }
+            }
             // In-app přehrávač posílá už resolvované položky (s URI) → projdou beze změny.
             return Futures.immediateFuture(
                 MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs),
@@ -338,6 +366,17 @@ class AudiobookPlayerService : MediaLibraryService() {
             ) {
                 val itemId = first.mediaId.removePrefix(PREFIX_BOOK)
                 return future { trackItems(repo.startPlayback(itemId).also { currentPlayback = it }).toMutableList() }
+            }
+            // CRUISE: direct epizoda custom zdroje → cache (s URI) nebo dohrání z feedu.
+            if (mediaItems.size == 1 && first != null &&
+                first.localConfiguration == null && first.mediaId.startsWith(PREFIX_DIRECT)
+            ) {
+                val cached = itemCache[first.mediaId]
+                if (cached?.localConfiguration != null) return Futures.immediateFuture(mutableListOf(cached))
+                val rest = first.mediaId.removePrefix(PREFIX_DIRECT).split("|", limit = 2)
+                if (rest.size == 2) {
+                    return future { resolveDirectEpisode(rest[0], rest[1])?.let { mutableListOf(it) } ?: mediaItems }
+                }
             }
             return Futures.immediateFuture(mediaItems)
         }
@@ -433,11 +472,40 @@ class AudiobookPlayerService : MediaLibraryService() {
         else libs.map { browsableNode("$PREFIX_LIB${it.id}", it.name) }
     }
 
-    /** Sekce Podcasty → knihovny (nebo rovnou podcasty, je-li jen jedna knihovna). */
+    /**
+     * Sekce Podcasty → CRUISE (SHW-70): custom zdroje Poslechu (YouTube/RSS/NaVýbornou; premium pin nahoru,
+     * pak abecedně) jako browsable `src:<id>` + ABS podcast knihovny (pokud je profil má). ABS-only profil
+     * s jedinou knihovnou → expanduj rovnou (zachová původní chování); ABS-podcast kód NErušíme (in-app
+     * Poslech ho dál používá pro profily s ABS podcast knihovnou).
+     */
     private suspend fun podcastSection(): List<MediaItem> {
-        val libs = repo.getPodcastLibraries()
-        return if (libs.size == 1) libraryPodcasts(libs.first().id)
-        else libs.map { browsableNode("$PREFIX_PLIB${it.id}", it.name) }
+        sourcesRepo.refresh()
+        val custom = sourcesRepo.sources.value
+            .sortedWith(
+                compareByDescending<PodcastSource> { it.premium }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title },
+            )
+            .map(::sourceNode)
+        val absLibs = if (repo.isConfigured) {
+            runCatching { repo.getPodcastLibraries() }.getOrDefault(emptyList())
+        } else emptyList()
+        if (custom.isEmpty() && absLibs.size == 1) return libraryPodcasts(absLibs.first().id)
+        return custom + absLibs.map { browsableNode("$PREFIX_PLIB${it.id}", it.name) }
+    }
+
+    /** CRUISE: epizody custom zdroje jako přehratelné položky S URI (cache v itemCache → play je najde). */
+    private suspend fun sourceEpisodes(sourceId: String): List<MediaItem> {
+        val src = sourcesRepo.sources.value.firstOrNull { it.id == sourceId } ?: return emptyList()
+        return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
+    }
+
+    /** CRUISE: dohrání direct epizody při cache-miss (cold resume bez procházení) — najde zdroj + epizodu. */
+    private suspend fun resolveDirectEpisode(sourceId: String, episodeId: String): MediaItem? {
+        val src = sourcesRepo.sources.value.firstOrNull { it.id == sourceId }
+            ?: run { sourcesRepo.refresh(); sourcesRepo.sources.value.firstOrNull { it.id == sourceId } }
+            ?: return null
+        val ep = sourcesRepo.loadEpisodes(src).firstOrNull { it.id == episodeId } ?: return null
+        return directEpisodeItem(sourceId, ep).also { itemCache[it.mediaId] = it }
     }
 
     /** Rozposlouchané a nedokončené knihy napříč knihovnami. */
@@ -543,6 +611,43 @@ class AudiobookPlayerService : MediaLibraryService() {
                     .setSubtitle(ep.guest)   // host (+profese) jako podtitul i v Android Auto
                     .setArtist(ep.guest)
                     .setArtworkUri(coverUrl?.let(Uri::parse))
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
+                    .build(),
+            )
+            .build()
+
+    /** CRUISE: browsable uzel custom zdroje (`src:<id>`) — klik vylistuje epizody. */
+    private fun sourceNode(s: PodcastSource): MediaItem =
+        MediaItem.Builder()
+            .setMediaId("$PREFIX_SRC${s.id}")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(s.title)
+                    .setArtworkUri(s.thumbnail?.let(Uri::parse))
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_PODCASTS)
+                    .build(),
+            )
+            .build()
+
+    /**
+     * CRUISE: přehratelná direct epizoda (`direct:<sourceId>|<episodeId>`) S URI = přímou stream URL
+     * (YT proxy / RSS enclosure). Cachuje se v itemCache → onSetMediaItems ji při tapnutí najde i po
+     * stripnutí URI (AA přenáší jen mediaId). Bez ABS session → syncNow() ji přeskočí.
+     */
+    private fun directEpisodeItem(sourceId: String, ep: SourceEpisode): MediaItem =
+        MediaItem.Builder()
+            .setUri(ep.streamUrl)
+            .setMediaId("$PREFIX_DIRECT$sourceId|${ep.id}")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(ep.title)
+                    .setSubtitle(ep.subtitle)
+                    .setArtist(ep.subtitle)
+                    .setArtworkUri(ep.imageUrl?.let(Uri::parse))
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
@@ -705,9 +810,11 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val PREFIX_LIB = "abslib:"
         const val PREFIX_BOOK = "abs:"
         const val PREFIX_CHAPTER = "chap:"
-        const val PREFIX_PLIB = "podlib:"          // podcast knihovna
-        const val PREFIX_PODCAST = "pod:"           // podcast (browsable → epizody)
-        const val PREFIX_EPISODE = "epi:"           // epizoda (playable, `epi:<itemId>|<episodeId>`)
+        const val PREFIX_PLIB = "podlib:"          // ABS podcast knihovna
+        const val PREFIX_PODCAST = "pod:"           // ABS podcast (browsable → epizody)
+        const val PREFIX_EPISODE = "epi:"           // ABS epizoda (playable, `epi:<itemId>|<episodeId>`)
+        const val PREFIX_SRC = "src:"               // CRUISE: custom zdroj (browsable → epizody)
+        const val PREFIX_DIRECT = "direct:"         // CRUISE: direct epizoda (`direct:<sourceId>|<episodeId>`)
         const val ACTION_PREV_CHAPTER = "com.github.jankoran90.showlyfin.PREV_CHAPTER"
         const val ACTION_NEXT_CHAPTER = "com.github.jankoran90.showlyfin.NEXT_CHAPTER"
         const val ACTION_SPEED = "com.github.jankoran90.showlyfin.SPEED"

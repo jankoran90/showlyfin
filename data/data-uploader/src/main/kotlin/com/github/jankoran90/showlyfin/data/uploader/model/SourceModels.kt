@@ -66,3 +66,17 @@ data class RssEpisode(
     /** EXODUS (SHW-67) E2: video epizody v JF knihovně (NaVýbornou) — tlačítko Video / cast na TV. */
     @SerializedName("jf_item_id") val jfItemId: String? = null,
 )
+
+/**
+ * CRUISE (SHW-70): sjednocená přehratelná epizoda libovolného zdroje (YouTube/RSS/NaVýbornou) s PŘÍMOU
+ * stream URL. Vrací [PodcastSourcesRepository.loadEpisodes] — datová vrstva vlastní stavbu URL (YT proxy
+ * vs RSS enclosure), spotřebitel (Android Auto browse strom) jen postaví MediaItem.
+ */
+data class SourceEpisode(
+    val id: String,
+    val title: String,
+    val subtitle: String? = null,     // název zdroje (autor/kanál)
+    val streamUrl: String,
+    val imageUrl: String? = null,
+    val date: String? = null,
+)
