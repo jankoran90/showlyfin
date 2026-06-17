@@ -256,8 +256,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                 val children: List<MediaItem> = when {
                     parentId == ROOT_ID -> rootChildren()
                     parentId == NODE_CONTINUE -> continueItems()
-                    parentId == NODE_BOOKS -> if (repo.isConfigured) bookSection() else emptyList()
                     parentId == NODE_PODCASTS -> podcastSection()
+                    parentId == NODE_LATEST -> latestEpisodes()
                     parentId.startsWith(PREFIX_SRC) -> sourceEpisodes(parentId.removePrefix(PREFIX_SRC))
                     parentId.startsWith(PREFIX_LIB) -> if (repo.isConfigured) libraryBooks(parentId.removePrefix(PREFIX_LIB)) else emptyList()
                     parentId.startsWith(PREFIX_PLIB) -> if (repo.isConfigured) libraryPodcasts(parentId.removePrefix(PREFIX_PLIB)) else emptyList()
@@ -452,24 +452,34 @@ class AudiobookPlayerService : MediaLibraryService() {
 
     // ---- Strom: uzly ----
 
-    /** Root → „Pokračovat" + (pokud hraje kniha) „Kapitoly" + jednotlivé ABS knihovny. */
-    private fun rootChildren(): List<MediaItem> {
-        // Pevné sekce — Android Auto zobrazuje jen pár kořenových záložek, proto Podcasty drží
-        // garantovaný slot (3.) a Kapitoly (jen při hrané knize) jdou až na konec.
+    /**
+     * Root = CRUISE (SHW-70) přesně 4 záložky (AA strop ~4, bez overflow „víc"): **Pokračovat | Podcasty
+     * | <audioknihovny jako vlastní záložky, label Dětské/Dospělý>**. Kapitoly (jen při hrané knize
+     * s kapitolami) jdou ÚPLNĚ NAKONEC — kdyby přetekly přes 4, schová se nepodstatná Kapitoly, ne hlavní 4.
+     */
+    private suspend fun rootChildren(): List<MediaItem> {
         val nodes = mutableListOf(
             browsableNode(NODE_CONTINUE, "Pokračovat"),
-            browsableNode(NODE_BOOKS, "Audioknihy"),
             browsableNode(NODE_PODCASTS, "Podcasty"),
         )
+        // Každá audioknihovní knihovna = vlastní záložka (Dětské/Dospělý — oddělené knihovny, každá své obecenstvo).
+        if (repo.isConfigured) {
+            runCatching { repo.getAudiobookLibraries() }.getOrDefault(emptyList())
+                .forEach { nodes += browsableNode("$PREFIX_LIB${it.id}", audiobookTabLabel(it.name)) }
+        }
         if (currentPlayback?.chapters?.isNotEmpty() == true) nodes += browsableNode(NODE_CHAPTERS, "Kapitoly")
         return nodes
     }
 
-    /** Sekce Audioknihy → knihovny (nebo rovnou knihy, je-li jen jedna knihovna). */
-    private suspend fun bookSection(): List<MediaItem> {
-        val libs = repo.getAudiobookLibraries()
-        return if (libs.size == 1) libraryBooks(libs.first().id)
-        else libs.map { browsableNode("$PREFIX_LIB${it.id}", it.name) }
+    /** CRUISE: pevný label audioknihovní záložky v AA dle obecenstva (Dětské/Dospělý), fallback = název knihovny. */
+    private fun audiobookTabLabel(name: String): String {
+        val n = java.text.Normalizer.normalize(name.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+        return when {
+            n.contains("det") -> "Dětské"      // „Děti" / „Dětské" / „Pro děti" …
+            n.contains("dospel") -> "Dospělý"  // „Dospělí" / „Dospělý" …
+            else -> name
+        }
     }
 
     /**
@@ -490,7 +500,28 @@ class AudiobookPlayerService : MediaLibraryService() {
             runCatching { repo.getPodcastLibraries() }.getOrDefault(emptyList())
         } else emptyList()
         if (custom.isEmpty() && absLibs.size == 1) return libraryPodcasts(absLibs.first().id)
-        return custom + absLibs.map { browsableNode("$PREFIX_PLIB${it.id}", it.name) }
+        // CRUISE: „Nejnovější epizody" (čerstvé napříč zdroji) jako PRVNÍ položka v Podcasty (5. věc, co se
+        // nevejde jako 5. záložka nahoře → AA strop ~4). Jen když máme custom zdroje, ze kterých agregovat.
+        val latest = if (custom.isNotEmpty()) listOf(browsableNode(NODE_LATEST, "🆕 Nejnovější epizody")) else emptyList()
+        return latest + custom + absLibs.map { browsableNode("$PREFIX_PLIB${it.id}", it.name) }
+    }
+
+    /** CRUISE: „Nejnovější epizody" napříč VŠEMI custom zdroji — round-robin nejnovějších (feedy jsou newest-first). */
+    private suspend fun latestEpisodes(): List<MediaItem> {
+        sourcesRepo.refresh()
+        val perSource = sourcesRepo.sources.value.map { it.id to sourcesRepo.loadEpisodes(it) }
+        val result = mutableListOf<MediaItem>()
+        var i = 0
+        while (result.size < LATEST_LIMIT) {
+            var added = false
+            for ((sid, eps) in perSource) {
+                eps.getOrNull(i)?.let { result += directEpisodeItem(sid, it); added = true }
+                if (result.size >= LATEST_LIMIT) break
+            }
+            if (!added) break
+            i++
+        }
+        return result
     }
 
     /** CRUISE: epizody custom zdroje jako přehratelné položky S URI (cache v itemCache → play je najde). */
@@ -514,25 +545,27 @@ class AudiobookPlayerService : MediaLibraryService() {
     }
 
     /**
-     * „Pokračovat" = rozposlouchané audioknihy (ABS) + CRUISE (SHW-70) rozposlouchané direct epizody
-     * (RSS/YouTube/NaVýbornou) z [DirectResumeStore] — dřív tu byly JEN audioknihy, podcasty chyběly.
+     * „Pokračovat" = VŠECHNO rozposlouchané dohromady (audioknihy + direct epizody RSS/YT/NaVýbornou),
+     * seřazené dle POSLEDNÍHO POSLECHU (nejnovější nahoře → starší). Čas: audiokniha `lastUpdate` (ABS
+     * mediaProgress), direct epizoda `updatedAt` (DirectResumeStore). Dřív: jen audioknihy řazené dle pozice.
      */
     private suspend fun continueItems(): List<MediaItem> {
-        val books = if (repo.isConfigured) {
+        val books: List<Pair<Long, MediaItem>> = if (repo.isConfigured) {
             runCatching {
                 repo.getAudiobookLibraries()
                     .flatMap { repo.getAudiobooks(it.id) }
                     .filter { it.progress > 0.0 && !it.isFinished }
-                    .sortedByDescending { it.currentTimeSec }
-                    .take(CONTINUE_LIMIT)
-                    .map(::bookItem)
+                    .map { (it.lastUpdate ?: 0L) to bookItem(it) }
             }.getOrDefault(emptyList())
         } else emptyList()
-        return books + continueDirectEpisodes()
+        return (books + continueDirectEntries())
+            .sortedByDescending { it.first }
+            .map { it.second }
+            .take(CONTINUE_LIMIT)
     }
 
-    /** CRUISE: rozposlouchané direct epizody → resolvnuté přes feedy zdrojů, řazeno dle posledního poslechu. */
-    private suspend fun continueDirectEpisodes(): List<MediaItem> {
+    /** CRUISE: rozposlouchané direct epizody → (čas posledního poslechu, položka), resolvnuté přes feedy zdrojů. */
+    private suspend fun continueDirectEntries(): List<Pair<Long, MediaItem>> {
         val marks = directResume.marks.value
         if (marks.isEmpty()) return emptyList()
         sourcesRepo.refresh()
@@ -540,10 +573,9 @@ class AudiobookPlayerService : MediaLibraryService() {
         sourcesRepo.sources.value.forEach { src ->
             sourcesRepo.loadEpisodes(src).forEach { ep -> ep.resumeKey?.let { byKey[it] = ep to src.id } }
         }
-        return marks.entries
-            .sortedByDescending { it.value.updatedAt }
-            .mapNotNull { (key, _) -> byKey[key]?.let { (ep, sid) -> directEpisodeItem(sid, ep) } }
-            .take(CONTINUE_LIMIT)
+        return marks.entries.mapNotNull { (key, mark) ->
+            byKey[key]?.let { (ep, sid) -> mark.updatedAt to directEpisodeItem(sid, ep) }
+        }
     }
 
     private suspend fun libraryBooks(libraryId: String): List<MediaItem> =
@@ -843,8 +875,8 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val ROOT_ID = "root"
         const val NODE_CONTINUE = "node:continue"
         const val NODE_CHAPTERS = "node:chapters"
-        const val NODE_BOOKS = "node:books"
         const val NODE_PODCASTS = "node:podcasts"
+        const val NODE_LATEST = "node:latest"       // CRUISE: „Nejnovější epizody" (uvnitř Podcasty)
         const val PREFIX_LIB = "abslib:"
         const val PREFIX_BOOK = "abs:"
         const val PREFIX_CHAPTER = "chap:"
@@ -861,5 +893,6 @@ class AudiobookPlayerService : MediaLibraryService() {
         private val SPEEDS = floatArrayOf(1.0f, 1.2f, 1.5f, 1.7f, 2.0f, 0.8f)
         private val SLEEP_STEPS = intArrayOf(15, 30, 45, 60)
         private const val CONTINUE_LIMIT = 25
+        private const val LATEST_LIMIT = 40   // CRUISE: strop „Nejnovější epizody" napříč zdroji
     }
 }

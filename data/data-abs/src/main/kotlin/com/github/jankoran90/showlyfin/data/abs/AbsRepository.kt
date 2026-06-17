@@ -91,6 +91,7 @@ class AbsRepository @Inject constructor(
                 progress = p?.progress ?: 0.0,
                 currentTimeSec = p?.currentTime ?: 0.0,
                 isFinished = p?.isFinished ?: false,
+                lastUpdate = p?.lastUpdate,
             )
         }
     }

@@ -13,6 +13,8 @@ data class Audiobook(
     val progress: Double,        // 0.0 - 1.0
     val currentTimeSec: Double,  // uložená pozice
     val isFinished: Boolean,
+    /** CRUISE (SHW-70): čas posledního poslechu (epoch ms z ABS mediaProgress) → řazení AA „Pokračovat". */
+    val lastUpdate: Long? = null,
 )
 
 data class AudiobookDetail(
