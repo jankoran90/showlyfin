@@ -374,7 +374,7 @@ class PlaybackViewModel @Inject constructor(
         return cues
     }
 
-    fun load(itemId: String, positionMs: Long, resumeKey: String? = null) {
+    fun load(itemId: String, positionMs: Long, resumeKey: String? = null, fallbackTitle: String = "") {
         // REWIND: klíč lokálního video resume (NaVýbornou video sdílí klíč s RSS epizodou; null = jen server).
         videoResumeKey = resumeKey
         _state.update { it.copy(isLoading = true) }
@@ -405,7 +405,9 @@ class PlaybackViewModel @Inject constructor(
 
                 // Seriál nelze přehrát přímo (vrací HTTP 500) → najdi epizodu (Next Up / první nezhlédnutá).
                 var playItemId = itemId
-                var title = item?.name ?: itemId
+                // REWIND: notifikace/název = JF name; když JF lookup nedá použitelný název (např.
+                // NaVýbornou video), použij název epizody z volajícího (ne syrové itemId/UUID).
+                var title = item?.name?.takeIf { it.isNotBlank() } ?: fallbackTitle.ifBlank { itemId }
                 var playItem: BaseItemDto? = item
                 if (item?.type == BaseItemKind.SERIES) {
                     val episode = resolveSeriesEpisode(UUID.fromString(itemId), userUuid)

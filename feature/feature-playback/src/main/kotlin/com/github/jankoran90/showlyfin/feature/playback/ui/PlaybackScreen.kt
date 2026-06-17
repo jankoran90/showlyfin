@@ -179,7 +179,7 @@ fun PlaybackScreen(
     LaunchedEffect(itemId, externalUrl, localVideoPath) {
         if (localVideoPath != null) viewModel.loadLocal(localVideoPath, localSubtitlePath, externalTitle, offlineKey, localPosterPath)
         else if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl)
-        else viewModel.load(itemId, positionMs, resumeKey)
+        else viewModel.load(itemId, positionMs, resumeKey, externalTitle)
     }
 
     val state by viewModel.state.collectAsStateWithLifecycle()
