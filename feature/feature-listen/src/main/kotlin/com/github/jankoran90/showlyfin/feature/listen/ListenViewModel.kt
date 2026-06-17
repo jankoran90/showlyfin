@@ -180,7 +180,16 @@ class ListenViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
         loadSources()
-        _uiState.update { it.copy(booksFirst = absPrefs.listenBooksFirst) }
+        // Výchozí sekce Poslechu MUSÍ následovat preferenci pořadí (Nastavení → Poslech). Dřív se `mode`
+        // držel natvrdo na BOOKS → při „podcasty první" se stejně otevřely Audioknihy (pager `initialPage`
+        // = indexOf(mode) = 1). Inicializuj `mode` z `booksFirst`, ať se otevře PRVNÍ nastavená sekce.
+        val booksFirst = absPrefs.listenBooksFirst
+        _uiState.update {
+            it.copy(
+                booksFirst = booksFirst,
+                mode = if (booksFirst) ListenMode.BOOKS else ListenMode.PODCASTS,
+            )
+        }
     }
 
     /** PRESET — načti/obnov sdílený seznam vlastních zdrojů (YouTube/RSS) ze serveru. */
@@ -193,9 +202,18 @@ class ListenViewModel @Inject constructor(
      * už načtené knihovny. Volá ListenScreen při vstupu.
      */
     fun reloadOrderPrefs() {
+        val booksFirst = absPrefs.listenBooksFirst
         _uiState.update {
+            // Když se preference pořadí ZMĚNILA (user ji přepnul v Nastavení), otevři po návratu PRVNÍ
+            // nastavenou sekci — jinak by se po změně „podcasty první" stejně držela stará `mode`.
+            val mode = if (booksFirst != it.booksFirst) {
+                if (booksFirst) ListenMode.BOOKS else ListenMode.PODCASTS
+            } else {
+                it.mode
+            }
             it.copy(
-                booksFirst = absPrefs.listenBooksFirst,
+                booksFirst = booksFirst,
+                mode = mode,
                 libraries = it.libraries.ordered(absPrefs.audiobookLibraryOrder),
                 podcastLibraries = it.podcastLibraries.ordered(absPrefs.podcastLibraryOrder),
             )
