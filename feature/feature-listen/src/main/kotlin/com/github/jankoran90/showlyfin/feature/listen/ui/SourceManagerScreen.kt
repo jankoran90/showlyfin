@@ -230,10 +230,17 @@ private fun SourceRow(source: PodcastSource, onRemove: () -> Unit) {
         Thumb(source.thumbnail)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(source.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(typeLabel(source.type), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (source.premium) "Prémiový zdroj rodiny" else typeLabel(source.type),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        IconButton(onClick = onRemove) {
-            Icon(Icons.Default.Delete, contentDescription = "Odebrat", tint = MaterialTheme.colorScheme.error)
+        // EXODUS (SHW-67): prémiový zdroj rodiny (NaVýbornou) nelze odebrat → mazání skryté.
+        if (!source.premium) {
+            IconButton(onClick = onRemove) {
+                Icon(Icons.Default.Delete, contentDescription = "Odebrat", tint = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }

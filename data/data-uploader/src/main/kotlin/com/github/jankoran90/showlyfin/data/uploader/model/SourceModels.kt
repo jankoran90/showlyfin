@@ -16,6 +16,8 @@ data class PodcastSource(
     val title: String,
     val thumbnail: String? = null,
     @SerializedName("added_at") val addedAt: Long? = null,
+    /** EXODUS (SHW-67): prémiový zdroj rodiny (NaVýbornou přes herolink) — pin nahoru, odznak, nemazat. */
+    val premium: Boolean = false,
 )
 
 /** Odpověď store endpointů (`/api/sources` GET/POST/DELETE). */

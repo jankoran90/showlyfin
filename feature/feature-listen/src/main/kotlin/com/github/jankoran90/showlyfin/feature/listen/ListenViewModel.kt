@@ -170,8 +170,12 @@ class ListenViewModel @Inject constructor(
         sourcesRepo.sources
             // PRESET FIX: vlastní zdroje řaď ABECEDNĚ dle názvu (ne v pořadí přidání — joe rogan
             // se jinak lepil nahoru jako poslední přidaný). Diakritika-insensitivně.
+            // EXODUS (SHW-67): prémiové zdroje rodiny (NaVýbornou) pinni NAHORU, pak abecedně.
             .onEach { srcs ->
-                val sorted = srcs.sortedBy { it.title.lowercase(java.util.Locale("cs")) }
+                val sorted = srcs.sortedWith(
+                    compareByDescending<com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource> { it.premium }
+                        .thenBy { it.title.lowercase(java.util.Locale("cs")) },
+                )
                 _uiState.update { it.copy(customSources = sorted) }
             }
             .launchIn(viewModelScope)

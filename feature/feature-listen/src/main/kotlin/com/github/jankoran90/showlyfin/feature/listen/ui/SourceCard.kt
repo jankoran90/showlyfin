@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -79,6 +80,17 @@ fun SourceCard(
             ) {
                 Icon(typeIcon, contentDescription = null, modifier = Modifier.padding(3.dp).size(16.dp))
             }
+            // EXODUS (SHW-67): prémiový zdroj rodiny (NaVýbornou) — odznak hvězdy v rohu.
+            if (source.premium) {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                ) {
+                    Icon(Icons.Default.Star, contentDescription = "Prémiový", modifier = Modifier.padding(3.dp).size(16.dp))
+                }
+            }
         }
         Text(
             text = source.title,
@@ -89,7 +101,11 @@ fun SourceCard(
             modifier = Modifier.padding(top = 8.dp),
         )
         Text(
-            text = if (source.type == "youtube") "YouTube kanál" else "Podcast",
+            text = when {
+                source.premium -> "Prémiový podcast"
+                source.type == "youtube" -> "YouTube kanál"
+                else -> "Podcast"
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
