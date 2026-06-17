@@ -106,6 +106,9 @@ class RssPodcastViewModel @Inject constructor(
     fun playAudio(ep: RssEpisode, fallbackTitle: String) =
         connection.playDirectEpisode(toQueued(ep, fallbackTitle))
 
+    /** L2b: „Pokračovat" u PRÁVĚ NAČTENÉ (pozastavené) epizody → jen navázat přehrávání (bez reloadu). */
+    fun resumeCurrent() = connection.play()
+
     /** Přidá RSS epizodu do fronty (atFront = hned po aktuální, jinak na konec). */
     fun enqueue(ep: RssEpisode, fallbackTitle: String, atFront: Boolean) =
         connection.enqueue(toQueued(ep, fallbackTitle), atFront)

@@ -429,6 +429,9 @@ class AudiobookPlayerConnection @Inject constructor(
         if (c.isPlaying) c.pause() else c.play()
     }
 
+    /** L2b: navázat přehrávání PRÁVĚ NAČTENÉ epizody (resume bez reloadu streamu). Idempotentní. */
+    fun play() = withController { it.play() }
+
     /** [ms] je v čase celé knihy. */
     fun seekTo(ms: Long) = withController { seekBook(it, ms) }
 

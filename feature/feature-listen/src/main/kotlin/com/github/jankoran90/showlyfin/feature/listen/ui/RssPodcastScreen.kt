@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -138,8 +137,9 @@ fun RssPodcastScreen(
                         canResume = canResume,
                         remainingLabel = remainingLabel,
                         onPlay = {
-                            if (isCurrent) onOpenAudioPlayer()
-                            else { viewModel.playAudio(ep, fallbackTitle); onOpenAudioPlayer() }
+                            // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
+                            if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep, fallbackTitle)
+                            onOpenAudioPlayer()
                         },
                         onMore = { actionEpisode = ep },
                     )
@@ -266,7 +266,7 @@ private fun RssEpisodeRow(
         ) {
             val (playIcon, playLabel) = when {
                 isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
-                isCurrent -> Icons.Default.Pause to "Pozastaveno"
+                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
                 canResume -> Icons.Default.PlayArrow to "Pokračovat"
                 else -> Icons.Default.Headphones to "Poslech"
             }

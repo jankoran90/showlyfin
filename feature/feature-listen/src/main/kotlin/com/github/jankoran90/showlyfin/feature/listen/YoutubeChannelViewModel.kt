@@ -126,6 +126,9 @@ class YoutubeChannelViewModel @Inject constructor(
     /** Spustí AUDIO režim v našem poslechovém přehrávači (mini-player, pozadí, zámek) + do fronty. */
     fun playAudio(ep: YtEpisode) = connection.playDirectEpisode(toQueued(ep))
 
+    /** L2b: „Pokračovat" u PRÁVĚ NAČTENÉ (pozastavené) epizody → jen navázat přehrávání (bez reloadu). */
+    fun resumeCurrent() = connection.play()
+
     /** Přidá YouTube epizodu do fronty (atFront = hned po aktuální, jinak na konec). */
     fun enqueue(ep: YtEpisode, atFront: Boolean) = connection.enqueue(toQueued(ep), atFront)
 

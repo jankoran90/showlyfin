@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tv
@@ -164,8 +163,9 @@ fun YoutubeChannelScreen(
                         remainingLabel = remainingLabel,
                         onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
                         onAudio = {
-                            if (isCurrent) onOpenAudioPlayer()
-                            else { viewModel.playAudio(ep); onOpenAudioPlayer() }
+                            // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
+                            if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep)
+                            onOpenAudioPlayer()
                         },
                         onMore = { actionEpisode = ep },
                     )
@@ -301,7 +301,7 @@ private fun EpisodeRow(
             }
             val (audioIcon, audioLabel) = when {
                 isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
-                isCurrent -> Icons.Default.Pause to "Pozastaveno"
+                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
                 canResume -> Icons.Default.PlayArrow to "Pokračovat"
                 else -> Icons.Default.Headphones to "Poslech"
             }
