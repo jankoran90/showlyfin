@@ -25,8 +25,9 @@ import javax.inject.Singleton
 class DirectResumeStore @Inject constructor(
     @ApplicationContext context: Context,
 ) {
-    /** Pozice + (známá) délka v ms pro jednu direct epizodu. */
-    data class Mark(val posMs: Long, val durMs: Long)
+    /** Pozice + (známá) délka v ms pro jednu direct epizodu. [updatedAt] = čas posledního zápisu
+     *  (epoch ms) → CRUISE (SHW-70) řadí „Pokračovat" v Android Auto dle posledního poslechu. */
+    data class Mark(val posMs: Long, val durMs: Long, val updatedAt: Long = 0L)
 
     private val prefs = context.getSharedPreferences("direct_resume", Context.MODE_PRIVATE)
 
@@ -46,7 +47,7 @@ class DirectResumeStore @Inject constructor(
         if (posMs < MIN_RESUME_MS) return
         val cur = _marks.value[mediaId]
         if (cur != null && cur.posMs == posMs && cur.durMs == durMs) return
-        _marks.update { it + (mediaId to Mark(posMs, durMs)) }
+        _marks.update { it + (mediaId to Mark(posMs, durMs, System.currentTimeMillis())) }
         persist()
     }
 
@@ -59,7 +60,7 @@ class DirectResumeStore @Inject constructor(
     private fun persist() {
         val obj = JSONObject()
         _marks.value.forEach { (id, m) ->
-            obj.put(id, JSONObject().put("p", m.posMs).put("d", m.durMs))
+            obj.put(id, JSONObject().put("p", m.posMs).put("d", m.durMs).put("u", m.updatedAt))
         }
         prefs.edit().putString(KEY_JSON, obj.toString()).apply()
     }
@@ -72,7 +73,7 @@ class DirectResumeStore @Inject constructor(
             buildMap {
                 obj.keys().forEach { id ->
                     val o = obj.getJSONObject(id)
-                    put(id, Mark(o.optLong("p", 0L), o.optLong("d", 0L)))
+                    put(id, Mark(o.optLong("p", 0L), o.optLong("d", 0L), o.optLong("u", 0L)))
                 }
             }
         }.getOrElse { emptyMap() }

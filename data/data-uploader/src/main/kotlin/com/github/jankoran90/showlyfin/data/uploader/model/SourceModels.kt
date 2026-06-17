@@ -79,4 +79,7 @@ data class SourceEpisode(
     val streamUrl: String,
     val imageUrl: String? = null,
     val date: String? = null,
+    /** Klíč resume SJEDNOCENÝ s in-app přehrávačem (`yt:<id>` / `rss:<id>`) → pozice se sdílí
+     *  mezi appkou a Android Auto + položka jde do AA „Pokračovat" (CRUISE). */
+    val resumeKey: String? = null,
 )

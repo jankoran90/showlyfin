@@ -90,6 +90,7 @@ class PodcastSourcesRepository @Inject constructor(
                         streamUrl = remote.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
                         imageUrl = (ep.thumbnail ?: source.thumbnail).httpsUrl(),
                         date = ep.uploadDate,
+                        resumeKey = "yt:${ep.id}",   // shoda s YoutubeChannelViewModel.episodeKey
                     )
                 }
                 else -> loadRss(source.ref, limit).let { feed ->
@@ -101,6 +102,7 @@ class PodcastSourcesRepository @Inject constructor(
                             streamUrl = ep.audioUrl,
                             imageUrl = ep.image ?: feed.image ?: source.thumbnail,
                             date = ep.date,
+                            resumeKey = "rss:${ep.id}",   // shoda s RssPodcastViewModel.episodeKey
                         )
                     }
                 }

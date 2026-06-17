@@ -32,6 +32,7 @@ import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.R
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -67,6 +68,9 @@ class AudiobookPlayerService : MediaLibraryService() {
 
     /** CRUISE (SHW-70): custom zdroje Poslechu (YouTube/RSS/NaVýbornou) do Android Auto browse stromu. */
     @Inject lateinit var sourcesRepo: PodcastSourcesRepository
+
+    /** CRUISE (SHW-70): sdílená pozice resume direct epizod (RSS/YT) — zápis z auta + AA „Pokračovat". */
+    @Inject lateinit var directResume: DirectResumeStore
 
     private var session: MediaLibrarySession? = null
     private var player: ExoPlayer? = null
@@ -251,7 +255,7 @@ class AudiobookPlayerService : MediaLibraryService() {
             return future {
                 val children: List<MediaItem> = when {
                     parentId == ROOT_ID -> rootChildren()
-                    parentId == NODE_CONTINUE -> if (repo.isConfigured) continueBooks() else emptyList()
+                    parentId == NODE_CONTINUE -> continueItems()
                     parentId == NODE_BOOKS -> if (repo.isConfigured) bookSection() else emptyList()
                     parentId == NODE_PODCASTS -> podcastSection()
                     parentId.startsWith(PREFIX_SRC) -> sourceEpisodes(parentId.removePrefix(PREFIX_SRC))
@@ -339,7 +343,10 @@ class AudiobookPlayerService : MediaLibraryService() {
                             MediaSession.MediaItemsWithStartPosition(mediaItems, 0, startPositionMs.coerceAtLeast(0L))
                         } else {
                             val idx = items.indexOfFirst { it.mediaId == first.mediaId }.coerceAtLeast(0)
-                            MediaSession.MediaItemsWithStartPosition(items.toMutableList(), idx, 0L)
+                            // CRUISE: navázat na uloženou pozici (resume sdílený s in-app přehrávačem).
+                            val resumeMs = items.getOrNull(idx)?.mediaMetadata?.extras
+                                ?.getString(KEY_DIRECT_KEY)?.let { directResume.get(it)?.posMs } ?: 0L
+                            MediaSession.MediaItemsWithStartPosition(items.toMutableList(), idx, resumeMs)
                         }
                     }
                 }
@@ -506,14 +513,38 @@ class AudiobookPlayerService : MediaLibraryService() {
             .also { items -> items.forEach { itemCache[it.mediaId] = it } }
     }
 
-    /** Rozposlouchané a nedokončené knihy napříč knihovnami. */
-    private suspend fun continueBooks(): List<MediaItem> =
-        repo.getAudiobookLibraries()
-            .flatMap { repo.getAudiobooks(it.id) }
-            .filter { it.progress > 0.0 && !it.isFinished }
-            .sortedByDescending { it.currentTimeSec }
+    /**
+     * „Pokračovat" = rozposlouchané audioknihy (ABS) + CRUISE (SHW-70) rozposlouchané direct epizody
+     * (RSS/YouTube/NaVýbornou) z [DirectResumeStore] — dřív tu byly JEN audioknihy, podcasty chyběly.
+     */
+    private suspend fun continueItems(): List<MediaItem> {
+        val books = if (repo.isConfigured) {
+            runCatching {
+                repo.getAudiobookLibraries()
+                    .flatMap { repo.getAudiobooks(it.id) }
+                    .filter { it.progress > 0.0 && !it.isFinished }
+                    .sortedByDescending { it.currentTimeSec }
+                    .take(CONTINUE_LIMIT)
+                    .map(::bookItem)
+            }.getOrDefault(emptyList())
+        } else emptyList()
+        return books + continueDirectEpisodes()
+    }
+
+    /** CRUISE: rozposlouchané direct epizody → resolvnuté přes feedy zdrojů, řazeno dle posledního poslechu. */
+    private suspend fun continueDirectEpisodes(): List<MediaItem> {
+        val marks = directResume.marks.value
+        if (marks.isEmpty()) return emptyList()
+        sourcesRepo.refresh()
+        val byKey = HashMap<String, Pair<SourceEpisode, String>>()
+        sourcesRepo.sources.value.forEach { src ->
+            sourcesRepo.loadEpisodes(src).forEach { ep -> ep.resumeKey?.let { byKey[it] = ep to src.id } }
+        }
+        return marks.entries
+            .sortedByDescending { it.value.updatedAt }
+            .mapNotNull { (key, _) -> byKey[key]?.let { (ep, sid) -> directEpisodeItem(sid, ep) } }
             .take(CONTINUE_LIMIT)
-            .map(::bookItem)
+    }
 
     private suspend fun libraryBooks(libraryId: String): List<MediaItem> =
         repo.getAudiobooks(libraryId).map(::bookItem)
@@ -649,6 +680,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
+                    // CRUISE: resume klíč (sdílený s in-app) → zápis pozice z auta + „Pokračovat".
+                    .setExtras(Bundle().apply { ep.resumeKey?.let { putString(KEY_DIRECT_KEY, it) } })
                     .build(),
             )
             .build()
@@ -777,11 +810,18 @@ class AudiobookPlayerService : MediaLibraryService() {
         runCatching { p.replaceMediaItem(p.currentMediaItemIndex, cur.buildUpon().setMediaMetadata(newMeta).build()) }
     }
 
-    /** Pošle aktuální pozici na ABS (drží „Pokračovat v poslechu"). */
+    /** Pošle aktuální pozici na ABS (drží „Pokračovat v poslechu"); CRUISE: direct epizody → DirectResumeStore. */
     private fun syncNow() {
         val p = player ?: return
         val item = p.currentMediaItem ?: return
         val extras = item.mediaMetadata.extras ?: return
+        // CRUISE: direct epizoda (RSS/YT/NaVýbornou) z Android Auto → ulož pozici do sdíleného resume store
+        // (stejný klíč jako in-app → „Pokračovat" v AA + navázání pozice; přehrávání jde přes tentýž player).
+        val directKey = extras.getString(KEY_DIRECT_KEY)?.takeIf { it.isNotBlank() }
+        if (directKey != null) {
+            directResume.save(directKey, p.currentPosition.coerceAtLeast(0L), p.duration.coerceAtLeast(0L))
+            return
+        }
         val sessionId = extras.getString(KEY_SESSION_ID)?.takeIf { it.isNotBlank() } ?: return  // TUNER: YouTube = bez ABS session
         val durationSec = extras.getDouble(KEY_DURATION_SEC)
         val trackOffsetSec = extras.getDouble(KEY_TRACK_OFFSET_SEC)
@@ -813,6 +853,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val PREFIX_EPISODE = "epi:"           // ABS epizoda (playable, `epi:<itemId>|<episodeId>`)
         const val PREFIX_SRC = "src:"               // CRUISE: custom zdroj (browsable → epizody)
         const val PREFIX_DIRECT = "direct:"         // CRUISE: direct epizoda (`direct:<sourceId>|<episodeId>`)
+        const val KEY_DIRECT_KEY = "direct_resume_key"   // CRUISE: resume klíč direct epizody (`rss:`/`yt:`)
         const val ACTION_PREV_CHAPTER = "com.github.jankoran90.showlyfin.PREV_CHAPTER"
         const val ACTION_NEXT_CHAPTER = "com.github.jankoran90.showlyfin.NEXT_CHAPTER"
         const val ACTION_SPEED = "com.github.jankoran90.showlyfin.SPEED"
