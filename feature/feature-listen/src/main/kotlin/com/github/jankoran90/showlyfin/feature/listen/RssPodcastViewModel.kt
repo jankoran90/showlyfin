@@ -1,8 +1,11 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
+import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * PRESET (SHW-65): RSS podcast jako zdroj Poslechu — seznam epizod z feedu (přímé audio enclosure URL),
@@ -32,7 +36,9 @@ class RssPodcastViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
+    private val naTv: NaTvService,
     resumeStore: DirectResumeStore,
+    @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     /** Stav offline stahování epizod (badge / akce v menu). Klíč = [episodeKey]. */
@@ -43,6 +49,12 @@ class RssPodcastViewModel @Inject constructor(
 
     /** L2b: uložené pozice direct epizod (mediaId=[episodeKey]) → progres + „Pokračovat" u nehrané. */
     val resumeMarks = resumeStore.marks
+
+    /** EXODUS E2: jednorázová hláška po pokusu o cast videa na TV (Toast v obrazovce). */
+    private val _castMessage = MutableStateFlow<String?>(null)
+    val castMessage = _castMessage.asStateFlow()
+
+    fun consumeCastMessage() { _castMessage.value = null }
 
     data class UiState(
         val isLoading: Boolean = false,
@@ -133,6 +145,32 @@ class RssPodcastViewModel @Inject constructor(
 
     /** L3: smaž staženou epizodu z telefonu. */
     fun deleteOffline(ep: RssEpisode) = offline.delete(episodeKey(ep))
+
+    /**
+     * EXODUS (SHW-67) E2: pošle VIDEO verzi epizody (JF knihovní položka) na běžící yellyfin session
+     * na TV/boxu (FERRY cast), jako film z Detailu. Jen u epizod, co mají [RssEpisode.jfItemId].
+     */
+    fun castVideoToTv(ep: RssEpisode) {
+        val itemId = ep.jfItemId ?: return
+        viewModelScope.launch {
+            val jfUrl = prefs.getString("jellyfin_server_url", "") ?: ""
+            val jfToken = prefs.getString("jellyfin_token", "") ?: ""
+            val base = prefs.getString("uploader_base_url", "") ?: ""
+            val cookie = prefs.getString("uploader_session_cookie", "") ?: ""
+            val streamUrl = "${jfUrl.trimEnd('/')}/Videos/$itemId/stream?static=true&api_key=$jfToken"
+            val reportUrl = if (base.isNotBlank() && cookie.isNotBlank()) {
+                "${base.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
+            } else null
+            val result = naTv.castFerry(jfUrl, jfToken, streamUrl, ep.title, emptyList(), reportUrl)
+            Timber.i("[EXODUS] cast NaVýbornou video → TV: %s result=%s", ep.title, result)
+            _castMessage.value = when (result) {
+                CastResult.SENT -> "Spuštěno na TV: ${ep.title}"
+                CastResult.NO_SESSION -> "Na TV nikdo nehraje — otevři Showlyfin/Jellyfin na televizi a zkus znovu."
+                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Připojení a účty)."
+                CastResult.FAILED -> "Nepodařilo se spustit na TV."
+            }
+        }
+    }
 }
 
 /** itunes:duration → sekundy. Podporuje "HH:MM:SS", "MM:SS" i čisté sekundy. */

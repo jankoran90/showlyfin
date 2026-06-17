@@ -761,6 +761,12 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             itemId = null, fromStart = false, parent = dest,
                         )
                     },
+                    // EXODUS E2: video epizody NaVýbornou = JF knihovní položka → standardní přehrávač.
+                    onPlayVideo = { jfItemId, videoTitle ->
+                        currentDestination = Destination.Player(
+                            itemId = jfItemId, externalUrl = null, title = videoTitle, parent = dest,
+                        )
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.YoutubeChannel -> YoutubeChannelScreen(

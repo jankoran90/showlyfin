@@ -63,4 +63,6 @@ data class RssEpisode(
     val description: String? = null,
     val duration: String? = null,     // itunes:duration ("HH:MM:SS" / "MM:SS" / sekundy)
     val image: String? = null,
+    /** EXODUS (SHW-67) E2: video epizody v JF knihovně (NaVýbornou) — tlačítko Video / cast na TV. */
+    @SerializedName("jf_item_id") val jfItemId: String? = null,
 )

@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +25,9 @@ import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -32,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -46,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +72,7 @@ fun RssPodcastScreen(
     title: String,
     onBack: () -> Unit,
     onOpenAudioPlayer: () -> Unit,
+    onPlayVideo: (jfItemId: String, title: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: RssPodcastViewModel = hiltViewModel(),
 ) {
@@ -74,7 +80,16 @@ fun RssPodcastScreen(
     val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
+    val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     LaunchedEffect(feedUrl) { viewModel.load(feedUrl) }
+    // EXODUS E2: výsledek castu videa na TV → jednorázový Toast.
+    LaunchedEffect(castMessage) {
+        castMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.consumeCastMessage()
+        }
+    }
     var actionEpisode by remember { mutableStateOf<RssEpisode?>(null) }
     val fallbackTitle = state.title ?: title
 
@@ -136,11 +151,13 @@ fun RssPodcastScreen(
                         progress = progress,
                         canResume = canResume,
                         remainingLabel = remainingLabel,
+                        hasVideo = ep.jfItemId != null,
                         onPlay = {
                             // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
                             if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep, fallbackTitle)
                             onOpenAudioPlayer()
                         },
+                        onVideo = { ep.jfItemId?.let { onPlayVideo(it, ep.title.ifBlank { fallbackTitle }) } },
                         onMore = { actionEpisode = ep },
                     )
                 }
@@ -152,9 +169,20 @@ fun RssPodcastScreen(
     actionEpisode?.let { ep ->
         ListenEpisodeActionSheet(
             title = ep.title.ifBlank { fallbackTitle },
-            actions = listOf(
+            actions = listOfNotNull(
                 ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
                     viewModel.playAudio(ep, fallbackTitle); onOpenAudioPlayer()
+                },
+                // EXODUS E2: video epizoda (v JF knihovně) → přehrát video / poslat na TV.
+                ep.jfItemId?.let {
+                    ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                        onPlayVideo(it, ep.title.ifBlank { fallbackTitle })
+                    }
+                },
+                ep.jfItemId?.let {
+                    ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                        viewModel.castVideoToTv(ep)
+                    }
                 },
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, fallbackTitle, atFront = true)
@@ -187,7 +215,9 @@ private fun RssEpisodeRow(
     progress: Float?,
     canResume: Boolean,
     remainingLabel: String?,
+    hasVideo: Boolean,
     onPlay: () -> Unit,
+    onVideo: () -> Unit,
     onMore: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -273,6 +303,13 @@ private fun RssEpisodeRow(
             FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
                 Icon(playIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(playLabel, Modifier.padding(start = 6.dp))
+            }
+            // EXODUS E2: druhé tlačítko Video u epizod, co mají video v JF knihovně (NaVýbornou).
+            if (hasVideo) {
+                OutlinedButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("Video", Modifier.padding(start = 6.dp))
+                }
             }
             IconButton(onClick = onMore) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
