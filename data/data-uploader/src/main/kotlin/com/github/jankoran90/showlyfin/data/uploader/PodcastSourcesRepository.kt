@@ -33,11 +33,18 @@ class PodcastSourcesRepository @Inject constructor(
     private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
     val isConfigured: Boolean get() = baseUrl.isNotBlank() && cookie.isNotBlank()
 
-    /** Znovu načte sdílený seznam ze serveru. Bez přihlášení k uploaderu → prázdný (žádná chyba). */
+    /**
+     * Znovu načte sdílený seznam ze serveru. GATE pouze na `baseUrl` — cookie smí být PRÁZDNÁ nebo
+     * stará: listSources pak dostane 401 a [UploaderAuthInterceptor] se přihlásí uloženým heslem a
+     * požadavek zopakuje. Dřív gate na `isConfigured` (vyžadoval i cookie) → na cold startu, kde
+     * `ProfileConfigApplier.apply` ZAHODÍ uploader cookie (vynucení reloginu), se zdroje tiše
+     * vyprázdnily a vůbec se neposlal request (interceptor neměl co zachytit) → zůstaly prázdné,
+     * dokud user nepřepnul záložku. To byl bug „v této knihovně nejsou žádné podcasty" po cold startu.
+     */
     suspend fun refresh() {
-        if (!isConfigured) { _sources.value = emptyList(); return }
+        if (baseUrl.isBlank()) { _sources.value = emptyList(); return }
         runCatching { remote.listSources(baseUrl, cookie) }
-            .onSuccess { _sources.value = it.normalized() }
+            .onSuccess { _sources.value = it.normalized(); Timber.i("[PRESET] zdrojů načteno: %d", it.size) }
             .onFailure { Timber.w(it, "[PRESET] načtení zdrojů selhalo") }
     }
 

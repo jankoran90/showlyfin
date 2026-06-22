@@ -136,6 +136,10 @@ class ListenViewModel @Inject constructor(
             .distinctUntilChanged()
             .onEach {
                 refresh()
+                // PRESET FIX — po aplikaci profilu (ProfileConfigApplier ZAHODÍ uploader cookie kvůli
+                // reloginu) přenačti i sdílené vlastní zdroje. Bez toho zůstaly po cold startu / přepnutí
+                // profilu prázdné, dokud user nepřepnul záložku Poslechu.
+                loadSources()
                 if (_uiState.value.podcastsLoaded || _uiState.value.mode == ListenMode.PODCASTS) {
                     loadPodcastLibraries()
                 }
