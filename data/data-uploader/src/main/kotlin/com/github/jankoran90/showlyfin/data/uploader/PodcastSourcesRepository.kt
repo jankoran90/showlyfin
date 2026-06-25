@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.data.uploader
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.RssFeed
+import com.github.jankoran90.showlyfin.data.uploader.model.SourceCategory
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,6 +71,36 @@ class PodcastSourcesRepository @Inject constructor(
     suspend fun search(query: String, type: String): List<SourceSearchResult> =
         remote.searchSources(baseUrl, cookie, query, type)
             .map { it.copy(thumbnail = it.thumbnail.httpsUrl()) }
+
+    /**
+     * AGORA: objevovací procházení zdrojů. [country] = cz|us|gb|au, [mode] = active|new|az|popular,
+     * [category] = id kategorie (string) nebo null, [exclude] = id kategorií k vynechání.
+     * Vrací obohacené karty (popis/počet epizod/kategorie); thumbnail normalizován jako v [search].
+     */
+    suspend fun browse(
+        country: String, mode: String, category: String? = null, exclude: List<String>? = null,
+        page: Int = 1, pageSize: Int = 30,
+    ): List<SourceSearchResult> =
+        remote.browseSources(baseUrl, cookie, country, mode, category, exclude, page, pageSize)
+            .results.map { it.copy(thumbnail = it.thumbnail.httpsUrl()) }
+
+    /** AGORA: kategorie podcastů pro danou zemi (CZ kategorie ≠ Apple žánr). */
+    suspend fun categories(country: String): List<SourceCategory> =
+        remote.getCategories(baseUrl, cookie, country).categories
+
+    /**
+     * AGORA (F5): dohledá VIDEO verzi audio epizody na YouTube. [query] = název podcastu + název epizody.
+     * Vrací kandidáty (řadí backend dle relevance) — výběr nejlepšího řeší volající (VM dle délky/uploadera).
+     */
+    suspend fun findEpisodeVideo(query: String, limit: Int = 6): List<com.github.jankoran90.showlyfin.data.uploader.model.EpisodeVideo> {
+        if (!isConfigured || query.isBlank()) return emptyList()
+        return runCatching { remote.findEpisodeVideo(baseUrl, cookie, query, limit) }
+            .onFailure { Timber.w(it, "[AGORA] hledání video verze epizody selhalo") }
+            .getOrDefault(emptyList())
+    }
+
+    /** Přímá přehrávací URL YouTube videa přes backend byte-proxy (kind=video). */
+    fun youtubeVideoUrl(videoId: String): String = remote.ytStreamUrl(baseUrl, cookie, videoId, "video")
 
     /** Epizody RSS podcastu (přímé audio enclosure URL). */
     suspend fun loadRss(feedUrl: String, limit: Int = 50): RssFeed =

@@ -615,4 +615,32 @@ internal class UploaderApi(
         val u = URLEncoder.encode(feedUrl, "UTF-8")
         return service.getRssFeed("${baseUrl.trimEnd('/')}/api/rss/feed?url=$u&limit=$limit", cookieOf(sessionCookie))
     }
+
+    // AGORA (F5) — video verze audio epizody na YouTube
+    override suspend fun findEpisodeVideo(baseUrl: String, sessionCookie: String, query: String, limit: Int): List<EpisodeVideo> {
+        val q = URLEncoder.encode(query, "UTF-8")
+        return service.episodeVideo("${baseUrl.trimEnd('/')}/api/sources/episode-video?q=$q&limit=$limit", cookieOf(sessionCookie)).results
+    }
+
+    // AGORA (objevovací modul) — procházení zdrojů (země/režim/kategorie/exclude/stránkování) + kategorie
+    override suspend fun browseSources(
+        baseUrl: String, sessionCookie: String, country: String, mode: String,
+        category: String?, exclude: List<String>?, page: Int, pageSize: Int,
+    ): SourceBrowseResponse {
+        val params = buildList {
+            add("country=${URLEncoder.encode(country, "UTF-8")}")
+            add("mode=${URLEncoder.encode(mode, "UTF-8")}")
+            if (!category.isNullOrBlank()) add("category=${URLEncoder.encode(category, "UTF-8")}")
+            val ex = exclude?.filter { it.isNotBlank() }?.joinToString(",")
+            if (!ex.isNullOrBlank()) add("exclude=${URLEncoder.encode(ex, "UTF-8")}")
+            add("page=$page")
+            add("page_size=$pageSize")
+        }.joinToString("&")
+        return service.browseSources("${baseUrl.trimEnd('/')}/api/sources/browse?$params", cookieOf(sessionCookie))
+    }
+
+    override suspend fun getCategories(baseUrl: String, sessionCookie: String, country: String): CategoriesResponse {
+        val c = URLEncoder.encode(country, "UTF-8")
+        return service.getCategories("${baseUrl.trimEnd('/')}/api/sources/categories?country=$c", cookieOf(sessionCookie))
+    }
 }

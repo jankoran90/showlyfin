@@ -132,4 +132,13 @@ interface UploaderRemoteDataSource {
     suspend fun searchSources(baseUrl: String, sessionCookie: String, query: String, type: String = "all", limit: Int = 8): List<SourceSearchResult>
     /** RSS podcast feed → epizody (přímé audio enclosure URL — ExoPlayer hraje rovnou, nic se neukládá). */
     suspend fun getRssFeed(baseUrl: String, sessionCookie: String, feedUrl: String, limit: Int = 50): RssFeed
+    /** AGORA (F5) — kandidáti VIDEO verze audio epizody na YouTube (q = název podcastu + název epizody). */
+    suspend fun findEpisodeVideo(baseUrl: String, sessionCookie: String, query: String, limit: Int = 6): List<EpisodeVideo>
+
+    // AGORA (objevovací modul) — procházení zdrojů dle země/režimu/kategorie + seznam kategorií
+    suspend fun browseSources(
+        baseUrl: String, sessionCookie: String, country: String, mode: String,
+        category: String? = null, exclude: List<String>? = null, page: Int = 1, pageSize: Int = 30,
+    ): SourceBrowseResponse
+    suspend fun getCategories(baseUrl: String, sessionCookie: String, country: String): CategoriesResponse
 }

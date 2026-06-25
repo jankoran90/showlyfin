@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Home
@@ -79,6 +80,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDetailScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.YoutubeChannelScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.RssPodcastScreen
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
@@ -125,6 +127,8 @@ internal sealed interface Destination {
 
     // PRESET (SHW-65) — správce zdrojů Poslechu (drawer nad adminem) + RSS podcast obrazovka
     data object SourceManager : Destination
+    // AGORA — objevovací modul podcastů (drawer „Objevit podcasty", vedle Zdrojů podcastů)
+    data object PodcastDiscovery : Destination
     data class RssPodcast(val feedUrl: String, val title: String, val parent: Destination) : Destination
 
     // Sub-screens
@@ -194,7 +198,7 @@ private fun JellyfinLibraryRef.toDestination(ancestors: List<JellyfinLibraryRef>
 
 // COMPASS C1: top-level cíle (drawer); jméno ponecháno kvůli minimální změně. „isSubScreen" = mimo ně.
 private val bottomTabs = listOf(
-    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Oblibeni, Destination.Downloads, Destination.SourceManager, Destination.Settings, Destination.Admin,
+    Destination.Hlavni, Destination.Ovladac, Destination.Listen, Destination.Oblibeni, Destination.Downloads, Destination.SourceManager, Destination.PodcastDiscovery, Destination.Settings, Destination.Admin,
 )
 
 /** FUSE F1: jedna definice navigačních cílů → vykreslí se buď ve spodní liště (telefon),
@@ -438,6 +442,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             } == true
             if (isSourcesOwner) {
                 add(ShellNavItem(Destination.SourceManager, Icons.Default.Podcasts, "Zdroje podcastů"))
+                add(ShellNavItem(Destination.PodcastDiscovery, Icons.Default.Explore, "Objevit podcasty"))
             }
             // Plan HELM — admin destinace (správa profilů/šablon/zálohy) jen pro admin profil.
             if (gateState.activeProfile?.isAdmin == true) {
@@ -753,6 +758,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.SourceManager -> SourceManagerScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
+                is Destination.PodcastDiscovery -> PodcastDiscoveryScreen(
+                    modifier = Modifier.fillMaxSize(),
+                )
                 is Destination.RssPodcast -> RssPodcastScreen(
                     feedUrl = dest.feedUrl,
                     title = dest.title,
@@ -768,6 +776,12 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         currentDestination = Destination.Player(
                             itemId = jfItemId, externalUrl = null, title = videoTitle, parent = dest,
                             resumeKey = resumeKey,
+                        )
+                    },
+                    // AGORA (F5): video verze epizody z YouTube → externí přehrávač (jako YouTube kanál).
+                    onPlayYoutubeVideo = { url, videoTitle, poster ->
+                        currentDestination = Destination.Player(
+                            itemId = null, externalUrl = url, title = videoTitle, parent = dest, posterUrl = poster,
                         )
                     },
                     modifier = Modifier.fillMaxSize(),

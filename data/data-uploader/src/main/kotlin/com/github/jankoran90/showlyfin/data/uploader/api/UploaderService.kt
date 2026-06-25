@@ -115,4 +115,9 @@ interface UploaderService {
     @DELETE suspend fun removeSource(@Url url: String, @Header("Cookie") cookie: String): SourcesResponse
     @GET suspend fun searchSources(@Url url: String, @Header("Cookie") cookie: String): SourceSearchResponse
     @GET suspend fun getRssFeed(@Url url: String, @Header("Cookie") cookie: String): RssFeed
+    // AGORA (F5) — video verze audio epizody na YouTube
+    @GET suspend fun episodeVideo(@Url url: String, @Header("Cookie") cookie: String): EpisodeVideoResponse
+    // AGORA (objevovací modul) — procházení zdrojů dle země/režimu/kategorie + seznam kategorií
+    @GET suspend fun browseSources(@Url url: String, @Header("Cookie") cookie: String): SourceBrowseResponse
+    @GET suspend fun getCategories(@Url url: String, @Header("Cookie") cookie: String): CategoriesResponse
 }

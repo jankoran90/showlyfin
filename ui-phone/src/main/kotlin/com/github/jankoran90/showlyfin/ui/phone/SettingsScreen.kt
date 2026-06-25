@@ -251,6 +251,8 @@ fun SettingsScreen(
             com.github.jankoran90.showlyfin.feature.listen.ui.ListenOrderSettingsSection()
             // LEVER (SHW-61) L5 — stažené podcasty/YouTube do telefonu (offline na chatu): místo + smazat vše.
             com.github.jankoran90.showlyfin.feature.listen.ui.ListenOfflineSettingsSection()
+            // AGORA (SHW-71) F4 — objevování podcastů: výchozí země/režim, skryté kategorie, prahy, náhledy.
+            com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoverySettingsSection()
             // Plan STRATA Fáze I — Poslech = JEN volby přehrávání; přihlášení ABS je v „Připojení a účty".
             if (uiState.absConfigured) {
                 ListenSettingsCard(uiState, viewModel)

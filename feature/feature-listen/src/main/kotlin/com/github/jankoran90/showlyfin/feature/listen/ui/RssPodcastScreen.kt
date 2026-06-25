@@ -74,6 +74,8 @@ fun RssPodcastScreen(
     onOpenAudioPlayer: () -> Unit,
     // REWIND (SHW-68): resumeKey = episodeKey(ep) — sdílený klíč s audio řádkem → resume/progres videa.
     onPlayVideo: (jfItemId: String, title: String, resumeKey: String) -> Unit,
+    // AGORA (F5): přehrání VIDEO verze epizody z YouTube (externí proxy URL, jako YouTube kanál).
+    onPlayYoutubeVideo: (url: String, title: String, posterUrl: String?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: RssPodcastViewModel = hiltViewModel(),
 ) {
@@ -190,6 +192,17 @@ fun RssPodcastScreen(
                         viewModel.castVideoToTv(ep)
                     }
                 },
+                // AGORA (F5): u epizod BEZ vlastního JF videa dohledej video verzi na YouTube.
+                if (ep.jfItemId == null) {
+                    ListenEpisodeAction(Icons.Default.OndemandVideo, "Video verze (YouTube)") {
+                        viewModel.findAndPlayVideo(ep, fallbackTitle, onPlayYoutubeVideo)
+                    }
+                } else null,
+                if (ep.jfItemId == null) {
+                    ListenEpisodeAction(Icons.Default.Tv, "Video verze na TV (YouTube)") {
+                        viewModel.findAndCastVideo(ep, fallbackTitle)
+                    }
+                } else null,
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, fallbackTitle, atFront = true)
                 },

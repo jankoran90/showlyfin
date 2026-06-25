@@ -229,6 +229,43 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getString(KEY_PODCAST_LIB_ORDER, "").orEmpty().split("\n").filter { it.isNotBlank() }
         set(value) = prefs.edit { putString(KEY_PODCAST_LIB_ORDER, value.joinToString("\n")) }
 
+    // ──────────────── Objevování podcastů (AGORA) ────────────────
+
+    /** Výchozí země objevovací obrazovky (kód: cz|us|gb|au). */
+    var discoveryCountry: String
+        get() = prefs.getString(KEY_DISC_COUNTRY, "cz").orEmpty().ifBlank { "cz" }
+        set(value) = prefs.edit { putString(KEY_DISC_COUNTRY, value) }
+
+    /** Výchozí režim objevovací obrazovky (apiValue: popular|active|new|az). */
+    var discoveryMode: String
+        get() = prefs.getString(KEY_DISC_MODE, "popular").orEmpty().ifBlank { "popular" }
+        set(value) = prefs.edit { putString(KEY_DISC_MODE, value) }
+
+    /** Trvale skryté CZ kategorie (ID) — předvyplní se do `excluded` při otevření Objevit. */
+    var discoveryHiddenCategories: Set<String>
+        get() = prefs.getStringSet(KEY_DISC_HIDDEN_CATS, emptySet()).orEmpty()
+        set(value) = prefs.edit { putStringSet(KEY_DISC_HIDDEN_CATS, value) }
+
+    /** Min. počet epizod — karty pod prahem se v objevování skryjí (0 = bez filtru). */
+    var discoveryMinEpisodes: Int
+        get() = prefs.getInt(KEY_DISC_MIN_EP, 0)
+        set(value) = prefs.edit { putInt(KEY_DISC_MIN_EP, value.coerceIn(0, 500)) }
+
+    /** Počet karet na stránku (donačítání). */
+    var discoveryPageSize: Int
+        get() = prefs.getInt(KEY_DISC_PAGE_SIZE, 30)
+        set(value) = prefs.edit { putInt(KEY_DISC_PAGE_SIZE, value.coerceIn(10, 100)) }
+
+    /** Zobrazovat popis v náhledech objevovacích karet. */
+    var discoveryShowSummary: Boolean
+        get() = prefs.getBoolean(KEY_DISC_SHOW_SUMMARY, true)
+        set(value) = prefs.edit { putBoolean(KEY_DISC_SHOW_SUMMARY, value) }
+
+    /** Zobrazovat počet epizod v náhledech objevovacích karet. */
+    var discoveryShowEpisodeCount: Boolean
+        get() = prefs.getBoolean(KEY_DISC_SHOW_EP_COUNT, true)
+        set(value) = prefs.edit { putBoolean(KEY_DISC_SHOW_EP_COUNT, value) }
+
     // ──────────────── Synchronizace ────────────────
 
     /** Interval syncu pozice na ABS server v sekundách. */
@@ -305,5 +342,12 @@ class AbsPreferences @Inject constructor(
         private const val KEY_SHOW_SPEED_BTN = "listen_show_speed_btn"
         private const val KEY_SHOW_SLEEP_BTN = "listen_show_sleep_btn"
         private const val KEY_SYNC_INTERVAL = "listen_sync_interval"
+        private const val KEY_DISC_COUNTRY = "podcast_discovery_country"
+        private const val KEY_DISC_MODE = "podcast_discovery_mode"
+        private const val KEY_DISC_HIDDEN_CATS = "podcast_discovery_hidden_categories"
+        private const val KEY_DISC_MIN_EP = "podcast_discovery_min_episodes"
+        private const val KEY_DISC_PAGE_SIZE = "podcast_discovery_page_size"
+        private const val KEY_DISC_SHOW_SUMMARY = "podcast_discovery_show_summary"
+        private const val KEY_DISC_SHOW_EP_COUNT = "podcast_discovery_show_episode_count"
     }
 }

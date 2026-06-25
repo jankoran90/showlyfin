@@ -35,17 +35,47 @@ data class AddSourceRequest(
     val thumbnail: String? = null,
 )
 
-/** Výsledek hledání zdroje podle názvu (`/api/sources/search`). */
+/**
+ * Výsledek hledání / objevovací karta zdroje (`/api/sources/search` i `/api/sources/browse`).
+ * AGORA: backend obohacuje kartu o [summary] (popis), [episodeCount] (počet epizod) a [category]
+ * (název kategorie) — reuse stejného tvaru pro hledání i objevování.
+ */
 data class SourceSearchResult(
     val type: String,                 // "youtube" | "rss"
     val ref: String,
     val title: String,
-    val subtitle: String? = null,     // "YouTube kanál" / autor podcastu
+    val subtitle: String? = null,     // "YouTube kanál" / autor podcastu (KDO PROVÁZÍ)
     val thumbnail: String? = null,
+    val summary: String? = null,                                    // krátký popis pořadu
+    @SerializedName("episode_count") val episodeCount: Int? = null, // počet epizod
+    val category: String? = null,                                   // název kategorie
 )
 
 data class SourceSearchResponse(
     val results: List<SourceSearchResult> = emptyList(),
+)
+
+/**
+ * AGORA (objevovací modul): kategorie podcastů pro danou zemi (`/api/sources/categories`).
+ * CZ kategorie ≠ Apple žánr — kategorie patří vždy ke konkrétní zemi.
+ */
+data class SourceCategory(
+    val id: Int,
+    val name: String,
+    val slug: String? = null,
+    val color: String? = null,
+)
+
+data class CategoriesResponse(
+    val categories: List<SourceCategory> = emptyList(),
+    val country: String = "cz",
+)
+
+/** Odpověď objevovacího procházení (`/api/sources/browse`) — karta = [SourceSearchResult]. */
+data class SourceBrowseResponse(
+    val results: List<SourceSearchResult> = emptyList(),
+    val country: String = "cz",
+    val mode: String = "active",
 )
 
 /** RSS podcast feed → epizody (`/api/rss/feed`). audio_url = přímá enclosure URL (ExoPlayer hraje rovnou). */
@@ -65,6 +95,22 @@ data class RssEpisode(
     val image: String? = null,
     /** EXODUS (SHW-67) E2: video epizody v JF knihovně (NaVýbornou) — tlačítko Video / cast na TV. */
     @SerializedName("jf_item_id") val jfItemId: String? = null,
+)
+
+/**
+ * AGORA (SHW, F5): kandidát VIDEO verze audio epizody nalezený na YouTube (`/api/sources/episode-video`).
+ * U epizod BEZ vlastního video v JF knihovně (tj. ne NaVýbornou) lze dohledat video verzi na YouTube
+ * a přehrát ji / poslat na TV stejnou cestou jako YouTube kanál (proxy `/api/yt/stream/{id}?kind=video`).
+ */
+data class EpisodeVideo(
+    val id: String,                   // yt_video_id
+    val title: String = "",
+    val uploader: String = "",
+    val duration: Int = 0,            // sekundy
+)
+
+data class EpisodeVideoResponse(
+    val results: List<EpisodeVideo> = emptyList(),
 )
 
 /**
