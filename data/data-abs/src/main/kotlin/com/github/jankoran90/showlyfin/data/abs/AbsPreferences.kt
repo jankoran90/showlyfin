@@ -266,6 +266,41 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_DISC_SHOW_EP_COUNT, true)
         set(value) = prefs.edit { putBoolean(KEY_DISC_SHOW_EP_COUNT, value) }
 
+    // ──────────────── Sekce Podcasty — taby + Timeline + filtr (AGORA-TABS) ────────────────
+
+    /**
+     * Výchozí záložka po otevření sekce Podcasty: timeline|following|discover. Default = timeline
+     * (chronologický feed nových epizod ze všech sledovaných zdrojů).
+     */
+    var podcastDefaultTab: String
+        get() = prefs.getString(KEY_PODCAST_TAB, "timeline").orEmpty().ifBlank { "timeline" }
+        set(value) = prefs.edit { putString(KEY_PODCAST_TAB, value) }
+
+    /** Výchozí časový rozsah Timeline ve dnech (7|30|90). Epizody starší než rozsah se odfiltrují. */
+    var podcastTimelineRangeDays: Int
+        get() = prefs.getInt(KEY_PODCAST_TIMELINE_RANGE, 90)
+        set(value) = prefs.edit { putInt(KEY_PODCAST_TIMELINE_RANGE, value.coerceIn(1, 365)) }
+
+    /** Výchozí typ zdroje pro filtr sekce Podcasty: all|rss|youtube. */
+    var podcastSourceTypeFilter: String
+        get() = prefs.getString(KEY_PODCAST_SOURCE_TYPE, "all").orEmpty().ifBlank { "all" }
+        set(value) = prefs.edit { putString(KEY_PODCAST_SOURCE_TYPE, value) }
+
+    /** AGORA Timeline: zobrazit u epizody popis „o čem to je" (RSS/YouTube description). Default ON. */
+    var podcastTimelineShowDescription: Boolean
+        get() = prefs.getBoolean(KEY_TL_SHOW_DESC, true)
+        set(value) = prefs.edit { putBoolean(KEY_TL_SHOW_DESC, value) }
+
+    /** AGORA Timeline: počet řádků popisu v sbaleném stavu (3|4|5), klik na popis rozbalí celý. Default 3. */
+    var podcastTimelineDescriptionLines: Int
+        get() = prefs.getInt(KEY_TL_DESC_LINES, 3).coerceIn(3, 5)
+        set(value) = prefs.edit { putInt(KEY_TL_DESC_LINES, value.coerceIn(3, 5)) }
+
+    /** AGORA Timeline: zobrazit u epizody datum vydání. Default ON. */
+    var podcastTimelineShowDate: Boolean
+        get() = prefs.getBoolean(KEY_TL_SHOW_DATE, true)
+        set(value) = prefs.edit { putBoolean(KEY_TL_SHOW_DATE, value) }
+
     // ──────────────── Synchronizace ────────────────
 
     /** Interval syncu pozice na ABS server v sekundách. */
@@ -349,5 +384,11 @@ class AbsPreferences @Inject constructor(
         private const val KEY_DISC_PAGE_SIZE = "podcast_discovery_page_size"
         private const val KEY_DISC_SHOW_SUMMARY = "podcast_discovery_show_summary"
         private const val KEY_DISC_SHOW_EP_COUNT = "podcast_discovery_show_episode_count"
+        private const val KEY_PODCAST_TAB = "podcast_default_tab"
+        private const val KEY_PODCAST_TIMELINE_RANGE = "podcast_timeline_range_days"
+        private const val KEY_PODCAST_SOURCE_TYPE = "podcast_source_type_filter"
+        private const val KEY_TL_SHOW_DESC = "podcast_timeline_show_description"
+        private const val KEY_TL_DESC_LINES = "podcast_timeline_description_lines"
+        private const val KEY_TL_SHOW_DATE = "podcast_timeline_show_date"
     }
 }

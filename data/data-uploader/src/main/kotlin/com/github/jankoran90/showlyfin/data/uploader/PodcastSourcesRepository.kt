@@ -129,6 +129,8 @@ class PodcastSourcesRepository @Inject constructor(
                         imageUrl = (ep.thumbnail ?: source.thumbnail).httpsUrl(),
                         date = ep.uploadDate,
                         resumeKey = "yt:${ep.id}",   // shoda s YoutubeChannelViewModel.episodeKey
+                        description = ep.description,
+                        durationSec = ep.duration ?: 0.0,
                     )
                 }
                 else -> loadRss(source.ref, limit).let { feed ->
@@ -141,6 +143,8 @@ class PodcastSourcesRepository @Inject constructor(
                             imageUrl = ep.image ?: feed.image ?: source.thumbnail,
                             date = ep.date,
                             resumeKey = "rss:${ep.id}",   // shoda s RssPodcastViewModel.episodeKey
+                            description = ep.description,
+                            durationSec = parseDurationSec(ep.duration),
                         )
                     }
                 }
@@ -160,3 +164,18 @@ private fun String?.httpsUrl(): String? =
 
 private fun List<PodcastSource>.normalized(): List<PodcastSource> =
     map { it.copy(thumbnail = it.thumbnail.httpsUrl()) }
+
+/** itunes:duration → sekundy (RSS). Podporuje "HH:MM:SS", "MM:SS" i čisté sekundy. 0 = neznámé. */
+private fun parseDurationSec(d: String?): Double {
+    val t = d?.trim().orEmpty()
+    if (t.isEmpty()) return 0.0
+    if (":" in t) {
+        val p = t.split(":").mapNotNull { it.trim().toIntOrNull() }
+        return when (p.size) {
+            3 -> (p[0] * 3600 + p[1] * 60 + p[2]).toDouble()
+            2 -> (p[0] * 60 + p[1]).toDouble()
+            else -> 0.0
+        }
+    }
+    return t.toDoubleOrNull() ?: 0.0
+}

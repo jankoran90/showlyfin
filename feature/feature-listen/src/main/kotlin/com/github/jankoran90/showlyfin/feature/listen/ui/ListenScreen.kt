@@ -47,6 +47,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -204,6 +205,12 @@ private fun BooksContent(
     }
 }
 
+/**
+ * AGORA-TABS: sekce Podcasty s přepínacími záložkami. PRVNÍ prvek řady = ikona filtru, pak
+ * Timeline (default) · Sledované · Objev. Timeline = chronologický feed nových epizod ze všech zdrojů;
+ * Sledované = grid vlastních + ABS podcastů; Objev = katalog + přidání vlastních YT/RSS.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PodcastsContent(
     state: ListenUiState,
@@ -213,16 +220,31 @@ private fun PodcastsContent(
     onOpenDownloads: () -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
 ) {
-    // Plan CASTAWAY — „Stažené epizody" musí zůstat dostupné i offline / při chybě načtení podcastů,
-    // proto je chip nad obsahovou částí (ne uvnitř úspěšné větve).
+    val discoveryVm: com.github.jankoran90.showlyfin.feature.listen.PodcastDiscoveryViewModel = hiltViewModel()
+    val filterVm: com.github.jankoran90.showlyfin.feature.listen.PodcastFilterViewModel = hiltViewModel()
+    val discoveryState by discoveryVm.state.collectAsStateWithLifecycle()
+    val filterState by filterVm.state.collectAsStateWithLifecycle()
+
+    var tab by rememberSaveable(stateSaver = PodcastTabSaver) {
+        mutableStateOf(PodcastTab.fromPref(viewModel.podcastDefaultTab))
+    }
+    var showFilter by remember { mutableStateOf(false) }
+    // Bump po zavření filtru → Timeline přepočítá feed dle nového rozsahu/typu.
+    var filterEpoch by remember { mutableStateOf(0) }
+
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // PRESET (SHW-65): YouTube i RSS jsou teď zdroje v Podcastech (SourceCard) — samostatný
-            // chip „YouTube podcasty" zrušen jako redundantní. YouTube kanál se otevře přes svůj zdroj.
-            if (downloadCount > 0) {
+        PodcastTabRow(
+            selected = tab,
+            onSelect = { tab = it },
+            onOpenFilter = { showFilter = true },
+            activeFilterCount = filterVm.activeCount(discoveryState.excluded.size),
+        )
+
+        if (downloadCount > 0) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 AssistChip(
                     onClick = onOpenDownloads,
                     label = { Text("Stažené · $downloadCount") },
@@ -230,9 +252,58 @@ private fun PodcastsContent(
                 )
             }
         }
-        // PRESET (SHW-65) — vlastní zdroje (YouTube/RSS) splynou s Podcasty: jsou nezávislé na ABS,
-        // proto se obsah ukáže, i když ABS podcasty chybí (offline / prázdná knihovna).
-        val hasContent = state.podcasts.isNotEmpty() || state.customSources.isNotEmpty()
+
+        when (tab) {
+            PodcastTab.TIMELINE -> PodcastTimelineSection(
+                onOpenDiscover = { tab = PodcastTab.DISCOVER },
+                refreshKey = filterEpoch,
+                modifier = Modifier.fillMaxSize(),
+            )
+            PodcastTab.FOLLOWING -> FollowingContent(
+                state = state,
+                viewModel = viewModel,
+                onOpenPodcast = onOpenPodcast,
+                onOpenSource = onOpenSource,
+                downloadCount = downloadCount,
+                sourceType = filterState.sourceType,
+            )
+            PodcastTab.DISCOVER -> PodcastDiscoverSection(modifier = Modifier.fillMaxSize())
+        }
+    }
+
+    if (showFilter) {
+        PodcastFilterSheet(
+            timelineRangeDays = filterState.timelineRangeDays,
+            onSetRange = filterVm::setTimelineRange,
+            sourceType = filterState.sourceType,
+            onSetSourceType = filterVm::setSourceType,
+            minEpisodes = filterState.minEpisodes,
+            onSetMinEpisodes = { filterVm.setMinEpisodes(it); discoveryVm.setMinEpisodes(it) },
+            categories = discoveryState.categories,
+            excluded = discoveryState.excluded,
+            onToggleCategory = discoveryVm::toggleExclude,
+            onDismiss = { showFilter = false; filterEpoch++ },
+        )
+    }
+}
+
+/** AGORA-TABS: Sledované = dnešní grid vlastních zdrojů + ABS podcastů (s filtrem typu zdroje). */
+@Composable
+private fun FollowingContent(
+    state: ListenUiState,
+    viewModel: ListenViewModel,
+    onOpenPodcast: (String) -> Unit,
+    onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
+    downloadCount: Int,
+    sourceType: String,
+) {
+    // Filtr typu zdroje (z filtru): all|rss|youtube — aplikuje se na vlastní zdroje. ABS podcasty
+    // ukazujeme jen u „Vše" nebo „Podcasty" (jsou to RSS-like pořady, ne YouTube).
+    val sources = state.customSources.filter { sourceType == "all" || it.type == sourceType }
+    val showAbs = sourceType == "all" || sourceType == "rss"
+    val hasContent = (showAbs && state.podcasts.isNotEmpty()) || sources.isNotEmpty()
+
+    Column(Modifier.fillMaxSize()) {
         when {
             state.isLoading && !hasContent ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -249,7 +320,7 @@ private fun PodcastsContent(
             state.error != null && !hasContent -> CenteredMessage(state.error)
 
             else -> {
-                if (state.podcastLibraries.size > 1) {
+                if (showAbs && state.podcastLibraries.size > 1) {
                     LibraryChips(
                         libraries = state.podcastLibraries.map { it.id to it.name },
                         selectedId = state.selectedPodcastLibraryId,
@@ -257,7 +328,7 @@ private fun PodcastsContent(
                     )
                 }
                 if (!hasContent && !state.isLoading) {
-                    CenteredMessage("V této knihovně zatím nejsou žádné podcasty.\nVlastní zdroje přidáš v postranním menu → Zdroje podcastů.")
+                    CenteredMessage("Zatím nesleduješ žádné podcasty.\nPřidej zdroje v záložce Objev.")
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 150.dp),
@@ -266,12 +337,13 @@ private fun PodcastsContent(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        // Vlastní zdroje (YouTube/RSS) nahoře — sdílené ze serveru, nezávislé na vybrané knihovně.
-                        items(state.customSources, key = { "src:${it.id}" }) { src ->
+                        items(sources, key = { "src:${it.id}" }) { src ->
                             SourceCard(source = src, onClick = { onOpenSource(src) })
                         }
-                        items(state.podcasts, key = { it.id }) { podcast ->
-                            PodcastCard(podcast = podcast, onClick = { onOpenPodcast(podcast.id) })
+                        if (showAbs) {
+                            items(state.podcasts, key = { it.id }) { podcast ->
+                                PodcastCard(podcast = podcast, onClick = { onOpenPodcast(podcast.id) })
+                            }
                         }
                     }
                 }

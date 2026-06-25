@@ -44,6 +44,50 @@ fun PodcastDiscoverySettingsSection(
             modifier = Modifier.padding(top = 8.dp),
         )
 
+        // AGORA-TABS: chování sekce Podcasty (taby + Timeline + filtr) — parita s filtrem v sekci.
+        SubHeader("Výchozí záložka Podcastů")
+        ChipChoices(
+            options = PODCAST_TABS,
+            selected = state.defaultTab,
+            onSelect = viewModel::setDefaultTab,
+        )
+
+        SubHeader("Výchozí rozsah Timeline")
+        IntChipChoices(
+            options = TIMELINE_RANGES,
+            selected = state.timelineRangeDays,
+            label = { rangeLabel(it) },
+            onSelect = viewModel::setTimelineRange,
+        )
+
+        // AGORA Timeline: přehlednost feedu — datum, popis a počet řádků popisu.
+        SwitchRow(
+            label = "Zobrazovat datum epizody",
+            checked = state.timelineShowDate,
+            onChange = viewModel::setTimelineShowDate,
+        )
+        SwitchRow(
+            label = "Zobrazovat popis epizody",
+            checked = state.timelineShowDescription,
+            onChange = viewModel::setTimelineShowDescription,
+        )
+        if (state.timelineShowDescription) {
+            SubHeader("Řádků popisu v Timeline")
+            IntChipChoices(
+                options = TIMELINE_DESC_LINES,
+                selected = state.timelineDescriptionLines,
+                label = { "$it řádky" },
+                onSelect = viewModel::setTimelineDescriptionLines,
+            )
+        }
+
+        SubHeader("Výchozí typ zdroje")
+        ChipChoices(
+            options = SOURCE_TYPES,
+            selected = state.sourceType,
+            onSelect = viewModel::setSourceType,
+        )
+
         SubHeader("Výchozí země")
         ChipChoices(
             options = COUNTRIES,
@@ -119,6 +163,19 @@ private val MODES = listOf(
 )
 private val MIN_EPISODE_OPTIONS = listOf(0, 5, 10, 25, 50)
 private val PAGE_SIZE_OPTIONS = listOf(20, 30, 50)
+private val PODCAST_TABS = listOf(
+    "timeline" to "Timeline", "following" to "Sledované", "discover" to "Objev",
+)
+private val TIMELINE_RANGES = listOf(7, 30, 90)
+private val TIMELINE_DESC_LINES = listOf(3, 4, 5)
+private val SOURCE_TYPES = listOf("all" to "Vše", "rss" to "Podcasty", "youtube" to "YouTube")
+
+private fun rangeLabel(days: Int): String = when (days) {
+    7 -> "1 týden"
+    30 -> "1 měsíc"
+    90 -> "3 měsíce"
+    else -> "$days dní"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

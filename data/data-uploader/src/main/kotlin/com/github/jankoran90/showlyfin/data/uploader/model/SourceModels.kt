@@ -128,4 +128,12 @@ data class SourceEpisode(
     /** Klíč resume SJEDNOCENÝ s in-app přehrávačem (`yt:<id>` / `rss:<id>`) → pozice se sdílí
      *  mezi appkou a Android Auto + položka jde do AA „Pokračovat" (CRUISE). */
     val resumeKey: String? = null,
+    /**
+     * AGORA (Timeline): popis epizody „o čem to je" (RSS `description` / YouTube `description`).
+     * Přenáší se až do feedu, aby Timeline řádek ukázal pár řádků popisu (ExpandableText) bez
+     * druhého fetche feedu. Může chybět (null) u zdrojů bez popisu.
+     */
+    val description: String? = null,
+    /** AGORA (Timeline): délka epizody v sekundách (0 = neznámá) — pro download request i případný štítek. */
+    val durationSec: Double = 0.0,
 )

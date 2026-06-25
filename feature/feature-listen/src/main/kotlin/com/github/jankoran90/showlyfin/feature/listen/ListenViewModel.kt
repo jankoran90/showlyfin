@@ -196,6 +196,9 @@ class ListenViewModel @Inject constructor(
         }
     }
 
+    /** AGORA-TABS: výchozí záložka sekce Podcasty (timeline|following|discover) z Nastavení. */
+    val podcastDefaultTab: String get() = absPrefs.podcastDefaultTab
+
     /** PRESET — načti/obnov sdílený seznam vlastních zdrojů (YouTube/RSS) ze serveru. */
     fun loadSources() {
         viewModelScope.launch { sourcesRepo.refresh() }

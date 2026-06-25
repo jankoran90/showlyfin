@@ -32,6 +32,18 @@ class PodcastDiscoverySettingsViewModel @Inject constructor(
         val pageSize: Int = 30,
         val showSummary: Boolean = true,
         val showEpisodeCount: Boolean = true,
+        /** AGORA-TABS: výchozí záložka sekce Podcasty (timeline|following|discover). */
+        val defaultTab: String = "timeline",
+        /** AGORA-TABS: výchozí časový rozsah Timeline ve dnech (7|30|90). */
+        val timelineRangeDays: Int = 90,
+        /** AGORA-TABS: výchozí typ zdroje filtru (all|rss|youtube). */
+        val sourceType: String = "all",
+        /** AGORA Timeline: zobrazit popis epizody „o čem to je". */
+        val timelineShowDescription: Boolean = true,
+        /** AGORA Timeline: počet řádků popisu ve sbaleném stavu (3|4|5). */
+        val timelineDescriptionLines: Int = 3,
+        /** AGORA Timeline: zobrazit datum vydání epizody. */
+        val timelineShowDate: Boolean = true,
         /** CZ kategorie pro multi-select „Trvale skryté kategorie" (načteno ze serveru). */
         val czCategories: List<SourceCategory> = emptyList(),
     )
@@ -55,7 +67,43 @@ class PodcastDiscoverySettingsViewModel @Inject constructor(
         pageSize = prefs.discoveryPageSize,
         showSummary = prefs.discoveryShowSummary,
         showEpisodeCount = prefs.discoveryShowEpisodeCount,
+        defaultTab = prefs.podcastDefaultTab,
+        timelineRangeDays = prefs.podcastTimelineRangeDays,
+        sourceType = prefs.podcastSourceTypeFilter,
+        timelineShowDescription = prefs.podcastTimelineShowDescription,
+        timelineDescriptionLines = prefs.podcastTimelineDescriptionLines,
+        timelineShowDate = prefs.podcastTimelineShowDate,
     )
+
+    fun setTimelineShowDescription(value: Boolean) {
+        prefs.podcastTimelineShowDescription = value
+        _state.update { it.copy(timelineShowDescription = value) }
+    }
+
+    fun setTimelineDescriptionLines(value: Int) {
+        prefs.podcastTimelineDescriptionLines = value
+        _state.update { it.copy(timelineDescriptionLines = prefs.podcastTimelineDescriptionLines) }
+    }
+
+    fun setTimelineShowDate(value: Boolean) {
+        prefs.podcastTimelineShowDate = value
+        _state.update { it.copy(timelineShowDate = value) }
+    }
+
+    fun setDefaultTab(value: String) {
+        prefs.podcastDefaultTab = value
+        _state.update { it.copy(defaultTab = value) }
+    }
+
+    fun setTimelineRange(days: Int) {
+        prefs.podcastTimelineRangeDays = days
+        _state.update { it.copy(timelineRangeDays = prefs.podcastTimelineRangeDays) }
+    }
+
+    fun setSourceType(value: String) {
+        prefs.podcastSourceTypeFilter = value
+        _state.update { it.copy(sourceType = value) }
+    }
 
     fun setCountry(code: String) {
         prefs.discoveryCountry = code

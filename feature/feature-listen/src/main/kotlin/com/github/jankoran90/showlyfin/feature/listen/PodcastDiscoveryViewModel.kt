@@ -145,6 +145,16 @@ class PodcastDiscoveryViewModel @Inject constructor(
         refresh()
     }
 
+    /** AGORA-TABS: běhová změna min. počtu epizod z filtru sekce Podcasty (klientský filtr karet). */
+    fun setMinEpisodes(value: Int) {
+        if (value == _state.value.minEpisodes) return
+        _state.update { it.copy(minEpisodes = value.coerceAtLeast(0)) }
+        refresh()
+    }
+
+    /** AGORA-TABS: aktuálně vyloučené kategorie (pro badge filtru v tab řadě). */
+    val excludedCount: Int get() = _state.value.excluded.size
+
     fun toggleExclude(id: Int) {
         _state.update {
             val ex = if (id in it.excluded) it.excluded - id else it.excluded + id
