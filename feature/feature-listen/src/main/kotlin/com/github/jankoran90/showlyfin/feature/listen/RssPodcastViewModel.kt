@@ -179,10 +179,20 @@ class RssPodcastViewModel @Inject constructor(
     }
 
     // ───────────────────────── AGORA (F5): VIDEO verze epizody přes YouTube ─────────────────────────
+    // Iterace „ruční výběr" (user device feedback): místo auto-přehrání nejlepšího kandidáta načteme
+    // VŠECHNY kandidáty a uživatel si v sheetu sám vybere video (+ akci Přehrát / Na TV).
 
-    /** F5: probíhá hledání video verze (spinner v menu / blokace dvojího ťuku). */
-    private val _videoSearching = MutableStateFlow(false)
-    val videoSearching = _videoSearching.asStateFlow()
+    /** F5: probíhá hledání video verze (spinner v menu) — klíč epizody, pro kterou se hledá; null = neběží. */
+    private val _videoLoadingFor = MutableStateFlow<String?>(null)
+    val videoLoadingFor = _videoLoadingFor.asStateFlow()
+
+    /** F5: nalezení kandidáti video verze pro picker. null = picker zavřený; prázdný = „nenalezeno". */
+    private val _videoCandidates = MutableStateFlow<List<EpisodeVideo>?>(null)
+    val videoCandidates = _videoCandidates.asStateFlow()
+
+    /** F5: id (yt video id) doporučeného kandidáta dle heuristiky [pickBestVideo] — odznak „doporučeno". */
+    private val _recommendedVideoId = MutableStateFlow<String?>(null)
+    val recommendedVideoId = _recommendedVideoId.asStateFlow()
 
     /** Sestaví dotaz pro YouTube: „<název podcastu> <název epizody>". */
     private fun videoQuery(ep: RssEpisode, fallbackTitle: String): String {
@@ -214,33 +224,51 @@ class RssPodcastViewModel @Inject constructor(
     }
 
     /**
-     * F5: dohledej video verzi epizody na YouTube a PŘEHRÁJ ji (proxy `/api/yt/stream/{id}?kind=video`).
-     * Přehrání řeší obrazovka přes [onResolved] (navigace na video přehrávač s externí URL) — stejnou
-     * cestou jako video YouTube kanálu. Když nic nenajde → Toast „Video verze nenalezena".
+     * F5: dohledej video verze epizody na YouTube a vystav kandidáty do [videoCandidates] (picker).
+     * Doporučený kandidát ([pickBestVideo]) se v sheetu označí odznakem a dá nahoru.
+     * Guard přes [_videoLoadingFor] (blokace dvojího ťuku). Nic nenalezeno → prázdný seznam (sheet ukáže text).
      */
-    fun findAndPlayVideo(ep: RssEpisode, fallbackTitle: String, onResolved: (url: String, title: String, poster: String?) -> Unit) {
-        if (_videoSearching.value) return
+    fun requestVideoVersions(ep: RssEpisode, fallbackTitle: String) {
+        if (_videoLoadingFor.value != null) return
+        val key = episodeKey(ep)
         viewModelScope.launch {
-            _videoSearching.value = true
-            val best = pickBestVideo(repo.findEpisodeVideo(videoQuery(ep, fallbackTitle)), ep, fallbackTitle)
-            _videoSearching.value = false
-            if (best == null) { _castMessage.value = "Video verze nenalezena."; return@launch }
-            Timber.i("[AGORA] video verze epizody '%s' → yt=%s (%s)", ep.title, best.id, best.title)
-            onResolved(repo.youtubeVideoUrl(best.id), ep.title.ifBlank { fallbackTitle }, ep.image ?: _state.value.image)
+            _videoLoadingFor.value = key
+            _videoCandidates.value = null
+            _recommendedVideoId.value = null
+            val candidates = repo.findEpisodeVideo(videoQuery(ep, fallbackTitle))
+            val best = pickBestVideo(candidates, ep, fallbackTitle)
+            // Doporučeného dej nahoru, zbytek v pořadí backendu (dle relevance).
+            val ordered = if (best != null) listOf(best) + candidates.filter { it.id != best.id } else candidates
+            _recommendedVideoId.value = best?.id
+            _videoCandidates.value = ordered
+            _videoLoadingFor.value = null
+            Timber.i("[AGORA] kandidáti video verze epizody '%s' → %d (doporučeno=%s)", ep.title, ordered.size, best?.id)
         }
     }
 
+    /** F5: zavře picker (zahodí kandidáty). */
+    fun clearVideoCandidates() {
+        _videoCandidates.value = null
+        _recommendedVideoId.value = null
+    }
+
     /**
-     * F5: dohledej video verzi epizody na YouTube a pošli ji na TV (FERRY cast), stejně jako YouTube kanál.
-     * URL = proxy `/api/yt/stream/{id}?kind=video`. Výsledek → jednorázová [castMessage] (Toast).
+     * F5: PŘEHRÁJ vybraného kandidáta video verze (proxy `/api/yt/stream/{id}?kind=video`) — stejnou
+     * cestou jako video YouTube kanálu. Přehrání řeší obrazovka přes [onResolved] (navigace).
      */
-    fun findAndCastVideo(ep: RssEpisode, fallbackTitle: String) {
-        if (_videoSearching.value) return
+    fun playVideoVersion(video: EpisodeVideo, ep: RssEpisode, fallbackTitle: String, onResolved: (url: String, title: String, poster: String?) -> Unit) {
+        Timber.i("[AGORA] přehrát video verzi epizody '%s' → yt=%s (%s)", ep.title, video.id, video.title)
+        clearVideoCandidates()
+        onResolved(repo.youtubeVideoUrl(video.id), ep.title.ifBlank { fallbackTitle }, ep.image ?: _state.value.image)
+    }
+
+    /**
+     * F5: pošli vybraného kandidáta video verze na TV (FERRY cast), stejně jako YouTube kanál.
+     * Výsledek → jednorázová [castMessage] (Toast).
+     */
+    fun castVideoVersion(video: EpisodeVideo, ep: RssEpisode) {
+        clearVideoCandidates()
         viewModelScope.launch {
-            _videoSearching.value = true
-            val best = pickBestVideo(repo.findEpisodeVideo(videoQuery(ep, fallbackTitle)), ep, fallbackTitle)
-            _videoSearching.value = false
-            if (best == null) { _castMessage.value = "Video verze nenalezena."; return@launch }
             val jfUrl = prefs.getString("jellyfin_server_url", "") ?: ""
             val jfToken = prefs.getString("jellyfin_token", "") ?: ""
             val base = prefs.getString("uploader_base_url", "") ?: ""
@@ -248,7 +276,7 @@ class RssPodcastViewModel @Inject constructor(
             val reportUrl = if (base.isNotBlank() && cookie.isNotBlank()) {
                 "${base.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
             } else null
-            val result = naTv.castFerry(jfUrl, jfToken, repo.youtubeVideoUrl(best.id), ep.title, emptyList(), reportUrl)
+            val result = naTv.castFerry(jfUrl, jfToken, repo.youtubeVideoUrl(video.id), ep.title, emptyList(), reportUrl)
             Timber.i("[AGORA] cast YouTube video verze → TV: %s result=%s", ep.title, result)
             _castMessage.value = when (result) {
                 CastResult.SENT -> "Spuštěno na TV: ${ep.title}"

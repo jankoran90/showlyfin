@@ -68,6 +68,7 @@ import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
+import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
@@ -111,8 +112,9 @@ internal sealed interface Destination {
     // Uploader — už není tab lišty, otevírá se z Nastavení
     data object Uploader : Destination
 
-    // COMPASS C3 — univerzální hledání (sub-screen, otevírá se z horního pole)
-    data object Search : Destination
+    // COMPASS C3 — univerzální hledání (sub-screen, otevírá se z horního pole).
+    // [podcasts] = kontextové směrování dle aktuální sekce: v Poslechu hledá PODCASTY, jinak filmy/lidi.
+    data class Search(val podcasts: Boolean = false) : Destination
 
     // NOMAD (SHW-60) — sekce „Stažené" (offline obsah v telefonu)
     data object Downloads : Destination
@@ -182,7 +184,7 @@ private fun Destination.sectionLabel(activeSubsection: String?): String = when (
         else -> "Sleduj"
     }
     Destination.Oblibeni -> "Oblíbení"
-    Destination.Search -> "Hledání"
+    is Destination.Search -> "Hledání"
     Destination.Downloads -> "Stažené"
     Destination.Listen -> "Poslech"
     else -> "Zpět"
@@ -533,7 +535,10 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     AnimatedVisibility(visible = topBarVisible) {
                         AppTopBar(
                             onMenuClick = { scope.launch { drawerState.open() } },
-                            onSearchClick = { currentDestination = Destination.Search },
+                            // Kontextové hledání: v sekci Poslech hledá PODCASTY, jinak filmy/seriály/lidi.
+                            onSearchClick = {
+                                currentDestination = Destination.Search(podcasts = bottomTab is Destination.Listen)
+                            },
                         )
                     }
                 }
@@ -685,6 +690,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Search -> SearchScreen(
+                    podcasts = dest.podcasts,
                     onOpenDetail = { tmdb, title, isShow ->
                         currentDestination = Destination.Detail(
                             MediaItem(
@@ -700,8 +706,16 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                                 posterPath = null,
                                 backdropPath = null,
                             ),
-                            parent = Destination.Search,
+                            parent = dest,
                         )
+                    },
+                    // Otevření podcastového zdroje z výsledků hledání (YouTube → kanál, RSS → epizody).
+                    onOpenSource = { src ->
+                        currentDestination = if (src.type == "youtube") {
+                            Destination.YoutubeChannel(handle = src.ref, title = src.title, parent = dest)
+                        } else {
+                            Destination.RssPodcast(feedUrl = src.ref, title = src.title, parent = dest)
+                        }
                     },
                     onBack = { currentDestination = bottomTab },
                     modifier = Modifier.fillMaxSize(),

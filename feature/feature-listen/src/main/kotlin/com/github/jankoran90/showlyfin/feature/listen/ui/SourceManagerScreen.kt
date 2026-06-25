@@ -14,17 +14,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,7 +30,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,7 +47,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
-import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
 import com.github.jankoran90.showlyfin.feature.listen.SourceManagerViewModel
 
 /**
@@ -146,7 +139,7 @@ fun SourceManagerScreen(
             } else if (state.results.isNotEmpty()) {
                 item { SectionHeader("Výsledky") }
                 items(state.results, key = { "${it.type}:${it.ref}" }) { r ->
-                    ResultRow(result = r, added = viewModel.isAdded(r), onAdd = { viewModel.add(r) })
+                    SourceResultCard(result = r, added = viewModel.isAdded(r), onAdd = { viewModel.add(r) })
                 }
             } else if (state.searched && state.query.trim().length >= 2) {
                 item {
@@ -199,29 +192,6 @@ private fun SectionHeader(text: String) {
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
     )
-}
-
-@Composable
-private fun ResultRow(result: SourceSearchResult, added: Boolean, onAdd: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Thumb(result.thumbnail)
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(result.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val sub = listOfNotNull(typeLabel(result.type), result.subtitle?.takeIf { it != typeLabel(result.type) }).joinToString(" · ")
-            if (sub.isNotBlank()) {
-                Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        if (added) {
-            AssistChip(onClick = {}, enabled = false, label = { Text("Přidáno") },
-                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) })
-        } else {
-            FilledTonalButton(onClick = onAdd) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Přidat", Modifier.padding(start = 4.dp))
-            }
-        }
-    }
 }
 
 @Composable

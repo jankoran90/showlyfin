@@ -61,7 +61,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
+import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
 import com.github.jankoran90.showlyfin.feature.detail.ui.PersonFilmographySheet
+import com.github.jankoran90.showlyfin.feature.listen.SourceManagerViewModel
+import com.github.jankoran90.showlyfin.feature.listen.ui.SourceResultCard
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.LaunchedEffect
 
 /** Role, pod kterými lze přidat osobu do Oblíbených (hvězda → menu). */
@@ -84,8 +88,15 @@ internal fun SearchScreen(
     onOpenDetail: (tmdbId: Long, title: String, isShow: Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Kontextové směrování (COMPASS): v sekci Poslech hledá PODCASTY (jiný zdroj i výsledky), jinak filmy.
+    podcasts: Boolean = false,
+    onOpenSource: (SourceSearchResult) -> Unit = {},
     vm: SearchViewModel = hiltViewModel(),
 ) {
+    if (podcasts) {
+        PodcastSearchScreen(onBack = onBack, onOpenSource = onOpenSource, modifier = modifier)
+        return
+    }
     val state by vm.state.collectAsStateWithLifecycle()
     val favorites by vm.favorites.collectAsStateWithLifecycle()
     val sheet by vm.sheet.collectAsStateWithLifecycle()
@@ -231,6 +242,96 @@ internal fun SearchScreen(
             },
             onDismiss = { vm.closeSheet() },
         )
+    }
+}
+
+/**
+ * COMPASS — podcastová varianta horního hledání (sekce Poslech). Reuse [SourceManagerViewModel]
+ * (stejné hledání `/api/sources/search` + Přidat) a sdílené karty [SourceResultCard] (jako správa
+ * zdrojů). Ťuk na kartu otevře zdroj (YouTube kanál / RSS epizody) přes [onOpenSource].
+ */
+@Composable
+private fun PodcastSearchScreen(
+    onBack: () -> Unit,
+    onOpenSource: (SourceSearchResult) -> Unit,
+    modifier: Modifier = Modifier,
+    vm: SourceManagerViewModel = hiltViewModel(),
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+
+    Column(modifier.fillMaxSize().statusBarsPadding()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět", tint = MaterialTheme.colorScheme.onBackground)
+            }
+            TextField(
+                value = state.query,
+                onValueChange = vm::onQueryChange,
+                modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                placeholder = { Text("Hledat podcasty…") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (state.query.isNotEmpty()) {
+                        IconButton(onClick = { vm.onQueryChange("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Vymazat")
+                        }
+                    }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                shape = RoundedCornerShape(24.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+            )
+        }
+
+        // Typ zdroje (Vše / Podcasty / YouTube) — stejné chipy jako ve správě zdrojů.
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(SourceManagerViewModel.TypeFilter.entries.toList()) { f ->
+                FilterChip(
+                    selected = state.typeFilter == f,
+                    onClick = { vm.setTypeFilter(f) },
+                    label = { Text(f.label) },
+                )
+            }
+        }
+
+        when {
+            state.notConfigured ->
+                CenteredHint("Pro hledání podcastů se přihlas k serveru v Nastavení.")
+            state.searching ->
+                Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+            state.query.trim().length < 2 ->
+                CenteredHint("Začni psát a hledej podcasty i YouTube kanály. Ťukni pro otevření, nebo přidej do svých zdrojů.")
+            state.results.isEmpty() && state.searched ->
+                CenteredHint("Nic se nenašlo. Zkus jiný název nebo přepni typ.")
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(state.results, key = { "${it.type}:${it.ref}" }) { r ->
+                    SourceResultCard(
+                        result = r,
+                        added = vm.isAdded(r),
+                        onAdd = { vm.add(r) },
+                        onOpen = { onOpenSource(r) },
+                    )
+                }
+            }
+        }
     }
 }
 
