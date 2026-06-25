@@ -255,6 +255,8 @@ fun SettingsScreen(
             com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoverySettingsSection()
             // TWINE (SHW-74) F7 — propojené pořady (audio RSS + video YouTube = 1 karta): přehled + zrušit.
             com.github.jankoran90.showlyfin.feature.listen.ui.PodcastLinksSettingsSection()
+            // WEFT (SHW-75) W5 — per-profil skryté pořady (časová osa / Sledované): přehled + obnovit.
+            com.github.jankoran90.showlyfin.feature.listen.ui.HiddenPodcastsSettingsSection()
             // Plan STRATA Fáze I — Poslech = JEN volby přehrávání; přihlášení ABS je v „Připojení a účty".
             if (uiState.absConfigured) {
                 ListenSettingsCard(uiState, viewModel)

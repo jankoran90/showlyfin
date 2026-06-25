@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -131,6 +132,8 @@ fun PodcastTimelineSection(
                         onEnqueueEnd = { viewModel.enqueue(item, atFront = false) },
                         onDownload = { viewModel.download(item) },
                         onDelete = { viewModel.deleteOffline(item) },
+                        onHideTimeline = { viewModel.setSourceHidden(item, timeline = true) },
+                        onHideFollowing = { viewModel.setSourceHidden(item, timeline = false) },
                     )
                 }
             }
@@ -150,6 +153,8 @@ private fun TimelineRow(
     onEnqueueEnd: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
+    onHideTimeline: () -> Unit,
+    onHideFollowing: () -> Unit,
 ) {
     val ep = item.episode
     var descExpanded by remember(item.key) { mutableStateOf(false) }
@@ -280,6 +285,9 @@ private fun TimelineRow(
                     onDownload = onDownload,
                     onDelete = onDelete,
                 ),
+                // WEFT (SHW-75/W5): per-profil skrytí pořadu (dvě nezávislé dimenze).
+                ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt pořad na časové ose") { onHideTimeline() },
+                ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt pořad ve Sledovaných") { onHideFollowing() },
             ),
             onDismiss = { showMenu = false },
         )

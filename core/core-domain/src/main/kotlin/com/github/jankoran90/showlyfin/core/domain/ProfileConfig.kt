@@ -56,6 +56,14 @@ data class ProfileConfig(
      * Prázdné = nic skryté. Filtruje seznam podcastů v sekci Poslech.
      */
     val hiddenPodcastIds: Set<String> = emptySet(),
+    /**
+     * WEFT (SHW-75/W5): per-profil skrytí POŘADŮ na **časové ose** Poslechu (Timeline). Klíč zdroje =
+     * `type:ref` (shoda s [com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore.key]),
+     * pro ABS pořad `abs:<id>`. Každý profil si skrývá sám ve svém účtu. Prázdné = nic skryté.
+     */
+    val hiddenTimelineSourceKeys: Set<String> = emptySet(),
+    /** WEFT (SHW-75/W5): per-profil skrytí POŘADŮ ve **Sledovaných** (knihovna). Klíč jako výše. */
+    val hiddenFollowingSourceKeys: Set<String> = emptySet(),
     /** Povolené žánry (lowercase). Prázdné = bez allow-listu (vše kromě blacklistu). */
     val allowedGenres: Set<String> = emptySet(),
     /** Zakázané žánry (lowercase) — blacklist. */
@@ -116,6 +124,12 @@ data class ProfileConfig(
 
     /** true = podcast (ABS id) se má profilu zobrazit (není ve [hiddenPodcastIds]). */
     fun isPodcastVisible(podcastId: String): Boolean = podcastId !in hiddenPodcastIds
+
+    /** WEFT (SHW-75/W5): true = pořad (klíč `type:ref` / `abs:id`) se má profilu ukázat na časové ose. */
+    fun isTimelineSourceVisible(sourceKey: String): Boolean = sourceKey !in hiddenTimelineSourceKeys
+
+    /** WEFT (SHW-75/W5): true = pořad se má profilu ukázat ve Sledovaných. */
+    fun isFollowingSourceVisible(sourceKey: String): Boolean = sourceKey !in hiddenFollowingSourceKeys
 
     /** true = klíč je touto šablonou zamčený (uživatel needituje, bere se hodnota šablony). */
     fun isLocked(lockKey: String): Boolean = lockedKeys.contains(lockKey)

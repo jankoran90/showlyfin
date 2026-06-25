@@ -133,18 +133,20 @@ fun SourceCard(
  * TWINE (SHW-74 / plán F7): karta PROPOJENÉHO pořadu (audio RSS + video YouTube = 1 pořad). Místo dvou
  * karet jedna, s odznakem propojení; tap → sloučená obrazovka se spárovanými epizodami.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MergedSourceCard(
     title: String,
     thumbnail: String?,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(SourceCoverShape)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(4.dp),
     ) {
         Box(

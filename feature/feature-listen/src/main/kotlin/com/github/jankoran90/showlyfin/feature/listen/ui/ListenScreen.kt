@@ -24,7 +24,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -295,20 +297,25 @@ private fun PodcastsContent(
 private sealed interface LibraryCard {
     val sortTitle: String
     val itemKey: String
+    /** WEFT (SHW-75/W5): klíče pro skrytí (sloučená = všichni členové, zdroj = `type:ref`, ABS = `abs:id`). */
+    val hideKeys: Set<String>
 
-    data class Merged(val groupId: String, val title: String, val thumbnail: String?) : LibraryCard {
+    data class Merged(val groupId: String, val title: String, val thumbnail: String?, val members: List<String>) : LibraryCard {
         override val sortTitle get() = title
         override val itemKey get() = "lg:$groupId"
+        override val hideKeys get() = members.toSet()
     }
 
-    data class Plain(val source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) : LibraryCard {
+    data class Plain(val source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource, val key: String) : LibraryCard {
         override val sortTitle get() = source.title
         override val itemKey get() = "src:${source.id}"
+        override val hideKeys get() = setOf(key)
     }
 
     data class Abs(val podcast: com.github.jankoran90.showlyfin.data.abs.model.Podcast) : LibraryCard {
         override val sortTitle get() = podcast.title
         override val itemKey get() = "abs:${podcast.id}"
+        override val hideKeys get() = setOf("abs:${podcast.id}")
     }
 }
 
@@ -330,31 +337,33 @@ private fun FollowingContent(
     // TWINE (SHW-74 / plán F7): slinkované zdroje (audio+video = týž pořad) → 1 sloučená karta.
     val links by viewModel.sourceLinks.collectAsStateWithLifecycle()
     var linkFor by remember { mutableStateOf<com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource?>(null) }
+    // WEFT (SHW-75/W5): per-profil skrytí pořadů ve Sledovaných + akční sheet při dlouhém stisku karty.
+    val cfg by viewModel.profileConfig.collectAsStateWithLifecycle()
+    val hiddenFollowing = cfg.hiddenFollowingSourceKeys
+    var actionCard by remember { mutableStateOf<LibraryCard?>(null) }
     val byKey = remember(state.customSources) { state.customSources.associateBy { viewModel.sourceKey(it) } }
     val linkedKeys = remember(links) { links.flatMap { it.members }.toSet() }
-    // Sloučené karty = skupiny s aspoň 1 přítomným členem, co sedí na filtr typu.
-    val mergedCards = remember(links, byKey, sourceType) {
-        links.mapNotNull { g ->
-            val members = g.members.mapNotNull { byKey[it] }
-            if (members.isEmpty()) return@mapNotNull null
-            if (sourceType != "all" && members.none { it.type == sourceType }) return@mapNotNull null
-            Triple(g.id, g.title ?: members.first().title, g.thumbnail ?: members.firstNotNullOfOrNull { it.thumbnail })
-        }
-    }
     // Samostatné karty = filtrované zdroje, které nejsou v žádné skupině.
     val plainSources = sources.filter { viewModel.sourceKey(it) !in linkedKeys }
-    val hasContent = (showAbs && state.podcasts.isNotEmpty()) || plainSources.isNotEmpty() || mergedCards.isNotEmpty()
 
-    // WEFT (SHW-75/W3): sloučené + samostatné + ABS karty do JEDNOHO abecedně řazeného gridu.
-    // Dřív šly sloučené karty vždy první, pak samostatné, pak ABS → knihovna nepůsobila „podle
-    // abecedy". Teď se všechny promíchají a seřadí dle názvu (case-insensitive, česká locale).
-    val libraryCards = remember(mergedCards, plainSources, state.podcasts, showAbs) {
+    // WEFT (SHW-75/W3+W5): sloučené + samostatné + ABS karty do JEDNOHO abecedně řazeného gridu
+    // (dřív sloučené vždy první → nepůsobilo „podle abecedy"), odfiltrované o per-profil skryté
+    // ve Sledovaných (W5). Sloučená karta zmizí, až když jsou skryté VŠECHNY její verze.
+    val libraryCards = remember(links, byKey, plainSources, state.podcasts, showAbs, sourceType, hiddenFollowing) {
         buildList<LibraryCard> {
-            mergedCards.forEach { (gid, t, th) -> add(LibraryCard.Merged(gid, t, th)) }
-            plainSources.forEach { add(LibraryCard.Plain(it)) }
+            links.forEach { g ->
+                val members = g.members.mapNotNull { byKey[it] }
+                if (members.isEmpty()) return@forEach
+                if (sourceType != "all" && members.none { it.type == sourceType }) return@forEach
+                add(LibraryCard.Merged(g.id, g.title ?: members.first().title, g.thumbnail ?: members.firstNotNullOfOrNull { it.thumbnail }, g.members))
+            }
+            plainSources.forEach { add(LibraryCard.Plain(it, viewModel.sourceKey(it))) }
             if (showAbs) state.podcasts.forEach { add(LibraryCard.Abs(it)) }
-        }.sortedBy { it.sortTitle.lowercase(java.util.Locale("cs")) }
+        }
+            .filter { card -> card.hideKeys.any { it !in hiddenFollowing } }
+            .sortedBy { it.sortTitle.lowercase(java.util.Locale("cs")) }
     }
+    val hasContent = libraryCards.isNotEmpty()
 
     Column(Modifier.fillMaxSize()) {
         when {
@@ -394,12 +403,17 @@ private fun FollowingContent(
                         items(libraryCards, key = { it.itemKey }) { card ->
                             when (card) {
                                 is LibraryCard.Merged ->
-                                    MergedSourceCard(title = card.title, thumbnail = card.thumbnail, onClick = { onOpenMerged(card.groupId, card.title) })
+                                    MergedSourceCard(
+                                        title = card.title,
+                                        thumbnail = card.thumbnail,
+                                        onClick = { onOpenMerged(card.groupId, card.title) },
+                                        onLongClick = { actionCard = card },
+                                    )
                                 is LibraryCard.Plain ->
                                     SourceCard(
                                         source = card.source,
                                         onClick = { onOpenSource(card.source) },
-                                        onLongClick = { linkFor = card.source },
+                                        onLongClick = { actionCard = card },
                                     )
                                 is LibraryCard.Abs ->
                                     PodcastCard(podcast = card.podcast, onClick = { onOpenPodcast(card.podcast.id) })
@@ -409,6 +423,27 @@ private fun FollowingContent(
                 }
             }
         }
+    }
+
+    // WEFT (SHW-75/W5): dlouhý stisk karty → akce (Propojit / Skrýt ve Sledovaných / Skrýt na časové ose).
+    actionCard?.let { card ->
+        ListenEpisodeActionSheet(
+            title = card.sortTitle,
+            actions = listOfNotNull(
+                (card as? LibraryCard.Plain)?.let { c ->
+                    ListenEpisodeAction(Icons.Default.Link, "Propojit s jinou verzí (audio + video)") {
+                        linkFor = c.source
+                    }
+                },
+                ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt ve Sledovaných") {
+                    viewModel.setHidden(card.hideKeys, timeline = false, hidden = true)
+                },
+                ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt na časové ose") {
+                    viewModel.setHidden(card.hideKeys, timeline = true, hidden = true)
+                },
+            ),
+            onDismiss = { actionCard = null },
+        )
     }
 
     // TWINE: dlouhý stisk karty → vyber druhou verzi pořadu k propojení (auto-návrh nahoře, potvrdí user).

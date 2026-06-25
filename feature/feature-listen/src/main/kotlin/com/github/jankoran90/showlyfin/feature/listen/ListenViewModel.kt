@@ -62,6 +62,34 @@ class ListenViewModel @Inject constructor(
     /** Zruš propojení celé skupiny. */
     fun unlinkGroup(groupId: String) = linkStore.unlink(groupId)
 
+    // ───────────────────────── WEFT (SHW-75/W5): per-profil skrytí pořadů ─────────────────────────
+    /** Config aktivního profilu (reaktivně) → Sledované/Timeline se přefiltrují při změně skrytí. */
+    val profileConfig = profileRepository.activeConfig
+
+    /** Klíče skrytí karty knihovny: sloučená = všichni členové, samostatný zdroj = `type:ref`. */
+    fun followingKeysForGroup(memberKeys: Collection<String>): Set<String> = memberKeys.toSet()
+
+    /**
+     * Skryj/odkryj pořad ve Sledovaných NEBO na časové ose (dvě nezávislé dimenze, per profil).
+     * Zapisuje do aktivního profilu (write-through → DB + backend). [keys] = `type:ref` zdrojů
+     * (u sloučeného pořadu všichni členové) nebo `abs:<id>`.
+     */
+    fun setHidden(keys: Set<String>, timeline: Boolean, hidden: Boolean) {
+        if (keys.isEmpty()) return
+        val profileId = profileRepository.activeProfile.value?.id ?: return
+        viewModelScope.launch {
+            profileRepository.updateConfig(profileId) { c ->
+                if (timeline) {
+                    val s = c.hiddenTimelineSourceKeys.toMutableSet().also { if (hidden) it.addAll(keys) else it.removeAll(keys) }
+                    c.copy(hiddenTimelineSourceKeys = s)
+                } else {
+                    val s = c.hiddenFollowingSourceKeys.toMutableSet().also { if (hidden) it.addAll(keys) else it.removeAll(keys) }
+                    c.copy(hiddenFollowingSourceKeys = s)
+                }
+            }
+        }
+    }
+
     /**
      * Auto-návrh kandidáta k propojení pro [source]: nejpodobnější zdroj OPAČNÉHO typu mezi aktuálně
      * sledovanými, který ještě není ve skupině se [source]. null = žádná dost silná shoda.

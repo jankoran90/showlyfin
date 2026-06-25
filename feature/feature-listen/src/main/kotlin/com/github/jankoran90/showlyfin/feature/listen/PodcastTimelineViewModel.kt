@@ -18,7 +18,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,6 +46,7 @@ class PodcastTimelineViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val linkStore: com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore,
+    private val profileRepository: com.github.jankoran90.showlyfin.core.data.ProfileRepository,
     private val prefs: AbsPreferences,
 ) : ViewModel() {
 
@@ -102,6 +105,12 @@ class PodcastTimelineViewModel @Inject constructor(
                 sources = srcs
                 if (changed) load()
             }
+            .launchIn(viewModelScope)
+        // WEFT (SHW-75/W5): přefiltruj časovou osu při změně per-profil skrytí (nebo přepnutí profilu).
+        profileRepository.activeConfig
+            .map { it.hiddenTimelineSourceKeys }
+            .distinctUntilChanged()
+            .onEach { load() }
             .launchIn(viewModelScope)
     }
 
@@ -172,8 +181,13 @@ class PodcastTimelineViewModel @Inject constructor(
             // správnější datum + jde rovnou přehrát). Nespárované audio i video zůstanou.
             val deduped = dedupeLinked(collected)
 
+            // WEFT (SHW-75/W5): odfiltruj pořady skryté na časové ose pro tento profil (klíč `type:ref`).
+            val hidden = profileRepository.activeConfig.value.hiddenTimelineSourceKeys
+            val visible = if (hidden.isEmpty()) deduped
+                else deduped.filter { "${it.sourceType}:${it.sourceRef}" !in hidden }
+
             // Sestupně dle data; sentinel (Long.MIN_VALUE) přirozeně skončí úplně dole → bucket na konci.
-            val sorted = deduped.sortedByDescending { it.timestampMs }
+            val sorted = visible.sortedByDescending { it.timestampMs }
             val buckets = bucketize(sorted)
             _state.update {
                 it.copy(
@@ -225,6 +239,18 @@ class PodcastTimelineViewModel @Inject constructor(
 
     /** WEFT (SHW-75/W1): smaž staženou epizodu z telefonu (z ⋮ menu řádku). */
     fun deleteOffline(item: TimelineItem) = offline.delete(item.key)
+
+    /** WEFT (SHW-75/W5): skryj POŘAD této epizody na časové ose / ve Sledovaných (per profil, write-through). */
+    fun setSourceHidden(item: TimelineItem, timeline: Boolean) {
+        val key = "${item.sourceType}:${item.sourceRef}"
+        val profileId = profileRepository.activeProfile.value?.id ?: return
+        viewModelScope.launch {
+            profileRepository.updateConfig(profileId) { c ->
+                if (timeline) c.copy(hiddenTimelineSourceKeys = c.hiddenTimelineSourceKeys + key)
+                else c.copy(hiddenFollowingSourceKeys = c.hiddenFollowingSourceKeys + key)
+            }
+        }
+    }
 
     /**
      * Stáhni epizodu do telefonu (offline poslech) přes sdílený [OfflineDownloadManager]
