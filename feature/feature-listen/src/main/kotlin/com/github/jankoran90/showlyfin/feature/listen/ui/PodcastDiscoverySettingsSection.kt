@@ -80,6 +80,11 @@ fun PodcastDiscoverySettingsSection(
                 onSelect = viewModel::setTimelineDescriptionLines,
             )
         }
+        SwitchRow(
+            label = "V Timeline jen stažené epizody",
+            checked = state.onlyDownloaded,
+            onChange = viewModel::setOnlyDownloaded,
+        )
 
         SubHeader("Výchozí typ zdroje")
         ChipChoices(

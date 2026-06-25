@@ -22,6 +22,8 @@ class PodcastFilterViewModel @Inject constructor(
         val timelineRangeDays: Int = 90,
         val sourceType: String = "all",   // all|rss|youtube
         val minEpisodes: Int = 0,
+        /** „Jen stažené" — v Timeline ukáže pouze offline (stažené) epizody. */
+        val onlyDownloaded: Boolean = false,
     )
 
     private val _state = MutableStateFlow(load())
@@ -31,6 +33,7 @@ class PodcastFilterViewModel @Inject constructor(
         timelineRangeDays = prefs.podcastTimelineRangeDays,
         sourceType = prefs.podcastSourceTypeFilter,
         minEpisodes = prefs.discoveryMinEpisodes,
+        onlyDownloaded = prefs.podcastOnlyDownloaded,
     )
 
     /** Znovu načte z prefs (např. po návratu z Nastavení). */
@@ -51,6 +54,11 @@ class PodcastFilterViewModel @Inject constructor(
         _state.update { it.copy(minEpisodes = prefs.discoveryMinEpisodes) }
     }
 
+    fun setOnlyDownloaded(value: Boolean) {
+        prefs.podcastOnlyDownloaded = value
+        _state.update { it.copy(onlyDownloaded = value) }
+    }
+
     /** Počet aktivních filtrů (mimo výchozí) → badge u ikony filtru. [excludedCategories] dodá Objev VM. */
     fun activeCount(excludedCategories: Int): Int {
         val s = _state.value
@@ -58,6 +66,7 @@ class PodcastFilterViewModel @Inject constructor(
         if (s.timelineRangeDays != 90) n++
         if (s.sourceType != "all") n++
         if (s.minEpisodes > 0) n++
+        if (s.onlyDownloaded) n++
         return n
     }
 }

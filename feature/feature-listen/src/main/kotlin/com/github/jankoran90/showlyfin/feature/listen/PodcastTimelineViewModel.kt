@@ -108,8 +108,9 @@ class PodcastTimelineViewModel @Inject constructor(
 
     /**
      * Agreguje epizody všech zdrojů paralelně, parsuje datum, odfiltruje starší než nastavený rozsah,
-     * seřadí sestupně a rozdělí do časových bucketů. Zdroje bez data (neparsovatelné) jdou na konec
-     * aktuálního bucketu — nezahazujeme je.
+     * seřadí sestupně a rozdělí do časových bucketů. Epizody bez data (datum se NEPODAŘILO naparsovat)
+     * NESMÍ spadnout do „Dnes" — dostanou sentinel ([NO_DATE_TS]) a jdou do samostatného bucketu
+     * „Bez data" na KONEC timeline (cutoff rozsahu se na ně neaplikuje, ať nezmizí).
      */
     private fun load() {
         loadJob?.cancel()
@@ -124,6 +125,7 @@ class PodcastTimelineViewModel @Inject constructor(
             val rangeMs = prefs.podcastTimelineRangeDays.toLong() * DAY_MS
             val cutoff = System.currentTimeMillis() - rangeMs
             val typeFilter = prefs.podcastSourceTypeFilter   // all|rss|youtube
+            val onlyDownloaded = prefs.podcastOnlyDownloaded
 
             val collected = runCatching {
                 withContext(Dispatchers.IO) {
@@ -132,17 +134,20 @@ class PodcastTimelineViewModel @Inject constructor(
                         .map { src ->
                             async {
                                 repo.loadEpisodes(src, limit = EPISODES_PER_SOURCE).mapNotNull { ep ->
-                                    val ts = parseEpisodeDate(ep.date)
-                                    // Bez data: ber jako „velmi nové" jen pokud rozsah pokrývá vše? Ne —
-                                    // raději je zařadíme s časem = teď, ať nezmizí (lepší ukázat než ztratit).
-                                    val effectiveTs = ts ?: System.currentTimeMillis()
-                                    if (effectiveTs < cutoff) null
-                                    else TimelineItem(
+                                    val item = TimelineItem(
                                         episode = ep,
                                         sourceTitle = src.title,
                                         sourceType = src.type,
-                                        timestampMs = effectiveTs,
+                                        // Bez data → sentinel: NIKDY do „Dnes", vždy do bucketu „Bez data".
+                                        timestampMs = parseEpisodeDate(ep.date) ?: NO_DATE_TS,
                                     )
+                                    when {
+                                        // „Jen stažené" (filtr) → ukaž jen offline epizody.
+                                        onlyDownloaded && !offline.isDownloaded(item.key) -> null
+                                        // Cutoff rozsahu platí jen pro DATOVANÉ; sentinel ho ignoruje.
+                                        item.timestampMs != NO_DATE_TS && item.timestampMs < cutoff -> null
+                                        else -> item
+                                    }
                                 }
                             }
                         }
@@ -155,6 +160,7 @@ class PodcastTimelineViewModel @Inject constructor(
                 return@launch
             }
 
+            // Sestupně dle data; sentinel (Long.MIN_VALUE) přirozeně skončí úplně dole → bucket na konci.
             val sorted = collected.sortedByDescending { it.timestampMs }
             val buckets = bucketize(sorted)
             _state.update {
@@ -242,11 +248,17 @@ class PodcastTimelineViewModel @Inject constructor(
         val lastWeekStart = weekStart - WEEK_MS
 
         val grouped = LinkedHashMap<String, MutableList<TimelineItem>>()
+        val noDate = mutableListOf<TimelineItem>()   // sentinel epizody → samostatný bucket na KONEC
         fun bucket(label: String, item: TimelineItem) {
             grouped.getOrPut(label) { mutableListOf() }.add(item)
         }
         for (it in items) {
             val ts = it.timestampMs
+            if (ts == NO_DATE_TS) {
+                // Bez data: NIKDY do „Dnes" — vlastní bucket „Bez data" připojený až nakonec.
+                noDate.add(it)
+                continue
+            }
             val label = when {
                 ts >= today0 -> "Dnes"
                 ts >= yesterday0 -> "Včera"
@@ -256,7 +268,9 @@ class PodcastTimelineViewModel @Inject constructor(
             }
             bucket(label, it)
         }
-        return grouped.map { (label, list) -> Bucket(label, list) }
+        val result = grouped.map { (label, list) -> Bucket(label, list) }.toMutableList()
+        if (noDate.isNotEmpty()) result.add(Bucket("Bez data", noDate))
+        return result
     }
 
     /** Pro epizody starší než „minulý týden": po týdnech do ~5 týdnů, pak po měsících. */
@@ -290,6 +304,9 @@ class PodcastTimelineViewModel @Inject constructor(
         private const val DAY_MS = 24L * 60 * 60 * 1000
         private const val WEEK_MS = 7L * DAY_MS
         private const val EPISODES_PER_SOURCE = 15
+
+        /** Sentinel pro epizodu bez naparsovatelného data → bucket „Bez data" na konci (NE „Dnes"). */
+        const val NO_DATE_TS = Long.MIN_VALUE
 
         /**
          * Robustní parser data epizody. RSS chodí RFC822 ("Tue, 24 Jun 2026 10:00:00 +0200") nebo

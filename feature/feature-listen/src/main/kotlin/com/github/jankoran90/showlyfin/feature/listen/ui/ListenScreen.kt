@@ -24,9 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -240,18 +238,7 @@ private fun PodcastsContent(
             activeFilterCount = filterVm.activeCount(discoveryState.excluded.size),
         )
 
-        if (downloadCount > 0) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AssistChip(
-                    onClick = onOpenDownloads,
-                    label = { Text("Stažené · $downloadCount") },
-                    leadingIcon = { Icon(Icons.Default.DownloadDone, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                )
-            }
-        }
+        // „Stažené" chip přesunut z řady do filtru (ikona Filtr) — viz PodcastFilterSheet.
 
         when (tab) {
             PodcastTab.TIMELINE -> PodcastTimelineSection(
@@ -279,6 +266,10 @@ private fun PodcastsContent(
             onSetSourceType = filterVm::setSourceType,
             minEpisodes = filterState.minEpisodes,
             onSetMinEpisodes = { filterVm.setMinEpisodes(it); discoveryVm.setMinEpisodes(it) },
+            onlyDownloaded = filterState.onlyDownloaded,
+            onSetOnlyDownloaded = filterVm::setOnlyDownloaded,
+            downloadCount = downloadCount,
+            onOpenDownloads = { showFilter = false; onOpenDownloads() },
             categories = discoveryState.categories,
             excluded = discoveryState.excluded,
             onToggleCategory = discoveryVm::toggleExclude,

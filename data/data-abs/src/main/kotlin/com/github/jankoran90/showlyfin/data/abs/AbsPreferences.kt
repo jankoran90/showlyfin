@@ -301,6 +301,11 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_TL_SHOW_DATE, true)
         set(value) = prefs.edit { putBoolean(KEY_TL_SHOW_DATE, value) }
 
+    /** AGORA Timeline: zobrazit jen STAŽENÉ epizody (offline). Default OFF (vidět vše). */
+    var podcastOnlyDownloaded: Boolean
+        get() = prefs.getBoolean(KEY_PODCAST_ONLY_DOWNLOADED, false)
+        set(value) = prefs.edit { putBoolean(KEY_PODCAST_ONLY_DOWNLOADED, value) }
+
     // ──────────────── Synchronizace ────────────────
 
     /** Interval syncu pozice na ABS server v sekundách. */
@@ -390,5 +395,6 @@ class AbsPreferences @Inject constructor(
         private const val KEY_TL_SHOW_DESC = "podcast_timeline_show_description"
         private const val KEY_TL_DESC_LINES = "podcast_timeline_description_lines"
         private const val KEY_TL_SHOW_DATE = "podcast_timeline_show_date"
+        private const val KEY_PODCAST_ONLY_DOWNLOADED = "podcast_only_downloaded"
     }
 }

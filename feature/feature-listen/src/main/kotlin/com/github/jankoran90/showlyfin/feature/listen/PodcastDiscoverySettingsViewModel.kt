@@ -44,6 +44,8 @@ class PodcastDiscoverySettingsViewModel @Inject constructor(
         val timelineDescriptionLines: Int = 3,
         /** AGORA Timeline: zobrazit datum vydání epizody. */
         val timelineShowDate: Boolean = true,
+        /** AGORA Timeline: v Timeline ukázat jen STAŽENÉ (offline) epizody. */
+        val onlyDownloaded: Boolean = false,
         /** CZ kategorie pro multi-select „Trvale skryté kategorie" (načteno ze serveru). */
         val czCategories: List<SourceCategory> = emptyList(),
     )
@@ -73,7 +75,13 @@ class PodcastDiscoverySettingsViewModel @Inject constructor(
         timelineShowDescription = prefs.podcastTimelineShowDescription,
         timelineDescriptionLines = prefs.podcastTimelineDescriptionLines,
         timelineShowDate = prefs.podcastTimelineShowDate,
+        onlyDownloaded = prefs.podcastOnlyDownloaded,
     )
+
+    fun setOnlyDownloaded(value: Boolean) {
+        prefs.podcastOnlyDownloaded = value
+        _state.update { it.copy(onlyDownloaded = value) }
+    }
 
     fun setTimelineShowDescription(value: Boolean) {
         prefs.podcastTimelineShowDescription = value

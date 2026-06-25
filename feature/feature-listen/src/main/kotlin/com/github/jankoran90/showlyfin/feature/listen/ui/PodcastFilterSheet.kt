@@ -2,17 +2,26 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +41,10 @@ fun PodcastFilterSheet(
     onSetSourceType: (String) -> Unit,
     minEpisodes: Int,
     onSetMinEpisodes: (Int) -> Unit,
+    onlyDownloaded: Boolean,
+    onSetOnlyDownloaded: (Boolean) -> Unit,
+    downloadCount: Int,
+    onOpenDownloads: () -> Unit,
     categories: List<SourceCategory>,
     excluded: Set<Int>,
     onToggleCategory: (Int) -> Unit,
@@ -49,6 +62,28 @@ fun PodcastFilterSheet(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
+
+            // Stažené (offline): vstup do přehledu stažených + přepínač „jen stažené" v Timeline.
+            SubHeader("Stažené (offline)")
+            SwitchRow(
+                label = "Jen stažené epizody (Timeline)",
+                checked = onlyDownloaded,
+                onChange = onSetOnlyDownloaded,
+            )
+            if (downloadCount > 0) {
+                AssistChip(
+                    onClick = onOpenDownloads,
+                    label = { Text("Stažené · $downloadCount") },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.DownloadDone,
+                            contentDescription = null,
+                            modifier = Modifier.size(AssistChipDefaults.IconSize),
+                        )
+                    },
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
 
             SubHeader("Časový rozsah (Timeline)")
             ChipRow(
@@ -129,4 +164,20 @@ private fun SubHeader(text: String) {
         color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.padding(top = 10.dp),
     )
+}
+
+@Composable
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
 }
