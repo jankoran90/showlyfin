@@ -1,8 +1,11 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
+import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
@@ -38,7 +41,9 @@ class MergedPodcastViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val linkStore: PodcastLinkStore,
+    private val naTv: NaTvService,
     resumeStore: DirectResumeStore,
+    @javax.inject.Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     /** Stav stahování epizod (badge / akce). Klíč = [PodcastPairing.MergedEpisode.key]. */
@@ -49,6 +54,15 @@ class MergedPodcastViewModel @Inject constructor(
 
     /** Uložené pozice direct epizod (mediaId = resume klíč) → progres + „Pokračovat" u nehrané. */
     val resumeMarks = resumeStore.marks
+
+    /** WEFT (SHW-75/W1): jednorázová hláška po pokusu o cast na TV (Toast v obrazovce). Parita s YT/RSS. */
+    private val _castMessage = MutableStateFlow<String?>(null)
+    val castMessage = _castMessage.asStateFlow()
+
+    fun consumeCastMessage() { _castMessage.value = null }
+
+    private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     data class UiState(
         val isLoading: Boolean = false,
@@ -123,9 +137,10 @@ class MergedPodcastViewModel @Inject constructor(
     /** „Pokračovat" u načtené pozastavené epizody → navázat bez reloadu. */
     fun resumeCurrent() = connection.play()
 
-    fun enqueue(item: PodcastPairing.MergedEpisode) {
+    /** WEFT (SHW-75/W1): fronta s volbou pozice (další = hned po aktuální / na konec) — parita s RSS/YT. */
+    fun enqueue(item: PodcastPairing.MergedEpisode, atFront: Boolean = false) {
         val a = item.audio ?: return
-        connection.enqueue(toQueued(a), atFront = false)
+        connection.enqueue(toQueued(a), atFront = atFront)
     }
 
     /** VIDEO URL pro přehrání (YT proxy `kind=video`) — jen u epizody s video verzí. */
@@ -133,6 +148,29 @@ class MergedPodcastViewModel @Inject constructor(
         val v = item.video ?: return null
         val id = v.resumeKey?.removePrefix("yt:") ?: v.id
         return repo.youtubeVideoUrl(id)
+    }
+
+    /**
+     * WEFT (SHW-75/W1): pošle VIDEO verzi (YouTube) propojené epizody na běžící TV session (FERRY cast),
+     * stejnou cestou jako YouTube kanál. Jen u epizod s video verzí. Parita „Přehrát na TV (video)".
+     */
+    fun castVideoToTv(item: PodcastPairing.MergedEpisode) {
+        val url = videoUrl(item) ?: return
+        viewModelScope.launch {
+            val jfUrl = prefs.getString("jellyfin_server_url", "") ?: ""
+            val jfToken = prefs.getString("jellyfin_token", "") ?: ""
+            val reportUrl = if (baseUrl.isNotBlank() && cookie.isNotBlank()) {
+                "${baseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
+            } else null
+            val result = naTv.castFerry(jfUrl, jfToken, url, item.title, emptyList(), reportUrl)
+            Timber.i("[WEFT] cast sloučené video → TV: %s result=%s", item.title, result)
+            _castMessage.value = when (result) {
+                CastResult.SENT -> "Spuštěno na TV: ${item.title}"
+                CastResult.NO_SESSION -> "Na TV nikdo nehraje — otevři Showlyfin/Jellyfin na televizi a zkus znovu."
+                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Připojení a účty)."
+                CastResult.FAILED -> "Nepodařilo se spustit na TV."
+            }
+        }
     }
 
     fun download(item: PodcastPairing.MergedEpisode) {

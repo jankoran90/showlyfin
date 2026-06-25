@@ -48,6 +48,13 @@ class PodcastLinkStore @Inject constructor(
     fun groupForKey(memberKey: String): LinkGroup? = _links.value.firstOrNull { memberKey in it.members }
     fun groupForSource(source: PodcastSource): LinkGroup? = groupForKey(key(source))
 
+    /**
+     * WEFT (SHW-75/W2): skupina podle samotného `ref` (bez ohledu na typ člena). Pojistka pro navigaci,
+     * kde známe jen feedUrl/handle, ale ne přesný `type` zdroje (např. NaVýbornou se může lišit od "rss").
+     */
+    fun groupForRef(ref: String): LinkGroup? =
+        _links.value.firstOrNull { g -> g.members.any { it.substringAfter(':') == ref } }
+
     /** Snapshot klíčů, které už jsou v nějaké skupině (≥2 členy) → kandidáti na linkování. */
     fun linkedKeys(): Set<String> = _links.value.filter { it.members.size >= 2 }.flatMap { it.members }.toSet()
 

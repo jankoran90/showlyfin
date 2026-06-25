@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -48,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -81,6 +85,16 @@ fun MergedPodcastScreen(
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
     var actionItem by remember { mutableStateOf<PodcastPairing.MergedEpisode?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+
+    // WEFT (SHW-75/W1): výsledek castu na TV → jednorázový Toast (parita s YT/RSS sekcemi).
+    val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    LaunchedEffect(castMessage) {
+        castMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.consumeCastMessage()
+        }
+    }
 
     LaunchedEffect(groupId) { viewModel.load(groupId) }
 
@@ -167,8 +181,9 @@ fun MergedPodcastScreen(
     actionItem?.let { item ->
         ListenEpisodeActionSheet(
             title = item.title.ifBlank { state.title },
+            // WEFT (SHW-75/W1): jednotné menu jako NaVýbornou/RSS — Přehrát · Video · Na TV · fronta×2 · stáhnout.
             actions = listOfNotNull(
-                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát (zvuk)") {
+                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
                     viewModel.playAudio(item); onOpenAudioPlayer()
                 },
                 item.video?.let {
@@ -176,8 +191,16 @@ fun MergedPodcastScreen(
                         viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
                     }
                 },
+                item.video?.let {
+                    ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                        viewModel.castVideoToTv(item)
+                    }
+                },
+                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
+                    viewModel.enqueue(item, atFront = true)
+                },
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
-                    viewModel.enqueue(item)
+                    viewModel.enqueue(item, atFront = false)
                 },
                 offlineDownloadAction(
                     status = offlineStates[item.key]?.status ?: OfflineStatus.NONE,

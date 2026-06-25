@@ -117,7 +117,12 @@ class PodcastSourcesRepository @Inject constructor(
      * stavbu URL: YouTube = proxy `/api/yt/stream?kind=audio`, RSS = přímá enclosure `audioUrl`.
      */
     suspend fun loadEpisodes(source: PodcastSource, limit: Int = 50): List<SourceEpisode> {
-        if (!isConfigured) return emptyList()
+        // WEFT (SHW-75/W4): gate jen na baseUrl, NE na cookie. Na cold startu je cookie prázdná
+        // (ProfileConfigApplier ji při aplikaci profilu čistí) → `!isConfigured` dřív tiše vracel []
+        // → Timeline „Nepodařilo se načíst nové epizody" dokud user nepřepnul záložku. Request
+        // s prázdnou/starou cookie → 401 → UploaderAuthInterceptor relogin heslem → retry 200.
+        // Stejná oprava jako ROSTER-FIX provedl v refresh().
+        if (baseUrl.isBlank()) return emptyList()
         return runCatching {
             when (source.type) {
                 "youtube" -> remote.getYtFeed(baseUrl, cookie, source.ref, limit).entries.map { ep ->

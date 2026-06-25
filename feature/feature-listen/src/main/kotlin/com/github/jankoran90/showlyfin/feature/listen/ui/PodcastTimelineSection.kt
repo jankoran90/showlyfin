@@ -18,14 +18,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -123,8 +127,10 @@ fun PodcastTimelineSection(
                         offlineStatus = offlineStatus,
                         onOpenSource = { onOpenSource(item) },
                         onPlay = { viewModel.play(item) },
-                        onEnqueue = { viewModel.enqueue(item) },
+                        onEnqueueNext = { viewModel.enqueue(item, atFront = true) },
+                        onEnqueueEnd = { viewModel.enqueue(item, atFront = false) },
                         onDownload = { viewModel.download(item) },
+                        onDelete = { viewModel.deleteOffline(item) },
                     )
                 }
             }
@@ -140,11 +146,14 @@ private fun TimelineRow(
     offlineStatus: OfflineStatus,
     onOpenSource: () -> Unit,
     onPlay: () -> Unit,
-    onEnqueue: () -> Unit,
+    onEnqueueNext: () -> Unit,
+    onEnqueueEnd: () -> Unit,
     onDownload: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val ep = item.episode
     var descExpanded by remember(item.key) { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     val dateLabel = remember(ep.date) { if (display.showDate) formatEpisodeDate(item.timestampMs) else null }
 
     Column(
@@ -241,16 +250,39 @@ private fun TimelineRow(
             )
         }
 
-        // ── Akce: Přehrát · Do fronty · Stáhnout ──
+        // ── Akce (WEFT SHW-75/W1): Přehrát + živý stav stažení + ⋮ menu — sjednoceno s ostatními
+        //    sekcemi Poslechu (fronta → menu). Video/Na TV nemá Timeline (agregát); klik na řádek
+        //    otevře pořad, kde jsou plné akce (NAVIGATE/W2). ──
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ActionChip(Icons.Default.PlayArrow, "Přehrát", onClick = onPlay)
-            ActionChip(Icons.Default.QueueMusic, "Do fronty", onClick = onEnqueue)
             DownloadChip(offlineStatus, onClick = onDownload)
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Další akce")
+            }
         }
+    }
+
+    if (showMenu) {
+        ListenEpisodeActionSheet(
+            title = ep.title,
+            actions = listOf(
+                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") { onPlay() },
+                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") { onEnqueueNext() },
+                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") { onEnqueueEnd() },
+                offlineDownloadAction(
+                    status = offlineStatus,
+                    progress = 0f,
+                    onDownload = onDownload,
+                    onDelete = onDelete,
+                ),
+            ),
+            onDismiss = { showMenu = false },
+        )
     }
 }
 

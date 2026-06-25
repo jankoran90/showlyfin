@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
@@ -198,9 +199,16 @@ fun YoutubeChannelScreen(
     actionEpisode?.let { ep ->
         ListenEpisodeActionSheet(
             title = ep.title,
+            // WEFT (SHW-75/W1): jednotné menu jako NaVýbornou/RSS — Přehrát · Video · Na TV · fronta×2 · …
             actions = listOf(
+                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
+                    viewModel.playAudio(ep); onOpenAudioPlayer()
+                },
+                ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                    onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail)
+                },
                 // L4 (LEVER): VIDEO verze epizody na TV/box (jako film). U YouTube vždy dostupné (video).
-                ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV") {
+                ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
                     viewModel.castVideoToTv(ep)
                 },
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {

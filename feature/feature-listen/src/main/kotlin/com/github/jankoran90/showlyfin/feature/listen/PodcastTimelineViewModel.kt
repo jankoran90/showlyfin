@@ -158,6 +158,10 @@ class PodcastTimelineViewModel @Inject constructor(
                         .flatten()
                 }
             }.getOrElse { e ->
+                // WEFT (SHW-75/W4): zrušení jobu (rychlý re-load: nový zdroj/refresh přeruší běžící
+                // agregaci) NESMÍ spadnout do chybového stavu — jinak na cold startu krátce blikne
+                // „Nepodařilo se načíst" i když nový load právě běží. CancellationException re-throw.
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Timber.w(e, "[AGORA-TABS] agregace timeline selhala")
                 _state.update { it.copy(loading = false, error = "Nepodařilo se načíst nové epizody.") }
                 return@launch
@@ -216,7 +220,11 @@ class PodcastTimelineViewModel @Inject constructor(
     fun play(item: TimelineItem) = connection.playDirectEpisode(toQueued(item))
 
     /** Přidej epizodu na konec fronty. */
-    fun enqueue(item: TimelineItem) = connection.enqueue(toQueued(item), atFront = false)
+    /** WEFT (SHW-75/W1): fronta s volbou pozice (další/na konec) — parita s RSS/YT/Merged. */
+    fun enqueue(item: TimelineItem, atFront: Boolean = false) = connection.enqueue(toQueued(item), atFront = atFront)
+
+    /** WEFT (SHW-75/W1): smaž staženou epizodu z telefonu (z ⋮ menu řádku). */
+    fun deleteOffline(item: TimelineItem) = offline.delete(item.key)
 
     /**
      * Stáhni epizodu do telefonu (offline poslech) přes sdílený [OfflineDownloadManager]

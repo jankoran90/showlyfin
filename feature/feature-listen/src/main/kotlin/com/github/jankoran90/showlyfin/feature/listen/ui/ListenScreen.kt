@@ -291,6 +291,27 @@ private fun PodcastsContent(
 }
 
 /** AGORA-TABS: Sledované = dnešní grid vlastních zdrojů + ABS podcastů (s filtrem typu zdroje). */
+/** WEFT (SHW-75/W3): položka knihovny Sledovaných pro JEDEN abecedně řazený grid (merged + zdroj + ABS). */
+private sealed interface LibraryCard {
+    val sortTitle: String
+    val itemKey: String
+
+    data class Merged(val groupId: String, val title: String, val thumbnail: String?) : LibraryCard {
+        override val sortTitle get() = title
+        override val itemKey get() = "lg:$groupId"
+    }
+
+    data class Plain(val source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) : LibraryCard {
+        override val sortTitle get() = source.title
+        override val itemKey get() = "src:${source.id}"
+    }
+
+    data class Abs(val podcast: com.github.jankoran90.showlyfin.data.abs.model.Podcast) : LibraryCard {
+        override val sortTitle get() = podcast.title
+        override val itemKey get() = "abs:${podcast.id}"
+    }
+}
+
 @Composable
 private fun FollowingContent(
     state: ListenUiState,
@@ -323,6 +344,17 @@ private fun FollowingContent(
     // Samostatné karty = filtrované zdroje, které nejsou v žádné skupině.
     val plainSources = sources.filter { viewModel.sourceKey(it) !in linkedKeys }
     val hasContent = (showAbs && state.podcasts.isNotEmpty()) || plainSources.isNotEmpty() || mergedCards.isNotEmpty()
+
+    // WEFT (SHW-75/W3): sloučené + samostatné + ABS karty do JEDNOHO abecedně řazeného gridu.
+    // Dřív šly sloučené karty vždy první, pak samostatné, pak ABS → knihovna nepůsobila „podle
+    // abecedy". Teď se všechny promíchají a seřadí dle názvu (case-insensitive, česká locale).
+    val libraryCards = remember(mergedCards, plainSources, state.podcasts, showAbs) {
+        buildList<LibraryCard> {
+            mergedCards.forEach { (gid, t, th) -> add(LibraryCard.Merged(gid, t, th)) }
+            plainSources.forEach { add(LibraryCard.Plain(it)) }
+            if (showAbs) state.podcasts.forEach { add(LibraryCard.Abs(it)) }
+        }.sortedBy { it.sortTitle.lowercase(java.util.Locale("cs")) }
+    }
 
     Column(Modifier.fillMaxSize()) {
         when {
@@ -358,20 +390,19 @@ private fun FollowingContent(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        // Sloučené pořady (audio+video) první.
-                        items(mergedCards, key = { "lg:${it.first}" }) { (gid, gTitle, gThumb) ->
-                            MergedSourceCard(title = gTitle, thumbnail = gThumb, onClick = { onOpenMerged(gid, gTitle) })
-                        }
-                        items(plainSources, key = { "src:${it.id}" }) { src ->
-                            SourceCard(
-                                source = src,
-                                onClick = { onOpenSource(src) },
-                                onLongClick = { linkFor = src },
-                            )
-                        }
-                        if (showAbs) {
-                            items(state.podcasts, key = { it.id }) { podcast ->
-                                PodcastCard(podcast = podcast, onClick = { onOpenPodcast(podcast.id) })
+                        // WEFT (SHW-75/W3): jeden abecedně řazený grid (sloučené + samostatné + ABS).
+                        items(libraryCards, key = { it.itemKey }) { card ->
+                            when (card) {
+                                is LibraryCard.Merged ->
+                                    MergedSourceCard(title = card.title, thumbnail = card.thumbnail, onClick = { onOpenMerged(card.groupId, card.title) })
+                                is LibraryCard.Plain ->
+                                    SourceCard(
+                                        source = card.source,
+                                        onClick = { onOpenSource(card.source) },
+                                        onLongClick = { linkFor = card.source },
+                                    )
+                                is LibraryCard.Abs ->
+                                    PodcastCard(podcast = card.podcast, onClick = { onOpenPodcast(card.podcast.id) })
                             }
                         }
                     }
