@@ -73,6 +73,8 @@ fun ListenScreen(
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
     /** Timeline: otevři obsah zdroje (RSS feedUrl / YouTube handle) a zvýrazni epizodu [episodeKey]. */
     onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
+    /** TWINE: otevři sloučený pohled propojeného pořadu (audio+video) podle [groupId]. */
+    onOpenMerged: (groupId: String, title: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ListenViewModel = hiltViewModel(),
 ) {
@@ -134,6 +136,7 @@ fun ListenScreen(
                                     onOpenDownloads = { showDownloads = true },
                                     onOpenSource = onOpenSource,
                                     onOpenSourceEpisode = onOpenSourceEpisode,
+                                    onOpenMerged = onOpenMerged,
                                 )
                             }
                         }
@@ -221,6 +224,7 @@ private fun PodcastsContent(
     onOpenDownloads: () -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
     onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
+    onOpenMerged: (groupId: String, title: String) -> Unit,
 ) {
     val discoveryVm: com.github.jankoran90.showlyfin.feature.listen.PodcastDiscoveryViewModel = hiltViewModel()
     val filterVm: com.github.jankoran90.showlyfin.feature.listen.PodcastFilterViewModel = hiltViewModel()
@@ -258,6 +262,7 @@ private fun PodcastsContent(
                 viewModel = viewModel,
                 onOpenPodcast = onOpenPodcast,
                 onOpenSource = onOpenSource,
+                onOpenMerged = onOpenMerged,
                 downloadCount = downloadCount,
                 sourceType = filterState.sourceType,
             )
@@ -292,6 +297,7 @@ private fun FollowingContent(
     viewModel: ListenViewModel,
     onOpenPodcast: (String) -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
+    onOpenMerged: (groupId: String, title: String) -> Unit,
     downloadCount: Int,
     sourceType: String,
 ) {
@@ -299,7 +305,24 @@ private fun FollowingContent(
     // ukazujeme jen u „Vše" nebo „Podcasty" (jsou to RSS-like pořady, ne YouTube).
     val sources = state.customSources.filter { sourceType == "all" || it.type == sourceType }
     val showAbs = sourceType == "all" || sourceType == "rss"
-    val hasContent = (showAbs && state.podcasts.isNotEmpty()) || sources.isNotEmpty()
+
+    // TWINE (SHW-74 / plán F7): slinkované zdroje (audio+video = týž pořad) → 1 sloučená karta.
+    val links by viewModel.sourceLinks.collectAsStateWithLifecycle()
+    var linkFor by remember { mutableStateOf<com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource?>(null) }
+    val byKey = remember(state.customSources) { state.customSources.associateBy { viewModel.sourceKey(it) } }
+    val linkedKeys = remember(links) { links.flatMap { it.members }.toSet() }
+    // Sloučené karty = skupiny s aspoň 1 přítomným členem, co sedí na filtr typu.
+    val mergedCards = remember(links, byKey, sourceType) {
+        links.mapNotNull { g ->
+            val members = g.members.mapNotNull { byKey[it] }
+            if (members.isEmpty()) return@mapNotNull null
+            if (sourceType != "all" && members.none { it.type == sourceType }) return@mapNotNull null
+            Triple(g.id, g.title ?: members.first().title, g.thumbnail ?: members.firstNotNullOfOrNull { it.thumbnail })
+        }
+    }
+    // Samostatné karty = filtrované zdroje, které nejsou v žádné skupině.
+    val plainSources = sources.filter { viewModel.sourceKey(it) !in linkedKeys }
+    val hasContent = (showAbs && state.podcasts.isNotEmpty()) || plainSources.isNotEmpty() || mergedCards.isNotEmpty()
 
     Column(Modifier.fillMaxSize()) {
         when {
@@ -335,8 +358,16 @@ private fun FollowingContent(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        items(sources, key = { "src:${it.id}" }) { src ->
-                            SourceCard(source = src, onClick = { onOpenSource(src) })
+                        // Sloučené pořady (audio+video) první.
+                        items(mergedCards, key = { "lg:${it.first}" }) { (gid, gTitle, gThumb) ->
+                            MergedSourceCard(title = gTitle, thumbnail = gThumb, onClick = { onOpenMerged(gid, gTitle) })
+                        }
+                        items(plainSources, key = { "src:${it.id}" }) { src ->
+                            SourceCard(
+                                source = src,
+                                onClick = { onOpenSource(src) },
+                                onLongClick = { linkFor = src },
+                            )
                         }
                         if (showAbs) {
                             items(state.podcasts, key = { it.id }) { podcast ->
@@ -347,6 +378,17 @@ private fun FollowingContent(
                 }
             }
         }
+    }
+
+    // TWINE: dlouhý stisk karty → vyber druhou verzi pořadu k propojení (auto-návrh nahoře, potvrdí user).
+    linkFor?.let { src ->
+        SourceLinkSheet(
+            source = src,
+            candidates = viewModel.linkCandidates(src),
+            suggested = viewModel.suggestLinkMatch(src),
+            onLink = { target -> viewModel.linkSources(src, target) },
+            onDismiss = { linkFor = null },
+        )
     }
 }
 

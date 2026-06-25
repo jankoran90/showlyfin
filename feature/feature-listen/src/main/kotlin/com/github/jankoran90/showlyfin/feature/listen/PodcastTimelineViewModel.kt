@@ -43,6 +43,7 @@ class PodcastTimelineViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
+    private val linkStore: com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore,
     private val prefs: AbsPreferences,
 ) : ViewModel() {
 
@@ -162,8 +163,13 @@ class PodcastTimelineViewModel @Inject constructor(
                 return@launch
             }
 
+            // TWINE (SHW-74 / plán F7): propojené pořady (audio+video) → epizoda v Timeline jen 1×.
+            // U slinkovaných zdrojů spáruj audio↔video; spárované VIDEO duplikáty zahoď (audio nese
+            // správnější datum + jde rovnou přehrát). Nespárované audio i video zůstanou.
+            val deduped = dedupeLinked(collected)
+
             // Sestupně dle data; sentinel (Long.MIN_VALUE) přirozeně skončí úplně dole → bucket na konci.
-            val sorted = collected.sortedByDescending { it.timestampMs }
+            val sorted = deduped.sortedByDescending { it.timestampMs }
             val buckets = bucketize(sorted)
             _state.update {
                 it.copy(
@@ -232,6 +238,35 @@ class PodcastTimelineViewModel @Inject constructor(
                 durationSec = ep.durationSec,
             ),
         )
+    }
+
+    /**
+     * TWINE: u zdrojů ve stejném propojení spáruj audio (RSS) ↔ video (YouTube) epizody a zahoď
+     * spárované VIDEO duplikáty (audio zůstává — má správnější datum a hraje rovnou). Nepropojené
+     * zdroje i nespárované epizody se nemění. Bez propojení = no-op.
+     */
+    private fun dedupeLinked(items: List<TimelineItem>): List<TimelineItem> {
+        val links = linkStore.links.value
+        if (links.isEmpty()) return items
+        fun groupId(item: TimelineItem): String? {
+            val k = linkStore.key(item.sourceType, item.sourceRef)
+            return links.firstOrNull { k in it.members }?.id
+        }
+        val byGroup = items.groupBy { groupId(it) }
+        val result = ArrayList<TimelineItem>(items.size)
+        result.addAll(byGroup[null].orEmpty())   // nepropojené beze změny
+        byGroup.forEach { (gid, group) ->
+            if (gid == null) return@forEach
+            val audio = group.filter { it.sourceType != "youtube" }
+            val video = group.filter { it.sourceType == "youtube" }
+            val pairedVideoIds = PodcastPairing
+                .pairEpisodes(audio.map { it.episode }, video.map { it.episode })
+                .mapNotNull { if (it.audio != null && it.video != null) it.video.id else null }
+                .toSet()
+            result.addAll(audio)
+            result.addAll(video.filter { it.episode.id !in pairedVideoIds })
+        }
+        return result
     }
 
     // ───────────────────────── Bucketování dle času ─────────────────────────

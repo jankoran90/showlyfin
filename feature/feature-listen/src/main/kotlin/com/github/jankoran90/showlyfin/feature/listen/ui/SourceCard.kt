@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,18 +47,21 @@ private val SourceCoverShape = RoundedCornerShape(16.dp)
  * PRESET (SHW-65): karta vlastního zdroje (YouTube kanál / RSS podcast) v sekci Poslech → Podcasty.
  * Vizuálně se od ABS podcastů odliší odznakem typu v rohu obálky. Tap → otevře epizody zdroje.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SourceCard(
     source: PodcastSource,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // TWINE (SHW-74): dlouhý stisk → propojit s druhou verzí pořadu (audio+video).
+    onLongClick: (() -> Unit)? = null,
 ) {
     val typeIcon: ImageVector = if (source.type == "youtube") Icons.Default.PlayArrow else Icons.Default.Podcasts
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(SourceCoverShape)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(4.dp),
     ) {
         Box(
@@ -119,6 +123,80 @@ fun SourceCard(
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * TWINE (SHW-74 / plán F7): karta PROPOJENÉHO pořadu (audio RSS + video YouTube = 1 pořad). Místo dvou
+ * karet jedna, s odznakem propojení; tap → sloučená obrazovka se spárovanými epizodami.
+ */
+@Composable
+fun MergedSourceCard(
+    title: String,
+    thumbnail: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(SourceCoverShape)
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(SourceCoverShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            if (thumbnail != null) {
+                AsyncImage(
+                    model = thumbnail,
+                    contentDescription = title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Podcasts,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
+            // Odznak propojení (audio + video pod jednou kartou).
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 5.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Podcasts, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(13.dp))
+                }
+            }
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            text = "Audio + video",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

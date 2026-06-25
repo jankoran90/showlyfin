@@ -83,6 +83,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.YoutubeChannelScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.RssPodcastScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.MergedPodcastScreen
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxHistoryScreen
@@ -133,6 +134,9 @@ internal sealed interface Destination {
     // AGORA — objevovací modul podcastů (drawer „Objevit podcasty", vedle Zdrojů podcastů)
     data object PodcastDiscovery : Destination
     data class RssPodcast(val feedUrl: String, val title: String, val parent: Destination, val highlightEpisodeKey: String? = null) : Destination
+
+    // TWINE (SHW-74 / plán F7) — sloučený pohled propojeného pořadu (audio RSS + video YouTube).
+    data class MergedPodcast(val groupId: String, val title: String, val parent: Destination) : Destination
 
     // Sub-screens
     data class Detail(val item: MediaItem, val parent: Destination) : Destination
@@ -504,6 +508,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.AudiobookPlayer -> current.parent
                 is Destination.YoutubeChannel -> current.parent
                 is Destination.RssPodcast -> current.parent
+                is Destination.MergedPodcast -> current.parent
                 else -> bottomTab
             }
         }
@@ -768,6 +773,11 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             Destination.RssPodcast(feedUrl = src.ref, title = src.title, parent = Destination.Listen)
                         }
                     },
+                    // TWINE (SHW-74) — sloučený pohled propojeného pořadu (audio+video).
+                    onOpenMerged = { gid, gTitle ->
+                        bottomTab = Destination.Listen
+                        currentDestination = Destination.MergedPodcast(gid, gTitle, parent = Destination.Listen)
+                    },
                     // NAVIGATE (SHW-73) — klik na řádek v Timeline → obsah zdroje + zvýrazni epizodu.
                     onOpenSourceEpisode = { type, ref, srcTitle, epKey ->
                         bottomTab = Destination.Listen
@@ -809,6 +819,25 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             itemId = null, externalUrl = url, title = videoTitle, parent = dest, posterUrl = poster,
                         )
                     },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // TWINE (SHW-74): sloučený pohled propojeného pořadu (audio RSS + video YouTube).
+                is Destination.MergedPodcast -> MergedPodcastScreen(
+                    groupId = dest.groupId,
+                    title = dest.title,
+                    onBack = { currentDestination = dest.parent },
+                    onOpenAudioPlayer = {
+                        currentDestination = Destination.AudiobookPlayer(
+                            itemId = null, fromStart = false, parent = dest,
+                        )
+                    },
+                    onPlayVideo = { url, videoTitle, poster ->
+                        currentDestination = Destination.Player(
+                            itemId = null, externalUrl = url, title = videoTitle, parent = dest, posterUrl = poster,
+                        )
+                    },
+                    // Po zrušení propojení se zdroje vrátí jako samostatné karty → zpět do Poslechu.
+                    onUnlinked = { currentDestination = dest.parent },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.YoutubeChannel -> YoutubeChannelScreen(

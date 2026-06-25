@@ -15,6 +15,7 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
@@ -44,8 +45,42 @@ class ListenViewModel @Inject constructor(
     private val connectivity: ConnectivityObserver,
     private val profileRepository: ProfileRepository,
     private val sourcesRepo: PodcastSourcesRepository,
+    private val linkStore: com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore,
     private val absPrefs: AbsPreferences,
 ) : ViewModel() {
+
+    // TWINE (SHW-74 / plán F7): propojení zdrojů „týž pořad jako audio+video". Lokální, reaktivní.
+    /** Reaktivní seznam propojených pořadů → Sledované grid sloučí slinkované zdroje do 1 karty. */
+    val sourceLinks = linkStore.links
+
+    /** Klíč zdroje shodný s [PodcastLinkStore] (`type:ref`) — pro dedup ve Sledovaných. */
+    fun sourceKey(source: PodcastSource) = linkStore.key(source)
+
+    /** Propoj dva zdroje jako týž pořad (audio+video). */
+    fun linkSources(a: PodcastSource, b: PodcastSource) = linkStore.link(a, b)
+
+    /** Zruš propojení celé skupiny. */
+    fun unlinkGroup(groupId: String) = linkStore.unlink(groupId)
+
+    /**
+     * Auto-návrh kandidáta k propojení pro [source]: nejpodobnější zdroj OPAČNÉHO typu mezi aktuálně
+     * sledovanými, který ještě není ve skupině se [source]. null = žádná dost silná shoda.
+     */
+    fun suggestLinkMatch(source: PodcastSource): PodcastSource? {
+        val sameGroup = linkStore.groupForSource(source)?.members.orEmpty().toSet()
+        val others = _uiState.value.customSources.filter {
+            sourceKey(it) != sourceKey(source) && sourceKey(it) !in sameGroup
+        }
+        return PodcastPairing.suggestMatch(source, others)
+    }
+
+    /** Kandidáti k propojení se [source] (opačný typ není podmínka, ale návrh ano) — bez sebe a bez své skupiny. */
+    fun linkCandidates(source: PodcastSource): List<PodcastSource> {
+        val sameGroup = linkStore.groupForSource(source)?.members.orEmpty().toSet()
+        return _uiState.value.customSources.filter {
+            sourceKey(it) != sourceKey(source) && sourceKey(it) !in sameGroup
+        }
+    }
 
     /** PRESET (SHW-65) — seřaď knihovny dle ručního pořadí ([order] = ID knihoven); neznámé na konec. */
     private fun List<com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary>.ordered(order: List<String>):
