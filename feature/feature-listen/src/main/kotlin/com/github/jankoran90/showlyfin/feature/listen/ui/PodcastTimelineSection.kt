@@ -63,6 +63,8 @@ import java.util.Locale
 @Composable
 fun PodcastTimelineSection(
     onOpenDiscover: () -> Unit,
+    /** Klik na řádek (ne na akční tlačítka) → otevři obsah zdroje + zvýrazni tuto epizodu. */
+    onOpenSource: (PodcastTimelineViewModel.TimelineItem) -> Unit,
     modifier: Modifier = Modifier,
     refreshKey: Any? = null,
     viewModel: PodcastTimelineViewModel = hiltViewModel(),
@@ -119,6 +121,7 @@ fun PodcastTimelineSection(
                         display = state.display,
                         isPlaying = player.isActive && player.currentEpisodeId == thisKey,
                         offlineStatus = offlineStatus,
+                        onOpenSource = { onOpenSource(item) },
                         onPlay = { viewModel.play(item) },
                         onEnqueue = { viewModel.enqueue(item) },
                         onDownload = { viewModel.download(item) },
@@ -135,6 +138,7 @@ private fun TimelineRow(
     display: PodcastTimelineViewModel.DisplayPrefs,
     isPlaying: Boolean,
     offlineStatus: OfflineStatus,
+    onOpenSource: () -> Unit,
     onPlay: () -> Unit,
     onEnqueue: () -> Unit,
     onDownload: () -> Unit,
@@ -151,7 +155,8 @@ private fun TimelineRow(
                 if (isPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.surface,
             )
-            .clickable(onClick = onPlay)
+            // Klik na řádek → obsah zdroje + zvýraznění epizody (přehrání je na chipu „Přehrát" níž).
+            .clickable(onClick = onOpenSource)
             .padding(vertical = 10.dp, horizontal = 8.dp)
             .animateContentSize(),
     ) {

@@ -71,6 +71,8 @@ fun ListenScreen(
     onOpenPodcast: (itemId: String) -> Unit,
     onPlayEpisode: (itemId: String, episodeId: String) -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
+    /** Timeline: otevři obsah zdroje (RSS feedUrl / YouTube handle) a zvýrazni epizodu [episodeKey]. */
+    onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ListenViewModel = hiltViewModel(),
 ) {
@@ -131,6 +133,7 @@ fun ListenScreen(
                                     downloadCount = downloads.size + podcastDownloads.size,
                                     onOpenDownloads = { showDownloads = true },
                                     onOpenSource = onOpenSource,
+                                    onOpenSourceEpisode = onOpenSourceEpisode,
                                 )
                             }
                         }
@@ -217,6 +220,7 @@ private fun PodcastsContent(
     downloadCount: Int,
     onOpenDownloads: () -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
+    onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
 ) {
     val discoveryVm: com.github.jankoran90.showlyfin.feature.listen.PodcastDiscoveryViewModel = hiltViewModel()
     val filterVm: com.github.jankoran90.showlyfin.feature.listen.PodcastFilterViewModel = hiltViewModel()
@@ -243,6 +247,9 @@ private fun PodcastsContent(
         when (tab) {
             PodcastTab.TIMELINE -> PodcastTimelineSection(
                 onOpenDiscover = { tab = PodcastTab.DISCOVER },
+                onOpenSource = { item ->
+                    onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.key)
+                },
                 refreshKey = filterEpoch,
                 modifier = Modifier.fillMaxSize(),
             )

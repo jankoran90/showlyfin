@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -74,6 +75,8 @@ fun YoutubeChannelScreen(
     onBack: () -> Unit,
     onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit,
     onOpenAudioPlayer: () -> Unit,
+    // NAVIGATE (SHW-73): klíč epizody (`yt:…`) k zvýraznění + scrollu (z Timeline řádku / cover prokliku).
+    highlightEpisodeKey: String? = null,
     modifier: Modifier = Modifier,
     viewModel: YoutubeChannelViewModel = hiltViewModel(),
 ) {
@@ -86,6 +89,19 @@ fun YoutubeChannelScreen(
     var actionEpisode by remember { mutableStateOf<YtEpisode?>(null) }
 
     LaunchedEffect(channel) { viewModel.load(channel) }
+
+    // NAVIGATE (SHW-73): jakmile se epizody načtou, jednorázově odscrolluj na zvýrazněnou epizodu.
+    val listState = rememberLazyListState()
+    var scrolledToHighlight by remember { mutableStateOf(false) }
+    LaunchedEffect(highlightEpisodeKey, state.episodes) {
+        if (!scrolledToHighlight && highlightEpisodeKey != null && state.episodes.isNotEmpty()) {
+            val idx = state.episodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
+            if (idx >= 0) {
+                listState.scrollToItem(idx)
+                scrolledToHighlight = true
+            }
+        }
+    }
 
     // L4 (LEVER): výsledek castu na TV → jednorázový Toast.
     LaunchedEffect(castMessage) {
@@ -128,6 +144,7 @@ fun YoutubeChannelScreen(
                 }
 
             else -> LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = padding.calculateTopPadding() + 8.dp,
@@ -139,6 +156,8 @@ fun YoutubeChannelScreen(
                 items(state.episodes, key = { it.id }) { ep ->
                     val key = viewModel.episodeKey(ep)
                     val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
+                    // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
+                    val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
                     val mark = resumeMarks[key]
                     val progress: Float? = when {
                         isCurrent && playerState.durationMs > 0 ->
@@ -161,6 +180,7 @@ fun YoutubeChannelScreen(
                         progress = progress,
                         canResume = canResume,
                         remainingLabel = remainingLabel,
+                        highlighted = isHighlighted,
                         onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
                         onAudio = {
                             // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
@@ -218,18 +238,21 @@ private fun EpisodeRow(
     progress: Float?,
     canResume: Boolean,
     remainingLabel: String?,
+    highlighted: Boolean,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
     onMore: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
+    // NAVIGATE: zvýrazni hranou epizodu (isCurrent) i tu, ze které se uživatel proklikl (highlighted).
+    val emphasized = isCurrent || highlighted
     Column(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isCurrent) accent.copy(alpha = 0.12f) else Color.Transparent)
-            .padding(if (isCurrent) 6.dp else 0.dp),
+            .background(if (emphasized) accent.copy(alpha = 0.12f) else Color.Transparent)
+            .padding(if (emphasized) 6.dp else 0.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
@@ -246,7 +269,7 @@ private fun EpisodeRow(
                     title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (isCurrent) accent else MaterialTheme.colorScheme.onBackground,
+                    color = if (emphasized) accent else MaterialTheme.colorScheme.onBackground,
                 )
                 val meta = listOfNotNull(formatDate(uploadDate), durationSec?.let { formatDuration(it) }, remainingLabel)
                     .joinToString(" · ")

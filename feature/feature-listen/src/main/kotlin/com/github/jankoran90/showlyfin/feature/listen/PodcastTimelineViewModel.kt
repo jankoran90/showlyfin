@@ -51,6 +51,7 @@ class PodcastTimelineViewModel @Inject constructor(
         val episode: SourceEpisode,
         val sourceTitle: String,
         val sourceType: String,        // "youtube" | "rss"
+        val sourceRef: String,         // youtube: channel_id/@handle ; rss: feed_url (→ navigace na obsah zdroje)
         val timestampMs: Long,
     ) {
         /** Stabilní klíč epizody (shoda s RSS/YT `episodeKey` → sdílené resume i offline index). */
@@ -138,6 +139,7 @@ class PodcastTimelineViewModel @Inject constructor(
                                         episode = ep,
                                         sourceTitle = src.title,
                                         sourceType = src.type,
+                                        sourceRef = src.ref,
                                         // Bez data → sentinel: NIKDY do „Dnes", vždy do bucketu „Bez data".
                                         timestampMs = parseEpisodeDate(ep.date) ?: NO_DATE_TS,
                                     )

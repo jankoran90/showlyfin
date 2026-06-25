@@ -125,13 +125,14 @@ internal sealed interface Destination {
     data class AudiobookPlayer(val itemId: String?, val fromStart: Boolean, val startSec: Double? = null, val episodeId: String? = null, val parent: Destination) : Destination
 
     // TUNER (SHW-62) — YouTube kanál jako podcast (video+audio streaming)
-    data class YoutubeChannel(val handle: String, val title: String, val parent: Destination) : Destination
+    // NAVIGATE (SHW-73): highlightEpisodeKey = epizoda ke zvýraznění/scrollu (z Timeline řádku / cover prokliku).
+    data class YoutubeChannel(val handle: String, val title: String, val parent: Destination, val highlightEpisodeKey: String? = null) : Destination
 
     // PRESET (SHW-65) — správce zdrojů Poslechu (drawer nad adminem) + RSS podcast obrazovka
     data object SourceManager : Destination
     // AGORA — objevovací modul podcastů (drawer „Objevit podcasty", vedle Zdrojů podcastů)
     data object PodcastDiscovery : Destination
-    data class RssPodcast(val feedUrl: String, val title: String, val parent: Destination) : Destination
+    data class RssPodcast(val feedUrl: String, val title: String, val parent: Destination, val highlightEpisodeKey: String? = null) : Destination
 
     // Sub-screens
     data class Detail(val item: MediaItem, val parent: Destination) : Destination
@@ -767,6 +768,15 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             Destination.RssPodcast(feedUrl = src.ref, title = src.title, parent = Destination.Listen)
                         }
                     },
+                    // NAVIGATE (SHW-73) — klik na řádek v Timeline → obsah zdroje + zvýrazni epizodu.
+                    onOpenSourceEpisode = { type, ref, srcTitle, epKey ->
+                        bottomTab = Destination.Listen
+                        currentDestination = if (type == "youtube") {
+                            Destination.YoutubeChannel(handle = ref, title = srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
+                        } else {
+                            Destination.RssPodcast(feedUrl = ref, title = srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.SourceManager -> SourceManagerScreen(
@@ -778,6 +788,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.RssPodcast -> RssPodcastScreen(
                     feedUrl = dest.feedUrl,
                     title = dest.title,
+                    highlightEpisodeKey = dest.highlightEpisodeKey,
                     onBack = { currentDestination = dest.parent },
                     onOpenAudioPlayer = {
                         currentDestination = Destination.AudiobookPlayer(
@@ -803,6 +814,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.YoutubeChannel -> YoutubeChannelScreen(
                     channel = dest.handle,
                     channelTitle = dest.title,
+                    highlightEpisodeKey = dest.highlightEpisodeKey,
                     onBack = { currentDestination = dest.parent },
                     onPlayVideo = { url, title, poster ->
                         currentDestination = Destination.Player(
@@ -847,8 +859,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         currentDestination = when (target) {
                             is ListenSourceTarget.Audiobook -> Destination.AudiobookDetail(target.itemId, parent = dest)
                             is ListenSourceTarget.Podcast -> Destination.PodcastDetail(target.itemId, parent = dest)
-                            is ListenSourceTarget.Rss -> Destination.RssPodcast(target.feedUrl, target.title, parent = dest)
-                            is ListenSourceTarget.Youtube -> Destination.YoutubeChannel(target.handle, target.title, parent = dest)
+                            // NAVIGATE (SHW-73): zvýrazni právě hranou epizodu v seznamu dílů zdroje.
+                            is ListenSourceTarget.Rss -> Destination.RssPodcast(target.feedUrl, target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
+                            is ListenSourceTarget.Youtube -> Destination.YoutubeChannel(target.handle, target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
                         }
                     },
                     modifier = Modifier.fillMaxSize(),

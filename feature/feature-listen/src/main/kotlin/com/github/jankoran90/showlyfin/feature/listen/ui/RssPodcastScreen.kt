@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -82,6 +83,8 @@ fun RssPodcastScreen(
     onPlayVideo: (jfItemId: String, title: String, resumeKey: String) -> Unit,
     // AGORA (F5): přehrání VIDEO verze epizody z YouTube (externí proxy URL, jako YouTube kanál).
     onPlayYoutubeVideo: (url: String, title: String, posterUrl: String?) -> Unit,
+    // NAVIGATE (SHW-73): klíč epizody (`rss:…`) k zvýraznění + scrollu (přišlo z Timeline řádku / cover prokliku).
+    highlightEpisodeKey: String? = null,
     modifier: Modifier = Modifier,
     viewModel: RssPodcastViewModel = hiltViewModel(),
 ) {
@@ -108,6 +111,18 @@ fun RssPodcastScreen(
     // AGORA (F5): epizoda, pro kterou je otevřený picker video verze (drží kontext pro play/cast).
     var videoForEpisode by remember { mutableStateOf<RssEpisode?>(null) }
     val fallbackTitle = state.title ?: title
+    // NAVIGATE (SHW-73): jakmile se epizody načtou, jednorázově odscrolluj na zvýrazněnou epizodu.
+    val listState = rememberLazyListState()
+    var scrolledToHighlight by remember { mutableStateOf(false) }
+    LaunchedEffect(highlightEpisodeKey, state.episodes) {
+        if (!scrolledToHighlight && highlightEpisodeKey != null && state.episodes.isNotEmpty()) {
+            val idx = state.episodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
+            if (idx >= 0) {
+                listState.scrollToItem(idx)
+                scrolledToHighlight = true
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -134,6 +149,7 @@ fun RssPodcastScreen(
                 }
 
             else -> LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = padding.calculateTopPadding() + 8.dp,
@@ -145,6 +161,8 @@ fun RssPodcastScreen(
                 items(state.episodes, key = { it.id }) { ep ->
                     val key = viewModel.episodeKey(ep)
                     val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
+                    // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
+                    val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
                     // REWIND (SHW-68): video resume má přednost (sdílený klíč = „poslední vyhrává"),
                     // jinak audio resume → progres + „Pokračovat" funguje i u VIDEO epizody.
                     val markPos = videoResumeMarks[key]?.posMs ?: resumeMarks[key]?.posMs
@@ -172,6 +190,7 @@ fun RssPodcastScreen(
                         canResume = canResume,
                         remainingLabel = remainingLabel,
                         hasVideo = ep.jfItemId != null,
+                        highlighted = isHighlighted,
                         onPlay = {
                             // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
                             if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep, fallbackTitle)
@@ -391,18 +410,21 @@ private fun RssEpisodeRow(
     canResume: Boolean,
     remainingLabel: String?,
     hasVideo: Boolean,
+    highlighted: Boolean,
     onPlay: () -> Unit,
     onVideo: () -> Unit,
     onMore: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
+    // NAVIGATE: zvýrazni hranou epizodu (isCurrent) i tu, ze které se uživatel proklikl (highlighted).
+    val emphasized = isCurrent || highlighted
     Column(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isCurrent) accent.copy(alpha = 0.12f) else Color.Transparent)
-            .padding(if (isCurrent) 6.dp else 0.dp),
+            .background(if (emphasized) accent.copy(alpha = 0.12f) else Color.Transparent)
+            .padding(if (emphasized) 6.dp else 0.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
@@ -419,7 +441,7 @@ private fun RssEpisodeRow(
                     title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (isCurrent) accent else MaterialTheme.colorScheme.onBackground,
+                    color = if (emphasized) accent else MaterialTheme.colorScheme.onBackground,
                 )
                 val meta = listOfNotNull(formatRssDate(date), formatRssDuration(duration), remainingLabel)
                     .joinToString(" · ")

@@ -60,8 +60,8 @@ class AudiobookPlayerViewModel @Inject constructor(
         val title = s.author?.takeIf { it.isNotBlank() } ?: s.title
         val epId = s.currentEpisodeId
         return when {
-            epId != null && epId.startsWith("rss:") -> ListenSourceTarget.Rss(itemId, title)
-            epId != null && epId.startsWith("yt:") -> ListenSourceTarget.Youtube(itemId, title)
+            epId != null && epId.startsWith("rss:") -> ListenSourceTarget.Rss(itemId, title, episodeKey = epId)
+            epId != null && epId.startsWith("yt:") -> ListenSourceTarget.Youtube(itemId, title, episodeKey = epId)
             s.isPodcastEpisode -> ListenSourceTarget.Podcast(itemId)
             else -> ListenSourceTarget.Audiobook(itemId)
         }
