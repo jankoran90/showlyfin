@@ -77,6 +77,9 @@ class MergedPodcastViewModel @Inject constructor(
 
     private var loadedFor: String? = null
 
+    /** WEFT (SHW-75/W2-FIX): členské zdroje skupiny → odvození REF pro `itemId` fronty (cover skok). */
+    private var members: List<PodcastSource> = emptyList()
+
     /** Načti sloučený pohled propojené skupiny [groupId]. */
     fun load(groupId: String) {
         if (loadedFor == groupId && _state.value.episodes.isNotEmpty()) return
@@ -86,7 +89,7 @@ class MergedPodcastViewModel @Inject constructor(
             _state.update { it.copy(isLoading = false, error = "Propojení už neexistuje.") }
             return
         }
-        val members = group.members.mapNotNull { mk -> repo.sources.value.firstOrNull { linkStore.key(it) == mk } }
+        members = group.members.mapNotNull { mk -> repo.sources.value.firstOrNull { linkStore.key(it) == mk } }
         val title = group.title ?: members.firstOrNull()?.title.orEmpty()
         val image = group.thumbnail ?: members.firstNotNullOfOrNull { it.thumbnail }
         _state.update { it.copy(isLoading = true, error = null, title = title, image = image) }
@@ -117,8 +120,14 @@ class MergedPodcastViewModel @Inject constructor(
         val key = ep.resumeKey ?: ep.id
         val podcast = ep.subtitle ?: _state.value.title
         val localUrl = offline.localVideo(key)?.let { Uri.fromFile(it).toString() }
+        // WEFT (SHW-75/W2-FIX): itemId = REF členského zdroje téhož typu jako epizoda (`rss:`→rss member,
+        // `yt:`→youtube member). `currentSourceTarget()` z něj odvodí cover-skok → `groupFor(type, ref)`
+        // najde TUTO sloučenou skupinu → cover otevře sloučenou kartu + zvýrazní epizodu (ne NaVýbornou).
+        val epType = if (key.startsWith("yt:")) "youtube" else "rss"
+        val sourceRef = members.firstOrNull { it.type == epType }?.ref
+            ?: members.firstOrNull()?.ref
         return QueuedEpisode(
-            itemId = ep.subtitle ?: _state.value.title.ifBlank { "merged" },
+            itemId = sourceRef ?: _state.value.title.ifBlank { "merged" },
             episodeId = key,
             title = ep.title,
             coverUrl = ep.imageUrl ?: _state.value.image,

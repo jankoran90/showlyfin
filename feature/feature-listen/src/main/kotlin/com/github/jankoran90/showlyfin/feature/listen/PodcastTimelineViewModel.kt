@@ -216,7 +216,10 @@ class PodcastTimelineViewModel @Inject constructor(
         val ep = item.episode
         val localUrl = offline.localVideo(item.key)?.let { android.net.Uri.fromFile(it).toString() }
         return QueuedEpisode(
-            itemId = item.sourceTitle,
+            // WEFT (SHW-75/W2-FIX): nes REF zdroje, ne název pořadu. `currentSourceTarget()` z něj odvodí
+            // cíl skoku z coveru přehrávače → u propojeného (TWINE) zdroje `groupFor(type, ref)` najde
+            // sloučenou skupinu a otevře SLOUČENOU obrazovku (dřív název → nematchlo → spadlo na NaVýbornou).
+            itemId = item.sourceRef,
             episodeId = item.key,
             title = ep.title,
             coverUrl = ep.imageUrl,

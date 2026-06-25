@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -77,6 +78,9 @@ fun MergedPodcastScreen(
     onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit,
     onUnlinked: () -> Unit,
     modifier: Modifier = Modifier,
+    // WEFT (SHW-75/W2-FIX): klíč epizody (`rss:`/`yt:`) k zvýraznění + odscrollování — proklik z časové
+    // osy / z coveru přehrávače na SLOUČENÝ pořad. Match na audio NEBO video verzi spárované epizody.
+    highlightEpisodeKey: String? = null,
     viewModel: MergedPodcastViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -85,6 +89,23 @@ fun MergedPodcastScreen(
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
     var actionItem by remember { mutableStateOf<PodcastPairing.MergedEpisode?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+
+    // WEFT (SHW-75/W2-FIX): zvýrazni + odscrolluj na epizodu, ze které se uživatel proklikl (časová osa /
+    // cover přehrávače). Spárovaná epizoda = match na audio NEBO video resumeKey. Jednorázově po načtení.
+    fun matchesHighlight(item: PodcastPairing.MergedEpisode): Boolean =
+        highlightEpisodeKey != null &&
+            (item.audio?.resumeKey == highlightEpisodeKey || item.video?.resumeKey == highlightEpisodeKey)
+    val listState = rememberLazyListState()
+    var scrolledToHighlight by remember { mutableStateOf(false) }
+    LaunchedEffect(highlightEpisodeKey, state.episodes) {
+        if (!scrolledToHighlight && highlightEpisodeKey != null && state.episodes.isNotEmpty()) {
+            val idx = state.episodes.indexOfFirst { matchesHighlight(it) }
+            if (idx >= 0) {
+                listState.scrollToItem(idx)
+                scrolledToHighlight = true
+            }
+        }
+    }
 
     // WEFT (SHW-75/W1): výsledek castu na TV → jednorázový Toast (parita s YT/RSS sekcemi).
     val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
@@ -136,6 +157,7 @@ fun MergedPodcastScreen(
 
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
+                state = listState,
                 contentPadding = PaddingValues(
                     top = padding.calculateTopPadding() + 8.dp,
                     bottom = padding.calculateBottomPadding() + 96.dp,
@@ -160,6 +182,7 @@ fun MergedPodcastScreen(
                         item = item,
                         downloaded = offlineStates[key]?.status == OfflineStatus.DOWNLOADED,
                         isCurrent = isCurrent,
+                        highlighted = matchesHighlight(item),
                         isPlaying = isCurrent && playerState.isPlaying,
                         progress = progress,
                         canResume = canResume,
@@ -219,6 +242,7 @@ private fun MergedEpisodeRow(
     item: PodcastPairing.MergedEpisode,
     downloaded: Boolean,
     isCurrent: Boolean,
+    highlighted: Boolean,
     isPlaying: Boolean,
     progress: Float?,
     canResume: Boolean,
@@ -229,12 +253,15 @@ private fun MergedEpisodeRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
+    // WEFT (SHW-75/W2-FIX): zvýrazni hranou epizodu (isCurrent) i tu, ze které se uživatel proklikl
+    // (highlighted) — vzor z RssPodcastScreen/NAVIGATE.
+    val emphasized = isCurrent || highlighted
     Column(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isCurrent) accent.copy(alpha = 0.12f) else Color.Transparent)
-            .padding(if (isCurrent) 6.dp else 0.dp),
+            .background(if (emphasized) accent.copy(alpha = 0.12f) else Color.Transparent)
+            .padding(if (emphasized) 6.dp else 0.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
@@ -248,7 +275,7 @@ private fun MergedEpisodeRow(
                     item.title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (isCurrent) accent else MaterialTheme.colorScheme.onBackground,
+                    color = if (emphasized) accent else MaterialTheme.colorScheme.onBackground,
                 )
                 val meta = listOfNotNull(
                     formatMergedDate(item.date),

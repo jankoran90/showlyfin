@@ -137,7 +137,14 @@ internal sealed interface Destination {
     data class RssPodcast(val feedUrl: String, val title: String, val parent: Destination, val highlightEpisodeKey: String? = null) : Destination
 
     // TWINE (SHW-74 / plán F7) — sloučený pohled propojeného pořadu (audio RSS + video YouTube).
-    data class MergedPodcast(val groupId: String, val title: String, val parent: Destination) : Destination
+    // WEFT (SHW-75/W2-FIX): highlightEpisodeKey = klíč epizody (`rss:`/`yt:`) k zvýraznění + scroll
+    // (z časové osy / z coveru přehrávače) — sloučená obrazovka dřív highlight neuměla (gap z TWINE).
+    data class MergedPodcast(
+        val groupId: String,
+        val title: String,
+        val parent: Destination,
+        val highlightEpisodeKey: String? = null,
+    ) : Destination
 
     // Sub-screens
     data class Detail(val item: MediaItem, val parent: Destination) : Destination
@@ -788,7 +795,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         bottomTab = Destination.Listen
                         val group = podcastLinkLookup.groupFor(type, ref)
                         currentDestination = when {
-                            group != null -> Destination.MergedPodcast(group.id, group.title ?: srcTitle, parent = Destination.Listen)
+                            // WEFT (SHW-75/W2-FIX): u sloučeného pořadu zvýrazni epizodu i ve SLOUČENÉ obrazovce.
+                            group != null -> Destination.MergedPodcast(group.id, group.title ?: srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
                             type == "youtube" -> Destination.YoutubeChannel(handle = ref, title = srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
                             else -> Destination.RssPodcast(feedUrl = ref, title = srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
                         }
@@ -831,6 +839,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.MergedPodcast -> MergedPodcastScreen(
                     groupId = dest.groupId,
                     title = dest.title,
+                    highlightEpisodeKey = dest.highlightEpisodeKey,
                     onBack = { currentDestination = dest.parent },
                     onOpenAudioPlayer = {
                         currentDestination = Destination.AudiobookPlayer(
@@ -897,10 +906,10 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             // NAVIGATE (SHW-73): zvýrazni právě hranou epizodu v seznamu dílů zdroje.
                             // WEFT (SHW-75/W2): u propojeného pořadu (TWINE) otevři SLOUČENOU obrazovku.
                             is ListenSourceTarget.Rss -> podcastLinkLookup.groupFor("rss", target.feedUrl)?.let {
-                                Destination.MergedPodcast(it.id, it.title ?: target.title, parent = dest)
+                                Destination.MergedPodcast(it.id, it.title ?: target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
                             } ?: Destination.RssPodcast(target.feedUrl, target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
                             is ListenSourceTarget.Youtube -> podcastLinkLookup.groupFor("youtube", target.handle)?.let {
-                                Destination.MergedPodcast(it.id, it.title ?: target.title, parent = dest)
+                                Destination.MergedPodcast(it.id, it.title ?: target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
                             } ?: Destination.YoutubeChannel(target.handle, target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
                         }
                     },
