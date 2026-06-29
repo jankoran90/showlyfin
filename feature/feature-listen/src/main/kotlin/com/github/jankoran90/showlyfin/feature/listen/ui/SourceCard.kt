@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Star
@@ -56,7 +57,11 @@ fun SourceCard(
     // TWINE (SHW-74): dlouhý stisk → propojit s druhou verzí pořadu (audio+video).
     onLongClick: (() -> Unit)? = null,
 ) {
-    val typeIcon: ImageVector = if (source.type == "youtube") Icons.Default.PlayArrow else Icons.Default.Podcasts
+    val typeIcon: ImageVector = when (source.type) {
+        "youtube" -> Icons.Default.PlayArrow
+        "ctv" -> Icons.Default.LiveTv
+        else -> Icons.Default.Podcasts
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -119,6 +124,7 @@ fun SourceCard(
             text = when {
                 source.premium -> "Prémiový podcast"
                 source.type == "youtube" -> "YouTube kanál"
+                source.type == "ctv" -> "ČT iVysílání"
                 else -> "Podcast"
             },
             style = MaterialTheme.typography.bodySmall,
@@ -223,7 +229,11 @@ fun DiscoveryCard(
     showSummary: Boolean = true,
     showEpisodeCount: Boolean = true,
 ) {
-    val typeIcon: ImageVector = if (result.type == "youtube") Icons.Default.PlayArrow else Icons.Default.Podcasts
+    val typeIcon: ImageVector = when (result.type) {
+        "youtube" -> Icons.Default.PlayArrow
+        "ctv" -> Icons.Default.LiveTv
+        else -> Icons.Default.Podcasts
+    }
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,

@@ -83,6 +83,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.YoutubeChannelScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.RssPodcastScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.CtvProgramScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MergedPodcastScreen
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
@@ -135,6 +136,9 @@ internal sealed interface Destination {
     // AGORA — objevovací modul podcastů (drawer „Objevit podcasty", vedle Zdrojů podcastů)
     data object PodcastDiscovery : Destination
     data class RssPodcast(val feedUrl: String, val title: String, val parent: Destination, val highlightEpisodeKey: String? = null) : Destination
+
+    // KAVKA (SHW-76) — ČT iVysílání pořad jako podcast (DASH video+audio streaming). ctvId = sidp pořadu.
+    data class CtvProgram(val ctvId: String, val title: String, val parent: Destination, val highlightEpisodeKey: String? = null) : Destination
 
     // TWINE (SHW-74 / plán F7) — sloučený pohled propojeného pořadu (audio RSS + video YouTube).
     // WEFT (SHW-75/W2-FIX): highlightEpisodeKey = klíč epizody (`rss:`/`yt:`) k zvýraznění + scroll
@@ -519,6 +523,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.AudiobookPlayer -> current.parent
                 is Destination.YoutubeChannel -> current.parent
                 is Destination.RssPodcast -> current.parent
+                is Destination.CtvProgram -> current.parent
                 is Destination.MergedPodcast -> current.parent
                 else -> bottomTab
             }
@@ -726,12 +731,12 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             parent = dest,
                         )
                     },
-                    // Otevření podcastového zdroje z výsledků hledání (YouTube → kanál, RSS → epizody).
+                    // Otevření podcastového zdroje z výsledků hledání (YouTube → kanál, ČT → pořad, RSS → epizody).
                     onOpenSource = { src ->
-                        currentDestination = if (src.type == "youtube") {
-                            Destination.YoutubeChannel(handle = src.ref, title = src.title, parent = dest)
-                        } else {
-                            Destination.RssPodcast(feedUrl = src.ref, title = src.title, parent = dest)
+                        currentDestination = when (src.type) {
+                            "youtube" -> Destination.YoutubeChannel(handle = src.ref, title = src.title, parent = dest)
+                            "ctv" -> Destination.CtvProgram(ctvId = src.ref, title = src.title, parent = dest)
+                            else -> Destination.RssPodcast(feedUrl = src.ref, title = src.title, parent = dest)
                         }
                     },
                     onBack = { currentDestination = bottomTab },
@@ -776,12 +781,12 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                         )
                     },
                     onOpenSource = { src ->
-                        // PRESET (SHW-65) — vlastní zdroj z Podcastů: YouTube → kanál, RSS → epizody podcastu.
+                        // PRESET (SHW-65) — vlastní zdroj z Podcastů: YouTube → kanál, ČT → pořad, RSS → epizody.
                         bottomTab = Destination.Listen
-                        currentDestination = if (src.type == "youtube") {
-                            Destination.YoutubeChannel(handle = src.ref, title = src.title, parent = Destination.Listen)
-                        } else {
-                            Destination.RssPodcast(feedUrl = src.ref, title = src.title, parent = Destination.Listen)
+                        currentDestination = when (src.type) {
+                            "youtube" -> Destination.YoutubeChannel(handle = src.ref, title = src.title, parent = Destination.Listen)
+                            "ctv" -> Destination.CtvProgram(ctvId = src.ref, title = src.title, parent = Destination.Listen)
+                            else -> Destination.RssPodcast(feedUrl = src.ref, title = src.title, parent = Destination.Listen)
                         }
                     },
                     // TWINE (SHW-74) — sloučený pohled propojeného pořadu (audio+video).
@@ -798,6 +803,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             // WEFT (SHW-75/W2-FIX): u sloučeného pořadu zvýrazni epizodu i ve SLOUČENÉ obrazovce.
                             group != null -> Destination.MergedPodcast(group.id, group.title ?: srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
                             type == "youtube" -> Destination.YoutubeChannel(handle = ref, title = srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
+                            type == "ctv" -> Destination.CtvProgram(ctvId = ref, title = srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
                             else -> Destination.RssPodcast(feedUrl = ref, title = srcTitle, parent = Destination.Listen, highlightEpisodeKey = epKey)
                         }
                     },
@@ -858,6 +864,24 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 is Destination.YoutubeChannel -> YoutubeChannelScreen(
                     channel = dest.handle,
                     channelTitle = dest.title,
+                    highlightEpisodeKey = dest.highlightEpisodeKey,
+                    onBack = { currentDestination = dest.parent },
+                    onPlayVideo = { url, title, poster ->
+                        currentDestination = Destination.Player(
+                            itemId = null, externalUrl = url, title = title, parent = dest, posterUrl = poster,
+                        )
+                    },
+                    onOpenAudioPlayer = {
+                        currentDestination = Destination.AudiobookPlayer(
+                            itemId = null, fromStart = false, parent = dest,
+                        )
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // KAVKA (SHW-76) — ČT iVysílání pořad jako podcast (DASH video+audio, cast na TV).
+                is Destination.CtvProgram -> CtvProgramScreen(
+                    ctvId = dest.ctvId,
+                    title = dest.title,
                     highlightEpisodeKey = dest.highlightEpisodeKey,
                     onBack = { currentDestination = dest.parent },
                     onPlayVideo = { url, title, poster ->

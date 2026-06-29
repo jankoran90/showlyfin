@@ -28,7 +28,7 @@ class SourceManagerViewModel @Inject constructor(
 ) : ViewModel() {
 
     enum class TypeFilter(val apiValue: String, val label: String) {
-        ALL("all", "Vše"), PODCAST("rss", "Podcasty"), YOUTUBE("youtube", "YouTube")
+        ALL("all", "Vše"), PODCAST("rss", "Podcasty"), YOUTUBE("youtube", "YouTube"), CTV("ctv", "ČT")
     }
 
     data class UiState(

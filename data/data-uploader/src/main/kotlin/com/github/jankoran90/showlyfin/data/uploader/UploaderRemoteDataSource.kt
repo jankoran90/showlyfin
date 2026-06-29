@@ -130,6 +130,15 @@ interface UploaderRemoteDataSource {
     /** Pre-warm resolve cache (best-effort) — rychlejší start přehrávání. */
     suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720")
 
+    // KAVKA (SHW-76) — ČT iVysílání podcast (DASH stream přes byte-proxy; o2tv CDN je IP-locked na server)
+    suspend fun getCtvFeed(baseUrl: String, sessionCookie: String, show: String, limit: Int = 100): CtvShowFeed
+    /** Poslechová (audio-only) varianta DASH manifestu dílu — `?audio=1`, ExoPlayer hraje jen aac stopu. */
+    fun ctvAudioUrl(baseUrl: String, sessionCookie: String, idec: String): String
+    /** Plný DASH manifest dílu (video) — ExoPlayer ABR (default nejvyšší dostupná, až 1080p). I pro cast na TV. */
+    fun ctvVideoUrl(baseUrl: String, sessionCookie: String, idec: String): String
+    /** Pre-warm resolve cache ČT dílu (best-effort). */
+    suspend fun warmCtv(baseUrl: String, sessionCookie: String, idec: String)
+
     // PRESET (SHW-65) — dynamický správce zdrojů Poslechu: sdílený store + hledání podle názvu + RSS epizody
     suspend fun listSources(baseUrl: String, sessionCookie: String): List<PodcastSource>
     suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?): List<PodcastSource>

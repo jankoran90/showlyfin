@@ -35,6 +35,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.exoplayer.dash) // KAVKA: ČT video = DASH manifest (o2tv CDN)
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.datasource)
     implementation(libs.androidx.media3.database)

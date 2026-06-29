@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.dash) // KAVKA: ČT poslech = audio-only DASH manifest
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.datasource)
     debugImplementation(libs.androidx.compose.ui.tooling)

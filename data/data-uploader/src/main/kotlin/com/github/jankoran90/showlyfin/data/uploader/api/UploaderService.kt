@@ -109,6 +109,9 @@ interface UploaderService {
     // TUNER — pre-warm resolve cache (rychlejší start přehrávání nejnovějších epizod)
     @GET suspend fun getYtResolve(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
 
+    // KAVKA (SHW-76) — ČT iVysílání podcast feed (díly pořadu; přehrání přes DASH manifest proxy)
+    @GET suspend fun getCtvFeed(@Url url: String, @Header("Cookie") cookie: String): CtvShowFeed
+
     // PRESET (SHW-65) — dynamický správce zdrojů Poslechu (sdílený store + hledání + RSS feed)
     @GET suspend fun listSources(@Url url: String, @Header("Cookie") cookie: String): SourcesResponse
     @POST suspend fun addSource(@Url url: String, @Header("Cookie") cookie: String, @Body request: AddSourceRequest): SourcesResponse

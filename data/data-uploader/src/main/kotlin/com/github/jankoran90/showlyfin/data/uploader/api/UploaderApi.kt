@@ -603,6 +603,32 @@ internal class UploaderApi(
         runCatching { service.getYtResolve("$base/api/yt/resolve?video_id=$videoId&kind=$kind&quality=$quality", cookie) }
     }
 
+    // KAVKA (SHW-76) — ČT iVysílání podcast (DASH stream přes byte-proxy)
+    override suspend fun getCtvFeed(baseUrl: String, sessionCookie: String, show: String, limit: Int): CtvShowFeed {
+        val base = baseUrl.trimEnd('/')
+        val s = URLEncoder.encode(show, "UTF-8")
+        return service.getCtvFeed("$base/api/ctv/feed?show=$s&limit=$limit", cookieOf(sessionCookie))
+    }
+
+    override fun ctvAudioUrl(baseUrl: String, sessionCookie: String, idec: String): String {
+        val base = baseUrl.trimEnd('/')
+        val key = URLEncoder.encode(sessionCookie, "UTF-8")
+        // audio=1 → audio-only DASH (poslech). `.mpd` přípona path → ExoPlayer pozná DASH i bez mime.
+        return "$base/api/ctv/manifest/$idec.mpd?audio=1&key=$key"
+    }
+
+    override fun ctvVideoUrl(baseUrl: String, sessionCookie: String, idec: String): String {
+        val base = baseUrl.trimEnd('/')
+        val key = URLEncoder.encode(sessionCookie, "UTF-8")
+        return "$base/api/ctv/manifest/$idec.mpd?key=$key"
+    }
+
+    override suspend fun warmCtv(baseUrl: String, sessionCookie: String, idec: String) {
+        val base = baseUrl.trimEnd('/')
+        // /api/ctv/resolve vrací {ok}; getYtResolve je generický GET (Response<ResponseBody>) → reuse.
+        runCatching { service.getYtResolve("$base/api/ctv/resolve?id=$idec", cookieOf(sessionCookie)) }
+    }
+
     // PRESET (SHW-65) — správce zdrojů Poslechu (sdílený store + hledání + RSS feed)
     private fun cookieOf(sessionCookie: String) = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
 

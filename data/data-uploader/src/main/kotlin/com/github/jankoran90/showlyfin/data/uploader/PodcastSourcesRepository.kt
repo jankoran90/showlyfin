@@ -139,6 +139,19 @@ class PodcastSourcesRepository @Inject constructor(
                         durationSec = ep.duration ?: 0.0,
                     )
                 }
+                "ctv" -> remote.getCtvFeed(baseUrl, cookie, source.ref, limit).episodes.map { ep ->
+                    SourceEpisode(
+                        id = ep.id,
+                        title = ep.title,
+                        subtitle = source.title,
+                        streamUrl = remote.ctvAudioUrl(baseUrl, cookie, ep.id),
+                        imageUrl = (ep.image ?: source.thumbnail).httpsUrl(),
+                        date = ep.date,
+                        resumeKey = "ctv:${ep.id}",   // shoda s CtvProgramViewModel.episodeKey
+                        description = ep.description,
+                        durationSec = ep.duration ?: 0.0,
+                    )
+                }
                 else -> loadRss(source.ref, limit).let { feed ->
                     feed.episodes.map { ep ->
                         SourceEpisode(

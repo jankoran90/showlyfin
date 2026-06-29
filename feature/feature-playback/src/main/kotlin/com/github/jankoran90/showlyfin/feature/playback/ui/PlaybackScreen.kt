@@ -153,7 +153,13 @@ private fun buildMediaItem(url: String, title: String, posterUrl: String?): Medi
         )
         // CLARITY (SHW-75): HLS podcast proxy (/api/yt/hls/…) nemá příponu .m3u8 → ExoPlayer by typ
         // neuhodl a hrál to jako progresivní. Vynutíme HLS MediaSource (itag 95/96 = 720p/1080p+audio).
-        .apply { if (url.contains("/api/yt/hls/")) setMimeType(MimeTypes.APPLICATION_M3U8) }
+        // KAVKA (SHW-76): ČT video proxy (/api/ctv/manifest/…mpd) = DASH (o2tv CDN, až 1080p) → vynutíme DASH.
+        .apply {
+            when {
+                url.contains("/api/yt/hls/") -> setMimeType(MimeTypes.APPLICATION_M3U8)
+                url.contains("/api/ctv/manifest/") -> setMimeType(MimeTypes.APPLICATION_MPD)
+            }
+        }
         .build()
 
 @OptIn(UnstableApi::class)
