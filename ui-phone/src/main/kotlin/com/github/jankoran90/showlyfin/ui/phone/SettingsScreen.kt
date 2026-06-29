@@ -251,6 +251,8 @@ fun SettingsScreen(
             com.github.jankoran90.showlyfin.feature.listen.ui.ListenOrderSettingsSection()
             // LEVER (SHW-61) L5 — stažené podcasty/YouTube do telefonu (offline na chatu): místo + smazat vše.
             com.github.jankoran90.showlyfin.feature.listen.ui.ListenOfflineSettingsSection()
+            // CLARITY (SHW-75) — kvalita videa podcastů: pro stream a zvlášť pro stahování (360p/720p/nejlepší).
+            com.github.jankoran90.showlyfin.feature.listen.ui.PodcastVideoQualitySettingsSection()
             // AGORA (SHW-71) F4 — objevování podcastů: výchozí země/režim, skryté kategorie, prahy, náhledy.
             com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoverySettingsSection()
             // TWINE (SHW-74) F7 — propojené pořady (audio RSS + video YouTube = 1 karta): přehled + zrušit.

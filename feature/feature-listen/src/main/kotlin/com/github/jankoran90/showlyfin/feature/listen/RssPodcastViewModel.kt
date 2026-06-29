@@ -259,7 +259,7 @@ class RssPodcastViewModel @Inject constructor(
     fun playVideoVersion(video: EpisodeVideo, ep: RssEpisode, fallbackTitle: String, onResolved: (url: String, title: String, poster: String?) -> Unit) {
         Timber.i("[AGORA] přehrát video verzi epizody '%s' → yt=%s (%s)", ep.title, video.id, video.title)
         clearVideoCandidates()
-        onResolved(repo.youtubeVideoUrl(video.id), ep.title.ifBlank { fallbackTitle }, ep.image ?: _state.value.image)
+        onResolved(repo.youtubeVideoUrl(video.id, PodcastVideoQuality.stream(prefs)), ep.title.ifBlank { fallbackTitle }, ep.image ?: _state.value.image)
     }
 
     /**
@@ -276,7 +276,7 @@ class RssPodcastViewModel @Inject constructor(
             val reportUrl = if (base.isNotBlank() && cookie.isNotBlank()) {
                 "${base.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
             } else null
-            val result = naTv.castFerry(jfUrl, jfToken, repo.youtubeVideoUrl(video.id), ep.title, emptyList(), reportUrl)
+            val result = naTv.castFerry(jfUrl, jfToken, repo.youtubeVideoUrl(video.id, PodcastVideoQuality.stream(prefs)), ep.title, emptyList(), reportUrl)
             Timber.i("[AGORA] cast YouTube video verze → TV: %s result=%s", ep.title, result)
             _castMessage.value = when (result) {
                 CastResult.SENT -> "Spuštěno na TV: ${ep.title}"

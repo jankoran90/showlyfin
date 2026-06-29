@@ -63,6 +63,8 @@ class MergedPodcastViewModel @Inject constructor(
 
     private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+    // CLARITY: kvalita videa pro stream z Nastavení (360 progresiv / 720·max HLS).
+    private val streamQuality get() = PodcastVideoQuality.stream(prefs)
 
     data class UiState(
         val isLoading: Boolean = false,
@@ -152,11 +154,11 @@ class MergedPodcastViewModel @Inject constructor(
         connection.enqueue(toQueued(a), atFront = atFront)
     }
 
-    /** VIDEO URL pro přehrání (YT proxy `kind=video`) — jen u epizody s video verzí. */
+    /** VIDEO URL pro přehrání i cast na TV — jen u epizody s video verzí. CLARITY: 360 progresiv / 720·max HLS. */
     fun videoUrl(item: PodcastPairing.MergedEpisode): String? {
         val v = item.video ?: return null
         val id = v.resumeKey?.removePrefix("yt:") ?: v.id
-        return repo.youtubeVideoUrl(id)
+        return repo.youtubeVideoUrl(id, streamQuality)
     }
 
     /**

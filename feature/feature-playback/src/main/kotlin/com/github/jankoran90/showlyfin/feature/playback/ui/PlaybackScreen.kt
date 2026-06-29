@@ -151,6 +151,9 @@ private fun buildMediaItem(url: String, title: String, posterUrl: String?): Medi
                 .setArtworkUri(posterUrl?.let(Uri::parse))
                 .build(),
         )
+        // CLARITY (SHW-75): HLS podcast proxy (/api/yt/hls/…) nemá příponu .m3u8 → ExoPlayer by typ
+        // neuhodl a hrál to jako progresivní. Vynutíme HLS MediaSource (itag 95/96 = 720p/1080p+audio).
+        .apply { if (url.contains("/api/yt/hls/")) setMimeType(MimeTypes.APPLICATION_M3U8) }
         .build()
 
 @OptIn(UnstableApi::class)

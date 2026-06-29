@@ -68,6 +68,8 @@ class YoutubeChannelViewModel @Inject constructor(
 
     private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+    // CLARITY: kvalita videa pro stream z Nastavení (360 progresiv / 720·max HLS).
+    private val streamQuality get() = PodcastVideoQuality.stream(prefs)
 
     private var loadedFor: String? = null
 
@@ -94,10 +96,10 @@ class YoutubeChannelViewModel @Inject constructor(
         }
     }
 
-    /** URL pro externí (video) přehrávač — byte-proxy přes backend. */
-    fun videoUrl(ep: YtEpisode): String = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "video")
+    /** URL pro video přehrávač i cast na TV. CLARITY: 360 progresiv / 720·max HLS (video+audio). */
+    fun videoUrl(ep: YtEpisode): String = uploaderDs.ytVideoUrl(baseUrl, cookie, ep.id, streamQuality)
 
-    /** Stabilní klíč epizody pro frontu i offline index. */
+    /** Stabilní klíč epizody pro frontu i offline index (audio). */
     fun episodeKey(ep: YtEpisode): String = "yt:${ep.id}"
 
     /**
@@ -148,7 +150,7 @@ class YoutubeChannelViewModel @Inject constructor(
         )
     }
 
-    /** L3: smaž staženou epizodu z telefonu. */
+    /** L3: smaž staženou AUDIO epizodu z telefonu. */
     fun deleteOffline(ep: YtEpisode) = offline.delete(episodeKey(ep))
 
     /**

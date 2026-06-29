@@ -99,8 +99,9 @@ class PodcastSourcesRepository @Inject constructor(
             .getOrDefault(emptyList())
     }
 
-    /** Přímá přehrávací URL YouTube videa přes backend byte-proxy (kind=video). */
-    fun youtubeVideoUrl(videoId: String): String = remote.ytStreamUrl(baseUrl, cookie, videoId, "video")
+    /** Přehrávací URL YouTube videa. CLARITY: 360 progresiv / 720·max HLS (video+audio, i pro TV). */
+    fun youtubeVideoUrl(videoId: String, quality: String = "720"): String =
+        remote.ytVideoUrl(baseUrl, cookie, videoId, quality)
 
     /** Epizody RSS podcastu (přímé audio enclosure URL). */
     suspend fun loadRss(feedUrl: String, limit: Int = 50): RssFeed =

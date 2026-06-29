@@ -582,16 +582,25 @@ internal class UploaderApi(
         return service.getYtFeed("$base/api/yt/feed?channel=$ch&limit=$limit", cookie)
     }
 
-    override fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String): String {
+    override fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String): String {
         val base = baseUrl.trimEnd('/')
         val key = URLEncoder.encode(sessionCookie, "UTF-8")
-        return "$base/api/yt/stream/$videoId?kind=$kind&key=$key"
+        return "$base/api/yt/stream/$videoId?kind=$kind&quality=$quality&key=$key"
     }
 
-    override suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String) {
+    override fun ytVideoUrl(baseUrl: String, sessionCookie: String, videoId: String, quality: String): String {
+        val base = baseUrl.trimEnd('/')
+        val key = URLEncoder.encode(sessionCookie, "UTF-8")
+        // 360 = progresivní mp4 (byte-proxy); 720/max = HLS (itag 95/96, video+audio), hraje i na TV.
+        // .m3u8 přípona → ExoPlayer (telefon i TV) sám pozná HLS i bez nastaveného mime typu.
+        return if (quality == "360") "$base/api/yt/stream/$videoId?kind=video&quality=360&key=$key"
+        else "$base/api/yt/hls/$videoId.m3u8?quality=$quality&key=$key"
+    }
+
+    override suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String) {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        runCatching { service.getYtResolve("$base/api/yt/resolve?video_id=$videoId&kind=$kind", cookie) }
+        runCatching { service.getYtResolve("$base/api/yt/resolve?video_id=$videoId&kind=$kind&quality=$quality", cookie) }
     }
 
     // PRESET (SHW-65) — správce zdrojů Poslechu (sdílený store + hledání + RSS feed)

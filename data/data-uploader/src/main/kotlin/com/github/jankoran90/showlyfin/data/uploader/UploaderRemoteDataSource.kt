@@ -120,10 +120,15 @@ interface UploaderRemoteDataSource {
 
     // TUNER (SHW-62) — YouTube podcast (streaming): feed + samonosné stream URL (?key=, jako sdilej/titulky)
     suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int = 30): YtChannelFeed
-    /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio". */
-    fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String): String
+    /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio".
+     *  CLARITY: quality jen pro video. Pro audio + progresivní 360p video. */
+    fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720"): String
+
+    /** CLARITY: přehrávací URL VIDEA dle kvality. 360 = progresivní byte-proxy; 720/max = HLS proxy
+     *  (itag 95/96 = video+audio, ExoPlayer hraje nativně, segmenty přes /api/yt/seg). Funguje i pro TV. */
+    fun ytVideoUrl(baseUrl: String, sessionCookie: String, videoId: String, quality: String = "720"): String
     /** Pre-warm resolve cache (best-effort) — rychlejší start přehrávání. */
-    suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String)
+    suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720")
 
     // PRESET (SHW-65) — dynamický správce zdrojů Poslechu: sdílený store + hledání podle názvu + RSS epizody
     suspend fun listSources(baseUrl: String, sessionCookie: String): List<PodcastSource>
