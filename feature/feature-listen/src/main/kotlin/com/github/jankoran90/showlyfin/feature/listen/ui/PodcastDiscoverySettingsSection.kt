@@ -161,7 +161,7 @@ fun PodcastDiscoverySettingsSection(
 }
 
 private val COUNTRIES = listOf(
-    "cz" to "ČR", "us" to "USA", "gb" to "UK", "au" to "Austrálie",
+    "cz" to "ČR", "ctv" to "ČT", "us" to "USA", "gb" to "UK", "au" to "Austrálie",
 )
 private val MODES = listOf(
     "popular" to "Populární", "active" to "Aktivní", "new" to "Nové", "az" to "A-Z",
@@ -171,14 +171,18 @@ private val PAGE_SIZE_OPTIONS = listOf(20, 30, 50)
 private val PODCAST_TABS = listOf(
     "timeline" to "Timeline", "following" to "Sledované", "discover" to "Objev",
 )
-private val TIMELINE_RANGES = listOf(7, 30, 90)
+private val TIMELINE_RANGES = listOf(7, 30, 90, 180, 365, 730, 0)
 private val TIMELINE_DESC_LINES = listOf(3, 4, 5)
 private val SOURCE_TYPES = listOf("all" to "Vše", "rss" to "Podcasty", "youtube" to "YouTube")
 
 private fun rangeLabel(days: Int): String = when (days) {
+    0 -> "Vše"
     7 -> "1 týden"
     30 -> "1 měsíc"
     90 -> "3 měsíce"
+    180 -> "6 měsíců"
+    365 -> "1 rok"
+    730 -> "2 roky"
     else -> "$days dní"
 }
 

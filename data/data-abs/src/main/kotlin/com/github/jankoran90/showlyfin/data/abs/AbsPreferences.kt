@@ -276,10 +276,12 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getString(KEY_PODCAST_TAB, "timeline").orEmpty().ifBlank { "timeline" }
         set(value) = prefs.edit { putString(KEY_PODCAST_TAB, value) }
 
-    /** Výchozí časový rozsah Timeline ve dnech (7|30|90). Epizody starší než rozsah se odfiltrují. */
+    /** Výchozí časový rozsah Timeline ve dnech (7|30|90|180|365|730, 0 = vše/bez cutoffu).
+     *  Epizody starší než rozsah se odfiltrují; default 180 (6 měsíců). Strop epizod na zdroj řeší
+     *  limit v Timeline VM (samotný rozsah počet dostupných epizod nezvedne nad ten limit). */
     var podcastTimelineRangeDays: Int
-        get() = prefs.getInt(KEY_PODCAST_TIMELINE_RANGE, 90)
-        set(value) = prefs.edit { putInt(KEY_PODCAST_TIMELINE_RANGE, value.coerceIn(1, 365)) }
+        get() = prefs.getInt(KEY_PODCAST_TIMELINE_RANGE, 180)
+        set(value) = prefs.edit { putInt(KEY_PODCAST_TIMELINE_RANGE, value.coerceIn(0, 730)) }
 
     /** Výchozí typ zdroje pro filtr sekce Podcasty: all|rss|youtube. */
     var podcastSourceTypeFilter: String

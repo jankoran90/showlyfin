@@ -133,8 +133,10 @@ class PodcastTimelineViewModel @Inject constructor(
         }
         loadJob = viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null, noSources = false, display = display) }
-            val rangeMs = prefs.podcastTimelineRangeDays.toLong() * DAY_MS
-            val cutoff = System.currentTimeMillis() - rangeMs
+            // Rozsah 0 = „Vše" → bez cutoffu (žádná datovaná epizoda se neořízne).
+            val rangeDays = prefs.podcastTimelineRangeDays
+            val cutoff = if (rangeDays <= 0) Long.MIN_VALUE
+                         else System.currentTimeMillis() - rangeDays.toLong() * DAY_MS
             val typeFilter = prefs.podcastSourceTypeFilter   // all|rss|youtube
             val onlyDownloaded = prefs.podcastOnlyDownloaded
 
@@ -377,7 +379,9 @@ class PodcastTimelineViewModel @Inject constructor(
     companion object {
         private const val DAY_MS = 24L * 60 * 60 * 1000
         private const val WEEK_MS = 7L * DAY_MS
-        private const val EPISODES_PER_SOURCE = 15
+        // Strop epizod na zdroj v Timeline. Vyšší = širší rozsah (6 m / 1–2 roky / Vše) reálně
+        // ukáže i starší epizody, ne jen ~poslední dva týdny. Tahá se paralelně per zdroj.
+        private const val EPISODES_PER_SOURCE = 100
 
         /** Sentinel pro epizodu bez naparsovatelného data → bucket „Bez data" na konci (NE „Dnes"). */
         const val NO_DATE_TS = Long.MIN_VALUE

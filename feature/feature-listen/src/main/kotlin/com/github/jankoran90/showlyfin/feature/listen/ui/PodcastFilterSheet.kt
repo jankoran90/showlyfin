@@ -132,7 +132,10 @@ fun PodcastFilterSheet(
     }
 }
 
-private val RANGE_OPTIONS = listOf(7 to "1 týden", 30 to "1 měsíc", 90 to "3 měsíce")
+private val RANGE_OPTIONS = listOf(
+    7 to "1 týden", 30 to "1 měsíc", 90 to "3 měsíce", 180 to "6 měsíců",
+    365 to "1 rok", 730 to "2 roky", 0 to "Vše",
+)
 private val TYPE_OPTIONS = listOf("all" to "Vše", "rss" to "Podcasty", "youtube" to "YouTube")
 private val MIN_EP_OPTIONS = listOf(0, 5, 10, 25, 50)
 

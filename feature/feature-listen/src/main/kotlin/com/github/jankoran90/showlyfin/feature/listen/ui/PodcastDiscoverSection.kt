@@ -114,7 +114,7 @@ private fun BrowseList(vm: PodcastDiscoveryViewModel) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
                 CountryRow(state.country, vm::setCountry)
-                ModeRow(state.mode, vm::setMode, Modifier.padding(top = 8.dp))
+                ModeRow(state.country, state.mode, vm::setMode, Modifier.padding(top = 8.dp))
                 if (state.categories.isNotEmpty() && state.mode != PodcastDiscoveryViewModel.Mode.FAVORITES) {
                     CategoryRow(
                         state.categories.filterNot { it.id in state.excluded },
@@ -194,12 +194,21 @@ private fun CountryRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModeRow(
+    country: PodcastDiscoveryViewModel.Country,
     selected: PodcastDiscoveryViewModel.Mode,
     onSelect: (PodcastDiscoveryViewModel.Mode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // ČT umí univerzálně jen populární + abecedně → ostatní řazení skryjeme (jinak by dělala totéž).
+    val modes = if (country == PodcastDiscoveryViewModel.Country.CTV)
+        listOf(
+            PodcastDiscoveryViewModel.Mode.POPULAR,
+            PodcastDiscoveryViewModel.Mode.AZ,
+            PodcastDiscoveryViewModel.Mode.FAVORITES,
+        )
+    else PodcastDiscoveryViewModel.Mode.entries.toList()
     LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(PodcastDiscoveryViewModel.Mode.entries) { m ->
+        items(modes) { m ->
             FilterChip(selected = selected == m, onClick = { onSelect(m) }, label = { Text(m.label) })
         }
     }

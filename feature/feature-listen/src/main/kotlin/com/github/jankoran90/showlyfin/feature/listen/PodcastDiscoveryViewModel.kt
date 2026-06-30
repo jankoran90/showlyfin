@@ -37,6 +37,7 @@ class PodcastDiscoveryViewModel @Inject constructor(
     /** Země — segment nahoře (CZ výchozí). */
     enum class Country(val code: String, val flag: String, val label: String) {
         CZ("cz", "🇨🇿", "ČR"),
+        CTV("ctv", "📺", "ČT"),
         US("us", "🇺🇸", "USA"),
         GB("gb", "🇬🇧", "UK"),
         AU("au", "🇦🇺", "Austrálie");
@@ -129,7 +130,10 @@ class PodcastDiscoveryViewModel @Inject constructor(
         // Změna země → kategorie přestávají platit (CZ kategorie ≠ Apple žánr). Skryté kategorie z
         // Nastavení jsou CZ-specifické → na cizí zemi je shodíme.
         val keepExcluded = if (c == Country.CZ) _state.value.excluded else emptySet()
-        _state.update { it.copy(country = c, selectedCategory = null, excluded = keepExcluded, categories = emptyList()) }
+        // ČT umí jen Populární/A-Z/Oblíbené → kdyby byl aktivní jiný režim, sjeď na Populární.
+        val ctvModes = setOf(Mode.POPULAR, Mode.AZ, Mode.FAVORITES)
+        val mode = if (c == Country.CTV && _state.value.mode !in ctvModes) Mode.POPULAR else _state.value.mode
+        _state.update { it.copy(country = c, mode = mode, selectedCategory = null, excluded = keepExcluded, categories = emptyList()) }
         refresh()
     }
 
