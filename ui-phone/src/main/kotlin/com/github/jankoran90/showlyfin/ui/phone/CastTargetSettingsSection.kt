@@ -42,7 +42,7 @@ fun CastTargetSettingsSection(
             modifier = Modifier.padding(top = 8.dp),
         )
         Text(
-            "Kam se pošle obsah tlačítkem „Na TV". Automaticky = televize. Vyber Zenbook (nebo jiné " +
+            "Kam se pošle obsah tlačítkem \"Na TV\". Automaticky = televize. Vyber Zenbook (nebo jiné " +
                 "zařízení), ať se přehrávání pouští tam. Cíl jde kdykoli přepnout i v ovladači.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
