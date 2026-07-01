@@ -404,6 +404,9 @@ fun SettingsScreen(
                 onVolumeStep = { viewModel.setAvrVolumeStep(it) },
                 onPairBox = { viewModel.pairBox() },
             )
+            Spacer(Modifier.height(12.dp))
+            // DOCK (SHW-77): výchozí cíl castu „Na TV" (televize / Zenbook / jiné zařízení)
+            CastTargetSettingsSection()
         }
 
         CollapsibleSettingsSection("Systém", expanded) {

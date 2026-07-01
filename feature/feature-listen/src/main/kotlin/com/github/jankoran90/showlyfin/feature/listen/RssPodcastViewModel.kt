@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
+import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
@@ -167,7 +168,7 @@ class RssPodcastViewModel @Inject constructor(
             val reportUrl = if (base.isNotBlank() && cookie.isNotBlank()) {
                 "${base.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
             } else null
-            val result = naTv.castFerry(jfUrl, jfToken, streamUrl, ep.title, emptyList(), reportUrl)
+            val result = naTv.castFerry(jfUrl, jfToken, streamUrl, ep.title, emptyList(), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
             Timber.i("[EXODUS] cast NaVýbornou video → TV: %s result=%s", ep.title, result)
             _castMessage.value = when (result) {
                 CastResult.SENT -> "Spuštěno na TV: ${ep.title}"
@@ -276,7 +277,7 @@ class RssPodcastViewModel @Inject constructor(
             val reportUrl = if (base.isNotBlank() && cookie.isNotBlank()) {
                 "${base.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
             } else null
-            val result = naTv.castFerry(jfUrl, jfToken, repo.youtubeVideoUrl(video.id, PodcastVideoQuality.stream(prefs)), ep.title, emptyList(), reportUrl)
+            val result = naTv.castFerry(jfUrl, jfToken, repo.youtubeVideoUrl(video.id, PodcastVideoQuality.stream(prefs)), ep.title, emptyList(), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
             Timber.i("[AGORA] cast YouTube video verze → TV: %s result=%s", ep.title, result)
             _castMessage.value = when (result) {
                 CastResult.SENT -> "Spuštěno na TV: ${ep.title}"

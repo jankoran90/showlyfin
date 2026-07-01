@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
+import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.maestro.AvrController
@@ -149,6 +150,10 @@ class OvladacViewModel @Inject constructor(
     /** Uživatel přepnul zařízení nahoře v přepínači (null = zpět na auto). */
     fun selectDevice(sessionId: String?) {
         userSelectedId = sessionId
+        // DOCK (SHW-77): přepínač zařízení zároveň uloží „výchozí cíl pro Na TV"
+        // (deviceId je stabilní; null = zpět na automatiku).
+        val dev = _state.value.sessions.firstOrNull { it.sessionId == sessionId }
+        CastTargetPrefs.setDefault(prefs, dev?.deviceId, dev?.deviceName)
         viewModelScope.launch { refresh() }
     }
 
@@ -455,7 +460,7 @@ class OvladacViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             val c = creds() ?: return@launch
-            naTv.castFerryConfig(c.url, c.token, resizeMode, subFontSizeSp, subColorArgb, subBottomMarginPct, subOffsetMs, subFpsScale)
+            naTv.castFerryConfig(c.url, c.token, resizeMode, subFontSizeSp, subColorArgb, subBottomMarginPct, subOffsetMs, subFpsScale, preferredDeviceId = _state.value.current?.deviceId)
         }
     }
 

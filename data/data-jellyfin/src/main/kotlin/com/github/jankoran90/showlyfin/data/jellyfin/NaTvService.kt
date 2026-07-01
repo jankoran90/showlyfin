@@ -71,6 +71,7 @@ class NaTvService @Inject constructor(
                     val s = arr.optJSONObject(i) ?: continue
                     val id = s.optString("Id").takeIf { it.isNotBlank() } ?: continue
                     val deviceName = s.optString("DeviceName").takeIf { it.isNotBlank() } ?: "?"
+                    val deviceId = s.optString("DeviceId").takeIf { it.isNotBlank() }
                     val client = s.optString("Client").takeIf { it.isNotBlank() }
                     val supportsRemote = s.optBoolean("SupportsRemoteControl", false)
                     val lastActivity = s.optString("LastActivityDate")
@@ -83,6 +84,7 @@ class NaTvService @Inject constructor(
                     out += JellyfinSessionSummary(
                         sessionId = id,
                         deviceName = deviceName,
+                        deviceId = deviceId,
                         client = client,
                         isActive = isActive,
                         lastActivityDate = lastActivity.takeIf { it.isNotBlank() },
@@ -224,6 +226,22 @@ class NaTvService @Inject constructor(
             ?: sessions.first()
     }
 
+    /**
+     * DOCK (SHW-77): vybere cíl castu podle uživatelovy preference „Výchozí zařízení pro Na TV".
+     * Když je `preferredDeviceId` vyplněné a to zařízení je právě dostupné (ovladatelné), pošle se tam
+     * (např. Zenbook); jinak spadneme na automatiku [pickWatchSession] (typicky televize/yellyfin).
+     */
+    fun resolveTarget(
+        sessions: List<JellyfinSessionSummary>,
+        preferredDeviceId: String?,
+    ): JellyfinSessionSummary? {
+        if (!preferredDeviceId.isNullOrBlank()) {
+            sessions.firstOrNull { it.deviceId == preferredDeviceId }?.let { return it }
+            // preferované zařízení není zrovna online → fallback na automatiku
+        }
+        return pickWatchSession(sessions)
+    }
+
     /** URL na cover (Primary) běžící položky — pro Coil; api_key v query je v pořádku. */
     fun imageUrl(baseUrl: String, token: String, itemId: String, tag: String?): String {
         val base = baseUrl.trimEnd('/')
@@ -309,10 +327,12 @@ class NaTvService @Inject constructor(
         title: String,
         subtitles: List<FerrySubtitle> = emptyList(),
         reportUrl: String? = null,
+        preferredDeviceId: String? = null,
     ): CastResult {
         if (baseUrl.isBlank() || token.isBlank()) return CastResult.NO_CREDS
         if (videoUrl.isBlank()) return CastResult.FAILED
-        val target = pickWatchSession(getSessions(baseUrl, token)) ?: return CastResult.NO_SESSION
+        val target = resolveTarget(getSessions(baseUrl, token), preferredDeviceId)
+            ?: return CastResult.NO_SESSION
         val payload = buildFerryPayload(videoUrl, title, subtitles, reportUrl)
         val ok = sendGeneralCommand(baseUrl, token, target.sessionId, "SendString", mapOf("String" to payload))
         Timber.i("[FERRY] cast → %s subs=%d ok=%b", target.deviceName, subtitles.size, ok)
@@ -404,9 +424,10 @@ class NaTvService @Inject constructor(
         subBottomMarginPct: Int? = null,
         subOffsetMs: Int? = null,
         subFpsScale: Double? = null,
+        preferredDeviceId: String? = null,
     ): Boolean {
         if (baseUrl.isBlank() || token.isBlank()) return false
-        val target = pickWatchSession(getSessions(baseUrl, token)) ?: return false
+        val target = resolveTarget(getSessions(baseUrl, token), preferredDeviceId) ?: return false
         val json = JSONObject().apply {
             resizeMode?.takeIf { it.isNotBlank() }?.let { put("resizeMode", it) }
             subFontSizeSp?.let { put("subFontSizeSp", it) }
@@ -446,6 +467,7 @@ data class FerryState(
 data class JellyfinSessionSummary(
     val sessionId: String,
     val deviceName: String,
+    val deviceId: String? = null,
     val client: String?,
     val isActive: Boolean,
     val lastActivityDate: String? = null,

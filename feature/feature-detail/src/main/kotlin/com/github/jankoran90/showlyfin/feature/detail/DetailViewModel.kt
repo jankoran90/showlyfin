@@ -13,6 +13,7 @@ import com.github.jankoran90.showlyfin.data.csfd.CsfdScraper
 import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
 import com.github.jankoran90.showlyfin.data.jellyfin.FerrySubtitle
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinLibraryService
+import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.jellyfin.normalizeBoxSetName
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
@@ -962,7 +963,7 @@ class DetailViewModel @Inject constructor(
             val reportUrl = if (uploaderBaseUrl.isNotBlank() && uploaderCookie.isNotBlank()) {
                 "${uploaderBaseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(uploaderCookie, "UTF-8")}"
             } else null
-            val result = naTv.castFerry(jfUrl, jfToken, url, title, subs, reportUrl)
+            val result = naTv.castFerry(jfUrl, jfToken, url, title, subs, reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
             // Po úspěšném spuštění na TV přepni appku rovnou na sekci „Ovladač" (parita s JF knihovnou
             // přes NaTvCoordinator) → telefon se hned stává dálkovým ovladačem běžícího streamu.
             // + zapamatuj cast (externí stream není JF NowPlaying) → Ovladač ukáže titul/cover + pozici.

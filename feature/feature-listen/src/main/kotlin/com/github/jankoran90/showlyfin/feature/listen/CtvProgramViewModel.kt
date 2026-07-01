@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
+import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
@@ -132,7 +133,7 @@ class CtvProgramViewModel @Inject constructor(
             val reportUrl = if (baseUrl.isNotBlank() && cookie.isNotBlank()) {
                 "${baseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
             } else null
-            val result = naTv.castFerry(jfUrl, jfToken, videoUrl(ep), ep.title, emptyList(), reportUrl)
+            val result = naTv.castFerry(jfUrl, jfToken, videoUrl(ep), ep.title, emptyList(), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
             Timber.i("[KAVKA] cast ČT video → TV: %s result=%s", ep.title, result)
             _castMessage.value = when (result) {
                 CastResult.SENT -> "Spuštěno na TV: ${ep.title}"
