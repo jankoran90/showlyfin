@@ -553,7 +553,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                if (!isTv && !isSubScreen) {
+                // CHORUS Osa 1: v Nastavení má vlastní pole „Hledat v nastavení" + rozcestník →
+                // globální vyjíždějící lišta (menu + hledání médií, autohide) by se s ním prala → skryj ji.
+                if (!isTv && !isSubScreen && currentDestination != Destination.Settings) {
                     AnimatedVisibility(visible = topBarVisible) {
                         AppTopBar(
                             onMenuClick = { scope.launch { drawerState.open() } },
