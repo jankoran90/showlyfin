@@ -230,7 +230,14 @@ internal data class ShellNavItem(
 
 @Composable
 fun ShowlyfinApp(isTv: Boolean = false) {
-    ShowlyfinPhoneTheme {
+    // CHORUS Osa 3 (kánon Písmo): volba fontu se čte v kořeni a předává do motivu (theme-level pref).
+    val fontPrefs: FontPrefsViewModel = hiltViewModel()
+    val font by fontPrefs.state.collectAsStateWithLifecycle()
+    ShowlyfinPhoneTheme(
+        serifFont = font.serif,
+        headingOnly = font.headingOnly,
+        fontScale = font.scale,
+    ) {
         val gateViewModel: ProfileGateViewModel = hiltViewModel()
         val gateState by gateViewModel.state.collectAsStateWithLifecycle()
 

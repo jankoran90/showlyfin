@@ -96,6 +96,11 @@ internal fun AppearanceSettingsSection(
                 LockedByAdminNote()
             }
     Spacer(Modifier.height(16.dp))
+    // CHORUS Osa 3 (kánon Písmo): patkové Newsreader vs systémové + rozsah + velikost. Plošné (motiv).
+    CollapsibleSettingsSection("Písmo", expandedMap) {
+        FontSettingsSection()
+    }
+    Spacer(Modifier.height(16.dp))
     CollapsibleSettingsSection("Pořadí sekcí", expandedMap) {
             if (ProfileConfig.LockKeys.ORDER in uiState.lockedKeys) {
                 LockedByAdminNote()
@@ -253,3 +258,39 @@ internal fun DetailSectionCheckRow(label: String, checked: Boolean, onChange: (B
 }
 
 
+
+/** CHORUS Osa 3 (kánon Písmo): volba fontu (systémové/Newsreader) + rozsah + velikost. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FontSettingsSection(viewModel: FontPrefsViewModel = hiltViewModel()) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            "Systémové bezpatkové, nebo patkové Newsreader (jednotné s ostatními appkami).",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.6f),
+        )
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !state.serif, onClick = { viewModel.setSerif(false) }, label = { Text("Systémové") })
+            FilterChip(selected = state.serif, onClick = { viewModel.setSerif(true) }, label = { Text("Newsreader") })
+        }
+        if (state.serif) {
+            Spacer(Modifier.height(12.dp))
+            Text("Kde se použije", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = !state.headingOnly, onClick = { viewModel.setHeadingOnly(false) }, label = { Text("Celá aplikace") })
+                FilterChip(selected = state.headingOnly, onClick = { viewModel.setHeadingOnly(true) }, label = { Text("Jen nadpisy") })
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("Velikost textu", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FontPrefsViewModel.SCALE_OPTIONS.forEach { pct ->
+                FilterChip(selected = state.scalePct == pct, onClick = { viewModel.setScalePct(pct) }, label = { Text("$pct %") })
+            }
+        }
+    }
+}
