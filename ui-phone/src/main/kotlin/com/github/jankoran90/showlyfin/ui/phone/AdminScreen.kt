@@ -1,5 +1,8 @@
 package com.github.jankoran90.showlyfin.ui.phone
 import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
+import com.github.jankoran90.showlyfin.ui.phone.settings.AdminRestrictionsSection
+import com.github.jankoran90.showlyfin.ui.phone.settings.TemplateAuthoringSection
+import com.github.jankoran90.showlyfin.ui.phone.settings.sections.ProfilesSection
 
 import android.content.Intent
 import android.net.Uri
