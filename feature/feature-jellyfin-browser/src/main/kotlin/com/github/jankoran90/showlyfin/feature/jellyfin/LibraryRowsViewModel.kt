@@ -24,6 +24,7 @@ import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
@@ -116,7 +117,7 @@ class LibraryRowsViewModel @Inject constructor(
                 recursive = true,
                 sortBy = listOf(ItemSortBy.DATE_CREATED),
                 sortOrder = listOf(SortOrder.DESCENDING),
-                fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
+                fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO, ItemFields.OVERVIEW),
                 limit = 60,
             ).content.items
         }.getOrElse {
@@ -132,7 +133,7 @@ class LibraryRowsViewModel @Inject constructor(
                         userId = userUuid,
                         parentId = dto.id,
                         includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
-                        fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO),
+                        fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO, ItemFields.OVERVIEW),
                     ).content.items
                 }.getOrElse { emptyList() }
             } else {
@@ -161,12 +162,22 @@ class LibraryRowsViewModel @Inject constructor(
             itemYear != null -> searchMatch(itemName, imdbId, itemYear, isShow)
             else -> null
         }
+        // PANORAMA (SHW-78): široký obrázek pro „Netflix" styl — backdrop, jinak thumb, jinak null (poster fallback).
+        val backdropTag = backdropImageTags?.firstOrNull()
+        val thumbTag = imageTags?.get(ImageType.THUMB)
+        val landscapeUrl = when {
+            backdropTag != null -> "$serverUrl/Items/$jellyfinId/Images/Backdrop/0?fillWidth=640&quality=85&tag=$backdropTag&api_key=$token"
+            thumbTag != null -> "$serverUrl/Items/$jellyfinId/Images/Thumb?fillWidth=640&quality=85&tag=$thumbTag&api_key=$token"
+            else -> null
+        }
         return LibraryRowItem(
             jellyfinId = jellyfinId,
             name = itemName,
             year = itemYear,
             type = type?.name ?: "MOVIE",
             imageUrl = "$serverUrl/Items/$jellyfinId/Images/Primary?fillWidth=320&quality=85&api_key=$token",
+            landscapeUrl = landscapeUrl,
+            overview = overview?.takeIf { it.isNotBlank() },
             watched = userData?.played == true,
             progressPct = userData?.playedPercentage?.toInt(),
             mediaItem = media,

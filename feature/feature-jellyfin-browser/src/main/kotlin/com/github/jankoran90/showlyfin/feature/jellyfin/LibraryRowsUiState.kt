@@ -13,6 +13,9 @@ data class LibraryRowItem(
     val year: Int?,
     val type: String,
     val imageUrl: String,
+    // PANORAMA (SHW-78): široký obrázek pro „Netflix" styl (backdrop → thumb; null = fallback na poster).
+    val landscapeUrl: String?,
+    val overview: String?,
     val watched: Boolean,
     val progressPct: Int?,
     val mediaItem: MediaItem?,

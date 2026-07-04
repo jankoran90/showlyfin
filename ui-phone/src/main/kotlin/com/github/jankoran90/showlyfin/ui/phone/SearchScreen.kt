@@ -360,7 +360,8 @@ private fun PosterTile(
             if (favorite != null) StarBadge(favorite, onStar, Modifier.align(Alignment.TopEnd))
         }
         Spacer(Modifier.height(6.dp))
-        Text(title, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        // PANORAMA (SHW-78): název na 1 řádek — dvouřádkové názvy ve výsledcích hledání se userovi nelíbily.
+        Text(title, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         if (!year.isNullOrBlank()) {
             Text(year, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
         }

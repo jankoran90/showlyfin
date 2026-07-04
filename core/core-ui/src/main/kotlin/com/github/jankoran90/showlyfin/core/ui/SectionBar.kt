@@ -55,9 +55,9 @@ fun SectionBar(
     searchQuery: String? = null,
     onSearchQueryChange: (String) -> Unit = {},
     searchPlaceholder: String = "Hledat…",
-    // VANTAGE (SHW-48): přepínač mřížka/seznam jako PRVNÍ prvek lišty. null = skrytý (např. „Na RD").
+    // VANTAGE (SHW-48) / PANORAMA (SHW-78): přepínač zobrazení jako PRVNÍ prvek lišty. null = skrytý.
     viewMode: ViewMode? = null,
-    onToggleViewMode: () -> Unit = {},
+    onSelectViewMode: (ViewMode) -> Unit = {},
     chips: (LazyListScope.() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -94,17 +94,9 @@ fun SectionBar(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // VANTAGE A: přepínač zobrazení (mřížka/seznam) jako PRVNÍ prvek lišty.
+                // PANORAMA A: přepínač zobrazení (4 režimy) jako PRVNÍ prvek lišty.
                 if (viewMode != null) {
-                    item {
-                        val toList = viewMode == ViewMode.GRID
-                        IconButton(onClick = onToggleViewMode, modifier = Modifier.tvFocusable()) {
-                            Icon(
-                                imageVector = if (toList) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
-                                contentDescription = if (toList) "Zobrazit jako seznam" else "Zobrazit jako mřížku",
-                            )
-                        }
-                    }
+                    item { ViewModeSelector(current = viewMode, onSelect = onSelectViewMode) }
                 }
                 // VANTAGE B: Filmy/Seriály (resp. pohledy) = dropdown (dřív segmenty) přímo v liště.
                 if (hasSegments) {
@@ -127,6 +119,31 @@ fun SectionBar(
                     }
                 }
                 chips?.invoke(this)
+            }
+        }
+    }
+}
+
+/** PANORAMA (SHW-78): rozbalovací přepínač 4 režimů zobrazení (Mřížka/Seznam/Na šířku/+popis). */
+@Composable
+private fun ViewModeSelector(current: ViewMode, onSelect: (ViewMode) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        AssistChip(
+            onClick = { open = true },
+            label = { Text(current.label) },
+            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+            modifier = Modifier.tvFocusable(),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ViewMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label) },
+                    onClick = { onSelect(mode); open = false },
+                    trailingIcon = if (mode == current) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else null,
+                )
             }
         }
     }

@@ -54,13 +54,10 @@ class WatchlistViewModel @Inject constructor(
 
     // VANTAGE (SHW-48): per-sekce volba zobrazení — Chci vidět výchozí SEZNAM (řádky s popisem).
     val viewMode: StateFlow<ViewMode> = viewModeStore.modes
-        .map { m -> if (m[ViewModeStore.SECTION_WATCHLIST] == ViewModeStore.GRID) ViewMode.GRID else ViewMode.LIST }
+        .map { m -> ViewMode.fromKey(m[ViewModeStore.SECTION_WATCHLIST] ?: ViewMode.LIST.storeKey) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.LIST)
 
-    fun toggleViewMode() {
-        val next = if (viewMode.value == ViewMode.LIST) ViewModeStore.GRID else ViewModeStore.LIST
-        viewModeStore.set(ViewModeStore.SECTION_WATCHLIST, next)
-    }
+    fun setViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_WATCHLIST, mode.storeKey)
 
     private val _rawItems = MutableStateFlow<List<MediaItem>>(emptyList())
     private var lockedRating: AgeRating? = null

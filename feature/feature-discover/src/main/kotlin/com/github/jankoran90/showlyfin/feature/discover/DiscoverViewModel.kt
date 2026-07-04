@@ -58,13 +58,10 @@ class DiscoverViewModel @Inject constructor(
 
     // VANTAGE (SHW-48): per-sekce volba zobrazení (mřížka/seznam) — Objevit výchozí mřížka.
     val viewMode: StateFlow<ViewMode> = viewModeStore.modes
-        .map { m -> if (m[ViewModeStore.SECTION_DISCOVER] == ViewModeStore.LIST) ViewMode.LIST else ViewMode.GRID }
+        .map { m -> ViewMode.fromKey(m[ViewModeStore.SECTION_DISCOVER]) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
 
-    fun toggleViewMode() {
-        val next = if (viewMode.value == ViewMode.GRID) ViewModeStore.LIST else ViewModeStore.GRID
-        viewModeStore.set(ViewModeStore.SECTION_DISCOVER, next)
-    }
+    fun setViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_DISCOVER, mode.storeKey)
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""

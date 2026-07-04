@@ -33,11 +33,23 @@ class ViewModeStore @Inject constructor(
     companion object {
         const val GRID = "grid"
         const val LIST = "list"
+        // PANORAMA (SHW-78): široké „Netflix" režimy.
+        const val LANDSCAPE = "landscape"
+        const val LANDSCAPE_DETAIL = "landscape_detail"
 
         // Klíče sekcí (per sekce ukládáme zvlášť).
         const val SECTION_DISCOVER = "discover"
         const val SECTION_WATCHLIST = "watchlist"
         const val SECTION_HISTORY = "history"
         const val SECTION_RD = "rd"
+
+        // PANORAMA: Knihovna — konfiguruje se z Nastavení (ne z lišty sekce).
+        const val LIBRARY_LAYOUT = "library_layout"    // "rows" (default) | "grid"
+        const val LIBRARY_CARD_STYLE = "library_style"  // grid|landscape|landscape_detail (globální styl karet)
+        const val LIBRARY_LAYOUT_ROWS = "rows"
+        const val LIBRARY_LAYOUT_GRID = "grid"
+
+        /** Per-řada styl karet Knihovny (přebíjí globální). Hodnota = ViewMode.storeKey. */
+        fun libraryRowStyleKey(libraryId: String) = "libstyle_$libraryId"
     }
 }

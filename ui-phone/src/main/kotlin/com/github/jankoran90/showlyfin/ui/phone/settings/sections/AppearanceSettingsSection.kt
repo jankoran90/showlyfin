@@ -97,6 +97,16 @@ internal fun AppearanceSettingsSection(
                 }
             }
     Spacer(Modifier.height(16.dp))
+    // PANORAMA (SHW-78): počet sloupců mřížky (globální) napříč Objevit/Chci vidět/Historie/Na RD.
+    CollapsibleSettingsSection("Zobrazení sekcí", expandedMap) {
+        SectionGridColumnsSettings()
+    }
+    Spacer(Modifier.height(16.dp))
+    // PANORAMA (SHW-78): rozvržení a styl karet Knihovny (řady/mřížka, plakát/na šířku/+popis).
+    CollapsibleSettingsSection("Zobrazení knihovny", expandedMap) {
+        LibraryDisplaySettings()
+    }
+    Spacer(Modifier.height(16.dp))
     // CHORUS Osa 3 (kánon motivu z hubme): skin/akcent + pozadí + dynamické posuvníky s náhledem.
     CollapsibleSettingsSection("Motiv a barvy", expandedMap) {
         ThemeSettingsSection()
@@ -301,6 +311,93 @@ private fun FontSettingsSection(viewModel: FontPrefsViewModel = hiltViewModel())
             FontPrefsViewModel.SCALE_OPTIONS.forEach { pct ->
                 FilterChip(selected = state.scalePct == pct, onClick = { viewModel.setScalePct(pct) }, label = { Text("$pct %") })
             }
+        }
+    }
+}
+
+
+/** PANORAMA (SHW-78): globální počet sloupců mřížky (0 = Auto). Ukládá `grid_columns` do trakt_prefs. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SectionGridColumnsSettings() {
+    val ctx = LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+    var cols by remember { mutableStateOf(prefs.getInt("grid_columns", 0)) }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Počet sloupců v mřížce", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Platí pro mřížku v Objevit, Chci vidět, Historii a Na RD. Auto = podle šířky displeje.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0 to "Auto", 2 to "2", 3 to "3", 4 to "4", 5 to "5").forEach { (n, l) ->
+                    FilterChip(
+                        selected = cols == n,
+                        onClick = { cols = n; prefs.edit().putInt("grid_columns", n).apply() },
+                        label = { Text(l) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** PANORAMA (SHW-78): rozvržení + styl karet Knihovny. Ukládá `library_layout`/`library_style` do trakt_prefs. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LibraryDisplaySettings() {
+    val ctx = LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+    var layout by remember { mutableStateOf(prefs.getString("library_layout", "rows") ?: "rows") }
+    var style by remember { mutableStateOf(prefs.getString("library_style", "grid") ?: "grid") }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Rozvržení", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Řady = vodorovné kategorie (jako doteď). Mřížka = svislé dlaždice po kategoriích.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("rows" to "Řady", "grid" to "Mřížka").forEach { (v, l) ->
+                    FilterChip(
+                        selected = layout == v,
+                        onClick = { layout = v; prefs.edit().putString("library_layout", v).apply() },
+                        label = { Text(l) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text("Styl karet", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("grid" to "Plakát", "landscape" to "Na šířku", "landscape_detail" to "Na šířku + popis").forEach { (v, l) ->
+                    FilterChip(
+                        selected = style == v,
+                        onClick = { style = v; prefs.edit().putString("library_style", v).apply() },
+                        label = { Text(l) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Jednotlivou řadu přepneš zvlášť podržením jejího názvu v Knihovně.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = {
+                style = "landscape"
+                val e = prefs.edit()
+                prefs.all.keys.filter { it.startsWith("libstyle_") }.forEach { e.remove(it) }
+                e.putString("library_style", "landscape").apply()
+            }) { Text("Všechny řady na šířku") }
         }
     }
 }

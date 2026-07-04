@@ -21,7 +21,8 @@ data class WatchProgress(
 
 data class WatchlistUiState(
     val items: List<MediaItem> = emptyList(),
-    val isLoading: Boolean = false,
+    // PANORAMA (SHW-78): default true → cold start ukáže spinner, ne falešné „prázdno" než doběhne load().
+    val isLoading: Boolean = true,
     val error: String? = null,
     val activeTab: WatchlistTab = WatchlistTab.MOVIES,
     val isLoggedIn: Boolean = false,

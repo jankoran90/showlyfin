@@ -23,8 +23,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.LandscapeCard
+import com.github.jankoran90.showlyfin.core.ui.LandscapeDetailCard
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.MediaRow
+import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
+import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
 import com.github.jankoran90.showlyfin.core.ui.SectionBar
 import com.github.jankoran90.showlyfin.core.ui.SectionSortChip
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
@@ -51,7 +55,7 @@ fun RdLibraryScreen(
             onSearchQueryChange = viewModel::onSearchQueryChange,
             searchPlaceholder = "Hledat na RD…",
             viewMode = viewMode,
-            onToggleViewMode = viewModel::toggleViewMode,
+            onSelectViewMode = viewModel::setViewMode,
             chips = {
                 item {
                     SectionSortChip(
@@ -91,26 +95,35 @@ fun RdLibraryScreen(
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    } else if (viewMode == ViewMode.LIST) {
+                    } else if (viewMode == ViewMode.LIST || viewMode == ViewMode.LANDSCAPE_DETAIL) {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             items(items, key = { "rd_${it.tmdbId}" }) { item ->
-                                MediaRow(item = item, onClick = { onItemClick(item) })
+                                if (viewMode == ViewMode.LANDSCAPE_DETAIL) {
+                                    LandscapeDetailCard(item = item, onClick = { onItemClick(item) })
+                                } else {
+                                    MediaRow(item = item, onClick = { onItemClick(item) })
+                                }
                             }
                         }
                     } else {
+                        val colPref = rememberGridColumnPref()
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 110.dp),
+                            columns = gridCellsFor(viewMode, colPref),
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             items(items, key = { "rd_${it.tmdbId}" }) { item ->
-                                MediaCard(item = item, onClick = { onItemClick(item) })
+                                if (viewMode == ViewMode.LANDSCAPE) {
+                                    LandscapeCard(item = item, onClick = { onItemClick(item) })
+                                } else {
+                                    MediaCard(item = item, onClick = { onItemClick(item) })
+                                }
                             }
                         }
                     }

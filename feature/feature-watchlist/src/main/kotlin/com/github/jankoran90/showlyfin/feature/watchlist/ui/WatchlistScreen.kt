@@ -54,8 +54,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.LandscapeCard
+import com.github.jankoran90.showlyfin.core.ui.LandscapeDetailCard
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.MediaRow
+import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
+import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
 import com.github.jankoran90.showlyfin.core.ui.SectionBar
 import com.github.jankoran90.showlyfin.core.ui.SectionSortChip
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
@@ -93,7 +97,7 @@ fun WatchlistScreen(
             { gridState.firstVisibleItemIndex },
             { gridState.firstVisibleItemScrollOffset },
         )
-        val headerVisible = if (viewMode == ViewMode.GRID) gridHeaderVisible else listHeaderVisible
+        val headerVisible = if (viewMode == ViewMode.GRID || viewMode == ViewMode.LANDSCAPE) gridHeaderVisible else listHeaderVisible
         AnimatedVisibility(
             visible = headerVisible,
             enter = fadeIn(tween(180)) + expandVertically(tween(180)),
@@ -109,7 +113,7 @@ fun WatchlistScreen(
                 onSearchQueryChange = { viewModel.setSearchQuery(it) },
                 searchPlaceholder = "Hledat (česky i originál)…",
                 viewMode = viewMode,
-                onToggleViewMode = { viewModel.toggleViewMode() },
+                onSelectViewMode = { viewModel.setViewMode(it) },
                 chips = if (showChips) {
                     {
                         watchlistChips(
@@ -186,10 +190,11 @@ fun WatchlistScreen(
                 }
             }
             // VANTAGE A: Chci vidět = seznam (řádky s popisem) NEBO mřížka karet, dle přepínače v liště.
-            viewMode == ViewMode.GRID -> {
+            viewMode == ViewMode.GRID || viewMode == ViewMode.LANDSCAPE -> {
+                val colPref = rememberGridColumnPref()
                 LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Adaptive(minSize = 110.dp),
+                    columns = gridCellsFor(viewMode, colPref),
                     contentPadding = PaddingValues(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -202,12 +207,21 @@ fun WatchlistScreen(
                         val watched = (item.imdbId?.let { uiState.watchedImdbIds.contains(it) } ?: false)
                             || (item.tmdbId?.let { uiState.watchedTmdbIds.contains(it) } ?: false)
                             || uiState.watchedTraktIds.contains(item.traktId)
-                        MediaCard(
-                            item = item,
-                            onClick = { onItemClick(item, jellyfinId) },
-                            inLibrary = inLibrary,
-                            watched = watched,
-                        )
+                        if (viewMode == ViewMode.LANDSCAPE) {
+                            LandscapeCard(
+                                item = item,
+                                onClick = { onItemClick(item, jellyfinId) },
+                                inLibrary = inLibrary,
+                                watched = watched,
+                            )
+                        } else {
+                            MediaCard(
+                                item = item,
+                                onClick = { onItemClick(item, jellyfinId) },
+                                inLibrary = inLibrary,
+                                watched = watched,
+                            )
+                        }
                     }
                 }
             }
@@ -229,16 +243,28 @@ fun WatchlistScreen(
                             || uiState.watchedTraktIds.contains(item.traktId)
                         // Líně načti ČSFD hodnocení jen pro skutečně zobrazený řádek.
                         LaunchedEffect(item.traktId) { viewModel.loadCsfdRating(item) }
-                        MediaRow(
-                            item = item,
-                            csfdRating = csfdRatings[item.traktId],
-                            inLibrary = inLibrary,
-                            watched = watched,
-                            progressText = if (item.type == MediaType.SHOW) {
-                                progressData?.let { "${it.watchedEpisodes}/${it.totalEpisodes} epizod" }
-                            } else null,
-                            onClick = { onItemClick(item, jellyfinId) },
-                        )
+                        val progressText = if (item.type == MediaType.SHOW) {
+                            progressData?.let { "${it.watchedEpisodes}/${it.totalEpisodes} epizod" }
+                        } else null
+                        if (viewMode == ViewMode.LANDSCAPE_DETAIL) {
+                            LandscapeDetailCard(
+                                item = item,
+                                csfdRating = csfdRatings[item.traktId],
+                                inLibrary = inLibrary,
+                                watched = watched,
+                                progressText = progressText,
+                                onClick = { onItemClick(item, jellyfinId) },
+                            )
+                        } else {
+                            MediaRow(
+                                item = item,
+                                csfdRating = csfdRatings[item.traktId],
+                                inLibrary = inLibrary,
+                                watched = watched,
+                                progressText = progressText,
+                                onClick = { onItemClick(item, jellyfinId) },
+                            )
+                        }
                     }
                 }
             }

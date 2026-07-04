@@ -42,7 +42,8 @@ enum class HistoryView(val label: String) { RECENT("Naposledy"), ALL("Vše") }
 
 data class HistoryUiState(
     val isLoggedIn: Boolean = false,
-    val isLoading: Boolean = false,
+    // PANORAMA (SHW-78): default true → cold start ukáže spinner, ne falešné „prázdno" než doběhne load().
+    val isLoading: Boolean = true,
     val view: HistoryView = HistoryView.RECENT,
     val items: List<MediaItem> = emptyList(),
     /** VISTA V1 — je k dispozici další blok pod aktuálním oknem (tlačítko „načíst dalších 20"). */
@@ -74,13 +75,10 @@ class HistoryViewModel @Inject constructor(
 
     // VANTAGE (SHW-48): per-sekce volba zobrazení (mřížka/seznam) — Historie výchozí mřížka.
     val viewMode: StateFlow<ViewMode> = viewModeStore.modes
-        .map { m -> if (m[ViewModeStore.SECTION_HISTORY] == ViewModeStore.LIST) ViewMode.LIST else ViewMode.GRID }
+        .map { m -> ViewMode.fromKey(m[ViewModeStore.SECTION_HISTORY]) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
 
-    fun toggleViewMode() {
-        val next = if (viewMode.value == ViewMode.GRID) ViewModeStore.LIST else ViewModeStore.GRID
-        viewModeStore.set(ViewModeStore.SECTION_HISTORY, next)
-    }
+    fun setViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_HISTORY, mode.storeKey)
 
     /**
      * VISTA V1 — surová (NEobohacená) historie: položka + čas posledního zhlédnutí (epoch ms).

@@ -37,13 +37,10 @@ class RdLibraryViewModel @Inject constructor(
 
     // VANTAGE/SWEEP: per-sekce mřížka/seznam (parita s ostatními sekcemi), klíč SECTION_RD.
     val viewMode: StateFlow<ViewMode> = viewModeStore.modes
-        .map { m -> if (m[ViewModeStore.SECTION_RD] == ViewModeStore.LIST) ViewMode.LIST else ViewMode.GRID }
+        .map { m -> ViewMode.fromKey(m[ViewModeStore.SECTION_RD]) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
 
-    fun toggleViewMode() {
-        val next = if (viewMode.value == ViewMode.GRID) ViewModeStore.LIST else ViewModeStore.GRID
-        viewModeStore.set(ViewModeStore.SECTION_RD, next)
-    }
+    fun setViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_RD, mode.storeKey)
 
     fun onSearchQueryChange(q: String) = _uiState.update { it.copy(searchQuery = q) }
     fun setSort(sort: RdSort) = _uiState.update { it.copy(sortBy = sort) }

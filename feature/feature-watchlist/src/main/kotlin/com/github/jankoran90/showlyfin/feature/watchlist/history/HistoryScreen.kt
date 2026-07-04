@@ -40,8 +40,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.LandscapeCard
+import com.github.jankoran90.showlyfin.core.ui.LandscapeDetailCard
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.MediaRow
+import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
+import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
 import com.github.jankoran90.showlyfin.core.ui.SectionBar
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.rememberScrollHeaderVisibility
@@ -84,7 +88,7 @@ fun HistoryScreen(
                 onSearchQueryChange = { viewModel.setSearchQuery(it) },
                 searchPlaceholder = "Hledat (česky i originál)…",
                 viewMode = viewMode,
-                onToggleViewMode = { viewModel.toggleViewMode() },
+                onSelectViewMode = { viewModel.setViewMode(it) },
             )
         }
 
@@ -95,7 +99,7 @@ fun HistoryScreen(
             uiState.items.isEmpty() && uiState.searchQuery.isBlank() -> EmptyHistory()
             uiState.items.isEmpty() -> CenteredText("Nic nenalezeno pro „${uiState.searchQuery}\"")
             // VANTAGE A: Historie = mřížka karet NEBO seznam řádků, dle přepínače v liště.
-            viewMode == ViewMode.LIST -> LazyColumn(
+            viewMode == ViewMode.LIST || viewMode == ViewMode.LANDSCAPE_DETAIL -> LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -105,12 +109,21 @@ fun HistoryScreen(
                         ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
                     val inLibrary = jellyfinId != null
                         || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
-                    MediaRow(
-                        item = item,
-                        onClick = { onItemClick(item, jellyfinId) },
-                        inLibrary = inLibrary,
-                        watched = true,
-                    )
+                    if (viewMode == ViewMode.LANDSCAPE_DETAIL) {
+                        LandscapeDetailCard(
+                            item = item,
+                            onClick = { onItemClick(item, jellyfinId) },
+                            inLibrary = inLibrary,
+                            watched = true,
+                        )
+                    } else {
+                        MediaRow(
+                            item = item,
+                            onClick = { onItemClick(item, jellyfinId) },
+                            inLibrary = inLibrary,
+                            watched = true,
+                        )
+                    }
                 }
                 if (uiState.hasMore) {
                     item {
@@ -123,9 +136,11 @@ fun HistoryScreen(
                     }
                 }
             }
-            else -> LazyVerticalGrid(
+            else -> {
+                val colPref = rememberGridColumnPref()
+                LazyVerticalGrid(
                 state = gridState,
-                columns = GridCells.Adaptive(minSize = 110.dp),
+                columns = gridCellsFor(viewMode, colPref),
                 contentPadding = PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -135,12 +150,21 @@ fun HistoryScreen(
                         ?: item.tmdbId?.let { uiState.tmdbToJellyfin[it] }
                     val inLibrary = jellyfinId != null
                         || (item.imdbId?.let { uiState.ownedImdbIds.contains(it) } ?: false)
-                    MediaCard(
-                        item = item,
-                        onClick = { onItemClick(item, jellyfinId) },
-                        inLibrary = inLibrary,
-                        watched = true,
-                    )
+                    if (viewMode == ViewMode.LANDSCAPE) {
+                        LandscapeCard(
+                            item = item,
+                            onClick = { onItemClick(item, jellyfinId) },
+                            inLibrary = inLibrary,
+                            watched = true,
+                        )
+                    } else {
+                        MediaCard(
+                            item = item,
+                            onClick = { onItemClick(item, jellyfinId) },
+                            inLibrary = inLibrary,
+                            watched = true,
+                        )
+                    }
                 }
                 if (uiState.hasMore) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -154,6 +178,7 @@ fun HistoryScreen(
                         }
                     }
                 }
+            }
             }
         }
     }

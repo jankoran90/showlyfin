@@ -60,8 +60,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.LandscapeCard
+import com.github.jankoran90.showlyfin.core.ui.LandscapeDetailCard
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.MediaRow
+import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
+import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
 import com.github.jankoran90.showlyfin.core.ui.SectionBar
 import com.github.jankoran90.showlyfin.core.ui.SectionSortChip
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
@@ -164,7 +168,7 @@ fun DiscoverScreen(
                     onSearchQueryChange = { viewModel.onSearchQueryChange(it) },
                     searchPlaceholder = "Hledat filmy a seriály…",
                     viewMode = viewMode,
-                    onToggleViewMode = { viewModel.toggleViewMode() },
+                    onSelectViewMode = { viewModel.setViewMode(it) },
                     chips = {
                         discoverChips(
                             uiState = uiState,
@@ -223,7 +227,7 @@ fun DiscoverScreen(
                         modifier = Modifier.padding(16.dp),
                     )
                 }
-            } else if (viewMode == ViewMode.LIST) {
+            } else if (viewMode == ViewMode.LIST || viewMode == ViewMode.LANDSCAPE_DETAIL) {
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -237,12 +241,21 @@ fun DiscoverScreen(
                         val watched = (item.imdbId?.let { uiState.watchedImdbIds.contains(it) } ?: false)
                             || (item.tmdbId?.let { uiState.watchedTmdbIds.contains(it) } ?: false)
                             || uiState.watchedTraktIds.contains(item.traktId)
-                        MediaRow(
-                            item = item,
-                            onClick = { onItemClick(item, jellyfinId) },
-                            inLibrary = inLibrary,
-                            watched = watched,
-                        )
+                        if (viewMode == ViewMode.LANDSCAPE_DETAIL) {
+                            LandscapeDetailCard(
+                                item = item,
+                                onClick = { onItemClick(item, jellyfinId) },
+                                inLibrary = inLibrary,
+                                watched = watched,
+                            )
+                        } else {
+                            MediaRow(
+                                item = item,
+                                onClick = { onItemClick(item, jellyfinId) },
+                                inLibrary = inLibrary,
+                                watched = watched,
+                            )
+                        }
                     }
                     if (!isSearchMode && uiState.isLoadingMore) {
                         item {
@@ -260,9 +273,10 @@ fun DiscoverScreen(
                     transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(140)) },
                     label = "discover-grid-swap",
                 ) { _ ->
+                    val colPref = rememberGridColumnPref()
                     LazyVerticalGrid(
                         state = gridState,
-                        columns = GridCells.Adaptive(minSize = 110.dp),
+                        columns = gridCellsFor(viewMode, colPref),
                         contentPadding = PaddingValues(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -275,13 +289,21 @@ fun DiscoverScreen(
                             val watched = (item.imdbId?.let { uiState.watchedImdbIds.contains(it) } ?: false)
                                 || (item.tmdbId?.let { uiState.watchedTmdbIds.contains(it) } ?: false)
                                 || uiState.watchedTraktIds.contains(item.traktId)
-                            timber.log.Timber.d("[Discover] render '${item.title}' imdb=${item.imdbId} tmdb=${item.tmdbId} → jfId=$jellyfinId inLib=$inLibrary watched=$watched")
-                            MediaCard(
-                                item = item,
-                                onClick = { onItemClick(item, jellyfinId) },
-                                inLibrary = inLibrary,
-                                watched = watched,
-                            )
+                            if (viewMode == ViewMode.LANDSCAPE) {
+                                LandscapeCard(
+                                    item = item,
+                                    onClick = { onItemClick(item, jellyfinId) },
+                                    inLibrary = inLibrary,
+                                    watched = watched,
+                                )
+                            } else {
+                                MediaCard(
+                                    item = item,
+                                    onClick = { onItemClick(item, jellyfinId) },
+                                    inLibrary = inLibrary,
+                                    watched = watched,
+                                )
+                            }
                         }
                         // VISTA V2b: indikátor dotahování další stránky (přes celou šířku mřížky).
                         if (!isSearchMode && uiState.isLoadingMore) {
