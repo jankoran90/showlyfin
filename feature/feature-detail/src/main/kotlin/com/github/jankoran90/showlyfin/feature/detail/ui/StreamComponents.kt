@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,10 +21,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -31,8 +36,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -561,14 +568,40 @@ internal fun SdilejPickerSheet(
     streams: List<UploaderStream>,
     isLoading: Boolean,
     error: String?,
+    defaultTitle: String,
+    defaultYear: Int?,
     onCapture: (UploaderStream) -> Unit,
+    onResearch: (String, Int?) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // QUARRY (SHW-79): ruční úprava hledaného textu — auto při nule, jinak přes diskrétní tlačítko.
+    var editing by remember { mutableStateOf(false) }
+    var titleText by remember(defaultTitle) { mutableStateOf(defaultTitle) }
+    var yearText by remember(defaultYear) { mutableStateOf(defaultYear?.toString().orEmpty()) }
+    val noResults = !isLoading && streams.isEmpty()
+    val showEdit = editing || noResults
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetHeader("Sdílej.cz", Icons.Default.Download)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { editing = !editing }) {
+                Icon(Icons.Default.Edit, contentDescription = null, Modifier.height(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(if (showEdit) "Skrýt úpravu" else "Upravit hledání", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        if (showEdit) {
+            SdilejQueryEditor(
+                title = titleText,
+                year = yearText,
+                onTitle = { titleText = it },
+                onYear = { yearText = it.filter { c -> c.isDigit() }.take(4) },
+                onSearch = { onResearch(titleText, yearText.toIntOrNull()) },
+            )
+            HorizontalDivider()
+        }
         when {
             isLoading -> SheetCenter { CircularProgressIndicator() }
-            error != null && streams.isEmpty() -> SheetMessage(error)
+            noResults -> SheetMessage(error ?: "Na Sdílej.cz nic nenalezeno.")
             else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
                 items(streams, key = { it.url ?: it.name.orEmpty() }) { s ->
                     StreamRow(
@@ -581,6 +614,42 @@ internal fun SdilejPickerSheet(
             }
         }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** QUARRY: dvě pole (Název, Rok) + „Hledat znovu" pro ruční korekci dotazu na Sdílej.cz. */
+@Composable
+private fun SdilejQueryEditor(
+    title: String,
+    year: String,
+    onTitle: (String) -> Unit,
+    onYear: (String) -> Unit,
+    onSearch: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        OutlinedTextField(
+            value = title,
+            onValueChange = onTitle,
+            label = { Text("Název") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = year,
+                onValueChange = onYear,
+                label = { Text("Rok") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.width(120.dp),
+            )
+            Button(onClick = onSearch) {
+                Icon(Icons.Default.Search, contentDescription = null, Modifier.height(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Hledat znovu")
+            }
+        }
     }
 }
 

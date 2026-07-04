@@ -139,6 +139,26 @@ internal fun StreamingSettingsSection(
                 onReload = { viewModel.loadStreamFilter() },
             )
             }
+            // QUARRY (SHW-79): chování hledání zdroje na Sdílej.cz.
+            CollapsibleSettingsSection("Sdílej.cz", expandedMap) {
+                val ctx = LocalContext.current
+                val sdilejPrefs = remember { ctx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+                var yearPm1 by remember { mutableStateOf(sdilejPrefs.getBoolean("sdilej_year_pm1", true)) }
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            "Když se film na Sdílej.cz nenajde (rok v metadatech z TMDB/IMDB bývá o rok mimo), appka automaticky zkusí i sousední roky. Hledaný text (název + rok) jde vždy ručně upravit přímo v nabídce Sdílej.cz.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        FilterSwitchRow("Při nule zkusit rok ±1", yearPm1) { v ->
+                            yearPm1 = v
+                            sdilejPrefs.edit().putBoolean("sdilej_year_pm1", v).apply()
+                        }
+                    }
+                }
+            }
           }
     if (!credLocked) {
         Spacer(Modifier.height(16.dp))

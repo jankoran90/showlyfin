@@ -271,7 +271,10 @@ fun DetailScreen(
             streams = uiState.sdilejStreams,
             isLoading = uiState.isLoadingSdilej,
             error = uiState.sdilejError,
+            defaultTitle = uiState.sdilejDefaultTitle,
+            defaultYear = uiState.sdilejDefaultYear,
             onCapture = { viewModel.captureSdilej(it) },
+            onResearch = { title, year -> viewModel.researchSdilej(title, year) },
             onDismiss = { viewModel.dismissSdilejPicker() },
         )
     }

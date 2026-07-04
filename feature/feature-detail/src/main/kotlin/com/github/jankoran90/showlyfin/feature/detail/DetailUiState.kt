@@ -92,6 +92,9 @@ data class DetailUiState(
     val isLoadingSdilej: Boolean = false,
     val sdilejStreams: List<com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream> = emptyList(),
     val sdilejError: String? = null,
+    // QUARRY (SHW-79): předvyplnění pro ruční úpravu hledaného textu na Sdílej.cz (název + rok).
+    val sdilejDefaultTitle: String = "",
+    val sdilejDefaultYear: Int? = null,
     val captureMessage: String? = null,
     val pendingPlaybackUrl: String? = null,
     val pendingPlaybackTitle: String = "",

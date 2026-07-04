@@ -1161,12 +1161,66 @@ class DetailViewModel @Inject constructor(
             return
         }
         val titleCs = item.titleCz?.takeIf { it.isNotBlank() } ?: _uiState.value.tmdbCzTitle.orEmpty()
-        _uiState.update { it.copy(showDownloadMenu = false, showSdilejPicker = true, isLoadingSdilej = true, sdilejError = null, sdilejStreams = emptyList()) }
-        viewModelScope.launch {
-            runCatching { uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, item.title, titleCs, item.year) }
-                .onSuccess { list -> timber.log.Timber.i("[Sdilej] streams=${list.size} imdb=$imdb"); _uiState.update { it.copy(isLoadingSdilej = false, sdilejStreams = list, sdilejError = if (list.isEmpty()) "Na Sdílej.cz nic nenalezeno." else null) } }
-                .onFailure { e -> timber.log.Timber.w(e, "[Sdilej] getSdillejStreams FAILED imdb=$imdb url=$uploaderBaseUrl"); _uiState.update { it.copy(isLoadingSdilej = false, sdilejError = e.message ?: "Chyba Sdílej.cz") } }
+        // QUARRY (SHW-79): předvyplnění ruční úpravy — český název (pro Sdílej.cz autoritativní) + rok z metadat.
+        val defaultTitle = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
+            ?: item.titleCz?.takeIf { it.isNotBlank() }
+            ?: _uiState.value.csfdTitle?.takeIf { it.isNotBlank() }
+            ?: item.title
+        _uiState.update {
+            it.copy(
+                showDownloadMenu = false, showSdilejPicker = true, isLoadingSdilej = true,
+                sdilejError = null, sdilejStreams = emptyList(),
+                sdilejDefaultTitle = defaultTitle, sdilejDefaultYear = item.year,
+            )
         }
+        viewModelScope.launch {
+            runSdilejSearch(mediaTypeStr(item), imdb, item.title, titleCs, item.year, allowYearRetry = prefs.getBoolean("sdilej_year_pm1", true))
+        }
+    }
+
+    /** QUARRY: ruční přehledání s uživatelem upraveným názvem/rokem (přesně, bez ±1). */
+    fun researchSdilej(title: String, year: Int?) {
+        val item = _uiState.value.item ?: return
+        val imdb = item.imdbId?.takeIf { it.isNotBlank() } ?: return
+        if (uploaderBaseUrl.isBlank()) return
+        val q = title.trim().ifBlank { item.title }
+        _uiState.update {
+            it.copy(
+                isLoadingSdilej = true, sdilejError = null, sdilejStreams = emptyList(),
+                sdilejDefaultTitle = q, sdilejDefaultYear = year,
+            )
+        }
+        viewModelScope.launch {
+            // ruční dotaz: upravený název jde jako český i originální, rok přesně dle zadání
+            runSdilejSearch(mediaTypeStr(item), imdb, q, q, year, allowYearRetry = false)
+        }
+    }
+
+    /**
+     * QUARRY: sdílené hledání zdroje na Sdílej.cz. Při 0 nálezech a [allowYearRetry] zkusí rok ±1
+     * (metadata roku z TMDB/IMDB bývají o rok mimo, zvlášť u českých/zahraničních filmů) a výsledky spojí.
+     */
+    private suspend fun runSdilejSearch(
+        mediaType: String, imdb: String, title: String, titleCs: String, year: Int?, allowYearRetry: Boolean,
+    ) {
+        runCatching {
+            val primary = uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, year)
+            if (primary.isNotEmpty() || !allowYearRetry || year == null) return@runCatching primary
+            val merged = primary.toMutableList()
+            val seen = merged.mapNotNull { it.url ?: it.name }.toMutableSet()
+            for (y in listOf(year - 1, year + 1)) {
+                val extra = runCatching {
+                    uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, y)
+                }.getOrDefault(emptyList())
+                for (s in extra) {
+                    val k = s.url ?: s.name
+                    if (k != null && seen.add(k)) merged.add(s)
+                }
+            }
+            merged
+        }
+            .onSuccess { list -> timber.log.Timber.i("[Sdilej] streams=${list.size} imdb=$imdb yearRetry=$allowYearRetry"); _uiState.update { it.copy(isLoadingSdilej = false, sdilejStreams = list, sdilejError = if (list.isEmpty()) "Na Sdílej.cz nic nenalezeno." else null) } }
+            .onFailure { e -> timber.log.Timber.w(e, "[Sdilej] getSdillejStreams FAILED imdb=$imdb url=$uploaderBaseUrl"); _uiState.update { it.copy(isLoadingSdilej = false, sdilejError = e.message ?: "Chyba Sdílej.cz") } }
     }
 
     fun dismissSdilejPicker() = _uiState.update { it.copy(showSdilejPicker = false) }
