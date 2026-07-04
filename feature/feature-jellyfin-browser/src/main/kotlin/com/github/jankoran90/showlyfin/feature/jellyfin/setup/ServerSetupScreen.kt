@@ -100,12 +100,12 @@ private fun UrlStage(
         Text(
             "Připojení k Jellyfin",
             style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "Zadej URL svého Jellyfin serveru.",
-            color = Color.White.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
         OutlinedTextField(
@@ -147,10 +147,10 @@ private fun UsersStage(
             Text(
                 "Vyber profil",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(4.dp))
-            Text(serverUrl, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+            Text(serverUrl, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.height(16.dp))
         LazyVerticalGrid(
@@ -200,7 +200,7 @@ private fun UserAvatarCard(user: PublicUserInfo, onClick: () -> Unit) {
                 } else {
                     Text(
                         text = user.name.take(1).uppercase(),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.headlineMedium,
                     )
                 }
@@ -208,7 +208,7 @@ private fun UserAvatarCard(user: PublicUserInfo, onClick: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             Text(
                 text = user.name,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -235,13 +235,13 @@ private fun PasswordStage(
             Text(
                 text = "Přihlásit: ${user.name}",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         } else {
             Text(
                 text = "Přihlášení (manuální)",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
@@ -266,10 +266,10 @@ private fun PasswordStage(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = rememberPassword, onCheckedChange = { rememberPassword = it })
             Column {
-                Text("Zapamatovat heslo", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                Text("Zapamatovat heslo", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "Předvyplní přihlášení a obnoví relaci. Vypni na sdíleném zařízení.",
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

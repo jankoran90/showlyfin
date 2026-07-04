@@ -38,7 +38,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
@@ -85,7 +84,7 @@ fun AdminScreen(
         ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = Color.White,
+            contentColor = MaterialTheme.colorScheme.onSurface,
             edgePadding = 8.dp,
         ) {
             tabs.forEachIndexed { index, tab ->
@@ -208,12 +207,12 @@ private fun AdminBackupTab(viewModel: SettingsViewModel) {
     }
 
     AdminTabScroll {
-        Text("Záloha profilů a šablon", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text("Záloha profilů a šablon", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Text(
             "Export stáhne celý balík profilů + šablon (vč. přihlašovacích údajů) z backendu do souboru. " +
                 "Import ho nahraje zpět. Backend je zdroj pravdy.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedButton(
             onClick = { exportLauncher.launch("showlyfin-profily-zaloha.json") },
@@ -245,13 +244,13 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Trakt — profil: $activeName", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Trakt — profil: $activeName", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(4.dp))
             Text(
                 "Přihlášení přes Trakt (i účtem Google). Tokeny se uloží k aktivnímu profilu. " +
                     "Pro jiný profil na něj nejdřív přepni.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
             when {
@@ -265,13 +264,13 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
                     ) { Text("Odhlásit z Trakt") }
                 }
                 isTvFormFactor() -> {
-                    Text("Nepřihlášen", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.65f))
+                    Text("Nepřihlášen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     uiState.traktUserCode?.let { code ->
                         Spacer(Modifier.height(12.dp))
                         Text(
                             "Otevři ${uiState.traktVerificationUrl ?: "trakt.tv/activate"} a zadej kód:",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(code, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
                     }
@@ -284,11 +283,11 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
                     ) { Text(if (uiState.traktUserCode == null) "Přihlásit přes Trakt" else "Čekám na potvrzení…") }
                     uiState.traktStatus?.let {
                         Spacer(Modifier.height(8.dp))
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 else -> {
-                    Text("Nepřihlášen", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.65f))
+                    Text("Nepřihlášen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Config.traktAuthorizeUrl))) },

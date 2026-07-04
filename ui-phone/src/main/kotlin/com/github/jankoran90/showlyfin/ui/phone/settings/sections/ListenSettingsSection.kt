@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -106,7 +105,7 @@ internal fun ListenSettingsSection(
                 Text(
                     "Připoj Audiobookshelf v sekci „Připojení a účty“, pak se tu objeví volby přehrávání.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 }
@@ -217,7 +216,7 @@ internal fun ListenSettingsCard(uiState: SettingsUiState, vm: SettingsViewModel)
             when {
                 uiState.serverPodcastsLoading && uiState.serverPodcasts.isEmpty() ->
                     Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White)
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurface)
                     }
                 uiState.serverPodcasts.isEmpty() ->
                     ListenInfoText("Žádné podcasty na serveru.")

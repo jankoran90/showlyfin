@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -90,11 +89,22 @@ internal fun AppearanceSettingsSection(
     expandedMap: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>,
 ) {
             // Plan WARDEN W2: ne-admin user vidí Vzhled jen pokud ho šablona nezamkla (lock-mapa).
-            if (isAdmin || ProfileConfig.LockKeys.APPEARANCE !in uiState.lockedKeys) {
-                DetailModeSection()
-            } else {
-                LockedByAdminNote()
+            CollapsibleSettingsSection("Zobrazení detailu", expandedMap) {
+                if (isAdmin || ProfileConfig.LockKeys.APPEARANCE !in uiState.lockedKeys) {
+                    DetailModeSection()
+                } else {
+                    LockedByAdminNote()
+                }
             }
+    Spacer(Modifier.height(16.dp))
+    // CHORUS Osa 3 (kánon motivu z hubme): skin/akcent + pozadí + dynamické posuvníky s náhledem.
+    CollapsibleSettingsSection("Motiv a barvy", expandedMap) {
+        ThemeSettingsSection()
+    }
+    Spacer(Modifier.height(16.dp))
+    CollapsibleSettingsSection("Barvy a plochy — pokročilé", expandedMap) {
+        AdvancedColorSection()
+    }
     Spacer(Modifier.height(16.dp))
     // CHORUS Osa 3 (kánon Písmo): patkové Newsreader vs systémové + rozsah + velikost. Plošné (motiv).
     CollapsibleSettingsSection("Písmo", expandedMap) {
@@ -108,7 +118,7 @@ internal fun AppearanceSettingsSection(
                 Text(
                     "Podrž a táhni pro změnu pořadí záložek a podsekcí.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
                 OrderEditor(
@@ -156,18 +166,18 @@ internal fun OrderEditor(
     onReorder: (List<String>) -> Unit,
 ) {
     if (orderedKeys.size < 2) return
-    Text(title, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+    Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     orderedKeys.forEachIndexed { i, keyItem ->
         Row(
             Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label(keyItem), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Text(label(keyItem), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
             IconButton(onClick = { onReorder(orderedKeys.moved(i, i - 1)) }, enabled = i > 0) {
-                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Nahoru", tint = Color.White)
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Nahoru", tint = MaterialTheme.colorScheme.onSurface)
             }
             IconButton(onClick = { onReorder(orderedKeys.moved(i, i + 1)) }, enabled = i < orderedKeys.lastIndex) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Dolů", tint = Color.White)
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Dolů", tint = MaterialTheme.colorScheme.onSurface)
             }
         }
     }
@@ -186,35 +196,35 @@ internal fun DetailModeSection(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Detail z knihovny", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Detail z knihovny", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "Jak otevřít detail filmu/seriálu z knihovny. Objevit a Watchlist mají vždy bohatý detail.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Bohatý detail", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    Text("Bohatý detail", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     Text(
                         text = if (s.rich) "kolekce, režisér, studio, obsazení, ČSFD" else "jen obrázek, popis, kolekce a Přehrát",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Switch(checked = s.rich, onCheckedChange = { viewModel.setRich(it) })
             }
             if (s.rich) {
                 Spacer(Modifier.height(8.dp))
-                Text("Zobrazit sekce:", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+                Text("Zobrazit sekce:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 DetailSectionCheckRow("Tvůrci (herci, režie, scénář, kamera)", s.showCreators) { viewModel.setCreators(it) }
                 DetailSectionCheckRow("Kolekce", s.showCollections) { viewModel.setCollections(it) }
                 DetailSectionCheckRow("Od stejného režiséra", s.showDirector) { viewModel.setDirector(it) }
                 DetailSectionCheckRow("Od stejného studia", s.showStudio) { viewModel.setStudio(it) }
             }
             Spacer(Modifier.height(12.dp))
-            Text("Popis – řádků ve sbaleném stavu:", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+            Text("Popis – řádků ve sbaleném stavu:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DetailPrefsViewModel.PLOT_LINE_OPTIONS.forEach { n ->
@@ -227,7 +237,7 @@ internal fun DetailModeSection(
             }
             // CANVAS A/E: pořadí akčních tlačítek v hero detailu (šipky ▲▼).
             Spacer(Modifier.height(12.dp))
-            Text("Pořadí akčních tlačítek na detailu:", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+            Text("Pořadí akčních tlačítek na detailu:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             val actionLabels = mapOf(
                 "favorite" to "Oblíbené", "play" to "Přehrát zde", "tv" to "Na TV",
@@ -235,12 +245,12 @@ internal fun DetailModeSection(
             )
             s.actionOrder.forEachIndexed { i, key ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${i + 1}. ${actionLabels[key] ?: key}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    Text("${i + 1}. ${actionLabels[key] ?: key}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     IconButton(onClick = { viewModel.setActionOrder(s.actionOrder.moved(i, i - 1)) }, enabled = i > 0) {
-                        Icon(Icons.Default.KeyboardArrowUp, "Nahoru", tint = Color.White)
+                        Icon(Icons.Default.KeyboardArrowUp, "Nahoru", tint = MaterialTheme.colorScheme.onSurface)
                     }
                     IconButton(onClick = { viewModel.setActionOrder(s.actionOrder.moved(i, i + 1)) }, enabled = i < s.actionOrder.lastIndex) {
-                        Icon(Icons.Default.KeyboardArrowDown, "Dolů", tint = Color.White)
+                        Icon(Icons.Default.KeyboardArrowDown, "Dolů", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
@@ -253,7 +263,7 @@ internal fun DetailModeSection(
 internal fun DetailSectionCheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = checked, onCheckedChange = onChange)
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -268,7 +278,7 @@ private fun FontSettingsSection(viewModel: FontPrefsViewModel = hiltViewModel())
         Text(
             "Systémové bezpatkové, nebo patkové Newsreader (jednotné s ostatními appkami).",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -277,7 +287,7 @@ private fun FontSettingsSection(viewModel: FontPrefsViewModel = hiltViewModel())
         }
         if (state.serif) {
             Spacer(Modifier.height(12.dp))
-            Text("Kde se použije", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Text("Kde se použije", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = !state.headingOnly, onClick = { viewModel.setHeadingOnly(false) }, label = { Text("Celá aplikace") })
@@ -285,7 +295,7 @@ private fun FontSettingsSection(viewModel: FontPrefsViewModel = hiltViewModel())
             }
         }
         Spacer(Modifier.height(12.dp))
-        Text("Velikost textu", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+        Text("Velikost textu", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(8.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FontPrefsViewModel.SCALE_OPTIONS.forEach { pct ->

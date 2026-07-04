@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -146,7 +145,7 @@ internal fun ProfileHeader(profile: ProfileEntity?, onSwitch: () -> Unit) {
                     avatarUrl != null -> AsyncImage(avatarUrl, profile?.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     else -> Text(
                         (profile?.name ?: "?").take(1).uppercase(),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
@@ -156,7 +155,7 @@ internal fun ProfileHeader(profile: ProfileEntity?, onSwitch: () -> Unit) {
                 Text(
                     profile?.name ?: "Nepřihlášen",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     if (profile?.isAdmin == true) "Admin · přihlášen" else "Přihlášen",
@@ -184,13 +183,13 @@ internal fun LockedByAdminNote() {
             Icon(
                 imageVector = Icons.Default.Lock,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.6f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.width(12.dp))
             Text(
                 "Zamčeno správcem profilu.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -210,14 +209,14 @@ internal fun ManagedInAdminNote(isAdmin: Boolean, onOpenAdmin: () -> Unit) {
         Icon(
             imageVector = Icons.Default.Lock,
             contentDescription = null,
-            tint = Color.White.copy(alpha = 0.5f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.width(8.dp))
         Text(
             text = if (isAdmin) "Přihlašovací údaje spravuješ v sekci Správa."
             else "Přihlašovací údaje spravuje správce profilu.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
     if (isAdmin) {
@@ -243,9 +242,9 @@ internal fun ListenGroupTitle(text: String) {
 @Composable
 internal fun ServerPodcastRow(title: String, checked: Boolean, busy: Boolean, onToggle: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = Color.White, modifier = Modifier.weight(1f))
+        Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         if (busy) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp), strokeWidth = 2.dp, color = Color.White)
+            CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurface)
         }
         Switch(checked = checked, enabled = !busy, onCheckedChange = onToggle)
     }
@@ -257,7 +256,7 @@ internal fun ListenInfoText(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.bodySmall,
-        color = Color.White.copy(alpha = 0.6f),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 4.dp),
     )
 }
@@ -267,9 +266,9 @@ internal fun ListenInfoText(text: String) {
 internal fun ListenSwitchRow(title: String, subtitle: String?, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
@@ -287,9 +286,9 @@ internal fun <T> ListenChipRow(
     subtitle: String? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
         if (subtitle != null) {
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
             options.forEach { (label, value) ->

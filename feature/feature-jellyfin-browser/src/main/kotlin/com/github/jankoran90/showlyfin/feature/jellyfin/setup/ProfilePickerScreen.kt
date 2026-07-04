@@ -67,7 +67,7 @@ fun ProfilePickerScreen(
     /** Plan VAULT — chyba poslední aktivace (Jellyfin odmítl creds profilu); null = bez chyby. */
     errorMessage: String? = null,
 ) {
-    Box(modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -75,7 +75,7 @@ fun ProfilePickerScreen(
             Text(
                 "Kdo se dívá?",
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(28.dp))
             Row(
@@ -148,7 +148,7 @@ private fun AvatarItem(profile: ProfileEntity, onClick: () -> Unit) {
                 )
                 else -> Text(
                     text = profile.name.take(1).uppercase(),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.displaySmall,
                 )
             }
@@ -175,7 +175,7 @@ private fun AvatarItem(profile: ProfileEntity, onClick: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         Text(
             text = profile.name,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
         )
@@ -211,14 +211,14 @@ private fun AddAvatarItem(onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Přidat profil",
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(40.dp),
             )
         }
         Spacer(Modifier.height(10.dp))
         Text(
             text = "Přidat profil",
-            color = Color.White.copy(alpha = 0.8f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
         )

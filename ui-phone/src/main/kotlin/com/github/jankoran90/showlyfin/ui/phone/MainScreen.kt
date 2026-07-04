@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
@@ -73,7 +72,7 @@ fun MainScreen(
         TabRow(
             selectedTabIndex = pagerState.currentPage,
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = Color.White,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             tabs.forEachIndexed { index, (_, title) ->
                 Tab(

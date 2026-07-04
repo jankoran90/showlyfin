@@ -79,12 +79,12 @@ fun MainLoginScreen(
                 Text(
                     "Přihlášení do Showlyfinu",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Zadej hlavní heslo. Po přihlášení se zobrazí profily.",
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(24.dp))
                 OutlinedTextField(

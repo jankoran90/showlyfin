@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -133,13 +132,13 @@ internal fun TemplateAuthoringSection(
     onDelete: (TemplateEntity) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
-        Text("Šablony (Admin)", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text("Šablony (Admin)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(4.dp))
         Text(
             "Pojmenovaná sada nastavení + zámky („co smí uživatel měnit“). Přiřaď ji profilu níže. " +
                 "Zamčené domény diktuje šablona, odemčené si uživatel mění sám.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(10.dp))
         templates.forEach { t ->
@@ -193,12 +192,12 @@ internal fun TemplateEditorBlock(
                     "🧩 " + name.ifBlank { "(bez názvu)" },
                     Modifier.weight(1f),
                     style = MaterialTheme.typography.titleSmall,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     "${cfg.lockedKeys.size} 🔒",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.width(8.dp))
                 Icon(
@@ -218,7 +217,7 @@ internal fun TemplateEditorBlock(
                 )
                 Spacer(Modifier.height(12.dp))
 
-                Text("Hlavní sekce (otevře se po vstupu)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Hlavní sekce (otevře se po vstupu)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LandingDropdown(
                     current = cfg.defaultSection,
                     options = LANDING_OPTIONS.filter { (key, _) -> cfg.isSectionVisible(key) },
@@ -227,15 +226,15 @@ internal fun TemplateEditorBlock(
                 Spacer(Modifier.height(12.dp))
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Viditelné sekce a podsekce", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
-                    Text("📱", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("Viditelné sekce a podsekce", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("📱", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(34.dp))
-                    Text("📺", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("📺", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(22.dp))
                 }
                 SECTION_TOGGLES.forEach { (key, label) ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                         Switch(
                             checked = cfg.isSectionVisible(key),
                             onCheckedChange = { visible ->
@@ -258,7 +257,7 @@ internal fun TemplateEditorBlock(
                 // GLIDE: pořadí řeší profil (Nastavení), ne šablona/admin — editor pořadí tu odebrán,
                 // ať se pořadí z víc míst nepere.
 
-                Text("Žánry", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Žánry", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     value = blockText,
                     onValueChange = { blockText = it },
@@ -276,14 +275,14 @@ internal fun TemplateEditorBlock(
                 )
                 Spacer(Modifier.height(12.dp))
 
-                Text("Věkový limit", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Věkový limit", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 AgeRatingDropdown(current = age, onSelect = { age = it })
                 Spacer(Modifier.height(12.dp))
 
-                Text("🔒 Zamčené domény (uživatel needituje; bere se ze šablony)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("🔒 Zamčené domény (uživatel needituje; bere se ze šablony)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TEMPLATE_LOCKS.forEach { (key, label) ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("🔒 $label", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                        Text("🔒 $label", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                         Switch(
                             checked = cfg.lockedKeys.contains(key),
                             onCheckedChange = { enabled ->

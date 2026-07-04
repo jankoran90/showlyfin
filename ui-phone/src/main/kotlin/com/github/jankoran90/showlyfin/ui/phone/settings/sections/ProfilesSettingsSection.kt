@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -136,13 +135,13 @@ internal fun ProfilesSection(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Profily", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Profily", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(8.dp))
             if (profiles.isEmpty()) {
                 Text(
                     text = "Žádné uložené profily. Přihlas se přes Jellyfin tab.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.65f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 // Ne-admin (děti) vidí jen svůj aktivní profil (read-only), bez správy ostatních.
@@ -161,12 +160,12 @@ internal fun ProfilesSection(
                                     if (profile.tvDefault) append(" · Výchozí (TV)")
                                     if (isActive) append(" · Aktivní")
                                 },
-                                color = if (isActive) MaterialTheme.colorScheme.primary else Color.White,
+                                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Text(
                                 text = profile.serverUrl,
-                                color = Color.White.copy(alpha = 0.5f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             Spacer(Modifier.height(6.dp))
@@ -273,7 +272,7 @@ internal fun ProfileAvatar(profile: ProfileEntity) {
             )
             else -> Text(
                 text = profile.name.take(1).uppercase(),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
             )
         }

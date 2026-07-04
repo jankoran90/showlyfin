@@ -81,7 +81,7 @@ fun LibraryRowsScreen(
             state.rows.isEmpty() ->
                 Text(
                     text = "Knihovna je prázdná",
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Center),
                 )
             else -> LazyColumn(
@@ -112,7 +112,7 @@ private fun LibraryRowSection(
         ) {
             Text(
                 text = row.libraryName,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
@@ -121,12 +121,12 @@ private fun LibraryRowSection(
                 onClick = { onOpenLibrary(row.libraryId, row.libraryName, row.collectionType) },
                 modifier = Modifier.tvFocusable(shape = RoundedCornerShape(percent = 50)),
             ) {
-                Text("Vše", color = Color.White.copy(alpha = 0.8f))
+                Text("Vše", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(2.dp))
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = "Otevřít knihovnu",
-                    tint = Color.White.copy(alpha = 0.8f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

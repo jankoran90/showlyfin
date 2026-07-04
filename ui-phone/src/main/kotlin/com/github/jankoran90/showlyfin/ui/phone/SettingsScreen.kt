@@ -60,7 +60,7 @@ fun SettingsScreen(
         SettingsCategoryScreen(category = sel, onBack = { selected = null }, modifier = modifier) {
             when (sel) {
                 SettingsCategory.CONNECTION -> ConnectionSettingsSection(
-                    uiState, viewModel, isAdmin, credLocked, onOpenUploader, onOpenAdmin,
+                    uiState, viewModel, isAdmin, credLocked, expanded, onOpenUploader, onOpenAdmin,
                 )
                 SettingsCategory.STREAMING -> StreamingSettingsSection(
                     uiState, viewModel, credLocked, expanded, onOpenUploader,
@@ -68,7 +68,7 @@ fun SettingsScreen(
                 SettingsCategory.LISTEN -> ListenSettingsSection(uiState, viewModel)
                 SettingsCategory.APPEARANCE -> AppearanceSettingsSection(uiState, viewModel, isAdmin, expanded)
                 SettingsCategory.PROFILES -> ProfilesCategorySection(uiState, viewModel, isAdmin)
-                SettingsCategory.HOME_THEATER -> HomeTheaterSettingsSection(uiState, viewModel)
+                SettingsCategory.HOME_THEATER -> HomeTheaterSettingsSection(uiState, viewModel, expanded)
                 SettingsCategory.SYSTEM -> SystemSettingsSection(uiState, viewModel, expanded)
             }
             uiState.error?.let {

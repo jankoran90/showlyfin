@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -116,7 +115,7 @@ internal fun ProfileAuthoringBlock(
                     },
                     Modifier.weight(1f),
                     style = MaterialTheme.typography.titleSmall,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Icon(
                     imageVector = if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -128,7 +127,7 @@ internal fun ProfileAuthoringBlock(
                 Spacer(Modifier.height(10.dp))
 
                 // — Šablona (Plan WARDEN W3c) — zamčené domény diktuje šablona, odemčené si user mění sám —
-                Text("Šablona", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Šablona", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TemplateAssignDropdown(
                     templates = templates,
                     current = profile.templateUuid,
@@ -137,7 +136,7 @@ internal fun ProfileAuthoringBlock(
                 Spacer(Modifier.height(12.dp))
 
                 // — Hlavní sekce —
-                Text("Hlavní sekce (otevře se po vstupu)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Hlavní sekce (otevře se po vstupu)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val landingChoices = LANDING_OPTIONS.filter { (key, _) -> cfg.isSectionVisible(key) }
                 LandingDropdown(
                     current = cfg.defaultSection,
@@ -149,15 +148,15 @@ internal fun ProfileAuthoringBlock(
                 // — Viditelné sekce + podsekce (V10: zvlášť telefon a TV; TV zrcadlí telefon do
                 //   prvního vlastního přepnutí) —
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Viditelné sekce a podsekce", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
-                    Text("📱", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("Viditelné sekce a podsekce", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("📱", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(34.dp))
-                    Text("📺", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("📺", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(22.dp))
                 }
                 SECTION_TOGGLES.forEach { (key, label) ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                         Switch(
                             checked = cfg.isSectionVisible(key),
                             onCheckedChange = { visible ->
@@ -188,12 +187,12 @@ internal fun ProfileAuthoringBlock(
 
                 // — Knihovny Jellyfin: whitelist (Plan HELM; nic = všechny) —
                 if (jellyfinLibraries.isNotEmpty()) {
-                    Text("Knihovny (Jellyfin) — nic zaškrtnuté = všechny", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("Knihovny (Jellyfin) — nic zaškrtnuté = všechny", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val jwl = cfg.jellyfinLibraryWhitelist
                     jellyfinLibraries.forEach { lib ->
                         val checked = jwl == null || lib.id in jwl
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(lib.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            Text(lib.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                             Switch(
                                 checked = checked,
                                 onCheckedChange = { enabled ->
@@ -221,12 +220,12 @@ internal fun ProfileAuthoringBlock(
 
                 // — Poslech: whitelist ABS knihoven (Plan PROFILES Fáze 4E) —
                 if (cfg.isSectionVisible(ProfileConfig.Sections.POSLECH) && absLibraries.isNotEmpty()) {
-                    Text("Poslech — knihovny (nic = všechny)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("Poslech — knihovny (nic = všechny)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val wl = cfg.absLibraryWhitelist
                     absLibraries.forEach { lib ->
                         val checked = wl == null || lib.id in wl
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(lib.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            Text(lib.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                             Switch(
                                 checked = checked,
                                 onCheckedChange = { enabled ->
@@ -249,11 +248,11 @@ internal fun ProfileAuthoringBlock(
 
                 // — Poslech: viditelnost jednotlivých podcastů pro tento profil (jemnější než whitelist police) —
                 if (cfg.isSectionVisible(ProfileConfig.Sections.POSLECH) && adminPodcasts.isNotEmpty()) {
-                    Text("Podcasty — zapnuto = zobrazený pro tento profil", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                    Text("Podcasty — zapnuto = zobrazený pro tento profil", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     adminPodcasts.forEach { pod ->
                         val visible = pod.id !in cfg.hiddenPodcastIds
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(pod.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            Text(pod.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                             // Polarita: zapnuto = viditelné (model drží skryté id, proto invertujeme).
                             Switch(
                                 checked = visible,
@@ -271,7 +270,7 @@ internal fun ProfileAuthoringBlock(
                 }
 
                 // — Žánry (allow + block) —
-                Text("Žánry", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Žánry", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 var blockText by remember(profile.id, profile.configJson) {
                     mutableStateOf(cfg.blockedGenres.joinToString(", "))
                 }
@@ -302,7 +301,7 @@ internal fun ProfileAuthoringBlock(
                 Spacer(Modifier.height(12.dp))
 
                 // — Věk —
-                Text("Věkový limit", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Věkový limit", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 AgeRatingDropdown(
                     current = profile.maxAgeRating?.let {
                         runCatching { com.github.jankoran90.showlyfin.core.domain.AgeRating.valueOf(it) }.getOrNull()

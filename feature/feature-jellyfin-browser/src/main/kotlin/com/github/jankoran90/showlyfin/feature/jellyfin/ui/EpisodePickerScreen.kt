@@ -83,10 +83,10 @@ fun EpisodePickerScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(state.seriesName.ifBlank { seriesName }, color = Color.White, maxLines = 1) },
+                title = { Text(state.seriesName.ifBlank { seriesName }, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.tvFocusable(shape = CircleShape)) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -103,7 +103,7 @@ fun EpisodePickerScreen(
                 )
                 state.episodes.isEmpty() -> Text(
                     "Žádné epizody",
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Center),
                 )
                 else -> LazyColumn(
@@ -173,7 +173,7 @@ private fun EpisodeItemRow(ep: EpisodeRow, onClick: () -> Unit) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (ep.watched) Color.White.copy(alpha = 0.55f) else Color.White,
+                color = if (ep.watched) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (ep.isNextUp) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -182,7 +182,7 @@ private fun EpisodeItemRow(ep: EpisodeRow, onClick: () -> Unit) {
                 Text(
                     it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -199,7 +199,7 @@ private fun EpisodeItemRow(ep: EpisodeRow, onClick: () -> Unit) {
             Icon(
                 Icons.Default.PlayArrow,
                 contentDescription = "Přehrát",
-                tint = Color.White.copy(alpha = 0.7f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.width(22.dp),
             )
         }

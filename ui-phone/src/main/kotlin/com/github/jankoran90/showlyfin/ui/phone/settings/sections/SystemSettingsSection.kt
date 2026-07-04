@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -129,18 +128,18 @@ internal fun UpdateSection() {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Aktualizace", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Aktualizace", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Aktuální verze: $buildInfo",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.85f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "Poslední kontrola: $lastText",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             // Stav: nová verze připravená k instalaci.
@@ -186,7 +185,7 @@ internal fun UpdateSection() {
             }
             statusText?.let {
                 Spacer(Modifier.height(8.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -222,16 +221,16 @@ internal fun DebugSection(liveLogging: Boolean, onLiveLogging: (Boolean) -> Unit
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Debug / Logy", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Debug / Logy", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(12.dp))
             // Živé logování — periodicky posílá log buffer na server (Claude tailuje při ladění)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Živé logování", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    Text("Živé logování", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     Text(
                         "Periodicky posílá logy na server (víc řádků; zapni jen při ladění)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Switch(checked = liveLogging, onCheckedChange = onLiveLogging)
@@ -240,7 +239,7 @@ internal fun DebugSection(liveLogging: Boolean, onLiveLogging: (Boolean) -> Unit
             Text(
                 text = "Manuální screenshot + log dump → upload na server",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
             Button(
@@ -259,7 +258,7 @@ internal fun DebugSection(liveLogging: Boolean, onLiveLogging: (Boolean) -> Unit
             }
             statusText?.let {
                 Spacer(Modifier.height(8.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

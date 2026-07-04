@@ -9,7 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SegmentedButton
@@ -61,18 +60,14 @@ fun PodcastTabRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 1) Filtr — úplně první prvek řady.
+        // 1) Filtr — úplně první prvek řady. Vždy tonální (secondaryContainer) → sourodé se světlým i
+        // tmavým motivem; aktivní filtr signalizuje červený badge (FilledIconButton=primary byl ve
+        // světlém motivu tmavě oranžový a nesourodý).
         BadgedBox(
             badge = { if (activeFilterCount > 0) Badge { Text("$activeFilterCount") } },
         ) {
-            if (activeFilterCount > 0) {
-                FilledIconButton(onClick = onOpenFilter, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Default.Tune, contentDescription = "Filtr podcastů")
-                }
-            } else {
-                FilledTonalIconButton(onClick = onOpenFilter, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Default.Tune, contentDescription = "Filtr podcastů")
-                }
+            FilledTonalIconButton(onClick = onOpenFilter, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.Tune, contentDescription = "Filtr podcastů")
             }
         }
 

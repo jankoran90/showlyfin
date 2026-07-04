@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -88,6 +87,7 @@ internal fun ConnectionSettingsSection(
     viewModel: SettingsViewModel,
     isAdmin: Boolean,
     credLocked: Boolean,
+    expandedMap: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>,
     onOpenUploader: () -> Unit,
     onOpenAdmin: () -> Unit,
 ) {
@@ -95,25 +95,24 @@ internal fun ConnectionSettingsSection(
             LockedByAdminNote()
           } else {
             // Jellyfin sekce
+            CollapsibleSettingsSection("Jellyfin", expandedMap) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Jellyfin", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                    Spacer(Modifier.height(8.dp))
                     if (uiState.jellyfinConnected) {
                         Text(
                             text = "Server: ${uiState.jellyfinServerUrl}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (uiState.jellyfinUserName.isNotBlank()) {
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = "Profil: ${uiState.jellyfinUserName}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.85f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Spacer(Modifier.height(4.dp))
@@ -126,34 +125,33 @@ internal fun ConnectionSettingsSection(
                         Text(
                             text = "Nenastaveno",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.65f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
                 }
             }
+            }
 
             // Profil & parental controls
             if (uiState.jellyfinConnected) {
-                Spacer(Modifier.height(16.dp))
+                CollapsibleSettingsSection("Profil", expandedMap) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("Profil", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                        Spacer(Modifier.height(8.dp))
                         Text(
                             text = "Věkové omezení: ${uiState.parentalAgeRating.displayName}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         uiState.maxParentalRating?.let { rating ->
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = "Jellyfin MaxParentalRating: $rating",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.6f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         if (uiState.parentalLocked) {
@@ -166,17 +164,16 @@ internal fun ConnectionSettingsSection(
                         }
                     }
                 }
+                }
             }
 
-            Spacer(Modifier.height(16.dp))
             // Trakt sekce
+            CollapsibleSettingsSection("Trakt", expandedMap) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Trakt", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                    Spacer(Modifier.height(8.dp))
                     // Plan VAULT — Trakt je teď per-profil pod adminem (OAuth, vč. Google sign-in);
                     // přihlášení/odhlášení se dělá v sekci Správa, tady jen stav.
                     if (uiState.isLoading) {
@@ -188,15 +185,16 @@ internal fun ConnectionSettingsSection(
                             if (uiState.traktLoggedIn) "Přihlášen" else "Nepřihlášen",
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (uiState.traktLoggedIn) MaterialTheme.colorScheme.primary
-                            else Color.White.copy(alpha = 0.65f),
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
                 }
             }
+            }
 
             // Plan STRATA Fáze I — všechna přihlášení pohromadě: Audiobookshelf + Uploader sem.
-            Spacer(Modifier.height(16.dp))
+            CollapsibleSettingsSection("Audiobookshelf", expandedMap) {
             AbsSection(
                 configured = uiState.absConfigured,
                 baseUrl = uiState.absBaseUrl,
@@ -205,8 +203,10 @@ internal fun ConnectionSettingsSection(
                 isAdmin = isAdmin,
                 onOpenAdmin = onOpenAdmin,
             )
-            Spacer(Modifier.height(16.dp))
+            }
+            CollapsibleSettingsSection("Uploader", expandedMap) {
             UploaderSection(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
+            }
           }
 }
 
@@ -223,19 +223,17 @@ internal fun UploaderSection(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Uploader", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Spacer(Modifier.height(8.dp))
             Text(
                 text = if (uiState.isLoggedIn) "Přihlášen: ${viewModel.baseUrl}" else "Nenastaveno",
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (uiState.isLoggedIn) MaterialTheme.colorScheme.primary
-                else Color.White.copy(alpha = 0.65f),
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "Stremio streamy, Sdílej.cz, Smart Remux.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             ManagedInAdminNote(isAdmin = isAdmin, onOpenAdmin = onOpenAdmin)
         }
@@ -258,23 +256,21 @@ internal fun AbsSection(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Audiobookshelf", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Spacer(Modifier.height(8.dp))
             Text(
                 text = if (configured) "Připojeno: $baseUrl" else "Nenastaveno",
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (configured) MaterialTheme.colorScheme.primary
-                else Color.White.copy(alpha = 0.65f),
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (configured) {
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Zobrazovat přehrané epizody", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                        Text("Zobrazovat přehrané epizody", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             "Dokončené podcast epizody zůstanou v detailu (vyp = skryjí se).",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.6f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     // Polarita: zapnuto = viditelné (model je „hide", proto invertujeme).

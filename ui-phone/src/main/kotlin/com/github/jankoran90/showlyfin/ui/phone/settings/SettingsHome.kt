@@ -68,7 +68,7 @@ internal fun SettingsHome(
             Text(
                 "Dětský profil — omezení a práva spravuje správce z admin profilu.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
         }
@@ -90,7 +90,7 @@ internal fun SettingsHome(
             Text(
                 "Nic nenalezeno.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         categories.forEach { category ->
@@ -137,7 +137,7 @@ private fun SettingsCategoryTile(
                 Text(
                     highlightMatches(category.title, query, highlightBg, highlightFg),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(

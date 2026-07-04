@@ -65,7 +65,7 @@ fun WatchedBadge(modifier: Modifier = Modifier) {
         Icon(
             imageVector = Icons.Default.Visibility,
             contentDescription = "Zhlédnuto",
-            tint = androidx.compose.ui.graphics.Color.White,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp),
         )
     }
@@ -81,7 +81,7 @@ fun WatchedTitleBadge(modifier: Modifier = Modifier) {
         Icon(
             imageVector = Icons.Default.Visibility,
             contentDescription = "Zhlédnuto",
-            tint = androidx.compose.ui.graphics.Color.White,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(10.dp),
         )
     }

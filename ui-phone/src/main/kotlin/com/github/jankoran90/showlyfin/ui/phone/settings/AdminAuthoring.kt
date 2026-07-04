@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -156,14 +155,14 @@ internal fun AdminRestrictionsSection(
         Text(
             "Profily (Admin) — nastavení per profil",
             style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             "Pro každý profil nastav hlavní sekci, viditelné sekce/podsekce, knihovny, žánry, věk, " +
                 "PIN a přihlašovací údaje. Aplikuje se při přepnutí profilu. Každý profil má vlastní izolované nastavení.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(10.dp))
         profiles.forEach { profile ->
@@ -190,7 +189,7 @@ internal fun ProfilePinEditor(
     Text(
         if (hasPin) "PIN: nastaven" else "PIN: bez PINu",
         style = MaterialTheme.typography.labelMedium,
-        color = Color.White.copy(alpha = 0.7f),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
@@ -230,7 +229,7 @@ internal fun ProfileCredentialsEditor(
         Modifier.fillMaxWidth().clickable { open = !open }.tvFocusable(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Přihlašovací údaje", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+        Text("Přihlašovací údaje", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Icon(
             imageVector = if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
             contentDescription = null,

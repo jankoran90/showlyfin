@@ -230,10 +230,14 @@ internal data class ShellNavItem(
 
 @Composable
 fun ShowlyfinApp(isTv: Boolean = false) {
-    // CHORUS Osa 3 (kánon Písmo): volba fontu se čte v kořeni a předává do motivu (theme-level pref).
+    // CHORUS Osa 3 (kánon motivu): volba fontu I motivu (pozadí, skin, posuvníky) se čte v kořeni a
+    // předává do motivu (theme-level pref). Activity-scoped VM → sekce Vzhled mění tytéž instance živě.
     val fontPrefs: FontPrefsViewModel = hiltViewModel()
     val font by fontPrefs.state.collectAsStateWithLifecycle()
+    val themePrefs: ThemePrefsViewModel = hiltViewModel()
+    val theme by themePrefs.state.collectAsStateWithLifecycle()
     ShowlyfinPhoneTheme(
+        themeState = theme,
         serifFont = font.serif,
         headingOnly = font.headingOnly,
         fontScale = font.scale,
@@ -502,8 +506,17 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         // VM jsou activity-scoped → data zůstávají, restoruje se jen pozice scrollu).
         val stateHolder = rememberSaveableStateHolder()
 
-        BackHandler(enabled = isSubScreen) {
+        // Nastavení je top-level cíl (v bottomTabs → isSubScreen=false), takže globální BackHandler by
+        // na něm byl vypnutý a systémové Zpět z rozcestníku Nastavení by ukončilo celou aplikaci. Proto
+        // ho zapínáme i pro Settings a vracíme na domovskou záložku (podstránky Nastavení řeší vlastní
+        // BackHandler v SettingsCategoryScreen, který je vnořenější → chytí Zpět dřív a vrátí na rozcestník).
+        BackHandler(enabled = isSubScreen || currentDestination == Destination.Settings) {
             val current = currentDestination
+            if (current == Destination.Settings) {
+                bottomTab = startBottomTab
+                currentDestination = startBottomTab
+                return@BackHandler
+            }
             currentDestination = when (current) {
                 is Destination.ReviewStep, is Destination.MoveStep -> Destination.Uploader
                 is Destination.LibraryDetail -> Destination.LibraryBrowser

@@ -86,7 +86,9 @@ import com.github.jankoran90.showlyfin.ui.phone.settings.*
 internal fun HomeTheaterSettingsSection(
     uiState: SettingsUiState,
     viewModel: SettingsViewModel,
+    expandedMap: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>,
 ) {
+            CollapsibleSettingsSection("Domácí sestava (AVR)", expandedMap) {
             AvrSection(
                 enabled = uiState.avrEnabled,
                 host = uiState.avrHost,
@@ -106,9 +108,11 @@ internal fun HomeTheaterSettingsSection(
                 onVolumeStep = { viewModel.setAvrVolumeStep(it) },
                 onPairBox = { viewModel.pairBox() },
             )
-            Spacer(Modifier.height(12.dp))
+            }
             // DOCK (SHW-77): výchozí cíl castu „Na TV" (televize / Zenbook / jiné zařízení)
+            CollapsibleSettingsSection("Cíl pro Na TV", expandedMap) {
             CastTargetSettingsSection()
+            }
 }
 
 /**

@@ -30,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -60,7 +59,7 @@ fun RealDebridSection(
         Text(
             "Připoj Uploader v sekci „Streamování“ — pak se tu objeví obsah tvého RealDebrid účtu.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         return
     }
@@ -72,19 +71,19 @@ fun RealDebridSection(
         Column(Modifier.padding(16.dp)) {
             // ── Hlavička: nadpis + obnovit ──
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Na RealDebridu", style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.weight(1f))
+                Text("Na RealDebridu", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                 if (ui.loading) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
                     IconButton(onClick = { viewModel.load(force = true) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Obnovit", tint = Color.White)
+                        Icon(Icons.Default.Refresh, contentDescription = "Obnovit", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
             Text(
                 "Torrenty uložené na tvém RealDebrid účtu. Mazání je nevratné.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
 
@@ -98,7 +97,7 @@ fun RealDebridSection(
             }
 
             if (!ui.loading && ui.rdItems.isEmpty() && ui.error == null) {
-                Text("Na RealDebridu nic není.", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Na RealDebridu nic není.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 ui.rdItems.forEach { item ->
                     RdAccountRow(
@@ -128,7 +127,7 @@ fun RealDebridSection(
                 Text(
                     "Smaže staré přímé odkazy na RealDebridu, které zůstaly po přehrávání a nemají už film.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -141,11 +140,11 @@ fun RealDebridSection(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("Zapamatované zdroje ⭐", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text("Zapamatované zdroje ⭐", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(
                     "Filmy, u kterých si appka pamatuje fungující zdroj. Zapomenutí ho smaže i z RealDebridu.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
                 ui.remembered.forEach { ws ->
@@ -180,7 +179,7 @@ private fun RdAccountRow(item: UploaderRdSavedItem, busy: Boolean, onDelete: () 
             Text(
                 item.filename.ifBlank { item.hash },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -190,7 +189,7 @@ private fun RdAccountRow(item: UploaderRdSavedItem, busy: Boolean, onDelete: () 
                     if (item.status.isNotBlank()) { if (isNotEmpty()) append(" · "); append(item.status) }
                 },
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (busy) {
@@ -213,7 +212,7 @@ private fun RememberedRow(ws: WorkingSource, onForget: () -> Unit) {
             Text(
                 ws.title.ifBlank { "Neznámý film" },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -222,7 +221,7 @@ private fun RememberedRow(ws: WorkingSource, onForget: () -> Unit) {
                 Text(
                     sub,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

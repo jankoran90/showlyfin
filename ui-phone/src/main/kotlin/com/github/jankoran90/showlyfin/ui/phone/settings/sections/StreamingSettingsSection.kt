@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -93,17 +92,16 @@ internal fun StreamingSettingsSection(
           if (credLocked) {
             LockedByAdminNote()
           } else {
+            CollapsibleSettingsSection("Uploader", expandedMap) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Uploader", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                    Spacer(Modifier.height(8.dp))
                     Text(
                         "Nahrávání filmů, fronta downloadů, Sdílej.cz, Smart Remux.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(12.dp))
                     Button(onClick = onOpenUploader, modifier = Modifier.fillMaxWidth()) {
@@ -111,8 +109,9 @@ internal fun StreamingSettingsSection(
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            }
             // Plan EVEN — DRC/normalizér filmu (opt-in, default Vyp). Jen telefon (na TV passthrough).
+            CollapsibleSettingsSection("Zvuk (DRC)", expandedMap) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -128,7 +127,8 @@ internal fun StreamingSettingsSection(
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            }
+            CollapsibleSettingsSection("Stremio / Comet výsledky", expandedMap) {
             StremioFilterSection(
                 sf = uiState.streamFilter,
                 loading = uiState.streamFilterLoading,
@@ -138,6 +138,7 @@ internal fun StreamingSettingsSection(
                 onToggleFallback = { k, e -> viewModel.toggleFallback(k, e) },
                 onReload = { viewModel.loadStreamFilter() },
             )
+            }
           }
     if (!credLocked) {
         Spacer(Modifier.height(16.dp))
@@ -157,7 +158,7 @@ internal val FALLBACK_LABELS = linkedMapOf(
 
 @Composable
 internal fun FilterLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.85f))
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(6.dp))
 }
 
@@ -165,7 +166,7 @@ internal fun FilterLabel(text: String) {
 @Composable
 internal fun FilterSwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
@@ -174,7 +175,7 @@ internal fun FilterSwitchRow(label: String, checked: Boolean, onChange: (Boolean
 @Composable
 internal fun FilterStepRow(label: String, onMinus: () -> Unit, onPlus: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         OutlinedButton(onClick = onMinus, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) { Text("−") }
         Spacer(Modifier.width(8.dp))
         OutlinedButton(onClick = onPlus, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) { Text("+") }
@@ -207,12 +208,10 @@ internal fun StremioFilterSection(
 ) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(Modifier.padding(16.dp)) {
-            Text("Stremio / Comet výsledky", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Spacer(Modifier.height(12.dp))
             when {
                 sf == null && loading -> CircularProgressIndicator()
                 sf == null -> {
-                    Text("Dostupné po přihlášení k Uploaderu.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                    Text("Dostupné po přihlášení k Uploaderu.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onReload) { Text("Načíst") }
                 }
@@ -260,11 +259,11 @@ internal fun StremioFilterSection(
                     }
                     Text(
                         "Co už máš na RealDebrid → ukáže se nahoře jako 💾 a přehraje hned (i při opakovaném sledování).",
-                        style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.55f),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(12.dp))
 
-                    Text("Přesné filtry (jen v režimu Přesné)", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                    Text("Přesné filtry (jen v režimu Přesné)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     MultiChipRow("Kodek", listOf("HEVC", "AV1", "AVC"), sf.videoCodecs) { v -> onUpdate { it.copy(videoCodecs = toggleIn(it.videoCodecs, v)) } }
                     Spacer(Modifier.height(8.dp))
@@ -278,10 +277,10 @@ internal fun StremioFilterSection(
                     FilterLabel("Pořadí fallbacků (priorita řazení)")
                     sf.fallbackOrder.forEachIndexed { i, key ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("${i + 1}. ${FALLBACK_LABELS[key] ?: key}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                            IconButton(onClick = { onMoveFallback(i, -1) }, enabled = i > 0) { Icon(Icons.Default.KeyboardArrowUp, "Nahoru", tint = Color.White) }
-                            IconButton(onClick = { onMoveFallback(i, 1) }, enabled = i < sf.fallbackOrder.lastIndex) { Icon(Icons.Default.KeyboardArrowDown, "Dolů", tint = Color.White) }
-                            Text("✕", Modifier.padding(horizontal = 8.dp).clickable { onToggleFallback(key, false) }, color = Color.White.copy(alpha = 0.7f))
+                            Text("${i + 1}. ${FALLBACK_LABELS[key] ?: key}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            IconButton(onClick = { onMoveFallback(i, -1) }, enabled = i > 0) { Icon(Icons.Default.KeyboardArrowUp, "Nahoru", tint = MaterialTheme.colorScheme.onSurface) }
+                            IconButton(onClick = { onMoveFallback(i, 1) }, enabled = i < sf.fallbackOrder.lastIndex) { Icon(Icons.Default.KeyboardArrowDown, "Dolů", tint = MaterialTheme.colorScheme.onSurface) }
+                            Text("✕", Modifier.padding(horizontal = 8.dp).clickable { onToggleFallback(key, false) }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Spacer(Modifier.height(8.dp))

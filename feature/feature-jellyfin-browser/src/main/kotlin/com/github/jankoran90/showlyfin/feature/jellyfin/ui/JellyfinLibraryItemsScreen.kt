@@ -102,13 +102,13 @@ fun JellyfinLibraryItemsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(state.libraryName.ifBlank { libraryName }, color = Color.White) },
+                title = { Text(state.libraryName.ifBlank { libraryName }, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.tvFocusable(shape = CircleShape)) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Zpět",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
@@ -171,12 +171,12 @@ fun JellyfinLibraryItemsScreen(
                     )
                     state.items.isEmpty() -> Text(
                         text = "Knihovna je prázdná",
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.Center),
                     )
                     visibleItems.isEmpty() -> Text(
                         text = "Nic nenalezeno pro „${state.searchQuery}\"",
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.Center).padding(16.dp),
                     )
                     else -> LazyVerticalGrid(
