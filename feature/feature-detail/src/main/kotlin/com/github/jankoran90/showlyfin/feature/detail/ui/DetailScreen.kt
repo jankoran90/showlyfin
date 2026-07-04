@@ -203,6 +203,10 @@ fun DetailScreen(
             onForgetRemembered = { viewModel.forgetWorkingSource() },
             pathLabel = pathLabel,
             onBack = if (path != null) { { viewModel.backToStreamPathChooser() } } else null,
+            defaultTitle = uiState.sdilejDefaultTitle,
+            defaultYear = uiState.sdilejDefaultYear,
+            allowSdilejEdit = path == com.github.jankoran90.showlyfin.feature.detail.StreamAudioPath.CZ_DUB,
+            onResearchSdilej = { t, y -> viewModel.researchSdilejStreams(t, y) },
         )
     }
     // SIEVE S2: po lokálním přehrání Stremio zdroje se zeptej, jestli sedl → zapamatuj fungující zdroj.

@@ -287,6 +287,11 @@ internal fun StreamPickerSheet(
     onForgetRemembered: () -> Unit = {},
     pathLabel: String? = null,
     onBack: (() -> Unit)? = null,
+    // QUARRY (SHW-79): ruční úprava hledání na Sdílej.cz (jen cesta CZ dabing).
+    defaultTitle: String = "",
+    defaultYear: Int? = null,
+    allowSdilejEdit: Boolean = false,
+    onResearchSdilej: (String, Int?) -> Unit = { _, _ -> },
 ) {
     // Plan FERRY (SHW-37): cíl přehrání — telefon (lokální MPV) nebo TV (yellyfin). Per-otevření.
     var toTv by remember { mutableStateOf(false) }
@@ -333,6 +338,30 @@ internal fun StreamPickerSheet(
                 onForget = onForgetRemembered,
             )
             HorizontalDivider()
+        }
+        // QUARRY (SHW-79): u CZ dabingu umožni ručně upravit hledaný text na Sdílej.cz (auto při prázdnu).
+        if (allowSdilejEdit) {
+            var editingSdilej by remember { mutableStateOf(false) }
+            var sTitle by remember(defaultTitle) { mutableStateOf(defaultTitle) }
+            var sYear by remember(defaultYear) { mutableStateOf(defaultYear?.toString().orEmpty()) }
+            val showEd = editingSdilej || (!isLoading && !isProbing && streams.isEmpty())
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { editingSdilej = !editingSdilej }) {
+                    Icon(Icons.Default.Edit, contentDescription = null, Modifier.height(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (showEd) "Skrýt úpravu" else "Upravit hledání na Sdílej.cz", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            if (showEd) {
+                SdilejQueryEditor(
+                    title = sTitle,
+                    year = sYear,
+                    onTitle = { sTitle = it },
+                    onYear = { sYear = it.filter { c -> c.isDigit() }.take(4) },
+                    onSearch = { onResearchSdilej(sTitle, sYear.toIntOrNull()) },
+                )
+                HorizontalDivider()
+            }
         }
         when {
             isLoading -> SheetCenter { CircularProgressIndicator() }
