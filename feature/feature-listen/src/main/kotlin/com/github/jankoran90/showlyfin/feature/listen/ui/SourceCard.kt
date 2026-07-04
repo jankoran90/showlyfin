@@ -1,13 +1,10 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -39,16 +36,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.CoverCard
+import com.github.jankoran90.showlyfin.core.ui.CoverCardShape
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
 
-private val SourceCoverShape = RoundedCornerShape(16.dp)
-
 /**
  * PRESET (SHW-65): karta vlastního zdroje (YouTube kanál / RSS podcast) v sekci Poslech → Podcasty.
- * Vizuálně se od ABS podcastů odliší odznakem typu v rohu obálky. Tap → otevře epizody zdroje.
+ * CHORUS Osa 2: delegát nad kanonickým [CoverCard]; odznak typu + prémiová hvězda v overlay.
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SourceCard(
     source: PodcastSource,
@@ -62,35 +58,20 @@ fun SourceCard(
         "ctv" -> Icons.Default.LiveTv
         else -> Icons.Default.Podcasts
     }
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(SourceCoverShape)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(4.dp),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(SourceCoverShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            if (source.thumbnail != null) {
-                AsyncImage(
-                    model = source.thumbnail,
-                    contentDescription = source.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Icon(
-                    imageVector = typeIcon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            }
+    CoverCard(
+        title = source.title,
+        subtitle = when {
+            source.premium -> "Prémiový podcast"
+            source.type == "youtube" -> "YouTube kanál"
+            source.type == "ctv" -> "ČT iVysílání"
+            else -> "Podcast"
+        },
+        imageUrl = source.thumbnail,
+        onClick = onClick,
+        modifier = modifier,
+        onLongClick = onLongClick,
+        placeholder = typeIcon,
+        overlay = {
             // Odznak typu (rozlišení od ABS podcastů).
             Surface(
                 color = MaterialTheme.colorScheme.primary,
@@ -111,35 +92,15 @@ fun SourceCard(
                     Icon(Icons.Default.Star, contentDescription = "Prémiový", modifier = Modifier.padding(3.dp).size(16.dp))
                 }
             }
-        }
-        Text(
-            text = source.title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Text(
-            text = when {
-                source.premium -> "Prémiový podcast"
-                source.type == "youtube" -> "YouTube kanál"
-                source.type == "ctv" -> "ČT iVysílání"
-                else -> "Podcast"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+        },
+    )
 }
 
 /**
  * TWINE (SHW-74 / plán F7): karta PROPOJENÉHO pořadu (audio RSS + video YouTube = 1 pořad). Místo dvou
  * karet jedna, s odznakem propojení; tap → sloučená obrazovka se spárovanými epizodami.
+ * CHORUS Osa 2: delegát nad kanonickým [CoverCard].
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MergedSourceCard(
     title: String,
@@ -148,35 +109,16 @@ fun MergedSourceCard(
     onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(SourceCoverShape)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(4.dp),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(SourceCoverShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            if (thumbnail != null) {
-                AsyncImage(
-                    model = thumbnail,
-                    contentDescription = title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.Podcasts,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            }
+    CoverCard(
+        title = title,
+        subtitle = "Audio + video",
+        subtitleColor = MaterialTheme.colorScheme.primary,
+        imageUrl = thumbnail,
+        onClick = onClick,
+        modifier = modifier,
+        onLongClick = onLongClick,
+        placeholder = Icons.Default.Podcasts,
+        overlay = {
             // Odznak propojení (audio + video pod jednou kartou).
             Surface(
                 color = MaterialTheme.colorScheme.primary,
@@ -192,23 +134,8 @@ fun MergedSourceCard(
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(13.dp))
                 }
             }
-        }
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Text(
-            text = "Audio + video",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+        },
+    )
 }
 
 /**
@@ -217,6 +144,7 @@ fun MergedSourceCard(
  * F3: srdíčko ([favorite]/[onToggleFavorite]) = OSOBNÍ lokální záložka (≠ „Přidáno" = sdílené
  * rodinné zdroje). F4: [showSummary]/[showEpisodeCount] respektují přepínače z Nastavení.
  * Čte výhradně z [MaterialTheme] tokenů (UNISON). Celá je jeden řádek v gridu/listu.
+ * (Horizontální rodina — mimo scope CoverCard; sdílí jen [CoverCardShape].)
  */
 @Composable
 fun DiscoveryCard(
@@ -238,7 +166,7 @@ fun DiscoveryCard(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = SourceCoverShape,
+        shape = CoverCardShape,
     ) {
         Row(Modifier.fillMaxWidth().padding(12.dp)) {
             // Obálka

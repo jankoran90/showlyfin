@@ -57,7 +57,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material3.Badge
+import com.github.jankoran90.showlyfin.core.ui.CoverCard
 import com.github.jankoran90.showlyfin.data.abs.model.EpisodeDownload
+import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.feature.listen.ListenMode
 import com.github.jankoran90.showlyfin.feature.listen.ListenUiState
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
@@ -139,6 +143,9 @@ fun ListenScreen(
                                     onOpenSource = onOpenSource,
                                     onOpenSourceEpisode = onOpenSourceEpisode,
                                     onOpenMerged = onOpenMerged,
+                                    podcastDownloads = podcastDownloads,
+                                    onPlayPodcast = { viewModel.playOfflinePodcast(it) },
+                                    onDeletePodcast = { viewModel.deleteOfflinePodcast(it) },
                                 )
                             }
                         }
@@ -227,6 +234,9 @@ private fun PodcastsContent(
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
     onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
     onOpenMerged: (groupId: String, title: String) -> Unit,
+    podcastDownloads: List<com.github.jankoran90.showlyfin.data.offline.OfflineDownload>,
+    onPlayPodcast: (com.github.jankoran90.showlyfin.data.offline.OfflineDownload) -> Unit,
+    onDeletePodcast: (String) -> Unit,
 ) {
     val discoveryVm: com.github.jankoran90.showlyfin.feature.listen.PodcastDiscoveryViewModel = hiltViewModel()
     val filterVm: com.github.jankoran90.showlyfin.feature.listen.PodcastFilterViewModel = hiltViewModel()
@@ -241,6 +251,11 @@ private fun PodcastsContent(
     var filterEpoch by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize()) {
+        // Offline: online taby (Timeline/Sledované/Objev) nemají data → zobraz rovnou stažené epizody
+        // v ploše (parita se sekcí Audioknihy, která offline ukazuje stažené knihy přímo v gridu).
+        if (state.isOffline) {
+            OfflineDownloadedPodcasts(podcastDownloads, onPlayPodcast, onDeletePodcast)
+        } else {
         PodcastTabRow(
             selected = tab,
             onSelect = { tab = it },
@@ -269,6 +284,7 @@ private fun PodcastsContent(
                 sourceType = filterState.sourceType,
             )
             PodcastTab.DISCOVER -> PodcastDiscoverSection(modifier = Modifier.fillMaxSize())
+        }
         }
     }
 
@@ -617,6 +633,134 @@ private fun DownloadEntryRow(
 private fun formatSize(bytes: Long): String {
     val mb = bytes / (1024.0 * 1024.0)
     return if (mb >= 1024) "%.1f GB".format(mb / 1024) else "%.0f MB".format(mb)
+}
+
+/** WEFT (SHW-75/W6): offline pořad = stažené epizody seskupené pod jednu kartu (parita s Audioknihy grid). */
+private data class OfflinePodcastShow(
+    val title: String,
+    val poster: String?,
+    val sourceLabel: String,
+    val episodes: List<OfflineDownload>,
+)
+
+private fun episodesWord(n: Int): String = when {
+    n == 1 -> "epizoda"
+    n in 2..4 -> "epizody"
+    else -> "epizod"
+}
+
+/**
+ * Offline sekce Podcasty — stažené epizody jako GRID KARET POŘADŮ (parita s Audioknihy/Sledované grid),
+ * NE plochý seznam. Karta = jeden pořad (obálka + počet stažených), klik → [OfflinePodcastEpisodesSheet]
+ * se staženými epizodami toho pořadu. Nahrazuje online taby (Timeline/Sledované/Objev), které bez sítě
+ * nemají data.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OfflineDownloadedPodcasts(
+    podcastDownloads: List<OfflineDownload>,
+    onPlayPodcast: (OfflineDownload) -> Unit,
+    onDeletePodcast: (String) -> Unit,
+) {
+    if (podcastDownloads.isEmpty()) {
+        CenteredMessage(
+            "Jsi offline a nemáš žádné stažené epizody.\nStáhni je v detailu podcastu přes ⋮ → Stáhnout do telefonu, dokud jsi připojený.",
+        )
+        return
+    }
+    // Seskup stažené epizody dle pořadu (subtitle = název pořadu; fallback zdroj) → jedna karta na pořad.
+    val shows = remember(podcastDownloads) {
+        podcastDownloads
+            .groupBy { it.subtitle?.takeIf { s -> s.isNotBlank() } ?: it.sourceLabel }
+            .map { (title, eps) ->
+                OfflinePodcastShow(
+                    title = title,
+                    poster = eps.firstNotNullOfOrNull { it.posterPath ?: it.posterUrl },
+                    sourceLabel = eps.first().sourceLabel,
+                    episodes = eps.sortedByDescending { it.addedAt },
+                )
+            }
+            .sortedBy { it.title.lowercase(java.util.Locale("cs")) }
+    }
+    var openShow by remember { mutableStateOf<OfflinePodcastShow?>(null) }
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 150.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(shows, key = { it.title }) { show ->
+            OfflinePodcastCard(show = show, onClick = { openShow = show })
+        }
+    }
+
+    openShow?.let { opened ->
+        // Živý přemap (po smazání epizody ať se detail zaktualizuje / zavře, když pořad zmizí).
+        val live = shows.firstOrNull { it.title == opened.title }
+        LaunchedEffect(live) { if (live == null) openShow = null }
+        if (live != null) {
+            OfflinePodcastEpisodesSheet(
+                show = live,
+                onPlay = onPlayPodcast,
+                onDelete = onDeletePodcast,
+                onDismiss = { openShow = null },
+            )
+        }
+    }
+}
+
+/** WEFT (SHW-75/W6): karta staženého pořadu — CHORUS Osa 2 delegát nad [CoverCard] (badge počtu). */
+@Composable
+private fun OfflinePodcastCard(
+    show: OfflinePodcastShow,
+    onClick: () -> Unit,
+) {
+    CoverCard(
+        title = show.title,
+        subtitle = "${show.sourceLabel} · ${show.episodes.size} ${episodesWord(show.episodes.size)}",
+        imageUrl = show.poster,
+        onClick = onClick,
+        placeholder = Icons.Default.Podcasts,
+        overlay = {
+            Badge(
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Text(show.episodes.size.toString())
+            }
+        },
+    )
+}
+
+/** WEFT (SHW-75/W6): stažené epizody jednoho pořadu — reuse [DownloadEntryRow] (přehrát/smazat). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OfflinePodcastEpisodesSheet(
+    show: OfflinePodcastShow,
+    onPlay: (OfflineDownload) -> Unit,
+    onDelete: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Text(
+            "${show.title} · ${show.episodes.size} ${episodesWord(show.episodes.size)}",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        LazyColumn(Modifier.height(420.dp)) {
+            columnItems(show.episodes, key = { "off_${it.key}" }) { dl ->
+                val meta = if (dl.sizeBytes > 0) formatSize(dl.sizeBytes) else ""
+                DownloadEntryRow(dl.title, meta, onPlay = { onPlay(dl) }, onDelete = { onDelete(dl.key) })
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            }
+        }
+        Box(Modifier.height(12.dp))
+    }
 }
 
 /** Vystředěná zpráva — funguje v Column i Box (vlastní fillMaxSize Box). */
