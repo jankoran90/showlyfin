@@ -187,6 +187,8 @@ class OfflineDownloadManager @Inject constructor(
             episode = req.episode,
             sizeBytes = out.length(),
             durationSec = req.durationSec,
+            description = req.description,
+            publishedAt = req.publishedAt,
         )
     }
 
@@ -250,6 +252,21 @@ class OfflineDownloadManager @Inject constructor(
     fun updateResume(key: String, positionMs: Long) {
         val dl = index[key] ?: return
         index[key] = dl.copy(lastPlayedAt = System.currentTimeMillis(), resumePositionMs = positionMs)
+        persistIndex()
+        refreshDownloads()
+    }
+
+    /**
+     * RESONANCE (SHW-81) D: doplní popis + datum vydání u UŽ stažené epizody, pokud je zatím nemá.
+     * Volá se online (spárováno dle klíče s čerstvým feedem) → staré stažené (bez těchto polí) se
+     * dovyplní samy. Nepřepisuje existující hodnoty ani neupravuje jiné položky. `null` args ignoruje.
+     */
+    fun backfillMeta(key: String, description: String?, publishedAt: Long?) {
+        val dl = index[key] ?: return
+        val newDesc = dl.description ?: description?.takeIf { it.isNotBlank() }
+        val newPub = dl.publishedAt ?: publishedAt?.takeIf { it > 0L }
+        if (newDesc == dl.description && newPub == dl.publishedAt) return
+        index[key] = dl.copy(description = newDesc, publishedAt = newPub)
         persistIndex()
         refreshDownloads()
     }

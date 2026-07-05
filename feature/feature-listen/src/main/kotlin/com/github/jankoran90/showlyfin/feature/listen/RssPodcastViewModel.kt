@@ -86,6 +86,11 @@ class RssPodcastViewModel @Inject constructor(
                     _state.update {
                         it.copy(isLoading = false, title = feed.title, image = feed.image, episodes = feed.episodes)
                     }
+                    // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod (staré stažení bez
+                    // těchto polí) → offline detail je ukáže i u „Divokých kár". Ignoruje ne-stažené.
+                    feed.episodes.forEach { ep ->
+                        offline.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.date))
+                    }
                 }
                 .onFailure {
                     Timber.w(it, "[PRESET] načtení RSS feedu selhalo")
@@ -146,6 +151,8 @@ class RssPodcastViewModel @Inject constructor(
                 videoUrl = ep.audioUrl,
                 posterUrl = ep.image ?: _state.value.image,
                 durationSec = parseDurationSec(ep.duration),
+                description = ep.description,
+                publishedAt = parseEpisodeDateMs(ep.date),
             ),
         )
     }

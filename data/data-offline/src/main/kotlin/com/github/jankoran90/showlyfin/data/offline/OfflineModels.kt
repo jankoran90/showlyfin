@@ -38,6 +38,9 @@ data class OfflineRequest(
     val season: Int? = null,
     val episode: Int? = null,
     val durationSec: Double = 0.0,
+    // RESONANCE (SHW-81): popis epizody + datum vydání → bohatý offline detail podcastu (parita s online).
+    val description: String? = null,
+    val publishedAt: Long? = null,
     val headers: Map<String, String> = emptyMap(),
 ) {
     companion object {
@@ -70,6 +73,9 @@ data class OfflineDownload(
     val episode: Int? = null,
     val sizeBytes: Long = 0L,
     val durationSec: Double = 0.0,
+    // RESONANCE (SHW-81): popis epizody + datum vydání (nullable = staré stažené záznamy nemají → auto-doplnění online).
+    val description: String? = null,
+    val publishedAt: Long? = null,
     val addedAt: Long = System.currentTimeMillis(),
     val lastPlayedAt: Long = 0L,
     val resumePositionMs: Long = 0L,

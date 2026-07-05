@@ -86,6 +86,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.RssPodcastScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.CtvProgramScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MergedPodcastScreen
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
+import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.feature.remux.RemuxHistoryScreen
@@ -337,6 +338,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         // WEFT (SHW-75/W2): lookup propojených pořadů (TWINE) → proklik z Timeline / cover v přehrávači
         // u slinkovaného zdroje míří na SLOUČENOU obrazovku, ne na původní audio/video.
         val podcastLinkLookup: PodcastLinkLookupViewModel = hiltViewModel()
+        // RESONANCE (SHW-81): sdílená instance (žádný NavHost → Activity-scoped, tatáž jako v ListenScreen)
+        // → proklik z přehrávače u offline epizody předá „otevři offline pořad" do ListenScreen.
+        val listenVm: ListenViewModel = hiltViewModel()
         val snackbarHostState = remember { SnackbarHostState() }
 
         LaunchedEffect(Unit) {
@@ -947,6 +951,13 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     // Poslechu). Zpět ze seznamu → návrat do přehrávače (parent = tato destinace).
                     onOpenSource = { target ->
                         currentDestination = when (target) {
+                            // RESONANCE (SHW-81): offline epizoda → přepni na Poslech a otevři offline detail
+                            // pořadu přes sdílený ListenViewModel (offline detail není Destination).
+                            is ListenSourceTarget.Offline -> {
+                                listenVm.openOfflinePodcast(target.showTitle, target.episodeKey)
+                                bottomTab = Destination.Listen
+                                Destination.Listen
+                            }
                             is ListenSourceTarget.Audiobook -> Destination.AudiobookDetail(target.itemId, parent = dest)
                             is ListenSourceTarget.Podcast -> Destination.PodcastDetail(target.itemId, parent = dest)
                             // NAVIGATE (SHW-73): zvýrazni právě hranou epizodu v seznamu dílů zdroje.

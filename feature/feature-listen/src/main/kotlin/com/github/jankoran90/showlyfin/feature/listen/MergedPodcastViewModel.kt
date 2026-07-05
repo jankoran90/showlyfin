@@ -198,6 +198,8 @@ class MergedPodcastViewModel @Inject constructor(
                 videoUrl = a.streamUrl,
                 posterUrl = item.imageUrl ?: _state.value.image,
                 durationSec = a.durationSec,
+                description = item.description,
+                publishedAt = parseEpisodeDateMs(item.date),
             ),
         )
     }

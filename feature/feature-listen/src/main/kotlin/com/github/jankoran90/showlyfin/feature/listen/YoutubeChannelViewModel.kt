@@ -147,6 +147,8 @@ class YoutubeChannelViewModel @Inject constructor(
                 videoUrl = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
                 posterUrl = ep.thumbnail,
                 durationSec = ep.duration ?: 0.0,
+                description = ep.description,
+                publishedAt = parseEpisodeDateMs(ep.uploadDate),
             ),
         )
     }

@@ -37,6 +37,11 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_HIDE_FINISHED, false)
         set(value) = prefs.edit { putBoolean(KEY_HIDE_FINISHED, value) }
 
+    /** RESONANCE (SHW-81): offline detail podcastu — epizody nejnovější nahoře (default true) vs nejstarší. */
+    var offlinePodcastNewestFirst: Boolean
+        get() = prefs.getBoolean("offline_podcast_newest_first", true)
+        set(value) = prefs.edit { putBoolean("offline_podcast_newest_first", value) }
+
     // ──────────────── Přehrávání ────────────────
 
     /** Velikost přeskoku ◀▶ v sekundách (in-app i Android Auto). */

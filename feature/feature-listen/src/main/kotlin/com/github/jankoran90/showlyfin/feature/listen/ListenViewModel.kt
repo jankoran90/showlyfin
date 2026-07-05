@@ -17,6 +17,7 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.PlayerState
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -158,6 +159,28 @@ class ListenViewModel @Inject constructor(
             SharingStarted.Eagerly,
             offline.downloads.value.filter { it.type == OfflineRequest.TYPE_PODCAST },
         )
+
+    /** RESONANCE (SHW-81): stav přehrávače → zvýraznění + progress právě hrané epizody v offline detailu. */
+    val playerState: StateFlow<PlayerState> = connection.state
+
+    /** RESONANCE (SHW-81): má stažená epizoda i lokální VIDEO? (offline podcast = zatím jen audio → false). */
+    fun hasLocalVideo(key: String): Boolean = offline.localVideo(key) != null
+
+    /**
+     * RESONANCE (SHW-81): žádost otevřít offline detail pořadu z prokliku na cover v přehrávači.
+     * Pair(showTitle, highlightEpisodeKey). ListenScreen ji spotřebuje → otevře kartu + zvýrazní epizodu.
+     */
+    private val _requestedOfflineShow = MutableStateFlow<Pair<String, String?>?>(null)
+    val requestedOfflineShow: StateFlow<Pair<String, String?>?> = _requestedOfflineShow.asStateFlow()
+    fun openOfflinePodcast(showTitle: String, highlightEpisodeKey: String?) {
+        _requestedOfflineShow.value = showTitle to highlightEpisodeKey
+    }
+    fun consumeOfflineRequest() { _requestedOfflineShow.value = null }
+
+    /** RESONANCE (SHW-81): řazení epizod offline detailu — true = nejnovější nahoře (default). Perzistentní. */
+    var offlinePodcastNewestFirst: Boolean
+        get() = absPrefs.offlinePodcastNewestFirst
+        set(value) { absPrefs.offlinePodcastNewestFirst = value }
 
     fun deleteDownload(episodeId: String) = downloadManager.delete(episodeId)
 

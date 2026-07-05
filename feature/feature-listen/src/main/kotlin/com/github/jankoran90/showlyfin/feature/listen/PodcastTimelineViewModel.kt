@@ -275,6 +275,8 @@ class PodcastTimelineViewModel @Inject constructor(
                 videoUrl = ep.streamUrl,
                 posterUrl = ep.imageUrl,
                 durationSec = ep.durationSec,
+                description = ep.description,
+                publishedAt = item.timestampMs.takeIf { it > 0L } ?: parseEpisodeDateMs(ep.date),
             ),
         )
     }

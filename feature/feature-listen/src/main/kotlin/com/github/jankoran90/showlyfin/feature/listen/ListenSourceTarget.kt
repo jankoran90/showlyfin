@@ -17,4 +17,11 @@ sealed interface ListenSourceTarget {
     /** [episodeKey] = klíč právě hrané epizody (`rss:`/`yt:`) → zvýraznění + scroll v obsahu zdroje. */
     data class Rss(val feedUrl: String, val title: String, val episodeKey: String? = null) : ListenSourceTarget
     data class Youtube(val handle: String, val title: String, val episodeKey: String? = null) : ListenSourceTarget
+
+    /**
+     * RESONANCE (SHW-81): offline stažený pořad (proklik z přehrávače u epizody hrané z lokálního
+     * souboru — `itemId="offline"`). [showTitle] = název pořadu, [episodeKey] = klíč hrané epizody
+     * (dl.key) → otevři offline detail pořadu + zvýrazni/scroll na epizodu.
+     */
+    data class Offline(val showTitle: String, val episodeKey: String? = null) : ListenSourceTarget
 }

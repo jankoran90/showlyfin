@@ -60,6 +60,9 @@ class AudiobookPlayerViewModel @Inject constructor(
         val title = s.author?.takeIf { it.isNotBlank() } ?: s.title
         val epId = s.currentEpisodeId
         return when {
+            // RESONANCE (SHW-81): offline hraná epizoda (lokální soubor) → offline detail pořadu,
+            // ne ABS/online (to by bez sítě hlásilo „nepodařilo se načíst epizody"). title = pořad.
+            itemId == "offline" -> ListenSourceTarget.Offline(title, episodeKey = epId)
             epId != null && epId.startsWith("rss:") -> ListenSourceTarget.Rss(itemId, title, episodeKey = epId)
             epId != null && epId.startsWith("yt:") -> ListenSourceTarget.Youtube(itemId, title, episodeKey = epId)
             s.isPodcastEpisode -> ListenSourceTarget.Podcast(itemId)

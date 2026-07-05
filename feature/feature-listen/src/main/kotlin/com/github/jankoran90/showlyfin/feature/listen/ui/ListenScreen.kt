@@ -65,6 +65,20 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.feature.listen.ListenMode
 import com.github.jankoran90.showlyfin.feature.listen.ListenUiState
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.SwapVert
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Poslechová sekce — přepínač Audioknihy ↔ Podcasty, knihovní chips + grid obálek s progressem.
@@ -144,8 +158,6 @@ fun ListenScreen(
                                     onOpenSourceEpisode = onOpenSourceEpisode,
                                     onOpenMerged = onOpenMerged,
                                     podcastDownloads = podcastDownloads,
-                                    onPlayPodcast = { viewModel.playOfflinePodcast(it) },
-                                    onDeletePodcast = { viewModel.deleteOfflinePodcast(it) },
                                 )
                             }
                         }
@@ -235,8 +247,6 @@ private fun PodcastsContent(
     onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
     onOpenMerged: (groupId: String, title: String) -> Unit,
     podcastDownloads: List<com.github.jankoran90.showlyfin.data.offline.OfflineDownload>,
-    onPlayPodcast: (com.github.jankoran90.showlyfin.data.offline.OfflineDownload) -> Unit,
-    onDeletePodcast: (String) -> Unit,
 ) {
     val discoveryVm: com.github.jankoran90.showlyfin.feature.listen.PodcastDiscoveryViewModel = hiltViewModel()
     val filterVm: com.github.jankoran90.showlyfin.feature.listen.PodcastFilterViewModel = hiltViewModel()
@@ -254,7 +264,7 @@ private fun PodcastsContent(
         // Offline: online taby (Timeline/Sledované/Objev) nemají data → zobraz rovnou stažené epizody
         // v ploše (parita se sekcí Audioknihy, která offline ukazuje stažené knihy přímo v gridu).
         if (state.isOffline) {
-            OfflineDownloadedPodcasts(podcastDownloads, onPlayPodcast, onDeletePodcast)
+            OfflineDownloadedPodcasts(podcastDownloads, viewModel)
         } else {
         PodcastTabRow(
             selected = tab,
@@ -659,8 +669,7 @@ private fun episodesWord(n: Int): String = when {
 @Composable
 private fun OfflineDownloadedPodcasts(
     podcastDownloads: List<OfflineDownload>,
-    onPlayPodcast: (OfflineDownload) -> Unit,
-    onDeletePodcast: (String) -> Unit,
+    viewModel: ListenViewModel,
 ) {
     if (podcastDownloads.isEmpty()) {
         CenteredMessage(
@@ -669,6 +678,7 @@ private fun OfflineDownloadedPodcasts(
         return
     }
     // Seskup stažené epizody dle pořadu (subtitle = název pořadu; fallback zdroj) → jedna karta na pořad.
+    // RESONANCE (SHW-81): epizody NEJNOVĚJŠÍ NAHOŘE dle data vydání (fallback datum stažení u starých).
     val shows = remember(podcastDownloads) {
         podcastDownloads
             .groupBy { it.subtitle?.takeIf { s -> s.isNotBlank() } ?: it.sourceLabel }
@@ -677,36 +687,50 @@ private fun OfflineDownloadedPodcasts(
                     title = title,
                     poster = eps.firstNotNullOfOrNull { it.posterPath ?: it.posterUrl },
                     sourceLabel = eps.first().sourceLabel,
-                    episodes = eps.sortedByDescending { it.addedAt },
+                    episodes = eps.sortedByDescending { it.publishedAt ?: it.addedAt },
                 )
             }
-            .sortedBy { it.title.lowercase(java.util.Locale("cs")) }
+            .sortedBy { it.title.lowercase(Locale("cs")) }
     }
     var openShow by remember { mutableStateOf<OfflinePodcastShow?>(null) }
+    var highlightKey by remember { mutableStateOf<String?>(null) }
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 150.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(shows, key = { it.title }) { show ->
-            OfflinePodcastCard(show = show, onClick = { openShow = show })
+    // RESONANCE (SHW-81): proklik z přehrávače (offline epizoda) → otevři kartu pořadu + zvýrazni epizodu.
+    val requested by viewModel.requestedOfflineShow.collectAsStateWithLifecycle()
+    LaunchedEffect(requested, shows) {
+        requested?.let { (title, epKey) ->
+            shows.firstOrNull { it.title == title }?.let { openShow = it; highlightKey = epKey }
+            viewModel.consumeOfflineRequest()
         }
     }
 
-    openShow?.let { opened ->
-        // Živý přemap (po smazání epizody ať se detail zaktualizuje / zavře, když pořad zmizí).
-        val live = shows.firstOrNull { it.title == opened.title }
-        LaunchedEffect(live) { if (live == null) openShow = null }
-        if (live != null) {
-            OfflinePodcastEpisodesSheet(
-                show = live,
-                onPlay = onPlayPodcast,
-                onDelete = onDeletePodcast,
-                onDismiss = { openShow = null },
-            )
+    // Grid + detail v jednom Boxu → detail (Scaffold, neprůhledné pozadí) PŘEKRYJE grid. Kdyby byl
+    // detail sourozencem gridu v Column, `fillMaxSize` grid by mu nenechal výšku (0 px = „nic se neděje").
+    Box(Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 150.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(shows, key = { it.title }) { show ->
+                OfflinePodcastCard(show = show, onClick = { openShow = show })
+            }
+        }
+
+        openShow?.let { opened ->
+            // Živý přemap (po smazání epizody ať se detail zaktualizuje / zavře, když pořad zmizí).
+            val live = shows.firstOrNull { it.title == opened.title }
+            LaunchedEffect(live) { if (live == null) openShow = null }
+            if (live != null) {
+                OfflinePodcastDetailScreen(
+                    show = live,
+                    viewModel = viewModel,
+                    highlightEpisodeKey = highlightKey,
+                    onBack = { openShow = null; highlightKey = null },
+                )
+            }
         }
     }
 }
@@ -735,32 +759,173 @@ private fun OfflinePodcastCard(
     )
 }
 
-/** WEFT (SHW-75/W6): stažené epizody jednoho pořadu — reuse [DownloadEntryRow] (přehrát/smazat). */
+/**
+ * RESONANCE (SHW-81): offline detail pořadu = PARITA s online vzhledem. Plná obrazitka (TopAppBar
+ * s názvem pořadu, cover + zdroj + počet), epizody přes sdílený [PodcastEpisodeRow] (obrázek + název
+ * + datum + popis + [Poslech/Pokračovat] + [⋮]). Nejnovější nahoře. Koš NENÍ v popředí → jen v ⋮ menu
+ * (Přehrát · Smazat z telefonu). Zvýrazní + resume právě hranou epizodu (`playerState`).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OfflinePodcastEpisodesSheet(
+private fun OfflinePodcastDetailScreen(
     show: OfflinePodcastShow,
-    onPlay: (OfflineDownload) -> Unit,
-    onDelete: (String) -> Unit,
-    onDismiss: () -> Unit,
+    viewModel: ListenViewModel,
+    highlightEpisodeKey: String? = null,
+    onBack: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
-        Text(
-            "${show.title} · ${show.episodes.size} ${episodesWord(show.episodes.size)}",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-        LazyColumn(Modifier.height(420.dp)) {
-            columnItems(show.episodes, key = { "off_${it.key}" }) { dl ->
-                val meta = if (dl.sizeBytes > 0) formatSize(dl.sizeBytes) else ""
-                DownloadEntryRow(dl.title, meta, onPlay = { onPlay(dl) }, onDelete = { onDelete(dl.key) })
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    val playerState by viewModel.playerState.collectAsStateWithLifecycle()
+    val playingKey = playerState.currentEpisodeId?.takeIf { playerState.isActive }
+    var actionEp by remember { mutableStateOf<OfflineDownload?>(null) }
+    var newestFirst by remember { mutableStateOf(viewModel.offlinePodcastNewestFirst) }
+    // show.episodes je defaultně nejnovější nahoře (publishedAt?:addedAt); obrácení = reversed.
+    val episodes = remember(show.episodes, newestFirst) {
+        if (newestFirst) show.episodes else show.episodes.reversed()
+    }
+    val listState = rememberLazyListState()
+    // Proklik z přehrávače: doskroluj na zvýrazněnou/hranou epizodu (+2 kvůli hlavičce a nadpisu „Epizody").
+    LaunchedEffect(highlightEpisodeKey, episodes) {
+        val key = highlightEpisodeKey ?: playingKey
+        if (key != null) {
+            val idx = episodes.indexOfFirst { it.key == key }
+            if (idx >= 0) listState.scrollToItem((idx + 2).coerceAtMost(episodes.size + 1))
+        }
+    }
+    BackHandler(onBack = onBack)
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text(show.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        newestFirst = !newestFirst
+                        viewModel.offlinePodcastNewestFirst = newestFirst
+                    }) {
+                        Icon(
+                            Icons.Default.SwapVert,
+                            contentDescription = if (newestFirst) "Řazení: nejnovější nahoře (ťuk = obrátit)"
+                            else "Řazení: nejstarší nahoře (ťuk = obrátit)",
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            )
+        },
+    ) { pad ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(pad),
+            state = listState,
+            contentPadding = PaddingValues(16.dp),
+        ) {
+            item {
+                Row {
+                    Box(
+                        Modifier
+                            .size(120.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    ) {
+                        if (show.poster != null) {
+                            AsyncImage(
+                                model = show.poster,
+                                contentDescription = show.title,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                    }
+                    Column(
+                        Modifier.padding(start = 16.dp).height(120.dp).weight(1f),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            show.sourceLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "${show.episodes.size} ${episodesWord(show.episodes.size)} · staženo",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                }
+            }
+            item {
+                Text(
+                    "Epizody",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(top = 22.dp, bottom = 4.dp),
+                )
+            }
+            columnItems(episodes, key = { "off_${it.key}" }) { dl ->
+                val isCurrent = dl.key == playingKey
+                // Progress: hraje-li → z přehrávače; jinak z uložené resume pozice stažené epizody.
+                val progress: Float? = when {
+                    isCurrent && playerState.durationMs > 0 ->
+                        (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
+                    dl.resumePositionMs > 0 && dl.durationSec > 0 ->
+                        (dl.resumePositionMs / 1000f / dl.durationSec.toFloat()).coerceIn(0f, 1f)
+                    else -> null
+                }
+                PodcastEpisodeRow(
+                    title = dl.title,
+                    image = dl.posterPath ?: dl.posterUrl,
+                    date = msToIso(dl.publishedAt),
+                    duration = dl.durationSec.takeIf { it > 0 }?.toLong()?.toString(),
+                    description = dl.description,
+                    downloaded = false, // v offline detailu je vše staženo → ikona redundantní
+                    isCurrent = isCurrent,
+                    isPlaying = isCurrent && playerState.isPlaying,
+                    progress = progress,
+                    canResume = !isCurrent && dl.resumePositionMs > 0,
+                    remainingLabel = null,
+                    hasVideo = false, // offline podcast = zatím jen audio
+                    highlighted = dl.key == highlightEpisodeKey,
+                    onPlay = { viewModel.playOfflinePodcast(dl) },
+                    onVideo = {},
+                    onMore = { actionEp = dl },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
             }
         }
-        Box(Modifier.height(12.dp))
     }
+
+    actionEp?.let { dl ->
+        ListenEpisodeActionSheet(
+            title = dl.title,
+            actions = listOf(
+                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
+                    viewModel.playOfflinePodcast(dl); actionEp = null
+                },
+                ListenEpisodeAction(Icons.Default.Delete, "Smazat z telefonu") {
+                    viewModel.deleteOfflinePodcast(dl.key); actionEp = null
+                },
+            ),
+            onDismiss = { actionEp = null },
+        )
+    }
+}
+
+/** RESONANCE (SHW-81): epoch ms → "yyyy-MM-dd" pro [formatRssDate] v řádku epizody (jednotné datum). */
+private fun msToIso(ms: Long?): String? {
+    if (ms == null || ms <= 0L) return null
+    return runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(ms)) }.getOrNull()
 }
 
 /** Vystředěná zpráva — funguje v Column i Box (vlastní fillMaxSize Box). */
