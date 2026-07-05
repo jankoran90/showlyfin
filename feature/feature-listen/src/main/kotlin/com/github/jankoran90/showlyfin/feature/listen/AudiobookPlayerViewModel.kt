@@ -77,7 +77,15 @@ class AudiobookPlayerViewModel @Inject constructor(
      */
     fun open(itemId: String, fromStart: Boolean, startSec: Double? = null, episodeId: String? = null) {
         val key = if (episodeId != null) "$itemId/$episodeId" else itemId
-        if (openedFor == key) {
+        // Early-return (seek místo restartu) SMÍ nastat jen když connection SKUTEČNĚ hraje právě tuhle
+        // položku. Dřív stačilo `openedFor == key`, jenže `openedFor` se nemění, když přehrávání převezme
+        // jiná cesta než open() — offline podcast (playDirectEpisode), fronta, widget, auto-advance.
+        // Pak zůstal `openedFor` „zaseknutý" na dřív otevřené knize a klik na play u téže knihy jen otevřel
+        // now-playing s cizí (podcastovou) položkou a knihu NIKDY nespustil (bug „Ďábelské káry offline
+        // → nejdou přehrát jiné audioknihy", 2026-07-05). Ověř proto reálný stav přehrávače.
+        val s = connection.state.value
+        val alreadyPlayingThis = s.isActive && s.currentItemId == itemId && s.currentEpisodeId == episodeId
+        if (openedFor == key && alreadyPlayingThis) {
             if (startSec != null) connection.seekTo((startSec * 1000).toLong())
             return
         }

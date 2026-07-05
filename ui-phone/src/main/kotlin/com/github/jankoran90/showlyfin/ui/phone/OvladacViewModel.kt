@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
+import com.github.jankoran90.showlyfin.data.jellyfin.FerryAudioOut
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.maestro.AvrController
@@ -85,6 +86,11 @@ class OvladacViewModel @Inject constructor(
          * se musí násobit `subFps/videoFps`. Ephemerální (per-release, neukládá se přes nový cast).
          */
         val subFpsScale: Double = 1.0,
+        /**
+         * REVERB (SHW-82): zvukový výstup přehrávače na Zenbooku (dock) — přepínač Zenbook↔AV receiver
+         * + lip-sync posun. null = nehraje na docku (běžný JF/yellyfin cast) → karta se neukáže.
+         */
+        val audioOut: FerryAudioOut? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -206,6 +212,8 @@ class OvladacViewModel @Inject constructor(
                 avrVolume = avrStatus?.volume ?: it.avrVolume ?: avrDefaultVolume(),
                 avrMuted = if (avrStatus?.reachable == true) avrStatus.muted else it.avrMuted,
                 avrVolumeStep = avrVolumeStepPref(),
+                // REVERB (SHW-82): zvukový výstup docku (Zenbook/AVR) — jen když box hlásí (= hraje na docku).
+                audioOut = ferrySt?.audioOut,
             )
         }
         // WINNOW item 4: nový externí cast (jiný film) → re-aplikuj uložený styl titulků/obrazu na box.
@@ -216,6 +224,31 @@ class OvladacViewModel @Inject constructor(
         } else if (fc == null) {
             lastReappliedCastKey = null
         }
+        // REVERB (SHW-82): po startu castu na dock přepni na výchozí zvukový výstup z Nastavení
+        // (opt-in; default "local" = neděláme nic). Retry každý poll, dokud dock nezačne hlásit audioOut.
+        maybeAutoSwitchAudio(fc, castKey)
+    }
+
+    // REVERB: klíč castu, pro který jsme už provedli auto-přepnutí výstupu (ať se nespouští každý poll).
+    private var audioAutoSwitchedKey: String? = null
+
+    private fun maybeAutoSwitchAudio(fc: ListenNavSignal.FerryCast?, castKey: String?) {
+        if (fc == null || castKey == null) {
+            audioAutoSwitchedKey = null
+            return
+        }
+        val ao = _state.value.audioOut ?: return   // dock ještě nehlásí výstup → zkusíme příští poll
+        if (audioAutoSwitchedKey == castKey) return
+        val want = defaultDockAudioTarget()
+        when {
+            want == "local" -> audioAutoSwitchedKey = castKey            // bez auto-přepnutí
+            ao.currentId == want -> audioAutoSwitchedKey = castKey        // už je na požadovaném
+            ao.targets.any { it.id == want } -> {                         // přepni na výchozí cíl
+                audioAutoSwitchedKey = castKey
+                setAudioOutput(want)
+            }
+            else -> audioAutoSwitchedKey = castKey                        // cíl dock nenabízí → nech být
+        }
     }
 
     /**
@@ -225,8 +258,11 @@ class OvladacViewModel @Inject constructor(
      */
     private fun activeFerryCastFor(current: JellyfinSessionSummary?): ListenNavSignal.FerryCast? {
         if (current == null || current.nowPlayingTitle != null) return null
-        val isYellyfin = "${current.client.orEmpty()} ${current.deviceName}".lowercase().contains("yellyfin")
-        if (!isYellyfin) return null
+        // FERRY přijímač bez JF NowPlaying = yellyfin box NEBO náš Zenbook dock (ShowlyfinDock/„Zenbook").
+        // REVERB (SHW-82): bez docku by ovladač u Zenbooku nečetl pozici ani zvukový výstup (audioOut).
+        val hay = "${current.client.orEmpty()} ${current.deviceName}".lowercase()
+        val isFerryReceiver = hay.contains("yellyfin") || hay.contains("showlyfindock") || hay.contains("zenbook")
+        if (!isFerryReceiver) return null
         val fc = ListenNavSignal.ferryCast.value ?: return null
         return if (System.currentTimeMillis() - fc.startedAtMs < EXTERNAL_TTL_MS) fc else null
     }
@@ -394,6 +430,58 @@ class OvladacViewModel @Inject constructor(
     fun setSubtitle(index: Int) = command { c, id -> naTv.setSubtitleIndex(c.url, c.token, id, index) }
     fun setAudio(index: Int) = command { c, id -> naTv.setAudioIndex(c.url, c.token, id, index) }
 
+    // --- REVERB (SHW-82): zvukový výstup přehrávače na docku (Zenbook ↔ AV receiver) + lip-sync.
+    /**
+     * Přepne zvukový výstup přehrávače na [id] (např. "local"=Zenbook, "avr"=AV receiver). Při přechodu
+     * na jiný než lokální cíl pošle i výchozí lip-sync posun z Nastavení. Optimisticky posune UI, poll
+     * pak potvrdí reálný stav z docku.
+     */
+    fun setAudioOutput(id: String) {
+        val c = creds() ?: return
+        viewModelScope.launch {
+            _state.update { st ->
+                st.copy(audioOut = st.audioOut?.let { ao ->
+                    ao.copy(currentId = id, targets = ao.targets.map { it.copy(active = it.id == id) })
+                })
+            }
+            val delayMs = if (id != "local") avrDefaultDelayMs() else 0
+            naTv.castFerryAudio(c.url, c.token, target = id, delayMs = delayMs, preferredDeviceId = _state.value.current?.deviceId)
+            delay(COMMAND_SETTLE_MS)
+            refresh()
+        }
+    }
+
+    /**
+     * Živě doladí lip-sync posun zvuku o [deltaMs] (− = zvuk dřív / video zdrženo), rozsah ±10 s.
+     * Doladěnou hodnotu ULOŽÍ jako novou výchozí ([PK_DOCK_AVR_DELAY]) → zpoždění AirPlay je konstantní,
+     * takže po jednom doladění drží napořád (příště se stejná hodnota nasadí sama při přepnutí na AVR).
+     */
+    fun nudgeAudioDelay(deltaMs: Int) {
+        val c = creds() ?: return
+        val v = ((_state.value.audioOut?.delayMs ?: 0) + deltaMs).coerceIn(-10_000, 10_000)
+        prefs.edit().putInt(PK_DOCK_AVR_DELAY, v).apply()
+        viewModelScope.launch {
+            _state.update { st -> st.copy(audioOut = st.audioOut?.copy(delayMs = v)) }
+            naTv.castFerryAudio(c.url, c.token, delayMs = v, preferredDeviceId = _state.value.current?.deviceId)
+        }
+    }
+
+    fun resetAudioDelay() {
+        val c = creds() ?: return
+        prefs.edit().putInt(PK_DOCK_AVR_DELAY, 0).apply()
+        viewModelScope.launch {
+            _state.update { st -> st.copy(audioOut = st.audioOut?.copy(delayMs = 0)) }
+            naTv.castFerryAudio(c.url, c.token, delayMs = 0, preferredDeviceId = _state.value.current?.deviceId)
+        }
+    }
+
+    /** Výchozí zvukový výstup po startu castu na dock (Nastavení); "local" = neděláme nic. */
+    private fun defaultDockAudioTarget(): String =
+        prefs.getString(PK_DOCK_AUDIO_TARGET, "local").orEmpty().ifBlank { "local" }
+
+    /** Výchozí lip-sync posun (ms) při přepnutí na AV receiver (Nastavení). */
+    private fun avrDefaultDelayMs(): Int = prefs.getInt(PK_DOCK_AVR_DELAY, 0)
+
     // --- CONSOLE (SHW-39): nastavení obrazu/titulků externího přehrávače z Ovladače.
     /** Poměr obrazu na TV: "fit" | "zoom" | "fill". */
     fun setResizeMode(mode: String) {
@@ -494,6 +582,9 @@ class OvladacViewModel @Inject constructor(
         const val PK_FONT = "console_sub_font_sp"
         const val PK_MARGIN = "console_sub_margin_pct"
         const val PK_COLOR = "console_sub_color_argb"
+        // REVERB (SHW-82): výchozí zvukový výstup docku + výchozí lip-sync posun pro AVR (z Nastavení).
+        const val PK_DOCK_AUDIO_TARGET = "dock_audio_default_target"
+        const val PK_DOCK_AVR_DELAY = "dock_audio_avr_delay_ms"
         val DEFAULT_COLOR_SLOTS = listOf(
             0xFFFFFFFF.toInt(), // bílá
             0xFFFFEB3B.toInt(), // žlutá

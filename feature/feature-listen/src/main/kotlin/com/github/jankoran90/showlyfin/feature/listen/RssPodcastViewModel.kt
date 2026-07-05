@@ -89,7 +89,7 @@ class RssPodcastViewModel @Inject constructor(
                     // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod (staré stažení bez
                     // těchto polí) → offline detail je ukáže i u „Divokých kár". Ignoruje ne-stažené.
                     feed.episodes.forEach { ep ->
-                        offline.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.date))
+                        offline.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.date), loadedFor?.let { "rss:$it" })
                     }
                 }
                 .onFailure {
@@ -153,6 +153,8 @@ class RssPodcastViewModel @Inject constructor(
                 durationSec = parseDurationSec(ep.duration),
                 description = ep.description,
                 publishedAt = parseEpisodeDateMs(ep.date),
+                // RESONANCE (SHW-81) D: klíč zdroje pro filtr skrytých pořadů offline (dětský profil).
+                sourceKey = loadedFor?.let { "rss:$it" },
             ),
         )
     }

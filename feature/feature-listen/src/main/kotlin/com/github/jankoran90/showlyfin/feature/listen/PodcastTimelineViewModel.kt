@@ -183,6 +183,13 @@ class PodcastTimelineViewModel @Inject constructor(
             // správnější datum + jde rovnou přehrát). Nespárované audio i video zůstanou.
             val deduped = dedupeLinked(collected)
 
+            // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvé agregace (parita
+            // s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes Timeline. Ne-stažené
+            // epizody backfillMeta ignoruje (levný no-op). Sentinel „bez data" (< 0) se nepředává.
+            deduped.forEach { item ->
+                offline.backfillMeta(item.key, item.episode.description, item.timestampMs.takeIf { it > 0L }, "${item.sourceType}:${item.sourceRef}")
+            }
+
             // WEFT (SHW-75/W5): odfiltruj pořady skryté na časové ose pro tento profil (klíč `type:ref`).
             val hidden = profileRepository.activeConfig.value.hiddenTimelineSourceKeys
             val visible = if (hidden.isEmpty()) deduped
@@ -277,6 +284,9 @@ class PodcastTimelineViewModel @Inject constructor(
                 durationSec = ep.durationSec,
                 description = ep.description,
                 publishedAt = item.timestampMs.takeIf { it > 0L } ?: parseEpisodeDateMs(ep.date),
+                // RESONANCE (SHW-81) D: klíč zdroje (shodný s hiddenTimeline/FollowingSourceKeys) pro filtr
+                // skrytých pořadů offline (dětský profil).
+                sourceKey = "${item.sourceType}:${item.sourceRef}",
             ),
         )
     }

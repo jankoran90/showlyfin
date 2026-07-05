@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.data.jellyfin.FerryAudioOut
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.StreamTrack
 import com.github.jankoran90.showlyfin.data.maestro.AvrController
@@ -144,6 +145,13 @@ fun OvladacScreen(
             else -> NowPlaying(state.current!!, state.coverUrl, state.externalTitle, state.externalPosterUrl, onOpenDetail, vm)
         }
 
+        // REVERB (SHW-82): zvukový výstup přehrávače (Zenbook ↔ AV receiver) + lip-sync — jen když hraje
+        // na Zenbook docku (box hlásí audioOut). Video zůstává na Zenbooku, zvuk lze poslat do receiveru.
+        state.audioOut?.let { ao ->
+            Spacer(Modifier.height(12.dp))
+            AudioOutputCard(ao, vm)
+        }
+
         // CONSOLE: nastavení obrazu/titulků TV streamu — jen pro externí (RD/Stremio) přehrávání,
         // kde to box (yellyfin ExternalPlaybackPage) umí aplikovat na PlayerView.
         if (state.isExternal && state.current != null) {
@@ -189,6 +197,72 @@ private fun SystemPowerCard(sceneStatus: String?, vm: OvladacViewModel) {
             if (sceneStatus != null) {
                 Spacer(Modifier.height(6.dp))
                 Text(sceneStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/**
+ * REVERB (SHW-82): přepínač zvukového výstupu přehrávače na Zenbook docku (Zenbook ↔ AV receiver)
+ * + živý stepper lip-sync posunu. Cíle a stav čte z FERRY reportu docku (`audioOut`), přepnutí i posun
+ * posílá zpět povelem `FERRYAUDIO1:`. Karta je vidět jen když se hraje na docku. Video zůstává na Zenbooku.
+ */
+@Composable
+private fun AudioOutputCard(ao: FerryAudioOut, vm: OvladacViewModel) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.VolumeUp, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("Zvukový výstup", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Kam jde zvuk, zatímco video běží na Zenbooku.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            if (ao.targets.isNotEmpty()) {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    ao.targets.forEachIndexed { i, t ->
+                        SegmentedButton(
+                            selected = t.active,
+                            onClick = { vm.setAudioOutput(t.id) },
+                            shape = SegmentedButtonDefaults.itemShape(i, ao.targets.size),
+                        ) { Text(t.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                }
+            }
+
+            // Lip-sync stepper — jen když aktivní cíl není přímo Zenbook (AirPlay do receiveru má ~2s buffer).
+            val activeKind = ao.targets.firstOrNull { it.active }?.kind ?: "local"
+            if (activeKind != "local") {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text("Posun zvuku (lip-sync)", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (ao.delayMs == 0) "synchronní" else "%+.1f s".format(ao.delayMs / 1000f),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalIconButton(onClick = { vm.nudgeAudioDelay(-100) }) { Icon(Icons.Filled.Remove, "Zvuk dřív") }
+                        TextButton(onClick = { vm.resetAudioDelay() }) { Text("0") }
+                        FilledTonalIconButton(onClick = { vm.nudgeAudioDelay(100) }) { Icon(Icons.Filled.Add, "Zvuk později") }
+                    }
+                }
+                Text(
+                    "Když zvuk za obrazem utíká, uber; když předbíhá, přidej.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -371,10 +445,16 @@ private fun DeviceSwitcher(
     selectedId: String?,
     onSelect: (String) -> Unit,
 ) {
+    // REVERB (SHW-82): Zenbook dock se hlásí do JF za VÍC profilů (yellman + Děti) se stejným
+    // deviceName → jinak dvě stejné dlaždice „Zenbook". Sjednotíme na jednu (dle deviceName);
+    // cast míří do sdíleného mpv, takže reprezentativní session stačí.
+    val unique = remember(sessions) { sessions.distinctBy { it.deviceName } }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        sessions.forEach { s ->
+        unique.forEach { s ->
+            // Vybráno = když je zvolená KTERÁKOLI session s tímto jménem (napříč profily).
+            val selected = sessions.any { it.deviceName == s.deviceName && it.sessionId == selectedId }
             FilterChip(
-                selected = s.sessionId == selectedId,
+                selected = selected,
                 onClick = { onSelect(s.sessionId) },
                 label = { Text(s.deviceName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 leadingIcon = { Icon(Icons.Filled.Tv, null, Modifier.size(18.dp)) },

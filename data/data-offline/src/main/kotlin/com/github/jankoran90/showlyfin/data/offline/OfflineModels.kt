@@ -41,6 +41,9 @@ data class OfflineRequest(
     // RESONANCE (SHW-81): popis epizody + datum vydání → bohatý offline detail podcastu (parita s online).
     val description: String? = null,
     val publishedAt: Long? = null,
+    // RESONANCE (SHW-81) D: klíč ZDROJE „type:ref" (rss:<feed> / youtube:<handle>) pro paritu skrytých
+    // pořadů v offline seznamu (dětský profil). null = staré stažené / neznámý zdroj → NEfiltruje se.
+    val sourceKey: String? = null,
     val headers: Map<String, String> = emptyMap(),
 ) {
     companion object {
@@ -76,6 +79,8 @@ data class OfflineDownload(
     // RESONANCE (SHW-81): popis epizody + datum vydání (nullable = staré stažené záznamy nemají → auto-doplnění online).
     val description: String? = null,
     val publishedAt: Long? = null,
+    // RESONANCE (SHW-81) D: klíč zdroje „type:ref" pro filtr skrytých pořadů offline (dětský profil). null = nefiltruje se.
+    val sourceKey: String? = null,
     val addedAt: Long = System.currentTimeMillis(),
     val lastPlayedAt: Long = 0L,
     val resumePositionMs: Long = 0L,

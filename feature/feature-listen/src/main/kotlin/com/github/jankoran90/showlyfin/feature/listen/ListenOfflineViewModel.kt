@@ -19,9 +19,16 @@ import javax.inject.Inject
 @HiltViewModel
 class ListenOfflineViewModel @Inject constructor(
     private val offline: OfflineDownloadManager,
+    private val absPrefs: com.github.jankoran90.showlyfin.data.abs.AbsPreferences,
 ) : ViewModel() {
 
     private val podcastTypes = setOf(OfflineRequest.TYPE_PODCAST)
+
+    /** RESONANCE (SHW-81) A: řazení epizod v offline detailu — nejnovější nahoře (default) vs nejstarší.
+     * Parita Nastavení k přepínači v liště offline detailu (dřív šlo měnit jen tam). */
+    var offlinePodcastNewestFirst: Boolean
+        get() = absPrefs.offlinePodcastNewestFirst
+        set(value) { absPrefs.offlinePodcastNewestFirst = value }
 
     val downloads: StateFlow<List<OfflineDownload>> = offline.downloads
         .map { list -> list.filter { it.type == OfflineRequest.TYPE_PODCAST } }

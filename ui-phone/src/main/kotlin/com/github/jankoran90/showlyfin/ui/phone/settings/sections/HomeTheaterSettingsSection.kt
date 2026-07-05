@@ -113,6 +113,10 @@ internal fun HomeTheaterSettingsSection(
             CollapsibleSettingsSection("Cíl pro Na TV", expandedMap) {
             CastTargetSettingsSection()
             }
+            // REVERB (SHW-82): zvukový výstup přehrávače na Zenbooku (Zenbook / AV receiver) + lip-sync
+            CollapsibleSettingsSection("Zvukový výstup přehrávače", expandedMap) {
+            DockAudioSettingsSection()
+            }
 }
 
 /**

@@ -2,13 +2,19 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,6 +42,26 @@ fun ListenOfflineSettingsSection(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 8.dp),
         )
+        // RESONANCE (SHW-81) A: řazení offline detailu — parita Nastavení (dřív jen ikona v liště detailu).
+        var newestFirst by remember { mutableStateOf(viewModel.offlinePodcastNewestFirst) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Nejnovější epizody nahoře",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Řazení epizod v detailu staženého pořadu. Změníš i přímo v detailu ikonou řazení.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = newestFirst,
+                onCheckedChange = { newestFirst = it; viewModel.offlinePodcastNewestFirst = it },
+            )
+        }
         if (downloads.isEmpty()) {
             Text(
                 "Zatím nic staženého. Epizodu stáhneš do telefonu v podcastu přes ⋮ → Stáhnout do telefonu — pak ji přehraješ i bez sítě (na chatě).",

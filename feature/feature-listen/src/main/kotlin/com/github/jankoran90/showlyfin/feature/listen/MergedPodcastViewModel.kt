@@ -110,6 +110,12 @@ class MergedPodcastViewModel @Inject constructor(
             val video = episodesBySource.flatMap { it.second }.filter { it.resumeKey?.startsWith("yt:") == true }
             val merged = PodcastPairing.pairEpisodes(audio, video)
             _state.update { it.copy(isLoading = false, episodes = merged, image = image ?: merged.firstNotNullOfOrNull { e -> e.imageUrl }) }
+            // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvých feedů (parita
+            // s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes sloučený pohled.
+            // Ne-stažené epizody backfillMeta ignoruje (levný no-op).
+            merged.forEach { ep ->
+                offline.backfillMeta(ep.key, ep.description, parseEpisodeDateMs(ep.date), members.firstOrNull { it.type == "rss" }?.let { "rss:${it.ref}" })
+            }
         }
     }
 
@@ -200,6 +206,8 @@ class MergedPodcastViewModel @Inject constructor(
                 durationSec = a.durationSec,
                 description = item.description,
                 publishedAt = parseEpisodeDateMs(item.date),
+                // RESONANCE (SHW-81) D: klíč RSS zdroje (audio verze) pro filtr skrytých pořadů offline.
+                sourceKey = members.firstOrNull { it.type == "rss" }?.let { "rss:${it.ref}" },
             ),
         )
     }

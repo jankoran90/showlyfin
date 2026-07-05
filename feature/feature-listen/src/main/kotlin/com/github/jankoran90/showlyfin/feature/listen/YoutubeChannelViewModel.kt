@@ -88,6 +88,12 @@ class YoutubeChannelViewModel @Inject constructor(
                     feed.entries.take(3).forEach { ep ->
                         viewModelScope.launch { runCatching { uploaderDs.warmYt(baseUrl, cookie, ep.id, "audio") } }
                     }
+                    // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvého feedu
+                    // (parita s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes YouTube.
+                    // Ne-stažené epizody backfillMeta ignoruje (levný no-op).
+                    feed.entries.forEach { ep ->
+                        offline.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.uploadDate), loadedFor?.let { "youtube:$it" })
+                    }
                 }
                 .onFailure {
                     Timber.w(it, "[TUNER] načtení YouTube feedu selhalo")
@@ -149,6 +155,8 @@ class YoutubeChannelViewModel @Inject constructor(
                 durationSec = ep.duration ?: 0.0,
                 description = ep.description,
                 publishedAt = parseEpisodeDateMs(ep.uploadDate),
+                // RESONANCE (SHW-81) D: klíč zdroje pro filtr skrytých pořadů offline (dětský profil).
+                sourceKey = loadedFor?.let { "youtube:$it" },
             ),
         )
     }

@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -151,14 +152,22 @@ class ListenViewModel @Inject constructor(
     /**
      * LEVER (SHW-61) L3: stažené RSS/YouTube podcasty (generický offline manager, `TYPE_PODCAST`).
      * Drží se i offline → „na chatu bez wifi" je najdeš v sekci Stažené a pustíš z lokálního souboru.
+     *
+     * RESONANCE (SHW-81) D: parita dětského profilu — odfiltruj epizody pořadů skrytých na časové ose /
+     * ve Sledovaných (klíč zdroje `type:ref`). `sourceKey == null` (staré stažené / neznámý zdroj) se
+     * NEfiltruje = zůstane vidět (bezpečný default, aby se stará stažení „neztratila").
      */
-    val offlinePodcasts: StateFlow<List<OfflineDownload>> = offline.downloads
-        .map { list -> list.filter { it.type == OfflineRequest.TYPE_PODCAST } }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            offline.downloads.value.filter { it.type == OfflineRequest.TYPE_PODCAST },
-        )
+    private fun List<OfflineDownload>.podcastsVisible(cfg: com.github.jankoran90.showlyfin.core.domain.ProfileConfig): List<OfflineDownload> {
+        val hidden = cfg.hiddenTimelineSourceKeys + cfg.hiddenFollowingSourceKeys
+        return filter { it.type == OfflineRequest.TYPE_PODCAST && (it.sourceKey == null || it.sourceKey !in hidden) }
+    }
+    val offlinePodcasts: StateFlow<List<OfflineDownload>> =
+        combine(offline.downloads, profileRepository.activeConfig) { list, cfg -> list.podcastsVisible(cfg) }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                offline.downloads.value.podcastsVisible(profileRepository.activeConfig.value),
+            )
 
     /** RESONANCE (SHW-81): stav přehrávače → zvýraznění + progress právě hrané epizody v offline detailu. */
     val playerState: StateFlow<PlayerState> = connection.state

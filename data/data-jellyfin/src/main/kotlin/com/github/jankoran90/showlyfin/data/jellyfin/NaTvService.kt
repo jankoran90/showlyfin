@@ -390,9 +390,56 @@ class NaTvService @Inject constructor(
                     audioTracks = auds.tracks,
                     currentSubtitleIndex = subs.selected,
                     currentAudioIndex = auds.selected,
+                    // REVERB (SHW-82): zvukový výstup docku (Zenbook/AVR) + lip-sync — jen když ho box hlásí.
+                    audioOut = parseAudioOut(json.optJSONObject("audioOut")),
                 )
             }
         }.getOrNull()
+    }
+
+    /** REVERB (SHW-82): audioOut objekt z ferry reportu → [FerryAudioOut] (null = box zvuk. výstup nehlásí). */
+    private fun parseAudioOut(obj: JSONObject?): FerryAudioOut? {
+        if (obj == null) return null
+        val arr = obj.optJSONArray("targets") ?: return null
+        val targets = mutableListOf<FerryAudioTarget>()
+        for (i in 0 until arr.length()) {
+            val t = arr.optJSONObject(i) ?: continue
+            val id = t.optString("id").takeIf { it.isNotBlank() } ?: continue
+            targets += FerryAudioTarget(
+                id = id,
+                label = t.optString("label").takeIf { it.isNotBlank() } ?: id,
+                kind = t.optString("kind").takeIf { it.isNotBlank() } ?: "local",
+                active = t.optBoolean("active", false),
+            )
+        }
+        if (targets.isEmpty()) return null
+        return FerryAudioOut(
+            currentId = obj.optString("current").takeIf { it.isNotBlank() } ?: "local",
+            delayMs = obj.optInt("delayMs", 0),
+            targets = targets,
+        )
+    }
+
+    /**
+     * REVERB (SHW-82): přepne zvukový výstup přehrávače na Zenbooku (dock) a/nebo doladí lip-sync posun.
+     * Payload `FERRYAUDIO1:{target?,delayMs?}` přes `SendString`; dock (`dock_audio.py`) přepne mpv
+     * audio-device + zorchestruje AV receiver (eISCP vstup) / nastaví audio-delay. `target=null` = jen posun.
+     */
+    suspend fun castFerryAudio(
+        baseUrl: String,
+        token: String,
+        target: String? = null,
+        delayMs: Int? = null,
+        preferredDeviceId: String? = null,
+    ): Boolean {
+        if (baseUrl.isBlank() || token.isBlank()) return false
+        if (target == null && delayMs == null) return false
+        val session = resolveTarget(getSessions(baseUrl, token), preferredDeviceId) ?: return false
+        val json = JSONObject().apply {
+            target?.takeIf { it.isNotBlank() }?.let { put("target", it) }
+            delayMs?.let { put("delayMs", it) }
+        }
+        return sendGeneralCommand(baseUrl, token, session.sessionId, "SendString", mapOf("String" to "FERRYAUDIO1:$json"))
     }
 
     private data class ParsedFerryTracks(val tracks: List<StreamTrack>, val selected: Int)
@@ -462,6 +509,26 @@ data class FerryState(
     val audioTracks: List<StreamTrack> = emptyList(),
     val currentSubtitleIndex: Int = -1,
     val currentAudioIndex: Int = -1,
+    /** REVERB (SHW-82): zvukový výstup přehrávače na docku (Zenbook/AVR) + lip-sync; null = nehlásí (ne dock). */
+    val audioOut: FerryAudioOut? = null,
+)
+
+/** REVERB (SHW-82): stav zvukového výstupu přehrávače na Zenbooku (dock) hlášený v `/api/ferry/state`. */
+data class FerryAudioOut(
+    /** id aktuálně aktivního cíle (např. "local" = Zenbook, "avr" = AV receiver). */
+    val currentId: String,
+    /** aktuální lip-sync posun zvuku v ms (− = zvuk dřív / video zdrženo). */
+    val delayMs: Int,
+    val targets: List<FerryAudioTarget>,
+)
+
+/** REVERB (SHW-82): jeden zvukový cíl přehrávače (Zenbook / AV receiver). */
+data class FerryAudioTarget(
+    val id: String,
+    val label: String,
+    /** "local" = přímo Zenbook, "avr" = AV receiver (AirPlay). */
+    val kind: String,
+    val active: Boolean,
 )
 
 data class JellyfinSessionSummary(

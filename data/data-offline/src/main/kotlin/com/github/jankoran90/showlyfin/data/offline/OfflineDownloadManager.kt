@@ -189,6 +189,7 @@ class OfflineDownloadManager @Inject constructor(
             durationSec = req.durationSec,
             description = req.description,
             publishedAt = req.publishedAt,
+            sourceKey = req.sourceKey,
         )
     }
 
@@ -257,16 +258,18 @@ class OfflineDownloadManager @Inject constructor(
     }
 
     /**
-     * RESONANCE (SHW-81) D: doplní popis + datum vydání u UŽ stažené epizody, pokud je zatím nemá.
-     * Volá se online (spárováno dle klíče s čerstvým feedem) → staré stažené (bez těchto polí) se
-     * dovyplní samy. Nepřepisuje existující hodnoty ani neupravuje jiné položky. `null` args ignoruje.
+     * RESONANCE (SHW-81) D: doplní popis + datum vydání + klíč zdroje u UŽ stažené epizody, pokud je
+     * zatím nemá. Volá se online (spárováno dle klíče s čerstvým feedem) → staré stažené (bez těchto
+     * polí, vč. `sourceKey` u epizod stažených před 1.45.144) se dovyplní samy → dětský profil je pak
+     * offline filtruje. Nepřepisuje existující hodnoty ani neupravuje jiné položky. `null` args ignoruje.
      */
-    fun backfillMeta(key: String, description: String?, publishedAt: Long?) {
+    fun backfillMeta(key: String, description: String?, publishedAt: Long?, sourceKey: String? = null) {
         val dl = index[key] ?: return
         val newDesc = dl.description ?: description?.takeIf { it.isNotBlank() }
         val newPub = dl.publishedAt ?: publishedAt?.takeIf { it > 0L }
-        if (newDesc == dl.description && newPub == dl.publishedAt) return
-        index[key] = dl.copy(description = newDesc, publishedAt = newPub)
+        val newSrc = dl.sourceKey ?: sourceKey?.takeIf { it.isNotBlank() }
+        if (newDesc == dl.description && newPub == dl.publishedAt && newSrc == dl.sourceKey) return
+        index[key] = dl.copy(description = newDesc, publishedAt = newPub, sourceKey = newSrc)
         persistIndex()
         refreshDownloads()
     }
