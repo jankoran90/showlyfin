@@ -260,7 +260,8 @@ fun DetailScreen(
     }
     if (uiState.showDownloadMenu) {
         DownloadMenuSheet(
-            canDevice = uiState.isOwnedInLibrary && displayItem.type == MediaType.MOVIE,
+            // HOARD (SHW-84): stáhnout do telefonu = film z knihovny NEBO film se zapamatovaným zdrojem.
+            canDevice = displayItem.type == MediaType.MOVIE && (uiState.isOwnedInLibrary || uiState.rememberedSource != null),
             offlineState = uiState.offlineState,
             showServerOptions = !uiState.isOwnedInLibrary,
             onDevice = { viewModel.downloadCurrentToDevice() },

@@ -76,12 +76,24 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    /** NOMAD: klíč offline stažení pro aktuální titul — slice jen FILMY z knihovny (JF). */
+    /**
+     * NOMAD: klíč offline stažení pro aktuální titul (film). Priorita: vlastněný JF titul → `jf_<id>`;
+     * jinak HOARD (SHW-84): film mimo knihovnu se zapamatovaným zdrojem → stabilní klíč z imdb/tmdb,
+     * ať badge „Stahuje se… / Staženo" a mazání sedí i na stažení ze zapamatovaného zdroje.
+     */
     private fun currentOfflineKey(): String? {
         val s = _uiState.value
-        val jfId = s.ownedJellyfinId ?: return null
         if (s.item?.type != MediaType.MOVIE) return null
-        return "jf_$jfId"
+        val item = s.item ?: return null
+        s.ownedJellyfinId?.let { return "jf_$it" }
+        if (s.rememberedSource != null) return movieOfflineKey(item)
+        return null
+    }
+
+    /** HOARD: stabilní offline klíč filmu mimo knihovnu (imdb, jinak tmdb). */
+    private fun movieOfflineKey(item: MediaItem): String {
+        item.imdbId?.takeIf { it.isNotBlank() }?.let { return "movie_$it" }
+        return "movie_tmdb_${item.tmdbId ?: 0}"
     }
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
@@ -1120,13 +1132,22 @@ class DetailViewModel @Inject constructor(
     fun openDownloadMenu() = _uiState.update { it.copy(showDownloadMenu = true) }
     fun dismissDownloadMenu() = _uiState.update { it.copy(showDownloadMenu = false) }
 
-    /** NOMAD (SHW-60): stáhnout TENTO film z Jellyfin knihovny do telefonu (offline „na chatu"). */
+    /**
+     * NOMAD (SHW-60) + HOARD (SHW-84): stáhnout TENTO film do telefonu (offline „na chatu“).
+     * Priorita: vlastněný v Jellyfin knihovně → přímý JF static stream; jinak film se ZAPAMATOVANÝM
+     * zdrojem → resolvni tentýž zdroj (co hraje přes Přehrát) na stažitelnou URL a stáhni ho.
+     */
     fun downloadCurrentToDevice() {
         val s = _uiState.value
         val item = s.item ?: return
         val jfId = s.ownedJellyfinId
-        if (jfId == null || item.type != MediaType.MOVIE) {
-            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahování do telefonu zatím jen pro filmy z knihovny.") }
+        if (item.type != MediaType.MOVIE) {
+            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahování do telefonu zatím jen pro filmy.") }
+            return
+        }
+        if (jfId == null) {
+            // HOARD: mimo knihovnu → stáhni zapamatovaný zdroj.
+            downloadRememberedToDevice(item, s.rememberedSource)
             return
         }
         val serverUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
@@ -1149,6 +1170,68 @@ class DetailViewModel @Inject constructor(
             ),
         )
         _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahuji do telefonu — sleduj v sekci Stažené.") }
+    }
+
+    /** HOARD (SHW-84): stáhni zapamatovaný zdroj filmu (týž, co hraje přes Přehrát) do telefonu. */
+    private fun downloadRememberedToDevice(item: MediaItem, source: UploaderStream?) {
+        if (source == null) {
+            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Nejdřív zdroj přehraj a zapamatuj (⭐), pak půjde stáhnout do telefonu.") }
+            return
+        }
+        _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Připravuji stahování zdroje…") }
+        viewModelScope.launch {
+            val url = resolveDownloadUrl(item, source)
+            if (url.isNullOrBlank()) {
+                _uiState.update { it.copy(captureMessage = "Zdroj se nepodařilo připravit ke stažení — zkus ho nejdřív přehrát a zapamatovat znovu.") }
+                return@launch
+            }
+            val poster = (item.posterPath ?: _uiState.value.movieDetails?.poster_path)?.let {
+                if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w342$it"
+            }
+            offlineManager.enqueue(
+                com.github.jankoran90.showlyfin.data.offline.OfflineRequest(
+                    key = movieOfflineKey(item),
+                    title = item.title,
+                    subtitle = item.year?.toString(),
+                    type = com.github.jankoran90.showlyfin.data.offline.OfflineRequest.TYPE_MOVIE,
+                    sourceLabel = "Zapamatovaný zdroj",
+                    videoUrl = url,
+                    posterUrl = poster,
+                    imdb = item.imdbId,
+                    tmdb = item.tmdbId?.toInt(),
+                ),
+            )
+            _uiState.update { it.copy(captureMessage = "Stahuji do telefonu — sleduj v sekci Stažené.") }
+        }
+    }
+
+    /**
+     * HOARD: resolvni zapamatovaný [source] na PŘÍMOU stažitelnou HTTP URL — stejné cesty jako `playStream`,
+     * ale bez CASCADE/probe (zapamatovaný zdroj už prokazatelně hrál): sdilej:// proxy → přímá url →
+     * cached Comet (RD) → uložený/cached infoHash (RD). Necachovaný torrent = null (vrátí hlášku).
+     * Nikdy nehází.
+     */
+    private suspend fun resolveDownloadUrl(item: MediaItem, source: UploaderStream): String? {
+        val direct = source.url
+        if (direct != null && direct.startsWith("sdilej://")) return buildSdilejProxyUrl(direct)
+        if (!direct.isNullOrBlank()) return direct
+        val ctx = com.github.jankoran90.showlyfin.data.uploader.model.UploaderResolveContext(
+            imdb = item.imdbId,
+            mediaType = mediaTypeStr(item),
+            resolution = source.quality.resolution,
+            sizeGB = source.quality.sizeGB,
+        )
+        val cometPath = source.cometPath
+        if (!cometPath.isNullOrBlank()) {
+            runCatching { uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, cometPath, ctx) }
+                .getOrNull()?.takeIf { it.isNotBlank() }?.let { return it }
+        }
+        val infoHash = source.infoHash
+        if (!infoHash.isNullOrBlank()) {
+            return runCatching { uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, infoHash, source.fileIdx, ctx) }
+                .getOrNull()?.takeIf { it.isNotBlank() }
+        }
+        return null
     }
 
     /** NOMAD: smaž offline stažení tohoto titulu (z menu Stáhnout, když je už staženo). */
