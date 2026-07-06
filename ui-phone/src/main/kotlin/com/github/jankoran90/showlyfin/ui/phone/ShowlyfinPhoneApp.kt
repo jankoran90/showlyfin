@@ -152,7 +152,13 @@ internal sealed interface Destination {
     ) : Destination
 
     // Sub-screens
-    data class Detail(val item: MediaItem, val parent: Destination) : Destination
+    // PROJECTOR (HUB-74): castTarget != null → po otevření detailu rovnou hlasový cast na TV/Zenbook.
+    data class Detail(
+        val item: MediaItem,
+        val parent: Destination,
+        val castTarget: String? = null,
+        val audioPath: String? = null,
+    ) : Destination
     data class SmartDetect(val imdbId: String, val title: String, val titleCs: String, val year: Int?, val mediaType: String) : Destination
     data class ReviewStep(val sid: String, val fid: String, val filename: String) : Destination
     data class MoveStep(val sid: String) : Destination
@@ -392,8 +398,14 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     backdropPath = null,
                 ),
                 parent = bottomTab,
+                // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook — DetailScreen po načtení auto-castne.
+                castTarget = req.castTarget,
+                audioPath = req.audioPath,
             )
             currentDestination = detailDest
+            // PROJECTOR: cast na externí obrazovku má přednost — offline kopie se necastuje (řeší
+            // auto-cast v DetailScreen/VM), takže offline větev přeskočíme.
+            if (req.castTarget != null) return@LaunchedEffect
             // AIRWAVE II Fáze C (část B): play=offline → je-li film stažený, spusť rovnou offline kopii.
             // Není-li stažený, zůstaň jen na kartě (nic navíc — NEspouštět jiný zdroj).
             if (req.playOffline) {
@@ -1017,6 +1029,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     item = dest.item,
                     onBack = { currentDestination = dest.parent },
                     sectionTitle = dest.parent.sectionLabel(mainSubsection),
+                    // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook po načtení detailu.
+                    autoCastTarget = dest.castTarget,
+                    autoCastAudioPath = dest.audioPath,
                     onSmartDetect = { item ->
                         currentDestination = Destination.SmartDetect(
                             imdbId = item.imdbId ?: "",

@@ -81,6 +81,8 @@ data class DetailUiState(
     // Plan FERRY (SHW-37): odesílání zvoleného streamu na TV (yellyfin) + výsledná hláška.
     val isCastingToTv: Boolean = false,
     val castToTvResult: com.github.jankoran90.showlyfin.data.jellyfin.CastResult? = null,
+    // PROJECTOR (HUB-74): hláška hlasového castu (odmítnutí — žádný zdroj / cíl nedostupný).
+    val autoCastMessage: String? = null,
     val streamStrict: Boolean = true,   // "Přesné hledání" vs "Vše" (per-search)
     // Plan SIEVE (SHW-38): paměť fungujícího zdroje.
     // rememberedSource = uložený „naposledy fungovalo" pro tento film (pin v pickeru, S3).

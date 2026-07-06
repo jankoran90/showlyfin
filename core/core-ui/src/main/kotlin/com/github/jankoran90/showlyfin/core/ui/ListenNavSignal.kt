@@ -73,15 +73,33 @@ object ListenNavSignal {
     /** VERDICT (claude-voice doporučovač): proklik `showlyfin://detail?tmdb=` → phone shell otevře
      *  detail filmu podle TMDb id. Payload + seq (retrigger i při stejném tmdb / opakovaném prokliku). */
     // AIRWAVE II Fáze C: playOffline = true → po otevření detailu rovnou spustit staženou kopii filmu (je-li).
-    data class DetailRequest(val seq: Long, val tmdb: Long, val title: String, val year: Int?, val playOffline: Boolean = false)
+    // PROJECTOR (HUB-74): castTarget = "tv"/"zenbook" → hlasový cast na externí obrazovku (auto-výběr
+    // streamovaného zdroje: připnutý → knihovna → sdílej/RD; offline kopie se necastuje). audioPath =
+    // "cz"/"orig" = cesta pro nejednoznačný zdroj (na jakou se asistent hlasem zeptal).
+    data class DetailRequest(
+        val seq: Long,
+        val tmdb: Long,
+        val title: String,
+        val year: Int?,
+        val playOffline: Boolean = false,
+        val castTarget: String? = null,
+        val audioPath: String? = null,
+    )
 
     private var detailSeq = 0L
     private val _openDetail = MutableStateFlow<DetailRequest?>(null)
     val openDetail = _openDetail.asStateFlow()
 
-    fun requestOpenDetail(tmdb: Long, title: String = "", year: Int? = null, playOffline: Boolean = false) {
+    fun requestOpenDetail(
+        tmdb: Long,
+        title: String = "",
+        year: Int? = null,
+        playOffline: Boolean = false,
+        castTarget: String? = null,
+        audioPath: String? = null,
+    ) {
         detailSeq += 1
-        _openDetail.value = DetailRequest(detailSeq, tmdb, title, year, playOffline)
+        _openDetail.value = DetailRequest(detailSeq, tmdb, title, year, playOffline, castTarget, audioPath)
     }
 
     /**

@@ -105,6 +105,9 @@ fun DetailScreen(
     onCollectionPartClick: ((CollectionPart) -> Unit)? = null,
     onPlayJellyfin: ((String) -> Unit)? = null,
     onPlayStreamUrl: ((String, String, com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery?) -> Unit)? = null,
+    // PROJECTOR (HUB-74): hlasový cast — po načtení detailu rovnou castni na TV/Zenbook.
+    autoCastTarget: String? = null,
+    autoCastAudioPath: String? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -112,6 +115,18 @@ fun DetailScreen(
     val context = LocalContext.current
 
     LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) { viewModel.load(item) }
+
+    // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook — jednou po vstupu (auto-výběr zdroje řeší VM:
+    // připnutý → knihovna → sdílej/RD dle path). Toast při odmítnutí (žádný zdroj / offline-only).
+    LaunchedEffect(autoCastTarget, item.tmdbId) {
+        if (autoCastTarget != null) viewModel.autoCastToTarget(autoCastTarget, autoCastAudioPath)
+    }
+    LaunchedEffect(uiState.autoCastMessage) {
+        uiState.autoCastMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.consumeAutoCastMessage()
+        }
+    }
 
     val displayItem = uiState.item ?: item
     val displayTitle = czechDisplayTitle(uiState.tmdbCzTitle, uiState.csfdTitle, displayItem.title)

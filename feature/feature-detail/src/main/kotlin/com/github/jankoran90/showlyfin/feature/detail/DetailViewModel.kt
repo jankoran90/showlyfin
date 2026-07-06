@@ -39,7 +39,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -123,6 +125,13 @@ class DetailViewModel @Inject constructor(
     // nikdy nesáhneme na nesouvisející torrenty. Reset při načtení jiného filmu (`load`).
     private val attemptedRdHashes = LinkedHashSet<String>()
 
+    // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook. Latch (VM je Activity-scoped → přežije mezi filmy,
+    // resetuje se v load()), preferovaný cíl (tv=null → automatika, zenbook=deviceId docku) a příznak,
+    // že běžící cast je hlasový (na odmítnutí ukázat hlášku místo pickeru).
+    private var autoCastPending = false
+    private var voiceCastActive = false
+    private var voiceCastDeviceId: String? = null
+
     fun load(item: MediaItem) = load(item, force = false)
 
     /** VISTA V4: znovunačtení po síťové chybě (obejde dedup guard). */
@@ -143,6 +152,10 @@ class DetailViewModel @Inject constructor(
         loadJob?.cancel()
         lastPlayedStream = null
         attemptedRdHashes.clear()
+        // PROJECTOR: nový film → resetuj hlasový cast latch (VM je Activity-scoped).
+        autoCastPending = false
+        voiceCastActive = false
+        voiceCastDeviceId = null
         _uiState.update {
             it.copy(
                 item = item,
@@ -891,6 +904,116 @@ class DetailViewModel @Inject constructor(
     fun consumeStremioFallback() = _uiState.update { it.copy(requestStremioFallback = false) }
     fun consumeAutoAdvanceInfo() = _uiState.update { it.copy(autoAdvanceInfo = null) }
     fun consumeCastResult() = _uiState.update { it.copy(castToTvResult = null) }
+    fun consumeAutoCastMessage() = _uiState.update { it.copy(autoCastMessage = null) }
+
+    /**
+     * PROJECTOR (HUB-74): hlasový cast filmu na TV/Zenbook. Po otevření detailu z hlasového deep-linku
+     * (`showlyfin://detail?tmdb=…&cast=tv|zenbook&path=cz|orig`) vybere zdroj v pořadí, které si přál
+     * uživatel: (1) zapamatovaný (připnutý) zdroj filmu, (2) film ve Jellyfin knihovně (jednoznačné),
+     * (3) sdílej/RD stream podle [audioPath] (cz = dabing/čes. film, orig = originál + CZ titulky).
+     * Stažená OFFLINE kopie se necastuje (lokální soubor telefonu si mpv na TV/Zenbooku nepřehraje) →
+     * když se žádný přehratelný stream nenajde, cast se ODMÍTNE hláškou (bez fallbacku na telefon).
+     */
+    fun autoCastToTarget(castTarget: String, audioPath: String?) {
+        if (autoCastPending) return
+        autoCastPending = true
+        viewModelScope.launch {
+            // 1) počkej na hydrataci detailu (metadata + imdb; rememberedSource je k dispozici hned).
+            val ready = withTimeoutOrNull(20_000) { uiState.first { !it.isLoading && it.item != null } }
+            if (ready == null) { failAutoCast("Film se nepodařilo načíst, na televizi ho teď nepustím."); return@launch }
+            voiceCastDeviceId = resolveVoiceCastDeviceId(castTarget)
+
+            val item = _uiState.value.item
+            // 2) zapamatovaný (připnutý) zdroj má přednost.
+            _uiState.value.rememberedSource?.let { castStreamViaVoice(it); return@launch }
+            // 3) Jellyfin knihovna — jednoznačný zdroj (deterministicky, bez race s paralelním loadem).
+            if (item != null) {
+                resolveOwnedJellyfinId(item)?.let { jfId -> castLibraryViaVoice(jfId, item); return@launch }
+            }
+            // 4) sdílej / RD stream podle zvolené cesty (dabing vs originál).
+            val path = when (audioPath) {
+                "cz" -> StreamAudioPath.CZ_DUB
+                "orig" -> StreamAudioPath.ORIGINAL
+                else -> null
+            }
+            val stream = resolveFirstStreamForCast(path)
+            if (stream == null) { failAutoCast("Na televizi jsem pro tenhle film nenašel žádný přehratelný zdroj."); return@launch }
+            castStreamViaVoice(stream)
+        }
+    }
+
+    /** Cíl hlasového castu → preferredDeviceId: tv = null (automatika → TV/Yellyfin), zenbook = deviceId docku. */
+    private suspend fun resolveVoiceCastDeviceId(castTarget: String): String? {
+        if (castTarget != "zenbook") return null
+        val jfUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
+        val jfToken = prefs.getString("jellyfin_token", "").orEmpty()
+        if (jfUrl.isBlank() || jfToken.isBlank()) return CastTargetPrefs.defaultDeviceId(prefs)
+        val sessions = runCatching { naTv.getSessions(jfUrl, jfToken) }.getOrDefault(emptyList())
+        val zen = sessions.firstOrNull {
+            val n = "${it.client.orEmpty()} ${it.deviceName}".lowercase()
+            n.contains("zenbook") || n.contains("dock")
+        }
+        return zen?.deviceId ?: CastTargetPrefs.defaultDeviceId(prefs)
+    }
+
+    /** Je film ve Jellyfin knihovně? Vrátí jeho jellyfin id (nebo null). Mirror [loadJellyfinOwned] matchingu. */
+    private suspend fun resolveOwnedJellyfinId(item: MediaItem): String? {
+        _uiState.value.ownedJellyfinId?.let { return it }   // už dořešeno paralelním loadem
+        val uid = prefs.getString("jellyfin_user_id", "")?.takeIf { it.isNotBlank() } ?: return null
+        val uuid = runCatching { UUID.fromString(uid) }.getOrNull() ?: return null
+        val owned = runCatching { jellyfinLibraryService.getOwnedIds(uuid) }.getOrNull() ?: return null
+        return item.imdbId?.let { owned.imdbToJellyfin[it] } ?: item.tmdbId?.let { owned.tmdbToJellyfin[it] }
+    }
+
+    /** Načte streamy a vybere první přehratelný podle zvolené cesty (dabing/originál); null = žádný. */
+    private suspend fun resolveFirstStreamForCast(path: StreamAudioPath?): UploaderStream? {
+        val imdb = _uiState.value.item?.imdbId
+        if (imdb.isNullOrBlank() || uploaderBaseUrl.isBlank()) return null
+        _uiState.update { it.copy(streamAudioPath = path) }
+        loadStreams()
+        // počkej na doběh načítání (instant vlna) — nebo dokud neskončí i probe (žádný instant zdroj).
+        val settled = withTimeoutOrNull(45_000) {
+            uiState.first { !it.isLoadingStreams && (it.streams.isNotEmpty() || !it.isProbingStreams) }
+        } ?: return null
+        val all = settled.streams
+        if (all.isEmpty()) return null
+        val cz = all.filter { isCzDubStream(it) }
+        val orig = all.filterNot { isCzDubStream(it) }
+        return when (path) {
+            StreamAudioPath.CZ_DUB -> cz.firstOrNull() ?: orig.firstOrNull()
+            StreamAudioPath.ORIGINAL -> orig.firstOrNull() ?: cz.firstOrNull()
+            null -> all.firstOrNull()
+        }
+    }
+
+    /** Stejné kritérium českého dabingu jako [playStream] / `isCzDub` v UI (drž v synchru). */
+    private fun isCzDubStream(stream: UploaderStream): Boolean {
+        val lang = stream.quality.audioLanguage?.uppercase()
+        return lang == "CZ" || lang == "SK" || (stream.url?.startsWith("sdilej://") == true && lang == null)
+    }
+
+    /** Pošli vybraný stream na TV/Zenbook přes FERRY (reuse playStream cesty; příznak hlasový cast). */
+    private fun castStreamViaVoice(stream: UploaderStream) {
+        voiceCastActive = true
+        playStream(stream, CastTarget.TV)
+    }
+
+    /** Film ve Jellyfin knihovně → přímá stream URL na FERRY (uniformně s ostatními zdroji). */
+    private fun castLibraryViaVoice(jellyfinId: String, item: MediaItem) {
+        val jfUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
+        val jfToken = prefs.getString("jellyfin_token", "").orEmpty()
+        if (jfUrl.isBlank() || jfToken.isBlank()) { failAutoCast("Jellyfin není přihlášený, na televizi to nepustím."); return }
+        val streamUrl = "${jfUrl.trimEnd('/')}/Videos/$jellyfinId/stream?static=true&api_key=$jfToken"
+        val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: item.title
+        voiceCastActive = true
+        castToTv(streamUrl, title)
+    }
+
+    /** Hlasový cast se nepovedl → zobraz hlášku (Toast v DetailScreen), ukliď příznaky. */
+    private fun failAutoCast(message: String) {
+        voiceCastActive = false
+        _uiState.update { it.copy(autoCastMessage = message, isCastingToTv = false, isResolvingStream = false) }
+    }
 
     /**
      * Plan WINNOW (SHW-41, item 1b): než URL doručíme, ověř, že to není NÁVNADA — Comet/RD běžně
@@ -981,7 +1104,10 @@ class DetailViewModel @Inject constructor(
             val reportUrl = if (uploaderBaseUrl.isNotBlank() && uploaderCookie.isNotBlank()) {
                 "${uploaderBaseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(uploaderCookie, "UTF-8")}"
             } else null
-            val result = naTv.castFerry(jfUrl, jfToken, url, title, subs, reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
+            // PROJECTOR (HUB-74): u hlasového castu použij zvolený cíl (tv=null → automatika, zenbook=dock).
+            val voice = voiceCastActive
+            val preferred = if (voice) voiceCastDeviceId else CastTargetPrefs.defaultDeviceId(prefs)
+            val result = naTv.castFerry(jfUrl, jfToken, url, title, subs, reportUrl, preferredDeviceId = preferred)
             // Po úspěšném spuštění na TV přepni appku rovnou na sekci „Ovladač" (parita s JF knihovnou
             // přes NaTvCoordinator) → telefon se hned stává dálkovým ovladačem běžícího streamu.
             // + zapamatuj cast (externí stream není JF NowPlaying) → Ovladač ukáže titul/cover + pozici.
@@ -991,10 +1117,23 @@ class DetailViewModel @Inject constructor(
                 ListenNavSignal.setFerryCast(title, poster, item?.tmdbId, reportUrl)
                 ListenNavSignal.requestOpenOvladac()
             }
+            voiceCastActive = false
             _uiState.update {
-                it.copy(isCastingToTv = false, isResolvingStream = false, showStreamPicker = result != CastResult.SENT, castToTvResult = result)
+                it.copy(
+                    isCastingToTv = false, isResolvingStream = false, castToTvResult = result,
+                    // Hlasový cast: na odmítnutí ukaž hlášku (Toast), NE stream picker.
+                    showStreamPicker = if (voice) false else result != CastResult.SENT,
+                    autoCastMessage = if (voice && result != CastResult.SENT) castFailMessage(result) else it.autoCastMessage,
+                )
             }
         }
+    }
+
+    /** PROJECTOR: lidská hláška při neúspěšném hlasovém castu. */
+    private fun castFailMessage(result: CastResult): String = when (result) {
+        CastResult.NO_SESSION -> "Televize teď není dostupná, nemám kam to poslat."
+        CastResult.NO_CREDS -> "Jellyfin není přihlášený, na televizi to nepustím."
+        else -> "Na televizi se film nepodařilo spustit."
     }
 
     /** Stáhne CZ titulkové kandidáty a sestaví box-dostupné SRT URL (`?key=<session>`) pro TV. */

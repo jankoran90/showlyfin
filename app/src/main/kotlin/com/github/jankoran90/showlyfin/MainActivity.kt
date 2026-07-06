@@ -176,11 +176,17 @@ class MainActivity : ComponentActivity() {
                 val tmdb = uri.getQueryParameter("tmdb")?.toLongOrNull() ?: return
                 // AIRWAVE II Fáze C: play=offline → po otevření detailu rovnou spustit staženou kopii (je-li).
                 val playOffline = uri.getQueryParameter("play") == "offline"
+                // PROJECTOR (HUB-74): cast=tv|zenbook → hlasový cast na externí obrazovku; path=cz|orig
+                // = cesta (dabing/originál) pro nejednoznačný zdroj.
+                val castTarget = uri.getQueryParameter("cast")?.takeIf { it == "tv" || it == "zenbook" }
+                val audioPath = uri.getQueryParameter("path")?.takeIf { it == "cz" || it == "orig" }
                 ListenNavSignal.requestOpenDetail(
                     tmdb,
                     uri.getQueryParameter("title") ?: "",
                     uri.getQueryParameter("year")?.toIntOrNull(),
                     playOffline = playOffline,
+                    castTarget = castTarget,
+                    audioPath = audioPath,
                 )
             }
             // BEAM (SHW-63): sdílený odkaz na Poslech → otevři plochu (podcast/audiokniha/epizoda/YouTube).
