@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
 import androidx.lifecycle.ViewModel
+import com.github.jankoran90.showlyfin.core.network.ConnectivityObserver
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
@@ -18,11 +19,18 @@ import javax.inject.Inject
 @HiltViewModel
 class DownloadsViewModel @Inject constructor(
     private val manager: OfflineDownloadManager,
+    connectivity: ConnectivityObserver,
 ) : ViewModel() {
     private val filmTypes = setOf(OfflineRequest.TYPE_MOVIE, OfflineRequest.TYPE_EPISODE)
 
     val downloads = manager.downloads
     val states = manager.states
+
+    /**
+     * Online = klik na stažený film otevře KARTU obsahu (lze pustit na TV / prohlédnout / vybrat zdroj),
+     * offline = klik pustí rovnou lokální kopii. Přehrát offline jde v obou stavech přes ikonu ▶.
+     */
+    val isOnline = connectivity.isOnline
 
     /** True = klíč patří audio podcastu (Poslech) → tato sekce ho neukazuje. */
     fun isPodcast(key: String) = manager.typeOf(key) == OfflineRequest.TYPE_PODCAST

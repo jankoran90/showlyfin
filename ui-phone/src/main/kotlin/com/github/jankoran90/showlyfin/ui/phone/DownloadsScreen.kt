@@ -53,11 +53,13 @@ import java.util.Locale
 @Composable
 fun DownloadsScreen(
     onPlay: (OfflineDownload) -> Unit,
+    onOpenDetail: (OfflineDownload) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DownloadsViewModel = hiltViewModel(),
 ) {
     val allDownloads by viewModel.downloads.collectAsStateWithLifecycle()
     val states by viewModel.states.collectAsStateWithLifecycle()
+    val online by viewModel.isOnline.collectAsStateWithLifecycle()
 
     // LEVER L3: audio podcasty (Poslech) sem nepatří — jsou ve „Stažené" v Poslechu.
     val downloads = allDownloads.filterNot { it.type == OfflineRequest.TYPE_PODCAST }
@@ -128,9 +130,13 @@ fun DownloadsScreen(
                     }
                 }
                 items(downloads, key = { it.key }) { dl ->
+                    // Online + film s TMDb → klik otevře KARTU obsahu (přehrát/na TV/prohlédnout).
+                    // Offline (nebo bez karty) → klik pustí rovnou lokální kopii. ▶ hraje offline vždy.
+                    val canOpenCard = online && dl.type == OfflineRequest.TYPE_MOVIE && dl.tmdb != null
                     DownloadRow(
                         download = dl,
-                        onClick = { onPlay(dl) },
+                        onClick = { if (canOpenCard) onOpenDetail(dl) else onPlay(dl) },
+                        onPlay = { onPlay(dl) },
                         onDelete = { viewModel.delete(dl.key) },
                     )
                 }
@@ -181,6 +187,7 @@ private fun ActiveRow(
 private fun DownloadRow(
     download: OfflineDownload,
     onClick: () -> Unit,
+    onPlay: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Row(
@@ -207,7 +214,9 @@ private fun DownloadRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát", tint = MaterialTheme.colorScheme.primary)
+        IconButton(onClick = onPlay) {
+            Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát offline", tint = MaterialTheme.colorScheme.primary)
+        }
         IconButton(onClick = onDelete) {
             Icon(Icons.Default.Delete, contentDescription = "Smazat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }

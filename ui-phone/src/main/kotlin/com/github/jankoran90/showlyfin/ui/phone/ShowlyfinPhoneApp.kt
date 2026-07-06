@@ -802,6 +802,26 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             offlineKey = dl.key,
                         )
                     },
+                    // Online: klik na stažený film otevře KARTU obsahu (přehrát/na TV/prohlédnout/vybrat zdroj)
+                    // místo okamžitého offline přehrání. Stub se hydratuje z TMDb id (jako proklik z doporučovače).
+                    onOpenDetail = { dl ->
+                        currentDestination = Destination.Detail(
+                            MediaItem(
+                                traktId = 0L,
+                                tmdbId = dl.tmdb?.toLong(),
+                                imdbId = dl.imdb,
+                                title = dl.title,
+                                year = null,
+                                overview = null,
+                                rating = null,
+                                genres = null,
+                                type = MediaType.MOVIE,
+                                posterPath = null,
+                                backdropPath = null,
+                            ),
+                            parent = Destination.Downloads,
+                        )
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 is Destination.Ovladac -> OvladacScreen(
