@@ -397,6 +397,15 @@ internal class UploaderApi(
         service.uploadLog("$base/api/logs", cookie, body)
     }
 
+    // AIRWAVE II Fáze C — nahrání snapshotu stažených filmů/epizod pro profil (nahrazuje seznam profilu).
+    override suspend fun reportDownloads(baseUrl: String, sessionCookie: String, profileKey: String, jsonBytes: ByteArray) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val key = URLEncoder.encode(profileKey, "UTF-8")
+        val body = jsonBytes.toRequestBody("application/json; charset=utf-8".toMediaType())
+        service.reportDownloads("$base/api/showlyfin/downloads?profile_key=$key", cookie, body)
+    }
+
     // Remux History
 
     override suspend fun getRemuxHistory(baseUrl: String, sessionCookie: String): List<RemuxSession> {

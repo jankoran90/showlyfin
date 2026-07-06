@@ -98,6 +98,9 @@ interface UploaderService {
     // Android log upload
     @POST suspend fun uploadLog(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Any
 
+    // AIRWAVE II Fáze C — nahlášení aktuálního snapshotu stažených filmů/epizod (profile_key = jellyfinUserId)
+    @POST suspend fun reportDownloads(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+
     // Remux History
     @GET suspend fun getRemuxHistory(@Url url: String, @Header("Cookie") cookie: String): RemuxHistoryResponse
     @GET suspend fun getRemuxSession(@Url url: String, @Header("Cookie") cookie: String): RemuxSession

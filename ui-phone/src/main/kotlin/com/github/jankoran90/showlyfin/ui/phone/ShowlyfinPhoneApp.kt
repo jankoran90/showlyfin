@@ -341,6 +341,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         // RESONANCE (SHW-81): sdílená instance (žádný NavHost → Activity-scoped, tatáž jako v ListenScreen)
         // → proklik z přehrávače u offline epizody předá „otevři offline pořad" do ListenScreen.
         val listenVm: ListenViewModel = hiltViewModel()
+        // AIRWAVE II Fáze C: lookup stažené kopie filmu (deep-link `showlyfin://detail?...&play=offline`).
+        val downloadsVm: DownloadsViewModel = hiltViewModel()
         val snackbarHostState = remember { SnackbarHostState() }
 
         LaunchedEffect(Unit) {
@@ -375,7 +377,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         val openDetailReq by ListenNavSignal.openDetail.collectAsStateWithLifecycle()
         LaunchedEffect(openDetailReq) {
             val req = openDetailReq ?: return@LaunchedEffect
-            currentDestination = Destination.Detail(
+            val detailDest = Destination.Detail(
                 MediaItem(
                     traktId = 0L,
                     tmdbId = req.tmdb,
@@ -391,6 +393,25 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                 ),
                 parent = bottomTab,
             )
+            currentDestination = detailDest
+            // AIRWAVE II Fáze C (část B): play=offline → je-li film stažený, spusť rovnou offline kopii.
+            // Není-li stažený, zůstaň jen na kartě (nic navíc — NEspouštět jiný zdroj).
+            if (req.playOffline) {
+                val tmdbInt = req.tmdb.toInt()
+                val dl = downloadsVm.findMovieByTmdb(tmdbInt)
+                if (dl != null) {
+                    currentDestination = Destination.Player(
+                        itemId = null,
+                        externalUrl = null,
+                        title = dl.title,
+                        parent = detailDest,
+                        localVideoPath = dl.videoPath,
+                        localSubtitlePath = dl.subtitlePath,
+                        localPosterPath = dl.posterPath,
+                        offlineKey = dl.key,
+                    )
+                }
+            }
         }
 
         // BEAM (SHW-63): sdílený odkaz `showlyfin://listen?type=…` → přepni na Poslech a otevři plochu.

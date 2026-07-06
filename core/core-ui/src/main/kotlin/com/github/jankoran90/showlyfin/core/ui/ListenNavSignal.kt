@@ -72,15 +72,16 @@ object ListenNavSignal {
 
     /** VERDICT (claude-voice doporučovač): proklik `showlyfin://detail?tmdb=` → phone shell otevře
      *  detail filmu podle TMDb id. Payload + seq (retrigger i při stejném tmdb / opakovaném prokliku). */
-    data class DetailRequest(val seq: Long, val tmdb: Long, val title: String, val year: Int?)
+    // AIRWAVE II Fáze C: playOffline = true → po otevření detailu rovnou spustit staženou kopii filmu (je-li).
+    data class DetailRequest(val seq: Long, val tmdb: Long, val title: String, val year: Int?, val playOffline: Boolean = false)
 
     private var detailSeq = 0L
     private val _openDetail = MutableStateFlow<DetailRequest?>(null)
     val openDetail = _openDetail.asStateFlow()
 
-    fun requestOpenDetail(tmdb: Long, title: String = "", year: Int? = null) {
+    fun requestOpenDetail(tmdb: Long, title: String = "", year: Int? = null, playOffline: Boolean = false) {
         detailSeq += 1
-        _openDetail.value = DetailRequest(detailSeq, tmdb, title, year)
+        _openDetail.value = DetailRequest(detailSeq, tmdb, title, year, playOffline)
     }
 
     /**

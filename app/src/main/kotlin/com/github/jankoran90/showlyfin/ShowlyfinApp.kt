@@ -12,8 +12,10 @@ import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.widget.ListenWidget
+import com.github.jankoran90.showlyfin.services.DownloadsReporter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.network.Config
@@ -48,6 +50,11 @@ class ShowlyfinApp : Application() {
         WidgetRefreshWorker.schedule(this)
         registerListenWidgetRefresh()
         registerForegroundTracking()
+        // AIRWAVE II Fáze C: nahlašuj snapshot stažených filmů/epizod na server (pro živý hlas).
+        runCatching {
+            DownloadsReporter.from(this)
+                .start(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+        }.onFailure { Timber.w(it, "[AIRWAVE] start reporteru selhal") }
     }
 
     /**

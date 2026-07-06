@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
 import androidx.lifecycle.ViewModel
+import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,6 +26,13 @@ class DownloadsViewModel @Inject constructor(
 
     /** True = klíč patří audio podcastu (Poslech) → tato sekce ho neukazuje. */
     fun isPodcast(key: String) = manager.typeOf(key) == OfflineRequest.TYPE_PODCAST
+
+    /**
+     * AIRWAVE II Fáze C (část B): najdi staženou kopii FILMU podle TMDb id (deep-link `play=offline`).
+     * null = film s tímto tmdb není v telefonu → jen otevřít kartu.
+     */
+    fun findMovieByTmdb(tmdb: Int): OfflineDownload? =
+        manager.downloads.value.firstOrNull { it.type == OfflineRequest.TYPE_MOVIE && it.tmdb == tmdb }
 
     fun titleFor(key: String) = manager.titleFor(key)
     fun cancel(key: String) = manager.cancel(key)

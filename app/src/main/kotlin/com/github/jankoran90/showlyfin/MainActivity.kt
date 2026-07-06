@@ -174,10 +174,13 @@ class MainActivity : ComponentActivity() {
             // VERDICT: proklik z doporučovače (claude-voice) na detail filmu podle TMDb id.
             "detail" -> {
                 val tmdb = uri.getQueryParameter("tmdb")?.toLongOrNull() ?: return
+                // AIRWAVE II Fáze C: play=offline → po otevření detailu rovnou spustit staženou kopii (je-li).
+                val playOffline = uri.getQueryParameter("play") == "offline"
                 ListenNavSignal.requestOpenDetail(
                     tmdb,
                     uri.getQueryParameter("title") ?: "",
                     uri.getQueryParameter("year")?.toIntOrNull(),
+                    playOffline = playOffline,
                 )
             }
             // BEAM (SHW-63): sdílený odkaz na Poslech → otevři plochu (podcast/audiokniha/epizoda/YouTube).

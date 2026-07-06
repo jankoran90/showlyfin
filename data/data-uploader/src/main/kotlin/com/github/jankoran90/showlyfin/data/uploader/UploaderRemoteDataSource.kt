@@ -68,6 +68,9 @@ interface UploaderRemoteDataSource {
     // Android log upload
     suspend fun uploadLog(baseUrl: String, sessionCookie: String, logBytes: ByteArray)
 
+    // AIRWAVE II Fáze C — nahraj aktuální snapshot stažených filmů/epizod pod profile_key (jellyfinUserId).
+    suspend fun reportDownloads(baseUrl: String, sessionCookie: String, profileKey: String, jsonBytes: ByteArray)
+
     // Remux History
     suspend fun getRemuxHistory(baseUrl: String, sessionCookie: String): List<RemuxSession>
     suspend fun getRemuxSessionDetail(baseUrl: String, sessionCookie: String, rsid: String): RemuxSession
