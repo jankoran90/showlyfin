@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.core.network
 
+import java.net.URLEncoder
 import java.time.Duration
 
 object Config {
@@ -21,7 +22,7 @@ object Config {
     var tmdbApiKey: String = ""
 
     val traktAuthorizeUrl: String
-        get() = "https://trakt.tv/oauth/authorize?response_type=code&client_id=$traktClientId&redirect_uri=$TRAKT_REDIRECT_URL"
+        get() = "https://trakt.tv/oauth/authorize?response_type=code&client_id=$traktClientId&redirect_uri=${URLEncoder.encode(TRAKT_REDIRECT_URL, "UTF-8")}"
 
     fun initialize(traktClientId: String, traktClientSecret: String, tmdbApiKey: String) {
         this.traktClientId = traktClientId
