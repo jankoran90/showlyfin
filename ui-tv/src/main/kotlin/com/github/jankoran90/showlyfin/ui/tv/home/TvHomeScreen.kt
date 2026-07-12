@@ -63,6 +63,8 @@ private data class Rail(
     val style: HomeCardStyle,
     val items: List<HomeRowItem>,
     val configId: String,
+    /** Popisky pod/na kartách (immersive Netflix styl je skrývá — per řada). */
+    val showTitles: Boolean = true,
 )
 
 /**
@@ -107,14 +109,14 @@ fun TvHomeScreen(
                     val libRow = libraryState.rows.firstOrNull { it.libraryId == libId }
                     val items = libRow?.items?.map { it.toHomeRowItem() }?.applyConfig(cfg).orEmpty()
                     if (items.isNotEmpty()) {
-                        add(Rail(cfg.id, cfg.title.ifBlank { libRow?.libraryName.orEmpty() }, cfg.cardStyle, items, cfg.id))
+                        add(Rail(cfg.id, cfg.title.ifBlank { libRow?.libraryName.orEmpty() }, cfg.cardStyle, items, cfg.id, cfg.showTitles))
                     }
                 }
                 HomeRowSourceType.JELLYFIN_LIBRARIES -> Unit // deprecated meta — migrováno pryč
                 else -> {
                     val st = states[cfg.id]
                     if (st != null && st.items.isNotEmpty()) {
-                        add(Rail(cfg.id, cfg.title, cfg.cardStyle, st.items, cfg.id))
+                        add(Rail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, st.items, cfg.id, cfg.showTitles))
                     }
                 }
             }
@@ -174,7 +176,8 @@ fun TvHomeScreen(
         ) {
             if (immersive) {
                 // Rezervuj hero prostor vždy (stabilní layout, žádný skok po autofokusu); header sedí dole.
-                Box(Modifier.weight(0.42f).fillMaxWidth()) {
+                // 0.34 (dřív 0.42) — méně mrtvého místa nahoře, víc řad vidět; osamocený titulek u resume řad nepřevažuje.
+                Box(Modifier.weight(0.34f).fillMaxWidth()) {
                     TvImmersiveHeader(
                         info = focusedInfo,
                         modifier = Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 8.dp),
@@ -202,6 +205,7 @@ fun TvHomeScreen(
                         firstCardFocus = if (index == 0) firstFocus else null,
                         onItemClick = ::clickItem,
                         onItemFocused = { item -> focusedItem = item; focusedIndex = index },
+                        showLabel = rail.showTitles,
                     )
                 }
             }
@@ -244,6 +248,7 @@ private fun RailSection(
     firstCardFocus: FocusRequester?,
     onItemClick: (HomeRowItem) -> Unit,
     onItemFocused: (HomeRowItem) -> Unit,
+    showLabel: Boolean = true,
 ) {
     Column(
         Modifier
@@ -270,6 +275,7 @@ private fun RailSection(
                         style = rail.style,
                         onClick = { onItemClick(item) },
                         focusRequester = if (firstCardFocus != null && item.key == rail.items.first().key) firstCardFocus else null,
+                        showLabel = showLabel,
                     )
                 }
             }

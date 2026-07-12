@@ -49,10 +49,11 @@ fun TvHomeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    showLabel: Boolean = true,
 ) {
     when (style) {
-        HomeCardStyle.LANDSCAPE -> TvLandscapeCard(item, onClick, modifier.width(TV_LANDSCAPE_WIDTH), focusRequester)
-        HomeCardStyle.COVER -> TvCoverCard(item, onClick, modifier.width(TV_POSTER_WIDTH), focusRequester)
+        HomeCardStyle.LANDSCAPE -> TvLandscapeCard(item, onClick, modifier.width(TV_LANDSCAPE_WIDTH), focusRequester, showLabel)
+        HomeCardStyle.COVER -> TvCoverCard(item, onClick, modifier.width(TV_POSTER_WIDTH), focusRequester, showLabel)
         HomeCardStyle.POSTER -> TvPosterCard(
             posterUrl = item.posterUrl,
             title = item.title,
@@ -60,6 +61,7 @@ fun TvHomeCard(
             onClick = onClick,
             modifier = modifier.width(TV_POSTER_WIDTH),
             focusRequester = focusRequester,
+            showLabel = showLabel,
         )
     }
 }
@@ -71,6 +73,7 @@ fun TvLandscapeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    showLabel: Boolean = true,
 ) {
     val shape = MaterialTheme.shapes.medium
     Box(
@@ -89,26 +92,28 @@ fun TvLandscapeCard(
             contentScale = ContentScale.Crop,
         )
         if (item.watched) WatchedBadge(modifier = Modifier.align(Alignment.TopStart))
-        CardScrim(Modifier.align(Alignment.BottomStart))
-        Column(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            Text(
-                text = item.title,
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            item.subtitle?.let {
+        if (showLabel) {
+            CardScrim(Modifier.align(Alignment.BottomStart))
+            Column(
+                Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
                 Text(
-                    text = it,
-                    color = Color.White.copy(alpha = 0.75f),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = item.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                item.subtitle?.let {
+                    Text(
+                        text = it,
+                        color = Color.White.copy(alpha = 0.75f),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
         CardProgress(item.progressPct, Modifier.align(Alignment.BottomStart))
@@ -122,6 +127,7 @@ fun TvCoverCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    showLabel: Boolean = true,
 ) {
     val shape = MaterialTheme.shapes.medium
     Box(
@@ -140,19 +146,21 @@ fun TvCoverCard(
             contentScale = ContentScale.Crop,
         )
         if (item.watched) WatchedBadge(modifier = Modifier.align(Alignment.TopStart))
-        CardScrim(Modifier.align(Alignment.BottomStart))
-        Row(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = item.title,
-                color = Color.White,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+        if (showLabel) {
+            CardScrim(Modifier.align(Alignment.BottomStart))
+            Row(
+                Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = item.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
         CardProgress(item.progressPct, Modifier.align(Alignment.BottomStart))
     }

@@ -19,6 +19,7 @@ import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSourc
 import com.github.jankoran90.showlyfin.data.trakt.TraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.feature.discover.mapper.toMediaItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -34,8 +35,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.displayPreferencesApi
 import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.tvShowsApi
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
+import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
@@ -63,6 +69,7 @@ class TvHomeViewModel @Inject constructor(
     private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
     private val tmdb: TmdbRemoteDataSource,
     private val favorites: FavoritesStore,
+    private val workingSources: WorkingSourceStore,
     private val apiClient: ApiClient,
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
@@ -144,22 +151,101 @@ class TvHomeViewModel @Inject constructor(
     private suspend fun loadOnce(config: HomeRowConfig): List<HomeRowItem> = when (config.source) {
         HomeRowSourceType.DISCOVER -> loadDiscover(config)
         HomeRowSourceType.CONTINUE_WATCHING -> loadJellyfin(config) { userUuid ->
-            apiClient.itemsApi.getResumeItems(
-                userId = userUuid,
-                limit = config.limit,
-                mediaTypes = listOf(JfMediaType.VIDEO),
-                fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO, ItemFields.OVERVIEW),
-                enableImages = true,
-            ).content.items
+            resumeItems(userUuid, config.limit)
         }
         HomeRowSourceType.NEXT_UP -> loadJellyfin(config) { userUuid ->
-            apiClient.tvShowsApi.getNextUp(
-                userId = userUuid,
-                limit = config.limit,
-                fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PRIMARY_IMAGE_ASPECT_RATIO, ItemFields.OVERVIEW),
-            ).content.items
+            nextUpItems(userUuid, config.limit)
         }
+        // Sloučené Pokračovat + Další díly — resume má přednost, dedup dle seriálu/položky.
+        HomeRowSourceType.CONTINUE_WATCHING_COMBINED -> loadJellyfin(config) { userUuid ->
+            val seen = mutableSetOf<String>()
+            (resumeItems(userUuid, config.limit) + nextUpItems(userUuid, config.limit))
+                .filter { dto -> seen.add((dto.seriesId ?: dto.id).toString()) }
+                .take(config.limit)
+        }
+        // „Nejnovější v <knihovna>" — getLatestMedia pro konkrétní knihovnu.
+        HomeRowSourceType.RECENTLY_ADDED -> {
+            val parent = config.params[HomeRowParams.LIBRARY_ID].toUuidOrNull()
+            if (parent == null) emptyList() else loadJellyfin(config) { userUuid ->
+                apiClient.userLibraryApi.getLatestMedia(
+                    userId = userUuid,
+                    parentId = parent,
+                    limit = config.limit,
+                    fields = ROW_ITEM_FIELDS,
+                    enableImages = true,
+                ).content
+            }
+        }
+        // Libovolná Jellyfin kolekce / playlist (ByParent).
+        HomeRowSourceType.COLLECTION -> {
+            val parent = config.params[HomeRowParams.COLLECTION_ID].toUuidOrNull()
+            if (parent == null) emptyList() else loadJellyfin(config) { userUuid ->
+                apiClient.itemsApi.getItems(
+                    userId = userUuid,
+                    parentId = parent,
+                    recursive = true,
+                    sortBy = listOf(ItemSortBy.SORT_NAME),
+                    sortOrder = listOf(SortOrder.ASCENDING),
+                    limit = config.limit,
+                    fields = ROW_ITEM_FIELDS,
+                    enableImages = true,
+                ).content.items
+            }
+        }
+        // NOVÝ zdroj: tituly se zapamatovaným zdrojem přehrávání (WorkingSourceStore).
+        HomeRowSourceType.SAVED_FOR_PLAYBACK -> loadSavedForPlayback(config)
+        // LIBRARY_TILES / GENRES / STUDIOS = dlaždicové navigační řady → 2. vlna (viz Known gaps).
         else -> emptyList()
+    }
+
+    private suspend fun resumeItems(userUuid: UUID, limit: Int): List<BaseItemDto> =
+        apiClient.itemsApi.getResumeItems(
+            userId = userUuid,
+            limit = limit,
+            mediaTypes = listOf(JfMediaType.VIDEO),
+            fields = ROW_ITEM_FIELDS,
+            enableImages = true,
+        ).content.items
+
+    private suspend fun nextUpItems(userUuid: UUID, limit: Int): List<BaseItemDto> =
+        apiClient.tvShowsApi.getNextUp(
+            userId = userUuid,
+            limit = limit,
+            fields = ROW_ITEM_FIELDS,
+        ).content.items
+
+    // ── SAVED_FOR_PLAYBACK (zapamatované zdroje) ───────────────────────────────
+
+    /**
+     * Řada „Uloženo k přehrání": tituly z [WorkingSourceStore.getAll] (nejnovější první). WorkingSource nenese
+     * poster → dohledáme přes TMDB paralelně. Klik → karta filmu, kde už je zapamatovaný zdroj předvybraný
+     * ([DetailViewModel] `rememberedSource`) = přehrání bez nového hledání. One-click z domova viz Known gaps.
+     */
+    private suspend fun loadSavedForPlayback(config: HomeRowConfig): List<HomeRowItem> {
+        workingSources.refresh()
+        val saved = workingSources.getAll().take(config.limit.coerceIn(1, 60))
+        return coroutineScope {
+            saved.map { ws ->
+                async {
+                    val details = runCatching { tmdb.fetchMovieDetails(ws.tmdb) }.getOrNull()
+                    val tr = runCatching { tmdb.fetchMovieTranslation(ws.tmdb, "cs") }.getOrNull()
+                    val item = stub(ws.tmdb, ws.title, year = null, isShow = false).copy(
+                        title = ws.title,
+                        posterPath = details?.poster_path,
+                        backdropPath = details?.backdrop_path,
+                        titleCz = tr?.title?.takeIf { it.isNotBlank() },
+                        imdbId = ws.imdb.takeIf { it.isNotBlank() },
+                    )
+                    HomeRowItem(
+                        key = "saved_${ws.tmdb}",
+                        title = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
+                        posterUrl = item.posterUrl("w342"),
+                        landscapeUrl = item.backdropUrl("w780"),
+                        mediaItem = item,
+                    )
+                }
+            }.awaitAll()
+        }
     }
 
     // ── DISCOVER (Trakt + TMDB) ────────────────────────────────────────────────
@@ -224,16 +310,72 @@ class TvHomeViewModel @Inject constructor(
         config: HomeRowConfig,
         fetch: suspend (UUID) -> List<BaseItemDto>,
     ): List<HomeRowItem> {
+        val session = prepareJellyfin() ?: return emptyList()
+        val dtos = runCatching { fetch(session.userUuid) }.getOrElse {
+            Timber.w(it, "[TvHome] JF fetch '${config.id}' selhal"); emptyList()
+        }
+        return dtos.map { it.toHomeRowItem(session.serverUrl, session.token) }
+    }
+
+    /** Přihlašovací údaje Jellyfinu z prefs + [ApiClient] nastavený na server. Null = nepřihlášen. */
+    private data class JfSession(val serverUrl: String, val token: String, val userUuid: UUID)
+
+    private fun prepareJellyfin(): JfSession? {
         val serverUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
         val token = prefs.getString("jellyfin_token", "").orEmpty()
         val userId = prefs.getString("jellyfin_user_id", "").orEmpty()
-        if (serverUrl.isBlank() || token.isBlank() || userId.isBlank()) return emptyList()
+        if (serverUrl.isBlank() || token.isBlank() || userId.isBlank()) return null
         apiClient.update(baseUrl = serverUrl, accessToken = token, clientInfo = clientInfo, deviceInfo = deviceInfo)
-        val userUuid = UUID.fromString(userId)
-        val dtos = runCatching { fetch(userUuid) }.getOrElse {
-            Timber.w(it, "[TvHome] JF fetch '${config.id}' selhal"); emptyList()
+        val userUuid = userId.toUuidOrNull() ?: return null
+        return JfSession(serverUrl, token, userUuid)
+    }
+
+    /**
+     * Import domovské konfigurace z Jellyfin serveru (synergie yellyfin↔showlyfin). Čte web-client
+     * DisplayPreferences (`usersettings`/`emby`) klíče `homesection0..9` a mapuje je na [HomeRowConfig] řady;
+     * `latestmedia` rozgeneruje na „Nejnovější v <knihovna>" per knihovnu. Nové řady se přidají ([addRows]),
+     * existující (dle id) se nepřepíšou. Vrací počet přidaných řad (0 = nic k importu / nepřihlášen).
+     */
+    suspend fun importFromJellyfin(): Int {
+        val session = prepareJellyfin() ?: return 0
+        val customPrefs = runCatching {
+            apiClient.displayPreferencesApi.getDisplayPreferences(
+                displayPreferencesId = "usersettings",
+                userId = session.userUuid,
+                client = "emby",
+            ).content.customPrefs
+        }.getOrElse { Timber.w(it, "[TvHome] import: čtení DisplayPreferences selhalo"); emptyMap() }
+        if (customPrefs.isEmpty()) return 0
+
+        val views = runCatching { apiClient.userViewsApi.getUserViews(session.userUuid).content.items }
+            .getOrElse { emptyList() }
+        val imported = mutableListOf<HomeRowConfig>()
+        for (idx in 0..9) {
+            when (customPrefs["homesection$idx"]?.lowercase()) {
+                "resume" -> imported += HomeRowConfig(
+                    id = "imp_resume", source = HomeRowSourceType.CONTINUE_WATCHING,
+                    title = "Pokračovat ve sledování", cardStyle = HomeCardStyle.LANDSCAPE,
+                )
+                "nextup" -> imported += HomeRowConfig(
+                    id = "imp_nextup", source = HomeRowSourceType.NEXT_UP,
+                    title = "Další díly", cardStyle = HomeCardStyle.LANDSCAPE,
+                )
+                "latestmedia" -> views.forEach { v ->
+                    val libId = v.id.toString()
+                    imported += HomeRowConfig(
+                        id = "imp_latest_$libId", source = HomeRowSourceType.RECENTLY_ADDED,
+                        title = "Nejnovější — ${v.name.orEmpty()}",
+                        params = mapOf(
+                            HomeRowParams.LIBRARY_ID to libId,
+                            HomeRowParams.COLLECTION_TYPE to (v.collectionType?.serialName ?: ""),
+                        ),
+                    )
+                }
+                else -> Unit // livetv/recordings/audio/book/tiles: showlyfin zatím nemapuje (viz Known gaps)
+            }
         }
-        return dtos.map { it.toHomeRowItem(serverUrl, token) }
+        store.addRows(imported)
+        return imported.size
     }
 
     private fun BaseItemDto.toHomeRowItem(serverUrl: String, token: String): HomeRowItem {
@@ -304,3 +446,14 @@ class TvHomeViewModel @Inject constructor(
 
 /** Styl karty pro řadu (helper pro render). */
 fun HomeCardStyle.isLandscape(): Boolean = this == HomeCardStyle.LANDSCAPE
+
+/** Sdílená sada Jellyfin ItemFields pro řady domova (providerIds kvůli klik-mapování, overview kvůli immersive). */
+private val ROW_ITEM_FIELDS = listOf(
+    ItemFields.PROVIDER_IDS,
+    ItemFields.PRIMARY_IMAGE_ASPECT_RATIO,
+    ItemFields.OVERVIEW,
+)
+
+/** Bezpečný parse Jellyfin UUID z volného params stringu (prázdné/neplatné → null místo pádu). */
+private fun String?.toUuidOrNull(): UUID? =
+    this?.takeIf { it.isNotBlank() }?.let { runCatching { UUID.fromString(it) }.getOrNull() }

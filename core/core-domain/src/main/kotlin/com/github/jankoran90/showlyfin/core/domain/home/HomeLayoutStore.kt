@@ -82,6 +82,19 @@ class HomeLayoutStore @Inject constructor(
         persistRows()
     }
 
+    /**
+     * Hromadně přidej řady (import z Jellyfin serveru). Řady s již existujícím id se PŘESKOČÍ (uživatelovo
+     * nastavení má přednost), nové se doplní na konec v pořadí importu. Idempotentní — opakovaný import nepřidá duplikáty.
+     */
+    fun addRows(configs: List<HomeRowConfig>) {
+        if (configs.isEmpty()) return
+        _rows.update { list ->
+            val existing = list.map { it.id }.toMutableSet()
+            list + configs.filter { existing.add(it.id) }
+        }
+        persistRows()
+    }
+
     /** Odeber řadu. Default řadu to jen skryje sémanticky ne — vrátí se při dalším merge; pro
      *  default používej [setEnabled]. Míněno pro vlastní `custom_*` řady. */
     fun removeRow(id: String) {
@@ -227,6 +240,13 @@ class HomeLayoutStore @Inject constructor(
                 id = "favorites",
                 source = HomeRowSourceType.FAVORITES,
                 title = "Oblíbené",
+                cardStyle = HomeCardStyle.POSTER,
+            ),
+            // Zapamatované zdroje — když prázdné, render řadu vynechá (buildList jen neprázdné).
+            HomeRowConfig(
+                id = "saved_for_playback",
+                source = HomeRowSourceType.SAVED_FOR_PLAYBACK,
+                title = "Uloženo k přehrání",
                 cardStyle = HomeCardStyle.POSTER,
             ),
         )

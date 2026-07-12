@@ -57,6 +57,7 @@ fun TvPosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    showLabel: Boolean = true,
 ) {
     val shape = MaterialTheme.shapes.medium   // tvar z theme (design guard: žádný inline RoundedCornerShape)
     // fillMaxWidth (ne pevná šířka) → dlaždice respektuje šířku buňky mřížky (GridCells.Fixed) místo aby ji přebíjela.
@@ -75,27 +76,30 @@ fun TvPosterCard(
                 .clickable(onClick = onClick)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         )
-        // Titulek VŽDY 2 řádky (min=max) — jinak karty s dlouhým názvem byly vyšší, řada zabrala výšku nejvyšší
-        // karty a druhá řada plakátů se ořízla (user feedback 2026-07-12). Fixní výška = stabilní mřížka.
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp, start = 2.dp, end = 2.dp),
-        )
-        year?.let {
+        // showLabel=false → Netflix immersive: čistý plakát bez popisku (název nese hero nahoře).
+        if (showLabel) {
+            // Titulek VŽDY 2 řádky (min=max) — jinak karty s dlouhým názvem byly vyšší, řada zabrala výšku nejvyšší
+            // karty a druhá řada plakátů se ořízla (user feedback 2026-07-12). Fixní výška = stabilní mřížka.
             Text(
-                text = "$it",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 1.dp),
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                minLines = 2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp, start = 2.dp, end = 2.dp),
             )
+            year?.let {
+                Text(
+                    text = "$it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 1.dp),
+                )
+            }
         }
     }
 }

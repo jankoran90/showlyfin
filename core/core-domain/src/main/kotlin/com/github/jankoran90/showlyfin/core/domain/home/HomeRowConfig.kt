@@ -15,16 +15,24 @@ data class HomeRowConfig(
     /** Stabilní id (default řady = pevné, vlastní = "custom_<n>"). Klíč pro reorder/merge. */
     val id: String,
     val source: HomeRowSourceType = HomeRowSourceType.DISCOVER,
-    /** Titulek nad řadou (uživatel může přejmenovat). */
+    /** Titulek nad řadou (uživatel může přejmenovat). Prázdné = použij [HomeRowSourceType.label]/params. */
     val title: String = "",
     val cardStyle: HomeCardStyle = HomeCardStyle.POSTER,
     val sort: HomeRowSort = HomeRowSort.DEFAULT,
     /** Kolik položek načíst (strop, výkon). */
     val limit: Int = 30,
     val enabled: Boolean = true,
-    /** Volné parametry zdroje: viz [HomeRowParams] (tab/filter/watchlistKind/hideWatched/genre/libraryId). */
+    /**
+     * Popisek pod/na kartě. Immersive Netflix styl skrývá popisky (řídí editor / globální přepínač).
+     * Default true = parita se stávajícím chováním starých uložených layoutů (přidané pole, `encodeDefaults`).
+     */
+    val showTitles: Boolean = true,
+    /** Volné parametry zdroje: viz [HomeRowParams] (tab/filter/watchlistKind/hideWatched/genre/libraryId/collectionId). */
     val params: Map<String, String> = emptyMap(),
-)
+) {
+    /** Řešený titulek řady: uživatelský přepis, jinak štítek zdroje (knihovní/kolekční řady si titulek nesou v [title]). */
+    fun resolvedTitle(): String = title.ifBlank { source.label }
+}
 
 /** Odkud řada bere obsah. Zdroj, který daný [HomeRowSort] neumí, řazení ignoruje. */
 @Serializable
@@ -33,14 +41,31 @@ enum class HomeRowSourceType(val label: String) {
     CONTINUE_WATCHING("Pokračovat ve sledování"),
     /** Jellyfin další nezhlédnuté epizody napříč seriály (getNextUp bez seriesId). */
     NEXT_UP("Další díly"),
+    /** Jellyfin sloučené Pokračovat + Další díly (resume ∪ nextUp, řazeno dle posledního přehrání). */
+    CONTINUE_WATCHING_COMBINED("Pokračovat + Další díly"),
     /** Trakt kategorie (viz [HomeRowParams.TAB] + [HomeRowParams.FILTER]). */
     DISCOVER("Objevovat (Trakt)"),
     /** Oblíbené z per-profil [data.uploader.FavoritesStore] (TOTÉŽ co telefonní „Oblíbené", parita). */
     FAVORITES("Oblíbené"),
+    /**
+     * NOVÝ zdroj: tituly se zapamatovaným zdrojem přehrávání z [data.uploader.WorkingSourceStore]
+     * („uloženo k přehrání"). Klik = přímé přehrání bez hledání zdroje. Samostatná sekce místo cpaní do oblíbených.
+     */
+    SAVED_FOR_PLAYBACK("Uloženo k přehrání"),
 
     /** JEDNA konkrétní Jellyfin knihovna (viz [HomeRowParams.LIBRARY_ID]). První-třídní řada:
      *  vlastní enabled/pořadí/styl per knihovna. Seed-once z profilu (viz [HomeLayoutStore.syncLibraries]). */
     JELLYFIN_LIBRARY("Jellyfin knihovna"),
+    /** „Nejnovější v <knihovna>" — Jellyfin getLatestMedia pro konkrétní knihovnu (viz [HomeRowParams.LIBRARY_ID]). */
+    RECENTLY_ADDED("Nejnovější v knihovně"),
+    /** Dlaždice knihoven (navigace do knihovny), yellyfin LibraryTiles vzor. */
+    LIBRARY_TILES("Dlaždice knihoven"),
+    /** Libovolná Jellyfin kolekce / playlist (viz [HomeRowParams.COLLECTION_ID], getItems ByParent). */
+    COLLECTION("Kolekce"),
+    /** Dlaždice žánrů konkrétní knihovny (viz [HomeRowParams.LIBRARY_ID]). Yellyfin vzor — 2. vlna editoru. */
+    GENRES("Žánry"),
+    /** Dlaždice studií konkrétní knihovny (viz [HomeRowParams.LIBRARY_ID]). Yellyfin vzor — 2. vlna editoru. */
+    STUDIOS("Studia"),
 
     /**
      * DEPRECATED meta zdroj (OTA ≤293): expandoval na jednu řadu per Jellyfin knihovna se SDÍLENÝM
@@ -85,10 +110,12 @@ object HomeRowParams {
     const val HIDE_WATCHED = "hideWatched"
     /** Volitelný žánrový filtr (klientský). */
     const val GENRE = "genre"
-    /** JELLYFIN_LIBRARY: id konkrétní Jellyfin knihovny (userView). */
+    /** JELLYFIN_LIBRARY / RECENTLY_ADDED / GENRES / STUDIOS: id konkrétní Jellyfin knihovny (userView). */
     const val LIBRARY_ID = "libraryId"
     /** JELLYFIN_LIBRARY: collectionType knihovny ("movies"/"tvshows"/…) — určuje default styl karty. */
     const val COLLECTION_TYPE = "collectionType"
+    /** COLLECTION: id konkrétní Jellyfin kolekce/playlistu (BoxSet/Playlist parentId). */
+    const val COLLECTION_ID = "collectionId"
 
     fun Map<String, String>.boolParam(key: String): Boolean = this[key] == "true"
 }

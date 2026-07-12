@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
@@ -39,9 +43,13 @@ data class ImmersiveInfo(
 /** Full-screen fanart + čitelnostní scrim (vlevo tmavý → doprava průhledný, dole tmavý). Crossfade při změně. */
 @Composable
 fun TvImmersiveBackground(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
+    // Podrž poslední ne-null backdrop (Netflix): fokus na kartu bez fanartu pozadí neshodí do černé,
+    // jen se nezmění. Zabraňuje blikání u řad bez backdropu (Pokračovat/poster řady).
+    var lastBackdrop by remember { mutableStateOf<String?>(null) }
+    info?.backdropUrl?.let { lastBackdrop = it }
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Crossfade(
-            targetState = info?.backdropUrl,
+            targetState = lastBackdrop,
             animationSpec = tween(durationMillis = 450),
             label = "immersiveBackdrop",
         ) { url ->
@@ -111,16 +119,19 @@ fun TvImmersiveHeader(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
 fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
     val mi = mediaItem
     return ImmersiveInfo(
-        backdropUrl = landscapeUrl ?: mi?.backdropUrl() ?: posterUrl,
+        // NIKDY poster fallback — 2:3 plakát roztažený Crop do 16:9 = ošklivý zoom. Radši žádné pozadí
+        // (background podrží poslední ne-null backdrop).
+        backdropUrl = landscapeUrl ?: mi?.backdropUrl(),
         title = mi?.let { it.titleCz?.takeIf { t -> t.isNotBlank() } ?: it.title } ?: title,
-        meta = mi?.metaLine() ?: year?.toString(),
+        // U resume řad (mediaItem == null) doplň meta z podtitulu (S×E · epizoda), jinak rok.
+        meta = mi?.metaLine() ?: subtitle?.takeIf { it.isNotBlank() } ?: year?.toString(),
         overview = mi?.let { it.overviewCz?.takeIf { o -> o.isNotBlank() } ?: it.overview },
     )
 }
 
 /** Sestav [ImmersiveInfo] z [MediaItem] (Objevovat). */
 fun MediaItem.toImmersiveInfo(): ImmersiveInfo = ImmersiveInfo(
-    backdropUrl = backdropUrl() ?: posterUrl(),
+    backdropUrl = backdropUrl(), // bez poster fallbacku (viz výše)
     title = titleCz?.takeIf { it.isNotBlank() } ?: title,
     meta = metaLine(),
     overview = overviewCz?.takeIf { it.isNotBlank() } ?: overview,
