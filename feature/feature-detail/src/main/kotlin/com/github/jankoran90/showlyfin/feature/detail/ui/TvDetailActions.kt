@@ -32,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -184,14 +183,13 @@ private fun TvActionButton(
     Row(
         modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            // POZOR: tvFocusBorder (uvnitř onFocusChanged) MUSÍ být PŘED clickable, jinak fokus nepozoruje
+            // a záře se nevykreslí (stejná past jako u TvMediaCard). Záře je akcentní a kreslí se VEN na pozadí
+            // (ne na tlačítku), takže na primárním tlačítku nesplyne — barvu neřešíme, jede default z motivu.
+            .tvFocusBorder(shape = shape)
             .clip(shape)
             .background(bg)
             .clickable(onClick = onClick)
-            // Na akcentním (primárním) tlačítku by akcentní prstenec splynul → kontrastní onPrimary.
-            .tvFocusBorder(
-                shape = shape,
-                color = if (primary) MaterialTheme.colorScheme.onPrimary else Color.Unspecified,
-            )
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

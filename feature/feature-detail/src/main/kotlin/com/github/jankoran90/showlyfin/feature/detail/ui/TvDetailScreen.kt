@@ -80,15 +80,16 @@ internal fun TvDetailBody(
             .background(MaterialTheme.colorScheme.background),
     ) {
     // Fanart NESMÍ zabrat celou výšku obrazovky — jinak auto-fokus na akční řadu (dole v heru) odscrolluje
-    // vršek fanartu pryč a user musí rolovat nahoru. ~60 % výšky → fanart celý + titul/meta/akce + začátek
-    // popisu se vejdou na jednu TV obrazovku bez scrollování (user feedback 2026-07-12).
-    val heroHeight = maxHeight * 0.60f
+    // vršek fanartu pryč a user musí rolovat nahoru. ~70 % výšky → fanart je immersivnější, přitom titul/meta/
+    // akce + začátek popisu se pořád vejdou na jednu TV obrazovku bez scrollování (user feedback 2026-07-12:
+    // 60 % bylo zbytečně nízké, popisek má od spodní hrany rezervu).
+    val heroHeight = maxHeight * 0.70f
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(scroll),
     ) {
-        // ── Immersive hero: fanart přes celou šířku, ~60 % výšky obrazovky ──
+        // ── Immersive hero: fanart přes celou šířku, ~70 % výšky obrazovky ──
         Box(
             Modifier
                 .fillMaxWidth()
@@ -123,9 +124,10 @@ internal fun TvDetailBody(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(start = 48.dp, top = 27.dp)
+                    // tvFocusBorder PŘED clickable (jinak onFocusChanged fokus nevidí → žádný prstenec).
+                    .tvFocusBorder(shape = CircleShape)
                     .clip(CircleShape)
                     .clickable(onClick = onBack)
-                    .tvFocusBorder(shape = CircleShape)
                     .padding(8.dp)
                     .size(28.dp),
             )

@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.ui.tv.jellyfin
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,9 +25,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinItem
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinLibraryItemsViewModel
+import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinSort
+import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinTypeFilter
 import com.github.jankoran90.showlyfin.ui.tv.components.TvJellyfinPosterCard
 
 /**
@@ -63,6 +69,17 @@ fun TvJellyfinBrowserScreen(
             modifier = Modifier.padding(bottom = 12.dp),
         )
 
+        // Řazení + filtr typu (parita s telefonem; VM to už umí, prefs sdílené telefon↔TV). „Víc voleb" (credo).
+        if (state.error == null) {
+            TvJellyfinFilters(
+                sort = state.sort,
+                typeFilter = state.typeFilter,
+                showTypeFilter = !state.isBoxSetContext,
+                onSort = viewModel::selectSort,
+                onType = viewModel::selectTypeFilter,
+            )
+        }
+
         when {
             state.isLoading -> Centered { CircularProgressIndicator() }
             state.error != null -> Centered {
@@ -98,6 +115,49 @@ fun TvJellyfinBrowserScreen(
 @Composable
 private fun Centered(content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
+}
+
+/** Řazení (vždy) + filtr typu (mimo BOX_SET kontext) jako D-pad chipy. FlowRow se sám zalomí, nepřeteče. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TvJellyfinFilters(
+    sort: JellyfinSort,
+    typeFilter: JellyfinTypeFilter,
+    showTypeFilter: Boolean,
+    onSort: (JellyfinSort) -> Unit,
+    onType: (JellyfinTypeFilter) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            JellyfinSort.entries.forEach { s ->
+                FilterChip(
+                    selected = sort == s,
+                    onClick = { onSort(s) },
+                    label = { Text(s.label) },
+                    modifier = Modifier.tvFocusable(),
+                )
+            }
+        }
+        if (showTypeFilter) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                JellyfinTypeFilter.entries.forEach { t ->
+                    FilterChip(
+                        selected = typeFilter == t,
+                        onClick = { onType(t) },
+                        label = { Text(t.label) },
+                        modifier = Modifier.tvFocusable(),
+                    )
+                }
+            }
+        }
+    }
 }
 
 /** Stub MediaItem z Jellyfin položky — bohatý detail si zbytek dotáhne z TMDB dle tmdbId (parita s telefonem). */

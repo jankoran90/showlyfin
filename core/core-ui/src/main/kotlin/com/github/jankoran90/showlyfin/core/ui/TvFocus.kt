@@ -1,6 +1,6 @@
 package com.github.jankoran90.showlyfin.core.ui
 
-import androidx.compose.foundation.border
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -10,9 +10,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,18 +41,46 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 @Composable
 fun Modifier.tvFocusBorder(
     shape: Shape = RoundedCornerShape(8.dp),
-    width: Dp = 3.dp,
+    width: Dp = 3.dp,          // základní tloušťka záře (decentní, ne obří)
     color: Color = Color.Unspecified,
+    focusScale: Float = 1.08f,
 ): Modifier {
     var focused by remember { mutableStateOf(false) }
-    val ring = if (color == Color.Unspecified) MaterialTheme.colorScheme.primary else color
+    // Výchozí barva = akcent aktuálního motivu (primary). Už teď řízeno motivem; po extrakci core-theme (F3)
+    // zůstane. Žádné tvrdé linky — jen měkká záře + zvětšení.
+    val glowColor = if (color == Color.Unspecified) MaterialTheme.colorScheme.primary else color
+    val isTv = isTvFormFactor()
+    // Zvětšení fokusovaného prvku (10-foot „lift"). graphicsLayer NEMĚNÍ layout (sousedi se nehýbou).
+    val scale by animateFloatAsState(
+        targetValue = if (focused && isTv) focusScale else 1f,
+        label = "tvFocusScale",
+    )
+    val glow by animateFloatAsState(
+        targetValue = if (focused) 1f else 0f,
+        label = "tvFocusGlow",
+    )
     return this
         .onFocusChanged { focused = it.isFocused }
-        .border(
-            width = if (focused) width else 0.dp,
-            color = if (focused) ring else Color.Transparent,
-            shape = shape,
-        )
+        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .drawBehind {
+            if (glow <= 0.01f) return@drawBehind
+            val outline = shape.createOutline(size, layoutDirection, this)
+            // Měkká záře BEZ tvrdé linky: vrstvené obrysové tahy, u objektu nejsilnější → graduálně do ztracena.
+            // Kreslíme od nejširšího/nejslabšího po nejužší/nejsilnější (nejsilnější navrch, u hrany objektu).
+            val layers = 6
+            val base = width.toPx()
+            for (j in layers - 1 downTo 0) {
+                val frac = j / (layers - 1f)            // 0 = u objektu, 1 = nejdál ven
+                val strokeW = base * (1f + frac * 3f)   // 1×..4× → decentní dosah
+                val a = glow * 0.5f * (1f - frac)       // u objektu neprůhledné, ven do ztracena
+                drawOutline(
+                    outline = outline,
+                    color = glowColor,
+                    alpha = a,
+                    style = Stroke(width = strokeW),
+                )
+            }
+        }
 }
 
 /**

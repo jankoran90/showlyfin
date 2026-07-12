@@ -2,6 +2,8 @@ package com.github.jankoran90.showlyfin.feature.detail.ui
 import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,17 +34,29 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
+import kotlinx.coroutines.launch
 
 private val CsfdRed = ShowlyfinStatus.CsfdHigh
 
@@ -151,7 +166,39 @@ fun CsfdGalleryDialog(
                 urls.isEmpty() -> Text("Galerie není k dispozici", color = AmberText)
                 else -> {
                     val pagerState = rememberPagerState(pageCount = { urls.size })
-                    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                    val scope = rememberCoroutineScope()
+                    val focusRequester = remember { FocusRequester() }
+                    val isTv = isTvFormFactor()
+                    // Na TV: HorizontalPager se swipe D-padem nepřepíná → řešíme LEFT/RIGHT přes key eventy
+                    // na fokusovatelném pageru (auto-fokus po otevření). Telefon = beze změny (swipe).
+                    var pagerModifier = Modifier.fillMaxSize()
+                    if (isTv) {
+                        pagerModifier = pagerModifier
+                            .focusRequester(focusRequester)
+                            .focusable()
+                            .onKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                when (event.key) {
+                                    Key.DirectionRight -> {
+                                        val next = (pagerState.currentPage + 1).coerceAtMost(urls.size - 1)
+                                        if (next != pagerState.currentPage) {
+                                            scope.launch { pagerState.animateScrollToPage(next) }
+                                        }
+                                        true
+                                    }
+                                    Key.DirectionLeft -> {
+                                        val prev = (pagerState.currentPage - 1).coerceAtLeast(0)
+                                        if (prev != pagerState.currentPage) {
+                                            scope.launch { pagerState.animateScrollToPage(prev) }
+                                        }
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            }
+                    }
+                    LaunchedEffect(isTv) { if (isTv) focusRequester.requestFocus() }
+                    HorizontalPager(state = pagerState, modifier = pagerModifier) { page ->
                         AsyncImage(
                             model = urls[page],
                             contentDescription = null,
@@ -213,7 +260,31 @@ fun CsfdReviewsBottomSheet(
             color = Amber,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
         )
+        val listState = rememberLazyListState()
+        val scope = rememberCoroutineScope()
+        val focusRequester = remember { FocusRequester() }
+        val isTv = isTvFormFactor()
+        // Na TV: seznam recenzí nešel scrollovat D-padem (položky nejsou fokusovatelné, sheet nemá
+        // touch scroll) → fokusovatelný kontejner + UP/DOWN posouvá o kus. Telefon = beze změny (touch scroll).
+        var listModifier = Modifier.fillMaxWidth()
+        if (isTv) {
+            listModifier = listModifier
+                .focusRequester(focusRequester)
+                .focusable()
+                .onKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    val step = 480f
+                    when (event.key) {
+                        Key.DirectionDown -> { scope.launch { listState.animateScrollBy(step) }; true }
+                        Key.DirectionUp -> { scope.launch { listState.animateScrollBy(-step) }; true }
+                        else -> false
+                    }
+                }
+        }
+        LaunchedEffect(isTv) { if (isTv) focusRequester.requestFocus() }
         LazyColumn(
+            state = listState,
+            modifier = listModifier,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
