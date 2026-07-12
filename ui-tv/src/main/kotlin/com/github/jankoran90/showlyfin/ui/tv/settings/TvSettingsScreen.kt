@@ -38,7 +38,8 @@ import kotlin.math.roundToInt
  * (prefs jsou activity-scoped, náhled naživo). Vše přes D-pad ± steppery / přepínače, žádný `Slider`.
  *
  * Zaměřeno na to, co člověk ladí u televize: vzhled (motiv, barevné osy, písmo), obraz/zvuk (DRC filmu),
- * systém. Přihlášení účtů (Trakt device-code) a pokročilé profilové věci = telefonní Nastavení / další fáze.
+ * přehrávač (transport lišta), účty (Trakt přes device-code — bez prohlížeče), systém. Pokročilé profilové
+ * věci zůstávají v telefonním Nastavení.
  */
 @Composable
 fun TvSettingsScreen(
@@ -186,6 +187,20 @@ fun TvSettingsScreen(
                     selected = sys.playerSeekStepSec,
                     labelOf = { "$it s" },
                     onSelect = settings::setPlayerSeekStepSec,
+                )
+            }
+        }
+
+        // ── Účty ──
+        item {
+            TvSettingsBlock(title = "Účty") {
+                TvTraktAccountRow(
+                    loggedIn = sys.traktLoggedIn,
+                    userCode = sys.traktUserCode,
+                    verificationUrl = sys.traktVerificationUrl,
+                    status = sys.traktStatus,
+                    onLogin = settings::startTraktDeviceLogin,
+                    onLogout = settings::logout,
                 )
             }
         }

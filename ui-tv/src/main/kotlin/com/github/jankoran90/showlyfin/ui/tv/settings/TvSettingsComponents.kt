@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -182,6 +184,90 @@ private fun StepperButton(
             .clickable(enabled = enabled, onClick = onClick)
             .padding(8.dp)
             .size(28.dp),
+    )
+}
+
+/**
+ * TENFOOT F3 — účet Trakt na TV přes device-code (bez prohlížeče). Zobrazí velký kód + adresu k zadání na
+ * jiném zařízení, tlačítko přihlásit/odhlásit je D-pad-fokusovatelné. Stav řídí sdílený [SettingsViewModel].
+ */
+@Composable
+fun TvTraktAccountRow(
+    loggedIn: Boolean,
+    userCode: String?,
+    verificationUrl: String?,
+    status: String?,
+    onLogin: () -> Unit,
+    onLogout: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            RowLabel(
+                label = "Trakt",
+                subtitle = if (loggedIn) "Přihlášeno" else "Sledování historie a oblíbených",
+                modifier = Modifier.weight(1f),
+            )
+            TvActionChip(
+                label = when {
+                    loggedIn -> "Odhlásit"
+                    userCode == null -> "Přihlásit"
+                    else -> "Čekám…"
+                },
+                enabled = loggedIn || userCode == null,
+                danger = loggedIn,
+                onClick = if (loggedIn) onLogout else onLogin,
+            )
+        }
+        if (!loggedIn && userCode != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Otevři ${verificationUrl ?: "trakt.tv/activate"} na telefonu a zadej kód:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = userCode,
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (status != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Fokusovatelné akční tlačítko na TV řádku (D-pad center = klik). Barva z motivu, `danger` = chybová. */
+@Composable
+private fun TvActionChip(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    danger: Boolean = false,
+) {
+    val container = if (danger) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primary
+    val content = if (danger) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimary
+    val alpha = if (enabled) 1f else 0.4f
+    Text(
+        text = label,
+        style = MaterialTheme.typography.titleMedium,
+        color = content.copy(alpha = alpha),
+        modifier = modifier
+            .tvFocusBorder(shape = MaterialTheme.shapes.medium)
+            .clip(MaterialTheme.shapes.medium)
+            .background(container.copy(alpha = alpha))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
     )
 }
 
