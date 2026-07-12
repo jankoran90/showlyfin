@@ -85,6 +85,9 @@ fun DiscoverScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
+    // TABULA: proklik do detailu vyčistí hledání → krok Zpět přistane na čistém (nefiltrovaném) seznamu.
+    // (Swipe mezi taby dotaz zachová — čistí se jen při navigaci na detail.)
+    val openDetail: (MediaItem, String?) -> Unit = { item, jid -> viewModel.clearSearch(); onItemClick(item, jid) }
     val isSearchMode = uiState.searchQuery.isNotBlank()
 
     val gridState = rememberLazyGridState()
@@ -244,14 +247,14 @@ fun DiscoverScreen(
                         if (viewMode == ViewMode.LANDSCAPE_DETAIL) {
                             LandscapeDetailCard(
                                 item = item,
-                                onClick = { onItemClick(item, jellyfinId) },
+                                onClick = { openDetail(item, jellyfinId) },
                                 inLibrary = inLibrary,
                                 watched = watched,
                             )
                         } else {
                             MediaRow(
                                 item = item,
-                                onClick = { onItemClick(item, jellyfinId) },
+                                onClick = { openDetail(item, jellyfinId) },
                                 inLibrary = inLibrary,
                                 watched = watched,
                             )
@@ -292,14 +295,14 @@ fun DiscoverScreen(
                             if (viewMode == ViewMode.LANDSCAPE) {
                                 LandscapeCard(
                                     item = item,
-                                    onClick = { onItemClick(item, jellyfinId) },
+                                    onClick = { openDetail(item, jellyfinId) },
                                     inLibrary = inLibrary,
                                     watched = watched,
                                 )
                             } else {
                                 MediaCard(
                                     item = item,
-                                    onClick = { onItemClick(item, jellyfinId) },
+                                    onClick = { openDetail(item, jellyfinId) },
                                     inLibrary = inLibrary,
                                     watched = watched,
                                 )

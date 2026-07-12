@@ -62,6 +62,8 @@ fun HistoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
+    // TABULA: proklik do detailu vyčistí hledání → krok Zpět přistane na čistém (nefiltrovaném) seznamu.
+    val openDetail: (MediaItem, String?) -> Unit = { item, jid -> viewModel.setSearchQuery(""); onItemClick(item, jid) }
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
 
@@ -112,14 +114,14 @@ fun HistoryScreen(
                     if (viewMode == ViewMode.LANDSCAPE_DETAIL) {
                         LandscapeDetailCard(
                             item = item,
-                            onClick = { onItemClick(item, jellyfinId) },
+                            onClick = { openDetail(item, jellyfinId) },
                             inLibrary = inLibrary,
                             watched = true,
                         )
                     } else {
                         MediaRow(
                             item = item,
-                            onClick = { onItemClick(item, jellyfinId) },
+                            onClick = { openDetail(item, jellyfinId) },
                             inLibrary = inLibrary,
                             watched = true,
                         )
@@ -153,14 +155,14 @@ fun HistoryScreen(
                     if (viewMode == ViewMode.LANDSCAPE) {
                         LandscapeCard(
                             item = item,
-                            onClick = { onItemClick(item, jellyfinId) },
+                            onClick = { openDetail(item, jellyfinId) },
                             inLibrary = inLibrary,
                             watched = true,
                         )
                     } else {
                         MediaCard(
                             item = item,
-                            onClick = { onItemClick(item, jellyfinId) },
+                            onClick = { openDetail(item, jellyfinId) },
                             inLibrary = inLibrary,
                             watched = true,
                         )

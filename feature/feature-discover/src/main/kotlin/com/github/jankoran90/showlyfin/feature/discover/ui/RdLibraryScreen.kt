@@ -48,6 +48,8 @@ fun RdLibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
+    // TABULA: proklik do detailu vyčistí hledání → krok Zpět přistane na čistém (nefiltrovaném) seznamu.
+    val openDetail: (MediaItem) -> Unit = { item -> viewModel.onSearchQueryChange(""); onItemClick(item) }
 
     Column(modifier.fillMaxSize()) {
         SectionBar(
@@ -103,9 +105,9 @@ fun RdLibraryScreen(
                         ) {
                             items(items, key = { "rd_${it.tmdbId}" }) { item ->
                                 if (viewMode == ViewMode.LANDSCAPE_DETAIL) {
-                                    LandscapeDetailCard(item = item, onClick = { onItemClick(item) })
+                                    LandscapeDetailCard(item = item, onClick = { openDetail(item) })
                                 } else {
-                                    MediaRow(item = item, onClick = { onItemClick(item) })
+                                    MediaRow(item = item, onClick = { openDetail(item) })
                                 }
                             }
                         }
@@ -120,9 +122,9 @@ fun RdLibraryScreen(
                         ) {
                             items(items, key = { "rd_${it.tmdbId}" }) { item ->
                                 if (viewMode == ViewMode.LANDSCAPE) {
-                                    LandscapeCard(item = item, onClick = { onItemClick(item) })
+                                    LandscapeCard(item = item, onClick = { openDetail(item) })
                                 } else {
-                                    MediaCard(item = item, onClick = { onItemClick(item) })
+                                    MediaCard(item = item, onClick = { openDetail(item) })
                                 }
                             }
                         }

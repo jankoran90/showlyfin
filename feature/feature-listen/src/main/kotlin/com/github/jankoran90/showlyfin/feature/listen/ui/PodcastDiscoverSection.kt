@@ -30,6 +30,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -65,6 +66,8 @@ fun PodcastDiscoverSection(
     searchVm: SourceManagerViewModel = hiltViewModel(),
 ) {
     var mode by rememberSaveable { mutableStateOf(DiscoverMode.BROWSE) }
+    // TABULA: proklik na výsledek → detail zdroje → krok Zpět nesmí zobrazit staré hledání podcastů.
+    DisposableEffect(Unit) { onDispose { searchVm.onQueryChange("") } }
 
     Column(modifier.fillMaxSize()) {
         SingleChoiceSegmentedButtonRow(

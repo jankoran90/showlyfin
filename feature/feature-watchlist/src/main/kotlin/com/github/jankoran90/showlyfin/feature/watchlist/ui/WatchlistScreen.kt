@@ -84,6 +84,8 @@ fun WatchlistScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val csfdRatings by viewModel.csfdRatings.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
+    // TABULA: proklik do detailu vyčistí hledání → krok Zpět přistane na čistém (nefiltrovaném) seznamu.
+    val openDetail: (MediaItem, String?) -> Unit = { item, jid -> viewModel.setSearchQuery(""); onItemClick(item, jid) }
     val listState = rememberLazyListState()
     val gridState = rememberLazyGridState()
 
@@ -210,14 +212,14 @@ fun WatchlistScreen(
                         if (viewMode == ViewMode.LANDSCAPE) {
                             LandscapeCard(
                                 item = item,
-                                onClick = { onItemClick(item, jellyfinId) },
+                                onClick = { openDetail(item, jellyfinId) },
                                 inLibrary = inLibrary,
                                 watched = watched,
                             )
                         } else {
                             MediaCard(
                                 item = item,
-                                onClick = { onItemClick(item, jellyfinId) },
+                                onClick = { openDetail(item, jellyfinId) },
                                 inLibrary = inLibrary,
                                 watched = watched,
                             )
@@ -253,7 +255,7 @@ fun WatchlistScreen(
                                 inLibrary = inLibrary,
                                 watched = watched,
                                 progressText = progressText,
-                                onClick = { onItemClick(item, jellyfinId) },
+                                onClick = { openDetail(item, jellyfinId) },
                             )
                         } else {
                             MediaRow(
@@ -262,7 +264,7 @@ fun WatchlistScreen(
                                 inLibrary = inLibrary,
                                 watched = watched,
                                 progressText = progressText,
-                                onClick = { onItemClick(item, jellyfinId) },
+                                onClick = { openDetail(item, jellyfinId) },
                             )
                         }
                     }

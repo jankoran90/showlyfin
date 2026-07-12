@@ -66,6 +66,7 @@ import com.github.jankoran90.showlyfin.feature.detail.ui.PersonFilmographySheet
 import com.github.jankoran90.showlyfin.feature.listen.SourceManagerViewModel
 import com.github.jankoran90.showlyfin.feature.listen.ui.SourceResultCard
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 
 /** Role, pod kterými lze přidat osobu do Oblíbených (hvězda → menu). */
@@ -98,6 +99,9 @@ internal fun SearchScreen(
         return
     }
     val state by vm.state.collectAsStateWithLifecycle()
+    // TABULA: proklik na výsledek → detail → krok Zpět nesmí zobrazit staré hledání. Opuštění obrazovky
+    // (návrat i vstup do detailu) proto dotaz vyčistí → příště čisté Hledání.
+    DisposableEffect(Unit) { onDispose { vm.onQueryChange("") } }
     val favorites by vm.favorites.collectAsStateWithLifecycle()
     val sheet by vm.sheet.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
@@ -258,6 +262,8 @@ private fun PodcastSearchScreen(
     vm: SourceManagerViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // TABULA: opuštění hledání podcastů vyčistí dotaz → návrat/vstup do zdroje = čisté hledání.
+    DisposableEffect(Unit) { onDispose { vm.onQueryChange("") } }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 

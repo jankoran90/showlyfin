@@ -31,6 +31,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +62,8 @@ fun SourceManagerScreen(
     viewModel: SourceManagerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // TABULA: opuštění správy zdrojů vyčistí hledání → návrat/vstup do zdroje = čisté hledání.
+    DisposableEffect(Unit) { onDispose { viewModel.onQueryChange("") } }
     val snackbar = remember { SnackbarHostState() }
     var pendingRemove by remember { mutableStateOf<PodcastSource?>(null) }
 
