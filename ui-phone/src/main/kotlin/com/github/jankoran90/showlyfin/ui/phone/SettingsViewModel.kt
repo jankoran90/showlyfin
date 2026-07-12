@@ -79,6 +79,8 @@ data class SettingsUiState(
     // TENFOOT F2c — TV transport lišta přehrávače: auto-skrytí ovládání (0 = nikdy) + krok převíjení (s).
     val playerControlsHideSec: Int = PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC,
     val playerSeekStepSec: Int = PlayerPrefs.DEFAULT_SEEK_STEP_SEC,
+    // TENFOOT F2d — na TV boxu passthrough zvuku do AVR (bez FFmpeg SW decode) kvůli A/V lip-sync.
+    val playerTvAudioPassthrough: Boolean = PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
     // Plan MAESTRO — ovládání domácí sestavy (AVR hlasitost + scéna „spustit z vypnuté TV").
@@ -252,6 +254,7 @@ class SettingsViewModel @Inject constructor(
                 movieDrcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0),
                 playerControlsHideSec = prefs.getInt(PlayerPrefs.CONTROLS_HIDE_SEC_KEY, PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC),
                 playerSeekStepSec = prefs.getInt(PlayerPrefs.SEEK_STEP_SEC_KEY, PlayerPrefs.DEFAULT_SEEK_STEP_SEC),
+                playerTvAudioPassthrough = prefs.getBoolean(PlayerPrefs.TV_AUDIO_PASSTHROUGH_KEY, PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH),
             )
         }
         viewModelScope.launch {
@@ -440,6 +443,12 @@ class SettingsViewModel @Inject constructor(
     fun setPlayerSeekStepSec(v: Int) {
         prefs.edit().putInt(PlayerPrefs.SEEK_STEP_SEC_KEY, v).apply()
         _uiState.update { it.copy(playerSeekStepSec = v) }
+    }
+
+    /** TENFOOT F2d — passthrough zvuku do AVR na TV boxu (bez FFmpeg SW decode). Projeví se při příštím přehrání. */
+    fun setPlayerTvAudioPassthrough(v: Boolean) {
+        prefs.edit().putBoolean(PlayerPrefs.TV_AUDIO_PASSTHROUGH_KEY, v).apply()
+        _uiState.update { it.copy(playerTvAudioPassthrough = v) }
     }
     fun setContinuePodcastAfterQueue(v: Boolean) = updateListen { continuePodcastAfterQueue = v }
     fun setPersistQueue(v: Boolean) = updateListen { persistQueue = v }

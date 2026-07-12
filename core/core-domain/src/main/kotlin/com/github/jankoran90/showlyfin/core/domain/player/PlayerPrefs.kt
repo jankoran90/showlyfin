@@ -16,4 +16,13 @@ object PlayerPrefs {
     const val SEEK_STEP_SEC_KEY = "player_seek_step_sec"
     const val DEFAULT_SEEK_STEP_SEC = 10
     val SEEK_STEP_SEC_OPTIONS = listOf(10, 15, 30, 60)
+
+    /**
+     * F2d — na TV boxu držet bitstream **passthrough** zvuku do AVR (5.1) místo SW dekódování NextLib FFmpeg,
+     * které kazí A/V lip-sync. `true` = čistý DefaultRenderersFactory + audio offload (jako yellyfin, sync OK);
+     * `false` = FFmpeg SW dekodér (nouzově, když AVR kodek nezvládne → jinak ticho). Čte `MoviePlayerService`,
+     * platí JEN na TV (telefon vždy FFmpeg). Projeví se při příštím přehrání.
+     */
+    const val TV_AUDIO_PASSTHROUGH_KEY = "player_tv_audio_passthrough"
+    const val DEFAULT_TV_AUDIO_PASSTHROUGH = true
 }

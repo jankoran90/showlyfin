@@ -3,21 +3,26 @@ package com.github.jankoran90.showlyfin.feature.playback.service
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.github.jankoran90.showlyfin.core.domain.InstallGuard
 import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
+import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import javax.inject.Inject
@@ -52,15 +57,22 @@ class MoviePlayerService : MediaSessionService() {
         super.onCreate()
         // Plan EVEN — pinneme stabilní audio session id pro připojení filmového DRC (jen telefon).
         val audioSessionId = C.generateAudioSessionIdV21(this)
-        val player = ExoPlayer.Builder(this)
-            // TEMPO Fáze C: FFmpeg SW dekodér (NextLib) pro DTS/DTS-HD core/TrueHD, které telefon nemá
-            // v HW → jinak u REMUXů ticho. EXTENSION_RENDERER_MODE_ON = HW dekodér má přednost, ffmpeg
-            // jen vyplní díry. JEN telefon (showlyfin), NIKDY box (yellyfin drží passthrough do AVR).
-            .setRenderersFactory(
-                NextRenderersFactory(applicationContext)
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-                    .setEnableDecoderFallback(true),
-            )
+        // F2d (A/V lip-sync): na TV boxu s AVR (eARC, 5.1 passthrough) NEsmí do audio cesty NextLib FFmpeg SW
+        // dekodér — mění latenci passthrough → video napřed. Na TV proto čistý DefaultRenderersFactory (bitstream
+        // passthrough do AVR) + audio offload (jako yellyfin, který sync problém nemá). Telefon BEZE ZMĚNY
+        // (FFmpeg nutný pro DTS/TrueHD, které telefon nemá v HW). Konfigurovatelné (PlayerPrefs, default zap na TV).
+        val isTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        val boxAudio = isTv &&
+            prefs.getBoolean(PlayerPrefs.TV_AUDIO_PASSTHROUGH_KEY, PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH)
+        val renderersFactory: RenderersFactory = if (boxAudio) {
+            DefaultRenderersFactory(applicationContext).setEnableDecoderFallback(true)
+        } else {
+            NextRenderersFactory(applicationContext)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                .setEnableDecoderFallback(true)
+        }
+        val builder = ExoPlayer.Builder(this)
+            .setRenderersFactory(renderersFactory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory()))
             .setLoadControl(
                 DefaultLoadControl.Builder()
@@ -78,6 +90,21 @@ class MoviePlayerService : MediaSessionService() {
                     .build(),
                 /* handleAudioFocus = */ true,
             )
+        if (boxAudio) {
+            // Audio offload (parita s yellyfinem) — kratší DSP cesta při passthrough → stabilnější A/V sync.
+            builder.setTrackSelector(
+                DefaultTrackSelector(applicationContext).apply {
+                    setParameters(
+                        buildUponParameters().setAudioOffloadPreferences(
+                            AudioOffloadPreferences.Builder()
+                                .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+                                .build(),
+                        ),
+                    )
+                },
+            )
+        }
+        val player = builder
             .build()
             .apply {
                 // Titulky kreslíme VLASTNÍM overlayem (Compose, z externích .srt). Vestavěné text stopy

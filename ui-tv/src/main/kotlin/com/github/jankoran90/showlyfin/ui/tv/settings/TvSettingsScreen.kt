@@ -166,6 +166,12 @@ fun TvSettingsScreen(
                     labelOf = ::drcLabel,
                     onSelect = settings::setMovieDrcLevel,
                 )
+                TvToggleRow(
+                    label = "Passthrough zvuku (5.1 do AVR)",
+                    subtitle = "Přijímač dekóduje zvuk sám — opraví rozjetý zvuk/obraz. Vypni, jen když je ticho",
+                    checked = sys.playerTvAudioPassthrough,
+                    onCheckedChange = settings::setPlayerTvAudioPassthrough,
+                )
             }
         }
 
