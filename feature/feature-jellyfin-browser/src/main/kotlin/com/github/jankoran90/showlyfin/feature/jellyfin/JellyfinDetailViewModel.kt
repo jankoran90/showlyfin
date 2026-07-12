@@ -15,11 +15,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ItemFields
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -80,9 +82,50 @@ class JellyfinDetailViewModel @Inject constructor(
                 _state.update { it.copy(isLoading = false, detail = detail) }
                 if (response.type.name.equals("MOVIE", ignoreCase = true)) {
                     loadCollectionWithPriority(itemUuid, userUuid, serverUrl, token, tmdbId)
+                } else if (response.type == BaseItemKind.SERIES) {
+                    loadNextUp(itemUuid, userUuid, serverUrl, token)
                 }
             } catch (e: Throwable) {
                 _state.update { it.copy(isLoading = false, error = e.message ?: "Chyba načtení") }
+            }
+        }
+    }
+
+    /**
+     * TENFOOT — „další na řadě" epizoda pro kartu seriálu (yellyfin-like). Jellyfin NextUp = první nezhlédnutá
+     * napříč sezónami (respektuje watched stav ze serveru); fallback na první epizodu (nový seriál). Jen náhled
+     * (1 položka) — plný výběr řeší EpisodePicker.
+     */
+    private fun loadNextUp(seriesUuid: UUID, userUuid: UUID, serverUrl: String, token: String) {
+        viewModelScope.launch {
+            val ep = runCatching {
+                apiClient.tvShowsApi.getNextUp(
+                    userId = userUuid,
+                    seriesId = seriesUuid,
+                    fields = listOf(ItemFields.OVERVIEW),
+                ).content.items.firstOrNull()
+                    ?: apiClient.tvShowsApi.getEpisodes(
+                        seriesId = seriesUuid,
+                        userId = userUuid,
+                        limit = 1,
+                        fields = listOf(ItemFields.OVERVIEW),
+                    ).content.items.firstOrNull()
+            }.getOrNull() ?: return@launch
+            val epId = ep.id.toString()
+            _state.update {
+                it.copy(
+                    nextUp = EpisodeRow(
+                        id = epId,
+                        seasonNumber = ep.parentIndexNumber,
+                        episodeNumber = ep.indexNumber,
+                        name = ep.name ?: "Epizoda",
+                        imageUrl = "$serverUrl/Items/$epId/Images/Primary?fillWidth=480&quality=85&api_key=$token",
+                        overview = ep.overview,
+                        watched = ep.userData?.played == true,
+                        progressPct = ep.userData?.playedPercentage?.toInt(),
+                        isNextUp = true,
+                    ),
+                )
             }
         }
     }

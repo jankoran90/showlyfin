@@ -38,9 +38,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -70,11 +73,14 @@ fun EpisodePickerScreen(
     LaunchedEffect(seriesId) { viewModel.load(seriesId, seriesName) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    // Autofokus jde přímo na „další na řadě" epizodu (ne na Zpět/lištu) — user 2026-07-12 „vždy na obsah".
+    val nextUpFocus = remember { FocusRequester() }
 
-    // Vycentruj aktuální epizodu (o 1 výš, ať je vidět kontext).
-    LaunchedEffect(state.nextUpIndex) {
-        if (state.nextUpIndex >= 0) {
+    // Vycentruj aktuální epizodu (o 1 výš, ať je vidět kontext) a rovnou na ni dej fokus.
+    LaunchedEffect(state.nextUpIndex, state.isLoading) {
+        if (!state.isLoading && state.nextUpIndex >= 0) {
             runCatching { listState.scrollToItem((state.nextUpIndex - 1).coerceAtLeast(0)) }
+            runCatching { nextUpFocus.requestFocus() }
         }
     }
 
@@ -112,7 +118,11 @@ fun EpisodePickerScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(state.episodes, key = { it.id }) { ep ->
-                        EpisodeItemRow(ep = ep, onClick = { onPlayEpisode(ep.id) })
+                        EpisodeItemRow(
+                            ep = ep,
+                            onClick = { onPlayEpisode(ep.id) },
+                            focusRequester = if (ep.isNextUp) nextUpFocus else null,
+                        )
                     }
                 }
             }
@@ -121,7 +131,7 @@ fun EpisodePickerScreen(
 }
 
 @Composable
-private fun EpisodeItemRow(ep: EpisodeRow, onClick: () -> Unit) {
+private fun EpisodeItemRow(ep: EpisodeRow, onClick: () -> Unit, focusRequester: FocusRequester? = null) {
     val label = buildString {
         ep.seasonNumber?.let { append("S$it") }
         ep.episodeNumber?.let { append("E$it") }
@@ -139,6 +149,7 @@ private fun EpisodeItemRow(ep: EpisodeRow, onClick: () -> Unit) {
     }
     Row(
         modifier = withBorder
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clickable(onClick = onClick)
             .tvFocusable(shape = RoundedCornerShape(10.dp))
             .padding(8.dp),

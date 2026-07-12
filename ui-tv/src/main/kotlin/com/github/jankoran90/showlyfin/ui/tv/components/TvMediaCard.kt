@@ -11,6 +11,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -27,6 +29,7 @@ fun TvMediaCard(
     item: MediaItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
 ) {
     TvPosterCard(
         posterUrl = item.posterUrl("w342"),
@@ -34,6 +37,7 @@ fun TvMediaCard(
         year = item.year,
         onClick = onClick,
         modifier = modifier,
+        focusRequester = focusRequester,
     )
 }
 
@@ -52,6 +56,7 @@ fun TvPosterCard(
     year: Int?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
 ) {
     val shape = MaterialTheme.shapes.medium   // tvar z theme (design guard: žádný inline RoundedCornerShape)
     // fillMaxWidth (ne pevná šířka) → dlaždice respektuje šířku buňky mřížky (GridCells.Fixed) místo aby ji přebíjela.
@@ -63,6 +68,8 @@ fun TvPosterCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
+                // focusRequester PŘED clickable (fokusový target) — autofokus na první dlaždici obsahu.
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .tvFocusBorder(shape = shape)
                 .clip(shape)
                 .clickable(onClick = onClick)

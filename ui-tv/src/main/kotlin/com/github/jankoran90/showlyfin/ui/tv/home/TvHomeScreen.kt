@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,8 +31,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -191,6 +193,11 @@ private fun WatchGrid(
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
+    // Autofokus na obsah: jakmile dorazí položky, přeskoč fokus na první plakát (ne na lištu sekcí/filtrů).
+    val firstItemFocus = remember { FocusRequester() }
+    LaunchedEffect(ui.items.isNotEmpty()) {
+        if (ui.items.isNotEmpty()) runCatching { firstItemFocus.requestFocus() }
+    }
 
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
@@ -208,8 +215,12 @@ private fun WatchGrid(
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 14.dp),
         modifier = modifier,
     ) {
-        items(ui.items, key = { it.traktId }) { item ->
-            TvMediaCard(item = item, onClick = { onOpenDetail(item) })
+        itemsIndexed(ui.items, key = { _, it -> it.traktId }) { index, item ->
+            TvMediaCard(
+                item = item,
+                onClick = { onOpenDetail(item) },
+                focusRequester = if (index == 0) firstItemFocus else null,
+            )
         }
     }
 }

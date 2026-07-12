@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -25,7 +26,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -33,8 +36,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -47,6 +54,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
+import com.github.jankoran90.showlyfin.feature.jellyfin.EpisodeRow
 import com.github.jankoran90.showlyfin.feature.jellyfin.JellyfinDetailViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -150,18 +158,34 @@ fun JellyfinDetailScreen(
 
                     Spacer(Modifier.height(8.dp))
                     val isSeries = detail.type.equals("SERIES", ignoreCase = true)
-                    Button(
-                        onClick = {
-                            if (isSeries && onOpenEpisodes != null) onOpenEpisodes(detail.id, detail.name)
-                            else onPlay(detail.id)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .tvFocusable(shape = RoundedCornerShape(percent = 50)),
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                        Text(if (isSeries) "Epizody" else "Přehrát")
+                    val nextUp = state.nextUp
+                    // Autofokus jde přímo na obsah/akci (Pokračovat u seriálu, Přehrát u filmu), NE na Zpět/lištu
+                    // (user 2026-07-12: „vždy na obsah, ne na sekce/tlačítka").
+                    val primaryFocus = remember { FocusRequester() }
+                    LaunchedEffect(detail.id, nextUp) { runCatching { primaryFocus.requestFocus() } }
+
+                    if (isSeries && nextUp != null) {
+                        NextUpCard(
+                            episode = nextUp,
+                            onContinue = { onPlay(nextUp.id) },
+                            onEpisodes = { onOpenEpisodes?.invoke(detail.id, detail.name) },
+                            continueFocus = primaryFocus,
+                        )
+                    } else {
+                        Button(
+                            onClick = {
+                                if (isSeries && onOpenEpisodes != null) onOpenEpisodes(detail.id, detail.name)
+                                else onPlay(detail.id)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .focusRequester(primaryFocus)
+                                .tvFocusable(shape = RoundedCornerShape(percent = 50)),
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                            Text(if (isSeries) "Epizody" else "Přehrát")
+                        }
                     }
                     Spacer(Modifier.height(12.dp))
 
@@ -196,6 +220,84 @@ fun JellyfinDetailScreen(
 
                     Spacer(Modifier.height(24.dp))
                 }
+            }
+        }
+    }
+}
+
+/**
+ * TENFOOT — náhled „další na řadě" epizody na kartě seriálu (yellyfin-like): miniatura + „S1E4 · název"
+ * + progress u rozkoukané; tlačítko **Pokračovat** (přímé přehrání nextUp epizody, dostává autofokus) vedle
+ * **Epizody** (plný výběr). Nahrazuje prosté tlačítko „Epizody" jen když má seriál next-up epizodu.
+ */
+@Composable
+private fun NextUpCard(
+    episode: EpisodeRow,
+    onContinue: () -> Unit,
+    onEpisodes: () -> Unit,
+    continueFocus: FocusRequester,
+) {
+    val se = buildString {
+        episode.seasonNumber?.let { append("S$it") }
+        episode.episodeNumber?.let { append("E$it") }
+    }
+    val subtitle = listOfNotNull(se.ifBlank { null }, episode.name).joinToString(" · ")
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier
+                    .width(160.dp)
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                AsyncImage(
+                    model = episode.imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = if (episode.watched) "Přehrát znovu" else "Další na řadě",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                )
+                episode.progressPct?.takeIf { it in 1..99 }?.let { pct ->
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { pct / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onContinue,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(continueFocus)
+                    .tvFocusable(shape = RoundedCornerShape(percent = 50)),
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                Text(if (episode.watched) "Přehrát" else "Pokračovat")
+            }
+            OutlinedButton(
+                onClick = onEpisodes,
+                modifier = Modifier
+                    .weight(1f)
+                    .tvFocusable(shape = RoundedCornerShape(percent = 50)),
+            ) {
+                Text("Epizody")
             }
         }
     }

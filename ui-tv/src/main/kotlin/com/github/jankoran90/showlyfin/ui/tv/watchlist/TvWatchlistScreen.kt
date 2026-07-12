@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,10 +21,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,6 +57,11 @@ fun TvWatchlistScreen(
     viewModel: WatchlistViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
+    // Autofokus na obsah: jakmile jsou položky, přeskoč fokus rovnou na první plakát (ne na Zpět/přepínač).
+    val firstItemFocus = remember { FocusRequester() }
+    LaunchedEffect(ui.items.size, ui.isLoading) {
+        if (!ui.isLoading && ui.items.isNotEmpty()) runCatching { firstItemFocus.requestFocus() }
+    }
 
     Column(modifier = modifier.fillMaxSize().tvOverscan()) {
         Row(
@@ -117,8 +125,12 @@ fun TvWatchlistScreen(
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 14.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                items(ui.items, key = { "${it.type}_${it.traktId}" }) { item ->
-                    TvMediaCard(item = item, onClick = { onOpenDetail(item) })
+                itemsIndexed(ui.items, key = { _, it -> "${it.type}_${it.traktId}" }) { index, item ->
+                    TvMediaCard(
+                        item = item,
+                        onClick = { onOpenDetail(item) },
+                        focusRequester = if (index == 0) firstItemFocus else null,
+                    )
                 }
             }
         }

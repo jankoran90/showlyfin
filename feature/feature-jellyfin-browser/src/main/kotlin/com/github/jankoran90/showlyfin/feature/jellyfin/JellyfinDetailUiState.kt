@@ -23,4 +23,7 @@ data class JellyfinDetailUiState(
     val detail: JellyfinDetail? = null,
     val error: String? = null,
     val collection: MediaCollection? = null,
+    // TENFOOT — „další na řadě" epizoda seriálu (Jellyfin NextUp, fallback první nezhlédnutá). Null = film /
+    // nový seriál bez next-up / vše zhlédnuto → karta ukáže prosté „Epizody".
+    val nextUp: EpisodeRow? = null,
 )
