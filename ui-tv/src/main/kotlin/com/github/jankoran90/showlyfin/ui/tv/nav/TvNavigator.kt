@@ -12,6 +12,7 @@ import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.jellyfin.TvJellyfinBrowserScreen
 import com.github.jankoran90.showlyfin.ui.tv.search.TvSearchScreen
 import com.github.jankoran90.showlyfin.ui.tv.settings.TvSettingsScreen
+import com.github.jankoran90.showlyfin.ui.tv.watchlist.TvWatchlistScreen
 
 /**
  * TENFOOT (SHW-87) — ruční stavová navigace TV shellu (stejné paradigma jako telefonní
@@ -38,6 +39,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             },
             onOpenSearch = { navigate(TvDestination.Search) },
             onOpenSettings = { navigate(TvDestination.Settings) },
+            onOpenWatchlist = { navigate(TvDestination.Watchlist) },
         )
 
         TvDestination.Search -> TvSearchScreen(
@@ -46,6 +48,11 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         )
 
         TvDestination.Settings -> TvSettingsScreen(onBack = { back() })
+
+        TvDestination.Watchlist -> TvWatchlistScreen(
+            onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            onBack = { back() },
+        )
 
         is TvDestination.LibraryItems -> TvJellyfinBrowserScreen(
             libraryId = dest.libraryId,

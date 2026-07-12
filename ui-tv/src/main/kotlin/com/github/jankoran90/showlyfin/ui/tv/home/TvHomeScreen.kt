@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FilterChip
@@ -70,6 +71,7 @@ fun TvHomeScreen(
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenWatchlist: () -> Unit,
     modifier: Modifier = Modifier,
     discoverViewModel: DiscoverViewModel = hiltViewModel(),
 ) {
@@ -95,6 +97,16 @@ fun TvHomeScreen(
                     .tvFocusable(shape = CircleShape)
                     .clip(CircleShape)
                     .clickable(onClick = onOpenSearch)
+                    .padding(8.dp),
+            )
+            Icon(
+                imageVector = Icons.Filled.Favorite,
+                contentDescription = "Oblíbené",
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .tvFocusable(shape = CircleShape)
+                    .clip(CircleShape)
+                    .clickable(onClick = onOpenWatchlist)
                     .padding(8.dp),
             )
             Icon(
