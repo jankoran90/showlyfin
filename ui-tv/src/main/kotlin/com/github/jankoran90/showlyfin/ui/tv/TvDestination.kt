@@ -18,6 +18,9 @@ sealed interface TvDestination {
     /** Fáze 3 — nativní TV Hledání (sdílí telefonní `SearchViewModel`, výsledky = plakátová mřížka). */
     data object Search : TvDestination
 
+    /** Fáze 3 — nativní TV Nastavení (10-foot bloky, D-pad steppery nad sdílenými prefs VM). */
+    data object Settings : TvDestination
+
     /** Karta obsahu. Fáze 1 reuse telefonní `DetailScreen`, Fáze 2 nativní `TvDetailScreen`. */
     data class Detail(val item: MediaItem) : TvDestination
 

@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,7 @@ fun TvHomeScreen(
     onOpenDetail: (MediaItem) -> Unit,
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     discoverViewModel: DiscoverViewModel = hiltViewModel(),
 ) {
@@ -84,7 +86,7 @@ fun TvHomeScreen(
                 .horizontalScroll(rememberScrollState())
                 .padding(bottom = 14.dp),
         ) {
-            // Vstup do Hledání (vlevo v liště) — ikona, aby lišta zůstala kompaktní.
+            // Vstup do Hledání + Nastavení (vlevo v liště) — ikony, aby lišta zůstala kompaktní.
             Icon(
                 imageVector = Icons.Filled.Search,
                 contentDescription = "Hledat",
@@ -93,6 +95,16 @@ fun TvHomeScreen(
                     .tvFocusable(shape = CircleShape)
                     .clip(CircleShape)
                     .clickable(onClick = onOpenSearch)
+                    .padding(8.dp),
+            )
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = "Nastavení",
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .tvFocusable(shape = CircleShape)
+                    .clip(CircleShape)
+                    .clickable(onClick = onOpenSettings)
                     .padding(8.dp),
             )
             BarDivider()
