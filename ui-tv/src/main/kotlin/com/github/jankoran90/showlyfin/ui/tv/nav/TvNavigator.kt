@@ -2,8 +2,7 @@ package com.github.jankoran90.showlyfin.ui.tv.nav
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
@@ -23,14 +22,13 @@ import com.github.jankoran90.showlyfin.ui.tv.settings.TvSettingsScreen
  * `AdaptivePickerScaffold`/vc278 už D-pad-adaptivní) → Player (`PlaybackScreen`, TV D-pad hotový).
  */
 @Composable
-fun TvNavigator() {
-    val backStack = remember { mutableStateListOf<TvDestination>(TvDestination.Home) }
-    val current = backStack.last()
+fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
+    val current = navVm.current
 
-    fun navigate(dest: TvDestination) { backStack.add(dest) }
-    fun back() { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
+    fun navigate(dest: TvDestination) = navVm.navigate(dest)
+    fun back() = navVm.back()
 
-    BackHandler(enabled = backStack.size > 1) { back() }
+    BackHandler(enabled = navVm.canGoBack) { back() }
 
     when (val dest = current) {
         TvDestination.Home -> TvHomeScreen(

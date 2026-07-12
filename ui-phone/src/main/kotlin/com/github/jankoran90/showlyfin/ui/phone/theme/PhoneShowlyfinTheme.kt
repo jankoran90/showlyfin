@@ -86,6 +86,66 @@ private fun Color.desaturate(chroma: Float): Color {
     return lerp(Color(g, g, g), this, c)
 }
 
+// ── Věrný akcent (PIGMENT, port z hubme) ────────────────────────────────────────────────────────
+// MaterialKolor seed tonálně přemapuje (v tmavém do pastelu, u Expressive posune hue → oranžová dává
+// fialový container) → vybraný akcent „se nerovná výsledku". Proto po sestavení schématu přepíšeme
+// primary/primaryContainer barvou drženou PŘESNĚ v hue seedu. Sladěno s hubme `Theme.kt`.
+
+/** RGB → HSL: vrací [h 0..360, s 0..1, l 0..1]. */
+private fun Color.toHsl(): FloatArray {
+    val r = red; val g = green; val b = blue
+    val max = maxOf(r, g, b); val min = minOf(r, g, b)
+    val l = (max + min) / 2f
+    val d = max - min
+    if (d == 0f) return floatArrayOf(0f, 0f, l)
+    val s = d / (1f - kotlin.math.abs(2f * l - 1f))
+    val h = when (max) {
+        r -> 60f * (((g - b) / d) % 6f)
+        g -> 60f * (((b - r) / d) + 2f)
+        else -> 60f * (((r - g) / d) + 4f)
+    }
+    return floatArrayOf((h + 360f) % 360f, s.coerceIn(0f, 1f), l.coerceIn(0f, 1f))
+}
+
+/** HSL → Color. */
+private fun hslColor(h: Float, s: Float, l: Float): Color {
+    val c = (1f - kotlin.math.abs(2f * l - 1f)) * s
+    val hp = (((h % 360f) + 360f) % 360f) / 60f
+    val x = c * (1f - kotlin.math.abs(hp % 2f - 1f))
+    val (r1, g1, b1) = when {
+        hp < 1f -> Triple(c, x, 0f)
+        hp < 2f -> Triple(x, c, 0f)
+        hp < 3f -> Triple(0f, c, x)
+        hp < 4f -> Triple(0f, x, c)
+        hp < 5f -> Triple(x, 0f, c)
+        else -> Triple(c, 0f, x)
+    }
+    val m = l - c / 2f
+    return Color((r1 + m).coerceIn(0f, 1f), (g1 + m).coerceIn(0f, 1f), (b1 + m).coerceIn(0f, 1f))
+}
+
+/** Vybraný akcent ve věrném hue: drží odstín seedu, sytost/jas řízené sílou akcentu. */
+private fun faithfulAccent(seed: Color, isDark: Boolean, strength: Float): Color {
+    val hsl = seed.toHsl(); val h = hsl[0]; val s0 = hsl[1]
+    if (s0 < 0.12f) return seed // neutrální (šedý) skin → ponech
+    val st = strength.coerceIn(0f, 1f)
+    val s = (maxOf(s0, 0.72f) + st * 0.18f).coerceIn(0f, 1f)
+    val l = if (isDark) 0.56f - st * 0.04f else 0.42f - st * 0.05f
+    return hslColor(h, s, l)
+}
+
+/** Kontejner k věrnému akcentu (stejný hue, tlumenější). */
+private fun accentContainer(accent: Color, isDark: Boolean): Color {
+    val hsl = accent.toHsl(); val h = hsl[0]; val s = hsl[1]
+    if (s < 0.12f) return accent
+    return if (isDark) hslColor(h, (s * 0.92f).coerceIn(0f, 1f), 0.26f)
+    else hslColor(h, (s * 0.85f).coerceIn(0f, 1f), 0.86f)
+}
+
+/** Čitelná barva na dané ploše (tmavá na světlé, bílá na tmavé). */
+private fun contrastOn(bg: Color): Color =
+    if (bg.luminance() > 0.5f) Color(0xFF1A1206) else Color(0xFFFFFFFF)
+
 /**
  * Sestaví plochy + kontejnery dle [background] + dynamických posuvníků (KÁNON CHORUS, port z hubme).
  * Pozadí AMOLED = vždy čistě černé (posuvníky ho nemění). Věrně sjednoceno s hubme `withTunedScheme`.
@@ -97,13 +157,15 @@ private fun ColorScheme.withTunedScheme(
     containerTint: Float,
     textContrast: Float,
     accentChroma: Float,
+    accentStrength: Float = 0f,
+    accentSeed: Color? = null,
 ): ColorScheme {
     val t = SurfaceTuning.clamp(surfaceTint)
     val l = SurfaceTuning.clamp(surfaceLightness)
     val bt = AccentTuning.clamp(containerTint)
     val tc = AccentTuning.clamp(textContrast)
     val ch = AccentTuning.clamp(accentChroma)
-    return if (background == Background.Light) {
+    val tuned: ColorScheme = if (background == Background.Light) {
         val root = Color(0xFFFDFDFD)
         val neutralCont = lerp(Color(0xFFFFFFFF), Color(0xFFDFDFDF), l)
         val onHi = lerp(Color(0xFF3A3A3A), Color(0xFF000000), tc)
@@ -169,6 +231,19 @@ private fun ColorScheme.withTunedScheme(
             outlineVariant = lerp(Color(0xFF000000), Color(0xFF3A3A3A), l),
         )
     }
+    // Finální přepis akcentu na věrnou barvu (drží hue seedu). accentSeed == null → ponech schéma
+    // z MaterialKolor (fallback). Jinak primary/onPrimary/primaryContainer/onPrimaryContainer = pigment.
+    return if (accentSeed == null) tuned else {
+        val dark = background != Background.Light
+        val accent = faithfulAccent(accentSeed, isDark = dark, strength = accentStrength).desaturate(ch)
+        val container = accentContainer(accent, dark).desaturate(ch)
+        tuned.copy(
+            primary = accent,
+            onPrimary = contrastOn(accent),
+            primaryContainer = container,
+            onPrimaryContainer = contrastOn(container),
+        )
+    }
 }
 
 @Composable
@@ -199,6 +274,10 @@ fun ShowlyfinPhoneTheme(
         contrastLevel = contrast,
     )
 
+    // Věrný akcent = vybraná barva (custom seed) nebo seed skinu. Showlyfin nemá Material You →
+    // accentSeed je vždy non-null → primary vždy odpovídá zvolené barvě (fix „akcent se nerovná výsledku").
+    val accentSeed = if (themeState.useCustomAccent) Color(themeState.customSeed) else themeState.skin.seed
+
     val colorScheme = accentScheme.withTunedScheme(
         background = resolved,
         surfaceTint = themeState.surfaceTint,
@@ -206,6 +285,8 @@ fun ShowlyfinPhoneTheme(
         containerTint = themeState.containerTint,
         textContrast = themeState.textContrast,
         accentChroma = themeState.accentChroma,
+        accentStrength = themeState.accentStrength,
+        accentSeed = accentSeed,
     )
 
     val typography = remember(serifFont, headingOnly, fontScale) {
