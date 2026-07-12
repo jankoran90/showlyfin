@@ -15,6 +15,9 @@ sealed interface TvDestination {
     /** Domovská „Sleduj" mřížka (feature-discover). Kořen stacku. */
     data object Home : TvDestination
 
+    /** Fáze 3 — nativní TV Hledání (sdílí telefonní `SearchViewModel`, výsledky = plakátová mřížka). */
+    data object Search : TvDestination
+
     /** Karta obsahu. Fáze 1 reuse telefonní `DetailScreen`, Fáze 2 nativní `TvDetailScreen`. */
     data class Detail(val item: MediaItem) : TvDestination
 

@@ -4,10 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,13 +19,8 @@ import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 
 /**
- * TENFOOT (SHW-87) — jedna dlaždice v TV mřížce „Sleduj". `clickable` ji dělá D-pad-fokusovatelnou,
- * `tvFocusBorder` kreslí akcentní prstenec ve fokusu (rukopis fleetu z přehrávače). Barvy/tvary čte z theme.
- *
- * POZOR na pořadí modifikátorů: `tvFocusBorder` (uvnitř má `onFocusChanged`) MUSÍ být PŘED `clickable`,
- * jinak `onFocusChanged` fokusový uzel `clickable` (který je pak výš/vně) nepozoruje → prstenec se nikdy
- * nevykreslí. Přesně tahle chyba dělala „kolem coverů žádné zvýraznění" na TV Home (chips fungují, protože
- * `tvFocusable` sedí na VNĚJŠÍM modifieru FilterChipu). User feedback 2026-07-12.
+ * TENFOOT (SHW-87) — jedna dlaždice v TV mřížce „Sleduj". Tenký obal nad [TvPosterCard]: z [MediaItem]
+ * vytáhne plakát/titul/rok. Vzhled a fokusové chování řeší [TvPosterCard].
  */
 @Composable
 fun TvMediaCard(
@@ -35,11 +28,37 @@ fun TvMediaCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    TvPosterCard(
+        posterUrl = item.posterUrl("w342"),
+        title = item.title,
+        year = item.year,
+        onClick = onClick,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Sdílená TV plakátová dlaždice (mřížka Sleduj i Hledání). Bere PŘÍMOU URL plakátu (Hledání má hotové
+ * TMDB URL, doporučovač staví z `posterPath`) → jeden vzhled napříč obrazovkami.
+ *
+ * POZOR na pořadí modifikátorů: `tvFocusBorder` (uvnitř má `onFocusChanged`) MUSÍ být PŘED `clickable`,
+ * jinak `onFocusChanged` fokusový uzel `clickable` (který je pak výš/vně) nepozoruje → prstenec/lift se
+ * nikdy nevykreslí. Přesně tahle chyba dělala „kolem coverů žádné zvýraznění" na TV Home (user 2026-07-12).
+ */
+@Composable
+fun TvPosterCard(
+    posterUrl: String?,
+    title: String,
+    year: Int?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val shape = MaterialTheme.shapes.medium   // tvar z theme (design guard: žádný inline RoundedCornerShape)
-    Column(modifier = modifier.width(160.dp)) {
+    // fillMaxWidth (ne pevná šířka) → dlaždice respektuje šířku buňky mřížky (GridCells.Fixed) místo aby ji přebíjela.
+    Column(modifier = modifier.fillMaxWidth()) {
         AsyncImage(
-            model = item.posterUrl("w342"),
-            contentDescription = item.title,
+            model = posterUrl,
+            contentDescription = title,
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxWidth()
@@ -49,20 +68,22 @@ fun TvMediaCard(
                 .clickable(onClick = onClick)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         )
-        // Celý titulek (až 2 řádky) + rok pod ním — na TV se dřív titulek na 1 řádek ořízl a rok chyběl.
+        // Titulek VŽDY 2 řádky (min=max) — jinak karty s dlouhým názvem byly vyšší, řada zabrala výšku nejvyšší
+        // karty a druhá řada plakátů se ořízla (user feedback 2026-07-12). Fixní výška = stabilní mřížka.
         Text(
-            text = item.title,
+            text = title,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp, start = 2.dp, end = 2.dp),
         )
-        item.year?.let { year ->
+        year?.let {
             Text(
-                text = "$year",
+                text = "$it",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

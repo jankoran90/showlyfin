@@ -84,12 +84,10 @@ internal fun TvDetailBody(
     // akce + začátek popisu se pořád vejdou na jednu TV obrazovku bez scrollování (user feedback 2026-07-12:
     // 60 % bylo zbytečně nízké, popisek má od spodní hrany rezervu).
     val heroHeight = maxHeight * 0.70f
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll),
-    ) {
-        // ── Immersive hero: fanart přes celou šířku, ~70 % výšky obrazovky ──
+    // Hero je FIXNÍ (mimo scroll); scrolluje jen popis pod ním. Bez toho fokus na akční tlačítko spustil
+    // bringIntoView a odscrolloval hero pryč → mizel fanart i „Skončí ve" (user feedback 2026-07-12).
+    Column(Modifier.fillMaxSize()) {
+        // ── Immersive hero: fanart přes celou šířku, ~70 % výšky obrazovky (fixní, vždy vidět) ──
         Box(
             Modifier
                 .fillMaxWidth()
@@ -196,7 +194,7 @@ internal fun TvDetailBody(
             }
         }
 
-        // ── Popis pod fanartem (sbalený na N řádků + rozklik) ──
+        // ── Popis pod fanartem — JEN tahle část scrolluje (hero nahoře zůstává fixní) ──
         val tmdbCz = uiState.tmdbCzOverview
         val plot = tmdbCz?.takeIf { looksCzech(it) }
             ?: uiState.csfdPlot?.takeIf { it.isNotBlank() }
@@ -204,31 +202,38 @@ internal fun TvDetailBody(
             ?: uiState.movieDetails?.overview
             ?: uiState.showDetails?.overview
             ?: displayItem.overview
-        if (!plot.isNullOrBlank()) {
-            val collapsedLines = uiState.plotCollapsedLines.takeIf { it > 0 } ?: 3
-            Column(Modifier.padding(horizontal = 48.dp, vertical = 16.dp)) {
-                Text(
-                    text = plot,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = if (plotExpanded) Int.MAX_VALUE else collapsedLines,
-                    overflow = if (plotExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(8.dp))
-                Icon(
-                    imageVector = if (plotExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (plotExpanded) "Sbalit" else "Zobrazit víc",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable { plotExpanded = !plotExpanded }
-                        .tvFocusBorder(shape = CircleShape)
-                        .padding(6.dp)
-                        .size(28.dp),
-                )
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(scroll),
+        ) {
+            if (!plot.isNullOrBlank()) {
+                val collapsedLines = uiState.plotCollapsedLines.takeIf { it > 0 } ?: 3
+                Column(Modifier.padding(horizontal = 48.dp, vertical = 16.dp)) {
+                    Text(
+                        text = plot,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = if (plotExpanded) Int.MAX_VALUE else collapsedLines,
+                        overflow = if (plotExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Icon(
+                        imageVector = if (plotExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (plotExpanded) "Sbalit" else "Zobrazit víc",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { plotExpanded = !plotExpanded }
+                            .tvFocusBorder(shape = CircleShape)
+                            .padding(6.dp)
+                            .size(28.dp),
+                    )
+                }
             }
+            Spacer(Modifier.height(24.dp))
         }
-        Spacer(Modifier.height(24.dp))
     }
     }
 }
