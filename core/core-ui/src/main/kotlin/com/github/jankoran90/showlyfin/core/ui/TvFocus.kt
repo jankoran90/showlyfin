@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.core.ui
 
 import androidx.compose.foundation.border
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -27,19 +28,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
  * ať je fokus napříč appkou jednotný.
  */
 
-/** Bílý prstenec při fokusu — bez ohledu na formfactor (přímý ekvivalent toho z přehrávače). */
+/**
+ * Prstenec při fokusu. Default = **akcent z motivu** (`primary`) v šířce 3 dp — na TV výrazně
+ * viditelnější než dřívější tenký bílý prstenec (user feedback 2026-07-12: bílé zesvětlení bylo
+ * na světlých plochách sotva vidět). Kde by akcentní prstenec splynul s akcentním pozadím (primární
+ * tlačítko), předej kontrastní `color` (např. `onPrimary`).
+ */
 @Composable
 fun Modifier.tvFocusBorder(
     shape: Shape = RoundedCornerShape(8.dp),
-    width: Dp = 2.dp,
-    color: Color = Color.White,
+    width: Dp = 3.dp,
+    color: Color = Color.Unspecified,
 ): Modifier {
     var focused by remember { mutableStateOf(false) }
+    val ring = if (color == Color.Unspecified) MaterialTheme.colorScheme.primary else color
     return this
         .onFocusChanged { focused = it.isFocused }
         .border(
             width = if (focused) width else 0.dp,
-            color = if (focused) color else Color.Transparent,
+            color = if (focused) ring else Color.Transparent,
             shape = shape,
         )
 }
@@ -51,8 +58,8 @@ fun Modifier.tvFocusBorder(
 @Composable
 fun Modifier.tvFocusable(
     shape: Shape = RoundedCornerShape(8.dp),
-    width: Dp = 2.dp,
-    color: Color = Color.White,
+    width: Dp = 3.dp,
+    color: Color = Color.Unspecified,
 ): Modifier = if (isTvFormFactor()) this.tvFocusBorder(shape, width, color) else this
 
 /**

@@ -44,15 +44,25 @@ fun TvMediaCard(
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         )
+        // Celý titulek (až 2 řádky) + rok pod ním — na TV se dřív titulek na 1 řádek ořízl a rok chyběl.
         Text(
             text = item.title,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp, start = 2.dp, end = 2.dp),
         )
+        item.year?.let { year ->
+            Text(
+                text = "$year",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 1.dp),
+            )
+        }
     }
 }

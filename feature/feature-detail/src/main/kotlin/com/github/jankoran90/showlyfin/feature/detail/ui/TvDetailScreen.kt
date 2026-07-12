@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -73,17 +74,25 @@ internal fun TvDetailBody(
     var plotExpanded by remember { mutableStateOf(false) }
 
     val scroll = rememberScrollState()
-    Column(
+    BoxWithConstraints(
         modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+    // Fanart NESMÍ zabrat celou výšku obrazovky — jinak auto-fokus na akční řadu (dole v heru) odscrolluje
+    // vršek fanartu pryč a user musí rolovat nahoru. ~60 % výšky → fanart celý + titul/meta/akce + začátek
+    // popisu se vejdou na jednu TV obrazovku bez scrollování (user feedback 2026-07-12).
+    val heroHeight = maxHeight * 0.60f
+    Column(
+        Modifier
+            .fillMaxSize()
             .verticalScroll(scroll),
     ) {
-        // ── Immersive hero: fanart 16:9 přes celou šířku ──
+        // ── Immersive hero: fanart přes celou šířku, ~60 % výšky obrazovky ──
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 9f)
+                .height(heroHeight)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             if (backdropUrl != null) {
@@ -218,5 +227,6 @@ internal fun TvDetailBody(
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
     }
 }

@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -186,7 +187,11 @@ private fun TvActionButton(
             .clip(shape)
             .background(bg)
             .clickable(onClick = onClick)
-            .tvFocusBorder(shape = shape)
+            // Na akcentním (primárním) tlačítku by akcentní prstenec splynul → kontrastní onPrimary.
+            .tvFocusBorder(
+                shape = shape,
+                color = if (primary) MaterialTheme.colorScheme.onPrimary else Color.Unspecified,
+            )
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
