@@ -123,9 +123,10 @@ fun TvHomeRowEditor(
                 )
             }
 
-            // Skrýt zhlédnuté — jen kde to dává smysl (Objevovat / Jellyfin knihovna).
+            // Skrýt zhlédnuté — jen kde to dává smysl (Objevovat / Jellyfin knihovna / Nejnovější v knihovně).
             if (config.source == HomeRowSourceType.DISCOVER ||
-                config.source == HomeRowSourceType.JELLYFIN_LIBRARY
+                config.source == HomeRowSourceType.JELLYFIN_LIBRARY ||
+                config.source == HomeRowSourceType.RECENTLY_ADDED
             ) {
                 TvToggleRow(
                     label = "Skrýt zhlédnuté",
@@ -133,6 +134,21 @@ fun TvHomeRowEditor(
                     onCheckedChange = { onUpdate(config.withParam(HomeRowParams.HIDE_WATCHED, it.toString())) },
                 )
             }
+
+            // Popisky na kartách — vypni pro čistý Netflix immersive (název nese hero nahoře).
+            TvToggleRow(
+                label = "Popisky na kartách",
+                checked = config.showTitles,
+                onCheckedChange = { onUpdate(config.copy(showTitles = it)) },
+            )
+
+            TvOptionStepperRow(
+                label = "Počet položek",
+                options = listOf(10, 20, 30, 40, 60),
+                selected = config.limit.coerceIn(1, 60),
+                labelOf = { "$it" },
+                onSelect = { onUpdate(config.copy(limit = it)) },
+            )
 
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),

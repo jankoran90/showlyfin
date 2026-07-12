@@ -17,7 +17,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +41,7 @@ import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.theme.Background
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinSkin
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -63,6 +67,8 @@ fun TvSettingsScreen(
     val sys by settings.uiState.collectAsStateWithLifecycle()
     val sidebar by homeVm.sidebar.collectAsStateWithLifecycle()
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var importMsg by remember { mutableStateOf<String?>(null) }
 
     val listState = rememberLazyListState()
     // TENFOOT: po OK ze sidebaru zaostři PRVNÍ interaktivní řádek (immersive toggle), ne šipku Zpět.
@@ -243,7 +249,9 @@ fun TvSettingsScreen(
         item {
             TvSettingsBlock(title = "Domů a postranní menu") {
                 Text(
-                    text = "Které sekce ukazovat v levém menu (řady domova se ladí přímo na domově tlačítkem Menu):",
+                    text = "Řady domova (Pokračovat, knihovny, kolekce, Uloženo k přehrání, Objevovat…) se ladí " +
+                        "přímo na domově tlačítkem Menu na řadě — styl, řazení, popisky, přesun, skrytí i přidání " +
+                        "nové řady z libovolného zdroje. Tady zvol sekce levého menu:",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -257,11 +265,36 @@ fun TvSettingsScreen(
                         onToggle = { on -> homeVm.setSidebarEnabled(entry.item, on) },
                     )
                 }
-                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    TvActionChip(
+                        label = "Načíst domov ze serveru",
+                        enabled = true,
+                        onClick = {
+                            scope.launch {
+                                importMsg = "Načítám ze serveru…"
+                                val added = runCatching { homeVm.importFromJellyfin() }.getOrDefault(0)
+                                importMsg = when {
+                                    added > 0 -> "Naimportováno $added řad z Jellyfinu"
+                                    else -> "Nic k importu (server nemá home konfiguraci nebo už je vše přidáno)"
+                                }
+                            }
+                        },
+                    )
                     TvActionChip(
                         label = "Obnovit výchozí domov",
                         enabled = true,
                         onClick = { homeVm.resetRows() },
+                    )
+                }
+                importMsg?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
                     )
                 }
             }

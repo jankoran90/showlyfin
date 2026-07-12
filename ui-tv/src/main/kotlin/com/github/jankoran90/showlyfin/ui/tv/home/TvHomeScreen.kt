@@ -127,6 +127,12 @@ fun TvHomeScreen(
     var focusedIndex by remember { mutableIntStateOf(0) }
     var focusedItem by remember { mutableStateOf<HomeRowItem?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
+    var showAddPicker by remember { mutableStateOf(false) }
+    var pendingNewId by remember { mutableStateOf("") }
+    // Seznam knihoven profilu pro picker „Přidat řadu" (konkrétní knihovna / Nejnovější v knihovně).
+    val libraries = remember(libraryState.rows) {
+        libraryState.rows.map { LibrarySummary(it.libraryId, it.libraryName, it.collectionType) }
+    }
 
     // Immersive: fokusovaná karta → info nahoru (pozadí) + lokální hero header.
     val focusedInfo: ImmersiveInfo? = if (immersive) focusedItem?.toImmersiveInfo() else null
@@ -224,19 +230,25 @@ fun TvHomeScreen(
                 onHide = { homeVm.setRowEnabled(id, false); editingId = null },
                 onUnhide = { unhideId -> homeVm.setRowEnabled(unhideId, true) },
                 onAddRow = {
-                    val newId = "custom_${allRows.size}_${cfg.hashCode()}"
-                    homeVm.addRow(
-                        HomeRowConfig(
-                            id = newId,
-                            source = HomeRowSourceType.DISCOVER,
-                            title = "Nová řada",
-                            cardStyle = HomeCardStyle.POSTER,
-                            params = mapOf(HomeRowParams.TAB to "movies", HomeRowParams.FILTER to "trending"),
-                        ),
-                    )
-                    editingId = newId
+                    // Otevři výběr zdroje (řeší mezeru: dřív šla přidat jen Trakt řada).
+                    pendingNewId = "custom_${System.currentTimeMillis()}"
+                    editingId = null
+                    showAddPicker = true
                 },
                 onDismiss = { editingId = null },
+            )
+        }
+
+        if (showAddPicker) {
+            TvAddRowPicker(
+                libraries = libraries,
+                newId = pendingNewId,
+                onPick = { newRow ->
+                    homeVm.addRow(newRow)
+                    showAddPicker = false
+                    editingId = newRow.id // rovnou otevři editaci nové řady (styl/řazení/limit)
+                },
+                onDismiss = { showAddPicker = false },
             )
         }
     }
