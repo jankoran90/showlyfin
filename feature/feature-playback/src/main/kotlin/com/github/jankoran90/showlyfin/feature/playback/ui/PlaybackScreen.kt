@@ -119,7 +119,7 @@ private fun currentBrightness(activity: Activity?, context: Context): Float {
     }
 }
 
-private fun fmtTime(ms: Long): String {
+internal fun fmtTime(ms: Long): String {
     if (ms <= 0) return "0:00"
     val s = ms / 1000
     val h = s / 3600
@@ -222,6 +222,9 @@ fun PlaybackScreen(
     // TV: panel titulků je touch-only, na TV ho zpřístupníme D-padem (otevření Up/Menu + fokus do panelu).
     val isTv = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
     val menuFocusRequester = remember { FocusRequester() }
+    // TENFOOT F2c: fokus přistane na ⏯ v TV transport liště; interactionTick resetuje auto-hide při navigaci.
+    val barFocusRequester = remember { FocusRequester() }
+    var interactionTick by remember { mutableStateOf(0) }
 
     // Seekbar (ruční přesouvání) + gesta jas/hlasitost
     var scrubbing by remember { mutableStateOf(false) }
@@ -344,10 +347,12 @@ fun PlaybackScreen(
             else viewModel.saveVideoPosition(c.currentPosition, c.duration)
         }
     }
-    // auto-hide controls (ne když je otevřený panel titulků)
-    LaunchedEffect(controlsVisible, isPlaying, showSubtitleMenu) {
-        if (controlsVisible && isPlaying && !showSubtitleMenu) {
-            delay(4000)
+    // auto-hide controls (ne když je otevřený panel titulků/zvuku). TENFOOT F2c: timeout konfigurovatelný
+    // (state.controlsHideSec, 0 = nikdy neskrývat); interactionTick resetuje odpočet při navigaci v liště.
+    LaunchedEffect(controlsVisible, isPlaying, showSubtitleMenu, showAudioMenu, interactionTick) {
+        val hideMs = state.controlsHideSec * 1000L
+        if (controlsVisible && isPlaying && !showSubtitleMenu && !showAudioMenu && hideMs > 0L) {
+            delay(hideMs)
             controlsVisible = false
         }
     }
@@ -356,15 +361,19 @@ fun PlaybackScreen(
         if (gestureIndicator != null) { delay(800); gestureIndicator = null }
     }
     LaunchedEffect(resumeDecided) {
-        if (resumeDecided) runCatching { focusRequester.requestFocus() }
+        if (resumeDecided && !isTv) runCatching { focusRequester.requestFocus() }
     }
-    // TV: přesměruj D-pad fokus do panelu titulků při otevření, zpět na přehrávač při zavření.
-    LaunchedEffect(showSubtitleMenu, resumeDecided) {
+    // TV: směruj D-pad fokus dle stavu — panel (titulky/zvuk) > transport lišta (⏯) > capture layer.
+    // TENFOOT F2c: když je lišta viditelná, fokus patří jí (ne capture vrstvě); po skrytí se vrátí zpět.
+    LaunchedEffect(showSubtitleMenu, showAudioMenu, controlsVisible, resumeDecided) {
         if (!isTv || !resumeDecided) return@LaunchedEffect
         delay(50)
         runCatching {
-            if (showSubtitleMenu) menuFocusRequester.requestFocus()
-            else focusRequester.requestFocus()
+            when {
+                showSubtitleMenu || showAudioMenu -> menuFocusRequester.requestFocus()
+                controlsVisible -> barFocusRequester.requestFocus()
+                else -> focusRequester.requestFocus()
+            }
         }
     }
 
@@ -591,18 +600,32 @@ fun PlaybackScreen(
                 } else {
                     // D-pad capture layer (TV i telefon s D-padem). Když je otevřený panel titulků,
                     // klávesy NEpožíráme → fokus i navigaci přebírá panel (menuFocusRequester).
+                    // Capture layer = rychlé přímé ovládání, když lišta NENÍ vidět (a není otevřený panel).
+                    // TENFOOT F2c: na TV se fokus při viditelné liště přesouvá do ní → tady capture vypneme,
+                    // ať tlačítka/osu ovládá D-pad. Seek respektuje konfigurovatelný krok (state.seekStepSec).
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .then(
-                                if (!showSubtitleMenu) Modifier
+                                if (!showSubtitleMenu && !showAudioMenu && !(isTv && controlsVisible)) Modifier
                                     .focusRequester(focusRequester)
                                     .focusable()
                                     .onKeyEvent { ev ->
                                         if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                        val stepMs = state.seekStepSec * 1000L
                                         when (ev.key) {
-                                            Key.DirectionLeft -> { controller?.seekBack(); controlsVisible = true; true }
-                                            Key.DirectionRight -> { controller?.seekForward(); controlsVisible = true; true }
+                                            Key.DirectionLeft -> {
+                                                controller?.let { it.seekTo((it.currentPosition - stepMs).coerceAtLeast(0L)) }
+                                                controlsVisible = true; true
+                                            }
+                                            Key.DirectionRight -> {
+                                                controller?.let {
+                                                    val d = it.duration
+                                                    val t = it.currentPosition + stepMs
+                                                    it.seekTo(if (d > 0) t.coerceAtMost(d) else t)
+                                                }
+                                                controlsVisible = true; true
+                                            }
                                             Key.DirectionCenter, Key.Enter, Key.Spacebar -> {
                                                 controller?.let { if (it.isPlaying) it.pause() else it.play() }
                                                 controlsVisible = true; true
@@ -630,6 +653,27 @@ fun PlaybackScreen(
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                         }
+                        if (isTv) {
+                            // TENFOOT F2c: 10-foot transport lišta (fokusovatelná, D-pad scrubbing).
+                            TvTransportBar(
+                                isPlaying = isPlaying,
+                                positionMs = position,
+                                durationMs = duration,
+                                seekStepMs = state.seekStepSec * 1000L,
+                                hasAudioChoice = audioTracks.size > 1 || audioTracks.any { !it.supported },
+                                audioProblem = audioTracks.none { it.selected && it.supported },
+                                subtitleActive = state.selectedSubtitleIndex >= 0,
+                                subtitleColor = Color(state.subtitleStyle.colorArgb),
+                                playPauseFocusRequester = barFocusRequester,
+                                onPlayPause = { controller?.let { if (it.isPlaying) it.pause() else it.play() } },
+                                onSeekTo = { ms -> controller?.seekTo(ms); position = ms },
+                                onAudio = { showAudioMenu = true; controlsVisible = true },
+                                onSubtitles = { showSubtitleMenu = true; controlsVisible = true },
+                                onInteraction = { interactionTick++; controlsVisible = true },
+                                onDismiss = { controlsVisible = false },
+                                modifier = Modifier.align(Alignment.BottomStart),
+                            )
+                        } else {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
@@ -707,6 +751,7 @@ fun PlaybackScreen(
                                 }
                             }
                         }
+                        }
                     }
 
                     if (showSubtitleMenu) {
@@ -730,6 +775,7 @@ fun PlaybackScreen(
                             tracks = audioTracks,
                             onSelect = { applyAudio(it); showAudioMenu = false },
                             onClose = { showAudioMenu = false },
+                            firstItemFocusRequester = if (isTv) menuFocusRequester else null,
                             modifier = Modifier.align(Alignment.CenterEnd),
                         )
                     }
@@ -1015,6 +1061,7 @@ private fun AudioTrackPanel(
     tracks: List<AudioTrackOption>,
     onSelect: (AudioTrackOption) -> Unit,
     onClose: () -> Unit,
+    firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1041,12 +1088,13 @@ private fun AudioTrackPanel(
                 modifier = Modifier.padding(vertical = 4.dp),
             )
         }
-        tracks.forEach { t ->
+        tracks.forEachIndexed { i, t ->
             SubtitleRow(
                 label = t.label,
                 sub = if (!t.supported) "telefon neumí přehrát" else "",
                 selected = t.selected,
                 onClick = { onSelect(t) },
+                focusRequester = if (i == 0) firstItemFocusRequester else null,
             )
         }
     }

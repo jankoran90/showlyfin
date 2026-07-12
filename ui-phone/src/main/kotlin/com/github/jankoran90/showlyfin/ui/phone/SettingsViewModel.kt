@@ -12,6 +12,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
+import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
@@ -75,6 +76,9 @@ data class SettingsUiState(
     val streamFilterError: String? = null,
     // Plan EVEN — DRC/normalizér filmu (0 Vyp default / 1 Mírná / 2 Střední / 3 Noční); jen telefon.
     val movieDrcLevel: Int = 0,
+    // TENFOOT F2c — TV transport lišta přehrávače: auto-skrytí ovládání (0 = nikdy) + krok převíjení (s).
+    val playerControlsHideSec: Int = PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC,
+    val playerSeekStepSec: Int = PlayerPrefs.DEFAULT_SEEK_STEP_SEC,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
     // Plan MAESTRO — ovládání domácí sestavy (AVR hlasitost + scéna „spustit z vypnuté TV").
@@ -246,6 +250,8 @@ class SettingsViewModel @Inject constructor(
             it.copy(
                 traktLoggedIn = traktAuthManager.isLoggedIn(),
                 movieDrcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0),
+                playerControlsHideSec = prefs.getInt(PlayerPrefs.CONTROLS_HIDE_SEC_KEY, PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC),
+                playerSeekStepSec = prefs.getInt(PlayerPrefs.SEEK_STEP_SEC_KEY, PlayerPrefs.DEFAULT_SEEK_STEP_SEC),
             )
         }
         viewModelScope.launch {
@@ -422,6 +428,18 @@ class SettingsViewModel @Inject constructor(
         val lvl = v.coerceIn(0, 3)
         prefs.edit().putInt(AudioBoost.MOVIE_DRC_KEY, lvl).apply()
         _uiState.update { it.copy(movieDrcLevel = lvl) }
+    }
+
+    /** TENFOOT F2c — auto-skrytí TV ovládací lišty (s; 0 = nikdy). Projeví se při příštím přehrání. */
+    fun setPlayerControlsHideSec(v: Int) {
+        prefs.edit().putInt(PlayerPrefs.CONTROLS_HIDE_SEC_KEY, v).apply()
+        _uiState.update { it.copy(playerControlsHideSec = v) }
+    }
+
+    /** TENFOOT F2c — krok převíjení ⏮/⏭ + scrubbingu (s). Projeví se při příštím přehrání. */
+    fun setPlayerSeekStepSec(v: Int) {
+        prefs.edit().putInt(PlayerPrefs.SEEK_STEP_SEC_KEY, v).apply()
+        _uiState.update { it.copy(playerSeekStepSec = v) }
     }
     fun setContinuePodcastAfterQueue(v: Boolean) = updateListen { continuePodcastAfterQueue = v }
     fun setPersistQueue(v: Boolean) = updateListen { persistQueue = v }

@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.playback
 
+import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleCandidate
 
 data class PlaybackUiState(
@@ -25,6 +26,9 @@ data class PlaybackUiState(
     val aiTranslateError: String? = null,
     // ── Styl / nastavení titulků (persistované) ──────────────────────────────
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    // ── TENFOOT F2c: TV transport lišta (konfigurovatelné, načteno z prefs při vzniku VM) ─────
+    val controlsHideSec: Int = PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC, // 0 = nikdy neskrývat
+    val seekStepSec: Int = PlayerPrefs.DEFAULT_SEEK_STEP_SEC,
 )
 
 /** Jeden titulkový blok (.srt) — renderujeme vlastním overlayem, takže posun/přepnutí stopy

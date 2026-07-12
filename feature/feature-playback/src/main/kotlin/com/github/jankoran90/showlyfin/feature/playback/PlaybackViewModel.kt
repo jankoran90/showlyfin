@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleCandidate
@@ -42,7 +43,13 @@ class PlaybackViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(PlaybackUiState(subtitleStyle = loadStyle()))
+    private val _state = MutableStateFlow(
+        PlaybackUiState(
+            subtitleStyle = loadStyle(),
+            controlsHideSec = prefs.getInt(PlayerPrefs.CONTROLS_HIDE_SEC_KEY, PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC),
+            seekStepSec = prefs.getInt(PlayerPrefs.SEEK_STEP_SEC_KEY, PlayerPrefs.DEFAULT_SEEK_STEP_SEC),
+        ),
+    )
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""

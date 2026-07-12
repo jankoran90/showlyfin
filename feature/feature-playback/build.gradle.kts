@@ -18,6 +18,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-domain"))
+    implementation(project(":core:core-ui")) // TENFOOT F2c: kanonický tvFocusBorder (záře+lift) pro TV transport lištu
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-uploader"))
     implementation(libs.timber)

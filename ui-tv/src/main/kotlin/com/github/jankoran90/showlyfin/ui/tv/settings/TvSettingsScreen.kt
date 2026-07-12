@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
@@ -167,6 +168,28 @@ fun TvSettingsScreen(
             }
         }
 
+        // ── Přehrávač ──
+        item {
+            TvSettingsBlock(title = "Přehrávač") {
+                TvOptionStepperRow(
+                    label = "Skrýt ovládání po",
+                    subtitle = "Nečinnost, po které zmizí lišta přehrávače",
+                    options = PlayerPrefs.CONTROLS_HIDE_SEC_OPTIONS,
+                    selected = sys.playerControlsHideSec,
+                    labelOf = ::hideDelayLabel,
+                    onSelect = settings::setPlayerControlsHideSec,
+                )
+                TvOptionStepperRow(
+                    label = "Krok převíjení",
+                    subtitle = "O kolik posunou tlačítka ⏮ ⏭ a osa",
+                    options = PlayerPrefs.SEEK_STEP_SEC_OPTIONS,
+                    selected = sys.playerSeekStepSec,
+                    labelOf = { "$it s" },
+                    onSelect = settings::setPlayerSeekStepSec,
+                )
+            }
+        }
+
         // ── Systém ──
         item {
             TvSettingsBlock(title = "Systém") {
@@ -187,3 +210,5 @@ private fun drcLabel(level: Int): String = when (level) {
     2 -> "Střední"
     else -> "Noční"
 }
+
+private fun hideDelayLabel(sec: Int): String = if (sec <= 0) "Nikdy" else "$sec s"
