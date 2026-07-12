@@ -18,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -85,12 +87,15 @@ fun TvLibraryCard(
     library: JellyfinLibrary,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
 ) {
     val shape = MaterialTheme.shapes.medium
     Box(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
+            // focusRequester PŘED tvFocusBorder/clickable (fokusový target) — autofokus na 1. knihovnu.
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .tvFocusBorder(shape = shape)
             .clip(shape)
             .clickable(onClick = onClick)

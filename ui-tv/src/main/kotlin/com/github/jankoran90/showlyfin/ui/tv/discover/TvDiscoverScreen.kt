@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,7 @@ import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverTab
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverViewModel
+import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
 import com.github.jankoran90.showlyfin.ui.tv.components.toImmersiveInfo
@@ -51,6 +53,13 @@ fun TvDiscoverScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
+    // TENFOOT: po OK ze sidebaru zaostři PRVNÍ kartu obsahu (sekce se přepíná jen přes OK, ne šipkami).
+    val firstFocus = remember { FocusRequester() }
+    AutoFocusFirst(
+        focusRequester = firstFocus,
+        enabled = state.items.isNotEmpty(),
+        isTargetPlaced = { gridState.layoutInfo.visibleItemsInfo.any { it.index == 0 } },
+    )
 
     // Nekonečné dotahování Objevit (Trakt page) při dojetí ke konci mřížky.
     LaunchedEffect(gridState, state.items.size, state.canLoadMore) {
@@ -115,9 +124,13 @@ fun TvDiscoverScreen(
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                itemsIndexed(state.items, key = { _, item -> "${item.type}_${item.traktId}_${item.tmdbId}" }) { _, item ->
+                itemsIndexed(state.items, key = { _, item -> "${item.type}_${item.traktId}_${item.tmdbId}" }) { index, item ->
                     Box(Modifier.onFocusChanged { if (it.hasFocus && immersive) onFocusItem(item.toImmersiveInfo()) }) {
-                        TvMediaCard(item = item, onClick = { onOpenDetail(item) })
+                        TvMediaCard(
+                            item = item,
+                            onClick = { onOpenDetail(item) },
+                            focusRequester = if (index == 0) firstFocus else null,
+                        )
                     }
                 }
             }

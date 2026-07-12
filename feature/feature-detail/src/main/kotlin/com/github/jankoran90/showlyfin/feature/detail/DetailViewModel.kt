@@ -287,7 +287,14 @@ class DetailViewModel @Inject constructor(
                                     showDetails = details,
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
-                                    item = item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path),
+                                    // TENFOOT: u seriálu otevřeného z resume/next-up je item.title název EPIZODY.
+                                    // Přepiš na název seriálu (TMDB `name`), aby detail neukazoval epizodu. Dedup je
+                                    // přes trakt/tmdb id (ne title), takže je to bezpečné.
+                                    item = item.copy(
+                                        title = details?.name?.takeIf { n -> n.isNotBlank() } ?: item.title,
+                                        posterPath = details?.poster_path,
+                                        backdropPath = details?.backdrop_path,
+                                    ),
                                     isLoading = false,
                                 )
                             }

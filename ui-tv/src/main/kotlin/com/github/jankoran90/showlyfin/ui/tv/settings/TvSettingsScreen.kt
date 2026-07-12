@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,9 +17,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,6 +32,7 @@ import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
+import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
@@ -59,7 +64,17 @@ fun TvSettingsScreen(
     val sidebar by homeVm.sidebar.collectAsStateWithLifecycle()
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
 
+    val listState = rememberLazyListState()
+    // TENFOOT: po OK ze sidebaru zaostři PRVNÍ interaktivní řádek (immersive toggle), ne šipku Zpět.
+    val firstFocus = remember { FocusRequester() }
+    AutoFocusFirst(
+        focusRequester = firstFocus,
+        enabled = true,
+        isTargetPlaced = { listState.layoutInfo.visibleItemsInfo.any { it.index >= 1 } },
+    )
+
     LazyColumn(
+        state = listState,
         modifier = modifier.fillMaxSize().tvOverscan(),
         contentPadding = PaddingValues(bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -92,6 +107,7 @@ fun TvSettingsScreen(
                     subtitle = "Fanart podle vybrané karty (Netflix styl) na Domů a Objevovat",
                     checked = immersive,
                     onCheckedChange = homeVm::setImmersiveBackground,
+                    modifier = Modifier.focusRequester(firstFocus),
                 )
                 TvOptionStepperRow(
                     label = "Pozadí",
