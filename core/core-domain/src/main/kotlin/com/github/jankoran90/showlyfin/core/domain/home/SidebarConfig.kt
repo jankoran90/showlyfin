@@ -14,24 +14,27 @@ data class SidebarEntry(
     val enabled: Boolean,
 )
 
-/** Položky, které sidebar může zobrazit. `home` = skok fokusu zpět na obsah. */
+/** Položky, které sidebar může zobrazit. Každá = přepnutí sekce shellu (kromě Hledat = push destinace). */
 enum class SidebarItem(val label: String) {
     DOMU("Domů"),
-    HLEDAT("Hledat"),
-    OBLIBENE("Oblíbené"),
+    OBJEVOVAT("Objevovat"),
     KNIHOVNA("Knihovna"),
+    OBLIBENE("Oblíbené"),
+    HLEDAT("Hledat"),
     NASTAVENI("Nastavení"),
     ;
 
     companion object {
         fun fromName(name: String): SidebarItem? = entries.firstOrNull { it.name == name }
 
-        /** Výchozí sidebar: minimalistický (Domů / Hledat / Nastavení zapnuté, zbytek vypnutý). */
+        /** Výchozí sidebar: navigace vrácena po redesignu 293 — Domů / Objevovat / Knihovna / Hledat /
+         *  Nastavení zapnuté; Oblíbené volitelné (má i kartu srdce jinde). */
         val DEFAULT: List<SidebarEntry> = listOf(
             SidebarEntry(DOMU.name, enabled = true),
-            SidebarEntry(HLEDAT.name, enabled = true),
+            SidebarEntry(OBJEVOVAT.name, enabled = true),
+            SidebarEntry(KNIHOVNA.name, enabled = true),
             SidebarEntry(OBLIBENE.name, enabled = false),
-            SidebarEntry(KNIHOVNA.name, enabled = false),
+            SidebarEntry(HLEDAT.name, enabled = true),
             SidebarEntry(NASTAVENI.name, enabled = true),
         )
     }

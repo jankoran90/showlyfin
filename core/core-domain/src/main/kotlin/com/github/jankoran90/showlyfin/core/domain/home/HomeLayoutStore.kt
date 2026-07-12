@@ -42,6 +42,15 @@ class HomeLayoutStore @Inject constructor(
     private val _sidebar = MutableStateFlow(loadSidebar())
     val sidebar: StateFlow<List<SidebarEntry>> = _sidebar.asStateFlow()
 
+    private val _immersiveBackground = MutableStateFlow(prefs.getBoolean(KEY_IMMERSIVE, true))
+    /** Netflix-like immersive pozadí (fokusovaná karta řídí fanart) na Domů/Objevovat/Knihovna. */
+    val immersiveBackground: StateFlow<Boolean> = _immersiveBackground.asStateFlow()
+
+    fun setImmersiveBackground(enabled: Boolean) {
+        _immersiveBackground.value = enabled
+        prefs.edit().putBoolean(KEY_IMMERSIVE, enabled).apply()
+    }
+
     // ── Řady ──────────────────────────────────────────────────────────────────
 
     /** Posun řady o jedno místo (nahoru = dřív). No-op na kraji. */
@@ -80,9 +89,41 @@ class HomeLayoutStore @Inject constructor(
         persistRows()
     }
 
-    /** Obnovit výchozí sadu řad. */
+    /** Obnovit výchozí sadu řad. Vyčistí i „seen" knihovny → při dalším [syncLibraries] se naseedují znovu. */
     fun resetRows() {
         _rows.value = DEFAULT_ROWS
+        prefs.edit().remove(KEY_SEEN_LIBS).apply()
+        persistRows()
+    }
+
+    /**
+     * Seed-once per Jellyfin knihovna. Pro každou knihovnu, kterou jsme ještě NEVIDĚLI, přidá první-třídní
+     * [HomeRowSourceType.JELLYFIN_LIBRARY] řadu (enabled, default styl dle collectionType) a označí ji jako
+     * viděnou. Existující řady zachovají uživatelovo nastavení (styl/pořadí/enabled); knihovny, které user
+     * skryl nebo smazal, se NEVRACÍ (jsou v „seen"). Voláno z UI po načtení seznamu knihoven profilu.
+     */
+    fun syncLibraries(libraries: List<LibrarySummary>) {
+        if (libraries.isEmpty()) return
+        val seen = prefs.getStringSet(KEY_SEEN_LIBS, emptySet()).orEmpty()
+        val existingLibIds = _rows.value.mapNotNull { it.params[HomeRowParams.LIBRARY_ID] }.toSet()
+        val toAdd = libraries
+            .filter { it.id !in seen && it.id !in existingLibIds }
+            .map { lib ->
+                HomeRowConfig(
+                    id = "lib_${lib.id}",
+                    source = HomeRowSourceType.JELLYFIN_LIBRARY,
+                    title = lib.name,
+                    cardStyle = defaultLibraryStyle(lib.collectionType),
+                    params = mapOf(
+                        HomeRowParams.LIBRARY_ID to lib.id,
+                        HomeRowParams.COLLECTION_TYPE to (lib.collectionType ?: ""),
+                    ),
+                )
+            }
+        // Vždy označ VŠECHNY aktuální knihovny jako viděné (i ty už přítomné) → idempotentní.
+        prefs.edit().putStringSet(KEY_SEEN_LIBS, seen + libraries.map { it.id }).apply()
+        if (toAdd.isEmpty()) return
+        _rows.update { list -> list + toAdd }
         persistRows()
     }
 
@@ -118,6 +159,8 @@ class HomeLayoutStore @Inject constructor(
         val stored = decodeList(prefs.getString(KEY_ROWS, null)) { el ->
             json.decodeFromJsonElement<HomeRowConfig>(el)
         }
+            // Migrace ≤293: starý meta zdroj zahoď — nahradí ho seed JELLYFIN_LIBRARY řad ([syncLibraries]).
+            .filterNot { it.source == HomeRowSourceType.JELLYFIN_LIBRARIES }
         if (stored.isEmpty()) return DEFAULT_ROWS
         // Merge: uložené v pořadí + nové default řady (podle id) na konec.
         val storedIds = stored.map { it.id }.toSet()
@@ -144,8 +187,15 @@ class HomeLayoutStore @Inject constructor(
     companion object {
         private const val KEY_ROWS = "rows_json"
         private const val KEY_SIDEBAR = "sidebar_json"
+        private const val KEY_IMMERSIVE = "immersive_bg"
+        private const val KEY_SEEN_LIBS = "seen_library_ids"
 
-        /** Výchozí domov: vzdušná Kodi-like sada. Obsah hned nahoře (Pokračovat), pak Trakt + Jellyfin. */
+        /** Default styl karty pro řadu knihovny dle collectionType. Konzistentní = plakát (žádné
+         *  nahodilé landscape jako v ≤293); user přepíše v editoru. */
+        fun defaultLibraryStyle(collectionType: String?): HomeCardStyle = HomeCardStyle.POSTER
+
+        /** Výchozí domov: vzdušná Kodi-like sada. Obsah hned nahoře (Pokračovat), pak Trakt.
+         *  JF knihovny se přidávají dynamicky per knihovna ([syncLibraries]) — ne natvrdo zde. */
         val DEFAULT_ROWS: List<HomeRowConfig> = listOf(
             HomeRowConfig(
                 id = "continue",
@@ -179,12 +229,13 @@ class HomeLayoutStore @Inject constructor(
                 title = "Oblíbené",
                 cardStyle = HomeCardStyle.POSTER,
             ),
-            HomeRowConfig(
-                id = "jellyfin_libraries",
-                source = HomeRowSourceType.JELLYFIN_LIBRARIES,
-                title = "Knihovny",
-                cardStyle = HomeCardStyle.LANDSCAPE,
-            ),
         )
     }
 }
+
+/** Lehký souhrn Jellyfin knihovny pro [HomeLayoutStore.syncLibraries] (bez závislosti na feature vrstvě). */
+data class LibrarySummary(
+    val id: String,
+    val name: String,
+    val collectionType: String?,
+)

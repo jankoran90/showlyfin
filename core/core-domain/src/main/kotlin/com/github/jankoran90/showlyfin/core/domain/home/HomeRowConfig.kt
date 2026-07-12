@@ -37,7 +37,17 @@ enum class HomeRowSourceType(val label: String) {
     DISCOVER("Objevovat (Trakt)"),
     /** Oblíbené z per-profil [data.uploader.FavoritesStore] (TOTÉŽ co telefonní „Oblíbené", parita). */
     FAVORITES("Oblíbené"),
-    /** Meta: expanduje na jednu řadu per Jellyfin knihovna (reuse LibraryRowsViewModel). */
+
+    /** JEDNA konkrétní Jellyfin knihovna (viz [HomeRowParams.LIBRARY_ID]). První-třídní řada:
+     *  vlastní enabled/pořadí/styl per knihovna. Seed-once z profilu (viz [HomeLayoutStore.syncLibraries]). */
+    JELLYFIN_LIBRARY("Jellyfin knihovna"),
+
+    /**
+     * DEPRECATED meta zdroj (OTA ≤293): expandoval na jednu řadu per Jellyfin knihovna se SDÍLENÝM
+     * stylem → nahodile landscape + žádná per-knihovna správa. Ponechán JEN kvůli forward-compat decode
+     * starých uložených layoutů; z [HomeLayoutStore.DEFAULT_ROWS] vyřazen a při loadu se nahradí
+     * seedem [JELLYFIN_LIBRARY] řad. Nová verze ho už nikdy negeneruje.
+     */
     JELLYFIN_LIBRARIES("Jellyfin knihovny"),
 }
 
@@ -75,6 +85,10 @@ object HomeRowParams {
     const val HIDE_WATCHED = "hideWatched"
     /** Volitelný žánrový filtr (klientský). */
     const val GENRE = "genre"
+    /** JELLYFIN_LIBRARY: id konkrétní Jellyfin knihovny (userView). */
+    const val LIBRARY_ID = "libraryId"
+    /** JELLYFIN_LIBRARY: collectionType knihovny ("movies"/"tvshows"/…) — určuje default styl karty. */
+    const val COLLECTION_TYPE = "collectionType"
 
     fun Map<String, String>.boolParam(key: String): Boolean = this[key] == "true"
 }

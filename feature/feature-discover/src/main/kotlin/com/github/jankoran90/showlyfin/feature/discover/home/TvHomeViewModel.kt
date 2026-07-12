@@ -12,6 +12,7 @@ import com.github.jankoran90.showlyfin.core.domain.home.HomeRowParams
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowParams.boolParam
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSourceType
+import com.github.jankoran90.showlyfin.core.domain.home.LibrarySummary
 import com.github.jankoran90.showlyfin.core.domain.home.SidebarEntry
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
@@ -77,6 +78,9 @@ class TvHomeViewModel @Inject constructor(
     val allRows: StateFlow<List<HomeRowConfig>> = store.rows
     val sidebar: StateFlow<List<SidebarEntry>> = store.sidebar
 
+    /** Netflix immersive pozadí (fokusovaná karta řídí fanart). */
+    val immersiveBackground: StateFlow<Boolean> = store.immersiveBackground
+
     // ── Inline editor (Kodi-like) — pass-through na [HomeLayoutStore] ──
     fun moveRow(id: String, up: Boolean) = store.move(id, up)
     fun setRowEnabled(id: String, enabled: Boolean) = store.setEnabled(id, enabled)
@@ -86,6 +90,10 @@ class TvHomeViewModel @Inject constructor(
     fun resetRows() = store.resetRows()
     fun moveSidebar(item: String, up: Boolean) = store.moveSidebar(item, up)
     fun setSidebarEnabled(item: String, enabled: Boolean) = store.setSidebarEnabled(item, enabled)
+    fun setImmersiveBackground(enabled: Boolean) = store.setImmersiveBackground(enabled)
+
+    /** Seed-once per Jellyfin knihovna (řady per knihovna). Voláno z UI po načtení seznamu knihoven. */
+    fun syncLibraries(libraries: List<LibrarySummary>) = store.syncLibraries(libraries)
 
     private val _states = MutableStateFlow<Map<String, HomeRowState>>(emptyMap())
     val states: StateFlow<Map<String, HomeRowState>> = _states.asStateFlow()

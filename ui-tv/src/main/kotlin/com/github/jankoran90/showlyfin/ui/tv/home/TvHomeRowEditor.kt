@@ -48,9 +48,11 @@ fun TvHomeRowEditor(
     config: HomeRowConfig,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
+    hiddenRows: List<HomeRowConfig>,
     onUpdate: (HomeRowConfig) -> Unit,
     onMove: (up: Boolean) -> Unit,
     onHide: () -> Unit,
+    onUnhide: (id: String) -> Unit,
     onAddRow: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -121,9 +123,9 @@ fun TvHomeRowEditor(
                 )
             }
 
-            // Skrýt zhlédnuté — jen kde to dává smysl (Objevovat / Jellyfin knihovny).
+            // Skrýt zhlédnuté — jen kde to dává smysl (Objevovat / Jellyfin knihovna).
             if (config.source == HomeRowSourceType.DISCOVER ||
-                config.source == HomeRowSourceType.JELLYFIN_LIBRARIES
+                config.source == HomeRowSourceType.JELLYFIN_LIBRARY
             ) {
                 TvToggleRow(
                     label = "Skrýt zhlédnuté",
@@ -142,6 +144,29 @@ fun TvHomeRowEditor(
                 TvActionChip(label = "Skrýt řadu", enabled = true, danger = true, onClick = onHide)
                 TvActionChip(label = "Přidat řadu", enabled = true, onClick = onAddRow)
                 TvActionChip(label = "Hotovo", enabled = true, onClick = onDismiss)
+            }
+
+            // Správa viditelnosti z jednoho místa: vrátit dřív skryté řady (i knihovny).
+            if (hiddenRows.isNotEmpty()) {
+                Text(
+                    text = "Vrátit skrytou řadu",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    hiddenRows.forEach { row ->
+                        TvActionChip(
+                            label = "＋ ${row.title.ifBlank { row.source.label }}",
+                            enabled = true,
+                            onClick = { onUnhide(row.id) },
+                        )
+                    }
+                }
             }
         }
     }

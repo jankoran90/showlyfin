@@ -57,6 +57,7 @@ fun TvSettingsScreen(
     val font by fontPrefs.state.collectAsStateWithLifecycle()
     val sys by settings.uiState.collectAsStateWithLifecycle()
     val sidebar by homeVm.sidebar.collectAsStateWithLifecycle()
+    val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = modifier.fillMaxSize().tvOverscan(),
@@ -86,6 +87,12 @@ fun TvSettingsScreen(
         // ── Vzhled ──
         item {
             TvSettingsBlock(title = "Vzhled") {
+                TvToggleRow(
+                    label = "Immersive pozadí",
+                    subtitle = "Fanart podle vybrané karty (Netflix styl) na Domů a Objevovat",
+                    checked = immersive,
+                    onCheckedChange = homeVm::setImmersiveBackground,
+                )
                 TvOptionStepperRow(
                     label = "Pozadí",
                     options = Background.entries.toList(),

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
@@ -114,8 +115,9 @@ private fun SidebarRow(
 
 private fun SidebarItem.icon(): ImageVector = when (this) {
     SidebarItem.DOMU -> Icons.Filled.Home
-    SidebarItem.HLEDAT -> Icons.Filled.Search
-    SidebarItem.OBLIBENE -> Icons.Filled.Favorite
+    SidebarItem.OBJEVOVAT -> Icons.Filled.Explore
     SidebarItem.KNIHOVNA -> Icons.Filled.VideoLibrary
+    SidebarItem.OBLIBENE -> Icons.Filled.Favorite
+    SidebarItem.HLEDAT -> Icons.Filled.Search
     SidebarItem.NASTAVENI -> Icons.Filled.Settings
 }

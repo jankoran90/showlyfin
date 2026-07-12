@@ -8,7 +8,7 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.tv.TvDestination
-import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeScreen
+import com.github.jankoran90.showlyfin.ui.tv.TvShell
 import com.github.jankoran90.showlyfin.ui.tv.jellyfin.TvJellyfinBrowserScreen
 import com.github.jankoran90.showlyfin.ui.tv.search.TvSearchScreen
 import com.github.jankoran90.showlyfin.ui.tv.settings.TvSettingsScreen
@@ -32,15 +32,15 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
     BackHandler(enabled = navVm.canGoBack) { back() }
 
     when (val dest = current) {
-        TvDestination.Home -> TvHomeScreen(
+        TvDestination.Home -> TvShell(
+            section = navVm.section,
+            onSelectSection = { navVm.selectSection(it) },
+            onOpenSearch = { navigate(TvDestination.Search) },
             onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
             onOpenLibrary = { id, name, collectionType ->
                 navigate(TvDestination.LibraryItems(id, name, collectionType))
             },
-            onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
-            onOpenSearch = { navigate(TvDestination.Search) },
-            onOpenSettings = { navigate(TvDestination.Settings) },
-            onOpenWatchlist = { navigate(TvDestination.Watchlist) },
         )
 
         TvDestination.Search -> TvSearchScreen(

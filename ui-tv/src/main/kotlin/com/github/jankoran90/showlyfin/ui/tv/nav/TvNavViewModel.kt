@@ -1,8 +1,14 @@
 package com.github.jankoran90.showlyfin.ui.tv.nav
 
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.github.jankoran90.showlyfin.ui.tv.TvDestination
+
+/** Hlavní sekce shellu (přepínané sidebarem, mimo drill stack). Hledat = push destinace, ne sekce. */
+enum class TvSection { HOME, DISCOVER, LIBRARY, WATCHLIST, SETTINGS }
 
 /**
  * TENFOOT (SHW-87) — back stack TV shellu drží ViewModel (ne `remember`), aby PŘEŽIL rekreaci Activity.
@@ -15,10 +21,16 @@ import com.github.jankoran90.showlyfin.ui.tv.TvDestination
  */
 class TvNavViewModel : ViewModel() {
 
-    /** Navigační zásobník; kořen = [TvDestination.Home]. Snapshot state → Compose se překreslí. */
+    /** Navigační zásobník; kořen = [TvDestination.Home] (= shell). Snapshot state → Compose se překreslí. */
     val backStack = mutableStateListOf<TvDestination>(TvDestination.Home)
 
     val current: TvDestination get() = backStack.last()
+
+    /** Aktivní sekce shellu (přepínaná sidebarem, mimo drill stack; přežije rekreaci Activity). */
+    var section: TvSection by mutableStateOf(TvSection.HOME)
+        private set
+
+    fun selectSection(target: TvSection) { section = target }
 
     /** Lze jít zpět jen když nejsme na kořeni (na kořeni BACK propadne = ukončí appku, což je správné). */
     val canGoBack: Boolean get() = backStack.size > 1
