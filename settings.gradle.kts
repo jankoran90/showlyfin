@@ -49,5 +49,8 @@ include(":feature:feature-jellyfin-browser")
 include(":feature:feature-playback")
 include(":feature:feature-listen")
 
-// UI shells (Plan FUSE F6: ui-tv smazán — TV dědí telefonní UI přes LocalFormFactor)
+// UI shells
+// TENFOOT (SHW-87): ui-tv OBNOVEN jako nativní Compose-for-TV shell (vědomě obrací FUSE F6 —
+// mělká sdílená vrstva dala jen nouzově ovladatelný telefonní layout; TV teď má vlastní 10-foot shell).
 include(":ui-phone")
+include(":ui-tv")

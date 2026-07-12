@@ -29,6 +29,7 @@ import com.github.jankoran90.showlyfin.services.UpdatePreferences
 import com.github.jankoran90.showlyfin.ui.UpdateOverlayController
 import com.github.jankoran90.showlyfin.ui.UpdateOverlayHost
 import com.github.jankoran90.showlyfin.ui.phone.ShowlyfinApp
+import com.github.jankoran90.showlyfin.ui.tv.ShowlyfinTvApp
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -124,8 +125,9 @@ class MainActivity : ComponentActivity() {
             ) {
                 DebugCaptureGestureHost {
                     Box {
-                        // FUSE F1: jeden sjednocený app pro telefon i TV (TV = telefonní UI s fokus railem).
-                        ShowlyfinApp(isTv = isTV)
+                        // TENFOOT (SHW-87): leanback zařízení → nativní TV shell (Compose-for-TV);
+                        // telefon/tablet → dosavadní ShowlyfinApp. Oba sdílí Application-scoped Hilt graf.
+                        if (isTV) ShowlyfinTvApp() else ShowlyfinApp(isTv = false)
                         UpdateOverlayHost()
                     }
                 }

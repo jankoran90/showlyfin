@@ -107,6 +107,7 @@ dependencies {
     implementation(project(":feature:feature-listen"))
 
     implementation(project(":ui-phone"))
+    implementation(project(":ui-tv"))   // TENFOOT (SHW-87): nativní TV shell (MainActivity větví dle isTV)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
