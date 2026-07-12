@@ -22,7 +22,12 @@ import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 
 /**
  * TENFOOT (SHW-87) — jedna dlaždice v TV mřížce „Sleduj". `clickable` ji dělá D-pad-fokusovatelnou,
- * `tvFocusBorder` kreslí bílý prstenec ve fokusu (rukopis fleetu z přehrávače). Barvy/tvary čte z theme.
+ * `tvFocusBorder` kreslí akcentní prstenec ve fokusu (rukopis fleetu z přehrávače). Barvy/tvary čte z theme.
+ *
+ * POZOR na pořadí modifikátorů: `tvFocusBorder` (uvnitř má `onFocusChanged`) MUSÍ být PŘED `clickable`,
+ * jinak `onFocusChanged` fokusový uzel `clickable` (který je pak výš/vně) nepozoruje → prstenec se nikdy
+ * nevykreslí. Přesně tahle chyba dělala „kolem coverů žádné zvýraznění" na TV Home (chips fungují, protože
+ * `tvFocusable` sedí na VNĚJŠÍM modifieru FilterChipu). User feedback 2026-07-12.
  */
 @Composable
 fun TvMediaCard(
@@ -39,9 +44,9 @@ fun TvMediaCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .clickable(onClick = onClick)
                 .tvFocusBorder(shape = shape)
                 .clip(shape)
+                .clickable(onClick = onClick)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         // Celý titulek (až 2 řádky) + rok pod ním — na TV se dřív titulek na 1 řádek ořízl a rok chyběl.

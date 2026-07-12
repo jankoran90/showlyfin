@@ -5,9 +5,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
+import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
+import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.tv.TvDestination
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeScreen
+import com.github.jankoran90.showlyfin.ui.tv.jellyfin.TvJellyfinBrowserScreen
 
 /**
  * TENFOOT (SHW-87) — ruční stavová navigace TV shellu (stejné paradigma jako telefonní
@@ -30,6 +33,48 @@ fun TvNavigator() {
     when (val dest = current) {
         TvDestination.Home -> TvHomeScreen(
             onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            onOpenLibrary = { id, name, collectionType ->
+                navigate(TvDestination.LibraryItems(id, name, collectionType))
+            },
+        )
+
+        is TvDestination.LibraryItems -> TvJellyfinBrowserScreen(
+            libraryId = dest.libraryId,
+            libraryName = dest.libraryName,
+            collectionType = dest.collectionType,
+            parentItemType = dest.parentItemType,
+            // Bohatý film s tmdbId → nativní TV karta obsahu (fanart hero, sdílená s doporučovačem).
+            onOpenRich = { item -> navigate(TvDestination.Detail(item)) },
+            // Bez tmdb / seriál → Jellyfin detail (reuse telefonní obrazovky).
+            onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
+            // Složka/BOX_SET → zanoření (nová mřížka, BACK popuje).
+            onDrillIn = { itemId, itemName, itemType ->
+                navigate(
+                    TvDestination.LibraryItems(
+                        libraryId = itemId,
+                        libraryName = itemName,
+                        collectionType = null,
+                        parentItemType = itemType,
+                    ),
+                )
+            },
+        )
+
+        is TvDestination.JellyfinDetail -> JellyfinDetailScreen(
+            itemId = dest.itemId,
+            onBack = { back() },
+            onPlay = { itemId -> navigate(TvDestination.Player(itemId = itemId)) },
+            onOpenEpisodes = { seriesId, name -> navigate(TvDestination.EpisodePicker(seriesId, name)) },
+            onCollectionPartClick = { part ->
+                part.jellyfinId?.let { navigate(TvDestination.JellyfinDetail(it)) }
+            },
+        )
+
+        is TvDestination.EpisodePicker -> EpisodePickerScreen(
+            seriesId = dest.seriesId,
+            seriesName = dest.seriesName,
+            onBack = { back() },
+            onPlayEpisode = { epId -> navigate(TvDestination.Player(itemId = epId)) },
         )
 
         is TvDestination.Detail -> DetailScreen(

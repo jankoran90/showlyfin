@@ -16,8 +16,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,14 +32,64 @@ import com.github.jankoran90.showlyfin.feature.discover.DiscoverViewModel
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
 import com.github.jankoran90.showlyfin.feature.discover.DiscoverTab
 import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
+import com.github.jankoran90.showlyfin.ui.tv.jellyfin.TvLibrariesContent
+
+/** Sekce TV Home: doporučovač Trakt (Sleduj) vs. Jellyfin knihovny (Knihovna). */
+private enum class TvHomeSection(val label: String) {
+    WATCH("Sleduj"),
+    LIBRARY("Knihovna"),
+}
 
 /**
- * TENFOOT (SHW-87) — TV domovská mřížka „Sleduj". Sdílí `DiscoverViewModel` s telefonem (stejný obsah,
- * stejné filtry), jen render je 10-foot: fokusovatelné chipy taby/filtrů + mřížka [TvMediaCard].
- * Nekonečné dotahování přes `loadMore()` u konce.
+ * TENFOOT (SHW-87) — TV domov. Nahoře rail **Sleduj | Knihovna** (odložený vstupní bod z Fáze 1),
+ * pod ním obsah dle sekce:
+ *  - Sleduj = mřížka doporučovače nad sdíleným [DiscoverViewModel] (D-pad, chipy tab/filtr),
+ *  - Knihovna = mřížka Jellyfin knihoven ([TvLibrariesContent]); klik na knihovnu → mřížka položek.
  */
 @Composable
 fun TvHomeScreen(
+    onOpenDetail: (MediaItem) -> Unit,
+    onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var section by rememberSaveable { mutableStateOf(TvHomeSection.WATCH) }
+
+    Column(modifier = modifier.fillMaxSize().tvOverscan()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(bottom = 16.dp),
+        ) {
+            TvHomeSection.entries.forEach { s ->
+                FilterChip(
+                    selected = section == s,
+                    onClick = { section = s },
+                    label = {
+                        Text(
+                            s.label,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (section == s) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    },
+                    modifier = Modifier.tvFocusable(),
+                )
+            }
+        }
+
+        when (section) {
+            TvHomeSection.WATCH -> WatchGrid(
+                onOpenDetail = onOpenDetail,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
+            TvHomeSection.LIBRARY -> TvLibrariesContent(
+                onOpenLibrary = onOpenLibrary,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun WatchGrid(
     onOpenDetail: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DiscoverViewModel = hiltViewModel(),
@@ -50,14 +104,7 @@ fun TvHomeScreen(
             }
     }
 
-    Column(modifier = modifier.fillMaxSize().tvOverscan()) {
-        Text(
-            text = "Sleduj",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 12.dp),
-        )
-
+    Column(modifier = modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DiscoverTab.entries.forEach { tab ->
                 FilterChip(

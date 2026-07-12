@@ -29,4 +29,21 @@ sealed interface TvDestination {
         val subtitleQuery: SubtitleQuery? = null,
         val externalPosterUrl: String? = null,
     ) : TvDestination
+
+    /**
+     * Fáze 2 — mřížka položek Jellyfin knihovny. Zanoření (složka/BOX_SET) = další `LibraryItems`
+     * na stacku s `parentItemType`; BACK popuje (drží [com.github.jankoran90.showlyfin.ui.tv.nav.TvNavigator]).
+     */
+    data class LibraryItems(
+        val libraryId: String,
+        val libraryName: String,
+        val collectionType: String? = null,
+        val parentItemType: String? = null,
+    ) : TvDestination
+
+    /** Fáze 2 — Jellyfin detail (reuse telefonní `JellyfinDetailScreen`; nativní TV detail = Fáze 3). */
+    data class JellyfinDetail(val itemId: String) : TvDestination
+
+    /** Fáze 2 — výběr epizod seriálu (reuse telefonní `EpisodePickerScreen`). */
+    data class EpisodePicker(val seriesId: String, val seriesName: String) : TvDestination
 }
