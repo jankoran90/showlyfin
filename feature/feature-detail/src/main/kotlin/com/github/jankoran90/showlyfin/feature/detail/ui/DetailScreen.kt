@@ -77,6 +77,7 @@ import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
+import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 
 /** Heuristika „text je v češtině" — přítomnost znaku z české abecedy s diakritikou.
@@ -326,6 +327,22 @@ fun DetailScreen(
             isLoading = uiState.isGalleryLoading,
             onDismiss = { viewModel.dismissGallery() },
         )
+    }
+
+    // TENFOOT (SHW-87) Fáze 2: na TV nativní 10-foot tělo (immersive fanart hero + akce pod popiskem
+    // s auto-fokusem + „Skončí ve…"). Sdílené sheety/dialogy/LaunchedEffecty výše platí pro obě větve
+    // (výběr zdroje = tentýž StreamPicker přes AdaptivePickerScaffold, playback signaling atd.).
+    if (isTvFormFactor()) {
+        TvDetailBody(
+            displayItem = displayItem,
+            displayTitle = displayTitle,
+            uiState = uiState,
+            viewModel = viewModel,
+            onBack = onBack,
+            onPlayJellyfin = onPlayJellyfin,
+            modifier = modifier,
+        )
+        return
     }
 
     Scaffold(
