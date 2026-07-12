@@ -61,6 +61,8 @@ class DetailViewModel @Inject constructor(
     private val naTv: NaTvService,
     private val workingSourceStore: com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore,
     private val favoritesStore: com.github.jankoran90.showlyfin.data.uploader.FavoritesStore,
+    // DINGO — per-zařízení preset přehrávání (preferuj H.264 pro slabé HEVC dekodéry v autě). Re-rank seznamu zdrojů.
+    private val streamPresetStore: com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore,
     private val offlineManager: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
@@ -644,7 +646,7 @@ class DetailViewModel @Inject constructor(
                     // Plan CASCADE Fáze 3: během probu ukaž JEN ověřené instant (rdSaved/rdReady) + sdílej
                     // (hraje přes proxy hned), zbytek se reálně testuje (addMagnet) → po probu nahradíme.
                     val instantNow = combined.filter { it.quality.rdSaved || it.quality.rdReady } + sdilej
-                    _uiState.update { it.copy(isLoadingStreams = false, isProbingStreams = true, streams = instantNow, streamError = null) }
+                    _uiState.update { it.copy(isLoadingStreams = false, isProbingStreams = true, streams = streamPresetStore.orderStreams(instantNow), streamError = null) }
                     viewModelScope.launch {
                         runCatching { uploaderDs.getProbedStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb) }
                             .onSuccess { probed ->
@@ -652,13 +654,13 @@ class DetailViewModel @Inject constructor(
                                 // CONDUIT: sdílej (instant, přes proxy) drž v seznamu i po probu — probe vrací jen torrent/RD.
                                 val finalList = (if (probed.isNotEmpty()) probed else combined) + sdilej
                                 val err = if (finalList.isEmpty()) "Žádný funkční zdroj nenalezen." else null
-                                _uiState.update { it.copy(isProbingStreams = false, streams = finalList, streamError = err) }
+                                _uiState.update { it.copy(isProbingStreams = false, streams = streamPresetStore.orderStreams(finalList), streamError = err) }
                             }
                             .onFailure { e ->
                                 timber.log.Timber.w(e, "[Stremio] probe FAILED imdb=$imdb → fallback na neprobnuty seznam")
                                 val fb = combined + sdilej
                                 val err = if (fb.isEmpty()) "Žádné streamy nenalezeny." else null
-                                _uiState.update { it.copy(isProbingStreams = false, streams = fb, streamError = err) }
+                                _uiState.update { it.copy(isProbingStreams = false, streams = streamPresetStore.orderStreams(fb), streamError = err) }
                             }
                     }
                 }
@@ -667,7 +669,7 @@ class DetailViewModel @Inject constructor(
                     val saved = savedDeferred?.await().orEmpty()
                     val sdilej = sdilejDeferred.await()
                     val fb = saved + sdilej
-                    if (fb.isNotEmpty()) _uiState.update { it.copy(isLoadingStreams = false, streams = fb, streamError = null) }
+                    if (fb.isNotEmpty()) _uiState.update { it.copy(isLoadingStreams = false, streams = streamPresetStore.orderStreams(fb), streamError = null) }
                     else _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") }
                 }
         }
@@ -1481,7 +1483,7 @@ class DetailViewModel @Inject constructor(
             _uiState.update { st ->
                 val seen = st.streams.mapNotNull { it.url ?: it.name }.toMutableSet()
                 val add = extra.filter { val k = it.url ?: it.name; k != null && seen.add(k) }
-                st.copy(streams = st.streams + add, streamError = if ((st.streams + add).isEmpty()) "Na Sdílej.cz nic nenalezeno." else null)
+                st.copy(streams = streamPresetStore.orderStreams(st.streams + add), streamError = if ((st.streams + add).isEmpty()) "Na Sdílej.cz nic nenalezeno." else null)
             }
         }
     }

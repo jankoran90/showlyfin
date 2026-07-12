@@ -1,13 +1,18 @@
 package com.github.jankoran90.showlyfin.feature.detail.ui
 import com.github.jankoran90.showlyfin.core.ui.ShowlyfinStatus
+import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -37,14 +42,22 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import com.github.jankoran90.showlyfin.feature.detail.RdDownloadState
 import com.github.jankoran90.showlyfin.feature.detail.StreamAudioPath
 import androidx.compose.ui.Alignment
@@ -144,6 +157,51 @@ private fun SourceBadge(stream: UploaderStream) {
     }
 }
 
+/**
+ * TENFOOT (SHW-87): adaptivní kontejner pro pickery zdrojů.
+ *
+ * V portrétu na telefonu = klasický `ModalBottomSheet` (dosavadní chování beze změny).
+ * V **landscape NEBO na TV** = full-height `Dialog` — bottom sheet je zdola ukotvený a v landscape má
+ * malou výšku, takže se výsledky ořežou pod okrajem a nejde k nim doscrollovat. Dialog dá seznamu
+ * zbývající výšku (`weight(1f)` přes předaný `listModifier`) a řádný scroll (D-padem i prstem).
+ *
+ * `content` dostává `listModifier`, který má picker přišpendlit na svůj seznam výsledků (LazyColumn):
+ *  - sheet → `heightIn(max = 460.dp)` (dynamická výška sheetu)
+ *  - dialog → `weight(1f)` (vyplní zbytek full-height plochy)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AdaptivePickerScaffold(
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.(listModifier: Modifier) -> Unit,
+) {
+    val isTv = isTvFormFactor()
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    if (isTv || landscape) {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(if (isTv) 0.72f else 0.9f)
+                    .fillMaxHeight(if (isTv) 0.9f else 0.94f),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+            ) {
+                Column(Modifier.fillMaxSize().padding(vertical = 12.dp)) {
+                    content(Modifier.fillMaxWidth().weight(1f))
+                }
+            }
+        }
+    } else {
+        ModalBottomSheet(onDismissRequest = onDismiss) {
+            content(Modifier.fillMaxWidth().heightIn(max = 460.dp))
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun StreamRow(
@@ -152,9 +210,12 @@ internal fun StreamRow(
     onClick: () -> Unit,
     showSourceBadge: Boolean = false,
     health: StreamHealth = StreamHealth.READY,
+    // FUSE/TENFOOT (SHW-87): TV D-pad — volající připne fokus prstenec (`tvFocusable`, na telefonu no-op)
+    // a případně `focusRequester` na první řádek, ať picker jde ovládat dálkovým ovladačem.
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 12.dp),
@@ -298,7 +359,7 @@ internal fun StreamPickerSheet(
     // SIEVE S1: rozbalit i podezřelé (ukázka/making-of/necachované klipy) — ruční kontrola.
     var showSuspect by remember { mutableStateOf(false) }
     val busy = isResolving || isCasting
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    AdaptivePickerScaffold(onDismiss = onDismiss) { listModifier ->
         // CONDUIT: hlavička dle zvolené cesty (CZ dabing / Originál); jinak původní popisek.
         SheetHeader(pathLabel?.let { "Přehrát · $it" } ?: "Stream přes Stremio", Icons.Default.PlayArrow)
         if (onBack != null) {
@@ -376,7 +437,15 @@ internal fun StreamPickerSheet(
                     .sortedBy { if (it.second == StreamHealth.READY) 0 else 1 }
                 val suspect = classified.filter { it.second == StreamHealth.SUSPECT }
                 val streamKey: (UploaderStream) -> String = { it.cometPath ?: it.infoHash ?: it.url ?: it.name.orEmpty() }
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
+                // TENFOOT (SHW-87): na TV nasměruj D-pad fokus rovnou na první výsledek, ať jde seznam
+                // ovládat dálkovým ovladačem (jinak fokus nemá kam přistát a nic nescrolluje).
+                val isTv = isTvFormFactor()
+                val firstKey = clean.firstOrNull()?.let { streamKey(it.first) }
+                val firstFocus = remember { FocusRequester() }
+                LaunchedEffect(firstKey, isTv) {
+                    if (isTv && firstKey != null) runCatching { firstFocus.requestFocus() }
+                }
+                LazyColumn(listModifier) {
                     items(clean, key = { streamKey(it.first) }) { (s, h) ->
                         StreamRow(
                             stream = s,
@@ -389,6 +458,11 @@ internal fun StreamPickerSheet(
                             onClick = { if (!busy) { if (toTv) onCastToTv(s) else onPlay(s) } },
                             showSourceBadge = true,
                             health = h,
+                            modifier = if (streamKey(s) == firstKey) {
+                                Modifier.focusRequester(firstFocus).tvFocusable()
+                            } else {
+                                Modifier.tvFocusable()
+                            },
                         )
                         HorizontalDivider()
                     }
@@ -419,6 +493,7 @@ internal fun StreamPickerSheet(
                                     onClick = { if (!busy) { if (toTv) onCastToTv(s) else onPlay(s) } },
                                     showSourceBadge = true,
                                     health = h,
+                                    modifier = Modifier.tvFocusable(),
                                 )
                                 HorizontalDivider()
                             }
@@ -609,7 +684,7 @@ internal fun SdilejPickerSheet(
     var yearText by remember(defaultYear) { mutableStateOf(defaultYear?.toString().orEmpty()) }
     val noResults = !isLoading && streams.isEmpty()
     val showEdit = editing || noResults
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    AdaptivePickerScaffold(onDismiss = onDismiss) { listModifier ->
         SheetHeader("Sdílej.cz", Icons.Default.Download)
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = { editing = !editing }) {
@@ -631,14 +706,29 @@ internal fun SdilejPickerSheet(
         when {
             isLoading -> SheetCenter { CircularProgressIndicator() }
             noResults -> SheetMessage(error ?: "Na Sdílej.cz nic nenalezeno.")
-            else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
-                items(streams, key = { it.url ?: it.name.orEmpty() }) { s ->
-                    StreamRow(
-                        stream = s,
-                        trailingIcon = { Icon(Icons.Default.Download, contentDescription = "Stáhnout") },
-                        onClick = { onCapture(s) },
-                    )
-                    HorizontalDivider()
+            else -> {
+                // TENFOOT (SHW-87): iniciální D-pad fokus na první výsledek (TV).
+                val isTv = isTvFormFactor()
+                val firstKey = streams.firstOrNull()?.let { it.url ?: it.name.orEmpty() }
+                val firstFocus = remember { FocusRequester() }
+                LaunchedEffect(firstKey, isTv) {
+                    if (isTv && firstKey != null) runCatching { firstFocus.requestFocus() }
+                }
+                LazyColumn(listModifier) {
+                    items(streams, key = { it.url ?: it.name.orEmpty() }) { s ->
+                        val key = s.url ?: s.name.orEmpty()
+                        StreamRow(
+                            stream = s,
+                            trailingIcon = { Icon(Icons.Default.Download, contentDescription = "Stáhnout") },
+                            onClick = { onCapture(s) },
+                            modifier = if (key == firstKey) {
+                                Modifier.focusRequester(firstFocus).tvFocusable()
+                            } else {
+                                Modifier.tvFocusable()
+                            },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }

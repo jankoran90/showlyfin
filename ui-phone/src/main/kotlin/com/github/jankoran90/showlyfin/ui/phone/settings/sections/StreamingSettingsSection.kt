@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore
 import coil3.compose.AsyncImage
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -156,6 +157,40 @@ internal fun StreamingSettingsSection(
                             yearPm1 = v
                             sdilejPrefs.edit().putBoolean("sdilej_year_pm1", v).apply()
                         }
+                    }
+                }
+            }
+            // DINGO — per-zařízení preset přehrávání (slabý HEVC dekodér v autě). Jen TOTO zařízení.
+            CollapsibleSettingsSection("Přehrávání (toto zařízení)", expandedMap) {
+                val ppCtx = LocalContext.current
+                val pp = remember { ppCtx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+                var codec by remember { mutableStateOf(pp.getString(StreamPresetStore.KEY_CODEC, StreamPresetStore.CODEC_ANY) ?: StreamPresetStore.CODEC_ANY) }
+                var maxRes by remember { mutableStateOf(pp.getString(StreamPresetStore.KEY_MAXRES, StreamPresetStore.RES_ANY) ?: StreamPresetStore.RES_ANY) }
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(Modifier.padding(16.dp)) {
+                        ListenInfoText("Nastav jednou pro tohle zařízení a nesahej. V autě (slabý head unit, který seká na HEVC) zvol H.264 — appka pak při výběru zdroje preferuje H.264 verzi filmu, když existuje. Doma na TV/AVR nech Auto. Volba je jen na tomhle zařízení, ostatní se nezmění.")
+                        Spacer(Modifier.height(8.dp))
+                        PresetChipRow(
+                            title = "Preferovaný video kodek",
+                            options = listOf(
+                                "Auto" to StreamPresetStore.CODEC_ANY,
+                                "H.264" to StreamPresetStore.CODEC_AVC,
+                                "HEVC" to StreamPresetStore.CODEC_HEVC,
+                            ),
+                            selected = codec,
+                            onSelect = { codec = it; pp.edit().putString(StreamPresetStore.KEY_CODEC, it).apply() },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        PresetChipRow(
+                            title = "Strop rozlišení",
+                            options = listOf(
+                                "Bez limitu" to StreamPresetStore.RES_ANY,
+                                "1080p" to "1080p",
+                                "720p" to "720p",
+                            ),
+                            selected = maxRes,
+                            onSelect = { maxRes = it; pp.edit().putString(StreamPresetStore.KEY_MAXRES, it).apply() },
+                        )
                     }
                 }
             }
@@ -319,6 +354,23 @@ internal fun StremioFilterSection(
                     }
                 }
             }
+        }
+    }
+}
+
+// DINGO — jednoduchý řádek volby (label + chipy) pro per-zařízení preset přehrávání.
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PresetChipRow(
+    title: String,
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { (label, value) ->
+            FilterChip(selected = selected == value, onClick = { onSelect(value) }, label = { Text(label) })
         }
     }
 }
