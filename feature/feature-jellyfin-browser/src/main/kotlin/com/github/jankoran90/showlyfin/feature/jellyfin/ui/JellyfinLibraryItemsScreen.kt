@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -95,6 +96,8 @@ fun JellyfinLibraryItemsScreen(
         viewModel.load(libraryId, libraryName, collectionType, parentItemType)
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // TABULA: proklik na položku → detail → krok Zpět nesmí zobrazit staré hledání. Opuštění obrazovky dotaz vyčistí.
+    DisposableEffect(Unit) { onDispose { viewModel.setSearchQuery("") } }
     val gridState = rememberLazyGridState()
 
     Scaffold(
@@ -190,12 +193,15 @@ fun JellyfinLibraryItemsScreen(
                             JellyfinItemCard(
                                 item = item,
                                 onClick = {
-                                    val isFolderLike = item.isFolder ||
-                                        item.type.equals("BOX_SET", ignoreCase = true)
+                                    // BUG fix: SERIES má isFolder==true → nesmí drillovat (děti jsou EPISODE/SEASON
+                                    // → prázdno); routuj na JF detail (onItemPlay → JellyfinDetail s epizodami).
+                                    val isSeries = item.type.equals("SERIES", ignoreCase = true)
+                                    val isFolderLike = !isSeries && (item.isFolder ||
+                                        item.type.equals("BOX_SET", ignoreCase = true))
                                     when {
                                         isFolderLike -> onItemDrillIn(item.id, item.name, item.type)
                                         // Bohatý režim + TMDB match → otevři bohatý Trakt/TMDB detail
-                                        state.detailRich && item.tmdbId != null && onItemOpenRich != null ->
+                                        !isSeries && state.detailRich && item.tmdbId != null && onItemOpenRich != null ->
                                             onItemOpenRich(item.toStubMediaItem())
                                         else -> onItemPlay(item.id)
                                     }

@@ -1,238 +1,286 @@
 package com.github.jankoran90.showlyfin.ui.tv.home
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
-import com.github.jankoran90.showlyfin.core.ui.tvFocusable
+import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
+import com.github.jankoran90.showlyfin.core.domain.home.HomeRowConfig
+import com.github.jankoran90.showlyfin.core.domain.home.HomeRowParams
+import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSourceType
+import com.github.jankoran90.showlyfin.core.domain.home.SidebarItem
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverTab
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverUiState
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverViewModel
-import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
-import com.github.jankoran90.showlyfin.ui.tv.jellyfin.TvLibrariesContent
+import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
+import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
+import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowItem
+import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
+import com.github.jankoran90.showlyfin.ui.tv.components.TvHomeCard
+import kotlinx.coroutines.flow.first
 
-/** Sekce TV Home: doporučovač Trakt (Sleduj) vs. Jellyfin knihovny (Knihovna). */
-private enum class TvHomeSection(val label: String) {
-    WATCH("Sleduj"),
-    LIBRARY("Knihovna"),
-}
+/** Jedna vykreslená řada (HomeVM řada NEBO expandovaná Jellyfin knihovna). */
+private data class Rail(
+    val id: String,
+    val title: String,
+    val style: HomeCardStyle,
+    val items: List<HomeRowItem>,
+    val configId: String,
+)
 
 /**
- * TENFOOT (SHW-87) — TV domov. **JEDNA kompaktní horní lišta** (user feedback 2026-07-12: dřív 3 samostatné
- * řady chipů = 3× dolů než se člověk dostal na plakáty + ubíraly výšku mřížce). Lišta = sekce
- * `Sleduj | Knihovna`, a pro „Sleduj" hned za oddělovačem podsekce (Filmy/Seriály) + kategorie
- * (Doporučené/Trendy/…). Horizontálně scrollovatelná (D-pad si posune). Pod ní hned obsah → 1× dolů na výběr.
- *
- * `DiscoverViewModel` je zvednutý sem (dřív byl uvnitř mřížky), aby lišta i mřížka sdílely jeden stav.
+ * TENFOOT (SHW-87) — TV DOMOV REDESIGN (Kodi Arctic Fuse styl). Levý [TvHomeSidebar] + vertikální
+ * seznam horizontálních railů dle uživatelské konfigurace ([TvHomeViewModel] + [LibraryRowsViewModel]
+ * pro Jellyfin knihovny). Obsah je VŽDY hned fokusovaný (první karta první řady). Menu na řadě =
+ * inline editor ([TvHomeRowEditor]). Vzdušné, konfigurovatelné, soustředěné na obsah.
  */
 @Composable
 fun TvHomeScreen(
     onOpenDetail: (MediaItem) -> Unit,
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
+    onOpenJellyfinDetail: (itemId: String) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenWatchlist: () -> Unit,
     modifier: Modifier = Modifier,
-    discoverViewModel: DiscoverViewModel = hiltViewModel(),
+    homeVm: TvHomeViewModel = hiltViewModel(),
+    libraryVm: LibraryRowsViewModel = hiltViewModel(),
 ) {
-    var section by rememberSaveable { mutableStateOf(TvHomeSection.WATCH) }
-    val ui by discoverViewModel.uiState.collectAsStateWithLifecycle()
+    val rowConfigs by homeVm.rowConfigs.collectAsStateWithLifecycle()
+    val allRows by homeVm.allRows.collectAsStateWithLifecycle()
+    val states by homeVm.states.collectAsStateWithLifecycle()
+    val sidebarEntries by homeVm.sidebar.collectAsStateWithLifecycle()
+    val libraryState by libraryVm.state.collectAsStateWithLifecycle()
 
-    Column(modifier = modifier.fillMaxSize().tvOverscan()) {
-        // ── Jedna kompaktní lišta: sekce + (pro Sleduj) podsekce + kategorie ──
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(bottom = 14.dp),
-        ) {
-            // Vstup do Hledání + Nastavení (vlevo v liště) — ikony, aby lišta zůstala kompaktní.
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = "Hledat",
-                tint = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier
-                    .tvFocusable(shape = CircleShape)
-                    .clip(CircleShape)
-                    .clickable(onClick = onOpenSearch)
-                    .padding(8.dp),
+    LaunchedEffect(Unit) { libraryVm.load() }
+    // Lazy načtení řad (mimo JF knihovny — ty jede LibraryRowsViewModel).
+    LaunchedEffect(rowConfigs) {
+        rowConfigs.filter { it.source != HomeRowSourceType.JELLYFIN_LIBRARIES }
+            .forEach { homeVm.ensureRowLoaded(it) }
+    }
+
+    // Sestav ploché raily (jen neprázdné → domov je vzdušný, obsah hned).
+    val rails: List<Rail> = buildList {
+        rowConfigs.forEach { cfg ->
+            if (cfg.source == HomeRowSourceType.JELLYFIN_LIBRARIES) {
+                libraryState.rows.forEach { lib ->
+                    add(
+                        Rail(
+                            id = "lib_${lib.libraryId}",
+                            title = lib.libraryName,
+                            style = cfg.cardStyle,
+                            items = lib.items.map { it.toHomeRowItem() },
+                            configId = cfg.id,
+                        ),
+                    )
+                }
+            } else {
+                val st = states[cfg.id]
+                if (st != null && st.items.isNotEmpty()) {
+                    add(Rail(id = cfg.id, title = cfg.title, style = cfg.cardStyle, items = st.items, configId = cfg.id))
+                }
+            }
+        }
+    }
+
+    val sidebarItems = sidebarEntries.filter { it.enabled }.mapNotNull { SidebarItem.fromName(it.item) }
+    val listState = rememberLazyListState()
+    var focusedIndex by remember { mutableIntStateOf(0) }
+    var editingId by remember { mutableStateOf<String?>(null) }
+
+    // Anti-bump: fokusovaná řada se plynule odscrolluje na stabilní pozici (žádný „bump" u 2. řady).
+    LaunchedEffect(focusedIndex) {
+        runCatching { listState.animateScrollToItem(focusedIndex.coerceAtLeast(0)) }
+    }
+
+    // Autofokus na PRVNÍ kartu PRVNÍ řady (obsah, ne sidebar/nadpis). Čeká na umístění uzlu.
+    val firstFocus = remember { FocusRequester() }
+    val firstRailId = rails.firstOrNull()?.id
+    LaunchedEffect(firstRailId) {
+        if (firstRailId == null) return@LaunchedEffect
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == firstRailId } }.first { it }
+        withFrameNanos { }
+        withFrameNanos { }
+        runCatching { firstFocus.requestFocus() }
+    }
+
+    fun clickItem(item: HomeRowItem) {
+        val mi = item.mediaItem
+        val jf = item.jellyfinId
+        when {
+            mi != null -> onOpenDetail(mi)
+            jf != null -> onOpenJellyfinDetail(jf)
+        }
+    }
+
+    fun openEditorForFocused() {
+        rails.getOrNull(focusedIndex)?.let { editingId = it.configId }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxSize()) {
+            TvHomeSidebar(
+                items = sidebarItems,
+                active = SidebarItem.DOMU,
+                onSelect = { item ->
+                    when (item) {
+                        SidebarItem.DOMU -> runCatching { firstFocus.requestFocus() }
+                        SidebarItem.HLEDAT -> onOpenSearch()
+                        SidebarItem.NASTAVENI -> onOpenSettings()
+                        SidebarItem.OBLIBENE -> onOpenWatchlist()
+                        SidebarItem.KNIHOVNA -> {
+                            val libIdx = rails.indexOfFirst { it.configId == "jellyfin_libraries" }
+                            if (libIdx >= 0) focusedIndex = libIdx
+                        }
+                    }
+                },
             )
-            Icon(
-                imageVector = Icons.Filled.Favorite,
-                contentDescription = "Oblíbené",
-                tint = MaterialTheme.colorScheme.onBackground,
+
+            Column(
                 modifier = Modifier
-                    .tvFocusable(shape = CircleShape)
-                    .clip(CircleShape)
-                    .clickable(onClick = onOpenWatchlist)
-                    .padding(8.dp),
-            )
-            Icon(
-                imageVector = Icons.Filled.Settings,
-                contentDescription = "Nastavení",
-                tint = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier
-                    .tvFocusable(shape = CircleShape)
-                    .clip(CircleShape)
-                    .clickable(onClick = onOpenSettings)
-                    .padding(8.dp),
-            )
-            BarDivider()
-            TvHomeSection.entries.forEach { s ->
-                FilterChip(
-                    selected = section == s,
-                    onClick = { section = s },
-                    label = {
-                        Text(
-                            s.label,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = if (section == s) FontWeight.Bold else FontWeight.Normal,
-                        )
+                    .weight(1f)
+                    .fillMaxSize()
+                    .tvOverscan()
+                    .onPreviewKeyEvent { e ->
+                        if (e.type == KeyEventType.KeyDown && (e.key == Key.Menu || e.key == Key.Info)) {
+                            openEditorForFocused(); true
+                        } else {
+                            false
+                        }
                     },
-                    modifier = Modifier.tvFocusable(),
+            ) {
+                Text(
+                    text = "Domů",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+                )
+
+                androidx.compose.foundation.lazy.LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(bottom = 40.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    itemsIndexed(rails, key = { _, r -> r.id }) { index, rail ->
+                        RailSection(
+                            rail = rail,
+                            firstCardFocus = if (index == 0) firstFocus else null,
+                            onItemClick = ::clickItem,
+                            onFocused = { focusedIndex = index },
+                        )
+                    }
+                }
+            }
+        }
+
+        editingId?.let { id ->
+            val cfg = allRows.firstOrNull { it.id == id } ?: return@let
+            val pos = allRows.indexOfFirst { it.id == id }
+            TvHomeRowEditor(
+                config = cfg,
+                canMoveUp = pos > 0,
+                canMoveDown = pos in 0 until allRows.lastIndex,
+                onUpdate = { homeVm.updateRow(it) },
+                onMove = { up -> homeVm.moveRow(id, up) },
+                onHide = { homeVm.setRowEnabled(id, false); editingId = null },
+                onAddRow = {
+                    val newId = "custom_${allRows.size}_${cfg.hashCode()}"
+                    homeVm.addRow(
+                        HomeRowConfig(
+                            id = newId,
+                            source = HomeRowSourceType.DISCOVER,
+                            title = "Nová řada",
+                            cardStyle = HomeCardStyle.POSTER,
+                            params = mapOf(HomeRowParams.TAB to "movies", HomeRowParams.FILTER to "trending"),
+                        ),
+                    )
+                    editingId = newId
+                },
+                onDismiss = { editingId = null },
+            )
+        }
+    }
+}
+
+@Composable
+private fun RailSection(
+    rail: Rail,
+    firstCardFocus: FocusRequester?,
+    onItemClick: (HomeRowItem) -> Unit,
+    onFocused: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .focusGroup()
+            .onFocusChanged { if (it.hasFocus) onFocused() },
+    ) {
+        Text(
+            text = rail.title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+        ) {
+            items(rail.items, key = { it.key }) { item ->
+                TvHomeCard(
+                    item = item,
+                    style = rail.style,
+                    onClick = { onItemClick(item) },
+                    focusRequester = if (firstCardFocus != null && item.key == rail.items.first().key) firstCardFocus else null,
                 )
             }
-
-            if (section == TvHomeSection.WATCH) {
-                BarDivider()
-                DiscoverTab.entries.forEach { tab ->
-                    FilterChip(
-                        selected = ui.activeTab == tab,
-                        onClick = { discoverViewModel.selectTab(tab) },
-                        label = { Text(tabLabel(tab)) },
-                        modifier = Modifier.tvFocusable(),
-                    )
-                }
-                BarDivider()
-                DiscoverFilter.entries.forEach { filter ->
-                    FilterChip(
-                        selected = ui.activeFilter == filter,
-                        onClick = { discoverViewModel.selectFilter(filter) },
-                        label = { Text(filterLabel(filter)) },
-                        modifier = Modifier.tvFocusable(),
-                    )
-                }
-            }
-        }
-
-        when (section) {
-            TvHomeSection.WATCH -> WatchGrid(
-                ui = ui,
-                onLoadMore = discoverViewModel::loadMore,
-                onOpenDetail = onOpenDetail,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
-            TvHomeSection.LIBRARY -> TvLibrariesContent(
-                onOpenLibrary = onOpenLibrary,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
         }
     }
 }
 
-/** Jemný oddělovač skupin chipů v liště (barva z motivu, žádný hardcoded odstín). */
-@Composable
-private fun BarDivider() {
-    Spacer(Modifier.width(4.dp))
-    VerticalDivider(
-        modifier = Modifier.height(28.dp),
-        color = MaterialTheme.colorScheme.outlineVariant,
-    )
-    Spacer(Modifier.width(4.dp))
-}
-
-@Composable
-private fun WatchGrid(
-    ui: DiscoverUiState,
-    onLoadMore: () -> Unit,
-    onOpenDetail: (MediaItem) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val gridState = rememberLazyGridState()
-    // Autofokus na obsah: jakmile dorazí položky, přeskoč fokus na první plakát (ne na lištu sekcí/filtrů).
-    val firstItemFocus = remember { FocusRequester() }
-    LaunchedEffect(ui.items.isNotEmpty()) {
-        if (ui.items.isNotEmpty()) runCatching { firstItemFocus.requestFocus() }
-    }
-
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-            .collect { lastVisible ->
-                if (ui.canLoadMore && lastVisible >= ui.items.size - 8) onLoadMore()
-            }
-    }
-
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(6),
-        state = gridState,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        // Prostor kolem obsahu pro fokusový lift (1.08×) — bez něj mřížka ořízne zvětšený vršek/kraje plakátů.
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 14.dp),
-        modifier = modifier,
-    ) {
-        itemsIndexed(ui.items, key = { _, it -> it.traktId }) { index, item ->
-            TvMediaCard(
-                item = item,
-                onClick = { onOpenDetail(item) },
-                focusRequester = if (index == 0) firstItemFocus else null,
-            )
-        }
-    }
-}
-
-private fun tabLabel(tab: DiscoverTab): String = when (tab) {
-    DiscoverTab.MOVIES -> "Filmy"
-    DiscoverTab.SHOWS -> "Seriály"
-}
-
-private fun filterLabel(filter: DiscoverFilter): String = when (filter) {
-    DiscoverFilter.RECOMMENDED -> "Doporučené"
-    DiscoverFilter.TRENDING -> "Trendy"
-    DiscoverFilter.POPULAR -> "Populární"
-    DiscoverFilter.ANTICIPATED -> "Očekávané"
-}
+/** Jellyfin řadová položka → sjednocený [HomeRowItem]. */
+private fun LibraryRowItem.toHomeRowItem() = HomeRowItem(
+    key = "jf_$jellyfinId",
+    title = name,
+    year = year,
+    posterUrl = imageUrl,
+    landscapeUrl = landscapeUrl,
+    progressPct = progressPct,
+    watched = watched,
+    mediaItem = mediaItem,
+    jellyfinId = jellyfinId,
+)

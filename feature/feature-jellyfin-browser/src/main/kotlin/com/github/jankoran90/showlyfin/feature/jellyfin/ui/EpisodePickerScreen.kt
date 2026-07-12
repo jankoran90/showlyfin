@@ -39,6 +39,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,10 +80,13 @@ fun EpisodePickerScreen(
 
     // Vycentruj aktuální epizodu (o 1 výš, ať je vidět kontext) a rovnou na ni dej fokus.
     LaunchedEffect(state.nextUpIndex, state.isLoading) {
-        if (!state.isLoading && state.nextUpIndex >= 0) {
-            runCatching { listState.scrollToItem((state.nextUpIndex - 1).coerceAtLeast(0)) }
-            runCatching { nextUpFocus.requestFocus() }
-        }
+        if (state.isLoading || state.nextUpIndex < 0) return@LaunchedEffect
+        runCatching { listState.scrollToItem((state.nextUpIndex - 1).coerceAtLeast(0)) }
+        // Počkej, až je next-up epizoda reálně umístěná (placed), teprve pak fokus — jinak výjimka
+        // „not placed" spolknutá runCatching → fokus zůstane na Zpět/liště (BUG do OTA 292).
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.index == state.nextUpIndex } }
+            .first { it }
+        runCatching { nextUpFocus.requestFocus() }
     }
 
     Scaffold(

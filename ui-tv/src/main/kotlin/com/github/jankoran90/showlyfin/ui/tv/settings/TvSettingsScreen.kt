@@ -22,9 +22,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.core.domain.home.SidebarEntry
+import com.github.jankoran90.showlyfin.core.domain.home.SidebarItem
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
+import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
@@ -48,10 +51,12 @@ fun TvSettingsScreen(
     themePrefs: ThemePrefsViewModel = hiltViewModel(),
     fontPrefs: FontPrefsViewModel = hiltViewModel(),
     settings: SettingsViewModel = hiltViewModel(),
+    homeVm: TvHomeViewModel = hiltViewModel(),
 ) {
     val theme by themePrefs.state.collectAsStateWithLifecycle()
     val font by fontPrefs.state.collectAsStateWithLifecycle()
     val sys by settings.uiState.collectAsStateWithLifecycle()
+    val sidebar by homeVm.sidebar.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = modifier.fillMaxSize().tvOverscan(),
@@ -211,6 +216,34 @@ fun TvSettingsScreen(
             }
         }
 
+        // ── Domů / Postranní menu ──
+        item {
+            TvSettingsBlock(title = "Domů a postranní menu") {
+                Text(
+                    text = "Které sekce ukazovat v levém menu (řady domova se ladí přímo na domově tlačítkem Menu):",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+                sidebar.forEachIndexed { index, entry ->
+                    SidebarEditorRow(
+                        entry = entry,
+                        index = index,
+                        count = sidebar.size,
+                        onMove = { up -> homeVm.moveSidebar(entry.item, up) },
+                        onToggle = { on -> homeVm.setSidebarEnabled(entry.item, on) },
+                    )
+                }
+                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    TvActionChip(
+                        label = "Obnovit výchozí domov",
+                        enabled = true,
+                        onClick = { homeVm.resetRows() },
+                    )
+                }
+            }
+        }
+
         // ── Systém ──
         item {
             TvSettingsBlock(title = "Systém") {
@@ -222,6 +255,38 @@ fun TvSettingsScreen(
                 )
             }
         }
+    }
+}
+
+/** Řádek editoru sidebaru: název sekce + přesun ↑/↓ + zap/vyp (vše D-pad chipy). */
+@Composable
+private fun SidebarEditorRow(
+    entry: SidebarEntry,
+    index: Int,
+    count: Int,
+    onMove: (up: Boolean) -> Unit,
+    onToggle: (Boolean) -> Unit,
+) {
+    val item = SidebarItem.fromName(entry.item) ?: return
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = item.label,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        TvActionChip(label = "↑", enabled = index > 0, onClick = { onMove(true) })
+        TvActionChip(label = "↓", enabled = index < count - 1, onClick = { onMove(false) })
+        TvActionChip(
+            label = if (entry.enabled) "Zap" else "Vyp",
+            enabled = true,
+            danger = !entry.enabled,
+            onClick = { onToggle(!entry.enabled) },
+        )
     }
 }
 

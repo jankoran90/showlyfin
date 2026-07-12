@@ -12,56 +12,51 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
-import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
-import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistTab
-import com.github.jankoran90.showlyfin.feature.watchlist.WatchlistViewModel
-import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
+import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
+import com.github.jankoran90.showlyfin.ui.tv.components.TvPosterCard
 
 /**
- * TENFOOT (SHW-87) F3 — nativní 10-foot „Oblíbené" (Trakt watchlist) na TV. Sdílí telefonní
- * [WatchlistViewModel] (žádný TV-specifický wiring), výsledky = plakátová mřížka ze sdílené
- * [TvMediaCard] (stejný vzhled + fokusová záře jako domov/hledání); ťuk → nativní TV karta obsahu
- * (`WatchlistViewModel` dává plný [MediaItem] vč. tmdbId, takže se předá přímo bez stubu).
- *
- * Přepínač Filmy/Seriály = `selectTab`. Odebrání z watchlistu tu neřešíme (stejně jako telefon —
- * běží přes kartu obsahu).
+ * TENFOOT (SHW-87) — nativní 10-foot „Oblíbené" na TV. Zdroj = per-profil [TvFavoritesViewModel]
+ * (FavoritesStore, TÝŽ jako telefonní „Oblíbené") → TV vidí uživatelovy oblíbené filmy jeho profilu.
+ * Plakátová mřížka (sdílená [TvPosterCard]); ťuk → nativní TV karta obsahu (stub s tmdbId).
+ * Autofokus na první plakát přes [AutoFocusFirst] (robustní, čeká na umístění uzlu).
  */
 @Composable
 fun TvWatchlistScreen(
     onOpenDetail: (MediaItem) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: WatchlistViewModel = hiltViewModel(),
+    viewModel: TvFavoritesViewModel = hiltViewModel(),
 ) {
-    val ui by viewModel.uiState.collectAsStateWithLifecycle()
-    // Autofokus na obsah: jakmile jsou položky, přeskoč fokus rovnou na první plakát (ne na Zpět/přepínač).
+    val movies by viewModel.movies.collectAsStateWithLifecycle()
+    val gridState = rememberLazyGridState()
     val firstItemFocus = remember { FocusRequester() }
-    LaunchedEffect(ui.items.size, ui.isLoading) {
-        if (!ui.isLoading && ui.items.isNotEmpty()) runCatching { firstItemFocus.requestFocus() }
-    }
+    AutoFocusFirst(
+        focusRequester = firstItemFocus,
+        enabled = movies.isNotEmpty(),
+        isTargetPlaced = { gridState.layoutInfo.visibleItemsInfo.any { it.index == 0 } },
+    )
 
     Column(modifier = modifier.fillMaxSize().tvOverscan()) {
         Row(
@@ -86,69 +81,47 @@ fun TvWatchlistScreen(
             )
         }
 
-        // Přepínač Filmy / Seriály (jen když je uživatel přihlášen k Traktu — jinak nemá watchlist).
-        if (ui.isLoggedIn) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
-            ) {
-                WatchlistTab.entries.forEach { tab ->
-                    FilterChip(
-                        selected = ui.activeTab == tab,
-                        onClick = { viewModel.selectTab(tab) },
-                        label = {
-                            Text(
-                                tabLabel(tab),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = if (ui.activeTab == tab) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        },
-                        modifier = Modifier.tvFocusable(),
-                    )
-                }
+        if (movies.isEmpty()) {
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "Zatím žádné oblíbené filmy — přidej si je v kartě filmu (❤).",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-        }
-
-        when {
-            !ui.isLoggedIn -> CenteredHint("Přihlas se k Trakt v Nastavení / Účty a uvidíš tady své oblíbené")
-            ui.isLoading -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-            ui.items.isEmpty() -> CenteredHint(
-                if (ui.activeTab == WatchlistTab.MOVIES) "Zatím žádné filmy v oblíbených"
-                else "Zatím žádné seriály v oblíbených",
-            )
-            else -> LazyVerticalGrid(
+        } else {
+            LazyVerticalGrid(
                 columns = GridCells.Fixed(6),
+                state = gridState,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 14.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                itemsIndexed(ui.items, key = { _, it -> "${it.type}_${it.traktId}" }) { index, item ->
-                    TvMediaCard(
-                        item = item,
-                        onClick = { onOpenDetail(item) },
+                itemsIndexed(movies, key = { _, it -> "fav_${it.id}" }) { index, fav ->
+                    TvPosterCard(
+                        posterUrl = fav.imageUrl,
+                        title = fav.name,
+                        year = fav.year,
+                        onClick = {
+                            onOpenDetail(
+                                MediaItem(
+                                    traktId = 0L,
+                                    tmdbId = fav.id,
+                                    imdbId = null,
+                                    title = fav.name,
+                                    year = fav.year,
+                                    overview = null,
+                                    rating = null,
+                                    genres = null,
+                                    type = MediaType.MOVIE,
+                                ),
+                            )
+                        },
                         focusRequester = if (index == 0) firstItemFocus else null,
                     )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun androidx.compose.foundation.layout.ColumnScope.CenteredHint(text: String) {
-    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-private fun tabLabel(tab: WatchlistTab): String = when (tab) {
-    WatchlistTab.MOVIES -> "Filmy"
-    WatchlistTab.SHOWS -> "Seriály"
 }

@@ -248,7 +248,7 @@ fun TvTraktAccountRow(
 
 /** Fokusovatelné akční tlačítko na TV řádku (D-pad center = klik). Barva z motivu, `danger` = chybová. */
 @Composable
-private fun TvActionChip(
+fun TvActionChip(
     label: String,
     enabled: Boolean,
     onClick: () -> Unit,

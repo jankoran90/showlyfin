@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -162,7 +163,12 @@ fun JellyfinDetailScreen(
                     // Autofokus jde přímo na obsah/akci (Pokračovat u seriálu, Přehrát u filmu), NE na Zpět/lištu
                     // (user 2026-07-12: „vždy na obsah, ne na sekce/tlačítka").
                     val primaryFocus = remember { FocusRequester() }
-                    LaunchedEffect(detail.id, nextUp) { runCatching { primaryFocus.requestFocus() } }
+                    // Počkej na umístění uzlu (1 snímek), pak fokus — jinak „not placed" (spolknuto) a fokus
+                    // zůstane na Zpět/liště. Column je ne-lazy, jeden snímek stačí.
+                    LaunchedEffect(detail.id, nextUp) {
+                        withFrameNanos { }
+                        runCatching { primaryFocus.requestFocus() }
+                    }
 
                     if (isSeries && nextUp != null) {
                         NextUpCard(

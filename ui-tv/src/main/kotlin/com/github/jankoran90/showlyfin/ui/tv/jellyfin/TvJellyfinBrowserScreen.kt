@@ -98,9 +98,14 @@ fun TvJellyfinBrowserScreen(
                     TvJellyfinPosterCard(
                         item = item,
                         onClick = {
-                            val folderLike = item.isFolder || item.type.equals("BOX_SET", ignoreCase = true)
+                            // BUG fix: SERIES má v Jellyfinu isFolder==true → dřív spadl do „drill" (prázdná
+                            // mřížka, děti jsou EPISODE/SEASON) místo JF detailu s epizodami/next-up.
+                            val isSeries = item.type.equals("SERIES", ignoreCase = true)
+                            val folderLike = !isSeries &&
+                                (item.isFolder || item.type.equals("BOX_SET", ignoreCase = true))
                             when {
                                 folderLike -> onDrillIn(item.id, item.name, item.type)
+                                isSeries -> onOpenJellyfinDetail(item.id)
                                 state.detailRich && item.tmdbId != null -> onOpenRich(item.toStubMediaItem())
                                 else -> onOpenJellyfinDetail(item.id)
                             }

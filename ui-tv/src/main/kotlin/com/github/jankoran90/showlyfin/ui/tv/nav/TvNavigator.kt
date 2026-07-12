@@ -37,6 +37,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             onOpenLibrary = { id, name, collectionType ->
                 navigate(TvDestination.LibraryItems(id, name, collectionType))
             },
+            onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
             onOpenSearch = { navigate(TvDestination.Search) },
             onOpenSettings = { navigate(TvDestination.Settings) },
             onOpenWatchlist = { navigate(TvDestination.Watchlist) },
