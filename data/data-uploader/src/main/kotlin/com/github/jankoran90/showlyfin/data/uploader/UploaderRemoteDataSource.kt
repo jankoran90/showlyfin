@@ -26,6 +26,12 @@ interface UploaderRemoteDataSource {
     // Plan PROFILES Fáze 2 — config balík per profil (raw JSON; key = jellyfinUserId)
     suspend fun getProfileConfig(baseUrl: String, sessionCookie: String, key: String): String?
     suspend fun putProfileConfig(baseUrl: String, sessionCookie: String, key: String, json: String)
+    // COMPASS follow-up — Oblíbené per profil (raw JSON tělo {"favorites":[…]}; key = jellyfinUserId)
+    suspend fun getProfileFavorites(baseUrl: String, sessionCookie: String, key: String): String?
+    suspend fun putProfileFavorites(baseUrl: String, sessionCookie: String, key: String, json: String)
+    // SIEVE follow-up — Zapamatované zdroje per profil (raw JSON {"sources":[…]})
+    suspend fun getProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String): String?
+    suspend fun putProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String, json: String)
     suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String? = null, loginPinHash: String? = null)
     // Plan WARDEN W3c — raw JSON: pole šablon (/api/templates) + pole profilových meta (/api/profiles).
     suspend fun getTemplates(baseUrl: String, sessionCookie: String): String?

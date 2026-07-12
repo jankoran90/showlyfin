@@ -27,6 +27,12 @@ interface UploaderService {
     // Plan PROFILES Fáze 2 — config balík per profil (raw JSON přes ResponseBody/RequestBody)
     @GET suspend fun getProfileConfig(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @PUT suspend fun putProfileConfig(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+    // COMPASS follow-up — Oblíbené per profil (raw JSON: {"favorites":[…]})
+    @GET suspend fun getProfileFavorites(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @PUT suspend fun putProfileFavorites(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+    // SIEVE follow-up — Zapamatované zdroje per profil (raw JSON: {"sources":[…]})
+    @GET suspend fun getProfileWorkingSources(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @PUT suspend fun putProfileWorkingSources(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
     @PUT suspend fun putProfile(@Url url: String, @Header("Cookie") cookie: String, @Body request: ProfileMetaRequest): Response<ResponseBody>
     // Plan WARDEN W3c — šablony + profilová meta (raw JSON pole přes ResponseBody)
     @GET suspend fun getTemplates(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>

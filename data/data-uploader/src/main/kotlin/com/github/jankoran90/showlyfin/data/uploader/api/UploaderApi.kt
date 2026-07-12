@@ -185,6 +185,36 @@ internal class UploaderApi(
         if (!resp.isSuccessful) throw HttpException(resp)
     }
 
+    override suspend fun getProfileFavorites(baseUrl: String, sessionCookie: String, key: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.getProfileFavorites("$base/api/profiles/${enc(key)}/favorites", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
+    override suspend fun putProfileFavorites(baseUrl: String, sessionCookie: String, key: String, json: String) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val resp = service.putProfileFavorites("$base/api/profiles/${enc(key)}/favorites", cookie, body)
+        if (!resp.isSuccessful) throw HttpException(resp)
+    }
+
+    override suspend fun getProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.getProfileWorkingSources("$base/api/profiles/${enc(key)}/working-sources", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
+    override suspend fun putProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String, json: String) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val resp = service.putProfileWorkingSources("$base/api/profiles/${enc(key)}/working-sources", cookie, body)
+        if (!resp.isSuccessful) throw HttpException(resp)
+    }
+
     override suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String?, loginPinHash: String?) {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

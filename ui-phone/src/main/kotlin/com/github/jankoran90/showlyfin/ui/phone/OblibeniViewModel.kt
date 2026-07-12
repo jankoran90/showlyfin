@@ -28,6 +28,11 @@ class OblibeniViewModel @Inject constructor(
 
     val items: StateFlow<List<FavoriteItem>> = favorites.items
 
+    init {
+        // DINGO — při otevření obrazovky dotáhni oblíbené aktuálního profilu ze serveru (per-profil sync).
+        favorites.refresh()
+    }
+
     private val _sheet = MutableStateFlow(WorksSheetState())
     val sheet: StateFlow<WorksSheetState> = _sheet.asStateFlow()
 
