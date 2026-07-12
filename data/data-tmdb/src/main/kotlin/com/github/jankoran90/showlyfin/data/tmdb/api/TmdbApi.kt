@@ -140,7 +140,9 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
         fun jobHas(vararg s: String) = job != null && s.any { job.contains(it, ignoreCase = true) }
         fun dept(d: String) = department.equals(d, ignoreCase = true)
         return when (role) {
-            PersonRole.DIRECTING -> jobHas("Director") && !jobHas("of Photography") || dept("Directing")
+            // Jen SKUTEČNÝ režisér — ne „First Assistant Director" / „Second Unit Director" (contains by je
+            // pustil) ani celé oddělení Directing (script supervisor apod.). Přesný job.
+            PersonRole.DIRECTING -> job.equals("Director", ignoreCase = true) || job.equals("Co-Director", ignoreCase = true)
             PersonRole.WRITING -> dept("Writing") || jobHas("Writer", "Screenplay", "Story", "Author")
             PersonRole.CINEMATOGRAPHY -> jobHas("Director of Photography", "Cinematograph") || dept("Camera")
             PersonRole.PRODUCING -> dept("Production") || jobHas("Producer")

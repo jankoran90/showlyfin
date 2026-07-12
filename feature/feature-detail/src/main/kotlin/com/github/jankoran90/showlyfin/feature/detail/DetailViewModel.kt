@@ -333,7 +333,7 @@ class DetailViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 cast = cast,
-                directors = crewByRole(crew, dept = "Directing", jobs = setOf("director")),
+                directors = crewByRole(crew, dept = "Directing", jobs = setOf("director", "co-director"), deptFallback = false),
                 writers = crewByRole(crew, dept = "Writing", jobs = setOf("writer", "screenplay", "story", "author", "novel")),
                 cinematographers = crewByRole(crew, dept = "Camera", jobs = setOf("director of photography", "cinematography", "cinematographer")),
             )
@@ -345,11 +345,14 @@ class DetailViewModel @Inject constructor(
         crew: List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson>,
         dept: String,
         jobs: Set<String>,
+        // Oddělení „Directing" obsahuje i asistenty režie / script supervisory apod. — u režie
+        // (deptFallback=false) ber JEN přesný job (Director), ať se nezobrazí špatní „režiséři".
+        deptFallback: Boolean = true,
     ): List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson> {
         fun matches(p: com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson): Boolean {
-            if (p.department?.equals(dept, ignoreCase = true) == true) return true
             if (p.job != null && jobs.any { it.equals(p.job, ignoreCase = true) }) return true
-            return p.jobs?.any { j -> j.job != null && jobs.any { it.equals(j.job, ignoreCase = true) } } == true
+            if (p.jobs?.any { j -> j.job != null && jobs.any { it.equals(j.job, ignoreCase = true) } } == true) return true
+            return deptFallback && p.department?.equals(dept, ignoreCase = true) == true
         }
         return crew.filter { it.id > 0 && matches(it) }
             .distinctBy { it.id }
