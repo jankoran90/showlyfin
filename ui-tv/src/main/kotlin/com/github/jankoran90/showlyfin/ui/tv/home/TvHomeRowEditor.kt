@@ -144,6 +144,13 @@ fun TvHomeRowEditor(
                 onCheckedChange = { onUpdate(config.copy(showTitles = it)) },
             )
 
+            // KOLO2 (M): per-řada immersive hlavička (název/rok/popis fokusované karty nahoře, Netflix styl).
+            TvToggleRow(
+                label = "Immersive hlavička",
+                checked = config.immersiveHeader,
+                onCheckedChange = { onUpdate(config.copy(immersiveHeader = it)) },
+            )
+
             TvOptionStepperRow(
                 label = "Počet položek",
                 options = listOf(10, 20, 30, 40, 60),

@@ -135,6 +135,17 @@ fun FilterBottomSheet(
                 Spacer(Modifier.padding(horizontal = 8.dp))
                 Text("Skrýt zhlédnuté")
             }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Switch(
+                    checked = draft.hideRated,
+                    onCheckedChange = { draft = draft.copy(hideRated = it) },
+                )
+                Spacer(Modifier.padding(horizontal = 8.dp))
+                Text("Skrýt ohodnocené (Trakt)")
+            }
 
             Text("Řazení", style = MaterialTheme.typography.titleSmall)
             var sortMenuOpen by remember { mutableStateOf(false) }

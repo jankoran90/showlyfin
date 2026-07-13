@@ -215,6 +215,10 @@ class DiscoverViewModel @Inject constructor(
         if (filters.hideWatched && state.watchedTraktIds.isNotEmpty()) {
             result = result.filter { item -> !state.watchedTraktIds.contains(item.traktId) }
         }
+        // COUCH T3: skryj co mám na Traktu ohodnocené.
+        if (filters.hideRated && state.ratedTraktIds.isNotEmpty()) {
+            result = result.filter { item -> !state.ratedTraktIds.contains(item.traktId) }
+        }
         if (state.rdOnly) {
             result = result.filter { item -> state.rdMatchedTraktIds.contains(item.traktId) }
         }
@@ -289,6 +293,13 @@ class DiscoverViewModel @Inject constructor(
                         )
                     }
                     Timber.i("[Discover] Trakt watched: trakt=${traktIds.size} imdb=${imdbIds.size} tmdb=${tmdbIds.size}")
+                }
+                // COUCH T3: hodnocené položky (ratings) — pro filtr „skryj co mám ohodnocené na Traktu".
+                runCatching {
+                    val rated = authorizedTraktApi.fetchMoviesRatings().mapNotNull { it.movie.ids.trakt } +
+                        authorizedTraktApi.fetchShowsRatings().mapNotNull { it.show.ids.trakt }
+                    _uiState.update { it.copy(ratedTraktIds = rated.toSet()) }
+                    Timber.i("[Discover] Trakt rated: ${rated.size}")
                 }
             }
             val userId = prefs.getString("jellyfin_user_id", "") ?: ""

@@ -39,8 +39,8 @@ import com.github.jankoran90.showlyfin.ui.tv.components.TvJellyfinPosterCard
  *
  * Klik replikuje bezpečnou telefonní logiku ([com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinLibraryItemsScreen]):
  *  - složka / BOX_SET → zanoř (drill) do vnořené mřížky,
- *  - bohatý detail dostupný (detailRich + tmdbId) → nativní TV karta obsahu (fanart hero),
- *  - jinak → Jellyfin detail (bezpečné pro seriál i film bez tmdb).
+ *  - položka s tmdbId (film i seriál) → nativní TV immersive detail (fanart hero) přes stub → TMDB,
+ *  - bez tmdbId → resolver (imdb→immersive, jinak fallback telefonní JellyfinDetail).
  *
  * BACK řeší globální `TvNavigator` (popuje stack) — obrazovka proto nemá vlastní horní lištu.
  */
@@ -105,8 +105,12 @@ fun TvJellyfinBrowserScreen(
                                 (item.isFolder || item.type.equals("BOX_SET", ignoreCase = true))
                             when {
                                 folderLike -> onDrillIn(item.id, item.name, item.type)
-                                isSeries -> onOpenJellyfinDetail(item.id)
-                                state.detailRich && item.tmdbId != null -> onOpenRich(item.toStubMediaItem())
+                                // TENFOOT: na TV jde položka s tmdbId (film I seriál) VŽDY do nativního
+                                // immersive detailu (fanart hero, nativní řada epizod). `detailRich` je
+                                // telefonní koncept (bohatý TMDB vs holý JF detail) a na TV byl no-op —
+                                // OFF větev stejně skončila immersive přes resolver. Sjednoceno (P3.3).
+                                item.tmdbId != null -> onOpenRich(item.toStubMediaItem())
+                                // Bez tmdbId → resolver (imdb→immersive, jinak fallback JellyfinDetailScreen).
                                 else -> onOpenJellyfinDetail(item.id)
                             }
                         },

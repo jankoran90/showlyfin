@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.detail.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,17 +48,30 @@ import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.feature.detail.DetailUiState
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
+import com.github.jankoran90.showlyfin.feature.detail.TvDetailLayout
 
-private fun looksCzech(t: String?): Boolean =
+private fun tvLooksCzech(t: String?): Boolean =
     !t.isNullOrBlank() && t.any { it in "áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ" }
+
+/** Popis (fallback: český TMDB → ČSFD → TMDB → item). */
+private fun resolveTvPlot(uiState: DetailUiState, displayItem: MediaItem): String? {
+    val tmdbCz = uiState.tmdbCzOverview
+    return tmdbCz?.takeIf { tvLooksCzech(it) }
+        ?: uiState.csfdPlot?.takeIf { it.isNotBlank() }
+        ?: tmdbCz?.takeIf { it.isNotBlank() }
+        ?: uiState.movieDetails?.overview
+        ?: uiState.showDetails?.overview
+        ?: displayItem.overview
+}
 
 /**
  * TENFOOT (SHW-87) — nativní 10-foot tělo karty filmu/seriálu na TV. Volá se z [DetailScreen] ve TV
  * form-factoru; sdílené sheety (výběr zdroje, galerie, recenze, tvorba osoby) + playback signaling
  * zůstávají v DetailScreen (společné pro telefon i TV).
  *
- * Immersive hero (fixní nahoře — WS fáze: fanart nemizí při fokusu akce) + POD ním scrollovatelné
- * sekce plné parity ([TvDetailSections]: popis, Tvůrci, sezóny/epizody, kolekce, od režiséra/studia).
+ * TV DETAIL REDESIGN (OTA 299): dvě rozvržení podle `uiState.tvDetailLayout`:
+ *  - IMMERSIVE_OVERLAY (default) = blok název→popis→akce PŘES fanart vlevo + první řada obsahu bez scrollu.
+ *  - CLASSIC_HERO = původní fixní hero pruh nahoře + scrollovatelné sekce pod ním.
  */
 @Composable
 internal fun TvDetailBody(
@@ -68,7 +85,8 @@ internal fun TvDetailBody(
     onCollectionPartClick: ((CollectionPart) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val backdropUrl = displayItem.backdropUrl("w1280")
+    // 4K TV: w1280 se na immersive fanartu roztaženém přes celou plochu pixeluje → plné rozlišení.
+    val backdropUrl = displayItem.backdropUrl("original")
     val genres = uiState.movieDetails?.genres?.map { it.name }
         ?: uiState.showDetails?.genres?.map { it.name }
         ?: displayItem.genres
@@ -77,27 +95,87 @@ internal fun TvDetailBody(
 
     val hasReviews = uiState.csfdReviews.isNotEmpty()
     val hasGallery = uiState.csfdId != null && uiState.uploaderConfigured
-
-    // Popis (fallback: český TMDB → ČSFD → TMDB → item).
-    val tmdbCz = uiState.tmdbCzOverview
-    val plot = tmdbCz?.takeIf { looksCzech(it) }
-        ?: uiState.csfdPlot?.takeIf { it.isNotBlank() }
-        ?: tmdbCz?.takeIf { it.isNotBlank() }
-        ?: uiState.movieDetails?.overview
-        ?: uiState.showDetails?.overview
-        ?: displayItem.overview
+    val plot = resolveTvPlot(uiState, displayItem)
 
     // Jsou pod hero nějaké sekce? Pokud ano, dej jim víc místa (nižší hero); jinak plný immersive hero.
     val hasSeasons = uiState.showSeasons && displayItem.type == MediaType.SHOW && uiState.seasons.isNotEmpty()
     val hasCreators = uiState.showCreators &&
         (uiState.cast.isNotEmpty() || uiState.directors.isNotEmpty() || uiState.writers.isNotEmpty() ||
             uiState.cinematographers.isNotEmpty() || !genres.isNullOrEmpty())
-    val hasSections = hasCreators || hasSeasons ||
+    val hasContentRows = hasSeasons ||
         (uiState.showCollections && (uiState.mergedCollection != null || uiState.collection != null)) ||
         (uiState.showDirector && uiState.directorMovies != null) ||
-        (uiState.showStudio && uiState.studioMovies != null) ||
-        !plot.isNullOrBlank()
+        (uiState.showStudio && uiState.studioMovies != null)
+    val hasSections = hasCreators || hasContentRows || !plot.isNullOrBlank()
 
+    when (uiState.tvDetailLayout) {
+        TvDetailLayout.IMMERSIVE_OVERLAY -> ImmersiveOverlayLayout(
+            displayItem = displayItem,
+            displayTitle = displayTitle,
+            uiState = uiState,
+            viewModel = viewModel,
+            genres = genres,
+            plot = plot,
+            plotExpanded = plotExpanded,
+            onTogglePlot = { plotExpanded = !plotExpanded },
+            hasReviews = hasReviews,
+            hasGallery = hasGallery,
+            onOpenReviews = onOpenReviews,
+            onPlayJellyfin = onPlayJellyfin,
+            onCollectionPartClick = onCollectionPartClick,
+            backdropUrl = backdropUrl,
+            endTime = endTime,
+            hasContentRows = hasContentRows,
+            modifier = modifier,
+        )
+        TvDetailLayout.CLASSIC_HERO -> ClassicHeroLayout(
+            displayItem = displayItem,
+            displayTitle = displayTitle,
+            uiState = uiState,
+            viewModel = viewModel,
+            onBack = onBack,
+            onPlayJellyfin = onPlayJellyfin,
+            onOpenReviews = onOpenReviews,
+            onCollectionPartClick = onCollectionPartClick,
+            genres = genres,
+            plot = plot,
+            plotExpanded = plotExpanded,
+            onTogglePlot = { plotExpanded = !plotExpanded },
+            hasReviews = hasReviews,
+            hasGallery = hasGallery,
+            backdropUrl = backdropUrl,
+            endTime = endTime,
+            hasSections = hasSections,
+            modifier = modifier,
+        )
+    }
+}
+
+/**
+ * Původní layout (device-ověřený): immersive hero FIXNÍ nahoře (fanart nemizí při fokusu akce) + POD ním
+ * scrollovatelné sekce plné parity. Zachováno jako přepínatelná varianta (Nastavení → Detail obsahu → Rozvržení).
+ */
+@Composable
+private fun ClassicHeroLayout(
+    displayItem: MediaItem,
+    displayTitle: String,
+    uiState: DetailUiState,
+    viewModel: DetailViewModel,
+    onBack: () -> Unit,
+    onPlayJellyfin: ((String) -> Unit)?,
+    onOpenReviews: () -> Unit,
+    onCollectionPartClick: ((CollectionPart) -> Unit)?,
+    genres: List<String>?,
+    plot: String?,
+    plotExpanded: Boolean,
+    onTogglePlot: () -> Unit,
+    hasReviews: Boolean,
+    hasGallery: Boolean,
+    backdropUrl: String?,
+    endTime: String?,
+    hasSections: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val scroll = rememberScrollState()
     BoxWithConstraints(
         modifier
@@ -177,42 +255,17 @@ internal fun TvDetailBody(
                         .padding(horizontal = 48.dp, vertical = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(
-                            text = displayTitle,
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        displayItem.year?.let {
-                            Text("$it", style = MaterialTheme.typography.titleLarge, color = Color.White.copy(alpha = 0.85f))
-                        }
-                        val csfdRating = uiState.csfdRating
-                        if (csfdRating != null) {
-                            // Klik na ČSFD badge → recenze (sdílený sheet v DetailScreen).
-                            CsfdRatingBadge(
-                                rating = csfdRating,
-                                big = true,
-                                modifier = if (hasReviews) Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable { onOpenReviews() }
-                                    .tvFocusable(shape = RoundedCornerShape(6.dp)) else Modifier,
-                            )
-                        } else {
-                            displayItem.rating?.let { rating ->
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
-                                    Text("%.1f".format(rating), style = MaterialTheme.typography.titleLarge, color = Color.White)
-                                }
-                            }
-                        }
-                    }
+                    TvDetailTitleRow(
+                        title = displayTitle,
+                        year = displayItem.year,
+                        csfdRating = uiState.csfdRating,
+                        fallbackRating = displayItem.rating,
+                        hasReviews = hasReviews,
+                        onOpenReviews = onOpenReviews,
+                        hasGallery = hasGallery,
+                        onOpenGallery = { viewModel.openGallery() },
+                        onWhite = true,
+                    )
                     if (!genres.isNullOrEmpty()) {
                         Text(
                             text = genres.joinToString(" · "),
@@ -244,10 +297,96 @@ internal fun TvDetailBody(
                     genres = genres,
                     plot = plot,
                     plotExpanded = plotExpanded,
-                    onTogglePlot = { plotExpanded = !plotExpanded },
+                    onTogglePlot = onTogglePlot,
                     onCollectionPartClick = onCollectionPartClick,
+                    onPlayJellyfin = onPlayJellyfin,
+                    showPlot = true,
                 )
             }
         }
+    }
+}
+
+/**
+ * Sdílený řádek: název + rok + ČSFD hodnocení + fokusovatelné akce „Recenze" (F3 — viditelný spouštěč,
+ * ne jen skrytý klik na badge) a „Galerie" (F3 — dřív jen skrytý klik na fanart). `onWhite` = text na fanartu.
+ */
+@Composable
+internal fun TvDetailTitleRow(
+    title: String,
+    year: Int?,
+    csfdRating: Int?,
+    fallbackRating: Float?,
+    hasReviews: Boolean,
+    onOpenReviews: () -> Unit,
+    hasGallery: Boolean,
+    onOpenGallery: () -> Unit,
+    onWhite: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val titleColor = if (onWhite) Color.White else MaterialTheme.colorScheme.onBackground
+    // KOLO2 (L): chipy Recenze/Galerie jako fokusová skupina → D-pad dolů z nich míří jednotně do akční
+    // skupiny (která má enter=primární CTA), místo geometrického přeskoku na náhodné tlačítko.
+    Row(
+        modifier.focusGroup(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            color = titleColor,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        year?.let {
+            Text("$it", style = MaterialTheme.typography.titleLarge, color = titleColor.copy(alpha = 0.85f))
+        }
+        if (csfdRating != null) {
+            CsfdRatingBadge(rating = csfdRating, big = true)
+        } else {
+            fallbackRating?.let { rating ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
+                    Text("%.1f".format(rating), style = MaterialTheme.typography.titleLarge, color = titleColor)
+                }
+            }
+        }
+        // F3: viditelné fokusovatelné akce místo skrytých kliků.
+        if (hasReviews) {
+            DetailInlineChip(icon = Icons.Filled.RateReview, label = "Recenze", onClick = onOpenReviews, onWhite = onWhite)
+        }
+        if (hasGallery) {
+            DetailInlineChip(icon = Icons.Filled.PhotoLibrary, label = "Galerie", onClick = onOpenGallery, onWhite = onWhite)
+        }
+    }
+}
+
+/** Malý fokusovatelný chip (ikona + text) pro sekundární akce v title-row (Recenze/Galerie). */
+@Composable
+private fun DetailInlineChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    onWhite: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    val bg = if (onWhite) Color.Black.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceContainerHigh
+    val fg = if (onWhite) Color.White else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier
+            .tvFocusBorder(shape = shape)
+            .clip(shape)
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(imageVector = icon, contentDescription = label, tint = fg, modifier = Modifier.size(20.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = fg, maxLines = 1)
     }
 }

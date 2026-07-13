@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.detail.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,7 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -52,6 +55,7 @@ import java.util.Calendar
  * (sdílený LaunchedEffect v DetailScreen) → onPlayStreamUrl → TV přehrávač.
  */
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 internal fun TvDetailActions(
     uiState: DetailUiState,
     viewModel: DetailViewModel,
@@ -73,7 +77,16 @@ internal fun TvDetailActions(
     LaunchedEffect(hasSource) { runCatching { primaryFocus.requestFocus() } }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        // KOLO2 (L): akční řada = fokusová skupina; vstup z JAKÉHOKOLI směru (D-pad dolů z chipů Recenze/
+        // Galerie, nebo z popisu) přistane VŽDY na primárním CTA (Přehrát/Hledat zdroje), ne na náhodném
+        // geometricky nejbližším tlačítku (dřív „z Recenze dolů skočilo na Oblíbené").
+        Row(
+            modifier = Modifier
+                .focusGroup()
+                .focusProperties { enter = { primaryFocus } },
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (hasSource) {
                 TvActionButton(
                     icon = Icons.Filled.PlayArrow,

@@ -5,7 +5,11 @@ import java.time.Duration
 
 object Config {
     const val TRAKT_VERSION = "2"
-    const val TRAKT_BASE_URL = "https://apiz.trakt.tv/"
+    // COUCH R3 fix (2026-07-13): `apiz.trakt.tv` vracel 403 na veřejné/api-key endpointy (trending/popular/
+    // users/me/lists) — OAuth přes něj náhodou procházel (proto watchlist fungoval, ale Objevit/seznamy/
+    // doporučení ne). Ověřeno curl: apiz/movies/trending=403, api/movies/trending=200 se STEJNÝM client-id.
+    // Kanonický host je `api.trakt.tv`.
+    const val TRAKT_BASE_URL = "https://api.trakt.tv/"
     const val TMDB_BASE_URL = "https://api.themoviedb.org/3/"
 
     const val TRAKT_REDIRECT_URL = "showlyfin://trakt"

@@ -8,6 +8,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
+import com.github.jankoran90.showlyfin.core.domain.TraktCreds
 import timber.log.Timber
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
@@ -122,10 +123,30 @@ class ProfileRepository @Inject constructor(
         return added
     }
 
-    /** Plan GATEKEY G-A3 — stáhne backend roster a nasadí stuby. Best-effort; vrací počet přidaných. */
-    suspend fun seedFromBackendRoster(): Int {
+    /**
+     * Plan GATEKEY G-A3 — stáhne backend roster a nasadí stuby. Best-effort; vrací počet přidaných.
+     * COUCH: [requireJellyfinUser] = seeduj JEN profily s Jellyfin identitou (sledování = JF uživatel).
+     * Na TV tím odfiltrujeme čistě poslechové/device-local profily; profily se stejným `jellyfinUserId`
+     * (honza + neli = JF „dospělý") navíc [seedFromRoster] deduplikuje na jeden (párování na backendKey).
+     */
+    suspend fun seedFromBackendRoster(requireJellyfinUser: Boolean = false): Int {
         val metas = configGateway.fetchAllProfiles() ?: return 0
-        return seedFromRoster(metas)
+        val filtered = if (requireJellyfinUser) metas.filter { it.jellyfinUserId.isNotBlank() } else metas
+        return seedFromRoster(filtered)
+    }
+
+    /**
+     * COUCH — TV bootstrap: sjednoť profily se serverem jako telefon. Zajisti dostupnost backendu
+     * (auto-login z build env, kdyby chyběla cookie po čisté instalaci) a naseeduj JF-user profily.
+     * Best-effort — TV bez sítě/backendu prostě ponechá stávající lokální profily.
+     */
+    suspend fun seedTvRosterBestEffort() {
+        runCatching {
+            if (!configGateway.isAvailable() && ProfileConfigGateway.autoLoginPassword.isNotBlank()) {
+                configGateway.login(ProfileConfigGateway.autoLoginPassword)
+            }
+            seedFromBackendRoster(requireJellyfinUser = true)
+        }
     }
 
     suspend fun count(): Int = dao.count()
@@ -324,13 +345,44 @@ class ProfileRepository @Inject constructor(
         dao.update(p.copy(serverUrl = serverUrl, jellyfinToken = token, configJson = configJson ?: p.configJson))
     }
 
+    /**
+     * COUCH per-profil — zrcadli AKTUÁLNÍ Trakt token z kanonických `trakt_prefs` do balíku daného
+     * profilu (typicky POSLEDNÍHO aktivního, PŘED přepnutím). Trakt refresh **rotuje refresh_token**
+     * a ukládá ho jen do prefs, ne do profilu; bez tohoto write-backu by [ProfileConfigApplier] při
+     * návratu na profil přepsal prefs STARÝM (rotací zneplatněným) tokenem z balíku → 401 → odhlášení.
+     * Zároveň zrcadlí legacy token (jen v prefs, bez per-profil balíku) do balíku, aby ho gate uviděl.
+     * Idempotentní: shodný token = no-op. Best-effort push na backend (cross-device).
+     */
+    private suspend fun captureCurrentTraktIntoProfile(profileId: Long) {
+        val access = prefs.getString("TRAKT_ACCESS_TOKEN", null)?.takeIf { it.isNotBlank() } ?: return
+        val profile = dao.getById(profileId) ?: return
+        val override = ProfileConfig.fromJson(profile.configJson)
+        if (override.credentials.trakt?.accessToken == access) return // shoda → nic
+        val newTrakt = TraktCreds(
+            accessToken = access,
+            refreshToken = prefs.getString("TRAKT_REFRESH_TOKEN", null).orEmpty(),
+            createdAtMillis = prefs.getLong("TRAKT_ACCESS_TOKEN_TIMESTAMP", 0L),
+            expiresAtMillis = prefs.getLong("TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP", 0L),
+            username = override.credentials.trakt?.username,
+        )
+        val newOverride = override.copy(credentials = override.credentials.copy(trakt = newTrakt))
+        val newJson = ProfileConfig.toJson(newOverride)
+        dao.update(profile.copy(configJson = newJson))
+        // Best-effort write-through (gateway polyká chyby); NEaplikujeme — prefs už ten token drží.
+        configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId)
+    }
+
     suspend fun setActive(profileId: Long) {
         val profile = dao.getById(profileId) ?: return
-        _activeProfile.value = profile
-        prefs.edit().putLong(PREF_ACTIVE_PROFILE_ID, profileId).apply()
-        // Backward compat: write canonical Jellyfin prefs so existing ViewModels work.
+        // COUCH per-profil: rotovaný/legacy Trakt token patří POSLEDNÍMU aktivnímu profilu — zrcadli ho
+        // do jeho balíku DŘÍV, než applier níže přepíše prefs tokenem z balíku aktivovaného profilu.
+        prefs.getLong(PREF_ACTIVE_PROFILE_ID, 0L).takeIf { it > 0L }?.let { captureCurrentTraktIntoProfile(it) }
+        // COUCH R2 fix: kanonické Jellyfin prefs zapiš PŘED emisí _activeProfile. Konzumenti (TvHomeViewModel
+        // reloadAllRows na activeProfile) čtou tyto prefs při reloadu — kdyby se emise stala dřív, reload by
+        // sáhl na STARÉ creds a obsah by se nezměnil (device 306: „přepnutí profilu nic nedělá").
         // userId VŽDY s pomlčkami — konzumenti parsují UUID.fromString (VAULT V7, viz dashUuid).
         prefs.edit()
+            .putLong(PREF_ACTIVE_PROFILE_ID, profileId)
             .putString("jellyfin_server_url", profile.serverUrl)
             .putString("jellyfin_token", profile.jellyfinToken)
             .putString("jellyfin_user_id", dashUuid(profile.jellyfinUserId))
@@ -340,6 +392,8 @@ class ProfileRepository @Inject constructor(
         val config = effectiveConfigFor(profile)
         configApplier.apply(config)
         _activeConfig.value = config
+        // Emise profilu AŽ po zápisu prefs + configu → observeři reloadují s korektními creds.
+        _activeProfile.value = profile
         // Plan PROFILES Fáze 2: zkus stáhnout aktuální balík z backendu (cache = lokální configJson).
         // Best-effort + timeout, ať přepnutí profilu nevisí offline. Uploader creds aplikované výše
         // → gateway má URL+cookie. Re-aplikuje jen pokud je profil pořád aktivní a balík přišel.

@@ -115,7 +115,11 @@ fun DetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) { viewModel.load(item) }
+    LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) {
+        viewModel.load(item)
+        // TENFOOT KOLO2 (K): po návratu (back) na tento titul obnov stashnutou filmografii, pokud tu je.
+        viewModel.reopenPendingPersonSheet(item)
+    }
 
     // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook — jednou po vstupu (auto-výběr zdroje řeší VM:
     // připnutý → knihovna → sdílej/RD dle path). Toast při odmítnutí (žádný zdroj / offline-only).
@@ -314,7 +318,8 @@ fun DetailScreen(
             loading = uiState.personSheetLoading,
             collection = uiState.personFilmography,
             roleLabel = uiState.personSheetRoleLabel,
-            onPartClick = { part -> viewModel.closePersonSheet(); onCollectionPartClick?.invoke(part) },
+            // TENFOOT KOLO2 (K): stash filmografie (ne zavření) → po Zpět z filmu se sem vrátíme s obsahem.
+            onPartClick = { part -> viewModel.stashPersonSheetForReturn(item); onCollectionPartClick?.invoke(part) },
             onDismiss = { viewModel.closePersonSheet() },
             canFavorite = uiState.personSheetKind != null,
             isFavorite = uiState.isPersonFavorite,

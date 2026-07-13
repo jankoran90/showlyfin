@@ -5,13 +5,14 @@ import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
-import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.tv.TvDestination
 import com.github.jankoran90.showlyfin.ui.tv.TvShell
 import com.github.jankoran90.showlyfin.ui.tv.jellyfin.TvJellyfinBrowserScreen
+import com.github.jankoran90.showlyfin.ui.tv.jellyfin.TvJellyfinDetailRoute
 import com.github.jankoran90.showlyfin.ui.tv.search.TvSearchScreen
 import com.github.jankoran90.showlyfin.ui.tv.settings.TvSettingsScreen
 import com.github.jankoran90.showlyfin.ui.tv.watchlist.TvWatchlistScreen
@@ -21,8 +22,8 @@ import com.github.jankoran90.showlyfin.ui.tv.watchlist.TvWatchlistScreen
  * `ShowlyfinPhoneApp`: back stack + `when`, ne Navigation-Compose). BACK popuje stack; na kořeni
  * (Home) systémový BACK propadne (ukončí appku).
  *
- * Fáze 1 smyčka: Home → Detail (reuse phone `DetailScreen` — jeho výběr zdroje je díky
- * `AdaptivePickerScaffold`/vc278 už D-pad-adaptivní) → Player (`PlaybackScreen`, TV D-pad hotový).
+ * Smyčka: Home → Detail (nativní immersive `TvDetailScreen`; výběr zdroje D-pad-adaptivní přes
+ * `AdaptivePickerScaffold`) → Player (`PlaybackScreen`, TV D-pad hotový).
  */
 @Composable
 fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
@@ -30,6 +31,32 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
 
     fun navigate(dest: TvDestination) = navVm.navigate(dest)
     fun back() = navVm.back()
+
+    // TENFOOT KOLO2 (N5): proklik karty v sekci detailu (kolekce / od režiséra / studia / tvorba osoby).
+    // Sdílené immersive Detailem i sjednoceným Jellyfin routem. tmdbId → nativní immersive detail (stub);
+    // jinak jellyfinId → JellyfinDetail (resolver dořeší i správný typ SHOW/MOVIE a immersive vzhled).
+    fun openCollectionPart(part: CollectionPart) {
+        val tmdb = part.tmdbId
+        val jfId = part.jellyfinId
+        when {
+            tmdb != null -> navigate(
+                TvDestination.Detail(
+                    MediaItem(
+                        traktId = 0L,
+                        tmdbId = tmdb,
+                        imdbId = null,
+                        title = part.title,
+                        year = part.year?.toIntOrNull(),
+                        overview = null,
+                        rating = null,
+                        genres = null,
+                        type = MediaType.MOVIE,
+                    ),
+                ),
+            )
+            jfId != null -> navigate(TvDestination.JellyfinDetail(jfId))
+        }
+    }
 
     BackHandler(enabled = navVm.canGoBack) { back() }
 
@@ -62,9 +89,9 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             libraryName = dest.libraryName,
             collectionType = dest.collectionType,
             parentItemType = dest.parentItemType,
-            // Bohatý film s tmdbId → nativní TV karta obsahu (fanart hero, sdílená s doporučovačem).
+            // Položka s tmdbId (film i seriál) → nativní TV immersive detail (fanart hero, sdílená s doporučovačem).
             onOpenRich = { item -> navigate(TvDestination.Detail(item)) },
-            // Bez tmdb / seriál → Jellyfin detail (reuse telefonní obrazovky).
+            // Bez tmdbId → resolver z jellyfinId (imdb→immersive, jinak fallback telefonní JellyfinDetail).
             onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
             // Složka/BOX_SET → zanoření (nová mřížka, BACK popuje).
             onDrillIn = { itemId, itemName, itemType ->
@@ -79,14 +106,24 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             },
         )
 
-        is TvDestination.JellyfinDetail -> JellyfinDetailScreen(
+        // TENFOOT KOLO2 (N3): Jellyfin obsah → nativní immersive detail (resolver z jellyfinId dohledá
+        // meta a deleguje na DetailScreen; telefonní JellyfinDetailScreen jen fallback bez tmdb/imdb).
+        is TvDestination.JellyfinDetail -> TvJellyfinDetailRoute(
             itemId = dest.itemId,
             onBack = { back() },
-            onPlay = { itemId -> navigate(TvDestination.Player(itemId = itemId)) },
-            onOpenEpisodes = { seriesId, name -> navigate(TvDestination.EpisodePicker(seriesId, name)) },
-            onCollectionPartClick = { part ->
-                part.jellyfinId?.let { navigate(TvDestination.JellyfinDetail(it)) }
+            onCollectionPartClick = { part -> openCollectionPart(part) },
+            onPlayJellyfin = { itemId -> navigate(TvDestination.Player(itemId = itemId)) },
+            onPlayStreamUrl = { url, title, subtitleQuery ->
+                navigate(
+                    TvDestination.Player(
+                        externalUrl = url,
+                        externalTitle = title,
+                        subtitleQuery = subtitleQuery,
+                    ),
+                )
             },
+            onOpenEpisodes = { seriesId, name -> navigate(TvDestination.EpisodePicker(seriesId, name)) },
+            onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
         )
 
         is TvDestination.EpisodePicker -> EpisodePickerScreen(
@@ -99,31 +136,9 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         is TvDestination.Detail -> DetailScreen(
             item = dest.item,
             onBack = { back() },
-            // TENFOOT WS-B: karty v sekcích detailu (kolekce / od režiséra / studia / tvorba osoby) →
-            // otevři další detail (JF pokud vlastníme, jinak bohatý TMDB detail ze stubu).
-            onCollectionPartClick = { part ->
-                val jfId = part.jellyfinId
-                val tmdb = part.tmdbId
-                if (jfId != null) {
-                    navigate(TvDestination.JellyfinDetail(jfId))
-                } else if (tmdb != null) {
-                    navigate(
-                        TvDestination.Detail(
-                            MediaItem(
-                                traktId = 0L,
-                                tmdbId = tmdb,
-                                imdbId = null,
-                                title = part.title,
-                                year = part.year?.toIntOrNull(),
-                                overview = null,
-                                rating = null,
-                                genres = null,
-                                type = MediaType.MOVIE,
-                            ),
-                        ),
-                    )
-                }
-            },
+            // TENFOOT KOLO2 (N5): karty v sekcích detailu → tmdbId má přednost (nativní immersive detail),
+            // jinak jellyfinId přes resolver. Sdílená logika s Jellyfin routem (openCollectionPart).
+            onCollectionPartClick = { part -> openCollectionPart(part) },
             // Fáze 1: po výběru zdroje / přehrání z knihovny navazujeme na TV přehrávač.
             onPlayStreamUrl = { url, title, subtitleQuery ->
                 navigate(

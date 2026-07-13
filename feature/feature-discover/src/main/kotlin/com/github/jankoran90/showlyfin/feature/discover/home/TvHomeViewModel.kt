@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.feature.discover.home
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
@@ -17,6 +19,7 @@ import com.github.jankoran90.showlyfin.core.domain.home.SidebarEntry
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.TraktRemoteDataSource
+import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
@@ -30,7 +33,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -67,9 +73,11 @@ class TvHomeViewModel @Inject constructor(
     private val store: HomeLayoutStore,
     private val traktApi: TraktRemoteDataSource,
     private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
+    private val traktLoader: TraktRowLoader,
     private val tmdb: TmdbRemoteDataSource,
     private val favorites: FavoritesStore,
     private val workingSources: WorkingSourceStore,
+    private val profileRepository: ProfileRepository,
     private val apiClient: ApiClient,
     private val clientInfo: ClientInfo,
     private val deviceInfo: DeviceInfo,
@@ -85,8 +93,24 @@ class TvHomeViewModel @Inject constructor(
     val allRows: StateFlow<List<HomeRowConfig>> = store.rows
     val sidebar: StateFlow<List<SidebarEntry>> = store.sidebar
 
+    // COUCH per-profil — Trakt sekce/řady jen když AKTIVNÍ profil má vlastní Trakt token v balíku
+    // (deti až po vlastním device-loginu → dětský Trakt). Konzumenti (TvShell, loadOnce) beze změny.
+    private fun hasTrakt(c: ProfileConfig): Boolean = !c.credentials.trakt?.accessToken.isNullOrBlank()
+    val traktAllowed: StateFlow<Boolean> = profileRepository.activeConfig
+        .map { hasTrakt(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), hasTrakt(profileRepository.activeConfig.value))
+
+    /** Id aktivního profilu — TvHomeScreen na jeho změnu přenačte i JF knihovní řady (LibraryRowsViewModel). */
+    val activeProfileId: StateFlow<Long?> = profileRepository.activeProfile
+        .map { it?.id }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), profileRepository.activeProfile.value?.id)
+
     /** Netflix immersive pozadí (fokusovaná karta řídí fanart). */
     val immersiveBackground: StateFlow<Boolean> = store.immersiveBackground
+
+    /** OTA 299: immersive hlavička nahoře (název/rok/popis fokusované karty) — oddělený přepínač od pozadí. */
+    val immersiveHeader: StateFlow<Boolean> = store.immersiveHeader
+    fun setImmersiveHeader(enabled: Boolean) = store.setImmersiveHeader(enabled)
 
     // ── Inline editor (Kodi-like) — pass-through na [HomeLayoutStore] ──
     fun moveRow(id: String, up: Boolean) = store.move(id, up)
@@ -107,6 +131,32 @@ class TvHomeViewModel @Inject constructor(
 
     private val loadedHash = mutableMapOf<String, Int>()
     private val jobs = mutableMapOf<String, Job>()
+
+    init {
+        // COUCH per-profil: každý profil má vlastní layout domova. Nejdřív přepni store na layout profilu
+        // (i iniciálně), pak (na ZMĚNU) přenačti obsah — jeden collector = pořadí switchProfile → reload.
+        var firstProfileEmit = true
+        profileRepository.activeProfile
+            .onEach { p ->
+                store.switchProfile(p?.id)
+                if (firstProfileEmit) firstProfileEmit = false
+                else {
+                    android.util.Log.i("COUCH_Home", "profil změněn → ${p?.name} (id=${p?.id}, trakt=${traktAllowed.value}) → reload")
+                    reloadAllRows()
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+
+    /** Zahoď cache řad a přenačti všechny aktuálně zapnuté (po přepnutí profilu / vynuceně). */
+    fun reloadAllRows() {
+        android.util.Log.i("COUCH_Home", "reloadAllRows: ${rowConfigs.value.size} řad")
+        loadedHash.clear()
+        jobs.values.forEach { it.cancel() }
+        jobs.clear()
+        _states.value = emptyMap()
+        rowConfigs.value.forEach { ensureRowLoaded(it) }
+    }
 
     /** Zavolej z UI, když řada vstoupí do viewportu. Reaguje na změnu configu (editor) = reload. */
     fun ensureRowLoaded(config: HomeRowConfig) {
@@ -148,7 +198,13 @@ class TvHomeViewModel @Inject constructor(
         _states.update { it + (config.id to HomeRowState(config, items = items, loading = false)) }
     }
 
-    private suspend fun loadOnce(config: HomeRowConfig): List<HomeRowItem> = when (config.source) {
+    private suspend fun loadOnce(config: HomeRowConfig): List<HomeRowItem> {
+        // COUCH R2: zamčený/dětský profil nevidí žádné Trakt řady (watchlist/historie/seznam/couchmonkey).
+        if (config.source in TRAKT_SOURCES && !traktAllowed.value) {
+            android.util.Log.i("COUCH_Home", "Trakt řada '${config.id}' skryta — zamčený profil")
+            return emptyList()
+        }
+        return when (config.source) {
         HomeRowSourceType.DISCOVER -> loadDiscover(config)
         HomeRowSourceType.CONTINUE_WATCHING -> loadJellyfin(config) { userUuid ->
             resumeItems(userUuid, config.limit)
@@ -194,8 +250,18 @@ class TvHomeViewModel @Inject constructor(
         }
         // NOVÝ zdroj: tituly se zapamatovaným zdrojem přehrávání (WorkingSourceStore).
         HomeRowSourceType.SAVED_FOR_PLAYBACK -> loadSavedForPlayback(config)
+        // COUCH T1/T2 — Trakt řady přes sdílený loader (OAuth; nepřihlášený/prázdný → řada se nezobrazí).
+        HomeRowSourceType.TRAKT_WATCHLIST ->
+            traktLoader.watchlist(config.params[HomeRowParams.WATCHLIST_KIND] ?: "all").map { it.toHomeRowItem(config) }
+        HomeRowSourceType.TRAKT_HISTORY ->
+            traktLoader.history(config.params[HomeRowParams.WATCHLIST_KIND] ?: "all").map { it.toHomeRowItem(config) }
+        HomeRowSourceType.TRAKT_LIST ->
+            config.params[HomeRowParams.LIST_ID]?.toLongOrNull()?.let { id -> traktLoader.list(id).map { it.toHomeRowItem(config) } } ?: emptyList()
+        HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS ->
+            traktLoader.couchmonkeyRecommendations().map { it.toHomeRowItem(config) }
         // LIBRARY_TILES / GENRES / STUDIOS = dlaždicové navigační řady → 2. vlna (viz Known gaps).
         else -> emptyList()
+        }
     }
 
     private suspend fun resumeItems(userUuid: UUID, limit: Int): List<BaseItemDto> =
@@ -212,6 +278,8 @@ class TvHomeViewModel @Inject constructor(
             userId = userUuid,
             limit = limit,
             fields = ROW_ITEM_FIELDS,
+            // OTA 299: bez enableImages nechodí imageTags → landscape karta „Další díly" neměla still dílu.
+            enableImages = true,
         ).content.items
 
     // ── SAVED_FOR_PLAYBACK (zapamatované zdroje) ───────────────────────────────
@@ -303,6 +371,16 @@ class TvHomeViewModel @Inject constructor(
             }
         }.awaitAll()
     }
+
+    /** COUCH T1/T2 — obohacené Trakt [MediaItem] (z [TraktRowLoader]) → [HomeRowItem] pro řadu domova. */
+    private fun MediaItem.toHomeRowItem(config: HomeRowConfig) = HomeRowItem(
+        key = "trakt_${config.id}_${type}_${tmdbId ?: traktId}",
+        title = titleCz?.takeIf { it.isNotBlank() } ?: title,
+        year = year,
+        posterUrl = posterUrl("w342"),
+        landscapeUrl = backdropUrl("w780"),
+        mediaItem = this,
+    )
 
     // ── Jellyfin (Pokračovat / Další díly) ─────────────────────────────────────
 
@@ -443,13 +521,22 @@ class TvHomeViewModel @Inject constructor(
         )
     }
 
-    /** Široký obrázek: backdrop → thumb → (u epizody) backdrop seriálu → null (poster fallback). */
+    /**
+     * Široký obrázek. U EPIZODY (řada „Další díly") preferuj NÁHLED KONKRÉTNÍHO DÍLU (still = Primary
+     * epizody) před fanartem seriálu (OTA 299 — dřív karta ukazovala jen fanart seriálu, ne díl).
+     * Jinak: backdrop → thumb → (u epizody bez stillu) backdrop seriálu → null (poster fallback).
+     */
     private fun BaseItemDto.landscapeUrl(serverUrl: String, token: String): String? {
         val backdropTag = backdropImageTags?.firstOrNull()
         val thumbTag = imageTags?.get(ImageType.THUMB)
+        val primaryTag = imageTags?.get(ImageType.PRIMARY)
         return when {
+            // Epizoda: still dílu (Primary epizody) = reálný náhled té epizody, ne fanart seriálu.
+            type == BaseItemKind.EPISODE && primaryTag != null ->
+                "$serverUrl/Items/$id/Images/Primary?fillWidth=640&quality=85&tag=$primaryTag&api_key=$token"
             backdropTag != null -> "$serverUrl/Items/$id/Images/Backdrop/0?fillWidth=640&quality=85&tag=$backdropTag&api_key=$token"
             thumbTag != null -> "$serverUrl/Items/$id/Images/Thumb?fillWidth=640&quality=85&tag=$thumbTag&api_key=$token"
+            // Fallback (epizoda bez stillu): fanart seriálu.
             type == BaseItemKind.EPISODE && seriesId != null ->
                 "$serverUrl/Items/$seriesId/Images/Backdrop/0?fillWidth=640&quality=85&api_key=$token"
             else -> null
@@ -486,6 +573,14 @@ class TvHomeViewModel @Inject constructor(
 
 /** Styl karty pro řadu (helper pro render). */
 fun HomeCardStyle.isLandscape(): Boolean = this == HomeCardStyle.LANDSCAPE
+
+/** COUCH R2: Trakt zdroje řad — skryté pro zamčený/dětský profil. */
+private val TRAKT_SOURCES = setOf(
+    HomeRowSourceType.TRAKT_WATCHLIST,
+    HomeRowSourceType.TRAKT_HISTORY,
+    HomeRowSourceType.TRAKT_LIST,
+    HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS,
+)
 
 /** Sdílená sada Jellyfin ItemFields pro řady domova (providerIds kvůli klik-mapování, overview kvůli immersive). */
 private val ROW_ITEM_FIELDS = listOf(

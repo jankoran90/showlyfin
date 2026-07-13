@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -51,7 +52,7 @@ import com.github.jankoran90.showlyfin.core.domain.home.HomeRowParams.boolParam
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSourceType
 import com.github.jankoran90.showlyfin.core.domain.home.LibrarySummary
-import com.github.jankoran90.showlyfin.core.ui.ScrollToTopBringIntoViewSpec
+import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
@@ -72,7 +73,21 @@ private data class Rail(
     val configId: String,
     /** Popisky pod/na kartách (immersive Netflix styl je skrývá — per řada). */
     val showTitles: Boolean = true,
+    /** KOLO2 (M): immersive hlavička (název/rok/popis fokusované karty nahoře) — per řada. */
+    val immersiveHeader: Boolean = false,
 )
+
+/**
+ * BringIntoViewSpec, který na vertikální ose NIKDY nescrolluje (vždy 0). Nasazen na LazyColumn domova:
+ * fokus karty (a jeho případná změna bounds) tak nemůže hnout svislým seznamem — svislý „bump" při vodorovném
+ * projíždění karet je konstrukčně vyloučen. Svislé pozicování řad řeší VÝHRADNĚ explicitní
+ * `animateScrollToItem(focusedIndex)` (klíčovaný jen na změnu ŘADY). Uvnitř řad se obnoví DEFAULT biv, aby
+ * horizontální LazyRow scrolloval normálně.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private val NoAutoScrollBiv = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
+}
 
 /**
  * TENFOOT (SHW-87) — TV domov (Kodi Arctic Fuse styl). Vertikální seznam horizontálních railů dle
@@ -88,6 +103,7 @@ fun TvHomeScreen(
     immersive: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
     modifier: Modifier = Modifier,
+    immersiveHeader: Boolean = true,
     homeVm: TvHomeViewModel = hiltViewModel(),
     libraryVm: LibraryRowsViewModel = hiltViewModel(),
 ) {
@@ -96,7 +112,9 @@ fun TvHomeScreen(
     val states by homeVm.states.collectAsStateWithLifecycle()
     val libraryState by libraryVm.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) { libraryVm.load() }
+    // COUCH R2: JF knihovní řady přenačti i při PŘEPNUTÍ profilu (nejen jednou) — jiný profil = jiné knihovny.
+    val activeProfileId by homeVm.activeProfileId.collectAsStateWithLifecycle()
+    LaunchedEffect(activeProfileId) { libraryVm.load() }
     // Seed-once řad per knihovna, jakmile známe seznam (neprázdné) knihoven.
     LaunchedEffect(libraryState.rows) {
         val libs = libraryState.rows.map { LibrarySummary(it.libraryId, it.libraryName, it.collectionType) }
@@ -117,14 +135,14 @@ fun TvHomeScreen(
                     val libRow = libraryState.rows.firstOrNull { it.libraryId == libId }
                     val items = libRow?.items?.map { it.toHomeRowItem() }?.applyConfig(cfg).orEmpty()
                     if (items.isNotEmpty()) {
-                        add(Rail(cfg.id, cfg.title.ifBlank { libRow?.libraryName.orEmpty() }, cfg.cardStyle, items, cfg.id, cfg.showTitles))
+                        add(Rail(cfg.id, cfg.title.ifBlank { libRow?.libraryName.orEmpty() }, cfg.cardStyle, items, cfg.id, cfg.showTitles, cfg.immersiveHeader))
                     }
                 }
                 HomeRowSourceType.JELLYFIN_LIBRARIES -> Unit // deprecated meta — migrováno pryč
                 else -> {
                     val st = states[cfg.id]
                     if (st != null && st.items.isNotEmpty()) {
-                        add(Rail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, st.items, cfg.id, cfg.showTitles))
+                        add(Rail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, st.items, cfg.id, cfg.showTitles, cfg.immersiveHeader))
                     }
                 }
             }
@@ -142,18 +160,20 @@ fun TvHomeScreen(
         libraryState.rows.map { LibrarySummary(it.libraryId, it.libraryName, it.collectionType) }
     }
 
-    // Immersive: fokusovaná karta → info nahoru (pozadí) + lokální hero header.
-    val focusedInfo: ImmersiveInfo? = if (immersive) focusedItem?.toImmersiveInfo() else null
-    LaunchedEffect(focusedInfo) { onFocusItem(focusedInfo) }
+    // Immersive: fokusovaná karta → info nahoru (pozadí, gated `immersive` v TvShell) + lokální hero header
+    // (gated `immersiveHeader`). Info počítej, když je aspoň jedno zapnuté; pozadí posílej jen když `immersive`.
+    val focusedInfo: ImmersiveInfo? =
+        if (immersive || immersiveHeader) focusedItem?.toImmersiveInfo() else null
+    LaunchedEffect(focusedInfo, immersive) { onFocusItem(if (immersive) focusedInfo else null) }
 
-    // Stránkování řad: fokusovaná řada se zarovná k hornímu okraji viewportu (hero je item 0, řada s indexem
-    // i je list-item i+1). U PRVNÍ řady (i==0) scrollni na 0 → hero zůstane vidět nad ní. U dalších scrollni
-    // na i+1 → řada vyjede nahoru a hero se odroluje = „jedna řada na stránku".
+    // DEFINITIVNÍ fix bumpu (user 2026-07-13, kolo 2): vertikální scroll je 100 % pod explicitní kontrolou —
+    // zarovnání fokusované řady se děje JEN při změně ŘADY (`focusedIndex`), nikdy z bring-into-view. Auto
+    // vertikální bring-into-view je totiž zdrojem bumpu: fokus-scale/lift karty mění její bounds, což
+    // `BringIntoViewSpec` na LazyColumn interpretuje jako potřebu svislého scrollu i při čistě VODOROVNÉM
+    // projíždění karet. Řešení = spec, který na vertikální ose vrací VŽDY 0 (viz `NoAutoScrollBiv` níže), takže
+    // vodorovný pohyb NIKDY nehne seznamem; svislé pozicování obstará tento efekt (klíčovaný jen na `focusedIndex`).
     LaunchedEffect(focusedIndex) {
-        runCatching {
-            if (focusedIndex <= 0) listState.animateScrollToItem(0)
-            else listState.animateScrollToItem(focusedIndex + 1)
-        }
+        runCatching { listState.animateScrollToItem(focusedIndex.coerceAtLeast(0)) }
     }
 
     // Autofokus na PRVNÍ kartu PRVNÍ řady. Čeká na umístění řady, pak pár snímků a request.
@@ -180,66 +200,63 @@ fun TvHomeScreen(
         rails.getOrNull(focusedIndex)?.let { editingId = it.configId }
     }
 
-    // Anti-bump (user feedback OTA 297): při VODOROVNÉ navigaci karet v ne-první řadě LazyColumn svisle cukal,
-    // protože default BringIntoViewSpec dopočítával drobný svislý scroll na doodhalení fokusované karty. Zapojíme
-    // ScrollToTopBringIntoViewSpec (napsán přesně na tohle, dosud nezapojen) na vertikální list; uvnitř řad se
-    // obnoví DEFAULT (defaultBiv), aby vodorovný scroll řady fungoval normálně.
     val defaultBiv = LocalBringIntoViewSpec.current
     Box(Modifier.fillMaxSize()) {
-        // Stránkování řad (Netflix/GoogleTV): hero je PRVNÍ scrollovatelná položka listu → při přechodu na
-        // řady se přirozeně odroluje a přestane překrývat obsah. Snap (viz LaunchedEffect(focusedIndex) výše)
-        // zarovná fokusovanou řadu k hornímu okraji, takže je vždy celá vidět. Immersive pozadí je full-screen
-        // ZA listem (TvImmersiveBackground v TvShell) — beze změny.
-        CompositionLocalProvider(LocalBringIntoViewSpec provides ScrollToTopBringIntoViewSpec()) {
-        LazyColumn(
-            state = listState,
-            contentPadding = PaddingValues(bottom = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            modifier = modifier
-                .fillMaxSize()
-                .tvOverscan()
-                .onPreviewKeyEvent { e ->
-                    // Menu/Info (ovladače, které je mají) → editor. Root cause fix pro ovladače BEZ Menu = podržení
-                    // OK na kartě (combinedClickable onLongClick v RailSection), ne přes key handler zde.
-                    if (e.type == KeyEventType.KeyDown && (e.key == Key.Menu || e.key == Key.Info)) {
-                        openEditorForFocused(); true
-                    } else {
-                        false
+        Column(modifier.fillMaxSize().tvOverscan()) {
+            // Titulek sekce NAHOŘE VLEVO — konzistentní s ostatními sekcemi (Objevovat/Hledat/Nastavení). VŽDY.
+            Text(
+                text = "Domů",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
+            )
+            // Immersive hero = info PRÁVĚ fokusované karty (název/rok/žánr/popis). Master toggle `immersiveHeader`;
+            // STABILNÍ výška (bez per-řada gate → žádné prázdné zóny ani přeblikávání). OFF → rovnou řady.
+            // Immersive POZADÍ (fanart) je full-screen za vším v TvShell. Text se mění recompose (bez fade blikání).
+            if (immersiveHeader) {
+                Box(
+                    Modifier.fillMaxWidth().fillMaxHeight(0.32f),
+                    contentAlignment = Alignment.BottomStart,
+                ) {
+                    focusedInfo?.let {
+                        TvImmersiveHeader(info = it, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
                     }
-                },
-        ) {
-            item(key = "__hero") {
-                if (immersive) {
-                    // Hero zóna = 42 % výšky viewportu (velké hero jako Netflix). Header sedí dole; při snapu
-                    // dolů se celá zóna odroluje pryč a řady dostanou plný prostor.
-                    Box(Modifier.fillParentMaxHeight(0.42f).fillMaxWidth()) {
-                        TvImmersiveHeader(
-                            info = focusedInfo,
-                            modifier = Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 8.dp),
-                        )
-                    }
-                } else {
-                    Text(
-                        text = "Domů",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
-                    )
                 }
             }
-            itemsIndexed(rails, key = { _, r -> r.id }) { index, rail ->
-                RailSection(
-                    rail = rail,
-                    firstCardFocus = if (index == 0) firstFocus else null,
-                    onItemClick = ::clickItem,
-                    onItemFocused = { item -> focusedItem = item; focusedIndex = index },
-                    onItemLongPress = { editingId = rail.configId },
-                    showLabel = rail.showTitles,
-                    rowBringIntoViewSpec = defaultBiv,
-                )
+            // Vertikální list řad. `NoAutoScrollBiv` = žádný svislý scroll z fokusu karet (anti-bump); svislé
+            // pozicování řeší explicitní `animateScrollToItem(focusedIndex)`. Uvnitř řad DEFAULT biv (horizontála).
+            CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScrollBiv) {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(bottom = 40.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .onPreviewKeyEvent { e ->
+                            // Menu/Info (ovladače, které je mají) → editor. Root cause fix pro ovladače BEZ Menu =
+                            // podržení OK na kartě (combinedClickable onLongClick v RailSection).
+                            if (e.type == KeyEventType.KeyDown && (e.key == Key.Menu || e.key == Key.Info)) {
+                                openEditorForFocused(); true
+                            } else {
+                                false
+                            }
+                        },
+                ) {
+                    itemsIndexed(rails, key = { _, r -> r.id }) { index, rail ->
+                        RailSection(
+                            rail = rail,
+                            firstCardFocus = if (index == 0) firstFocus else null,
+                            onItemClick = ::clickItem,
+                            onItemFocused = { item -> focusedItem = item; focusedIndex = index },
+                            onItemLongPress = { editingId = rail.configId },
+                            showLabel = rail.showTitles,
+                            rowBringIntoViewSpec = defaultBiv,
+                        )
+                    }
+                }
             }
-        }
         }
 
         editingId?.let { id ->
@@ -310,11 +327,14 @@ private fun RailSection(
         // Uvnitř řady obnov DEFAULT BringIntoViewSpec (parent list má ScrollToTop) → vodorovný scroll LazyRow
         // funguje normálně a nepropaguje svislé cukání do LazyColumn.
         CompositionLocalProvider(LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
+        // COUCH DA4: rozestup karet z uživatelské volby (jeden multiplier pro všechny řady). Horizontální
+        // contentPadding NEškálujeme (drží ořez u sidebaru), škáluje se jen mezera mezi kartami.
+        val cardScale = LocalTvCardScale.current
         LazyRow(
             // vertical 10dp: prostor pro fokus lift (1.08×) + záři. horizontal 14dp: totéž vodorovně — LazyRow
             // ořezává na své bounds, tak PRVNÍ (a poslední) karta potřebuje odsazení ≥ scale přesah (~5dp) + záře
             // (~6dp), jinak se levý sloupec u sidebaru ořízne (user feedback OTA 297).
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(cardScale.spacing(12.dp)),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         ) {
             items(rail.items, key = { it.key }) { item ->

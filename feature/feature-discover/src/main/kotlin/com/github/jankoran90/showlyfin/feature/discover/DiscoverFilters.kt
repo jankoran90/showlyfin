@@ -14,17 +14,17 @@ data class DiscoverFilters(
     val yearMax: Int = 2030,
     val minRating: Float = 0f,
     val hideInJellyfin: Boolean = false,
-    val hideInWatchlist: Boolean = false,
-    val hideWatched: Boolean = false,
+    // COUCH T3 (user 2026-07-13): v Objevovat NECHCI co už mám na Traktu → watchlist / zhlédnuté /
+    // hodnocené skryté DEFAULTNĚ. (hideInJellyfin ponechán vypnutý — vlastněné v JF si můžu chtít pustit.)
+    val hideInWatchlist: Boolean = true,
+    val hideWatched: Boolean = true,
+    val hideRated: Boolean = true,
     val sortBy: DiscoverSort = DiscoverSort.DEFAULT,
 ) {
-    val isActive: Boolean
-        get() = selectedGenres.isNotEmpty() ||
-            yearMin != 1950 ||
-            yearMax != 2030 ||
-            minRating > 0f ||
-            hideInJellyfin ||
-            hideInWatchlist ||
-            hideWatched ||
-            sortBy != DiscoverSort.DEFAULT
+    /** Aktivní = liší se od výchozích filtrů (robustní vůči změně defaultů). */
+    val isActive: Boolean get() = this != DEFAULT
+
+    companion object {
+        val DEFAULT = DiscoverFilters()
+    }
 }

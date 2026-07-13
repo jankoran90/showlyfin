@@ -15,7 +15,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -43,25 +42,18 @@ fun Modifier.tvFocusBorder(
     shape: Shape = RoundedCornerShape(8.dp),
     width: Dp = 3.dp,          // základní tloušťka záře (decentní, ne obří)
     color: Color = Color.Unspecified,
-    focusScale: Float = 1.08f,
 ): Modifier {
     var focused by remember { mutableStateOf(false) }
-    // Výchozí barva = akcent aktuálního motivu (primary). Už teď řízeno motivem; po extrakci core-theme (F3)
-    // zůstane. Žádné tvrdé linky — jen měkká záře + zvětšení.
+    // Výchozí barva = akcent aktuálního motivu (primary). Fokus = JEN akcentní záře, ŽÁDNÉ zvětšení prvku
+    // (user 2026-07-13: zvětšování vybraného objektu pryč, stačí akcent). Bez scale se navíc nemění vizuální
+    // bounds karty → jistota, že fokus nikdy nezavdá příčinu ke svislému posunu řady (bump).
     val glowColor = if (color == Color.Unspecified) MaterialTheme.colorScheme.primary else color
-    val isTv = isTvFormFactor()
-    // Zvětšení fokusovaného prvku (10-foot „lift"). graphicsLayer NEMĚNÍ layout (sousedi se nehýbou).
-    val scale by animateFloatAsState(
-        targetValue = if (focused && isTv) focusScale else 1f,
-        label = "tvFocusScale",
-    )
     val glow by animateFloatAsState(
         targetValue = if (focused) 1f else 0f,
         label = "tvFocusGlow",
     )
     return this
         .onFocusChanged { focused = it.isFocused }
-        .graphicsLayer { scaleX = scale; scaleY = scale }
         .drawBehind {
             if (glow <= 0.01f) return@drawBehind
             val outline = shape.createOutline(size, layoutDirection, this)

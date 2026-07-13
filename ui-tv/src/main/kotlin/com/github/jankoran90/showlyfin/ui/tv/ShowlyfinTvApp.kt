@@ -13,6 +13,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
+import com.github.jankoran90.showlyfin.core.ui.TvCardScale
 import com.github.jankoran90.showlyfin.ui.phone.CardCsfdViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
@@ -55,6 +57,8 @@ fun ShowlyfinTvApp() {
                 LocalDensity provides Density(base.density * font.uiScale, base.fontScale),
                 LocalCsfdRatingProvider provides cardCsfd,
                 LocalCzechOverviewProvider provides cardCsfd,
+                // COUCH DA4: globální šířka/rozestupy karet mřížky (všechny TV řady + Objevovat).
+                LocalTvCardScale provides TvCardScale(widthScale = font.gridWidth, spacingScale = font.gridSpacing),
             ) {
                 TvNavigator()
             }

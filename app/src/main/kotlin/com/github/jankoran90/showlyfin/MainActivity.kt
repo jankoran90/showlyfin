@@ -51,6 +51,9 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             profileRepository.migrateLegacyPrefsIfNeeded()
             profileRepository.restoreActive(preferTv = isTV)
+            // COUCH — TV sjednocení: stáhni profily ze serveru jako telefon (dospělý + deti dle JF
+            // uživatele). Po restoreActive (uploader creds aplikované) je backend dostupný pro fetch.
+            if (isTV) profileRepository.seedTvRosterBestEffort()
         }
 
         val launcher = object : UpdateLauncher {

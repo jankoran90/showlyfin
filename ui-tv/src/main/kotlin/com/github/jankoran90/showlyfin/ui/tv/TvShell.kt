@@ -19,8 +19,10 @@ import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvImmersiveBackground
 import com.github.jankoran90.showlyfin.ui.tv.discover.TvDiscoverScreen
+import com.github.jankoran90.showlyfin.ui.tv.trakt.TvTraktScreen
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeSidebar
+import com.github.jankoran90.showlyfin.ui.tv.profile.TvProfileSwitcher
 import com.github.jankoran90.showlyfin.ui.tv.library.TvLibraryScreen
 import com.github.jankoran90.showlyfin.ui.tv.nav.TvSection
 import com.github.jankoran90.showlyfin.ui.tv.settings.TvSettingsScreen
@@ -44,11 +46,23 @@ fun TvShell(
     homeVm: TvHomeViewModel = hiltViewModel(),
 ) {
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
+    val immersiveHeader by homeVm.immersiveHeader.collectAsStateWithLifecycle()
     val sidebarEntries by homeVm.sidebar.collectAsStateWithLifecycle()
+    // COUCH R2: zamčený/dětský profil nevidí sekci Trakt (ani obsah mimo dětský).
+    val traktAllowed by homeVm.traktAllowed.collectAsStateWithLifecycle()
     val sidebarItems = sidebarEntries.filter { it.enabled }.mapNotNull { SidebarItem.fromName(it.item) }
+        .filter { it != SidebarItem.TRAKT || traktAllowed }
 
     // Back v ne-Home sekci = zpět na Domů (skládá se jen když je shell aktuální = žádný drill nahoře).
     BackHandler(enabled = section != TvSection.HOME) { onSelectSection(TvSection.HOME) }
+
+    // COUCH R2: kdyby se přepnul na dětský profil zatímco je otevřená sekce Trakt → hoď zpět na Domů.
+    LaunchedEffect(traktAllowed, section) {
+        if (!traktAllowed && section == TvSection.TRAKT) onSelectSection(TvSection.HOME)
+    }
+
+    // COUCH T5: overlay přepínače profilu (spouští se z profilového tlačítka dole ve sidebaru).
+    var showProfiles by remember { mutableStateOf(false) }
 
     // Immersive info z fokusované karty (debounce proti thrashingu při rychlém D-padu).
     var rawInfo by remember { mutableStateOf<ImmersiveInfo?>(null) }
@@ -63,10 +77,13 @@ fun TvShell(
             TvHomeSidebar(
                 items = sidebarItems,
                 active = section.toSidebarItem(),
+                onMove = { item, up -> homeVm.moveSidebar(item.name, up) },
+                onOpenProfiles = { showProfiles = true },
                 onSelect = { item ->
                     when (item) {
                         SidebarItem.DOMU -> onSelectSection(TvSection.HOME)
                         SidebarItem.OBJEVOVAT -> onSelectSection(TvSection.DISCOVER)
+                        SidebarItem.TRAKT -> onSelectSection(TvSection.TRAKT)
                         SidebarItem.KNIHOVNA -> onSelectSection(TvSection.LIBRARY)
                         SidebarItem.OBLIBENE -> onSelectSection(TvSection.WATCHLIST)
                         SidebarItem.NASTAVENI -> onSelectSection(TvSection.SETTINGS)
@@ -81,10 +98,16 @@ fun TvShell(
                         onOpenDetail = onOpenDetail,
                         onOpenJellyfinDetail = onOpenJellyfinDetail,
                         immersive = immersive,
+                        immersiveHeader = immersiveHeader,
                         onFocusItem = { rawInfo = it },
                         homeVm = homeVm,
                     )
                     TvSection.DISCOVER -> TvDiscoverScreen(
+                        onOpenDetail = onOpenDetail,
+                        immersive = immersive,
+                        onFocusItem = { rawInfo = it },
+                    )
+                    TvSection.TRAKT -> TvTraktScreen(
                         onOpenDetail = onOpenDetail,
                         immersive = immersive,
                         onFocusItem = { rawInfo = it },
@@ -98,12 +121,15 @@ fun TvShell(
                 }
             }
         }
+
+        if (showProfiles) TvProfileSwitcher(onDismiss = { showProfiles = false })
     }
 }
 
 private fun TvSection.toSidebarItem(): SidebarItem = when (this) {
     TvSection.HOME -> SidebarItem.DOMU
     TvSection.DISCOVER -> SidebarItem.OBJEVOVAT
+    TvSection.TRAKT -> SidebarItem.TRAKT
     TvSection.LIBRARY -> SidebarItem.KNIHOVNA
     TvSection.WATCHLIST -> SidebarItem.OBLIBENE
     TvSection.SETTINGS -> SidebarItem.NASTAVENI

@@ -83,23 +83,20 @@ fun TvPosterCard(
         )
         // showLabel=false → Netflix immersive: čistý plakát bez popisku (název nese hero nahoře).
         if (showLabel) {
-            // Text blok PEVNÉ výšky (stabilní výška karty → řada se neořízne), ale název BEZ minLines:
-            // krátký název nevytvoří prázdný 2. řádek, takže rok sedí TĚSNĚ pod názvem (nahoře), zbytek bloku
-            // je prázdný dole — fix „rok daleko dole / obří mezera" (user feedback 2026-07-13). Column je
-            // Top-zarovnaný (default), proto se text drží u sebe nahoře, ne rozstřelený přes celý blok.
+            // Text blok = max 2 ŘÁDKY pod obrázkem (user 2026-07-13): NÁZEV na 1 řádek (zkrátí se ellipsis) +
+            // ROK povinně pod ním. Dřív název 2 řádky + rok = 3 řádky. Pevná výška 46dp = stabilní karta
+            // (řada se neořízne) a pojme přesně 1 řádek názvu (titleSmall ~20dp) + rok (bodySmall ~16dp) + padding.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 66dp: pojme 2 řádky názvu (2×20dp lineHeight) + rok (16dp) + horní padding, aby se 3. „řádek"
-                    // (rok pod dvouřádkovým názvem) neořízl. Stabilní výška karty zůstává. (user feedback OTA 297)
-                    .height(66.dp)
+                    .height(46.dp)
                     .padding(top = 6.dp, start = 2.dp, end = 2.dp),
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 year?.let {

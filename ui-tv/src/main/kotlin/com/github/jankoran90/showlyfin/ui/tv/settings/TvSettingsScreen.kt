@@ -43,6 +43,8 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.tv.home.TvAddRowPicker
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeRowEditor
+import com.github.jankoran90.showlyfin.feature.detail.DetailActionsPlacement
+import com.github.jankoran90.showlyfin.feature.detail.TvDetailLayout
 import com.github.jankoran90.showlyfin.ui.phone.DetailPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
@@ -86,6 +88,7 @@ fun TvSettingsScreen(
     val detail by detailPrefs.state.collectAsStateWithLifecycle()
     val sidebar by homeVm.sidebar.collectAsStateWithLifecycle()
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
+    val immersiveHeader by homeVm.immersiveHeader.collectAsStateWithLifecycle()
     val allRows by homeVm.allRows.collectAsStateWithLifecycle()
     val libraryState by libraryVm.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -141,11 +144,19 @@ fun TvSettingsScreen(
         item {
             TvSettingsBlock(title = "Vzhled") {
                 TvToggleRow(
-                    label = "Immersive pozadí",
-                    subtitle = "Fanart podle vybrané karty (Netflix styl) na Domů a Objevovat",
+                    label = "Immersive pozadí (Netflix styl)",
+                    subtitle = "Fanart podle vybrané karty na pozadí — Domů a Objevovat",
                     checked = immersive,
                     onCheckedChange = homeVm::setImmersiveBackground,
                     modifier = Modifier.focusRequester(firstFocus),
+                )
+                // KOLO2 (M): hlavní vypínač; konkrétní řady se zapínají zvlášť v editoru řady (podržení OK
+                // na řadě → „Immersive hlavička"). Z výroby zapnutá jen první řada.
+                TvToggleRow(
+                    label = "Immersive hlavička (Netflix styl)",
+                    subtitle = "Hlavní vypínač. Zapni pro jednotlivé řady v jejich editoru (podržení OK)",
+                    checked = immersiveHeader,
+                    onCheckedChange = homeVm::setImmersiveHeader,
                 )
                 TvOptionStepperRow(
                     label = "Pozadí",
@@ -229,6 +240,28 @@ fun TvSettingsScreen(
             }
         }
 
+        // ── Mřížka ── (COUCH DA4: globální šířka karet + rozestupy pro všechny řady i Objevovat)
+        item {
+            TvSettingsBlock(title = "Mřížka") {
+                TvOptionStepperRow(
+                    label = "Šířka karet",
+                    subtitle = "Širší karta = víc textu, méně sloupců (platí na všechny řady i Objevovat)",
+                    options = FontPrefsViewModel.GRID_WIDTH_OPTIONS,
+                    selected = font.gridWidthPct,
+                    labelOf = { "$it %" },
+                    onSelect = fontPrefs::setGridWidthPct,
+                )
+                TvOptionStepperRow(
+                    label = "Rozestupy karet",
+                    subtitle = "Mezera mezi kartami v řadě i mřížce",
+                    options = FontPrefsViewModel.GRID_SPACING_OPTIONS,
+                    selected = font.gridSpacingPct,
+                    labelOf = { "$it %" },
+                    onSelect = fontPrefs::setGridSpacingPct,
+                )
+            }
+        }
+
         // ── Obraz a zvuk ──
         item {
             TvSettingsBlock(title = "Obraz a zvuk") {
@@ -274,6 +307,37 @@ fun TvSettingsScreen(
         // ── Detail obsahu ── (TENFOOT WS-B/WS-C: volitelné sekce karty filmu/seriálu)
         item {
             TvSettingsBlock(title = "Detail obsahu") {
+                // OTA 299: rozvržení TV detailu (immersive overlay přes fanart vs. klasický hero pruh).
+                TvOptionStepperRow(
+                    label = "Rozvržení detailu",
+                    subtitle = "Immersive (blok přes fanart) nebo klasický hero pruh nahoře",
+                    options = TvDetailLayout.entries.toList(),
+                    selected = detail.tvLayout,
+                    labelOf = { it.label },
+                    onSelect = detailPrefs::setTvLayout,
+                )
+                TvToggleRow(
+                    label = "Auto-kompakt popisu",
+                    subtitle = "Zkrátit popis tak, aby první řada obsahu byla vidět bez scrollu",
+                    checked = detail.plotAutoCompact,
+                    onCheckedChange = detailPrefs::setPlotAutoCompact,
+                )
+                TvOptionStepperRow(
+                    label = "Počet řádků popisu",
+                    subtitle = "Když je auto-kompakt vypnutý — pevný počet řádků",
+                    options = DetailPrefsViewModel.PLOT_LINE_OPTIONS,
+                    selected = detail.plotLines,
+                    labelOf = { if (it <= 0) "Bez omezení" else "$it řádků" },
+                    onSelect = detailPrefs::setPlotLines,
+                )
+                TvOptionStepperRow(
+                    label = "Umístění tlačítek",
+                    subtitle = "Blok akcí nad popisem, nebo pod ním (immersive layout)",
+                    options = DetailActionsPlacement.entries.toList(),
+                    selected = detail.actionsPlacement,
+                    labelOf = { it.label },
+                    onSelect = detailPrefs::setActionsPlacement,
+                )
                 TvToggleRow(
                     label = "Tvůrci",
                     subtitle = "Pás herců a režie + Scénář/Kamera/Žánry",
@@ -324,6 +388,7 @@ fun TvSettingsScreen(
                     onLogin = settings::startTraktDeviceLogin,
                     onLogout = settings::logout,
                 )
+                TvTraktImportRow() // COUCH — nahrát zhlédnutou JF historii profilu do jeho Traktu
             }
         }
 

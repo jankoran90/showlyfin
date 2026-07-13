@@ -45,11 +45,13 @@ internal fun TvDetailSections(
     plotExpanded: Boolean,
     onTogglePlot: () -> Unit,
     onCollectionPartClick: ((CollectionPart) -> Unit)?,
+    onPlayJellyfin: ((String) -> Unit)? = null,
+    showPlot: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth()) {
-        // ── Popis (rozbalovací) ──
-        if (!plot.isNullOrBlank()) {
+        // ── Popis (rozbalovací) — jen v CLASSIC_HERO layoutu; v immersim je popis v hero bloku (showPlot=false).
+        if (showPlot && !plot.isNullOrBlank()) {
             val collapsedLines = uiState.plotCollapsedLines.takeIf { it > 0 } ?: 3
             Column(Modifier.padding(horizontal = 48.dp, vertical = 8.dp)) {
                 Text(
@@ -74,22 +76,9 @@ internal fun TvDetailSections(
             }
         }
 
-        // ── Tvůrci — CELÁ sekce (vč. pásu herců/režie) až po rozbalení popisu (user feedback OTA 295).
-        // Když film popis nemá (není co rozbalit), ukaž Tvůrce rovnou i s detaily, ať nezmizí úplně.
-        val plotless = plot.isNullOrBlank()
-        if (uiState.showCreators && (plotExpanded || plotless)) {
-            CreatorsSection(
-                cast = uiState.cast,
-                directors = uiState.directors,
-                writers = uiState.writers,
-                cinematographers = uiState.cinematographers,
-                onPersonClick = { person, kind -> viewModel.openPersonFilmography(person, kind) },
-                genres = genres.orEmpty(),
-                detailsVisible = plotExpanded || plotless,
-            )
-        }
-
-        // ── Sezóny / epizody seriálu (WS-C) — klik na epizodu spustí stream flow ──
+        // ── Sezóny / epizody seriálu (WS-C) ──
+        // KOLO2 (G): epizoda vlastněného seriálu (v Jellyfin knihovně) → přímé přehrání z Jellyfinu
+        // (episode id z mapy), místo stream/download flow. Neowned nebo bez mapy → stávající stream flow.
         if (uiState.showSeasons && displayItem.type == MediaType.SHOW && uiState.seasons.isNotEmpty()) {
             SeasonEpisodeSection(
                 seasons = uiState.seasons,
@@ -97,7 +86,19 @@ internal fun TvDetailSections(
                 episodes = uiState.seasonEpisodes,
                 isLoadingEpisodes = uiState.isLoadingEpisodes,
                 onSelectSeason = { viewModel.selectSeason(it) },
-                onPlayEpisode = { s, e, t -> viewModel.playEpisode(s, e, t) },
+                onPlayEpisode = { s, e, t ->
+                    val jfEpisodeId = uiState.episodeJellyfinIds[s to e]
+                    if (uiState.isOwnedInLibrary && jfEpisodeId != null && onPlayJellyfin != null) {
+                        onPlayJellyfin(jfEpisodeId)
+                    } else {
+                        viewModel.playEpisode(s, e, t)
+                    }
+                },
+                watched = uiState.episodeWatched,
+                progress = uiState.episodeProgress,
+                nextUp = uiState.nextUpEpisode,
+                // KOLO2 (J): long-press na epizodě → přepni zhlédnuto (VM zapíše do Jellyfinu; no-op mimo knihovnu).
+                onToggleWatched = { s, e -> viewModel.toggleEpisodeWatched(s, e) },
             )
         }
 
@@ -137,8 +138,22 @@ internal fun TvDetailSections(
             }
         }
 
-        // Spodní overscan — poslední sekce (kolekce / od režiséra / studia) nesmí končit v TV overscan zóně
-        // u dolní hrany (jinak se ořízne label/rok karet — user feedback OTA 295).
+        // ── Tvůrci — SAMOSTATNÁ POSLEDNÍ řada (OTA 299): odpojeno od rozbalení popisu (user 2026-07-13
+        // „dáme je normálně do rows a budou úplně na konci jako poslední row"). Detaily (crew/žánry) vidět rovnou.
+        if (uiState.showCreators) {
+            CreatorsSection(
+                cast = uiState.cast,
+                directors = uiState.directors,
+                writers = uiState.writers,
+                cinematographers = uiState.cinematographers,
+                onPersonClick = { person, kind -> viewModel.openPersonFilmography(person, kind) },
+                genres = genres.orEmpty(),
+                detailsVisible = true,
+            )
+        }
+
+        // Spodní overscan — poslední sekce nesmí končit v TV overscan zóně u dolní hrany (jinak se ořízne
+        // label/rok karet — user feedback OTA 295).
         Spacer(Modifier.height(56.dp))
     }
 }

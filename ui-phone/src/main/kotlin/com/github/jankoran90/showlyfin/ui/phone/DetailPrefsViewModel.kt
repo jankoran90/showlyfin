@@ -4,6 +4,8 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.feature.detail.DETAIL_ACTION_KEYS
+import com.github.jankoran90.showlyfin.feature.detail.DetailActionsPlacement
+import com.github.jankoran90.showlyfin.feature.detail.TvDetailLayout
 import com.github.jankoran90.showlyfin.feature.detail.parseActionOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +25,10 @@ data class DetailPrefsState(
     val sectionStyle: HomeCardStyle = HomeCardStyle.POSTER,   // styl karet sekcí (plakát/fanart/fanart+popis)
     val plotLines: Int = 5,   // počet řádků popisu ve sbaleném stavu (0 = bez omezení)
     val actionOrder: List<String> = DETAIL_ACTION_KEYS,   // CANVAS A: pořadí akčních tlačítek
+    // TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu + auto-kompakt popisu + umístění tlačítek.
+    val tvLayout: TvDetailLayout = TvDetailLayout.IMMERSIVE_OVERLAY,
+    val plotAutoCompact: Boolean = true,
+    val actionsPlacement: DetailActionsPlacement = DetailActionsPlacement.BELOW_PLOT,
 )
 
 /** Nastavení detailu obsahu z knihovny (jednoduchý vs bohatý + volitelné sekce). */
@@ -45,6 +51,11 @@ class DetailPrefsViewModel @Inject constructor(
             ?.let { runCatching { HomeCardStyle.valueOf(it) }.getOrNull() } ?: HomeCardStyle.POSTER,
         plotLines = prefs.getInt(KEY_PLOT_LINES, 5),
         actionOrder = parseActionOrder(prefs.getString(KEY_ACTION_ORDER, null)),
+        tvLayout = prefs.getString(KEY_TV_LAYOUT, null)
+            ?.let { runCatching { TvDetailLayout.valueOf(it) }.getOrNull() } ?: TvDetailLayout.IMMERSIVE_OVERLAY,
+        plotAutoCompact = prefs.getBoolean(KEY_PLOT_AUTOCOMPACT, true),
+        actionsPlacement = prefs.getString(KEY_ACTIONS_PLACEMENT, null)
+            ?.let { runCatching { DetailActionsPlacement.valueOf(it) }.getOrNull() } ?: DetailActionsPlacement.BELOW_PLOT,
     )
 
     fun setRich(value: Boolean) = put(KEY_RICH) { _state.update { s -> s.copy(rich = value) }; value }
@@ -68,6 +79,17 @@ class DetailPrefsViewModel @Inject constructor(
         prefs.edit().putString(KEY_ACTION_ORDER, order.joinToString(",")).apply()
     }
 
+    /** TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu (immersive overlay vs klasický hero). */
+    fun setTvLayout(value: TvDetailLayout) {
+        _state.update { s -> s.copy(tvLayout = value) }
+        prefs.edit().putString(KEY_TV_LAYOUT, value.name).apply()
+    }
+    fun setPlotAutoCompact(value: Boolean) = put(KEY_PLOT_AUTOCOMPACT) { _state.update { s -> s.copy(plotAutoCompact = value) }; value }
+    fun setActionsPlacement(value: DetailActionsPlacement) {
+        _state.update { s -> s.copy(actionsPlacement = value) }
+        prefs.edit().putString(KEY_ACTIONS_PLACEMENT, value.name).apply()
+    }
+
     private inline fun put(key: String, block: () -> Boolean) {
         prefs.edit().putBoolean(key, block()).apply()
     }
@@ -82,6 +104,10 @@ class DetailPrefsViewModel @Inject constructor(
         private const val KEY_SECTION_STYLE = "detail_section_style"
         private const val KEY_PLOT_LINES = "detail_plot_lines"
         private const val KEY_ACTION_ORDER = "detail_action_order"
+        // TV DETAIL REDESIGN (OTA 299)
+        private const val KEY_TV_LAYOUT = "detail_tv_layout"
+        private const val KEY_PLOT_AUTOCOMPACT = "detail_plot_autocompact"
+        private const val KEY_ACTIONS_PLACEMENT = "detail_actions_placement"
         // CANVAS A5: větší rozsah řádků popisu (3–25) + „bez omezení" (0).
         val PLOT_LINE_OPTIONS = listOf(3, 5, 8, 10, 15, 20, 25, 0)   // 0 = bez omezení
     }

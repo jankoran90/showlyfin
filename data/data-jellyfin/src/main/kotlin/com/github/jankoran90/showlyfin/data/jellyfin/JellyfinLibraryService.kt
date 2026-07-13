@@ -6,6 +6,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.playStateApi
+import org.jellyfin.sdk.api.client.extensions.tvShowsApi
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
@@ -43,6 +46,32 @@ class JellyfinLibraryService @Inject constructor(
             )
         }.onFailure { Timber.w(it, "apiClient.update failed") }
         return true
+    }
+
+    /**
+     * TENFOOT KOLO2 (N): reverzní lookup metadat jednoho Jellyfin titulu podle jeho id — providerIds
+     * (Tmdb/Imdb) + typ + název/rok/popis. Slouží k sestavení [MediaItem] pro nativní immersive TV
+     * detail (místo telefonního JellyfinDetailScreen) i u vstupů, kde známe jen jellyfinId (home owned
+     * řada, browser bez tmdb). Vrací null, když Jellyfin není nastaven, id je nevalidní, nebo dotaz selže.
+     */
+    suspend fun getItemMeta(jellyfinId: String): JfItemMeta? {
+        if (!ensureApiConfigured()) return null
+        val userId = prefs.getString("jellyfin_user_id", "")?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching {
+            val userUuid = UUID.fromString(userId)
+            val itemUuid = UUID.fromString(jellyfinId)
+            val r = apiClient.userLibraryApi.getItem(userId = userUuid, itemId = itemUuid).content
+            val providerIds = r.providerIds ?: emptyMap()
+            JfItemMeta(
+                jellyfinId = r.id.toString(),
+                tmdbId = providerIds["Tmdb"]?.toLongOrNull(),
+                imdbId = providerIds["Imdb"]?.takeIf { it.isNotBlank() },
+                isSeries = r.type == BaseItemKind.SERIES,
+                name = r.name ?: "",
+                year = r.productionYear,
+                overview = r.overview,
+            )
+        }.onFailure { Timber.w(it, "[Jellyfin] getItemMeta failed for $jellyfinId") }.getOrNull()
     }
 
     suspend fun getOwnedIds(userId: UUID): OwnedIds {
@@ -198,6 +227,45 @@ class JellyfinLibraryService @Inject constructor(
     }
 
     /**
+     * COUCH — zhlédnuté položky daného JF uživatele pro jednorázový import do Trakt `sync/history`.
+     * Rozlišuje FILMY vs celé SERIÁLY (`item.type`), aby šly do správného pole Trakt payloadu. Epizodová
+     * granularita = mimo rozsah (follow-up). Čte `userData.played` (jako watched badges), BoxSet přeskočí
+     * (filmy z kolekcí přijdou jako samostatné MOVIE díky `recursive`).
+     */
+    suspend fun getWatchedForTraktSync(userId: UUID): WatchedForSync {
+        if (!ensureApiConfigured()) {
+            Timber.w("getWatchedForTraktSync: ApiClient not configured (Jellyfin nepřihlášen)")
+            return WatchedForSync()
+        }
+        val movies = mutableListOf<WatchedIds>()
+        val shows = mutableListOf<WatchedIds>()
+        runCatching {
+            val resp = apiClient.itemsApi.getItems(
+                userId = userId,
+                includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+                recursive = true,
+                fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.PATH),
+                limit = 5000,
+            ).content
+            for (item in resp.items) {
+                if (item.userData?.played != true) continue
+                if (isExcludedPath(item.path)) continue
+                val ids = item.providerIds ?: continue
+                val tmdb = ids["Tmdb"]?.toLongOrNull()
+                val imdb = ids["Imdb"]?.takeIf { it.isNotBlank() }
+                if (tmdb == null && imdb == null) continue
+                when (item.type) {
+                    BaseItemKind.SERIES -> shows.add(WatchedIds(tmdb, imdb))
+                    BaseItemKind.MOVIE -> movies.add(WatchedIds(tmdb, imdb))
+                    else -> Unit // BoxSet ap. — přeskoč
+                }
+            }
+            Timber.i("[Jellyfin] getWatchedForTraktSync: movies=${movies.size} shows=${shows.size}")
+        }.onFailure { Timber.w(it, "getWatchedForTraktSync failed") }
+        return WatchedForSync(movies, shows)
+    }
+
+    /**
      * Najde Jellyfin BoxSet, který obsahuje danou položku, a vrátí jeho děti
      * jako kolekci seřazenou od nejstarší po nejnovější. Null pokud item v žádném BoxSetu není.
      */
@@ -241,11 +309,90 @@ class JellyfinLibraryService @Inject constructor(
         return null
     }
 
+    /**
+     * TV DETAIL REDESIGN (OTA 299): per-epizoda stav zhlédnutí seriálu z Jellyfinu — pro horizontální řadu
+     * epizod v detailu + auto-scroll na první nezhlédnutou. Klíč = (season, episode). `nextUp` z Jellyfin
+     * getNextUp (přesné „další na řadě"); prázdný stav když Jellyfin nepřihlášen / seriál není v knihovně.
+     */
+    suspend fun getSeriesEpisodeStatus(seriesJellyfinId: String): SeriesEpisodeStatus {
+        if (!ensureApiConfigured()) return SeriesEpisodeStatus()
+        val userId = prefs.getString("jellyfin_user_id", "")?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return SeriesEpisodeStatus()
+        val seriesUuid = runCatching { UUID.fromString(seriesJellyfinId) }.getOrNull() ?: return SeriesEpisodeStatus()
+        return runCatching {
+            val nextUpEp = runCatching {
+                apiClient.tvShowsApi.getNextUp(userId = userId, seriesId = seriesUuid).content.items.firstOrNull()
+            }.getOrNull()
+            val nextUp = nextUpEp?.let { ep ->
+                val s = ep.parentIndexNumber
+                val e = ep.indexNumber
+                if (s != null && e != null) s to e else null
+            }
+            val episodes = apiClient.tvShowsApi.getEpisodes(seriesId = seriesUuid, userId = userId).content.items
+            val watched = mutableSetOf<Pair<Int, Int>>()
+            val progress = mutableMapOf<Pair<Int, Int>, Int>()
+            // KOLO2 (G): (season,episode) → jellyfin episode id pro přímé přehrání z knihovny.
+            val episodeIds = mutableMapOf<Pair<Int, Int>, String>()
+            for (ep in episodes) {
+                val s = ep.parentIndexNumber ?: continue
+                val e = ep.indexNumber ?: continue
+                episodeIds[s to e] = ep.id.toString()
+                if (ep.userData?.played == true) watched.add(s to e)
+                ep.userData?.playedPercentage?.toInt()?.takeIf { it in 1..99 }?.let { progress[s to e] = it }
+            }
+            SeriesEpisodeStatus(watched = watched, progress = progress, nextUp = nextUp, episodeIds = episodeIds)
+        }.getOrElse {
+            Timber.w(it, "getSeriesEpisodeStatus failed for $seriesJellyfinId")
+            SeriesEpisodeStatus()
+        }
+    }
+
+    /**
+     * TENFOOT KOLO2 (H/J): nahlásí `played` stav titulu/epizody ZPĚT do Jellyfin UserData (dosud showlyfin
+     * playback stav vůbec nereportoval — statický `/Videos/{id}/stream` server neoznačí zhlédnuto). Použito
+     * long-pressem „označit zhlédnuto" (J) i po dokoukání (H). Invaliduje owned/watched cache. Vrací úspěch.
+     */
+    suspend fun markPlayed(jellyfinId: String, played: Boolean): Boolean {
+        if (!ensureApiConfigured()) return false
+        val userId = prefs.getString("jellyfin_user_id", "")?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return false
+        val itemUuid = runCatching { UUID.fromString(jellyfinId) }.getOrNull() ?: return false
+        return runCatching {
+            if (played) {
+                apiClient.playStateApi.markPlayedItem(userId = userId, itemId = itemUuid)
+            } else {
+                apiClient.playStateApi.markUnplayedItem(userId = userId, itemId = itemUuid)
+            }
+            invalidate() // owned/watched cache je teď zastaralá → přenačti při dalším dotazu
+            true
+        }.onFailure { Timber.w(it, "[Jellyfin] markPlayed($played) failed for $jellyfinId") }.getOrDefault(false)
+    }
+
     fun invalidate() {
         cachedOwned = null
         cacheTimestamp = 0L
     }
 }
+
+/** TENFOOT KOLO2 (N): metadata Jellyfin titulu pro sestavení immersive detailu z pouhého jellyfinId. */
+data class JfItemMeta(
+    val jellyfinId: String,
+    val tmdbId: Long?,
+    val imdbId: String?,
+    val isSeries: Boolean,
+    val name: String,
+    val year: Int?,
+    val overview: String?,
+)
+
+/** TV DETAIL REDESIGN (OTA 299): stav epizod seriálu z Jellyfinu, klíčováno (season, episode). */
+data class SeriesEpisodeStatus(
+    val watched: Set<Pair<Int, Int>> = emptySet(),
+    val progress: Map<Pair<Int, Int>, Int> = emptyMap(),
+    val nextUp: Pair<Int, Int>? = null,
+    // KOLO2 (G): (season,episode) → jellyfin episode id pro přímé přehrání epizody z knihovny.
+    val episodeIds: Map<Pair<Int, Int>, String> = emptyMap(),
+)
 
 data class JfCollectionPart(
     val jellyfinId: String,
@@ -275,6 +422,15 @@ data class BoxSetInfo(
     val jellyfinId: String,
     val name: String,
     val tmdbCollectionId: Long?,
+)
+
+/** COUCH — jedna zhlédnutá položka (tmdb/imdb id) pro Trakt sync/history. */
+data class WatchedIds(val tmdb: Long?, val imdb: String?)
+
+/** COUCH — zhlédnuté položky JF profilu rozdělené na filmy vs celé seriály (Trakt payload je odděluje). */
+data class WatchedForSync(
+    val movies: List<WatchedIds> = emptyList(),
+    val shows: List<WatchedIds> = emptyList(),
 )
 
 data class OwnedIds(

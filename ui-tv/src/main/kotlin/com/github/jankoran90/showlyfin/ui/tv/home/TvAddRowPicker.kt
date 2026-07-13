@@ -112,6 +112,11 @@ fun TvAddRowPicker(
                     simpleSource(newId, HomeRowSourceType.CONTINUE_WATCHING_COMBINED, HomeCardStyle.LANDSCAPE, onPick)
                     simpleSource(newId, HomeRowSourceType.FAVORITES, HomeCardStyle.POSTER, onPick)
                     simpleSource(newId, HomeRowSourceType.SAVED_FOR_PLAYBACK, HomeCardStyle.POSTER, onPick)
+                    // COUCH T1/T2 — Trakt řady (prázdné bez přihlášení → řada se nezobrazí). Konkrétní seznam
+                    // se přidává z Trakt sekce „Moje seznamy" (má kontext listů), sem patří jen bezparametrové.
+                    simpleSource(newId, HomeRowSourceType.TRAKT_WATCHLIST, HomeCardStyle.POSTER, onPick)
+                    simpleSource(newId, HomeRowSourceType.TRAKT_HISTORY, HomeCardStyle.LANDSCAPE, onPick)
+                    simpleSource(newId, HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS, HomeCardStyle.POSTER, onPick)
                     // Knihovní zdroje → fáze 2 (výběr konkrétní knihovny), jen když nějaké knihovny známe.
                     if (libraries.isNotEmpty()) {
                         TvActionChip(

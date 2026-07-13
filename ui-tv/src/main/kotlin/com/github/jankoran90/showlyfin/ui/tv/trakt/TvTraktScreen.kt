@@ -1,22 +1,22 @@
-package com.github.jankoran90.showlyfin.ui.tv.discover
+package com.github.jankoran90.showlyfin.ui.tv.trakt
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -31,9 +31,8 @@ import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverFilter
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverTab
-import com.github.jankoran90.showlyfin.feature.discover.DiscoverViewModel
+import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktCategory
+import com.github.jankoran90.showlyfin.feature.discover.trakt.TvTraktViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
@@ -41,23 +40,21 @@ import com.github.jankoran90.showlyfin.ui.tv.components.toImmersiveInfo
 import kotlin.math.roundToInt
 
 /**
- * TENFOOT (SHW-87) — sekce „Objevovat". Vrací 10-foot browse plochu ztracenou v redesignu 293: taby
- * Filmy/Seriály + kategorie chipy (Doporučené/Trendy/Populární/Očekávané) nad sdíleným [DiscoverViewModel]
- * + plakátová mřížka ([TvMediaCard]). Fokusovaná karta hlásí [onFocusItem] nahoru (immersive pozadí).
+ * COUCH (SHW-88) — sekce „Trakt" (strukturálně jako [com.github.jankoran90.showlyfin.ui.tv.discover.TvDiscoverScreen]):
+ * chip lišta kategorií (Doporučeno = couchmonkey sloučení / Watchlist / Zhlédnuto / Moje seznamy) + plakátová
+ * mřížka. „Moje seznamy" navíc vykreslí řadu chipů seznamů. Šířka/rozestupy z [LocalTvCardScale] (DA4).
  */
 @Composable
-fun TvDiscoverScreen(
+fun TvTraktScreen(
     onOpenDetail: (MediaItem) -> Unit,
     immersive: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: DiscoverViewModel = hiltViewModel(),
+    viewModel: TvTraktViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
-    // COUCH DA4: globální šířka/rozestupy karet (sdíleno s domovem přes LocalTvCardScale).
     val cardScale = LocalTvCardScale.current
-    // TENFOOT: po OK ze sidebaru zaostři PRVNÍ kartu obsahu (sekce se přepíná jen přes OK, ne šipkami).
     val firstFocus = remember { FocusRequester() }
     AutoFocusFirst(
         focusRequester = firstFocus,
@@ -65,65 +62,59 @@ fun TvDiscoverScreen(
         isTargetPlaced = { gridState.layoutInfo.visibleItemsInfo.any { it.index == 0 } },
     )
 
-    // Nekonečné dotahování Objevit (Trakt page) při dojetí ke konci mřížky.
-    LaunchedEffect(gridState, state.items.size, state.canLoadMore) {
-        snapshotFlowLastVisible(gridState) { last ->
-            if (last >= state.items.size - 8 && state.canLoadMore && !state.isLoadingMore) viewModel.loadMore()
-        }
-    }
-
     Column(modifier = modifier.fillMaxSize().tvOverscan()) {
         Text(
-            text = "Objevovat",
+            text = "Trakt",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
         )
-
-        Row(
+        // Kategorie (chipy) — jako filtr chipy v Objevovat.
+        androidx.compose.foundation.layout.Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.padding(bottom = 8.dp),
         ) {
-            DiscoverTab.entries.forEach { tab ->
+            TraktCategory.entries.forEach { cat ->
                 FilterChip(
-                    selected = state.activeTab == tab,
-                    onClick = { viewModel.selectTab(tab) },
-                    label = { Text(tab.czLabel()) },
+                    selected = state.category == cat,
+                    onClick = { viewModel.selectCategory(cat) },
+                    label = { Text(cat.label) },
                     modifier = Modifier.tvFocusable(),
                 )
             }
         }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.padding(bottom = 12.dp),
-        ) {
-            DiscoverFilter.entries.forEach { filter ->
-                FilterChip(
-                    selected = state.activeFilter == filter,
-                    onClick = { viewModel.selectFilter(filter) },
-                    label = { Text(filter.czLabel()) },
-                    modifier = Modifier.tvFocusable(),
-                )
+        // „Moje seznamy" → řada chipů jednotlivých seznamů (v pořadí z Trakt API).
+        if (state.category == TraktCategory.MY_LISTS && state.lists.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            ) {
+                items(state.lists, key = { it.id }) { l ->
+                    FilterChip(
+                        selected = state.selectedListId == l.id,
+                        onClick = { viewModel.selectList(l.id) },
+                        label = { Text(l.name) },
+                        modifier = Modifier.tvFocusable(),
+                    )
+                }
             }
         }
 
         when {
-            state.isLoading && state.items.isEmpty() -> Centered { Text("Načítám…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            state.error == "needs_trakt_login" -> Centered {
+            state.isLoading && state.items.isEmpty() ->
+                Centered { Text("Načítám…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            state.items.isEmpty() -> Centered {
                 Text(
-                    "Doporučené vyžadují přihlášení k Traktu (Nastavení → Účty).",
+                    text = "Nic k zobrazení — přihlaš se k Traktu (Nastavení → Účty), nebo tu zatím nic není.",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 48.dp),
                 )
             }
-            state.items.isEmpty() -> Centered { Text("Nic k zobrazení", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             else -> LazyVerticalGrid(
                 state = gridState,
-                // COUCH DA4: šířka karet Objevovat = počet sloupců odvozený z globálního multiplieru šířky
-                // (širší karta = méně sloupců). Základ 6 sloupců @100 %. Rozestupy škáluje spacingScale.
                 columns = GridCells.Fixed((6f / cardScale.widthScale).roundToInt().coerceIn(3, 9)),
                 horizontalArrangement = Arrangement.spacedBy(cardScale.spacing(16.dp)),
                 verticalArrangement = Arrangement.spacedBy(cardScale.spacing(16.dp)),
@@ -147,22 +138,4 @@ fun TvDiscoverScreen(
 @Composable
 private fun Centered(content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
-}
-
-private fun DiscoverTab.czLabel() = if (this == DiscoverTab.SHOWS) "Seriály" else "Filmy"
-
-private fun DiscoverFilter.czLabel() = when (this) {
-    DiscoverFilter.RECOMMENDED -> "Doporučené"
-    DiscoverFilter.TRENDING -> "Trendy"
-    DiscoverFilter.POPULAR -> "Populární"
-    DiscoverFilter.ANTICIPATED -> "Očekávané"
-}
-
-/** Malý most: sleduj poslední viditelný index mřížky (paging trigger). */
-private suspend fun snapshotFlowLastVisible(
-    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
-    onChange: (Int) -> Unit,
-) {
-    androidx.compose.runtime.snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-        .collect { onChange(it) }
 }

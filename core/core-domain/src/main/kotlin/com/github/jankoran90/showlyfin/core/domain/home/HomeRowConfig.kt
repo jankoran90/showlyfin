@@ -27,6 +27,12 @@ data class HomeRowConfig(
      * Default true = parita se stávajícím chováním starých uložených layoutů (přidané pole, `encodeDefaults`).
      */
     val showTitles: Boolean = true,
+    /**
+     * KOLO2 (M): immersive hlavička (název/rok/popis fokusované karty nahoře, Netflix styl) PER ŘADA.
+     * Default false = vypnuto (jen řady, které to mají explicitně zapnuté — z výroby první řada). Přidané
+     * pole → staré uložené layouty dostanou false (`encodeDefaults`, `ignoreUnknownKeys`).
+     */
+    val immersiveHeader: Boolean = false,
     /** Volné parametry zdroje: viz [HomeRowParams] (tab/filter/watchlistKind/hideWatched/genre/libraryId/collectionId). */
     val params: Map<String, String> = emptyMap(),
 ) {
@@ -52,6 +58,18 @@ enum class HomeRowSourceType(val label: String) {
      * („uloženo k přehrání"). Klik = přímé přehrání bez hledání zdroje. Samostatná sekce místo cpaní do oblíbených.
      */
     SAVED_FOR_PLAYBACK("Uloženo k přehrání"),
+
+    /** COUCH T1: Trakt watchlist (uložené k zhlédnutí). Volitelně [HomeRowParams.WATCHLIST_KIND]. OAuth. */
+    TRAKT_WATCHLIST("Watchlist (Trakt)"),
+    /** COUCH T1: Trakt historie sledování (watched). Volitelně [HomeRowParams.WATCHLIST_KIND]. OAuth. */
+    TRAKT_HISTORY("Zhlédnuto (Trakt)"),
+    /** COUCH T1: konkrétní Trakt seznam uživatele (viz [HomeRowParams.LIST_ID] = trakt id listu). OAuth. */
+    TRAKT_LIST("Trakt seznam"),
+    /**
+     * COUCH T2: sloučená „Doporučeno" z couchmonkey — všechny userovy Trakt listy s „couchmonkey" v názvu,
+     * sjednocené + dedup, mínus viděné ∪ hodnocené ∪ watchlist. Self-contained (bez params). OAuth.
+     */
+    COUCHMONKEY_RECOMMENDATIONS("Doporučeno"),
 
     /** JEDNA konkrétní Jellyfin knihovna (viz [HomeRowParams.LIBRARY_ID]). První-třídní řada:
      *  vlastní enabled/pořadí/styl per knihovna. Seed-once z profilu (viz [HomeLayoutStore.syncLibraries]). */
@@ -108,8 +126,10 @@ object HomeRowParams {
     const val TAB = "tab"
     /** DISCOVER: "trending" | "popular" | "anticipated" | "recommended". */
     const val FILTER = "filter"
-    /** WATCHLIST: "movies" | "shows" | "all". */
+    /** TRAKT_WATCHLIST / TRAKT_HISTORY: "movies" | "shows" | "all". */
     const val WATCHLIST_KIND = "watchlistKind"
+    /** TRAKT_LIST: trakt id konkrétního seznamu (Long jako string). */
+    const val LIST_ID = "listId"
     /** Bool ("true"): skryj zhlédnuté položky. */
     const val HIDE_WATCHED = "hideWatched"
     /** Volitelný žánrový filtr (klientský). */

@@ -35,6 +35,28 @@ class HomeLayoutStore @Inject constructor(
         encodeDefaults = true
     }
 
+    /**
+     * COUCH per-profil — domov (řady/sidebar/immersive/seen) je klíčovaný per AKTIVNÍ profil. Klíč nese
+     * prefix `p<id>_`; při chybějícím per-profil klíči padá read na GLOBÁLNÍ klíč (bezešvá migrace — dospělý
+     * zdědí stávající layout, deti začne od stejného defaultu). core-domain nesmí vidět ProfileRepository
+     * (obrácená závislost), proto profil přepíná [switchProfile] volané z TvHomeViewModel (feature vrstva).
+     */
+    private var activeId: Long? = null
+
+    private fun keyFor(base: String): String = activeId?.let { "p${it}_$base" } ?: base
+
+    /** Přepni na layout daného profilu — přenačte všechny toky. Idempotentní (stejný profil = no-op). */
+    fun switchProfile(id: Long?) {
+        if (id == activeId && switched) return
+        activeId = id
+        switched = true
+        _rows.value = loadRows()
+        _sidebar.value = loadSidebar()
+        _immersiveBackground.value = prefs.getBoolean(keyFor(KEY_IMMERSIVE), prefs.getBoolean(KEY_IMMERSIVE, true))
+        _immersiveHeader.value = prefs.getBoolean(keyFor(KEY_IMMERSIVE_HEADER), prefs.getBoolean(KEY_IMMERSIVE_HEADER, true))
+    }
+    private var switched = false
+
     private val _rows = MutableStateFlow(loadRows())
     /** Všechny řady (i vypnuté) v pořadí; konzument si vyfiltruje `enabled`. */
     val rows: StateFlow<List<HomeRowConfig>> = _rows.asStateFlow()
@@ -48,7 +70,17 @@ class HomeLayoutStore @Inject constructor(
 
     fun setImmersiveBackground(enabled: Boolean) {
         _immersiveBackground.value = enabled
-        prefs.edit().putBoolean(KEY_IMMERSIVE, enabled).apply()
+        prefs.edit().putBoolean(keyFor(KEY_IMMERSIVE), enabled).apply()
+    }
+
+    private val _immersiveHeader = MutableStateFlow(prefs.getBoolean(KEY_IMMERSIVE_HEADER, true))
+    /** OTA 299: immersive hlavička nahoře (název + rok + popis fokusované karty = „netflix styl") — oddělená
+     * od pozadí, aby šla zapnout/vypnout zvlášť. */
+    val immersiveHeader: StateFlow<Boolean> = _immersiveHeader.asStateFlow()
+
+    fun setImmersiveHeader(enabled: Boolean) {
+        _immersiveHeader.value = enabled
+        prefs.edit().putBoolean(keyFor(KEY_IMMERSIVE_HEADER), enabled).apply()
     }
 
     // ── Řady ──────────────────────────────────────────────────────────────────
@@ -105,7 +137,7 @@ class HomeLayoutStore @Inject constructor(
     /** Obnovit výchozí sadu řad. Vyčistí i „seen" knihovny → při dalším [syncLibraries] se naseedují znovu. */
     fun resetRows() {
         _rows.value = DEFAULT_ROWS
-        prefs.edit().remove(KEY_SEEN_LIBS).apply()
+        prefs.edit().remove(keyFor(KEY_SEEN_LIBS)).apply()
         persistRows()
     }
 
@@ -117,7 +149,7 @@ class HomeLayoutStore @Inject constructor(
      */
     fun syncLibraries(libraries: List<LibrarySummary>) {
         if (libraries.isEmpty()) return
-        val seen = prefs.getStringSet(KEY_SEEN_LIBS, emptySet()).orEmpty()
+        val seen = prefs.getStringSet(keyFor(KEY_SEEN_LIBS), emptySet()).orEmpty()
         val existingLibIds = _rows.value.mapNotNull { it.params[HomeRowParams.LIBRARY_ID] }.toSet()
         val toAdd = libraries
             .filter { it.id !in seen && it.id !in existingLibIds }
@@ -134,7 +166,7 @@ class HomeLayoutStore @Inject constructor(
                 )
             }
         // Vždy označ VŠECHNY aktuální knihovny jako viděné (i ty už přítomné) → idempotentní.
-        prefs.edit().putStringSet(KEY_SEEN_LIBS, seen + libraries.map { it.id }).apply()
+        prefs.edit().putStringSet(keyFor(KEY_SEEN_LIBS), seen + libraries.map { it.id }).apply()
         if (toAdd.isEmpty()) return
         _rows.update { list -> list + toAdd }
         persistRows()
@@ -161,15 +193,17 @@ class HomeLayoutStore @Inject constructor(
     // ── Perzistence ─────────────────────────────────────────────────────────────
 
     private fun persistRows() {
-        prefs.edit().putString(KEY_ROWS, json.encodeToString(_rows.value)).apply()
+        prefs.edit().putString(keyFor(KEY_ROWS), json.encodeToString(_rows.value)).apply()
     }
 
     private fun persistSidebar() {
-        prefs.edit().putString(KEY_SIDEBAR, json.encodeToString(_sidebar.value)).apply()
+        prefs.edit().putString(keyFor(KEY_SIDEBAR), json.encodeToString(_sidebar.value)).apply()
     }
 
     private fun loadRows(): List<HomeRowConfig> {
-        val stored = decodeList(prefs.getString(KEY_ROWS, null)) { el ->
+        // Per-profil klíč; fallback na GLOBÁLNÍ (bezešvá migrace stávajícího layoutu na první profil).
+        val raw = prefs.getString(keyFor(KEY_ROWS), null) ?: prefs.getString(KEY_ROWS, null)
+        val stored = decodeList(raw) { el ->
             json.decodeFromJsonElement<HomeRowConfig>(el)
         }
             // Migrace ≤293: starý meta zdroj zahoď — nahradí ho seed JELLYFIN_LIBRARY řad ([syncLibraries]).
@@ -181,7 +215,8 @@ class HomeLayoutStore @Inject constructor(
     }
 
     private fun loadSidebar(): List<SidebarEntry> {
-        val stored = decodeList(prefs.getString(KEY_SIDEBAR, null)) { el ->
+        val raw = prefs.getString(keyFor(KEY_SIDEBAR), null) ?: prefs.getString(KEY_SIDEBAR, null)
+        val stored = decodeList(raw) { el ->
             json.decodeFromJsonElement<SidebarEntry>(el)
         }.filter { SidebarItem.fromName(it.item) != null }
         if (stored.isEmpty()) return SidebarItem.DEFAULT
@@ -201,6 +236,7 @@ class HomeLayoutStore @Inject constructor(
         private const val KEY_ROWS = "rows_json"
         private const val KEY_SIDEBAR = "sidebar_json"
         private const val KEY_IMMERSIVE = "immersive_bg"
+        private const val KEY_IMMERSIVE_HEADER = "immersive_header"
         private const val KEY_SEEN_LIBS = "seen_library_ids"
 
         /** Default styl karty pro řadu knihovny dle collectionType. Konzistentní = plakát (žádné
@@ -215,12 +251,23 @@ class HomeLayoutStore @Inject constructor(
                 source = HomeRowSourceType.CONTINUE_WATCHING,
                 title = "Pokračovat ve sledování",
                 cardStyle = HomeCardStyle.LANDSCAPE,
+                // KOLO2 (M): z výroby jen první řada má immersive hlavičku zapnutou.
+                immersiveHeader = true,
             ),
             HomeRowConfig(
                 id = "next_up",
                 source = HomeRowSourceType.NEXT_UP,
                 title = "Další díly",
                 cardStyle = HomeCardStyle.LANDSCAPE,
+            ),
+            // COUCH T2 (user 2026-07-13): sloučená couchmonkey „Doporučeno" jako první-třídní řada domova.
+            // Zapnutá z výroby (kurátorská); prázdná bez přihlášení/couchmonkey listů → nezobrazí se. Merge
+            // v loadRows ji doplní i stávajícím uživatelům (na konec, dají se přesunout).
+            HomeRowConfig(
+                id = "couchmonkey_reco",
+                source = HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS,
+                title = "Doporučeno",
+                cardStyle = HomeCardStyle.POSTER,
             ),
             HomeRowConfig(
                 id = "trending_movies",

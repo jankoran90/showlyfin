@@ -46,6 +46,17 @@ internal class TraktTokenProvider(
     @Volatile
     private var refreshCooldownUntil = 0L
 
+    // COUCH per-profil — ProfileConfigApplier zapisuje TRAKT_ACCESS_TOKEN do prefs MIMO tento provider
+    // (při přepnutí profilu). In-memory cache `token` by pak držela token předchozího profilu, dokud se
+    // proces nerestartuje. Listener ji invaliduje při každé externí změně klíče → getToken() načte nový.
+    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == KEY_ACCESS_TOKEN) token = null
+    }
+
+    init {
+        sharedPreferences.registerOnSharedPreferenceChangeListener(prefListener)
+    }
+
     override fun isInRefreshCooldown(): Boolean = System.currentTimeMillis() < refreshCooldownUntil
 
     override fun getToken(): String? {

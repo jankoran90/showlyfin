@@ -155,9 +155,10 @@ fun TvImmersiveHeader(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
 fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
     val mi = mediaItem
     return ImmersiveInfo(
-        // NIKDY poster fallback — 2:3 plakát roztažený Crop do 16:9 = ošklivý zoom. Radši žádné pozadí
-        // (background podrží poslední ne-null backdrop).
-        backdropUrl = landscapeUrl ?: mi?.backdropUrl(),
+        // 4K TV: plné rozlišení TMDB fanartu má přednost (landscapeUrl je jen 640–780 px pro karty →
+        // fullscreen backdrop pixeloval). Fallback na landscapeUrl (Jellyfin řady bez TMDB backdropu).
+        // NIKDY poster fallback — 2:3 plakát roztažený Crop do 16:9 = ošklivý zoom.
+        backdropUrl = mi?.backdropUrl("original") ?: landscapeUrl,
         title = mi?.let { it.titleCz?.takeIf { t -> t.isNotBlank() } ?: it.title } ?: title,
         overview = mi?.let { it.overviewCz?.takeIf { o -> o.isNotBlank() } ?: it.overview },
         year = mi?.year ?: year,
@@ -174,7 +175,7 @@ fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
 
 /** Sestav [ImmersiveInfo] z [MediaItem] (Objevovat). */
 fun MediaItem.toImmersiveInfo(): ImmersiveInfo = ImmersiveInfo(
-    backdropUrl = backdropUrl(), // bez poster fallbacku (viz výše)
+    backdropUrl = backdropUrl("original"), // 4K: plné rozlišení; bez poster fallbacku (viz výše)
     title = titleCz?.takeIf { it.isNotBlank() } ?: title,
     overview = overviewCz?.takeIf { it.isNotBlank() } ?: overview,
     year = year,

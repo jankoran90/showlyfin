@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.ui.CsfdMiniBadge
+import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
 import com.github.jankoran90.showlyfin.core.ui.WatchedBadge
 import com.github.jankoran90.showlyfin.core.ui.rememberCsfdCardRating
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
@@ -58,22 +59,24 @@ fun TvHomeCard(
     // ČSFD % badge (parita s telefonem): líně přes sdílený provider zapojený v ShowlyfinTvApp; bez id/providera
     // = null → badge se neukáže. Overlay v pravém horním rohu plakátu (jako telefonní PosterCard).
     val csfd = rememberCsfdCardRating(item.mediaItem?.imdbId, item.mediaItem?.tmdbId, item.title, item.year)
+    // COUCH DA4: globální šířka karet z uživatelské volby (jeden multiplier pro všechny řady).
+    val cardScale = LocalTvCardScale.current
     Box(modifier) {
         when (style) {
-            HomeCardStyle.LANDSCAPE -> TvLandscapeCard(item, onClick, Modifier.width(TV_LANDSCAPE_WIDTH), focusRequester, showLabel, onLongClick)
-            HomeCardStyle.COVER -> TvCoverCard(item, onClick, Modifier.width(TV_POSTER_WIDTH), focusRequester, showLabel, onLongClick)
+            HomeCardStyle.LANDSCAPE -> TvLandscapeCard(item, onClick, Modifier.width(cardScale * TV_LANDSCAPE_WIDTH), focusRequester, showLabel, onLongClick)
+            HomeCardStyle.COVER -> TvCoverCard(item, onClick, Modifier.width(cardScale * TV_POSTER_WIDTH), focusRequester, showLabel, onLongClick)
             HomeCardStyle.POSTER -> TvPosterCard(
                 posterUrl = item.posterUrl,
                 title = item.title,
                 year = item.year,
                 onClick = onClick,
-                modifier = Modifier.width(TV_POSTER_WIDTH),
+                modifier = Modifier.width(cardScale * TV_POSTER_WIDTH),
                 focusRequester = focusRequester,
                 showLabel = showLabel,
                 onLongClick = onLongClick,
             )
-            HomeCardStyle.LIST -> TvListCard(item, csfd, onClick, Modifier.width(TV_LIST_WIDTH), focusRequester, onLongClick)
-            HomeCardStyle.FANART_DETAIL -> TvDetailCard(item, csfd, onClick, Modifier.width(TV_DETAIL_WIDTH), focusRequester, onLongClick)
+            HomeCardStyle.LIST -> TvListCard(item, csfd, onClick, Modifier.width(cardScale * TV_LIST_WIDTH), focusRequester, onLongClick)
+            HomeCardStyle.FANART_DETAIL -> TvDetailCard(item, csfd, onClick, Modifier.width(cardScale * TV_DETAIL_WIDTH), focusRequester, onLongClick)
         }
         // Overlay ČSFD badge jen pro plakátové styly; LIST/FANART_DETAIL mají ČSFD přímo v textu.
         if (style == HomeCardStyle.POSTER || style == HomeCardStyle.COVER || style == HomeCardStyle.LANDSCAPE) {

@@ -172,6 +172,9 @@ class DetailViewModel @Inject constructor(
                 csfdId = null,
                 csfdRating = null,
                 csfdPlot = null,
+                // TENFOOT KOLO2 (I): csfdTitle je fallback pro český název; bez resetu drží starý
+                // titul předchozího filmu (u seriálů loadCsfd neběží → nikdy se nepřepíše) → hero „visí".
+                csfdTitle = null,
                 csfdReviews = emptyList(),
                 csfdGallery = emptyList(),
                 isGalleryLoading = false,
@@ -232,8 +235,15 @@ class DetailViewModel @Inject constructor(
                 selectedSeason = null,
                 seasonEpisodes = emptyList(),
                 isLoadingEpisodes = false,
+                episodeWatched = emptySet(),
+                episodeProgress = emptyMap(),
+                nextUpEpisode = null,
+                episodeJellyfinIds = emptyMap(),
                 plotCollapsedLines = prefs.getInt("detail_plot_lines", 5),
                 actionOrder = parseActionOrder(prefs.getString("detail_action_order", null)),
+                tvDetailLayout = readTvDetailLayout(),
+                plotAutoCompact = prefs.getBoolean("detail_plot_autocompact", true),
+                actionsPlacement = readActionsPlacement(),
                 error = null,
             )
         }
@@ -445,6 +455,76 @@ class DetailViewModel @Inject constructor(
         )
     }
 
+    // TENFOOT KOLO2 (K): návrat na otevřenou filmografii po Zpět z detailu filmu.
+    // PersonFilmographySheet je transientní stav sdílené (Activity-scoped) VM, ne back-stack destinace —
+    // klik na film sheet zavře a load(B) reset jej vynuluje. Uložíme ho do privátního pole (mimo uiState,
+    // takže ho load() reset nesmaže) a po back() na PŮVODNÍ titul (stejný stableKey) znovu otevřeme z cache
+    // (bez refetch → „zachovaný obsah"). Jednoúrovňový stash (pokrývá scénář otevři→jeden film→Zpět).
+    private data class PendingPersonSheet(
+        val ownerKey: String,
+        val name: String?,
+        val person: TmdbPerson?,
+        val kind: FavoriteKind?,
+        val roleLabel: String?,
+        val filmography: MediaCollection?,
+        val favorite: Boolean,
+    )
+    private var pendingPersonSheet: PendingPersonSheet? = null
+
+    /** Stabilní klíč titulu (stejná priorita jako [isSameAs]) — kotví stash na konkrétní Detail. */
+    private fun MediaItem.stableKey(): String = when {
+        tmdbId != null -> "tmdb:$tmdbId"
+        traktId != 0L -> "trakt:$traktId"
+        !imdbId.isNullOrBlank() -> "imdb:$imdbId"
+        else -> "title:$title"
+    }
+
+    /** K: místo [closePersonSheet] při prokliku z filmografie na film — ulož sheet pro pozdější re-open. */
+    fun stashPersonSheetForReturn(owner: MediaItem) {
+        val st = _uiState.value
+        if (!st.showPersonSheet || st.personFilmography == null) return
+        pendingPersonSheet = PendingPersonSheet(
+            ownerKey = owner.stableKey(), name = st.personSheetName, person = st.personSheetPerson,
+            kind = st.personSheetKind, roleLabel = st.personSheetRoleLabel,
+            filmography = st.personFilmography, favorite = st.isPersonFavorite,
+        )
+    }
+
+    /** K: po návratu (back) na původní titul znovu otevři stashnutou filmografii — jednorázově. */
+    fun reopenPendingPersonSheet(owner: MediaItem) {
+        val pending = pendingPersonSheet ?: return
+        if (pending.ownerKey != owner.stableKey()) return
+        pendingPersonSheet = null
+        _uiState.update {
+            it.copy(
+                showPersonSheet = true, personSheetLoading = false, personSheetName = pending.name,
+                personFilmography = pending.filmography, personSheetPerson = pending.person,
+                personSheetKind = pending.kind, personSheetRoleLabel = pending.roleLabel,
+                isPersonFavorite = pending.favorite,
+            )
+        }
+    }
+
+    /**
+     * KOLO2 (J): long-pressem přepni „zhlédnuto" u epizody vlastněného seriálu. Zapíše stav ZPĚT do Jellyfin
+     * UserData ([JellyfinLibraryService.markPlayed]) a aktualizuje lokální [DetailUiState.episodeWatched]
+     * (fajfka na kartě). No-op u epizod mimo Jellyfin knihovnu (chybí episode id → nemáme kam zapsat).
+     */
+    fun toggleEpisodeWatched(season: Int, episode: Int) {
+        val key = season to episode
+        val jfId = _uiState.value.episodeJellyfinIds[key] ?: return
+        val nowWatched = key !in _uiState.value.episodeWatched
+        viewModelScope.launch {
+            if (jellyfinLibraryService.markPlayed(jfId, nowWatched)) {
+                _uiState.update { st ->
+                    val w = st.episodeWatched.toMutableSet()
+                    if (nowWatched) w.add(key) else w.remove(key)
+                    st.copy(episodeWatched = w)
+                }
+            }
+        }
+    }
+
     /** COMPASS C2 (SHW-44): přidat/odebrat tento film do/z Oblíbených. */
     fun toggleFavorite() {
         val item = _uiState.value.item ?: return
@@ -540,6 +620,18 @@ class DetailViewModel @Inject constructor(
         prefs.getString("detail_section_style", null)
             ?.let { runCatching { HomeCardStyle.valueOf(it) }.getOrNull() }
             ?: HomeCardStyle.POSTER
+
+    /** TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu z prefs (neznámé/žádné → IMMERSIVE_OVERLAY). */
+    private fun readTvDetailLayout(): TvDetailLayout =
+        prefs.getString("detail_tv_layout", null)
+            ?.let { runCatching { TvDetailLayout.valueOf(it) }.getOrNull() }
+            ?: TvDetailLayout.IMMERSIVE_OVERLAY
+
+    /** TV DETAIL REDESIGN (OTA 299): umístění akčních tlačítek z prefs (neznámé/žádné → BELOW_PLOT). */
+    private fun readActionsPlacement(): DetailActionsPlacement =
+        prefs.getString("detail_actions_placement", null)
+            ?.let { runCatching { DetailActionsPlacement.valueOf(it) }.getOrNull() }
+            ?: DetailActionsPlacement.BELOW_PLOT
 
     private suspend fun loadWatchlistMembership(item: MediaItem) {
         if (tokenProvider.getToken() == null) return
@@ -1632,6 +1724,30 @@ class DetailViewModel @Inject constructor(
             )
         }
         recomputeMergedCollection(item)
+
+        // TV DETAIL REDESIGN (OTA 299): per-epizoda watched z Jellyfinu (jen seriál v knihovně) → horizontální
+        // řada epizod se zhlédnutým/progress + auto-scroll na první nezhlédnutou (getNextUp).
+        if (item.type == MediaType.SHOW && matchedJellyfinId != null) {
+            val status = runCatching { jellyfinLibraryService.getSeriesEpisodeStatus(matchedJellyfinId) }.getOrNull()
+            if (status != null && _uiState.value.item?.isSameAs(item) == true) {
+                _uiState.update {
+                    it.copy(
+                        episodeWatched = status.watched,
+                        episodeProgress = status.progress,
+                        nextUpEpisode = status.nextUp,
+                        episodeJellyfinIds = status.episodeIds,
+                    )
+                }
+                // Otevři rovnou sezónu s další nezhlédnutou epizodou, pokud je už načtená.
+                val nextSeason = status.nextUp?.first
+                if (nextSeason != null &&
+                    _uiState.value.seasons.any { s -> s.season_number == nextSeason } &&
+                    _uiState.value.selectedSeason != nextSeason
+                ) {
+                    selectSeason(nextSeason)
+                }
+            }
+        }
     }
 
     /** Jellyfin BoxSet má přednost; doplní TMDB díly mimo knihovnu; řadí nejstarší→nejnovější. */

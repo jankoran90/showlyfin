@@ -27,6 +27,22 @@ data class RdDownloadState(
 /** CONDUIT (SHW-58): cesta výběru zvuku v rozcestníku „Přehrát" — český dabing vs původní znění + CZ titulky. */
 enum class StreamAudioPath { CZ_DUB, ORIGINAL }
 
+/**
+ * TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu.
+ * IMMERSIVE_OVERLAY = blok (název→popis→akce) přes fanart vlevo + první řada obsahu bez scrollu (default).
+ * CLASSIC_HERO = původní fixní hero pruh nahoře + sekce pod ním.
+ */
+enum class TvDetailLayout(val label: String) {
+    IMMERSIVE_OVERLAY("Immersive (přes fanart)"),
+    CLASSIC_HERO("Klasický hero"),
+}
+
+/** Umístění bloku akčních tlačítek vůči popisu (immersive layout). */
+enum class DetailActionsPlacement(val label: String) {
+    BELOW_PLOT("Pod popisem"),
+    ABOVE_PLOT("Nad popisem"),
+}
+
 data class DetailArgs(
     val traktId: Long,
     val tmdbId: Long?,
@@ -152,8 +168,19 @@ data class DetailUiState(
     val selectedSeason: Int? = null,
     val seasonEpisodes: List<TmdbEpisode> = emptyList(),
     val isLoadingEpisodes: Boolean = false,
+    // TV DETAIL REDESIGN (OTA 299): per-epizoda stav zhlédnutí z Jellyfinu (klíč = season to episode) +
+    // „další na řadě" pro auto-scroll na první nezhlédnutou.
+    val episodeWatched: Set<Pair<Int, Int>> = emptySet(),
+    val episodeProgress: Map<Pair<Int, Int>, Int> = emptyMap(),
+    val nextUpEpisode: Pair<Int, Int>? = null,
+    // KOLO2 (G): (season,episode) → jellyfin episode id → přímé přehrání epizody vlastněného seriálu.
+    val episodeJellyfinIds: Map<Pair<Int, Int>, String> = emptyMap(),
     // Počet řádků popisu ve sbaleném stavu (Nastavení). 0 = bez omezení.
     val plotCollapsedLines: Int = 5,
+    // TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu + auto-kompakt popisu + umístění tlačítek.
+    val tvDetailLayout: TvDetailLayout = TvDetailLayout.IMMERSIVE_OVERLAY,
+    val plotAutoCompact: Boolean = true,
+    val actionsPlacement: DetailActionsPlacement = DetailActionsPlacement.BELOW_PLOT,
     // CANVAS (SHW-47) A: pořadí akčních tlačítek na detailu (konfigurovatelné v Nastavení).
     val actionOrder: List<String> = DETAIL_ACTION_KEYS,
     // NOMAD (SHW-60): stav offline stažení TOHOTO titulu do telefonu (jen filmy z knihovny — slice).
