@@ -269,6 +269,24 @@ class HomeLayoutStore @Inject constructor(
                 title = "Doporučeno",
                 cardStyle = HomeCardStyle.POSTER,
             ),
+            // COUCH per-profil (user 2026-07-13 „ne generický obsah, na míru dle profilu"): Trakt
+            // personalizovaná doporučení (dle watched historie profilu + počtu přehrání = Trakt algoritmus).
+            // DISCOVER filter „recommended" = authorizedTraktApi.fetchRecommended*. Prázdné bez Traktu / bez
+            // historie → řada se nezobrazí. Nahrazuje generické Trendy/Populární pro profil s Traktem.
+            HomeRowConfig(
+                id = "trakt_reco_movies",
+                source = HomeRowSourceType.DISCOVER,
+                title = "Filmy pro tebe",
+                cardStyle = HomeCardStyle.POSTER,
+                params = mapOf(HomeRowParams.TAB to "movies", HomeRowParams.FILTER to "recommended"),
+            ),
+            HomeRowConfig(
+                id = "trakt_reco_shows",
+                source = HomeRowSourceType.DISCOVER,
+                title = "Seriály pro tebe",
+                cardStyle = HomeCardStyle.POSTER,
+                params = mapOf(HomeRowParams.TAB to "shows", HomeRowParams.FILTER to "recommended"),
+            ),
             HomeRowConfig(
                 id = "trending_movies",
                 source = HomeRowSourceType.DISCOVER,
