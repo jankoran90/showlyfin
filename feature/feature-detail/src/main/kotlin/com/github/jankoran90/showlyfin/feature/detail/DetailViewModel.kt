@@ -35,6 +35,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,6 +57,7 @@ class DetailViewModel @Inject constructor(
     private val csfdScraper: CsfdScraper,
     private val csfdRepository: CsfdRepository,
     private val jellyfinLibraryService: JellyfinLibraryService,
+    private val parentalControls: com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository,
     private val authorizedTrakt: AuthorizedTraktRemoteDataSource,
     private val tokenProvider: TokenProvider,
     private val uploaderDs: UploaderRemoteDataSource,
@@ -587,12 +589,15 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    private fun moviesToCollection(
+    private suspend fun moviesToCollection(
         name: String,
-        movies: List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSearchMovieItem>,
+        moviesRaw: List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSearchMovieItem>,
         excludeTmdbId: Long,
         limit: Int = 20,
     ): MediaCollection? {
+        // COUCH (SHW-88): věkový filtr dětského profilu i na sekcích režisér/studio (dřív se sem gate nedostal
+        // → user je musel na deti vypínat). JF knihovna zůstává mimo (tohle jsou TMDB návrhy, ne knihovna).
+        val movies = ageFilterMovies(moviesRaw)
         // COUCH (SHW-88): řazení + filtr „jen vydané" pro sekce režisér/studio (KOLEKCE má vlastní cestu).
         val releasedOnly = prefs.getBoolean("detail_section_released_only", false)
         val today = java.time.LocalDate.now().toString()   // "YYYY-MM-DD" — ISO datum jde porovnat lexikograficky
@@ -625,6 +630,31 @@ class DetailViewModel @Inject constructor(
                 )
             }
         return if (parts.isEmpty()) null else MediaCollection(name = name, parts = parts)
+    }
+
+    /**
+     * COUCH (SHW-88): odfiltruj z TMDB sekcí (režisér/studio) tituly nad věkovým stropem dětského profilu.
+     * Cap null (dospělý) → beze změny. Certifikace se tahá per titul jen když je strop aktivní (paralelně).
+     */
+    private suspend fun ageFilterMovies(
+        movies: List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSearchMovieItem>,
+    ): List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSearchMovieItem> {
+        val cap = parentalControls.profile.value.effectiveAgeCap ?: return movies
+        val hideUnrated = parentalControls.profile.value.hideUnratedForAge
+        return coroutineScope {
+            movies.map { m ->
+                async {
+                    val certAge = runCatching { tmdbApi.fetchMovieCertificationAge(m.id) }.getOrNull()
+                    val probe = MediaItem(
+                        traktId = 0L, tmdbId = m.id, imdbId = null, title = m.title ?: "", year = null,
+                        overview = null, rating = null,
+                        genres = com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(m.genre_ids, isShow = false),
+                        type = MediaType.MOVIE, certificationAge = certAge,
+                    )
+                    m.takeIf { com.github.jankoran90.showlyfin.core.domain.ContentAgeGate.isAllowed(cap, probe, hideUnrated) }
+                }
+            }.awaitAll().filterNotNull()
+        }
     }
 
     /** Styl karet sekcí detailu z prefs (uloženo jako enum name; neznámé/žádné → POSTER). */
