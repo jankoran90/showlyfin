@@ -16,6 +16,14 @@ interface TmdbService {
     @GET("tv/{tmdbId}/images")
     suspend fun fetchShowImages(@Path("tmdbId") tmdbId: Long): TmdbImages
 
+    // TENFOOT WS-C (SHW-87): detail sezóny (seznam epizod). Jazyk cs-CZ (fallback orig na prázdné pole v UI).
+    @GET("tv/{tmdbId}/season/{seasonNumber}")
+    suspend fun fetchSeason(
+        @Path("tmdbId") tmdbId: Long,
+        @Path("seasonNumber") seasonNumber: Int,
+        @Query("language") language: String = "cs-CZ",
+    ): TmdbSeasonDetails
+
     @GET("tv/{tmdbId}/season/{season}/episode/{episode}/images")
     suspend fun fetchEpisodeImages(@Path("tmdbId") tmdbId: Long?, @Path("season") seasonNumber: Int?, @Path("episode") episodeNumber: Int?): TmdbImages
 

@@ -340,6 +340,8 @@ fun DetailScreen(
             viewModel = viewModel,
             onBack = onBack,
             onPlayJellyfin = onPlayJellyfin,
+            onOpenReviews = { showReviewsSheet = true },
+            onCollectionPartClick = onCollectionPartClick,
             modifier = modifier,
         )
         return
@@ -646,6 +648,18 @@ fun DetailScreen(
                         onPartClick = { part -> onCollectionPartClick?.invoke(part) },
                     )
                 }
+            }
+
+            // TENFOOT WS-C (SHW-87): sezóny/epizody seriálu (telefon i TV; klik → stream flow epizody).
+            if (uiState.showSeasons && displayItem.type == MediaType.SHOW && uiState.seasons.isNotEmpty()) {
+                SeasonEpisodeSection(
+                    seasons = uiState.seasons,
+                    selectedSeason = uiState.selectedSeason,
+                    episodes = uiState.seasonEpisodes,
+                    isLoadingEpisodes = uiState.isLoadingEpisodes,
+                    onSelectSeason = { viewModel.selectSeason(it) },
+                    onPlayEpisode = { s, e, t -> viewModel.playEpisode(s, e, t) },
+                )
             }
 
             Spacer(Modifier.height(24.dp))

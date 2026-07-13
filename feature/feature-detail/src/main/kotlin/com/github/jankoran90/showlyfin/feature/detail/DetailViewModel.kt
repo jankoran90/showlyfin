@@ -153,6 +153,7 @@ class DetailViewModel @Inject constructor(
         // nepřepíšou stav nově otevřeného (konec race „visí na původním").
         loadJob?.cancel()
         lastPlayedStream = null
+        episodeSelector = null   // TENFOOT WS-C: nový titul → zapomeň vybranou epizodu
         attemptedRdHashes.clear()
         // PROJECTOR: nový film → resetuj hlasový cast latch (VM je Activity-scoped).
         autoCastPending = false
@@ -224,6 +225,11 @@ class DetailViewModel @Inject constructor(
                 showDirector = prefs.getBoolean("detail_show_director", true),
                 showStudio = prefs.getBoolean("detail_show_studio", true),
                 showCreators = prefs.getBoolean("detail_show_creators", true),
+                showSeasons = prefs.getBoolean("detail_show_seasons", true),
+                seasons = emptyList(),
+                selectedSeason = null,
+                seasonEpisodes = emptyList(),
+                isLoadingEpisodes = false,
                 plotCollapsedLines = prefs.getInt("detail_plot_lines", 5),
                 actionOrder = parseActionOrder(prefs.getString("detail_action_order", null)),
                 error = null,
@@ -285,6 +291,9 @@ class DetailViewModel @Inject constructor(
                                 if (st.item?.isSameAs(item) != true) st
                                 else st.copy(
                                     showDetails = details,
+                                    // TENFOOT WS-C: souhrn sezón (bez speciálů 0 nahoře — necháme, ale řadíme).
+                                    seasons = details?.seasons?.filter { s -> s.season_number >= 0 }
+                                        ?.sortedBy { s -> s.season_number }.orEmpty(),
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
                                     // TENFOOT: u seriálu otevřeného z resume/next-up je item.title název EPIZODY.
@@ -297,6 +306,14 @@ class DetailViewModel @Inject constructor(
                                     ),
                                     isLoading = false,
                                 )
+                            }
+                            // TENFOOT WS-C: auto-vyber první „skutečnou" sezónu (season ≥ 1 s epizodami) a načti epizody.
+                            val seasonList = details?.seasons?.filter { s -> s.season_number >= 0 }
+                                ?.sortedBy { s -> s.season_number }.orEmpty()
+                            val defaultSeason = seasonList.firstOrNull { s -> s.season_number >= 1 && (s.episode_count ?: 0) > 0 }?.season_number
+                                ?: seasonList.firstOrNull()?.season_number
+                            if (defaultSeason != null && _uiState.value.item?.isSameAs(item) == true) {
+                                selectSeason(defaultSeason)
                             }
                         }
                     }
@@ -570,6 +587,37 @@ class DetailViewModel @Inject constructor(
 
     private fun mediaTypeStr(item: MediaItem) = if (item.type == MediaType.MOVIE) "movie" else "series"
 
+    // ── TENFOOT WS-C (SHW-87): sezóny / epizody seriálu ──────────────────────────
+    /** Vybraná epizoda pro stream flow — season/episode se propíšou do dotazů zdrojů i titulků. */
+    private data class EpisodeSelector(val season: Int, val episode: Int, val label: String)
+    private var episodeSelector: EpisodeSelector? = null
+
+    /** WS-C: vyber sezónu → lazy-load seznamu epizod z TMDB (jen pokud se změnila / je prázdný). */
+    fun selectSeason(seasonNumber: Int) {
+        val item = _uiState.value.item ?: return
+        val tmdbId = item.tmdbId ?: return
+        if (_uiState.value.selectedSeason == seasonNumber && _uiState.value.seasonEpisodes.isNotEmpty()) return
+        _uiState.update { it.copy(selectedSeason = seasonNumber, isLoadingEpisodes = true, seasonEpisodes = emptyList()) }
+        viewModelScope.launch {
+            val details = tmdbApi.fetchSeason(tmdbId, seasonNumber)
+            _uiState.update { st ->
+                if (st.item?.isSameAs(item) != true || st.selectedSeason != seasonNumber) st
+                else st.copy(seasonEpisodes = details?.episodes.orEmpty(), isLoadingEpisodes = false)
+            }
+        }
+    }
+
+    /** WS-C: přehraj epizodu seriálu přes stream flow (uploader query nese season/episode). */
+    fun playEpisode(season: Int, episode: Int, episodeTitle: String?) {
+        val base = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: _uiState.value.item?.title.orEmpty()
+        val label = buildString {
+            append(base); append(" S"); append(season); append("E"); append(episode)
+            episodeTitle?.takeIf { it.isNotBlank() }?.let { append(" · "); append(it) }
+        }
+        episodeSelector = EpisodeSelector(season, episode, label)
+        openStreamPathChooser()
+    }
+
     /** CONDUIT (SHW-58): ▶ Přehrát — nejdřív rozcestník CZ dabing / Originál, pak filtrovaný picker. */
     fun openStreamPathChooser() {
         val item = _uiState.value.item ?: return
@@ -620,6 +668,9 @@ class DetailViewModel @Inject constructor(
         val item = _uiState.value.item ?: return
         val imdb = item.imdbId ?: return
         val strict = _uiState.value.streamStrict
+        // TENFOOT WS-C: pro epizodu seriálu předej season/episode do všech dotazů (uploader je podporuje).
+        val epSeason = episodeSelector?.season
+        val epEpisode = episodeSelector?.episode
         // QUARRY (SHW-79): předvyplnění ruční úpravy hledání na Sdílej.cz i pro play cestu.
         val sdilejDefault = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: item.titleCz?.takeIf { it.isNotBlank() }
@@ -643,10 +694,10 @@ class DetailViewModel @Inject constructor(
             // CZ dabing / Originál se rozřadí dle audia (isCzDub) až v UI filtru. Hraje přes náš proxy.
             val sdilejDeferred = async {
                 // QUARRY (SHW-79): rok z metadat bývá o rok mimo → při nule zkus ±1 (dle prefs).
-                sdilejStreamsWithRetry(mediaTypeStr(item), imdb, item.title, _uiState.value.tmdbCzTitle ?: item.title, item.year)
+                sdilejStreamsWithRetry(mediaTypeStr(item), imdb, item.title, _uiState.value.tmdbCzTitle ?: item.title, item.year, epSeason, epEpisode)
             }
             // Backend vrací už seřazené (rdSaved → cached → CZ/SK → fallbackOrder) a ořezané dle prefs.
-            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, strict = strict) }
+            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = strict) }
                 .onSuccess { list ->
                     val saved = savedDeferred?.await().orEmpty()
                     val sdilej = sdilejDeferred.await()
@@ -658,7 +709,7 @@ class DetailViewModel @Inject constructor(
                     val instantNow = combined.filter { it.quality.rdSaved || it.quality.rdReady } + sdilej
                     _uiState.update { it.copy(isLoadingStreams = false, isProbingStreams = true, streams = streamPresetStore.orderStreams(instantNow), streamError = null) }
                     viewModelScope.launch {
-                        runCatching { uploaderDs.getProbedStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb) }
+                        runCatching { uploaderDs.getProbedStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode) }
                             .onSuccess { probed ->
                                 timber.log.Timber.i("[Stremio] probe → ${probed.size} smysluplných (instant=${probed.count { it.quality.rdSaved || it.quality.rdReady }} dl=${probed.count { it.quality.rdDownloadable }})")
                                 // CONDUIT: sdílej (instant, přes proxy) drž v seznamu i po probu — probe vrací jen torrent/RD.
@@ -764,7 +815,9 @@ class DetailViewModel @Inject constructor(
     fun playStream(stream: UploaderStream, target: CastTarget = CastTarget.LOCAL) {
         if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
         lastPlayedStream = stream   // CASCADE Fáze 4: zapamatuj pro případný auto-advance po chybě přehrávání
-        val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
+        // TENFOOT WS-C: u epizody použij popisek „Seriál S1E4 · název" jako titul přehrávače.
+        val title = episodeSelector?.label
+            ?: _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
             ?: _uiState.value.item?.title.orEmpty()
         // CZ titulky query (Fáze E): orig+cz název, rok, runtime, release+fps zvoleného streamu.
         // BATON regrese: query stavíme VŽDY (dřív gate `if imdb != null` → při castu z doporučení je
@@ -788,6 +841,8 @@ class DetailViewModel @Inject constructor(
                     title = subTitle,
                     origTitle = subOrig,
                     year = st.item?.year,
+                    season = episodeSelector?.season,
+                    episode = episodeSelector?.episode,
                     release = stream.name ?: stream.description,
                     fps = stream.quality.fps,
                     runtime = st.movieDetails?.runtime,
@@ -804,6 +859,8 @@ class DetailViewModel @Inject constructor(
             com.github.jankoran90.showlyfin.data.uploader.model.UploaderResolveContext(
                 imdb = item.imdbId,
                 mediaType = mediaTypeStr(item),
+                season = episodeSelector?.season,
+                episode = episodeSelector?.episode,
                 resolution = stream.quality.resolution,
                 sizeGB = stream.quality.sizeGB,
             )
@@ -1457,16 +1514,17 @@ class DetailViewModel @Inject constructor(
      */
     private suspend fun sdilejStreamsWithRetry(
         mediaType: String, imdb: String, title: String, titleCs: String, year: Int?,
+        season: Int? = null, episode: Int? = null,
     ): List<UploaderStream> {
         val primary = runCatching {
-            uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, year)
+            uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, year, season, episode)
         }.getOrDefault(emptyList())
         if (primary.isNotEmpty() || year == null || !prefs.getBoolean("sdilej_year_pm1", true)) return primary
         val merged = primary.toMutableList()
         val seen = merged.mapNotNull { it.url ?: it.name }.toMutableSet()
         for (y in listOf(year - 1, year + 1)) {
             val extra = runCatching {
-                uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, y)
+                uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, y, season, episode)
             }.getOrDefault(emptyList())
             for (s in extra) {
                 val k = s.url ?: s.name

@@ -36,6 +36,7 @@ import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
+import com.github.jankoran90.showlyfin.ui.phone.DetailPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
@@ -60,11 +61,13 @@ fun TvSettingsScreen(
     themePrefs: ThemePrefsViewModel = hiltViewModel(),
     fontPrefs: FontPrefsViewModel = hiltViewModel(),
     settings: SettingsViewModel = hiltViewModel(),
+    detailPrefs: DetailPrefsViewModel = hiltViewModel(),
     homeVm: TvHomeViewModel = hiltViewModel(),
 ) {
     val theme by themePrefs.state.collectAsStateWithLifecycle()
     val font by fontPrefs.state.collectAsStateWithLifecycle()
     val sys by settings.uiState.collectAsStateWithLifecycle()
+    val detail by detailPrefs.state.collectAsStateWithLifecycle()
     val sidebar by homeVm.sidebar.collectAsStateWithLifecycle()
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -227,6 +230,40 @@ fun TvSettingsScreen(
                     selected = sys.playerSeekStepSec,
                     labelOf = { "$it s" },
                     onSelect = settings::setPlayerSeekStepSec,
+                )
+            }
+        }
+
+        // ── Detail obsahu ── (TENFOOT WS-B/WS-C: volitelné sekce karty filmu/seriálu)
+        item {
+            TvSettingsBlock(title = "Detail obsahu") {
+                TvToggleRow(
+                    label = "Tvůrci",
+                    subtitle = "Pás herců a režie + Scénář/Kamera/Žánry",
+                    checked = detail.showCreators,
+                    onCheckedChange = detailPrefs::setCreators,
+                )
+                TvToggleRow(
+                    label = "Sezóny a epizody",
+                    subtitle = "U seriálu výběr sezóny a seznam epizod v detailu",
+                    checked = detail.showSeasons,
+                    onCheckedChange = detailPrefs::setSeasons,
+                )
+                TvToggleRow(
+                    label = "Kolekce",
+                    subtitle = "Další díly ságy / kolekce",
+                    checked = detail.showCollections,
+                    onCheckedChange = detailPrefs::setCollections,
+                )
+                TvToggleRow(
+                    label = "Od stejného režiséra",
+                    checked = detail.showDirector,
+                    onCheckedChange = detailPrefs::setDirector,
+                )
+                TvToggleRow(
+                    label = "Od stejného studia",
+                    checked = detail.showStudio,
+                    onCheckedChange = detailPrefs::setStudio,
                 )
             }
         }

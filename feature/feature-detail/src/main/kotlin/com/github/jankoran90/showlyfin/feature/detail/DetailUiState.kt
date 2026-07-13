@@ -7,7 +7,9 @@ import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
 import com.github.jankoran90.showlyfin.data.jellyfin.BoxSetInfo
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbCollection
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbMovieDetails
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbEpisode
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSeasonSummary
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbShowDetails
 
 /** Stav nahrávání necachovaného torrentu na RealDebrid (Fáze F). */
@@ -141,6 +143,12 @@ data class DetailUiState(
     val showDirector: Boolean = true,
     val showStudio: Boolean = true,
     val showCreators: Boolean = true,
+    // TENFOOT WS-C (SHW-87): sekce sezóny/epizody seriálu v detailu.
+    val showSeasons: Boolean = true,
+    val seasons: List<TmdbSeasonSummary> = emptyList(),
+    val selectedSeason: Int? = null,
+    val seasonEpisodes: List<TmdbEpisode> = emptyList(),
+    val isLoadingEpisodes: Boolean = false,
     // Počet řádků popisu ve sbaleném stavu (Nastavení). 0 = bez omezení.
     val plotCollapsedLines: Int = 5,
     // CANVAS (SHW-47) A: pořadí akčních tlačítek na detailu (konfigurovatelné v Nastavení).

@@ -6,6 +6,8 @@ interface TmdbRemoteDataSource {
     suspend fun fetchMovieDetails(tmdbId: Long): TmdbMovieDetails?
     suspend fun fetchShowDetails(tmdbId: Long): TmdbShowDetails?
     suspend fun fetchShowImages(tmdbId: Long): TmdbImages
+    // TENFOOT WS-C (SHW-87): detail sezóny seriálu (seznam epizod).
+    suspend fun fetchSeason(tmdbId: Long, seasonNumber: Int): TmdbSeasonDetails?
     suspend fun fetchEpisodeImage(showTmdbId: Long?, season: Int?, episode: Int?): TmdbImage?
     suspend fun fetchMovieImages(tmdbId: Long): TmdbImages
     suspend fun fetchMoviePeople(tmdbId: Long): Map<TmdbPerson.Type, List<TmdbPerson>>

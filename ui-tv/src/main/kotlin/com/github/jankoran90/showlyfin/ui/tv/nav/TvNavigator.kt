@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.ui.tv.nav
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.EpisodePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinDetailScreen
@@ -97,6 +99,31 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         is TvDestination.Detail -> DetailScreen(
             item = dest.item,
             onBack = { back() },
+            // TENFOOT WS-B: karty v sekcích detailu (kolekce / od režiséra / studia / tvorba osoby) →
+            // otevři další detail (JF pokud vlastníme, jinak bohatý TMDB detail ze stubu).
+            onCollectionPartClick = { part ->
+                val jfId = part.jellyfinId
+                val tmdb = part.tmdbId
+                if (jfId != null) {
+                    navigate(TvDestination.JellyfinDetail(jfId))
+                } else if (tmdb != null) {
+                    navigate(
+                        TvDestination.Detail(
+                            MediaItem(
+                                traktId = 0L,
+                                tmdbId = tmdb,
+                                imdbId = null,
+                                title = part.title,
+                                year = part.year?.toIntOrNull(),
+                                overview = null,
+                                rating = null,
+                                genres = null,
+                                type = MediaType.MOVIE,
+                            ),
+                        ),
+                    )
+                }
+            },
             // Fáze 1: po výběru zdroje / přehrání z knihovny navazujeme na TV přehrávač.
             onPlayStreamUrl = { url, title, subtitleQuery ->
                 navigate(

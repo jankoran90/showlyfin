@@ -13,4 +13,6 @@ data class TmdbShowDetails(
     val genres: List<TmdbGenre>?,
     val status: String?,
     val tagline: String?,
+    // TENFOOT WS-C (SHW-87): souhrn sezón (TMDB `tv/{id}` vrací pole `seasons`).
+    val seasons: List<TmdbSeasonSummary>? = null,
 )

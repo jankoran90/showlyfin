@@ -52,6 +52,7 @@ import com.github.jankoran90.showlyfin.core.ui.CollectionGrid
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
+import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 
@@ -164,6 +165,7 @@ private fun ActorChip(person: TmdbPerson, onClick: () -> Unit, roleOverride: Str
     Column(
         modifier = Modifier
             .width(84.dp)
+            .tvFocusable(shape = MaterialTheme.shapes.medium)
             .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick)
             .padding(vertical = 4.dp),
