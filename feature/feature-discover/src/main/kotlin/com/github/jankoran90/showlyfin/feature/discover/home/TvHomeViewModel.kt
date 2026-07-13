@@ -314,7 +314,27 @@ class TvHomeViewModel @Inject constructor(
         val dtos = runCatching { fetch(session.userUuid) }.getOrElse {
             Timber.w(it, "[TvHome] JF fetch '${config.id}' selhal"); emptyList()
         }
-        return dtos.map { it.toHomeRowItem(session.serverUrl, session.token) }
+        // U epizod (Další díly / Pokračovat) nese providerIds id EPIZODY, ale ČSFD hodnotí SERIÁL →
+        // dohledej providerIds seriálů batchem (unikátní seriesId), ať karta dostane tmdb/imdb pro ČSFD badge.
+        val seriesProviders = fetchSeriesProviderIds(session.userUuid, dtos)
+        return dtos.map { it.toHomeRowItem(session.serverUrl, session.token, seriesProviders) }
+    }
+
+    /** Batch dohledání providerIds seriálů pro epizodní položky (1 request pro všechny unikátní seriesId). */
+    private suspend fun fetchSeriesProviderIds(
+        userUuid: UUID,
+        dtos: List<BaseItemDto>,
+    ): Map<UUID, Map<String, String?>> {
+        val seriesIds = dtos.filter { it.type == BaseItemKind.EPISODE }
+            .mapNotNull { it.seriesId }.distinct()
+        if (seriesIds.isEmpty()) return emptyMap()
+        return runCatching {
+            apiClient.itemsApi.getItems(
+                userId = userUuid,
+                ids = seriesIds,
+                fields = listOf(ItemFields.PROVIDER_IDS),
+            ).content.items.mapNotNull { s -> s.providerIds?.let { s.id to it } }.toMap()
+        }.getOrElse { Timber.w(it, "[TvHome] dohledání providerIds seriálů selhalo"); emptyMap() }
     }
 
     /** Přihlašovací údaje Jellyfinu z prefs + [ApiClient] nastavený na server. Null = nepřihlášen. */
@@ -378,7 +398,11 @@ class TvHomeViewModel @Inject constructor(
         return imported.size
     }
 
-    private fun BaseItemDto.toHomeRowItem(serverUrl: String, token: String): HomeRowItem {
+    private fun BaseItemDto.toHomeRowItem(
+        serverUrl: String,
+        token: String,
+        seriesProviders: Map<UUID, Map<String, String?>> = emptyMap(),
+    ): HomeRowItem {
         val jfId = id.toString()
         val isEpisode = type == BaseItemKind.EPISODE
         val displayTitle = if (isEpisode) (seriesName ?: name ?: "") else (name ?: "")
@@ -390,6 +414,21 @@ class TvHomeViewModel @Inject constructor(
         } else null
         // Klik na epizodu → otevři kartu SERIÁLU (fixnutý next-up flow → Pokračovat); film → karta filmu.
         val targetId = if (isEpisode) (seriesId?.toString() ?: jfId) else jfId
+        // ČSFD/CZ badge potřebuje tmdb/imdb: epizoda → id seriálu (dohledané), jinak vlastní providerIds.
+        val ids = if (isEpisode) seriesId?.let { seriesProviders[it] } else providerIds
+        val tmdb = ids?.get("Tmdb")?.toLongOrNull()
+        val imdb = ids?.get("Imdb")?.takeIf { it.isNotBlank() }
+        val media = if (tmdb != null || imdb != null) MediaItem(
+            traktId = 0L,
+            tmdbId = tmdb,
+            imdbId = imdb,
+            title = displayTitle,
+            year = productionYear,
+            overview = null,
+            rating = null,
+            genres = null,
+            type = if (isEpisode || type == BaseItemKind.SERIES) MediaType.SHOW else MediaType.MOVIE,
+        ) else null
         return HomeRowItem(
             key = "jf_$jfId",
             title = displayTitle,
@@ -400,6 +439,7 @@ class TvHomeViewModel @Inject constructor(
             progressPct = userData?.playedPercentage?.toInt(),
             watched = userData?.played == true,
             jellyfinId = targetId,
+            mediaItem = media,
         )
     }
 

@@ -85,6 +85,10 @@ enum class HomeCardStyle(val label: String) {
     COVER("Jen obal"),
     /** Fanart 16:9 se scrimem + progress (Netflix/Kodi styl). */
     LANDSCAPE("Fanart"),
+    /** Řádek: malý plakát vlevo + název/rok/ČSFD vpravo (kompaktní seznam). */
+    LIST("Seznam"),
+    /** Fanart 16:9 + název/rok/popis vedle (širší karta s textem). */
+    FANART_DETAIL("Fanart + popis"),
 }
 
 /** Řazení řady. Ne každý zdroj umí každé (DEFAULT = pořadí z API/serveru). */

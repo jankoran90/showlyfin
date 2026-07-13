@@ -1,10 +1,12 @@
 package com.github.jankoran90.showlyfin.ui.tv.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,6 +51,7 @@ fun TvMediaCard(
  * jinak `onFocusChanged` fokusový uzel `clickable` (který je pak výš/vně) nepozoruje → prstenec/lift se
  * nikdy nevykreslí. Přesně tahle chyba dělala „kolem coverů žádné zvýraznění" na TV Home (user 2026-07-12).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TvPosterCard(
     posterUrl: String?,
@@ -58,6 +61,7 @@ fun TvPosterCard(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     showLabel: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val shape = MaterialTheme.shapes.medium   // tvar z theme (design guard: žádný inline RoundedCornerShape)
     // fillMaxWidth (ne pevná šířka) → dlaždice respektuje šířku buňky mřížky (GridCells.Fixed) místo aby ji přebíjela.
@@ -73,32 +77,38 @@ fun TvPosterCard(
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .tvFocusBorder(shape = shape)
                 .clip(shape)
-                .clickable(onClick = onClick)
+                // combinedClickable rozliší klik vs. podržení (long-press = editor řady, ne otevření detailu).
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         // showLabel=false → Netflix immersive: čistý plakát bez popisku (název nese hero nahoře).
         if (showLabel) {
-            // Titulek VŽDY 2 řádky (min=max) — jinak karty s dlouhým názvem byly vyšší, řada zabrala výšku nejvyšší
-            // karty a druhá řada plakátů se ořízla (user feedback 2026-07-12). Fixní výška = stabilní mřížka.
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            // Text blok PEVNÉ výšky (stabilní výška karty → řada se neořízne), ale název BEZ minLines:
+            // krátký název nevytvoří prázdný 2. řádek, takže rok sedí TĚSNĚ pod názvem (nahoře), zbytek bloku
+            // je prázdný dole — fix „rok daleko dole / obří mezera" (user feedback 2026-07-13). Column je
+            // Top-zarovnaný (default), proto se text drží u sebe nahoře, ne rozstřelený přes celý blok.
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(54.dp)
                     .padding(top = 6.dp, start = 2.dp, end = 2.dp),
-            )
-            year?.let {
+            ) {
                 Text(
-                    text = "$it",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 1.dp),
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                year?.let {
+                    Text(
+                        text = "$it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 1.dp),
+                    )
+                }
             }
         }
     }

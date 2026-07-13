@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.ui.phone
 
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
+import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.feature.detail.DETAIL_ACTION_KEYS
 import com.github.jankoran90.showlyfin.feature.detail.parseActionOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +20,7 @@ data class DetailPrefsState(
     val showStudio: Boolean = true,
     val showCreators: Boolean = true,   // ENSEMBLE (SHW-45): sekce „Tvůrci"
     val showSeasons: Boolean = true,    // TENFOOT WS-C (SHW-87): sezóny/epizody seriálu v detailu
+    val sectionStyle: HomeCardStyle = HomeCardStyle.POSTER,   // styl karet sekcí (plakát/fanart/fanart+popis)
     val plotLines: Int = 5,   // počet řádků popisu ve sbaleném stavu (0 = bez omezení)
     val actionOrder: List<String> = DETAIL_ACTION_KEYS,   // CANVAS A: pořadí akčních tlačítek
 )
@@ -39,6 +41,8 @@ class DetailPrefsViewModel @Inject constructor(
         showStudio = prefs.getBoolean(KEY_STUDIO, true),
         showCreators = prefs.getBoolean(KEY_CREATORS, true),
         showSeasons = prefs.getBoolean(KEY_SEASONS, true),
+        sectionStyle = prefs.getString(KEY_SECTION_STYLE, null)
+            ?.let { runCatching { HomeCardStyle.valueOf(it) }.getOrNull() } ?: HomeCardStyle.POSTER,
         plotLines = prefs.getInt(KEY_PLOT_LINES, 5),
         actionOrder = parseActionOrder(prefs.getString(KEY_ACTION_ORDER, null)),
     )
@@ -49,6 +53,10 @@ class DetailPrefsViewModel @Inject constructor(
     fun setStudio(value: Boolean) = put(KEY_STUDIO) { _state.update { s -> s.copy(showStudio = value) }; value }
     fun setCreators(value: Boolean) = put(KEY_CREATORS) { _state.update { s -> s.copy(showCreators = value) }; value }
     fun setSeasons(value: Boolean) = put(KEY_SEASONS) { _state.update { s -> s.copy(showSeasons = value) }; value }
+    fun setSectionStyle(value: HomeCardStyle) {
+        _state.update { s -> s.copy(sectionStyle = value) }
+        prefs.edit().putString(KEY_SECTION_STYLE, value.name).apply()
+    }
     fun setPlotLines(value: Int) {
         _state.update { s -> s.copy(plotLines = value) }
         prefs.edit().putInt(KEY_PLOT_LINES, value).apply()
@@ -71,6 +79,7 @@ class DetailPrefsViewModel @Inject constructor(
         private const val KEY_STUDIO = "detail_show_studio"
         private const val KEY_CREATORS = "detail_show_creators"
         private const val KEY_SEASONS = "detail_show_seasons"
+        private const val KEY_SECTION_STYLE = "detail_section_style"
         private const val KEY_PLOT_LINES = "detail_plot_lines"
         private const val KEY_ACTION_ORDER = "detail_action_order"
         // CANVAS A5: větší rozsah řádků popisu (3–25) + „bez omezení" (0).

@@ -26,7 +26,9 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -138,9 +140,14 @@ fun TvHomeScreen(
     val focusedInfo: ImmersiveInfo? = if (immersive) focusedItem?.toImmersiveInfo() else null
     LaunchedEffect(focusedInfo) { onFocusItem(focusedInfo) }
 
-    // Anti-bump: scrolluj JEN u řad pod první (index 0 je nahoře) → žádná pračka s počátečním fokusem.
+    // Stránkování řad: fokusovaná řada se zarovná k hornímu okraji viewportu (hero je item 0, řada s indexem
+    // i je list-item i+1). U PRVNÍ řady (i==0) scrollni na 0 → hero zůstane vidět nad ní. U dalších scrollni
+    // na i+1 → řada vyjede nahoru a hero se odroluje = „jedna řada na stránku".
     LaunchedEffect(focusedIndex) {
-        if (focusedIndex > 0) runCatching { listState.animateScrollToItem(focusedIndex) }
+        runCatching {
+            if (focusedIndex <= 0) listState.animateScrollToItem(0)
+            else listState.animateScrollToItem(focusedIndex + 1)
+        }
     }
 
     // Autofokus na PRVNÍ kartu PRVNÍ řady. Čeká na umístění řady, pak pár snímků a request.
@@ -168,11 +175,20 @@ fun TvHomeScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        Column(
+        // Stránkování řad (Netflix/GoogleTV): hero je PRVNÍ scrollovatelná položka listu → při přechodu na
+        // řady se přirozeně odroluje a přestane překrývat obsah. Snap (viz LaunchedEffect(focusedIndex) výše)
+        // zarovná fokusovanou řadu k hornímu okraji, takže je vždy celá vidět. Immersive pozadí je full-screen
+        // ZA listem (TvImmersiveBackground v TvShell) — beze změny.
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(bottom = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
             modifier = modifier
                 .fillMaxSize()
                 .tvOverscan()
                 .onPreviewKeyEvent { e ->
+                    // Menu/Info (ovladače, které je mají) → editor. Root cause fix pro ovladače BEZ Menu = podržení
+                    // OK na kartě (combinedClickable onLongClick v RailSection), ne přes key handler zde.
                     if (e.type == KeyEventType.KeyDown && (e.key == Key.Menu || e.key == Key.Info)) {
                         openEditorForFocused(); true
                     } else {
@@ -180,40 +196,35 @@ fun TvHomeScreen(
                     }
                 },
         ) {
-            if (immersive) {
-                // Rezervuj hero prostor vždy (stabilní layout, žádný skok po autofokusu); header sedí dole.
-                // 0.34 (dřív 0.42) — méně mrtvého místa nahoře, víc řad vidět; osamocený titulek u resume řad nepřevažuje.
-                Box(Modifier.weight(0.34f).fillMaxWidth()) {
-                    TvImmersiveHeader(
-                        info = focusedInfo,
-                        modifier = Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 8.dp),
+            item(key = "__hero") {
+                if (immersive) {
+                    // Hero zóna = 42 % výšky viewportu (velké hero jako Netflix). Header sedí dole; při snapu
+                    // dolů se celá zóna odroluje pryč a řady dostanou plný prostor.
+                    Box(Modifier.fillParentMaxHeight(0.42f).fillMaxWidth()) {
+                        TvImmersiveHeader(
+                            info = focusedInfo,
+                            modifier = Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 8.dp),
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Domů",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
                     )
                 }
-            } else {
-                Text(
-                    text = "Domů",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
-                )
             }
-
-            LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(bottom = 40.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            ) {
-                itemsIndexed(rails, key = { _, r -> r.id }) { index, rail ->
-                    RailSection(
-                        rail = rail,
-                        firstCardFocus = if (index == 0) firstFocus else null,
-                        onItemClick = ::clickItem,
-                        onItemFocused = { item -> focusedItem = item; focusedIndex = index },
-                        showLabel = rail.showTitles,
-                    )
-                }
+            itemsIndexed(rails, key = { _, r -> r.id }) { index, rail ->
+                RailSection(
+                    rail = rail,
+                    firstCardFocus = if (index == 0) firstFocus else null,
+                    onItemClick = ::clickItem,
+                    onItemFocused = { item -> focusedItem = item; focusedIndex = index },
+                    onItemLongPress = { editingId = rail.configId },
+                    showLabel = rail.showTitles,
+                )
             }
         }
 
@@ -254,18 +265,25 @@ fun TvHomeScreen(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun RailSection(
     rail: Rail,
     firstCardFocus: FocusRequester?,
     onItemClick: (HomeRowItem) -> Unit,
     onItemFocused: (HomeRowItem) -> Unit,
+    onItemLongPress: () -> Unit,
     showLabel: Boolean = true,
 ) {
+    // Vstup do řady (vertikální navigací i initial autofokus) směřuj VŽDY na 1. kartu. Bez tohoto default
+    // directional focus search + souběžný snap-scroll (animateScrollToItem) přistál na 2. sloupci. Na první
+    // řadě je enterFocus = firstCardFocus (slouží i initial requestFocus z parenta), jinde lokální requester.
+    val enterFocus = firstCardFocus ?: remember { FocusRequester() }
     Column(
         Modifier
             .fillMaxWidth()
-            .focusGroup(),
+            .focusGroup()
+            .focusProperties { enter = { enterFocus } },
     ) {
         Text(
             text = rail.title,
@@ -275,8 +293,9 @@ private fun RailSection(
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
         )
         LazyRow(
+            // vertical 10dp: prostor pro fokus lift (1.08×) + záři, aby se zvětšená karta neořízla o sousední řadu.
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
         ) {
             items(rail.items, key = { it.key }) { item ->
                 Box(
@@ -286,8 +305,10 @@ private fun RailSection(
                         item = item,
                         style = rail.style,
                         onClick = { onItemClick(item) },
-                        focusRequester = if (firstCardFocus != null && item.key == rail.items.first().key) firstCardFocus else null,
+                        // 1. karta nese enterFocus (cíl focusProperties.enter + initial autofokus první řady).
+                        focusRequester = if (item.key == rail.items.first().key) enterFocus else null,
                         showLabel = showLabel,
+                        onLongClick = onItemLongPress,
                     )
                 }
             }

@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.detail
 
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.data.csfd.CsfdReviewRaw
 import com.github.jankoran90.showlyfin.data.jellyfin.BoxSetInfo
@@ -143,6 +144,8 @@ data class DetailUiState(
     val showDirector: Boolean = true,
     val showStudio: Boolean = true,
     val showCreators: Boolean = true,
+    // Styl karet sekcí detailu (kolekce/režisér/studio): plakát / fanart / fanart+popis. Nastavení → Detail obsahu.
+    val sectionStyle: HomeCardStyle = HomeCardStyle.POSTER,
     // TENFOOT WS-C (SHW-87): sekce sezóny/epizody seriálu v detailu.
     val showSeasons: Boolean = true,
     val seasons: List<TmdbSeasonSummary> = emptyList(),

@@ -147,8 +147,10 @@ class CsfdRepository @Inject constructor(
         "imdb=$imdbId",
     )
 
+    // P4947 = TMDb movie ID, P4983 = TMDb TV series ID → UNION pokryje film i seriál (seriál jen s tmdbId
+    // se dřív přes samotné P4947 nikdy netrefil → chybějící ČSFD badge u seriálů na domově).
     private fun wikidataLookupByTmdb(tmdbId: Long): Long? = wikidataSparql(
-        """SELECT ?csfdId WHERE { ?item wdt:P4947 "$tmdbId". ?item wdt:P2529 ?csfdId }""",
+        """SELECT ?csfdId WHERE { { ?item wdt:P4947 "$tmdbId". } UNION { ?item wdt:P4983 "$tmdbId". } ?item wdt:P2529 ?csfdId }""",
         "tmdb=$tmdbId",
     )
 

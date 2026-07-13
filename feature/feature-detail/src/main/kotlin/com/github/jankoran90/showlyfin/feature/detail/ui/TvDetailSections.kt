@@ -74,8 +74,10 @@ internal fun TvDetailSections(
             }
         }
 
-        // ── Tvůrci (pás herců + režie, Scénář/Kamera/Žánry po rozbalení popisu) ──
-        if (uiState.showCreators) {
+        // ── Tvůrci — CELÁ sekce (vč. pásu herců/režie) až po rozbalení popisu (user feedback OTA 295).
+        // Když film popis nemá (není co rozbalit), ukaž Tvůrce rovnou i s detaily, ať nezmizí úplně.
+        val plotless = plot.isNullOrBlank()
+        if (uiState.showCreators && (plotExpanded || plotless)) {
             CreatorsSection(
                 cast = uiState.cast,
                 directors = uiState.directors,
@@ -83,7 +85,7 @@ internal fun TvDetailSections(
                 cinematographers = uiState.cinematographers,
                 onPersonClick = { person, kind -> viewModel.openPersonFilmography(person, kind) },
                 genres = genres.orEmpty(),
-                detailsVisible = plotExpanded,
+                detailsVisible = plotExpanded || plotless,
             )
         }
 
@@ -110,6 +112,7 @@ internal fun TvDetailSections(
                         jellyfinId = uiState.ownedTmdbToJellyfin[part.id],
                         title = part.title ?: "",
                         posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
+                        backdropUrl = part.backdrop_path?.let { "https://image.tmdb.org/t/p/w780$it" },
                         year = part.release_date?.take(4),
                         watched = uiState.watchedTmdbIds.contains(part.id),
                     )
@@ -117,22 +120,25 @@ internal fun TvDetailSections(
             )
         }
         val excludeKey = displayItem.tmdbId?.let { "tmdb_$it" }
+        val sectionStyle = uiState.sectionStyle
         if (uiState.showCollections) {
             mergedCollection?.let { coll ->
-                CollectionSection(collection = coll, excludeKey = excludeKey, onPartClick = { onCollectionPartClick?.invoke(it) })
+                CollectionSection(collection = coll, excludeKey = excludeKey, onPartClick = { onCollectionPartClick?.invoke(it) }, style = sectionStyle)
             }
         }
         if (uiState.showDirector) {
             uiState.directorMovies?.let { coll ->
-                CollectionSection(collection = coll, excludeKey = excludeKey, onPartClick = { onCollectionPartClick?.invoke(it) })
+                CollectionSection(collection = coll, excludeKey = excludeKey, onPartClick = { onCollectionPartClick?.invoke(it) }, style = sectionStyle)
             }
         }
         if (uiState.showStudio) {
             uiState.studioMovies?.let { coll ->
-                CollectionSection(collection = coll, excludeKey = excludeKey, onPartClick = { onCollectionPartClick?.invoke(it) })
+                CollectionSection(collection = coll, excludeKey = excludeKey, onPartClick = { onCollectionPartClick?.invoke(it) }, style = sectionStyle)
             }
         }
 
-        Spacer(Modifier.height(24.dp))
+        // Spodní overscan — poslední sekce (kolekce / od režiséra / studia) nesmí končit v TV overscan zóně
+        // u dolní hrany (jinak se ořízne label/rok karet — user feedback OTA 295).
+        Spacer(Modifier.height(56.dp))
     }
 }

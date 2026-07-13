@@ -1,7 +1,8 @@
 package com.github.jankoran90.showlyfin.ui.tv.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,7 +30,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
+import com.github.jankoran90.showlyfin.core.ui.CsfdMiniBadge
 import com.github.jankoran90.showlyfin.core.ui.WatchedBadge
+import com.github.jankoran90.showlyfin.core.ui.rememberCsfdCardRating
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 
@@ -50,23 +53,37 @@ fun TvHomeCard(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     showLabel: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
 ) {
-    when (style) {
-        HomeCardStyle.LANDSCAPE -> TvLandscapeCard(item, onClick, modifier.width(TV_LANDSCAPE_WIDTH), focusRequester, showLabel)
-        HomeCardStyle.COVER -> TvCoverCard(item, onClick, modifier.width(TV_POSTER_WIDTH), focusRequester, showLabel)
-        HomeCardStyle.POSTER -> TvPosterCard(
-            posterUrl = item.posterUrl,
-            title = item.title,
-            year = item.year,
-            onClick = onClick,
-            modifier = modifier.width(TV_POSTER_WIDTH),
-            focusRequester = focusRequester,
-            showLabel = showLabel,
-        )
+    // ČSFD % badge (parita s telefonem): líně přes sdílený provider zapojený v ShowlyfinTvApp; bez id/providera
+    // = null → badge se neukáže. Overlay v pravém horním rohu plakátu (jako telefonní PosterCard).
+    val csfd = rememberCsfdCardRating(item.mediaItem?.imdbId, item.mediaItem?.tmdbId, item.title, item.year)
+    Box(modifier) {
+        when (style) {
+            HomeCardStyle.LANDSCAPE -> TvLandscapeCard(item, onClick, Modifier.width(TV_LANDSCAPE_WIDTH), focusRequester, showLabel, onLongClick)
+            HomeCardStyle.COVER -> TvCoverCard(item, onClick, Modifier.width(TV_POSTER_WIDTH), focusRequester, showLabel, onLongClick)
+            HomeCardStyle.POSTER -> TvPosterCard(
+                posterUrl = item.posterUrl,
+                title = item.title,
+                year = item.year,
+                onClick = onClick,
+                modifier = Modifier.width(TV_POSTER_WIDTH),
+                focusRequester = focusRequester,
+                showLabel = showLabel,
+                onLongClick = onLongClick,
+            )
+            HomeCardStyle.LIST -> TvListCard(item, csfd, onClick, Modifier.width(TV_LIST_WIDTH), focusRequester, onLongClick)
+            HomeCardStyle.FANART_DETAIL -> TvDetailCard(item, csfd, onClick, Modifier.width(TV_DETAIL_WIDTH), focusRequester, onLongClick)
+        }
+        // Overlay ČSFD badge jen pro plakátové styly; LIST/FANART_DETAIL mají ČSFD přímo v textu.
+        if (style == HomeCardStyle.POSTER || style == HomeCardStyle.COVER || style == HomeCardStyle.LANDSCAPE) {
+            csfd?.let { CsfdMiniBadge(it, Modifier.align(Alignment.TopEnd).padding(6.dp)) }
+        }
     }
 }
 
 /** Fanart 16:9 (Netflix/Kodi styl): landscape → fallback poster; scrim název + (u epizody) S×E · popis + progress. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TvLandscapeCard(
     item: HomeRowItem,
@@ -74,6 +91,7 @@ fun TvLandscapeCard(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     showLabel: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val shape = MaterialTheme.shapes.medium
     Box(
@@ -82,7 +100,7 @@ fun TvLandscapeCard(
             .aspectRatio(16f / 9f)
             .tvFocusBorder(shape = shape)
             .clip(shape)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         AsyncImage(
@@ -121,6 +139,7 @@ fun TvLandscapeCard(
 }
 
 /** Čistý plakát 2:3 (COVER): název jen ve scrimu, vzdušná mřížka. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TvCoverCard(
     item: HomeRowItem,
@@ -128,6 +147,7 @@ fun TvCoverCard(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     showLabel: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val shape = MaterialTheme.shapes.medium
     Box(
@@ -136,7 +156,7 @@ fun TvCoverCard(
             .aspectRatio(2f / 3f)
             .tvFocusBorder(shape = shape)
             .clip(shape)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         AsyncImage(

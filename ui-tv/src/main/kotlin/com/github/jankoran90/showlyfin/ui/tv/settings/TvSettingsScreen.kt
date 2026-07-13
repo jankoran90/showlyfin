@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.ui.tv.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,13 +31,18 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
+import com.github.jankoran90.showlyfin.core.domain.home.LibrarySummary
 import com.github.jankoran90.showlyfin.core.domain.home.SidebarEntry
 import com.github.jankoran90.showlyfin.core.domain.home.SidebarItem
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
+import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
+import com.github.jankoran90.showlyfin.ui.tv.home.TvAddRowPicker
+import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeRowEditor
 import com.github.jankoran90.showlyfin.ui.phone.DetailPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
@@ -54,6 +61,14 @@ import kotlin.math.roundToInt
  * přehrávač (transport lišta), účty (Trakt přes device-code — bez prohlížeče), systém. Pokročilé profilové
  * věci zůstávají v telefonním Nastavení.
  */
+
+/** Styly karet pro sekce detailu (kolekce/režisér/studio) — jen ty, co v horizontálním pásu dávají smysl. */
+private val DETAIL_SECTION_STYLES = listOf(
+    HomeCardStyle.POSTER,
+    HomeCardStyle.LANDSCAPE,
+    HomeCardStyle.FANART_DETAIL,
+)
+
 @Composable
 fun TvSettingsScreen(
     onBack: () -> Unit,
@@ -63,6 +78,7 @@ fun TvSettingsScreen(
     settings: SettingsViewModel = hiltViewModel(),
     detailPrefs: DetailPrefsViewModel = hiltViewModel(),
     homeVm: TvHomeViewModel = hiltViewModel(),
+    libraryVm: LibraryRowsViewModel = hiltViewModel(),
 ) {
     val theme by themePrefs.state.collectAsStateWithLifecycle()
     val font by fontPrefs.state.collectAsStateWithLifecycle()
@@ -70,8 +86,20 @@ fun TvSettingsScreen(
     val detail by detailPrefs.state.collectAsStateWithLifecycle()
     val sidebar by homeVm.sidebar.collectAsStateWithLifecycle()
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
+    val allRows by homeVm.allRows.collectAsStateWithLifecycle()
+    val libraryState by libraryVm.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var importMsg by remember { mutableStateOf<String?>(null) }
+
+    // Dedikovaný editor řad domova z Nastavení (root cause fix: ovladač boxu nemá klávesu Menu, kterou se
+    // spouštěl inline editor na domově). Overlay + picker jsou stejné komponenty jako na domově.
+    LaunchedEffect(Unit) { libraryVm.load() }
+    val libraries = remember(libraryState.rows) {
+        libraryState.rows.map { LibrarySummary(it.libraryId, it.libraryName, it.collectionType) }
+    }
+    var editingRowId by remember { mutableStateOf<String?>(null) }
+    var showAddPicker by remember { mutableStateOf(false) }
+    var pendingNewId by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
     // TENFOOT: po OK ze sidebaru zaostři PRVNÍ interaktivní řádek (immersive toggle), ne šipku Zpět.
@@ -82,9 +110,10 @@ fun TvSettingsScreen(
         isTargetPlaced = { listState.layoutInfo.visibleItemsInfo.any { it.index >= 1 } },
     )
 
+    Box(modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxSize().tvOverscan(),
+        modifier = Modifier.fillMaxSize().tvOverscan(),
         contentPadding = PaddingValues(bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -265,6 +294,14 @@ fun TvSettingsScreen(
                     checked = detail.showStudio,
                     onCheckedChange = detailPrefs::setStudio,
                 )
+                TvOptionStepperRow(
+                    label = "Styl karet sekcí",
+                    subtitle = "Kolekce / režisér / studio: plakát, fanart nebo fanart s popisem",
+                    options = DETAIL_SECTION_STYLES,
+                    selected = detail.sectionStyle,
+                    labelOf = { it.label },
+                    onSelect = detailPrefs::setSectionStyle,
+                )
             }
         }
 
@@ -286,12 +323,42 @@ fun TvSettingsScreen(
         item {
             TvSettingsBlock(title = "Domů a postranní menu") {
                 Text(
-                    text = "Řady domova (Pokračovat, knihovny, kolekce, Uloženo k přehrání, Objevovat…) se ladí " +
-                        "přímo na domově tlačítkem Menu na řadě — styl, řazení, popisky, přesun, skrytí i přidání " +
-                        "nové řady z libovolného zdroje. Tady zvol sekce levého menu:",
+                    text = "Řady domova (Pokračovat, knihovny, kolekce, Uloženo k přehrání, Objevovat…) uprav tady " +
+                        "níže, nebo přímo na domově podržením tlačítka OK na řadě — styl karet, řazení, popisky, " +
+                        "přesun, skrytí i přidání nové řady z libovolného zdroje.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+                Text(
+                    text = "Řady domova",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                )
+                allRows.forEach { row ->
+                    HomeRowManageRow(
+                        title = row.resolvedTitle(),
+                        enabled = row.enabled,
+                        styleLabel = row.cardStyle.label,
+                        onEdit = { editingRowId = row.id },
+                    )
+                }
+                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    TvActionChip(
+                        label = "Přidat řadu",
+                        enabled = true,
+                        onClick = {
+                            pendingNewId = "custom_${System.currentTimeMillis()}"
+                            showAddPicker = true
+                        },
+                    )
+                }
+                Text(
+                    text = "Postranní menu",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
                 )
                 sidebar.forEachIndexed { index, entry ->
                     SidebarEditorRow(
@@ -348,6 +415,73 @@ fun TvSettingsScreen(
                 )
             }
         }
+    }
+
+        // Overlay editoru řady domova (stejné komponenty jako inline editor na domově).
+        editingRowId?.let { id ->
+            val cfg = allRows.firstOrNull { it.id == id } ?: return@let
+            val pos = allRows.indexOfFirst { it.id == id }
+            TvHomeRowEditor(
+                config = cfg,
+                canMoveUp = pos > 0,
+                canMoveDown = pos in 0 until allRows.lastIndex,
+                hiddenRows = allRows.filter { !it.enabled },
+                onUpdate = { homeVm.updateRow(it) },
+                onMove = { up -> homeVm.moveRow(id, up) },
+                onHide = { homeVm.setRowEnabled(id, false); editingRowId = null },
+                onUnhide = { unhideId -> homeVm.setRowEnabled(unhideId, true) },
+                onAddRow = {
+                    pendingNewId = "custom_${System.currentTimeMillis()}"
+                    editingRowId = null
+                    showAddPicker = true
+                },
+                onDismiss = { editingRowId = null },
+            )
+        }
+
+        if (showAddPicker) {
+            TvAddRowPicker(
+                libraries = libraries,
+                newId = pendingNewId,
+                onPick = { newRow ->
+                    homeVm.addRow(newRow)
+                    showAddPicker = false
+                    editingRowId = newRow.id
+                },
+                onDismiss = { showAddPicker = false },
+            )
+        }
+    }
+}
+
+/** Řádek správy řady domova: název + aktuální styl + stav (skrytá) + chip „Upravit" (otevře plný editor). */
+@Composable
+private fun HomeRowManageRow(
+    title: String,
+    enabled: Boolean,
+    styleLabel: String,
+    onEdit: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+            Text(
+                text = if (enabled) styleLabel else "$styleLabel · skrytá",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        TvActionChip(label = "Upravit", enabled = true, onClick = onEdit)
     }
 }
 

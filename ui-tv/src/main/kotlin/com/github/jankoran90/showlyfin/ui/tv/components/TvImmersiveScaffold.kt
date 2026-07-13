@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.rememberCsfdCardRating
+import com.github.jankoran90.showlyfin.core.ui.rememberCzechOverview
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 
 /**
@@ -35,9 +37,19 @@ import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 data class ImmersiveInfo(
     val backdropUrl: String?,
     val title: String,
-    /** Řádek metadat: „2024 · Sci-fi · ★ 8.2". */
-    val meta: String?,
+    /** Fallback popis (může být EN) — header ho líně nahradí českým přes provider. */
     val overview: String?,
+    // Strukturovaná meta pro sestavení řádku „rok · žánr · hodnocení" v headeru (ČSFD % má přednost před ★).
+    val year: Int?,
+    val genre: String?,
+    val tmdbRating: Float?,
+    /** U resume řad (bez MediaItem) hotový meta řádek „S×E · epizoda"; má přednost před rok/žánr/rating. */
+    val subtitleMeta: String?,
+    // Klíče pro líný ČSFD/CZ lookup (stejný zdroj jako karty). Prázdné id = jen fallback.
+    val imdbId: String?,
+    val tmdbId: Long?,
+    val rawTitle: String,
+    val titleCz: String?,
 )
 
 /** Full-screen fanart + čitelnostní scrim (vlevo tmavý → doprava průhledný, dole tmavý). Crossfade při změně. */
@@ -81,6 +93,18 @@ fun TvImmersiveBackground(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
 @Composable
 fun TvImmersiveHeader(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
     info ?: return
+    // ČSFD % + český popis líně ze STEJNÉHO zdroje co karty (provider zapojený v ShowlyfinTvApp). Než dorazí,
+    // ukazuje se fallback (TMDB ★ / EN popis). Parita s telefonem a s detailem (user feedback OTA 295).
+    val csfd = rememberCsfdCardRating(info.imdbId, info.tmdbId, info.rawTitle, info.year)
+    val czOverview = rememberCzechOverview(
+        info.imdbId, info.tmdbId, info.rawTitle, info.titleCz, info.year, info.overview,
+    )
+    // Resume řady mají hotový meta řádek (S×E · epizoda); jinak poskládej rok · žánr · ČSFD % (fallback ★).
+    val meta = info.subtitleMeta?.takeIf { it.isNotBlank() } ?: listOfNotNull(
+        info.year?.toString(),
+        info.genre,
+        csfd?.let { "ČSFD $it%" } ?: info.tmdbRating?.takeIf { it > 0f }?.let { "★ %.1f".format(it) },
+    ).joinToString(" · ").takeIf { it.isNotBlank() }
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -93,7 +117,7 @@ fun TvImmersiveHeader(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        info.meta?.takeIf { it.isNotBlank() }?.let {
+        meta?.let {
             Text(
                 text = it,
                 style = MaterialTheme.typography.titleSmall,
@@ -102,7 +126,7 @@ fun TvImmersiveHeader(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        info.overview?.takeIf { it.isNotBlank() }?.let {
+        czOverview?.takeIf { it.isNotBlank() }?.let {
             Text(
                 text = it,
                 style = MaterialTheme.typography.bodyMedium,
@@ -123,9 +147,16 @@ fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
         // (background podrží poslední ne-null backdrop).
         backdropUrl = landscapeUrl ?: mi?.backdropUrl(),
         title = mi?.let { it.titleCz?.takeIf { t -> t.isNotBlank() } ?: it.title } ?: title,
-        // U resume řad (mediaItem == null) doplň meta z podtitulu (S×E · epizoda), jinak rok.
-        meta = mi?.metaLine() ?: subtitle?.takeIf { it.isNotBlank() } ?: year?.toString(),
         overview = mi?.let { it.overviewCz?.takeIf { o -> o.isNotBlank() } ?: it.overview },
+        year = mi?.year ?: year,
+        genre = mi?.genres?.firstOrNull()?.replaceFirstChar { it.uppercase() },
+        tmdbRating = mi?.rating,
+        // U resume řad (mediaItem == null) meta z podtitulu (S×E · epizoda).
+        subtitleMeta = if (mi == null) subtitle?.takeIf { it.isNotBlank() } else null,
+        imdbId = mi?.imdbId,
+        tmdbId = mi?.tmdbId,
+        rawTitle = mi?.title ?: title,
+        titleCz = mi?.titleCz,
     )
 }
 
@@ -133,12 +164,13 @@ fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
 fun MediaItem.toImmersiveInfo(): ImmersiveInfo = ImmersiveInfo(
     backdropUrl = backdropUrl(), // bez poster fallbacku (viz výše)
     title = titleCz?.takeIf { it.isNotBlank() } ?: title,
-    meta = metaLine(),
     overview = overviewCz?.takeIf { it.isNotBlank() } ?: overview,
+    year = year,
+    genre = genres?.firstOrNull()?.replaceFirstChar { it.uppercase() },
+    tmdbRating = rating,
+    subtitleMeta = null,
+    imdbId = imdbId,
+    tmdbId = tmdbId,
+    rawTitle = title,
+    titleCz = titleCz,
 )
-
-private fun MediaItem.metaLine(): String = listOfNotNull(
-    year?.toString(),
-    genres?.firstOrNull()?.replaceFirstChar { it.uppercase() },
-    rating?.takeIf { it > 0f }?.let { "★ %.1f".format(it) },
-).joinToString(" · ")

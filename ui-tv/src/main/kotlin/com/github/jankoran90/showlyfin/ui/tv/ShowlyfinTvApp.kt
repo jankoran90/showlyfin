@@ -4,10 +4,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
+import com.github.jankoran90.showlyfin.ui.phone.CardCsfdViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
@@ -27,6 +31,10 @@ fun ShowlyfinTvApp() {
     val fontPrefs: FontPrefsViewModel = hiltViewModel()
     val font by fontPrefs.state.collectAsStateWithLifecycle()
 
+    // ČSFD % + český popis na celé TV (parita s telefonem): stejný provider (CardCsfdViewModel) přes stejné
+    // CompositionLocaly jako ShowlyfinPhoneApp → TV karty i immersive hero líně dotahují ČSFD/CZ z jednoho zdroje.
+    val cardCsfd: CardCsfdViewModel = hiltViewModel()
+
     ShowlyfinPhoneTheme(
         themeState = theme,
         serifFont = font.serif,
@@ -37,7 +45,12 @@ fun ShowlyfinTvApp() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
-            TvNavigator()
+            CompositionLocalProvider(
+                LocalCsfdRatingProvider provides cardCsfd,
+                LocalCzechOverviewProvider provides cardCsfd,
+            ) {
+                TvNavigator()
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
@@ -225,6 +226,7 @@ class DetailViewModel @Inject constructor(
                 showDirector = prefs.getBoolean("detail_show_director", true),
                 showStudio = prefs.getBoolean("detail_show_studio", true),
                 showCreators = prefs.getBoolean("detail_show_creators", true),
+                sectionStyle = readSectionStyle(),
                 showSeasons = prefs.getBoolean("detail_show_seasons", true),
                 seasons = emptyList(),
                 selectedSeason = null,
@@ -521,6 +523,7 @@ class DetailViewModel @Inject constructor(
                     jellyfinId = _uiState.value.ownedTmdbToJellyfin[m.id],
                     title = m.title ?: "",
                     posterUrl = m.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
+                    backdropUrl = m.backdrop_path?.let { "https://image.tmdb.org/t/p/w780$it" },
                     year = m.release_date?.take(4),
                     watched = _uiState.value.watchedTmdbIds.contains(m.id),
                     // CANVAS D: data pro řazení (hodnocení/oblíbenost) + žánrové štítky na kartě.
@@ -531,6 +534,12 @@ class DetailViewModel @Inject constructor(
             }
         return if (parts.isEmpty()) null else MediaCollection(name = name, parts = parts)
     }
+
+    /** Styl karet sekcí detailu z prefs (uloženo jako enum name; neznámé/žádné → POSTER). */
+    private fun readSectionStyle(): HomeCardStyle =
+        prefs.getString("detail_section_style", null)
+            ?.let { runCatching { HomeCardStyle.valueOf(it) }.getOrNull() }
+            ?: HomeCardStyle.POSTER
 
     private suspend fun loadWatchlistMembership(item: MediaItem) {
         if (tokenProvider.getToken() == null) return
@@ -1640,6 +1649,7 @@ class DetailViewModel @Inject constructor(
                 jellyfinId = ownedTmdb[part.id],
                 title = part.title ?: "",
                 posterUrl = part.poster_path?.let { "https://image.tmdb.org/t/p/w185$it" },
+                backdropUrl = part.backdrop_path?.let { "https://image.tmdb.org/t/p/w780$it" },
                 year = part.release_date?.take(4),
                 watched = watchedTmdb.contains(part.id),
             )
