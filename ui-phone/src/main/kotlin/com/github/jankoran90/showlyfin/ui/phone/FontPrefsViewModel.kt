@@ -15,8 +15,10 @@ data class FontPrefsState(
     val serif: Boolean = false,        // false = systémové bezpatkové, true = Newsreader (patkové)
     val headingOnly: Boolean = false,  // font jen na nadpisy (jen když serif); jinak celá app
     val scalePct: Int = 100,           // měřítko velikosti textu v %
+    val uiScalePct: Int = 100,         // měřítko hustoty celého UI (density) — jen TV shell
 ) {
     val scale: Float get() = scalePct / 100f
+    val uiScale: Float get() = uiScalePct / 100f
 }
 
 @HiltViewModel
@@ -31,6 +33,7 @@ class FontPrefsViewModel @Inject constructor(
         serif = prefs.getBoolean(KEY_SERIF, false),
         headingOnly = prefs.getBoolean(KEY_HEADING_ONLY, false),
         scalePct = prefs.getInt(KEY_SCALE, 100),
+        uiScalePct = prefs.getInt(KEY_UI_SCALE, 100),
     )
 
     fun setSerif(value: Boolean) {
@@ -48,10 +51,17 @@ class FontPrefsViewModel @Inject constructor(
         prefs.edit().putInt(KEY_SCALE, value).apply()
     }
 
+    fun setUiScalePct(value: Int) {
+        _state.update { it.copy(uiScalePct = value) }
+        prefs.edit().putInt(KEY_UI_SCALE, value).apply()
+    }
+
     companion object {
         private const val KEY_SERIF = "font_serif"
         private const val KEY_HEADING_ONLY = "font_heading_only"
         private const val KEY_SCALE = "font_scale_pct"
-        val SCALE_OPTIONS = listOf(85, 100, 115, 130)
+        private const val KEY_UI_SCALE = "ui_scale_pct"
+        val SCALE_OPTIONS = listOf(85, 100, 115, 130, 145, 160)
+        val UI_SCALE_OPTIONS = listOf(80, 90, 100, 110, 125, 150)
     }
 }

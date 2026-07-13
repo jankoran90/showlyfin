@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -102,8 +104,10 @@ fun TvValueStepperRow(
 }
 
 /**
- * Výběr z konečného seznamu voleb ([options]) přes ± cyklení (bez wrap — na krajích se tlačítko ztlumí).
- * Univerzální pro enumy (Pozadí/Motiv) i číselné option-listy (velikost písma, úroveň DRC).
+ * Výběr z konečného seznamu voleb ([options]) — CYKLENÍ dokola (‹ › listuje volbami, na kraji přeskočí na
+ * druhý konec). Obě tlačítka jsou VŽDY fokusovatelná a aktivní → D-pad na ně vždy najede a fokus nikdy neuteče
+ * ven (dřív se krajní tlačítko disablovalo = nefokusovatelné → nešlo na mínus a na poslední volbě fokus utekl
+ * do sidebaru). Univerzální pro enumy (Pozadí/Motiv/Styl karet) i číselné option-listy (velikost písma/UI).
  */
 @Composable
 fun <T> TvOptionStepperRow(
@@ -116,19 +120,22 @@ fun <T> TvOptionStepperRow(
     subtitle: String? = null,
 ) {
     val idx = options.indexOf(selected).coerceAtLeast(0)
+    val n = options.size
     StepperRow(
         label = label,
         valueLabel = labelOf(options[idx]),
         subtitle = subtitle,
-        onMinus = { if (idx > 0) onSelect(options[idx - 1]) },
-        onPlus = { if (idx < options.lastIndex) onSelect(options[idx + 1]) },
-        minusEnabled = idx > 0,
-        plusEnabled = idx < options.lastIndex,
+        onMinus = { if (n > 0) onSelect(options[(idx - 1 + n) % n]) },
+        onPlus = { if (n > 0) onSelect(options[(idx + 1) % n]) },
+        minusEnabled = true,
+        plusEnabled = true,
+        minusIcon = Icons.Filled.ChevronLeft,
+        plusIcon = Icons.Filled.ChevronRight,
         modifier = modifier,
     )
 }
 
-/** Sdílené tělo stepperu: label vlevo, vpravo [−] hodnota [+]. */
+/** Sdílené tělo stepperu: label vlevo, vpravo [−] hodnota [+] (nebo ‹ › u výběrových). */
 @Composable
 private fun StepperRow(
     label: String,
@@ -139,6 +146,8 @@ private fun StepperRow(
     plusEnabled: Boolean,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    minusIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.Remove,
+    plusIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.Add,
 ) {
     Row(
         modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -150,7 +159,7 @@ private fun StepperRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            StepperButton(icon = Icons.Filled.Remove, enabled = minusEnabled, onClick = onMinus)
+            StepperButton(icon = minusIcon, enabled = minusEnabled, onClick = onMinus)
             Text(
                 text = valueLabel,
                 style = MaterialTheme.typography.titleMedium,
@@ -160,7 +169,7 @@ private fun StepperRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.widthIn(min = 128.dp),
             )
-            StepperButton(icon = Icons.Filled.Add, enabled = plusEnabled, onClick = onPlus)
+            StepperButton(icon = plusIcon, enabled = plusEnabled, onClick = onPlus)
         }
     }
 }
@@ -181,7 +190,9 @@ private fun StepperButton(
             .tvFocusBorder(shape = CircleShape)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(enabled = enabled, onClick = onClick)
+            // VŽDY clickable(enabled=true) → prvek zůstává fokusovatelný i na kraji (klik se provede jen když
+            // enabled). U procentních stepperů (TvValueStepperRow) tak minus/plus nezmizí z D-pad traversalu.
+            .clickable(enabled = true) { if (enabled) onClick() }
             .padding(8.dp)
             .size(28.dp),
     )

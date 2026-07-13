@@ -89,6 +89,7 @@ fun TvHomeRowEditor(
 
             TvOptionStepperRow(
                 label = "Styl karet",
+                subtitle = "‹ › listuje mezi vzhledy karet (Plakát, Fanart, Seznam…)",
                 options = HomeCardStyle.entries,
                 selected = config.cardStyle,
                 labelOf = { it.label },
@@ -97,6 +98,7 @@ fun TvHomeRowEditor(
 
             TvOptionStepperRow(
                 label = "Řazení",
+                subtitle = "‹ › mění pořadí položek v řadě",
                 options = HomeRowSort.entries,
                 selected = config.sort,
                 labelOf = { it.label },

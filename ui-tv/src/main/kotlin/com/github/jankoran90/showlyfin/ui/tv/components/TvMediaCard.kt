@@ -90,7 +90,9 @@ fun TvPosterCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
+                    // 66dp: pojme 2 řádky názvu (2×20dp lineHeight) + rok (16dp) + horní padding, aby se 3. „řádek"
+                    // (rok pod dvouřádkovým názvem) neořízl. Stabilní výška karty zůstává. (user feedback OTA 297)
+                    .height(66.dp)
                     .padding(top = 6.dp, start = 2.dp, end = 2.dp),
             ) {
                 Text(

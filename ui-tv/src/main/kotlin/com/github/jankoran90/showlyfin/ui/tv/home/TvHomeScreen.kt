@@ -1,5 +1,8 @@
 package com.github.jankoran90.showlyfin.ui.tv.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,6 +51,7 @@ import com.github.jankoran90.showlyfin.core.domain.home.HomeRowParams.boolParam
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSourceType
 import com.github.jankoran90.showlyfin.core.domain.home.LibrarySummary
+import com.github.jankoran90.showlyfin.core.ui.ScrollToTopBringIntoViewSpec
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
@@ -75,6 +80,7 @@ private data class Rail(
  * v [com.github.jankoran90.showlyfin.ui.tv.TvShell]; tady je jen tělo domova. Fokusovaná karta hlásí
  * [onFocusItem] nahoru (immersive pozadí) a řídí lokální hero header. Menu na řadě = inline editor.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TvHomeScreen(
     onOpenDetail: (MediaItem) -> Unit,
@@ -174,11 +180,17 @@ fun TvHomeScreen(
         rails.getOrNull(focusedIndex)?.let { editingId = it.configId }
     }
 
+    // Anti-bump (user feedback OTA 297): při VODOROVNÉ navigaci karet v ne-první řadě LazyColumn svisle cukal,
+    // protože default BringIntoViewSpec dopočítával drobný svislý scroll na doodhalení fokusované karty. Zapojíme
+    // ScrollToTopBringIntoViewSpec (napsán přesně na tohle, dosud nezapojen) na vertikální list; uvnitř řad se
+    // obnoví DEFAULT (defaultBiv), aby vodorovný scroll řady fungoval normálně.
+    val defaultBiv = LocalBringIntoViewSpec.current
     Box(Modifier.fillMaxSize()) {
         // Stránkování řad (Netflix/GoogleTV): hero je PRVNÍ scrollovatelná položka listu → při přechodu na
         // řady se přirozeně odroluje a přestane překrývat obsah. Snap (viz LaunchedEffect(focusedIndex) výše)
         // zarovná fokusovanou řadu k hornímu okraji, takže je vždy celá vidět. Immersive pozadí je full-screen
         // ZA listem (TvImmersiveBackground v TvShell) — beze změny.
+        CompositionLocalProvider(LocalBringIntoViewSpec provides ScrollToTopBringIntoViewSpec()) {
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(bottom = 40.dp),
@@ -224,8 +236,10 @@ fun TvHomeScreen(
                     onItemFocused = { item -> focusedItem = item; focusedIndex = index },
                     onItemLongPress = { editingId = rail.configId },
                     showLabel = rail.showTitles,
+                    rowBringIntoViewSpec = defaultBiv,
                 )
             }
+        }
         }
 
         editingId?.let { id ->
@@ -265,7 +279,7 @@ fun TvHomeScreen(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun RailSection(
     rail: Rail,
@@ -274,6 +288,7 @@ private fun RailSection(
     onItemFocused: (HomeRowItem) -> Unit,
     onItemLongPress: () -> Unit,
     showLabel: Boolean = true,
+    rowBringIntoViewSpec: BringIntoViewSpec,
 ) {
     // Vstup do řady (vertikální navigací i initial autofokus) směřuj VŽDY na 1. kartu. Bez tohoto default
     // directional focus search + souběžný snap-scroll (animateScrollToItem) přistál na 2. sloupci. Na první
@@ -292,10 +307,15 @@ private fun RailSection(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
         )
+        // Uvnitř řady obnov DEFAULT BringIntoViewSpec (parent list má ScrollToTop) → vodorovný scroll LazyRow
+        // funguje normálně a nepropaguje svislé cukání do LazyColumn.
+        CompositionLocalProvider(LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
         LazyRow(
-            // vertical 10dp: prostor pro fokus lift (1.08×) + záři, aby se zvětšená karta neořízla o sousední řadu.
+            // vertical 10dp: prostor pro fokus lift (1.08×) + záři. horizontal 14dp: totéž vodorovně — LazyRow
+            // ořezává na své bounds, tak PRVNÍ (a poslední) karta potřebuje odsazení ≥ scale přesah (~5dp) + záře
+            // (~6dp), jinak se levý sloupec u sidebaru ořízne (user feedback OTA 297).
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         ) {
             items(rail.items, key = { it.key }) { item ->
                 Box(
@@ -312,6 +332,7 @@ private fun RailSection(
                     )
                 }
             }
+        }
         }
     }
 }

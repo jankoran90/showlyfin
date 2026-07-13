@@ -218,6 +218,14 @@ fun TvSettingsScreen(
                     labelOf = { "$it %" },
                     onSelect = fontPrefs::setScalePct,
                 )
+                TvOptionStepperRow(
+                    label = "Velikost UI",
+                    subtitle = "Zvětší/zmenší celé rozhraní (karty, rozestupy, ikony)",
+                    options = FontPrefsViewModel.UI_SCALE_OPTIONS,
+                    selected = font.uiScalePct,
+                    labelOf = { "$it %" },
+                    onSelect = fontPrefs::setUiScalePct,
+                )
             }
         }
 

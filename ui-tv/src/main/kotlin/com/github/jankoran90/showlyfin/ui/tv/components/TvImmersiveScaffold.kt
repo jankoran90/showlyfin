@@ -1,7 +1,5 @@
 package com.github.jankoran90.showlyfin.ui.tv.components
 
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +11,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,10 +19,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.rememberCsfdCardRating
 import com.github.jankoran90.showlyfin.core.ui.rememberCzechOverview
@@ -55,24 +57,34 @@ data class ImmersiveInfo(
 /** Full-screen fanart + čitelnostní scrim (vlevo tmavý → doprava průhledný, dole tmavý). Crossfade při změně. */
 @Composable
 fun TvImmersiveBackground(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
-    // Podrž poslední ne-null backdrop (Netflix): fokus na kartu bez fanartu pozadí neshodí do černé,
-    // jen se nezmění. Zabraňuje blikání u řad bez backdropu (Pokračovat/poster řady).
-    var lastBackdrop by remember { mutableStateOf<String?>(null) }
-    info?.backdropUrl?.let { lastBackdrop = it }
+    // DVĚ vrstvy proti blikání (user feedback OTA 297): `shown` = poslední ÚSPĚŠNĚ načtený backdrop drží
+    // obraz dole, `incoming` = nový cíl se dolaďuje NAD ním (Coil crossfade fade-in). Dřívější Compose
+    // `Crossfade` odfadoval starý na alpha 0 dřív, než nový (async AsyncImage) dekódoval → prosvítala černá
+    // = záblesk při každé změně řady. Takto se starý drží, dokud nový nedoloadí → nikdy probliknutí do černé.
+    // Podržení poslední ne-null hodnoty (fokus na kartu bez fanartu pozadí neshodí) je zachováno přes `incoming`.
+    val ctx = LocalContext.current
+    var shown by remember { mutableStateOf<String?>(null) }
+    var incoming by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(info?.backdropUrl) {
+        info?.backdropUrl?.let { if (it != shown) incoming = it }
+    }
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Crossfade(
-            targetState = lastBackdrop,
-            animationSpec = tween(durationMillis = 450),
-            label = "immersiveBackdrop",
-        ) { url ->
-            if (url != null) {
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+        shown?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        incoming?.takeIf { it != shown }?.let { url ->
+            AsyncImage(
+                model = ImageRequest.Builder(ctx).data(url).crossfade(400).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                onSuccess = { shown = url },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         val bg = MaterialTheme.colorScheme.background
         // Levý gradient (text vlevo čitelný) + spodní gradient (řady dole čitelné).
