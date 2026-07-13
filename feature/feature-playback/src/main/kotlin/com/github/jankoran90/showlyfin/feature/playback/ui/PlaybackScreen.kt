@@ -915,7 +915,8 @@ private fun SubtitleSettingsPanel(
             )
         }
 
-        // LINGUA Fáze 2 — AI překlad EN→CS, když nejsou žádné CZ titulky (poslední záloha).
+        // LINGUA/SUBWEAVE — AI překlad EN→CS. Nabízí se VŽDY (i když jsou titulky nalezené), aby si
+        // uživatel mohl vynutit vlastní kvalitní překlad, když jsou stažené špatné (např. strojový OpenSubtitles).
         if (state.canTranslateAi || state.aiTranslating || state.aiTranslateError != null) {
             if (state.aiTranslating) {
                 Row(
@@ -940,7 +941,9 @@ private fun SubtitleSettingsPanel(
                     Column(Modifier.weight(1f)) {
                         Text("Přeložit do češtiny (AI)", color = Color(0xFFFFBF00), style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            state.aiTranslateError ?: "Žádné české titulky — přeložím anglické přes AI",
+                            state.aiTranslateError ?: if (state.subtitleCandidates.any { !it.id.startsWith("ai_") })
+                                "Nejsou dobré? Přeložím anglické naší AI"
+                            else "Žádné české titulky — přeložím anglické přes AI",
                             color = if (state.aiTranslateError != null) Color(0xFFEF5350) else Color.White.copy(alpha = 0.5f),
                             style = MaterialTheme.typography.bodySmall,
                         )

@@ -185,6 +185,11 @@ class PlaybackViewModel @Inject constructor(
                     selectSubtitle(if (idx >= 0) idx else (resp.best.takeIf { it in resp.subtitles.indices } ?: 0), persist = false)
                 }
             }
+            // SUBWEAVE A: náš AI překlad nabízet VŽDY (i když jsou titulky nalezené) — user si může vynutit
+            // vlastní kvalitní překlad, když jsou stažené špatné (např. strojový OpenSubtitles). Jen zpřístupnit
+            // tlačítko; NEauto-nasazovat přes nalezené lidské titulky (auto-apply zůstává jen v prázdné větvi výše).
+            // Vlastní observe + enqueue (nebo instant reuse) obstará translateSubtitlesAi() až po kliknutí usera.
+            if (q.imdb.isNotBlank()) _state.update { it.copy(canTranslateAi = true) }
         }
     }
 
@@ -289,6 +294,12 @@ class PlaybackViewModel @Inject constructor(
         }
         val key = translateStore.keyOf(q.imdb, q.season, q.episode)
         translateKey = key
+        // SUBWEAVE A: film už jednou přeložený → nasadit hotovou AI stopu HNED (bez opětovného překladu =
+        // šetří čas i kvótu voice-bridge). Jinak zařadit nový překlad na pozadí.
+        translateStore.doneSubId(key)?.let { doneId ->
+            timber.log.Timber.i("[Lingua] AI už hotové ($key) → nasazuji hned")
+            applyAiSubtitle(doneId); return
+        }
         _state.update { it.copy(aiTranslating = true, aiTranslateError = null) }
         translateStore.setRunning(key)
         observeTranslation(key)
