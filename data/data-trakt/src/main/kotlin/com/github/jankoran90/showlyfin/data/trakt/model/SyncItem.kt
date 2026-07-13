@@ -10,6 +10,8 @@ data class SyncItem(
     val last_watched_at: String?,
     val last_updated_at: String?,
     val listed_at: String?,
+    /** COUCH (SHW-88): počet přehrání (jen /sync/watched). Váha pro play-count doporučení. */
+    val plays: Int? = null,
 ) {
     fun requireShow() = show!!
     fun requireMovie() = movie!!

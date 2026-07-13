@@ -150,6 +150,10 @@ private fun CollectionLandscapeCard(
                 }
                 if (part.jellyfinId != null) InLibraryTitleBadge(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
                 if (part.watched) WatchedBadge(modifier = Modifier.align(Alignment.TopStart))
+                // COUCH (SHW-88): TMDB hodnocení ve volném rohu (okamžité, na rozdíl od líného ČSFD ve scrimu).
+                part.rating?.takeIf { it > 0f }?.let {
+                    TmdbMiniBadge(rating = it, modifier = Modifier.align(Alignment.BottomStart).padding(4.dp))
+                }
                 Box(
                     Modifier
                         .fillMaxWidth()

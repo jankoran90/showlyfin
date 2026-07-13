@@ -14,6 +14,12 @@ data class MediaItem(
     val backdropPath: String? = null,
     val titleCz: String? = null,
     val overviewCz: String? = null,
+    /**
+     * COUCH (SHW-88) — číselná věková hranice (roky) z TMDB certifikace (release_dates / content_ratings,
+     * preferováno CZ→DE→GB→US). null = neznámá. Plní [enrich] jen když je aktivní věkový strop profilu
+     * (jinak zbytečné síťové volání). Použití: [ContentAgeGate] pro dětský profil.
+     */
+    val certificationAge: Int? = null,
 ) {
     fun posterUrl(size: String = "w342") = posterPath?.let { "https://image.tmdb.org/t/p/$size$it" }
     fun backdropUrl(size: String = "w780") = backdropPath?.let { "https://image.tmdb.org/t/p/$size$it" }

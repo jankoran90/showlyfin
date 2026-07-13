@@ -1,16 +1,21 @@
 package com.github.jankoran90.showlyfin.feature.discover.trakt
 
 import android.util.Log
+import com.github.jankoran90.showlyfin.core.domain.ContentAgeGate
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbSearchMovieItem
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.model.CustomList
 import com.github.jankoran90.showlyfin.data.trakt.model.SyncItem
+import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import com.github.jankoran90.showlyfin.feature.discover.mapper.toMediaItem
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlin.math.ln
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,7 +29,12 @@ import javax.inject.Singleton
 class TraktRowLoader @Inject constructor(
     private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
     private val tmdb: TmdbRemoteDataSource,
+    private val enricher: MediaEnricher,
+    private val parental: ParentalControlsRepository,
 ) {
+    /** Aktivní věkový strop profilu (null = bez omezení). Řídí i to, zda enrich tahá certifikace. */
+    private fun capAge(): Int? = parental.profile.value.effectiveAgeCap
+    private fun hideUnrated(): Boolean = parental.profile.value.hideUnratedForAge
     /** Watchlist, NEJNOVĚJI PŘIDANÉ PRVNÍ (listed_at desc — user 2026-07-13). [kind] = movies|shows|all. */
     suspend fun watchlist(kind: String = "all"): List<MediaItem> {
         val raw = runCatching {
@@ -83,8 +93,66 @@ class TraktRowLoader @Inject constructor(
         return enrich(merged.values.filter { (it.getTraktId() ?: return@filter false) !in exclude })
     }
 
+    /**
+     * COUCH (SHW-88) — play-count vážená doporučení „na míru dle sledování". Z nejvíc přehrávaných
+     * filmů (Trakt `plays`) vezme TMDB recommendations, každý kandidát dostane skóre = Σ přes seedy
+     * `ln(1+plays) / (pozice+1)` (log tlumí megahity, pozice zvýhodní bližší doporučení). Odečte co už
+     * mám (tmdb) a projde věkovým gate. Prázdné = málo historie / nepřihlášen.
+     */
+    suspend fun weightedRecommendations(limit: Int): List<MediaItem> = coroutineScope {
+        val watched = runCatching { authorizedTraktApi.fetchSyncWatchedMovies() }.getOrElse { emptyList() }
+        val seeds = watched.filter { it.getTmdbId() != null }
+            .sortedByDescending { it.plays ?: 1 }
+            .take(SEED_COUNT)
+        if (seeds.isEmpty()) { Log.i(TAG, "weighted: žádné seedy (prázdná historie)"); return@coroutineScope emptyList() }
+        val ownedTmdb = ownedTmdbIds()
+        val recLists = seeds.map { seed ->
+            async {
+                val weight = ln(1.0 + (seed.plays ?: 1).toDouble())
+                val recs = runCatching { tmdb.movieRecommendations(seed.getTmdbId()!!) }.getOrElse { emptyList() }
+                recs.take(REC_PER_SEED).mapIndexed { idx, item -> item to weight / (idx + 1.0) }
+            }
+        }.awaitAll().flatten()
+        val scores = LinkedHashMap<Long, Double>()
+        val byId = HashMap<Long, TmdbSearchMovieItem>()
+        for ((item, w) in recLists) {
+            if (item.id in ownedTmdb) continue
+            byId.putIfAbsent(item.id, item)
+            scores[item.id] = (scores[item.id] ?: 0.0) + w
+        }
+        val ranked = scores.entries.sortedByDescending { it.value }
+            .mapNotNull { byId[it.key] }
+            .take(limit.coerceIn(1, 60))
+            .map { it.toMovieMediaItem() }
+        Log.i(TAG, "weighted: ${seeds.size} seedů → ${ranked.size} kandidátů")
+        ContentAgeGate.filter(capAge(), enricher.enrich(ranked, withCertification = capAge() != null), hideUnrated())
+    }
+
+    private fun TmdbSearchMovieItem.toMovieMediaItem() = MediaItem(
+        traktId = 0L,
+        tmdbId = id,
+        imdbId = null,
+        title = title ?: original_title ?: "",
+        year = release_date?.take(4)?.toIntOrNull(),
+        overview = overview,
+        rating = vote_average,
+        genres = null,
+        type = MediaType.MOVIE,
+        posterPath = poster_path,
+        backdropPath = backdrop_path,
+    )
+
+    /** Sjednocené tmdb id všeho, co už mám: watched ∪ watchlist (pro dedup TMDB doporučení). */
+    private suspend fun ownedTmdbIds(): Set<Long> = coroutineScope {
+        val watched = async { runCatching { authorizedTraktApi.fetchSyncWatchedMovies() + authorizedTraktApi.fetchSyncWatchedShows() }.getOrElse { emptyList() } }
+        val watchlist = async { runCatching { authorizedTraktApi.fetchSyncMoviesWatchlist() + authorizedTraktApi.fetchSyncShowsWatchlist() }.getOrElse { emptyList() } }
+        val set = mutableSetOf<Long>()
+        (watched.await() + watchlist.await()).forEach { it.getTmdbId()?.let(set::add) }
+        set
+    }
+
     /** Sjednocené trakt id všeho, co už mám: watched ∪ hodnocené ∪ watchlist. */
-    private suspend fun ownedTraktIds(): Set<Long> = coroutineScope {
+    suspend fun ownedTraktIds(): Set<Long> = coroutineScope {
         val watched = async { runCatching { authorizedTraktApi.fetchSyncWatchedMovies() + authorizedTraktApi.fetchSyncWatchedShows() }.getOrElse { emptyList() } }
         val watchlist = async { runCatching { authorizedTraktApi.fetchSyncMoviesWatchlist() + authorizedTraktApi.fetchSyncShowsWatchlist() }.getOrElse { emptyList() } }
         val ratedShows = async { runCatching { authorizedTraktApi.fetchShowsRatings() }.getOrElse { emptyList() } }
@@ -96,27 +164,22 @@ class TraktRowLoader @Inject constructor(
         set
     }
 
-    /** SyncItem → obohacené MediaItem (per-item TMDB poster/backdrop + CZ titulek), paralelně. */
-    private suspend fun enrich(items: List<SyncItem>): List<MediaItem> = coroutineScope {
-        items.mapNotNull { si -> si.movie?.toMediaItem() ?: si.show?.toMediaItem() }
-            .map { base -> async { enrichOne(base) } }
-            .awaitAll()
+    /**
+     * SyncItem → obohacené MediaItem (poster/backdrop + CZ titulek + žánry + certifikace, paralelně),
+     * pak **věkový gate** dětského profilu ([ContentAgeGate]). Filtr běží tady → pokrývá Trakt řady na
+     * DOMOVĚ i v sekci TRAKT najednou; pro dospělý profil (cap=null) je no-op.
+     */
+    private suspend fun enrich(items: List<SyncItem>): List<MediaItem> {
+        val base = items.mapNotNull { si -> si.movie?.toMediaItem() ?: si.show?.toMediaItem() }
+        val enriched = enricher.enrich(base, withCertification = capAge() != null)
+        return ContentAgeGate.filter(capAge(), enriched, hideUnrated())
     }
 
     private companion object {
         const val TAG = "COUCH_Trakt"
-    }
-
-    private suspend fun enrichOne(item: MediaItem): MediaItem {
-        val tmdbId = item.tmdbId ?: return item
-        return if (item.type == MediaType.SHOW) {
-            val details = runCatching { tmdb.fetchShowDetails(tmdbId) }.getOrNull()
-            val tr = runCatching { tmdb.fetchShowTranslation(tmdbId, "cs") }.getOrNull()
-            item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path, titleCz = tr?.name?.takeIf { it.isNotBlank() })
-        } else {
-            val details = runCatching { tmdb.fetchMovieDetails(tmdbId) }.getOrNull()
-            val tr = runCatching { tmdb.fetchMovieTranslation(tmdbId, "cs") }.getOrNull()
-            item.copy(posterPath = details?.poster_path, backdropPath = details?.backdrop_path, titleCz = tr?.title?.takeIf { it.isNotBlank() })
-        }
+        /** Kolik nejhranějších titulů použít jako seed (omezuje počet TMDB volání). */
+        const val SEED_COUNT = 15
+        /** Kolik doporučení vzít z jednoho seedu. */
+        const val REC_PER_SEED = 20
     }
 }

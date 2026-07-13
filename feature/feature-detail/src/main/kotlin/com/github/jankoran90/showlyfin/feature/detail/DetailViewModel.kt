@@ -593,8 +593,20 @@ class DetailViewModel @Inject constructor(
         excludeTmdbId: Long,
         limit: Int = 20,
     ): MediaCollection? {
-        val parts = movies
+        // COUCH (SHW-88): řazení + filtr „jen vydané" pro sekce režisér/studio (KOLEKCE má vlastní cestu).
+        val releasedOnly = prefs.getBoolean("detail_section_released_only", false)
+        val today = java.time.LocalDate.now().toString()   // "YYYY-MM-DD" — ISO datum jde porovnat lexikograficky
+        val sorted = when (readSectionSort()) {
+            com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.RATING -> movies.sortedByDescending { it.vote_average ?: 0f }
+            com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.RECENT,
+            com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.YEAR_DESC -> movies.sortedByDescending { it.release_date ?: "" }
+            com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.ALPHA -> movies.sortedBy { (it.title ?: "").lowercase() }
+            com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.RANDOM -> movies.shuffled()
+            com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.DEFAULT -> movies
+        }
+        val parts = sorted
             .filter { it.id != excludeTmdbId && !it.poster_path.isNullOrBlank() }
+            .filter { !releasedOnly || (it.release_date?.let { d -> d.isNotBlank() && d <= today } == true) }
             .take(limit)
             .map { m ->
                 CollectionPart(
@@ -620,6 +632,12 @@ class DetailViewModel @Inject constructor(
         prefs.getString("detail_section_style", null)
             ?.let { runCatching { HomeCardStyle.valueOf(it) }.getOrNull() }
             ?: HomeCardStyle.POSTER
+
+    /** COUCH (SHW-88): řazení sekcí režisér/studio z prefs (neznámé/žádné → DEFAULT = pořadí z API). */
+    private fun readSectionSort(): com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort =
+        prefs.getString("detail_section_sort", null)
+            ?.let { runCatching { com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.valueOf(it) }.getOrNull() }
+            ?: com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.DEFAULT
 
     /** TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu z prefs (neznámé/žádné → IMMERSIVE_OVERLAY). */
     private fun readTvDetailLayout(): TvDetailLayout =

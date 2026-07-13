@@ -117,6 +117,7 @@ fun TvAddRowPicker(
                     simpleSource(newId, HomeRowSourceType.TRAKT_WATCHLIST, HomeCardStyle.POSTER, onPick)
                     simpleSource(newId, HomeRowSourceType.TRAKT_HISTORY, HomeCardStyle.LANDSCAPE, onPick)
                     simpleSource(newId, HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS, HomeCardStyle.POSTER, onPick)
+                    simpleSource(newId, HomeRowSourceType.WEIGHTED_RECOMMENDATIONS, HomeCardStyle.POSTER, onPick)
                     // Knihovní zdroje → fáze 2 (výběr konkrétní knihovny), jen když nějaké knihovny známe.
                     if (libraries.isNotEmpty()) {
                         TvActionChip(

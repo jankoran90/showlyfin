@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.ui.phone
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
+import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort
 import com.github.jankoran90.showlyfin.feature.detail.DETAIL_ACTION_KEYS
 import com.github.jankoran90.showlyfin.feature.detail.DetailActionsPlacement
 import com.github.jankoran90.showlyfin.feature.detail.TvDetailLayout
@@ -23,6 +24,9 @@ data class DetailPrefsState(
     val showCreators: Boolean = true,   // ENSEMBLE (SHW-45): sekce „Tvůrci"
     val showSeasons: Boolean = true,    // TENFOOT WS-C (SHW-87): sezóny/epizody seriálu v detailu
     val sectionStyle: HomeCardStyle = HomeCardStyle.POSTER,   // styl karet sekcí (plakát/fanart/fanart+popis)
+    // COUCH (SHW-88): řazení + filtr sekcí režisér/studio (kolekce se neřadí — má vlastní logiku dle data).
+    val sectionSort: HomeRowSort = HomeRowSort.DEFAULT,
+    val releasedOnly: Boolean = false,
     val plotLines: Int = 5,   // počet řádků popisu ve sbaleném stavu (0 = bez omezení)
     val actionOrder: List<String> = DETAIL_ACTION_KEYS,   // CANVAS A: pořadí akčních tlačítek
     // TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu + auto-kompakt popisu + umístění tlačítek.
@@ -49,6 +53,9 @@ class DetailPrefsViewModel @Inject constructor(
         showSeasons = prefs.getBoolean(KEY_SEASONS, true),
         sectionStyle = prefs.getString(KEY_SECTION_STYLE, null)
             ?.let { runCatching { HomeCardStyle.valueOf(it) }.getOrNull() } ?: HomeCardStyle.POSTER,
+        sectionSort = prefs.getString(KEY_SECTION_SORT, null)
+            ?.let { runCatching { HomeRowSort.valueOf(it) }.getOrNull() } ?: HomeRowSort.DEFAULT,
+        releasedOnly = prefs.getBoolean(KEY_RELEASED_ONLY, false),
         plotLines = prefs.getInt(KEY_PLOT_LINES, 5),
         actionOrder = parseActionOrder(prefs.getString(KEY_ACTION_ORDER, null)),
         tvLayout = prefs.getString(KEY_TV_LAYOUT, null)
@@ -72,6 +79,11 @@ class DetailPrefsViewModel @Inject constructor(
         _state.update { s -> s.copy(plotLines = value) }
         prefs.edit().putInt(KEY_PLOT_LINES, value).apply()
     }
+    fun setSectionSort(value: HomeRowSort) {
+        _state.update { s -> s.copy(sectionSort = value) }
+        prefs.edit().putString(KEY_SECTION_SORT, value.name).apply()
+    }
+    fun setReleasedOnly(value: Boolean) = put(KEY_RELEASED_ONLY) { _state.update { s -> s.copy(releasedOnly = value) }; value }
 
     /** CANVAS A/E: změna pořadí akčních tlačítek detailu (Nastavení, šipky ▲▼). */
     fun setActionOrder(order: List<String>) {
@@ -102,6 +114,8 @@ class DetailPrefsViewModel @Inject constructor(
         private const val KEY_CREATORS = "detail_show_creators"
         private const val KEY_SEASONS = "detail_show_seasons"
         private const val KEY_SECTION_STYLE = "detail_section_style"
+        private const val KEY_SECTION_SORT = "detail_section_sort"
+        private const val KEY_RELEASED_ONLY = "detail_section_released_only"
         private const val KEY_PLOT_LINES = "detail_plot_lines"
         private const val KEY_ACTION_ORDER = "detail_action_order"
         // TV DETAIL REDESIGN (OTA 299)

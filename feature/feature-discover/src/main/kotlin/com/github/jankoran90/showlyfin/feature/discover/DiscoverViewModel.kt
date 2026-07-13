@@ -46,6 +46,7 @@ class DiscoverViewModel @Inject constructor(
     private val tmdbApi: TmdbRemoteDataSource,
     private val jellyfinLibraryService: JellyfinLibraryService,
     private val parentalControlsRepository: ParentalControlsRepository,
+    private val enricher: com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher,
     private val tokenProvider: TokenProvider,
     private val uploaderDs: UploaderRemoteDataSource,
     private val profileRepository: ProfileRepository,
@@ -231,6 +232,13 @@ class DiscoverViewModel @Inject constructor(
         effectiveAgeRating?.let { rating ->
             result = result.filter { item -> isAllowedForRating(item, rating) }
         }
+        // COUCH (SHW-88) — reálná TMDB certifikace (číselný strop) navíc k žánrové heuristice výše.
+        val ageCap = parentalControlsRepository.profile.value.effectiveAgeCap
+        if (ageCap != null) {
+            result = com.github.jankoran90.showlyfin.core.domain.ContentAgeGate.filter(
+                ageCap, result, parentalControlsRepository.profile.value.hideUnratedForAge,
+            )
+        }
         result = when (filters.sortBy) {
             DiscoverSort.DEFAULT -> result
             DiscoverSort.RATING_DESC -> result.sortedByDescending { it.rating ?: 0f }
@@ -361,37 +369,9 @@ class DiscoverViewModel @Inject constructor(
                 (traktDeferred.await() + tmdbMoviesDeferred.await() + tmdbShowsDeferred.await())
                     .distinctBy { "${it.type}_${it.traktId}" }
             }
-            val mediaItems = combined
-            val enriched = coroutineScope {
-                mediaItems.map { item ->
-                    async {
-                        val tmdbId = item.tmdbId ?: return@async item
-                        if (item.type == MediaType.MOVIE) {
-                            val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
-                            val translationDeferred = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
-                            val details = detailsDeferred.await()
-                            val translation = translationDeferred.await()
-                            item.copy(
-                                posterPath = details?.poster_path,
-                                backdropPath = details?.backdrop_path,
-                                titleCz = translation?.title?.takeIf { it.isNotBlank() },
-                                overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
-                            )
-                        } else {
-                            val detailsDeferred = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
-                            val translationDeferred = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
-                            val details = detailsDeferred.await()
-                            val translation = translationDeferred.await()
-                            item.copy(
-                                posterPath = details?.poster_path,
-                                backdropPath = details?.backdrop_path,
-                                titleCz = translation?.name?.takeIf { it.isNotBlank() },
-                                overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
-                            )
-                        }
-                    }
-                }.awaitAll()
-            }
+            // COUCH (SHW-88): sdílený enricher (CZ názvy + certifikace pro věkový filtr hledání).
+            val ageCap = parentalControlsRepository.profile.value.effectiveAgeCap
+            val enriched = enricher.enrich(combined, withCertification = ageCap != null)
             val state = _uiState.value
             val filtered = applyFilters(enriched, state.filters, state)
             _uiState.update {
@@ -507,35 +487,11 @@ class DiscoverViewModel @Inject constructor(
         }
 
     /** TMDB obohacení (poster/backdrop + CZ titulek/popis) paralelně. */
-    private suspend fun enrich(items: List<MediaItem>, tab: DiscoverTab): List<MediaItem> = coroutineScope {
-        items.map { item ->
-            async {
-                val tmdbId = item.tmdbId ?: return@async item
-                if (tab == DiscoverTab.MOVIES) {
-                    val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
-                    val translationDeferred = async { runCatching { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
-                    val details = detailsDeferred.await()
-                    val translation = translationDeferred.await()
-                    item.copy(
-                        posterPath = details?.poster_path,
-                        backdropPath = details?.backdrop_path,
-                        titleCz = translation?.title?.takeIf { it.isNotBlank() },
-                        overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
-                    )
-                } else {
-                    val detailsDeferred = async { runCatching { tmdbApi.fetchShowDetails(tmdbId) }.getOrNull() }
-                    val translationDeferred = async { runCatching { tmdbApi.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
-                    val details = detailsDeferred.await()
-                    val translation = translationDeferred.await()
-                    item.copy(
-                        posterPath = details?.poster_path,
-                        backdropPath = details?.backdrop_path,
-                        titleCz = translation?.name?.takeIf { it.isNotBlank() },
-                        overviewCz = translation?.overview?.takeIf { it.isNotBlank() },
-                    )
-                }
-            }
-        }.awaitAll()
+    // COUCH (SHW-88): sjednoceno do sdíleného [MediaEnricher] (poster/backdrop + CZ titulek s cs-CZ
+    // fallbackem + žánry + certifikace jen když je aktivní věkový strop). [tab] už netřeba (MediaItem.type).
+    private suspend fun enrich(items: List<MediaItem>, tab: DiscoverTab): List<MediaItem> {
+        val cap = parentalControlsRepository.profile.value.effectiveAgeCap
+        return enricher.enrich(items, withCertification = cap != null)
     }
 
     private fun mergeGenres(existing: List<String>, items: List<MediaItem>): List<String> {

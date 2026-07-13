@@ -65,11 +65,6 @@ import kotlin.math.roundToInt
  */
 
 /** Styly karet pro sekce detailu (kolekce/režisér/studio) — jen ty, co v horizontálním pásu dávají smysl. */
-private val DETAIL_SECTION_STYLES = listOf(
-    HomeCardStyle.POSTER,
-    HomeCardStyle.LANDSCAPE,
-    HomeCardStyle.FANART_DETAIL,
-)
 
 @Composable
 fun TvSettingsScreen(
@@ -304,78 +299,11 @@ fun TvSettingsScreen(
             }
         }
 
-        // ── Detail obsahu ── (TENFOOT WS-B/WS-C: volitelné sekce karty filmu/seriálu)
-        item {
-            TvSettingsBlock(title = "Detail obsahu") {
-                // OTA 299: rozvržení TV detailu (immersive overlay přes fanart vs. klasický hero pruh).
-                TvOptionStepperRow(
-                    label = "Rozvržení detailu",
-                    subtitle = "Immersive (blok přes fanart) nebo klasický hero pruh nahoře",
-                    options = TvDetailLayout.entries.toList(),
-                    selected = detail.tvLayout,
-                    labelOf = { it.label },
-                    onSelect = detailPrefs::setTvLayout,
-                )
-                TvToggleRow(
-                    label = "Auto-kompakt popisu",
-                    subtitle = "Zkrátit popis tak, aby první řada obsahu byla vidět bez scrollu",
-                    checked = detail.plotAutoCompact,
-                    onCheckedChange = detailPrefs::setPlotAutoCompact,
-                )
-                TvOptionStepperRow(
-                    label = "Počet řádků popisu",
-                    subtitle = "Když je auto-kompakt vypnutý — pevný počet řádků",
-                    options = DetailPrefsViewModel.PLOT_LINE_OPTIONS,
-                    selected = detail.plotLines,
-                    labelOf = { if (it <= 0) "Bez omezení" else "$it řádků" },
-                    onSelect = detailPrefs::setPlotLines,
-                )
-                TvOptionStepperRow(
-                    label = "Umístění tlačítek",
-                    subtitle = "Blok akcí nad popisem, nebo pod ním (immersive layout)",
-                    options = DetailActionsPlacement.entries.toList(),
-                    selected = detail.actionsPlacement,
-                    labelOf = { it.label },
-                    onSelect = detailPrefs::setActionsPlacement,
-                )
-                TvToggleRow(
-                    label = "Tvůrci",
-                    subtitle = "Pás herců a režie + Scénář/Kamera/Žánry",
-                    checked = detail.showCreators,
-                    onCheckedChange = detailPrefs::setCreators,
-                )
-                TvToggleRow(
-                    label = "Sezóny a epizody",
-                    subtitle = "U seriálu výběr sezóny a seznam epizod v detailu",
-                    checked = detail.showSeasons,
-                    onCheckedChange = detailPrefs::setSeasons,
-                )
-                TvToggleRow(
-                    label = "Kolekce",
-                    subtitle = "Další díly ságy / kolekce",
-                    checked = detail.showCollections,
-                    onCheckedChange = detailPrefs::setCollections,
-                )
-                TvToggleRow(
-                    label = "Od stejného režiséra",
-                    checked = detail.showDirector,
-                    onCheckedChange = detailPrefs::setDirector,
-                )
-                TvToggleRow(
-                    label = "Od stejného studia",
-                    checked = detail.showStudio,
-                    onCheckedChange = detailPrefs::setStudio,
-                )
-                TvOptionStepperRow(
-                    label = "Styl karet sekcí",
-                    subtitle = "Kolekce / režisér / studio: plakát, fanart nebo fanart s popisem",
-                    options = DETAIL_SECTION_STYLES,
-                    selected = detail.sectionStyle,
-                    labelOf = { it.label },
-                    onSelect = detailPrefs::setSectionStyle,
-                )
-            }
-        }
+        // ── Detail obsahu ── (extrahováno do TvContentSettingsBlocks kvůli stropu 600ř)
+        item { TvDetailContentBlock(detail, detailPrefs) }
+
+        // ── Rodičovská kontrola (COUCH SHW-88) — věkový strop objevovacích ploch dětského profilu ──
+        item { TvParentalSettingsBlock() }
 
         // ── Účty ──
         item {

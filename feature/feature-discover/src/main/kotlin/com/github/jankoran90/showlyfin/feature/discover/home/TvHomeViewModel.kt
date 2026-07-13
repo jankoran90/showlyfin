@@ -4,9 +4,12 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.domain.ContentAgeGate
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
+import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.domain.home.HomeLayoutStore
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowConfig
@@ -75,6 +78,8 @@ class TvHomeViewModel @Inject constructor(
     private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
     private val traktLoader: TraktRowLoader,
     private val tmdb: TmdbRemoteDataSource,
+    private val enricher: MediaEnricher,
+    private val parentalControls: ParentalControlsRepository,
     private val favorites: FavoritesStore,
     private val workingSources: WorkingSourceStore,
     private val profileRepository: ProfileRepository,
@@ -99,6 +104,23 @@ class TvHomeViewModel @Inject constructor(
     val traktAllowed: StateFlow<Boolean> = profileRepository.activeConfig
         .map { hasTrakt(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), hasTrakt(profileRepository.activeConfig.value))
+
+    // COUCH (SHW-88) — věkový strop dětského profilu (null = bez omezení). Řídí enrich (tahat certifikace)
+    // i filtr v applyOps. Reaktivní na přepnutí profilu.
+    private val ageCap: StateFlow<Int?> = parentalControls.profile
+        .map { it.effectiveAgeCap }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), parentalControls.profile.value.effectiveAgeCap)
+    private fun hideUnrated(): Boolean = parentalControls.profile.value.hideUnratedForAge
+
+    // Owned trakt id (viděné ∪ hodnocené ∪ watchlist) — pro filtr „skryj co už mám" na reco/discover řadách.
+    // Cache per profil; vyčištěno v [reloadAllRows]. Prázdné pro profil bez Traktu.
+    @Volatile private var ownedIdsCache: Set<Long>? = null
+    private suspend fun ownedIds(): Set<Long> {
+        ownedIdsCache?.let { return it }
+        val ids = if (traktAllowed.value) runCatching { traktLoader.ownedTraktIds() }.getOrElse { emptySet() } else emptySet()
+        ownedIdsCache = ids
+        return ids
+    }
 
     /** Id aktivního profilu — TvHomeScreen na jeho změnu přenačte i JF knihovní řady (LibraryRowsViewModel). */
     val activeProfileId: StateFlow<Long?> = profileRepository.activeProfile
@@ -152,6 +174,7 @@ class TvHomeViewModel @Inject constructor(
     fun reloadAllRows() {
         android.util.Log.i("COUCH_Home", "reloadAllRows: ${rowConfigs.value.size} řad")
         loadedHash.clear()
+        ownedIdsCache = null
         jobs.values.forEach { it.cancel() }
         jobs.clear()
         _states.value = emptyMap()
@@ -259,6 +282,9 @@ class TvHomeViewModel @Inject constructor(
             config.params[HomeRowParams.LIST_ID]?.toLongOrNull()?.let { id -> traktLoader.list(id).map { it.toHomeRowItem(config) } } ?: emptyList()
         HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS ->
             traktLoader.couchmonkeyRecommendations().map { it.toHomeRowItem(config) }
+        // COUCH (SHW-88) play-count vážená doporučení „na míru dle sledování".
+        HomeRowSourceType.WEIGHTED_RECOMMENDATIONS ->
+            traktLoader.weightedRecommendations(config.limit).map { it.toHomeRowItem(config) }
         // LIBRARY_TILES / GENRES / STUDIOS = dlaždicové navigační řady → 2. vlna (viz Known gaps).
         else -> emptyList()
         }
@@ -334,7 +360,8 @@ class TvHomeViewModel @Inject constructor(
                     else traktApi.fetchTrendingMovies("", "", limit, 1).map { it.toMediaItem() }
             }
         }.getOrElse { emptyList() }
-        return enrich(raw, isShow).map { item ->
+        // Sdílený enricher (poster/backdrop + CZ titulek + žánry + certifikace jen když aktivní strop).
+        return enricher.enrich(raw, withCertification = ageCap.value != null).map { item ->
             HomeRowItem(
                 key = "disc_${item.type}_${item.tmdbId ?: item.traktId}",
                 title = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
@@ -344,32 +371,6 @@ class TvHomeViewModel @Inject constructor(
                 mediaItem = item,
             )
         }
-    }
-
-    /** TMDB obohacení (poster/backdrop + CZ titulek) paralelně — zjednodušené z DiscoverViewModel. */
-    private suspend fun enrich(items: List<MediaItem>, isShow: Boolean): List<MediaItem> = coroutineScope {
-        items.map { item ->
-            async {
-                val tmdbId = item.tmdbId ?: return@async item
-                if (isShow) {
-                    val details = runCatching { tmdb.fetchShowDetails(tmdbId) }.getOrNull()
-                    val tr = runCatching { tmdb.fetchShowTranslation(tmdbId, "cs") }.getOrNull()
-                    item.copy(
-                        posterPath = details?.poster_path,
-                        backdropPath = details?.backdrop_path,
-                        titleCz = tr?.name?.takeIf { it.isNotBlank() },
-                    )
-                } else {
-                    val details = runCatching { tmdb.fetchMovieDetails(tmdbId) }.getOrNull()
-                    val tr = runCatching { tmdb.fetchMovieTranslation(tmdbId, "cs") }.getOrNull()
-                    item.copy(
-                        posterPath = details?.poster_path,
-                        backdropPath = details?.backdrop_path,
-                        titleCz = tr?.title?.takeIf { it.isNotBlank() },
-                    )
-                }
-            }
-        }.awaitAll()
     }
 
     /** COUCH T1/T2 — obohacené Trakt [MediaItem] (z [TraktRowLoader]) → [HomeRowItem] pro řadu domova. */
@@ -545,9 +546,20 @@ class TvHomeViewModel @Inject constructor(
 
     // ── Klientské operace (řazení / limit / skryj zhlédnuté) ───────────────────
 
-    private fun applyOps(items: List<HomeRowItem>, config: HomeRowConfig): List<HomeRowItem> {
+    private suspend fun applyOps(items: List<HomeRowItem>, config: HomeRowConfig): List<HomeRowItem> {
         var r = items
         if (config.params.boolParam(HomeRowParams.HIDE_WATCHED)) r = r.filter { !it.watched }
+        // COUCH (SHW-88) — věkový strop dětského profilu na OBJEVOVACÍCH řadách (JF knihovna vyňata).
+        val cap = ageCap.value
+        if (cap != null && config.source !in AGE_EXEMPT_SOURCES) {
+            val strict = hideUnrated()
+            r = r.filter { item -> item.mediaItem?.let { ContentAgeGate.isAllowed(cap, it, strict) } ?: true }
+        }
+        // „Skryj co už mám" na reco/discover řadách (Trakt owned). Trakt řady řeší owned už v loaderu.
+        if (config.source in OWNED_FILTER_SOURCES) {
+            val owned = ownedIds()
+            if (owned.isNotEmpty()) r = r.filter { item -> item.mediaItem?.traktId?.let { it !in owned } ?: true }
+        }
         r = when (config.sort) {
             HomeRowSort.RATING -> r.sortedByDescending { it.mediaItem?.rating ?: -1f }
             HomeRowSort.YEAR_DESC -> r.sortedByDescending { it.year ?: 0 }
@@ -580,6 +592,24 @@ private val TRAKT_SOURCES = setOf(
     HomeRowSourceType.TRAKT_HISTORY,
     HomeRowSourceType.TRAKT_LIST,
     HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS,
+    HomeRowSourceType.WEIGHTED_RECOMMENDATIONS,
+)
+
+/** COUCH (SHW-88) — zdroje z Jellyfin knihovny (pro děti schválené) → věkový filtr se NEaplikuje. */
+private val AGE_EXEMPT_SOURCES = setOf(
+    HomeRowSourceType.CONTINUE_WATCHING,
+    HomeRowSourceType.NEXT_UP,
+    HomeRowSourceType.CONTINUE_WATCHING_COMBINED,
+    HomeRowSourceType.RECENTLY_ADDED,
+    HomeRowSourceType.COLLECTION,
+    HomeRowSourceType.JELLYFIN_LIBRARY,
+    HomeRowSourceType.SAVED_FOR_PLAYBACK,
+)
+
+/** Řady, kde skrýváme co už mám (doporučovací/objevovací). */
+private val OWNED_FILTER_SOURCES = setOf(
+    HomeRowSourceType.DISCOVER,
+    HomeRowSourceType.WEIGHTED_RECOMMENDATIONS,
 )
 
 /** Sdílená sada Jellyfin ItemFields pro řady domova (providerIds kvůli klik-mapování, overview kvůli immersive). */

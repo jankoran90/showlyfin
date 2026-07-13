@@ -5,13 +5,49 @@ import com.github.jankoran90.showlyfin.data.tmdb.model.*
 
 internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource {
 
-    override suspend fun fetchMovieDetails(tmdbId: Long) =
-        try { if (tmdbId <= 0) null else service.fetchMovieDetails(tmdbId) }
+    override suspend fun fetchMovieDetails(tmdbId: Long, language: String?) =
+        try { if (tmdbId <= 0) null else service.fetchMovieDetails(tmdbId, language) }
         catch (e: Throwable) { null }
 
-    override suspend fun fetchShowDetails(tmdbId: Long) =
-        try { if (tmdbId <= 0) null else service.fetchShowDetails(tmdbId) }
+    override suspend fun fetchShowDetails(tmdbId: Long, language: String?) =
+        try { if (tmdbId <= 0) null else service.fetchShowDetails(tmdbId, language) }
         catch (e: Throwable) { null }
+
+    override suspend fun fetchMovieCertificationAge(tmdbId: Long): Int? =
+        try {
+            if (tmdbId <= 0) null
+            else pickCertificationAge(
+                service.fetchMovieReleaseDates(tmdbId).results.orEmpty()
+                    .associate { c -> c.iso_3166_1.orEmpty().uppercase() to c.release_dates.orEmpty().mapNotNull { it.certification } }
+            )
+        } catch (e: Throwable) { null }
+
+    override suspend fun fetchShowCertificationAge(tmdbId: Long): Int? =
+        try {
+            if (tmdbId <= 0) null
+            else pickCertificationAge(
+                service.fetchShowContentRatings(tmdbId).results.orEmpty()
+                    .associate { c -> c.iso_3166_1.orEmpty().uppercase() to listOfNotNull(c.rating) }
+            )
+        } catch (e: Throwable) { null }
+
+    /**
+     * Vyber certifikaci dle priority zemí ([CertificationAge.COUNTRY_PRIORITY]) a převeď na věk. V rámci
+     * země bere NEJNIŽŠÍ platnou hranici (u filmů je víc release_dates s různými cert; nejpřísnější =
+     * nejbezpečnější floor pro děti). Když prioritní země nic nedá, zkusí kteroukoli.
+     */
+    override suspend fun movieRecommendations(tmdbId: Long): List<TmdbSearchMovieItem> =
+        try { if (tmdbId <= 0) emptyList() else service.fetchMovieRecommendations(tmdbId).results }
+        catch (e: Throwable) { emptyList() }
+
+    private fun pickCertificationAge(byCountry: Map<String, List<String>>): Int? {
+        fun ageOf(certs: List<String>): Int? =
+            certs.mapNotNull { CertificationAge.toAge(it) }.minOrNull()
+        for (country in CertificationAge.COUNTRY_PRIORITY) {
+            byCountry[country]?.let { ageOf(it)?.let { age -> return age } }
+        }
+        return byCountry.values.flatMap { it }.let { ageOf(it) }
+    }
 
     override suspend fun fetchShowImages(tmdbId: Long) =
         try { if (tmdbId <= 0) TmdbImages.EMPTY else service.fetchShowImages(tmdbId) }

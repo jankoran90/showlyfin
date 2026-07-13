@@ -71,6 +71,12 @@ enum class HomeRowSourceType(val label: String) {
      */
     COUCHMONKEY_RECOMMENDATIONS("Doporučeno"),
 
+    /**
+     * COUCH (SHW-88): play-count vážená doporučení „na míru dle sledování" — z nejvíc přehrávaných
+     * titulů (Trakt `plays`) → TMDB recommendations, vážené počtem přehrání, mínus co už mám. OAuth.
+     */
+    WEIGHTED_RECOMMENDATIONS("Na míru (podle sledování)"),
+
     /** JEDNA konkrétní Jellyfin knihovna (viz [HomeRowParams.LIBRARY_ID]). První-třídní řada:
      *  vlastní enabled/pořadí/styl per knihovna. Seed-once z profilu (viz [HomeLayoutStore.syncLibraries]). */
     JELLYFIN_LIBRARY("Jellyfin knihovna"),

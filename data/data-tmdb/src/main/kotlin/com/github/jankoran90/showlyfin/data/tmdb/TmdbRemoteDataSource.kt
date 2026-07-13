@@ -3,8 +3,13 @@ package com.github.jankoran90.showlyfin.data.tmdb
 import com.github.jankoran90.showlyfin.data.tmdb.model.*
 
 interface TmdbRemoteDataSource {
-    suspend fun fetchMovieDetails(tmdbId: Long): TmdbMovieDetails?
-    suspend fun fetchShowDetails(tmdbId: Long): TmdbShowDetails?
+    suspend fun fetchMovieDetails(tmdbId: Long, language: String? = null): TmdbMovieDetails?
+    suspend fun fetchShowDetails(tmdbId: Long, language: String? = null): TmdbShowDetails?
+    /** COUCH (SHW-88) — číselná věková hranice z TMDB certifikace (CZ→SK→DE→GB→US). null = neznámá. */
+    suspend fun fetchMovieCertificationAge(tmdbId: Long): Int?
+    suspend fun fetchShowCertificationAge(tmdbId: Long): Int?
+    /** COUCH (SHW-88) — TMDB doporučení k filmu (seed pro play-count engine). */
+    suspend fun movieRecommendations(tmdbId: Long): List<TmdbSearchMovieItem>
     suspend fun fetchShowImages(tmdbId: Long): TmdbImages
     // TENFOOT WS-C (SHW-87): detail sezóny seriálu (seznam epizod).
     suspend fun fetchSeason(tmdbId: Long, seasonNumber: Int): TmdbSeasonDetails?

@@ -1,0 +1,71 @@
+package com.github.jankoran90.showlyfin.feature.discover.enrich
+
+import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * COUCH (SHW-88) — SDÍLENÉ TMDB obohacení [MediaItem] pro objevovací plochy (domov / Objevit / Trakt).
+ * Sjednocuje dřív trojnásobně duplikovanou logiku (TvHomeViewModel.enrich, TraktRowLoader.enrichOne,
+ * DiscoverViewModel.enrich).
+ *
+ * Řeší:
+ * 1. **poster/backdrop** z TMDB details,
+ * 2. **CZ titulek + popis** — preferuje explicitní `cs` translations, jinak `details` volané v `cs-CZ`
+ *    (TMDB vrací česky-NEBO-originál, nikdy prázdné — opravuje niche/foreign tituly, kde `cs` translations
+ *    má prázdný title a dřív padly do angličtiny),
+ * 3. **žánry** (pro žánrovou pojistku věkového filtru),
+ * 4. **věková certifikace** ([withCertification] = true, jen když je aktivní věkový strop profilu — jinak
+ *    zbytečné síťové volání navíc).
+ */
+@Singleton
+class MediaEnricher @Inject constructor(
+    private val tmdb: TmdbRemoteDataSource,
+) {
+    suspend fun enrich(items: List<MediaItem>, withCertification: Boolean): List<MediaItem> = coroutineScope {
+        items.map { item -> async { enrichOne(item, withCertification) } }.awaitAll()
+    }
+
+    suspend fun enrichOne(item: MediaItem, withCertification: Boolean): MediaItem = coroutineScope {
+        val tmdbId = item.tmdbId ?: return@coroutineScope item
+        if (item.type == MediaType.SHOW) {
+            val detailsD = async { runCatching { tmdb.fetchShowDetails(tmdbId, LANG) }.getOrNull() }
+            val trD = async { runCatching { tmdb.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
+            val ageD = async { if (withCertification) runCatching { tmdb.fetchShowCertificationAge(tmdbId) }.getOrNull() else null }
+            val details = detailsD.await(); val tr = trD.await()
+            item.copy(
+                posterPath = details?.poster_path ?: item.posterPath,
+                backdropPath = details?.backdrop_path ?: item.backdropPath,
+                titleCz = firstNonBlank(tr?.name, details?.name) ?: item.titleCz,
+                overviewCz = firstNonBlank(tr?.overview, details?.overview) ?: item.overviewCz,
+                genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
+                certificationAge = ageD.await() ?: item.certificationAge,
+            )
+        } else {
+            val detailsD = async { runCatching { tmdb.fetchMovieDetails(tmdbId, LANG) }.getOrNull() }
+            val trD = async { runCatching { tmdb.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
+            val ageD = async { if (withCertification) runCatching { tmdb.fetchMovieCertificationAge(tmdbId) }.getOrNull() else null }
+            val details = detailsD.await(); val tr = trD.await()
+            item.copy(
+                posterPath = details?.poster_path ?: item.posterPath,
+                backdropPath = details?.backdrop_path ?: item.backdropPath,
+                titleCz = firstNonBlank(tr?.title, details?.title) ?: item.titleCz,
+                overviewCz = firstNonBlank(tr?.overview, details?.overview) ?: item.overviewCz,
+                genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
+                certificationAge = ageD.await() ?: item.certificationAge,
+            )
+        }
+    }
+
+    private fun firstNonBlank(vararg values: String?): String? =
+        values.firstOrNull { !it.isNullOrBlank() }
+
+    private companion object {
+        const val LANG = "cs-CZ"
+    }
+}

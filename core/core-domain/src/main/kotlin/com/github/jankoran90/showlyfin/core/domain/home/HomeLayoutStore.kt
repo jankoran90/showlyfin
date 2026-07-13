@@ -287,6 +287,14 @@ class HomeLayoutStore @Inject constructor(
                 cardStyle = HomeCardStyle.POSTER,
                 params = mapOf(HomeRowParams.TAB to "shows", HomeRowParams.FILTER to "recommended"),
             ),
+            // COUCH (SHW-88): play-count vážená doporučení — z nejvíc přehrávaných titulů profilu.
+            // Prázdné bez Traktu / bez historie s přehráními → řada se nezobrazí.
+            HomeRowConfig(
+                id = "weighted_reco",
+                source = HomeRowSourceType.WEIGHTED_RECOMMENDATIONS,
+                title = "Na míru podle sledování",
+                cardStyle = HomeCardStyle.POSTER,
+            ),
             HomeRowConfig(
                 id = "trending_movies",
                 source = HomeRowSourceType.DISCOVER,
