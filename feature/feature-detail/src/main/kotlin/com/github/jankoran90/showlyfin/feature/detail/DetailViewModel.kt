@@ -702,17 +702,25 @@ class DetailViewModel @Inject constructor(
 
     fun toggleWatchlist() {
         val item = _uiState.value.item ?: return
-        if (tokenProvider.getToken() == null) return
+        // BUG „Chci vidět bez fajfky" (2026-07-14): dřív tiché `return` bez zpětné vazby → user nevěděl,
+        // proč fajfka nenaskočí. Teď: viditelná hláška (Toast) při každém blokujícím stavu + OPTIMISTICKÝ
+        // překlop (fajfka hned) s revertem při selhání Trakt POSTu.
+        if (tokenProvider.getToken() == null) {
+            _uiState.update { it.copy(autoCastMessage = "Pro seznam „Chci vidět\" se přihlas k Trakt (Nastavení → Účty).") }
+            return
+        }
         if (_uiState.value.isTogglingWatchlist) return
         // WINNOW (SHW-41): nesmí padnout na traktId==0 — tituly z pásu „od stejného režiséra/studia"
         // nesou jen tmdbId. Sestavíme položku z čehokoli, co máme (trakt/tmdb/imdb); Trakt to přijme.
         val exportItem = SyncExportItem.fromIds(item.traktId, item.tmdbId, item.imdbId)
         if (exportItem == null) {
             timber.log.Timber.w("[Watchlist] toggle: žádné použitelné id (trakt/tmdb/imdb) pro '${item.title}'")
+            _uiState.update { it.copy(autoCastMessage = "Film zatím nemá ID pro Trakt seznam — zkus to za chvíli.") }
             return
         }
         val currentlyIn = _uiState.value.isInWatchlist
-        _uiState.update { it.copy(isTogglingWatchlist = true) }
+        // Optimistický překlop: fajfka naskočí okamžitě, backend doběhne na pozadí.
+        _uiState.update { it.copy(isTogglingWatchlist = true, isInWatchlist = !currentlyIn) }
         viewModelScope.launch {
             val request = if (item.type == MediaType.MOVIE) {
                 SyncExportRequest(movies = listOf(exportItem))
@@ -726,7 +734,10 @@ class DetailViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     isTogglingWatchlist = false,
+                    // Při selhání revert na původní stav + hláška; při úspěchu ponech optimistický.
                     isInWatchlist = if (ok) !currentlyIn else currentlyIn,
+                    autoCastMessage = if (ok) it.autoCastMessage
+                        else "Nepodařilo se uložit do Trakt seznamu — zkus to znovu.",
                 )
             }
         }
@@ -1091,6 +1102,12 @@ class DetailViewModel @Inject constructor(
             val fIdx = add.fileIdx
             timber.log.Timber.i("[RD] add ok torrent=${add.torrentId} status=${add.status} fileIdx=$fIdx")
             _uiState.update { it.copy(rdDownload = it.rdDownload?.copy(torrentId = add.torrentId, status = add.status, progress = add.progress)) }
+            // ③ (2026-07-14) stall-timeout: když se necachovaný zdroj NEZAČNE stahovat (progress visí na 0 %)
+            // po konfigurovanou dobu (pref `rd_stall_timeout_sec`, default 120 s), vzdej a vyzvi k jinému zdroji.
+            // Jakmile progress poskočí nad 0 % (stahuje se), timeout se vypne — dál ruší jen user tlačítkem Zrušit.
+            val stallTimeoutMs = prefs.getInt("rd_stall_timeout_sec", 120).coerceAtLeast(1) * 1000L
+            val startedAt = System.currentTimeMillis()
+            var everMoved = add.progress > 0.0
             while (isActive) {
                 val p = try {
                     uploaderDs.rdProgress(uploaderBaseUrl, uploaderCookie, add.torrentId, fIdx)
@@ -1104,6 +1121,18 @@ class DetailViewModel @Inject constructor(
                 }
                 _uiState.update {
                     it.copy(rdDownload = it.rdDownload?.copy(status = p.status, progress = p.progress, speedBytesPerSec = p.speed, seeders = p.seeders))
+                }
+                if (p.progress > 0.0) everMoved = true
+                if (!everMoved && p.status != "downloaded" &&
+                    System.currentTimeMillis() - startedAt >= stallTimeoutMs) {
+                    timber.log.Timber.w("[RD] stall-abort: 0 %% po ${stallTimeoutMs / 1000}s → vzdávám torrent=${add.torrentId}")
+                    _uiState.update {
+                        it.copy(
+                            rdDownload = null,
+                            autoCastMessage = "Zdroj se za ${stallTimeoutMs / 1000} s nezačal stahovat (0 %). Nejspíš mrtvý — zkus jiný zdroj.",
+                        )
+                    }
+                    return@launch
                 }
                 val readyUrl = p.url
                 if (p.status == "downloaded" && !readyUrl.isNullOrBlank()) {

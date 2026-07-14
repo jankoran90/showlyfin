@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -295,6 +296,19 @@ fun TvSettingsScreen(
                     selected = sys.playerSeekStepSec,
                     labelOf = { "$it s" },
                     onSelect = settings::setPlayerSeekStepSec,
+                )
+                // PASSPORT ③ (SHW-93) — kdy vzdát necachovaný RD zdroj, co se nezačne stahovat (drží 0 %).
+                // Raw trakt_prefs (čte i DetailViewModel), vzorem phone DINGO sekce.
+                val rdCtx = LocalContext.current
+                val rdPrefs = remember { rdCtx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+                var rdStall by remember { mutableStateOf(rdPrefs.getInt("rd_stall_timeout_sec", 120)) }
+                TvOptionStepperRow(
+                    label = "Vzdát necachovaný zdroj po",
+                    subtitle = "Když se na Real-Debrid nezačne stahovat (0 %) za tuhle dobu, appka to vzdá a vyzve k jinému zdroji",
+                    options = listOf(5, 10, 30, 60, 120),
+                    selected = rdStall,
+                    labelOf = { if (it >= 60) "${it / 60} min" else "$it s" },
+                    onSelect = { rdStall = it; rdPrefs.edit().putInt("rd_stall_timeout_sec", it).apply() },
                 )
             }
         }

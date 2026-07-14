@@ -160,6 +160,28 @@ internal fun StreamingSettingsSection(
                     }
                 }
             }
+            // PASSPORT ③ (SHW-93) — kdy vzdát necachovaný RD zdroj, co se nezačne stahovat (drží 0 %).
+            CollapsibleSettingsSection("Stahování zdroje (Real-Debrid)", expandedMap) {
+                val rdCtx = LocalContext.current
+                val rdPrefs = remember { rdCtx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+                var rdStall by remember { mutableStateOf(rdPrefs.getInt("rd_stall_timeout_sec", 120).toString()) }
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            "Necachovaný zdroj (RD ⏳) se stahuje na Real-Debrid až při přehrání. Když se do téhle doby nezačne stahovat (drží 0 %), appka to vzdá a vyzve k jinému zdroji. Jakmile se stahování rozjede, běží dál a zrušíš ho ručně tlačítkem.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        PresetChipRow(
+                            title = "Vzdát při 0 % po",
+                            options = listOf("5 s" to "5", "10 s" to "10", "30 s" to "30", "1 min" to "60", "2 min" to "120"),
+                            selected = rdStall,
+                            onSelect = { v -> rdStall = v; rdPrefs.edit().putInt("rd_stall_timeout_sec", v.toInt()).apply() },
+                        )
+                    }
+                }
+            }
             // DINGO — per-zařízení preset přehrávání (slabý HEVC dekodér v autě). Jen TOTO zařízení.
             CollapsibleSettingsSection("Přehrávání (toto zařízení)", expandedMap) {
                 val ppCtx = LocalContext.current
