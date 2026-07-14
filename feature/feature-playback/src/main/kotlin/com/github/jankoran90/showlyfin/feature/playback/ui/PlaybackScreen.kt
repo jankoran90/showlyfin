@@ -14,6 +14,8 @@ import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import kotlin.math.roundToInt
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -58,8 +60,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -129,6 +134,13 @@ internal fun fmtTime(ms: Long): String {
 }
 
 // Paleta barev titulků — preferované jantarové/žluté odstíny + bílá.
+private val SUBTITLE_EDGES = listOf(
+    SubtitleEdge.OUTLINE to "Obrys",
+    SubtitleEdge.SHADOW to "Stín",
+    SubtitleEdge.BOX to "Podklad",
+    SubtitleEdge.NONE to "Bez",
+)
+
 private val SUBTITLE_COLORS = listOf(
     0xFFFFBF00.toInt(), // amber
     0xFFFFC107.toInt(), // gold
@@ -212,6 +224,8 @@ fun PlaybackScreen(
     var failureReported by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var currentSubtitle by remember { mutableStateOf<String?>(null) }
+    // Krátký popis zdroje do lišty: rozlišení · video kodek · audio kodek · kanály.
+    var sourceMeta by remember { mutableStateOf("") }
     // TEMPO (SHW-49): výběr zvukové stopy v lokálním přehrávači. Telefon (ExoPlayer bez FFmpeg dekodéru)
     // neumí DTS/DTS-HD/TrueHD → `isTrackSupported` říká autoritativně, co reálně hraje. Když je vybraná
     // stopa nepodporovaná a existuje podporovaná (např. AC3 vedle DTS-HD), přepneme; když žádná, hlásíme.
@@ -415,6 +429,14 @@ fun PlaybackScreen(
                         audioNotice = "Telefon neumí přehrát zvuk tohoto zdroje (DTS-HD/TrueHD) — zkus přehrát na TV."
                     }
                 }
+                // Krátké info o zdroji do lišty (vybrané video + audio).
+                val vf = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+                    .firstNotNullOfOrNull { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it) } }
+                    ?: tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+                        .firstOrNull()?.let { if (it.length > 0) it.getTrackFormat(0) else null }
+                val af = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                    .firstNotNullOfOrNull { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it) } }
+                sourceMeta = buildSourceMeta(vf, af)
             }
         }
         c.addListener(listener)
@@ -657,6 +679,8 @@ fun PlaybackScreen(
                             // TENFOOT F2c: 10-foot transport lišta (fokusovatelná, D-pad scrubbing).
                             TvTransportBar(
                                 isPlaying = isPlaying,
+                                title = state.title,
+                                sourceMeta = sourceMeta,
                                 positionMs = position,
                                 durationMs = duration,
                                 seekStepMs = state.seekStepSec * 1000L,
@@ -762,6 +786,7 @@ fun PlaybackScreen(
                             onColor = { viewModel.setColor(it) },
                             onPosition = { viewModel.setBottomPadding(it) },
                             onNudge = { viewModel.nudgeOffset(it) },
+                            onEdge = { viewModel.setEdge(it) },
                             onTranslateAi = { viewModel.translateSubtitlesAi() },
                             onClose = { showSubtitleMenu = false },
                             firstItemFocusRequester = if (isTv) menuFocusRequester else null,
@@ -812,39 +837,66 @@ fun PlaybackScreen(
     }
 }
 
-/** Vlastní render aktuálního titulku — dole na střed, černý obrys pro čitelnost. */
+/** Vlastní render aktuálního titulku — dole na střed. Bezpatkový font (nezávisle na serif volbě UI —
+ *  titulky mají být čistý sans, jinak tlustý obrys na patkách vypadá roztaženě) + konfigurovatelný okraj. */
 @Composable
 private fun SubtitleOverlay(text: String, style: SubtitleStyle, modifier: Modifier = Modifier) {
     val screenH = LocalConfiguration.current.screenHeightDp
     val fontSize = (22 * style.fontScale).sp
+    val lineH = fontSize * 1.25f
+    val fill = Color(style.colorArgb)
     Box(
         modifier = modifier
             .fillMaxSize()
             .padding(bottom = (style.bottomPaddingFraction * screenH).dp),
     ) {
-        val textMod = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        // obrys
-        Text(
-            text = text,
-            modifier = textMod,
-            color = Color.Black,
-            fontSize = fontSize,
-            lineHeight = fontSize * 1.25f,
-            textAlign = TextAlign.Center,
-            style = TextStyle(drawStyle = Stroke(width = 8f, join = StrokeJoin.Round)),
-        )
-        // výplň barvou stylu
-        Text(
-            text = text,
-            modifier = textMod,
-            color = Color(style.colorArgb),
-            fontSize = fontSize,
-            lineHeight = fontSize * 1.25f,
-            textAlign = TextAlign.Center,
-        )
+        val bottom = Modifier.align(Alignment.BottomCenter)
+        when (style.edge) {
+            // Podklad: text v polopropustném černém rámečku, který ho obepíná (Netflix „box" styl).
+            SubtitleEdge.BOX -> Box(
+                modifier = bottom.fillMaxWidth().padding(horizontal = 16.dp),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Text(
+                    text = text,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    color = fill, fontSize = fontSize, lineHeight = lineH,
+                    fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
+                )
+            }
+            // Stín: měkký vržený stín pod textem.
+            SubtitleEdge.SHADOW -> Text(
+                text = text,
+                modifier = bottom.fillMaxWidth().padding(horizontal = 16.dp),
+                color = fill, fontSize = fontSize, lineHeight = lineH,
+                fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
+                style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, 2f), blurRadius = 6f)),
+            )
+            // Bez: čistá výplň bez okraje.
+            SubtitleEdge.NONE -> Text(
+                text = text,
+                modifier = bottom.fillMaxWidth().padding(horizontal = 16.dp),
+                color = fill, fontSize = fontSize, lineHeight = lineH,
+                fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
+            )
+            // Obrys (default): lehký černý obrys pod barevnou výplní.
+            SubtitleEdge.OUTLINE -> {
+                val textMod = bottom.fillMaxWidth().padding(horizontal = 16.dp)
+                Text(
+                    text = text, modifier = textMod, color = Color.Black,
+                    fontSize = fontSize, lineHeight = lineH,
+                    fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
+                    style = TextStyle(drawStyle = Stroke(width = 5f, join = StrokeJoin.Round)),
+                )
+                Text(
+                    text = text, modifier = textMod, color = fill,
+                    fontSize = fontSize, lineHeight = lineH,
+                    fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
+                )
+            }
+        }
     }
 }
 
@@ -856,6 +908,7 @@ private fun SubtitleSettingsPanel(
     onColor: (Int) -> Unit,
     onPosition: (Float) -> Unit,
     onNudge: (Long) -> Unit,
+    onEdge: (SubtitleEdge) -> Unit,
     onTranslateAi: () -> Unit,
     onClose: () -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
@@ -954,20 +1007,45 @@ private fun SubtitleSettingsPanel(
         }
 
         Spacer(Modifier.height(12.dp))
-        // Velikost
-        StepperRow("Velikost", "${(state.subtitleStyle.fontScale * 100).toInt()} %",
-            onMinus = { onFontScale(state.subtitleStyle.fontScale - 0.1f) },
-            onPlus = { onFontScale(state.subtitleStyle.fontScale + 0.1f) })
+        // Velikost (jemný krok 5 %)
+        StepperRow("Velikost", "${(state.subtitleStyle.fontScale * 100).roundToInt()} %",
+            onMinus = { onFontScale(state.subtitleStyle.fontScale - 0.05f) },
+            onPlus = { onFontScale(state.subtitleStyle.fontScale + 0.05f) })
 
-        // Pozice (výška odspodu)
-        StepperRow("Pozice", "${(state.subtitleStyle.bottomPaddingFraction * 100).toInt()} %",
-            onMinus = { onPosition(state.subtitleStyle.bottomPaddingFraction - 0.04f) },
-            onPlus = { onPosition(state.subtitleStyle.bottomPaddingFraction + 0.04f) })
+        // Pozice (výška odspodu, jemný krok 2 %)
+        StepperRow("Pozice", "${(state.subtitleStyle.bottomPaddingFraction * 100).roundToInt()} %",
+            onMinus = { onPosition(state.subtitleStyle.bottomPaddingFraction - 0.02f) },
+            onPlus = { onPosition(state.subtitleStyle.bottomPaddingFraction + 0.02f) })
 
-        // Posun (synchronizace)
-        StepperRow("Posun", "%+.1f s".format(state.subtitleStyle.offsetMs / 1000.0),
-            onMinus = { onNudge(-500L) },
-            onPlus = { onNudge(500L) })
+        // Posun (synchronizace, krok 0,25 s) — per film; nový film startuje na 0.
+        StepperRow("Posun", "%+.2f s".format(state.subtitleStyle.offsetMs / 1000.0),
+            onMinus = { onNudge(-250L) },
+            onPlus = { onNudge(250L) })
+
+        // Okraj (vzhled pozadí titulku)
+        Spacer(Modifier.height(8.dp))
+        Text("Okraj", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SUBTITLE_EDGES.forEach { (edge, label) ->
+                val sel = state.subtitleStyle.edge == edge
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .tvFocusBorder(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.06f))
+                        .border(if (sel) 2.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                        .clickable { onEdge(edge) }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(label, color = Color.White, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
 
         Spacer(Modifier.height(12.dp))
         // Barva
@@ -1128,4 +1206,37 @@ private fun audioCodecName(f: Format): String? = when (f.sampleMimeType) {
 
 private fun channelLabel(c: Int): String = when (c) {
     1 -> "Mono"; 2 -> "Stereo"; 6 -> "5.1"; 7 -> "6.1"; 8 -> "7.1"; else -> "${c}ch"
+}
+
+/** Krátký popis zdroje do lišty: rozlišení · video kodek · audio kodek · kanály. */
+private fun buildSourceMeta(video: Format?, audio: Format?): String {
+    val parts = listOfNotNull(
+        video?.let { resolutionLabel(it.width, it.height) },
+        video?.let { videoCodecName(it) },
+        audio?.let { audioCodecName(it) },
+        audio?.channelCount?.takeIf { it > 0 }?.let { channelLabel(it) },
+    )
+    return parts.joinToString(" · ")
+}
+
+private fun resolutionLabel(w: Int, h: Int): String? {
+    val p = maxOf(w, h).takeIf { it > 0 } ?: return null // vertikální/horizontální jistota
+    val lines = minOf(w, h)
+    return when {
+        p >= 3000 || lines >= 1600 -> "4K"
+        lines >= 1000 -> "1080p"
+        lines >= 700 -> "720p"
+        lines >= 500 -> "576p"
+        lines > 0 -> "${lines}p"
+        else -> null
+    }
+}
+
+private fun videoCodecName(f: Format): String? = when (f.sampleMimeType) {
+    MimeTypes.VIDEO_H264 -> "H.264"
+    MimeTypes.VIDEO_H265 -> "HEVC"
+    MimeTypes.VIDEO_AV1 -> "AV1"
+    MimeTypes.VIDEO_VP9 -> "VP9"
+    MimeTypes.VIDEO_MPEG2 -> "MPEG-2"
+    else -> f.sampleMimeType?.substringAfter('/')?.uppercase()
 }

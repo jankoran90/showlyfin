@@ -45,4 +45,8 @@ data class SubtitleStyle(
     val colorArgb: Int = 0xFFFFBF00.toInt(), // amber (default dle preference uživatele)
     val bottomPaddingFraction: Float = 0.08f, // pozice odspodu (0.0–0.4)
     val offsetMs: Long = 0L,              // + = titulky dřív, − = později
+    val edge: SubtitleEdge = SubtitleEdge.OUTLINE, // vzhled okraje (obrys/stín/podklad/bez)
 )
+
+/** Vzhled okraje titulku pro vlastní render. */
+enum class SubtitleEdge { OUTLINE, SHADOW, BOX, NONE }

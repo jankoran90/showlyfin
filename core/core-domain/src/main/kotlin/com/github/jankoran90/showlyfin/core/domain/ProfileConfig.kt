@@ -354,7 +354,13 @@ data class SubtitleStylePrefs(
     val fontScale: Float = 1.0f,
     val colorArgb: Int = 0xFFFFBF00.toInt(),
     val bottomPaddingFraction: Float = 0.08f,
+    /** Vzhled pozadí/okraje titulku (obrys/stín/podklad/bez). Default = lehký obrys. */
+    val edge: SubtitleEdgePref = SubtitleEdgePref.OUTLINE,
 )
+
+/** Vzhled okraje titulku — jak se text odděluje od obrazu. Zrcadlí runtime `SubtitleEdge`. */
+@Serializable
+enum class SubtitleEdgePref { OUTLINE, SHADOW, BOX, NONE }
 
 /**
  * Vloží [key]→[value] a udrží mapu v LRU pořadí s tvrdým stropem [max] (nejstarší klíč vypadne).

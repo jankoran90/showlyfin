@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -56,6 +57,8 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun TvTransportBar(
     isPlaying: Boolean,
+    title: String,
+    sourceMeta: String,
     positionMs: Long,
     durationMs: Long,
     seekStepMs: Long,
@@ -109,6 +112,34 @@ internal fun TvTransportBar(
             .padding(horizontal = 48.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // Hlavička: název filmu + krátké info o zdroji (rozlišení · kodeky · kanály).
+        if (title.isNotBlank() || sourceMeta.isNotBlank()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                if (title.isNotBlank()) {
+                    Text(
+                        text = title,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false).padding(end = 16.dp),
+                    )
+                }
+                if (sourceMeta.isNotBlank()) {
+                    Text(
+                        text = sourceMeta,
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+
         // Časy: uplynulo vlevo, zbývá vpravo.
         Row(
             modifier = Modifier.fillMaxWidth(),

@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.domain.SubtitleEdgePref
 import com.github.jankoran90.showlyfin.core.domain.SubtitleStylePrefs
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.domain.putCappedLru
@@ -77,7 +78,7 @@ class PlaybackViewModel @Inject constructor(
             styleWrites.debounce(400).collect { s ->
                 activeProfileId()?.let { id ->
                     profileRepository.updateConfig(id) {
-                        it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction))
+                        it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref()))
                     }
                 }
             }
@@ -101,6 +102,7 @@ class PlaybackViewModel @Inject constructor(
                             subtitleStyle = st.subtitleStyle.copy(
                                 fontScale = sp.fontScale, colorArgb = sp.colorArgb,
                                 bottomPaddingFraction = sp.bottomPaddingFraction,
+                                edge = sp.edge.toRuntime(),
                             ),
                         )
                     }
@@ -112,7 +114,7 @@ class PlaybackViewModel @Inject constructor(
             if (profileRepository.activeConfig.value.subtitleStyle == null && prefs.contains("sub_font_scale")) {
                 val s = loadStyle()
                 profileRepository.updateConfig(id) {
-                    it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction))
+                    it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref()))
                 }
             }
         }
@@ -226,6 +228,13 @@ class PlaybackViewModel @Inject constructor(
             }
             _state.update { it.copy(subtitlesLoading = false, subtitleCandidates = resp.subtitles) }
             timber.log.Timber.i("[Titulky] ${resp.subtitles.size} CZ kandidátů, best=${resp.best}")
+            // Per-source posun je PER FILM: pro nový zdroj se vždy vrátí na uloženou hodnotu (default 0 s),
+            // aby posun z předchozího filmu nepřetekl. Aplikuj ho HNED (i před AI cestou u 0 titulků).
+            val key = sourceKey(q)
+            val storedOffset = loadSourceOffset(key)
+            if (storedOffset != _state.value.subtitleStyle.offsetMs) {
+                _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = storedOffset)) }
+            }
             // LINGUA: 0 CZ titulků + máme imdb → AI překlad jako poslední záloha. Fáze 3: dřív
             // přeložené (persistované) nasaď sám = „nezmizí nikdy"; jinak nabídni tlačítko a pozoruj
             // překlad běžící na pozadí (worker přežije odchod z přehrávače).
@@ -234,12 +243,7 @@ class PlaybackViewModel @Inject constructor(
                 return@launch
             }
 
-            // Per-source: aplikuj uložený offset (před výběrem, ať se .srt zapíše s ním) + vyber uloženou stopu.
-            val key = sourceKey(q)
-            val storedOffset = loadSourceOffset(key)
-            if (storedOffset != _state.value.subtitleStyle.offsetMs) {
-                _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = storedOffset)) }
-            }
+            // Vyber uloženou stopu (offset už je aplikován výše).
             when (val storedId = loadSourceSelectedId(key)) {
                 "OFF" -> selectSubtitle(-1, persist = false)
                 null -> selectSubtitle(if (resp.best in resp.subtitles.indices) resp.best else 0, persist = false)
@@ -384,6 +388,7 @@ class PlaybackViewModel @Inject constructor(
     fun setFontScale(scale: Float) = updateStyle { it.copy(fontScale = scale.coerceIn(0.6f, 2.0f)) }
     fun setColor(argb: Int) = updateStyle { it.copy(colorArgb = argb) }
     fun setBottomPadding(fraction: Float) = updateStyle { it.copy(bottomPaddingFraction = fraction.coerceIn(0.0f, 0.4f)) }
+    fun setEdge(edge: SubtitleEdge) = updateStyle { it.copy(edge = edge) }
 
     /** Posun synchronizace. delta v ms (+ = titulky později, − = dříve). Per-source.
      *  Okamžitý — render aplikuje offset live, žádné přepisování .srt ani re-prepare videa. */
@@ -403,12 +408,14 @@ class PlaybackViewModel @Inject constructor(
     // per-source (viz níže). Fallback na staré globální prefs = profil bez configu / před migrací.
     private fun loadStyle(): SubtitleStyle {
         val sp = profileRepository.activeConfig.value.subtitleStyle
-        return if (sp != null) SubtitleStyle(sp.fontScale, sp.colorArgb, sp.bottomPaddingFraction, 0L)
+        return if (sp != null) SubtitleStyle(sp.fontScale, sp.colorArgb, sp.bottomPaddingFraction, 0L, sp.edge.toRuntime())
         else SubtitleStyle(
             fontScale = prefs.getFloat("sub_font_scale", 1.0f),
             colorArgb = prefs.getInt("sub_color_argb", 0xFFFFBF00.toInt()),
             bottomPaddingFraction = prefs.getFloat("sub_bottom_pad", 0.08f),
             offsetMs = 0L,
+            edge = runCatching { SubtitleEdge.valueOf(prefs.getString("sub_edge", null) ?: "OUTLINE") }
+                .getOrDefault(SubtitleEdge.OUTLINE),
         )
     }
 
@@ -421,6 +428,7 @@ class PlaybackViewModel @Inject constructor(
                 .putFloat("sub_font_scale", s.fontScale)
                 .putInt("sub_color_argb", s.colorArgb)
                 .putFloat("sub_bottom_pad", s.bottomPaddingFraction)
+                .putString("sub_edge", s.edge.name)
                 .apply()
         }
     }
@@ -569,4 +577,19 @@ class PlaybackViewModel @Inject constructor(
         }.getOrNull().orEmpty()
         return episodes.firstOrNull { it.userData?.played != true } ?: episodes.firstOrNull()
     }
+}
+
+// ── Mapování vzhledu okraje titulku runtime ↔ persistovaný (SUBWEAVE) ──────────
+private fun SubtitleEdge.toPref(): SubtitleEdgePref = when (this) {
+    SubtitleEdge.OUTLINE -> SubtitleEdgePref.OUTLINE
+    SubtitleEdge.SHADOW -> SubtitleEdgePref.SHADOW
+    SubtitleEdge.BOX -> SubtitleEdgePref.BOX
+    SubtitleEdge.NONE -> SubtitleEdgePref.NONE
+}
+
+private fun SubtitleEdgePref.toRuntime(): SubtitleEdge = when (this) {
+    SubtitleEdgePref.OUTLINE -> SubtitleEdge.OUTLINE
+    SubtitleEdgePref.SHADOW -> SubtitleEdge.SHADOW
+    SubtitleEdgePref.BOX -> SubtitleEdge.BOX
+    SubtitleEdgePref.NONE -> SubtitleEdge.NONE
 }
