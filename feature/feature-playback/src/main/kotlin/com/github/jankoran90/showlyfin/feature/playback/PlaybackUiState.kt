@@ -46,6 +46,7 @@ data class SubtitleStyle(
     val bottomPaddingFraction: Float = 0.08f, // pozice odspodu (0.0–0.4)
     val offsetMs: Long = 0L,              // + = titulky dřív, − = později
     val edge: SubtitleEdge = SubtitleEdge.OUTLINE, // vzhled okraje (obrys/stín/podklad/bez)
+    val edgeStrength: Float = 1.0f,       // síla okraje: obrys tloušťka / stín rozostření / podklad krytí (0.4–2.5)
 )
 
 /** Vzhled okraje titulku pro vlastní render. */

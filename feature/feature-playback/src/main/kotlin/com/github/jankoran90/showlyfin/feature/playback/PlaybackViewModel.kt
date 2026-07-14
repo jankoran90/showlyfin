@@ -78,7 +78,7 @@ class PlaybackViewModel @Inject constructor(
             styleWrites.debounce(400).collect { s ->
                 activeProfileId()?.let { id ->
                     profileRepository.updateConfig(id) {
-                        it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref()))
+                        it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref(), s.edgeStrength))
                     }
                 }
             }
@@ -103,6 +103,7 @@ class PlaybackViewModel @Inject constructor(
                                 fontScale = sp.fontScale, colorArgb = sp.colorArgb,
                                 bottomPaddingFraction = sp.bottomPaddingFraction,
                                 edge = sp.edge.toRuntime(),
+                                edgeStrength = sp.edgeStrength,
                             ),
                         )
                     }
@@ -114,7 +115,7 @@ class PlaybackViewModel @Inject constructor(
             if (profileRepository.activeConfig.value.subtitleStyle == null && prefs.contains("sub_font_scale")) {
                 val s = loadStyle()
                 profileRepository.updateConfig(id) {
-                    it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref()))
+                    it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref(), s.edgeStrength))
                 }
             }
         }
@@ -389,6 +390,7 @@ class PlaybackViewModel @Inject constructor(
     fun setColor(argb: Int) = updateStyle { it.copy(colorArgb = argb) }
     fun setBottomPadding(fraction: Float) = updateStyle { it.copy(bottomPaddingFraction = fraction.coerceIn(0.0f, 0.4f)) }
     fun setEdge(edge: SubtitleEdge) = updateStyle { it.copy(edge = edge) }
+    fun setEdgeStrength(strength: Float) = updateStyle { it.copy(edgeStrength = strength.coerceIn(0.4f, 2.5f)) }
 
     /** Posun synchronizace. delta v ms (+ = titulky později, − = dříve). Per-source.
      *  Okamžitý — render aplikuje offset live, žádné přepisování .srt ani re-prepare videa. */
@@ -408,7 +410,7 @@ class PlaybackViewModel @Inject constructor(
     // per-source (viz níže). Fallback na staré globální prefs = profil bez configu / před migrací.
     private fun loadStyle(): SubtitleStyle {
         val sp = profileRepository.activeConfig.value.subtitleStyle
-        return if (sp != null) SubtitleStyle(sp.fontScale, sp.colorArgb, sp.bottomPaddingFraction, 0L, sp.edge.toRuntime())
+        return if (sp != null) SubtitleStyle(sp.fontScale, sp.colorArgb, sp.bottomPaddingFraction, 0L, sp.edge.toRuntime(), sp.edgeStrength)
         else SubtitleStyle(
             fontScale = prefs.getFloat("sub_font_scale", 1.0f),
             colorArgb = prefs.getInt("sub_color_argb", 0xFFFFBF00.toInt()),
@@ -416,6 +418,7 @@ class PlaybackViewModel @Inject constructor(
             offsetMs = 0L,
             edge = runCatching { SubtitleEdge.valueOf(prefs.getString("sub_edge", null) ?: "OUTLINE") }
                 .getOrDefault(SubtitleEdge.OUTLINE),
+            edgeStrength = prefs.getFloat("sub_edge_strength", 1.0f),
         )
     }
 
@@ -429,6 +432,7 @@ class PlaybackViewModel @Inject constructor(
                 .putInt("sub_color_argb", s.colorArgb)
                 .putFloat("sub_bottom_pad", s.bottomPaddingFraction)
                 .putString("sub_edge", s.edge.name)
+                .putFloat("sub_edge_strength", s.edgeStrength)
                 .apply()
         }
     }

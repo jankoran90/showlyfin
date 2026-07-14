@@ -64,7 +64,6 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -788,6 +787,7 @@ fun PlaybackScreen(
                             onPosition = { viewModel.setBottomPadding(it) },
                             onNudge = { viewModel.nudgeOffset(it) },
                             onEdge = { viewModel.setEdge(it) },
+                            onEdgeStrength = { viewModel.setEdgeStrength(it) },
                             onTranslateAi = { viewModel.translateSubtitlesAi() },
                             onClose = { showSubtitleMenu = false },
                             firstItemFocusRequester = if (isTv) menuFocusRequester else null,
@@ -838,14 +838,15 @@ fun PlaybackScreen(
     }
 }
 
-/** Vlastní render aktuálního titulku — dole na střed. Bezpatkový font (nezávisle na serif volbě UI —
- *  titulky mají být čistý sans, jinak tlustý obrys na patkách vypadá roztaženě) + konfigurovatelný okraj. */
+/** Vlastní render aktuálního titulku — dole na střed. Font DĚDÍ z UI (patkový, když má user serif zapnutý),
+ *  okraj i jeho síla jsou konfigurovatelné (obrys tloušťka / stín rozostření / podklad krytí). */
 @Composable
 private fun SubtitleOverlay(text: String, style: SubtitleStyle, modifier: Modifier = Modifier) {
     val screenH = LocalConfiguration.current.screenHeightDp
     val fontSize = (22 * style.fontScale).sp
     val lineH = fontSize * 1.25f
     val fill = Color(style.colorArgb)
+    val k = style.edgeStrength
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -853,7 +854,7 @@ private fun SubtitleOverlay(text: String, style: SubtitleStyle, modifier: Modifi
     ) {
         val bottom = Modifier.align(Alignment.BottomCenter)
         when (style.edge) {
-            // Podklad: text v polopropustném černém rámečku, který ho obepíná (Netflix „box" styl).
+            // Podklad: text v polopropustném černém rámečku, který ho obepíná (Netflix „box" styl). Síla = krytí.
             SubtitleEdge.BOX -> Box(
                 modifier = bottom.fillMaxWidth().padding(horizontal = 16.dp),
                 contentAlignment = Alignment.BottomCenter,
@@ -861,40 +862,35 @@ private fun SubtitleOverlay(text: String, style: SubtitleStyle, modifier: Modifi
                 Text(
                     text = text,
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = (0.55f * k).coerceIn(0.2f, 0.95f)), RoundedCornerShape(6.dp))
                         .padding(horizontal = 12.dp, vertical = 4.dp),
-                    color = fill, fontSize = fontSize, lineHeight = lineH,
-                    fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
+                    color = fill, fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
                 )
             }
-            // Stín: měkký vržený stín pod textem.
+            // Stín: měkký vržený stín pod textem. Síla = rozostření + posun.
             SubtitleEdge.SHADOW -> Text(
                 text = text,
                 modifier = bottom.fillMaxWidth().padding(horizontal = 16.dp),
-                color = fill, fontSize = fontSize, lineHeight = lineH,
-                fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
-                style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, 2f), blurRadius = 6f)),
+                color = fill, fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
+                style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, 2f * k), blurRadius = 6f * k)),
             )
             // Bez: čistá výplň bez okraje.
             SubtitleEdge.NONE -> Text(
                 text = text,
                 modifier = bottom.fillMaxWidth().padding(horizontal = 16.dp),
-                color = fill, fontSize = fontSize, lineHeight = lineH,
-                fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
+                color = fill, fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
             )
-            // Obrys (default): lehký černý obrys pod barevnou výplní.
+            // Obrys (default): černý obrys pod barevnou výplní. Síla = tloušťka.
             SubtitleEdge.OUTLINE -> {
                 val textMod = bottom.fillMaxWidth().padding(horizontal = 16.dp)
                 Text(
                     text = text, modifier = textMod, color = Color.Black,
-                    fontSize = fontSize, lineHeight = lineH,
-                    fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
-                    style = TextStyle(drawStyle = Stroke(width = 5f, join = StrokeJoin.Round)),
+                    fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
+                    style = TextStyle(drawStyle = Stroke(width = 5f * k, join = StrokeJoin.Round)),
                 )
                 Text(
                     text = text, modifier = textMod, color = fill,
-                    fontSize = fontSize, lineHeight = lineH,
-                    fontFamily = FontFamily.SansSerif, textAlign = TextAlign.Center,
+                    fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
                 )
             }
         }
@@ -910,6 +906,7 @@ private fun SubtitleSettingsPanel(
     onPosition: (Float) -> Unit,
     onNudge: (Long) -> Unit,
     onEdge: (SubtitleEdge) -> Unit,
+    onEdgeStrength: (Float) -> Unit,
     onTranslateAi: () -> Unit,
     onClose: () -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
@@ -1046,6 +1043,12 @@ private fun SubtitleSettingsPanel(
                     Text(label, color = Color.White, style = MaterialTheme.typography.bodySmall)
                 }
             }
+        }
+        // Síla okraje (obrys tloušťka / stín rozostření / podklad krytí) — nedává smysl u „Bez".
+        if (state.subtitleStyle.edge != SubtitleEdge.NONE) {
+            StepperRow("Síla", "${(state.subtitleStyle.edgeStrength * 100).roundToInt()} %",
+                onMinus = { onEdgeStrength(state.subtitleStyle.edgeStrength - 0.2f) },
+                onPlus = { onEdgeStrength(state.subtitleStyle.edgeStrength + 0.2f) })
         }
 
         Spacer(Modifier.height(12.dp))
