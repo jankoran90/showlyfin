@@ -358,11 +358,19 @@ data class SubtitleStylePrefs(
     val edge: SubtitleEdgePref = SubtitleEdgePref.OUTLINE,
     /** Síla/intenzita okraje (obrys tloušťka / stín rozostření / podklad krytí). 1.0 = default. */
     val edgeStrength: Float = 1.0f,
+    /** Typ písma titulku (bezpatkové/patkové/strojové). Default = patkové (preference uživatele). */
+    val font: SubtitleFontPref = SubtitleFontPref.SERIF,
+    /** Zvýraznění/tučnost písma (FontWeight, 100–900). 400 = normální. */
+    val weight: Int = 400,
 )
 
 /** Vzhled okraje titulku — jak se text odděluje od obrazu. Zrcadlí runtime `SubtitleEdge`. */
 @Serializable
 enum class SubtitleEdgePref { OUTLINE, SHADOW, BOX, NONE }
+
+/** Typ písma titulku. Zrcadlí runtime `SubtitleFont`. */
+@Serializable
+enum class SubtitleFontPref { SANS, SERIF, MONO }
 
 /**
  * Vloží [key]→[value] a udrží mapu v LRU pořadí s tvrdým stropem [max] (nejstarší klíč vypadne).

@@ -74,6 +74,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -101,6 +103,7 @@ import com.github.jankoran90.showlyfin.feature.playback.service.MoviePlayerServi
 import com.google.common.util.concurrent.MoreExecutors
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleEdge
+import com.github.jankoran90.showlyfin.feature.playback.SubtitleFont
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
 import kotlinx.coroutines.delay
 
@@ -139,6 +142,18 @@ private val SUBTITLE_EDGES = listOf(
     SubtitleEdge.SHADOW to "Stín",
     SubtitleEdge.BOX to "Podklad",
     SubtitleEdge.NONE to "Bez",
+)
+
+private val SUBTITLE_FONTS = listOf(
+    SubtitleFont.SERIF to "Patkové",
+    SubtitleFont.SANS to "Bezpatkové",
+    SubtitleFont.MONO to "Strojové",
+)
+
+private val SUBTITLE_WEIGHTS = listOf(
+    300 to "Tenké",
+    400 to "Normální",
+    700 to "Tučné",
 )
 
 private val SUBTITLE_COLORS = listOf(
@@ -788,6 +803,8 @@ fun PlaybackScreen(
                             onNudge = { viewModel.nudgeOffset(it) },
                             onEdge = { viewModel.setEdge(it) },
                             onEdgeStrength = { viewModel.setEdgeStrength(it) },
+                            onFont = { viewModel.setFont(it) },
+                            onWeight = { viewModel.setWeight(it) },
                             onTranslateAi = { viewModel.translateSubtitlesAi() },
                             onClose = { showSubtitleMenu = false },
                             firstItemFocusRequester = if (isTv) menuFocusRequester else null,
@@ -838,8 +855,8 @@ fun PlaybackScreen(
     }
 }
 
-/** Vlastní render aktuálního titulku — dole na střed. Font DĚDÍ z UI (patkový, když má user serif zapnutý),
- *  okraj i jeho síla jsou konfigurovatelné (obrys tloušťka / stín rozostření / podklad krytí). */
+/** Vlastní render aktuálního titulku — dole na střed. Font (typ + tučnost) je EXPLICITNÍ a stejný na všech
+ *  vrstvách (obrys/výplň) — jinak obrys renderovaný jiným fontem nesedí na písmo. Okraj + síla konfigurovatelné. */
 @Composable
 private fun SubtitleOverlay(text: String, style: SubtitleStyle, modifier: Modifier = Modifier) {
     val screenH = LocalConfiguration.current.screenHeightDp
@@ -847,6 +864,12 @@ private fun SubtitleOverlay(text: String, style: SubtitleStyle, modifier: Modifi
     val lineH = fontSize * 1.25f
     val fill = Color(style.colorArgb)
     val k = style.edgeStrength
+    val ff = when (style.font) {
+        SubtitleFont.SANS -> FontFamily.SansSerif
+        SubtitleFont.SERIF -> FontFamily.Serif
+        SubtitleFont.MONO -> FontFamily.Monospace
+    }
+    val fw = FontWeight(style.weight)
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -864,33 +887,38 @@ private fun SubtitleOverlay(text: String, style: SubtitleStyle, modifier: Modifi
                     modifier = Modifier
                         .background(Color.Black.copy(alpha = (0.55f * k).coerceIn(0.2f, 0.95f)), RoundedCornerShape(6.dp))
                         .padding(horizontal = 12.dp, vertical = 4.dp),
-                    color = fill, fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
+                    color = fill, fontSize = fontSize, lineHeight = lineH,
+                    fontFamily = ff, fontWeight = fw, textAlign = TextAlign.Center,
                 )
             }
             // Stín: měkký vržený stín pod textem. Síla = rozostření + posun.
             SubtitleEdge.SHADOW -> Text(
                 text = text,
                 modifier = bottom.fillMaxWidth().padding(horizontal = 16.dp),
-                color = fill, fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
-                style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, 2f * k), blurRadius = 6f * k)),
+                color = fill, fontSize = fontSize, lineHeight = lineH,
+                fontFamily = ff, fontWeight = fw, textAlign = TextAlign.Center,
+                style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.9f), Offset(2f * k, 2f * k), blurRadius = 5f * k)),
             )
             // Bez: čistá výplň bez okraje.
             SubtitleEdge.NONE -> Text(
                 text = text,
                 modifier = bottom.fillMaxWidth().padding(horizontal = 16.dp),
-                color = fill, fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
+                color = fill, fontSize = fontSize, lineHeight = lineH,
+                fontFamily = ff, fontWeight = fw, textAlign = TextAlign.Center,
             )
-            // Obrys (default): černý obrys pod barevnou výplní. Síla = tloušťka.
+            // Obrys (default): černý obrys pod barevnou výplní. STEJNÝ font+tučnost obou vrstev → obrys sedí na hranu. Síla = tloušťka.
             SubtitleEdge.OUTLINE -> {
                 val textMod = bottom.fillMaxWidth().padding(horizontal = 16.dp)
                 Text(
                     text = text, modifier = textMod, color = Color.Black,
-                    fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
+                    fontSize = fontSize, lineHeight = lineH,
+                    fontFamily = ff, fontWeight = fw, textAlign = TextAlign.Center,
                     style = TextStyle(drawStyle = Stroke(width = 5f * k, join = StrokeJoin.Round)),
                 )
                 Text(
                     text = text, modifier = textMod, color = fill,
-                    fontSize = fontSize, lineHeight = lineH, textAlign = TextAlign.Center,
+                    fontSize = fontSize, lineHeight = lineH,
+                    fontFamily = ff, fontWeight = fw, textAlign = TextAlign.Center,
                 )
             }
         }
@@ -907,6 +935,8 @@ private fun SubtitleSettingsPanel(
     onNudge: (Long) -> Unit,
     onEdge: (SubtitleEdge) -> Unit,
     onEdgeStrength: (Float) -> Unit,
+    onFont: (SubtitleFont) -> Unit,
+    onWeight: (Int) -> Unit,
     onTranslateAi: () -> Unit,
     onClose: () -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
@@ -1051,6 +1081,10 @@ private fun SubtitleSettingsPanel(
                 onPlus = { onEdgeStrength(state.subtitleStyle.edgeStrength + 0.2f) })
         }
 
+        // Typ písma + tučnost
+        SubtitleChoiceRow("Písmo", SUBTITLE_FONTS, state.subtitleStyle.font, onFont)
+        SubtitleChoiceRow("Tučnost", SUBTITLE_WEIGHTS, state.subtitleStyle.weight, onWeight)
+
         Spacer(Modifier.height(12.dp))
         // Barva
         Text("Barva", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
@@ -1111,6 +1145,34 @@ private fun StepperRow(label: String, value: String, onMinus: () -> Unit, onPlus
             TextButton(onClick = onMinus, modifier = Modifier.tvFocusBorder(CircleShape)) { Text("−", color = Color.White, style = MaterialTheme.typography.titleLarge) }
             Text(value, color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             TextButton(onClick = onPlus, modifier = Modifier.tvFocusBorder(CircleShape)) { Text("+", color = Color.White, style = MaterialTheme.typography.titleLarge) }
+        }
+    }
+}
+
+/** Řádek voleb (label + segmentované chipy) — pro typ písma / tučnost / okraj. */
+@Composable
+private fun <T> SubtitleChoiceRow(label: String, options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
+    Spacer(Modifier.height(8.dp))
+    Text(label, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { (value, text) ->
+            val sel = value == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .tvFocusBorder(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.06f))
+                    .border(if (sel) 2.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                    .clickable { onSelect(value) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text, color = Color.White, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }

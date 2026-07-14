@@ -47,7 +47,12 @@ data class SubtitleStyle(
     val offsetMs: Long = 0L,              // + = titulky dřív, − = později
     val edge: SubtitleEdge = SubtitleEdge.OUTLINE, // vzhled okraje (obrys/stín/podklad/bez)
     val edgeStrength: Float = 1.0f,       // síla okraje: obrys tloušťka / stín rozostření / podklad krytí (0.4–2.5)
+    val font: SubtitleFont = SubtitleFont.SERIF, // typ písma (bezpatkové/patkové/strojové)
+    val weight: Int = 400,                // tučnost písma (FontWeight 100–900)
 )
 
 /** Vzhled okraje titulku pro vlastní render. */
 enum class SubtitleEdge { OUTLINE, SHADOW, BOX, NONE }
+
+/** Typ písma titulku. */
+enum class SubtitleFont { SANS, SERIF, MONO }

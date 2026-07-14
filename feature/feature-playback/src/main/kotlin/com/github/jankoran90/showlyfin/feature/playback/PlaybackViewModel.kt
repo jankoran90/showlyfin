@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.SubtitleEdgePref
+import com.github.jankoran90.showlyfin.core.domain.SubtitleFontPref
 import com.github.jankoran90.showlyfin.core.domain.SubtitleStylePrefs
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.domain.putCappedLru
@@ -78,7 +79,7 @@ class PlaybackViewModel @Inject constructor(
             styleWrites.debounce(400).collect { s ->
                 activeProfileId()?.let { id ->
                     profileRepository.updateConfig(id) {
-                        it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref(), s.edgeStrength))
+                        it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref(), s.edgeStrength, s.font.toFontPref(), s.weight))
                     }
                 }
             }
@@ -104,6 +105,8 @@ class PlaybackViewModel @Inject constructor(
                                 bottomPaddingFraction = sp.bottomPaddingFraction,
                                 edge = sp.edge.toRuntime(),
                                 edgeStrength = sp.edgeStrength,
+                                font = sp.font.toRuntimeFont(),
+                                weight = sp.weight,
                             ),
                         )
                     }
@@ -115,7 +118,7 @@ class PlaybackViewModel @Inject constructor(
             if (profileRepository.activeConfig.value.subtitleStyle == null && prefs.contains("sub_font_scale")) {
                 val s = loadStyle()
                 profileRepository.updateConfig(id) {
-                    it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref(), s.edgeStrength))
+                    it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref(), s.edgeStrength, s.font.toFontPref(), s.weight))
                 }
             }
         }
@@ -391,6 +394,8 @@ class PlaybackViewModel @Inject constructor(
     fun setBottomPadding(fraction: Float) = updateStyle { it.copy(bottomPaddingFraction = fraction.coerceIn(0.0f, 0.4f)) }
     fun setEdge(edge: SubtitleEdge) = updateStyle { it.copy(edge = edge) }
     fun setEdgeStrength(strength: Float) = updateStyle { it.copy(edgeStrength = strength.coerceIn(0.4f, 2.5f)) }
+    fun setFont(font: SubtitleFont) = updateStyle { it.copy(font = font) }
+    fun setWeight(weight: Int) = updateStyle { it.copy(weight = weight.coerceIn(300, 900)) }
 
     /** Posun synchronizace. delta v ms (+ = titulky později, − = dříve). Per-source.
      *  Okamžitý — render aplikuje offset live, žádné přepisování .srt ani re-prepare videa. */
@@ -410,7 +415,7 @@ class PlaybackViewModel @Inject constructor(
     // per-source (viz níže). Fallback na staré globální prefs = profil bez configu / před migrací.
     private fun loadStyle(): SubtitleStyle {
         val sp = profileRepository.activeConfig.value.subtitleStyle
-        return if (sp != null) SubtitleStyle(sp.fontScale, sp.colorArgb, sp.bottomPaddingFraction, 0L, sp.edge.toRuntime(), sp.edgeStrength)
+        return if (sp != null) SubtitleStyle(sp.fontScale, sp.colorArgb, sp.bottomPaddingFraction, 0L, sp.edge.toRuntime(), sp.edgeStrength, sp.font.toRuntimeFont(), sp.weight)
         else SubtitleStyle(
             fontScale = prefs.getFloat("sub_font_scale", 1.0f),
             colorArgb = prefs.getInt("sub_color_argb", 0xFFFFBF00.toInt()),
@@ -419,6 +424,9 @@ class PlaybackViewModel @Inject constructor(
             edge = runCatching { SubtitleEdge.valueOf(prefs.getString("sub_edge", null) ?: "OUTLINE") }
                 .getOrDefault(SubtitleEdge.OUTLINE),
             edgeStrength = prefs.getFloat("sub_edge_strength", 1.0f),
+            font = runCatching { SubtitleFont.valueOf(prefs.getString("sub_font_type", null) ?: "SERIF") }
+                .getOrDefault(SubtitleFont.SERIF),
+            weight = prefs.getInt("sub_weight", 400),
         )
     }
 
@@ -433,6 +441,8 @@ class PlaybackViewModel @Inject constructor(
                 .putFloat("sub_bottom_pad", s.bottomPaddingFraction)
                 .putString("sub_edge", s.edge.name)
                 .putFloat("sub_edge_strength", s.edgeStrength)
+                .putString("sub_font_type", s.font.name)
+                .putInt("sub_weight", s.weight)
                 .apply()
         }
     }
@@ -596,4 +606,17 @@ private fun SubtitleEdgePref.toRuntime(): SubtitleEdge = when (this) {
     SubtitleEdgePref.SHADOW -> SubtitleEdge.SHADOW
     SubtitleEdgePref.BOX -> SubtitleEdge.BOX
     SubtitleEdgePref.NONE -> SubtitleEdge.NONE
+}
+
+// ── Mapování typu písma titulku runtime ↔ persistovaný ──────────
+private fun SubtitleFont.toFontPref(): SubtitleFontPref = when (this) {
+    SubtitleFont.SANS -> SubtitleFontPref.SANS
+    SubtitleFont.SERIF -> SubtitleFontPref.SERIF
+    SubtitleFont.MONO -> SubtitleFontPref.MONO
+}
+
+private fun SubtitleFontPref.toRuntimeFont(): SubtitleFont = when (this) {
+    SubtitleFontPref.SANS -> SubtitleFont.SANS
+    SubtitleFontPref.SERIF -> SubtitleFont.SERIF
+    SubtitleFontPref.MONO -> SubtitleFont.MONO
 }
