@@ -843,7 +843,8 @@ class DetailViewModel @Inject constructor(
             // CZ dabing / Originál se rozřadí dle audia (isCzDub) až v UI filtru. Hraje přes náš proxy.
             val sdilejDeferred = async {
                 // QUARRY (SHW-79): rok z metadat bývá o rok mimo → při nule zkus ±1 (dle prefs).
-                sdilejStreamsWithRetry(mediaTypeStr(item), imdb, item.title, _uiState.value.tmdbCzTitle ?: item.title, item.year, epSeason, epEpisode)
+                // PASSPORT (SHW-93) A2 — originální/romanizovaný název jako další kandidát (asijské klenoty).
+                sdilejStreamsWithRetry(mediaTypeStr(item), imdb, item.title, _uiState.value.tmdbCzTitle ?: item.title, item.year, epSeason, epEpisode, origTitle = item.originalTitle.orEmpty())
             }
             // Backend vrací už seřazené (rdSaved → cached → CZ/SK → fallbackOrder) a ořezané dle prefs.
             runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = strict) }
@@ -975,7 +976,11 @@ class DetailViewModel @Inject constructor(
         // API klient placeholderem. Postavíme když máme aspoň název.
         val st = _uiState.value
         val subTitle = st.tmdbCzTitle?.takeIf { t -> t.isNotBlank() } ?: st.item?.title.orEmpty()
-        val subOrig = st.item?.title.orEmpty()
+        // PASSPORT (SHW-93) A2 — skutečný originální název pro titulky (OS/titulky.com indexují i podle originálu);
+        // dřív = item.title (duplikoval subTitle). Fallback: MediaItem.originalTitle → movieDetails → title.
+        val subOrig = st.item?.originalTitle?.takeIf { it.isNotBlank() }
+            ?: st.movieDetails?.original_title?.takeIf { it.isNotBlank() }
+            ?: st.item?.title.orEmpty()
         // CONDUIT (SHW-58): český dabing (CZ/SK audio nebo sdílej bez detekce) → NEhledat automaticky
         // titulky (film je dabovaný), ale `SubtitleQuery` postavíme dál (drží resume klíč `resumeKeyOf`).
         // Drž v synchru s `isCzDub` v StreamComponents.kt (stejné kritérium).
@@ -1663,17 +1668,17 @@ class DetailViewModel @Inject constructor(
      */
     private suspend fun sdilejStreamsWithRetry(
         mediaType: String, imdb: String, title: String, titleCs: String, year: Int?,
-        season: Int? = null, episode: Int? = null,
+        season: Int? = null, episode: Int? = null, origTitle: String = "",
     ): List<UploaderStream> {
         val primary = runCatching {
-            uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, year, season, episode)
+            uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, year, season, episode, origTitle)
         }.getOrDefault(emptyList())
         if (primary.isNotEmpty() || year == null || !prefs.getBoolean("sdilej_year_pm1", true)) return primary
         val merged = primary.toMutableList()
         val seen = merged.mapNotNull { it.url ?: it.name }.toMutableSet()
         for (y in listOf(year - 1, year + 1)) {
             val extra = runCatching {
-                uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, y, season, episode)
+                uploaderDs.getSdillejStreams(uploaderBaseUrl, uploaderCookie, mediaType, imdb, title, titleCs, y, season, episode, origTitle)
             }.getOrDefault(emptyList())
             for (s in extra) {
                 val k = s.url ?: s.name

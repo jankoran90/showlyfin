@@ -46,7 +46,7 @@ interface UploaderRemoteDataSource {
     // Plan WARDEN W3c (část 2) — write-through authoring šablon na backend.
     suspend fun putTemplate(baseUrl: String, sessionCookie: String, uuid: String, name: String, ageRating: String?, configJson: String)
     suspend fun deleteTemplate(baseUrl: String, sessionCookie: String, uuid: String)
-    suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int? = null, season: Int? = null, episode: Int? = null): List<UploaderStream>
+    suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int? = null, season: Int? = null, episode: Int? = null, origTitle: String = ""): List<UploaderStream>
     suspend fun captureSdillej(baseUrl: String, sessionCookie: String, request: UploaderCaptureRequest): UploaderCaptureResponse
 
     // TMM Pipeline

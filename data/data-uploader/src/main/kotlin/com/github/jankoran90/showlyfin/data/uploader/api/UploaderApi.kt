@@ -300,11 +300,13 @@ internal class UploaderApi(
         return resp.isSuccessful
     }
 
-    override suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int?, season: Int?, episode: Int?): List<UploaderStream> {
+    override suspend fun getSdillejStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, title: String, titleCs: String, year: Int?, season: Int?, episode: Int?, origTitle: String): List<UploaderStream> {
         val base = baseUrl.trimEnd('/')
         val params = buildString {
             append("?title=${java.net.URLEncoder.encode(title, "UTF-8")}")
             if (titleCs.isNotBlank()) append("&title_cs=${java.net.URLEncoder.encode(titleCs, "UTF-8")}")
+            // PASSPORT (SHW-93) A2 — originální/romanizovaný název jako další kandidát hledání (asijské klenoty).
+            if (origTitle.isNotBlank() && origTitle != title && origTitle != titleCs) append("&orig_title=${java.net.URLEncoder.encode(origTitle, "UTF-8")}")
             if (year != null) append("&year=$year")
             if (season != null && episode != null) append("&season=$season&episode=$episode")
         }
