@@ -65,7 +65,7 @@ fun LandscapeCard(
     val lazyRating = rememberCsfdCardRating(item.imdbId, item.tmdbId, item.title, item.year)
     val rating = csfdRating ?: (if (enableCsfd) lazyRating else null)
     val image = item.landscapeImageUrl()
-    val title = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title
+    val title = item.displayTitle
     val isShow = item.type != MediaType.MOVIE
 
     Card(
@@ -158,7 +158,7 @@ fun LandscapeDetailCard(
     val lazyRating = rememberCsfdCardRating(item.imdbId, item.tmdbId, item.title, item.year)
     val rating = csfdRating ?: (if (enableCsfd) lazyRating else null)
     val image = item.landscapeImageUrl()
-    val title = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title
+    val title = item.displayTitle
     val isShow = item.type != MediaType.MOVIE
 
     Card(

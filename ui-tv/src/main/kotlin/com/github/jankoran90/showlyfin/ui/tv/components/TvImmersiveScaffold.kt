@@ -159,7 +159,7 @@ fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
         // fullscreen backdrop pixeloval). Fallback na landscapeUrl (Jellyfin řady bez TMDB backdropu).
         // NIKDY poster fallback — 2:3 plakát roztažený Crop do 16:9 = ošklivý zoom.
         backdropUrl = mi?.backdropUrl("original") ?: landscapeUrl,
-        title = mi?.let { it.titleCz?.takeIf { t -> t.isNotBlank() } ?: it.title } ?: title,
+        title = mi?.displayTitle ?: title,
         overview = mi?.let { it.overviewCz?.takeIf { o -> o.isNotBlank() } ?: it.overview },
         year = mi?.year ?: year,
         genre = mi?.genres?.firstOrNull()?.replaceFirstChar { it.uppercase() },
@@ -176,7 +176,7 @@ fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
 /** Sestav [ImmersiveInfo] z [MediaItem] (Objevovat). */
 fun MediaItem.toImmersiveInfo(): ImmersiveInfo = ImmersiveInfo(
     backdropUrl = backdropUrl("original"), // 4K: plné rozlišení; bez poster fallbacku (viz výše)
-    title = titleCz?.takeIf { it.isNotBlank() } ?: title,
+    title = displayTitle,
     overview = overviewCz?.takeIf { it.isNotBlank() } ?: overview,
     year = year,
     genre = genres?.firstOrNull()?.replaceFirstChar { it.uppercase() },

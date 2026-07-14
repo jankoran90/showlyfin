@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.data.tmdb.api
 
+import com.github.jankoran90.showlyfin.core.domain.looksNonLatin
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.model.*
 
@@ -150,13 +151,17 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
     override suspend fun discoverMoviesByPerson(personId: Long, language: String): List<TmdbSearchMovieItem> =
         try {
             if (personId <= 0) emptyList()
-            else service.discoverMovies(withPeople = personId.toString(), language = language).results
+            else withReadableTitles(service.discoverMovies(withPeople = personId.toString(), language = language).results) {
+                service.discoverMovies(withPeople = personId.toString(), language = EN).results
+            }
         } catch (e: Throwable) { emptyList() }
 
     override suspend fun discoverMoviesByCompany(companyId: Long, language: String): List<TmdbSearchMovieItem> =
         try {
             if (companyId <= 0) emptyList()
-            else service.discoverMovies(withCompanies = companyId.toString(), language = language).results
+            else withReadableTitles(service.discoverMovies(withCompanies = companyId.toString(), language = language).results) {
+                service.discoverMovies(withCompanies = companyId.toString(), language = EN).results
+            }
         } catch (e: Throwable) { emptyList() }
 
     override suspend fun moviesByPersonRole(personId: Long, role: PersonRole, language: String): List<TmdbSearchMovieItem> =
@@ -165,15 +170,41 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
                 personId <= 0 -> emptyList()
                 // Neznámá role → původní chování (cast i crew dohromady přes with_people).
                 role == PersonRole.GENERIC ->
-                    service.discoverMovies(withPeople = personId.toString(), language = language).results
-                else -> {
-                    val credits = service.fetchPersonMovieCredits(personId, language)
-                    val raw = if (role == PersonRole.ACTING) credits.cast
-                    else credits.crew.filter { roleMatches(role, it.department, it.job) }
-                    raw.map { it.toMovieItem() }.distinctBy { it.id }
+                    withReadableTitles(service.discoverMovies(withPeople = personId.toString(), language = language).results) {
+                        service.discoverMovies(withPeople = personId.toString(), language = EN).results
+                    }
+                else -> withReadableTitles(personRoleMovies(service.fetchPersonMovieCredits(personId, language), role)) {
+                    personRoleMovies(service.fetchPersonMovieCredits(personId, EN), role)
                 }
             }
         } catch (e: Throwable) { emptyList() }
+
+    /** VANTAGE (SHW-48): kredity osoby → filmy dle role (režie/kamera/…) → karty. */
+    private fun personRoleMovies(credits: TmdbPersonMovieCredits, role: PersonRole): List<TmdbSearchMovieItem> {
+        val raw = if (role == PersonRole.ACTING) credits.cast
+        else credits.crew.filter { roleMatches(role, it.department, it.job) }
+        return raw.map { it.toMovieItem() }.distinctBy { it.id }
+    }
+
+    /**
+     * PASSPORT (SHW-93) A1 — čitelný název pro TMDB seznamy (filmografie/studio). cs-CZ `title` u titulů
+     * bez českého překladu spadne na originál (asijské písmo). Když je nějaký `title` ne-latinka, dotáhne
+     * [enFetch] (tentýž seznam v en-US) a ne-latinkové tituly nahradí anglickým názvem (párování přes `id`).
+     * Bez ne-latinkových titulů = žádný dotaz navíc (rychlá cesta).
+     */
+    private suspend fun withReadableTitles(
+        cs: List<TmdbSearchMovieItem>,
+        enFetch: suspend () -> List<TmdbSearchMovieItem>,
+    ): List<TmdbSearchMovieItem> {
+        if (cs.none { it.title?.looksNonLatin() == true }) return cs
+        val en = runCatching { enFetch() }.getOrNull()?.associateBy { it.id } ?: return cs
+        return cs.map { m ->
+            if (m.title?.looksNonLatin() == true) {
+                val enTitle = en[m.id]?.title?.takeIf { it.isNotBlank() && !it.looksNonLatin() }
+                if (enTitle != null) m.copy(title = enTitle) else m
+            } else m
+        }
+    }
 
     /** Sedí TMDB `job`/`department` kreditu na požadovanou [PersonRole]. */
     private fun roleMatches(role: PersonRole, department: String?, job: String?): Boolean {
@@ -189,5 +220,10 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
             PersonRole.COMPOSING -> jobHas("Composer", "Music") || dept("Sound") && jobHas("Music")
             PersonRole.ACTING, PersonRole.GENERIC -> false
         }
+    }
+
+    private companion object {
+        // PASSPORT (SHW-93) A1 — jazyk pro anglický fallback čitelného názvu.
+        const val EN = "en-US"
     }
 }

@@ -339,7 +339,7 @@ class TvHomeViewModel @Inject constructor(
                     )
                     HomeRowItem(
                         key = "saved_${ws.tmdb}",
-                        title = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
+                        title = item.displayTitle,
                         posterUrl = item.posterUrl("w342"),
                         landscapeUrl = item.backdropUrl("w780"),
                         mediaItem = item,
@@ -371,7 +371,7 @@ class TvHomeViewModel @Inject constructor(
         return enricher.enrich(raw, withCertification = ageCap.value != null).map { item ->
             HomeRowItem(
                 key = "disc_${item.type}_${item.tmdbId ?: item.traktId}",
-                title = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
+                title = item.displayTitle,
                 year = item.year,
                 posterUrl = item.posterUrl("w342"),
                 landscapeUrl = item.backdropUrl("w780"),
@@ -383,7 +383,7 @@ class TvHomeViewModel @Inject constructor(
     /** COUCH T1/T2 — obohacené Trakt [MediaItem] (z [TraktRowLoader]) → [HomeRowItem] pro řadu domova. */
     private fun MediaItem.toHomeRowItem(config: HomeRowConfig) = HomeRowItem(
         key = "trakt_${config.id}_${type}_${tmdbId ?: traktId}",
-        title = titleCz?.takeIf { it.isNotBlank() } ?: title,
+        title = displayTitle,
         year = year,
         posterUrl = posterUrl("w342"),
         landscapeUrl = backdropUrl("w780"),

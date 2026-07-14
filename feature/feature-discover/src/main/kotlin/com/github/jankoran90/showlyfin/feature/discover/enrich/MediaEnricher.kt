@@ -54,6 +54,7 @@ class MediaEnricher @Inject constructor(
                 genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
                 certificationAge = ageD.await() ?: item.certificationAge,
                 originCountries = countriesOfShow(details) ?: item.originCountries,
+                originalTitle = details?.original_name?.takeIf { it.isNotBlank() } ?: item.originalTitle,
             )
         } else {
             val detailsD = async { runCatching { tmdb.fetchMovieDetails(tmdbId, LANG) }.getOrNull() }
@@ -68,6 +69,7 @@ class MediaEnricher @Inject constructor(
                 genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
                 certificationAge = ageD.await() ?: item.certificationAge,
                 originCountries = countriesOfMovie(details) ?: item.originCountries,
+                originalTitle = details?.original_title?.takeIf { it.isNotBlank() } ?: item.originalTitle,
             )
         }
     }

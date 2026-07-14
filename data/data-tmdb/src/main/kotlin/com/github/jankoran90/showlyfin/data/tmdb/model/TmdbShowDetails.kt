@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.data.tmdb.model
 data class TmdbShowDetails(
     val id: Long,
     val name: String?,
+    // PASSPORT (SHW-93) A1 — originální název seriálu (u ne-latinkových asijské písmo); zdroj čitelného fallbacku.
+    val original_name: String? = null,
     val poster_path: String?,
     val backdrop_path: String?,
     val overview: String?,

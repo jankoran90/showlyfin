@@ -274,7 +274,7 @@ class TvFilmotekaViewModel @Inject constructor(
     private fun MediaItem.toHomeRowItem(axisValue: String) = HomeRowItem(
         // Klíč nese hodnotu osy → titul může být ve víc řadách bez Compose key kolize.
         key = "filmo_${axisValue}_${tmdbId ?: imdbId ?: traktId}",
-        title = titleCz?.takeIf { it.isNotBlank() } ?: title,
+        title = displayTitle,
         year = year,
         posterUrl = posterUrl("w342"),
         landscapeUrl = backdropUrl("w780"),

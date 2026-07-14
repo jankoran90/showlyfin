@@ -26,7 +26,27 @@ data class MediaItem(
      * `production_countries`). Použití: osa Země Filmotéky (regionsOf v CinematographyRegion).
      */
     val originCountries: List<String>? = null,
+    /**
+     * PASSPORT (SHW-93) A1 — originální název z TMDB `original_title`/`original_name` (u ne-latinkových titulů
+     * asijské písmo). Plní [enrich]. Používá se v [displayTitle] jako poslední čitelný kandidát a v hledání
+     * zdrojů/titulků (A2). null = neznámý.
+     */
+    val originalTitle: String? = null,
 ) {
     fun posterUrl(size: String = "w342") = posterPath?.let { "https://image.tmdb.org/t/p/$size$it" }
     fun backdropUrl(size: String = "w780") = backdropPath?.let { "https://image.tmdb.org/t/p/$size$it" }
+
+    /**
+     * PASSPORT (SHW-93) A1 — název k ZOBRAZENÍ: první ČITELNÝ (latinkový) kandidát v pořadí
+     * CZ překlad → raw (Trakt, obv. anglický) → originál. Když je vše ne-latinka (žádný latinkový kandidát
+     * není), vrátí aspoň CZ/raw (lepší než prázdno). Sjednocuje dřív roztroušené `titleCz ?: title`.
+     */
+    val displayTitle: String
+        get() {
+            val cz = titleCz?.takeIf { it.isNotBlank() }
+            val raw = title.takeIf { it.isNotBlank() }
+            val orig = originalTitle?.takeIf { it.isNotBlank() }
+            return sequenceOf(cz, raw, orig).filterNotNull().firstOrNull { !it.looksNonLatin() }
+                ?: cz ?: title
+        }
 }

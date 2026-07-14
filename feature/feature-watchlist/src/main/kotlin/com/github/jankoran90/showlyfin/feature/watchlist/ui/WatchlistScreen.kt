@@ -321,7 +321,7 @@ private fun WatchlistRow(
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.height(RowCoverHeight).fillMaxWidth()) {
             Text(
-                text = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
+                text = item.displayTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,

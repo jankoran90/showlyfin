@@ -20,7 +20,7 @@ fun MediaCard(
 ) {
     PosterCard(
         posterUrl = item.posterUrl(),
-        title = item.titleCz?.takeIf { it.isNotBlank() } ?: item.title,
+        title = item.displayTitle,
         year = item.year?.toString(),
         onClick = onClick,
         modifier = modifier,
