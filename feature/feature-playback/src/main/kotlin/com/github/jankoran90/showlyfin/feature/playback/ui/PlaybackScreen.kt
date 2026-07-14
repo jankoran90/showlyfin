@@ -101,6 +101,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.playback.service.MoviePlayerService
 import com.google.common.util.concurrent.MoreExecutors
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
+import com.github.jankoran90.showlyfin.feature.playback.SubtitleEdge
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
 import kotlinx.coroutines.delay
 
