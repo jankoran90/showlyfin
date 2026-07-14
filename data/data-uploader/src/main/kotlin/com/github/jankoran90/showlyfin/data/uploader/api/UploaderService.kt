@@ -132,4 +132,7 @@ interface UploaderService {
     // AGORA (objevovací modul) — procházení zdrojů dle země/režimu/kategorie + seznam kategorií
     @GET suspend fun browseSources(@Url url: String, @Header("Cookie") cookie: String): SourceBrowseResponse
     @GET suspend fun getCategories(@Url url: String, @Header("Cookie") cookie: String): CategoriesResponse
+
+    // AUTEUR (SHW-91) — kurátorský mozek (raw JSON body → raw JSON odpověď)
+    @POST suspend fun curatorRecommend(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
 }

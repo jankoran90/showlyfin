@@ -269,6 +269,15 @@ class HomeLayoutStore @Inject constructor(
                 title = "Doporučeno",
                 cardStyle = HomeCardStyle.POSTER,
             ),
+            // AUTEUR (SHW-91): kurátorský mozek „Pro tebe" (LLM z vkusu Trakt+Favorites → TMDB). Zapnuto
+            // z výroby; merge v loadRows doplní i stávajícím uživatelům (nový id → append). Prázdné/mozek
+            // nedostupný → fallback na weighted uvnitř loadOnce, takže řada nezůstane prázdná při historii.
+            HomeRowConfig(
+                id = "brain_for_you",
+                source = HomeRowSourceType.BRAIN_FOR_YOU,
+                title = "Pro tebe (kurátor)",
+                cardStyle = HomeCardStyle.POSTER,
+            ),
             // COUCH per-profil (user 2026-07-13 „ne generický obsah, na míru dle profilu"): Trakt
             // personalizovaná doporučení (dle watched historie profilu + počtu přehrání = Trakt algoritmus).
             // DISCOVER filter „recommended" = authorizedTraktApi.fetchRecommended*. Prázdné bez Traktu / bez

@@ -77,6 +77,13 @@ enum class HomeRowSourceType(val label: String) {
      */
     WEIGHTED_RECOMMENDATIONS("Na míru (podle sledování)"),
 
+    /**
+     * AUTEUR (SHW-91): kurátorský mozek „Pro tebe" — vkus (Trakt watched+ratings+watchlist ∪ Favorites)
+     * pošle na backend `/curator/recommend` (LLM → resolve na TMDB). Prázdné/nedostupné → fallback na
+     * [WEIGHTED_RECOMMENDATIONS]. OAuth (potřebuje Trakt vkus).
+     */
+    BRAIN_FOR_YOU("Pro tebe (kurátor)"),
+
     /** JEDNA konkrétní Jellyfin knihovna (viz [HomeRowParams.LIBRARY_ID]). První-třídní řada:
      *  vlastní enabled/pořadí/styl per knihovna. Seed-once z profilu (viz [HomeLayoutStore.syncLibraries]). */
     JELLYFIN_LIBRARY("Jellyfin knihovna"),

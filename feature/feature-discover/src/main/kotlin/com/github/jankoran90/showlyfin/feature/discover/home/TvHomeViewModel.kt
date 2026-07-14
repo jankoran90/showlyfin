@@ -77,6 +77,7 @@ class TvHomeViewModel @Inject constructor(
     private val traktApi: TraktRemoteDataSource,
     private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
     private val traktLoader: TraktRowLoader,
+    private val curatorLoader: com.github.jankoran90.showlyfin.feature.discover.curator.CuratorLoader,
     private val tmdb: TmdbRemoteDataSource,
     private val enricher: MediaEnricher,
     private val parentalControls: ParentalControlsRepository,
@@ -285,6 +286,11 @@ class TvHomeViewModel @Inject constructor(
         // COUCH (SHW-88) play-count vážená doporučení „na míru dle sledování".
         HomeRowSourceType.WEIGHTED_RECOMMENDATIONS ->
             traktLoader.weightedRecommendations(config.limit).map { it.toHomeRowItem(config) }
+        // AUTEUR (SHW-91) kurátorský mozek „Pro tebe"; prázdné/nedostupné → fallback weightedRecommendations.
+        HomeRowSourceType.BRAIN_FOR_YOU ->
+            curatorLoader.forYou(config.limit)
+                .ifEmpty { traktLoader.weightedRecommendations(config.limit) }
+                .map { it.toHomeRowItem(config) }
         // LIBRARY_TILES / GENRES / STUDIOS = dlaždicové navigační řady → 2. vlna (viz Known gaps).
         else -> emptyList()
         }
@@ -593,6 +599,7 @@ private val TRAKT_SOURCES = setOf(
     HomeRowSourceType.TRAKT_LIST,
     HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS,
     HomeRowSourceType.WEIGHTED_RECOMMENDATIONS,
+    HomeRowSourceType.BRAIN_FOR_YOU,
 )
 
 /** COUCH (SHW-88) — zdroje z Jellyfin knihovny (pro děti schválené) → věkový filtr se NEaplikuje. */
@@ -610,6 +617,7 @@ private val AGE_EXEMPT_SOURCES = setOf(
 private val OWNED_FILTER_SOURCES = setOf(
     HomeRowSourceType.DISCOVER,
     HomeRowSourceType.WEIGHTED_RECOMMENDATIONS,
+    HomeRowSourceType.BRAIN_FOR_YOU,
 )
 
 /** Sdílená sada Jellyfin ItemFields pro řady domova (providerIds kvůli klik-mapování, overview kvůli immersive). */

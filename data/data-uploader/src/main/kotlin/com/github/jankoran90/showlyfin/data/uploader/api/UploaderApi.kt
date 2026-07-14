@@ -207,6 +207,15 @@ internal class UploaderApi(
         return if (resp.isSuccessful) resp.body()?.string() else null
     }
 
+    // AUTEUR (SHW-91) — kurátorský mozek
+    override suspend fun curatorRecommend(baseUrl: String, sessionCookie: String, json: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val resp = service.curatorRecommend("$base/curator/recommend", cookie, body)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
     override suspend fun putProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String, json: String) {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
