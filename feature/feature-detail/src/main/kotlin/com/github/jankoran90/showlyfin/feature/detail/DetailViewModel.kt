@@ -727,17 +727,24 @@ class DetailViewModel @Inject constructor(
             } else {
                 SyncExportRequest(shows = listOf(exportItem))
             }
-            val ok = runCatching {
+            val result = runCatching {
                 if (currentlyIn) authorizedTrakt.postDeleteWatchlist(request)
                 else authorizedTrakt.postSyncWatchlist(request)
-            }.isSuccess
+            }
+            val ok = result.isSuccess
+            // Diagnostika (2026-07-14): při selhání ukázat SKUTEČNÝ důvod — HttpException.message nese
+            // „HTTP <kód>…" (420=plný watchlist/limit, 401=token, 429=rate limit), IOException=síť.
+            val reason = result.exceptionOrNull()?.let { e ->
+                timber.log.Timber.w(e, "[Watchlist] POST selhal (currentlyIn=$currentlyIn) pro '${item.title}'")
+                e.message?.take(90) ?: e.javaClass.simpleName
+            }
             _uiState.update {
                 it.copy(
                     isTogglingWatchlist = false,
                     // Při selhání revert na původní stav + hláška; při úspěchu ponech optimistický.
                     isInWatchlist = if (ok) !currentlyIn else currentlyIn,
                     autoCastMessage = if (ok) it.autoCastMessage
-                        else "Nepodařilo se uložit do Trakt seznamu — zkus to znovu.",
+                        else "Trakt seznam se neuložil: ${reason ?: "neznámá chyba"}. Zkus znovu.",
                 )
             }
         }
