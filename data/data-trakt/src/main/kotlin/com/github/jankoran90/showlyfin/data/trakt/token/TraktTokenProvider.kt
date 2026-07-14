@@ -93,7 +93,19 @@ internal class TraktTokenProvider(
         val nowMillis = System.currentTimeMillis()
         val tokenCreatedAt = sharedPreferences.getLong(KEY_TOKEN_CREATED_AT, 0L)
         val tokenExpiresAt = sharedPreferences.getLong(KEY_TOKEN_EXPIRES_AT, 0L)
-        if (tokenCreatedAt == 0L) return false
+        // SEBEOZDRAVENÍ (2026-07-15): chybí-li časové razítko (token ze starší verze bez timestampu,
+        // zapsaný přes ProfileConfigApplier při přepnutí/sync profilu, nebo po migraci), NEpředpokládej
+        // „platí navěky". Dřív `createdAt==0 → return false` = proaktivní obnova se nikdy nespustila →
+        // access token tiše vypršel, zápisy (watchlist/rating) padaly na 401, ale bez razítka se token
+        // tvářil platně → nedošlo ani k odhlášení → uživatel to musel spravit RUČNÍM re-loginem.
+        // Když máme access i refresh token, vynuť obnovu: refresh zapíše created/expires a stav se
+        // znormalizuje (jedna úspěšná obnova → createdAt != 0 → dál běžná logika; cooldown brání bouři).
+        // Když je refresh_token opravdu mrtvý (400/401), spadne to čistě do odhlášení (výzva k přihlášení).
+        if (tokenCreatedAt == 0L) {
+            val haveAccess = !sharedPreferences.getString(KEY_ACCESS_TOKEN, null).isNullOrBlank()
+            val haveRefresh = !sharedPreferences.getString(KEY_REFRESH_TOKEN, null).isNullOrBlank()
+            return haveAccess && haveRefresh
+        }
         if (nowMillis - tokenCreatedAt > Config.TRAKT_TOKEN_REFRESH_DURATION.toMillis()) return true
         if (tokenExpiresAt in 1..nowMillis) return true
         return false
