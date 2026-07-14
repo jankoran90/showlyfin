@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.phone.settings
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Movie
@@ -33,6 +34,12 @@ enum class SettingsCategory(
         subtitle = "Uploader, Stremio filtry, hlasitost filmu",
         icon = Icons.Filled.Movie,
         keywords = "stremio torrent zdroje kvalita filtr streamování uploader sdílej remux drc hlasitost normalizér film realdebrid",
+    ),
+    CURATOR(
+        title = "Kurátor",
+        subtitle = "Doporučení „Pro tebe“, míra objevování",
+        icon = Icons.Filled.AutoAwesome,
+        keywords = "kurátor doporučení pro tebe objevování překvapení jistota nálada žánr druh mozek ai umělá inteligence recommend auteur",
     ),
     LISTEN(
         title = "Poslech",

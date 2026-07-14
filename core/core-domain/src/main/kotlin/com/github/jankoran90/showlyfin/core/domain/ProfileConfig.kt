@@ -95,6 +95,12 @@ data class ProfileConfig(
     /** Per-source posun synchronizace titulků (ms). Klíč jako [subtitleSelections]. Cap ~300 (LRU). */
     val subtitleOffsets: Map<String, Long> = emptyMap(),
     /**
+     * AUTEUR (SHW-91) Fáze C1 — per-profil nastavení kurátorského mozku „Pro tebe", synchronizované
+     * TV↔telefon (vzor [subtitleStyle]). null = profil zatím nemá vlastní volby → čte se [CuratorPrefs]
+     * default (kurátor zapnutý, lehké objevování). Dětský vs. dospělý profil má vlastní konfiguraci.
+     */
+    val curator: CuratorPrefs? = null,
+    /**
      * Lock-mapa (Plan WARDEN W0): logické klíče ([LockKeys]), které jsou **admin-zamčené** =
      * uživatel je nesmí editovat a do efektivního configu se vždy berou ze **šablony**, ne z
      * uživatelského override. Smysl má jen na **šabloně**; na uživatelském override se ignoruje.
@@ -371,6 +377,71 @@ enum class SubtitleEdgePref { OUTLINE, SHADOW, BOX, NONE }
 /** Typ písma titulku. Zrcadlí runtime `SubtitleFont`. */
 @Serializable
 enum class SubtitleFontPref { SANS, SERIF, MONO }
+
+/**
+ * AUTEUR (SHW-91) Fáze C1 — persistovaná nastavení kurátorského mozku „Pro tebe" (per-profil,
+ * synced TV↔telefon, viz [ProfileConfig.curator]). Zrcadlí osy promptu backendu `services/curator/brain.py`
+ * (discover_titles: discovery/surprise/mood/genres). Prázdné/null hodnoty = default backendu (kurátor
+ * pak sám volí vyváženě) — nic se nezadrátovává, appka posílá jen to, co uživatel reálně nastavil.
+ */
+@Serializable
+data class CuratorPrefs(
+    /**
+     * Master switch kurátora. false = řada „Pro tebe" mozek NEvolá a spadne rovnou na mechanický
+     * fallback (weightedRecommendations dle Trakt historie) — „přepínač, ne náhrada".
+     */
+    val enabled: Boolean = true,
+    /**
+     * Osa JISTOTA↔PŘEKVAPENÍ. 0.0 = drž se blízko vkusu (jistota), 1.0 = odvážně objevuj (překvapení).
+     * Default = lehké objevování (parita s backend `CURATOR_DISCOVERY_DEFAULT`).
+     */
+    val discovery: Float = 0.35f,
+    /**
+     * Módy překvapení — kudy smí kurátor odbočit od vkusu. Prázdné = default backendu (blízké tituly +
+     * sousední žánry). Zrcadlí `_SURPRISE_MODES` v brain.py.
+     */
+    val surprise: Set<CuratorSurprise> = emptySet(),
+    /** Nálada / přání „teď" (volný text, volitelné). Prázdné = bez omezení náladou. */
+    val mood: String = "",
+    /** Držet se konkrétních žánrů (názvy lowercase). Prázdné = bez žánrového omezení. */
+    val genres: Set<String> = emptySet(),
+    /** Druh doporučovaného obsahu (film / seriál / oboje). */
+    val kind: CuratorKind = CuratorKind.BOTH,
+    /**
+     * Model mozku (pokročilé, progressive disclosure). null/prázdné = default gateway (paušál).
+     * Parita s audioman BACKBONE per-request modelem.
+     */
+    val model: String? = null,
+) {
+    /** Backendová hodnota `kind` pro payload `/curator/recommend`. */
+    fun kindWire(): String = when (kind) {
+        CuratorKind.MOVIE -> "movie"
+        CuratorKind.SHOW -> "show"
+        CuratorKind.BOTH -> "both"
+    }
+
+    /** Backendové hodnoty `surprise` (lowercase názvy módů) pro payload. Prázdné = default backendu. */
+    fun surpriseWire(): List<String> = surprise.map {
+        when (it) {
+            CuratorSurprise.NEAR -> "near"
+            CuratorSurprise.GENRES -> "genres"
+            CuratorSurprise.UNKNOWN -> "unknown"
+            CuratorSurprise.ERA -> "era"
+        }
+    }
+
+    companion object {
+        val DEFAULT = CuratorPrefs()
+    }
+}
+
+/** Osa překvapení kurátora — kudy smí odbočit od vkusu. Zrcadlí `_SURPRISE_MODES` v brain.py. */
+@Serializable
+enum class CuratorSurprise { NEAR, GENRES, UNKNOWN, ERA }
+
+/** Druh obsahu, který kurátor doporučuje. */
+@Serializable
+enum class CuratorKind { MOVIE, SHOW, BOTH }
 
 /**
  * Vloží [key]→[value] a udrží mapu v LRU pořadí s tvrdým stropem [max] (nejstarší klíč vypadne).

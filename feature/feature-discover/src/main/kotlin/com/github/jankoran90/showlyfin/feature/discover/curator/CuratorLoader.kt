@@ -2,7 +2,9 @@ package com.github.jankoran90.showlyfin.feature.discover.curator
 
 import android.content.SharedPreferences
 import android.util.Log
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.ContentAgeGate
+import com.github.jankoran90.showlyfin.core.domain.CuratorPrefs
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
@@ -36,6 +38,7 @@ class CuratorLoader @Inject constructor(
     private val enricher: MediaEnricher,
     private val parental: ParentalControlsRepository,
     private val uploaderDs: UploaderRemoteDataSource,
+    private val profileRepository: ProfileRepository,
     @param:Named("traktPreferences") private val appPrefs: SharedPreferences,
 ) {
     private fun capAge(): Int? = parental.profile.value.effectiveAgeCap
@@ -44,11 +47,17 @@ class CuratorLoader @Inject constructor(
     private fun serverBase(): String = appPrefs.getString("uploader_base_url", "").orEmpty()
     private fun serverCookie(): String = appPrefs.getString("uploader_session_cookie", "").orEmpty()
 
+    /** Per-profil nastavení kurátora (osy jistoty/nálada/žánr/druh/model) — synced přes [ProfileConfig]. */
+    private fun prefs(): CuratorPrefs = profileRepository.activeConfig.value.curator ?: CuratorPrefs.DEFAULT
+
     /**
      * Kurátorská doporučení „Pro tebe". Prázdné = backend/mozek nedostupný nebo studený vkus →
      * volající (TvHomeViewModel) může fallbacknout na `weightedRecommendations`.
      */
     suspend fun forYou(limit: Int): List<MediaItem> {
+        val prefs = prefs()
+        // Master switch (C1): vypnutý kurátor → mozek NEvoláme, volající spadne na fallback (weighted).
+        if (!prefs.enabled) { Log.i(TAG, "forYou: kurátor vypnutý → fallback"); return emptyList() }
         val base = serverBase(); val cookie = serverCookie(); val key = profileKey()
         if (base.isBlank() || key.isBlank()) {
             Log.i(TAG, "forYou: chybí backend/profil (base=${base.isNotBlank()}, key=${key.isNotBlank()})")
@@ -57,7 +66,7 @@ class CuratorLoader @Inject constructor(
         val taste = buildTaste()
         if (taste.isEmpty()) { Log.i(TAG, "forYou: studený vkus → fallback"); return emptyList() }
 
-        val requestJson = buildRequestJson(key, limit.coerceIn(1, 60), taste)
+        val requestJson = buildRequestJson(key, limit.coerceIn(1, 60), taste, prefs)
         val raw = runCatching { uploaderDs.curatorRecommend(base, cookie, requestJson) }
             .onFailure { Log.w(TAG, "forYou: volání backendu selhalo", it) }
             .getOrNull() ?: return emptyList()
@@ -141,7 +150,7 @@ class CuratorLoader @Inject constructor(
     }
 
     // ── JSON (org.json — bez Gson závislosti v tomto modulu) ───────────────────
-    private fun buildRequestJson(profileKey: String, count: Int, taste: TastePayload): String {
+    private fun buildRequestJson(profileKey: String, count: Int, taste: TastePayload, prefs: CuratorPrefs): String {
         fun entriesToJson(list: List<TasteEntry>, withPlays: Boolean): JSONArray {
             val arr = JSONArray()
             for (e in list) {
@@ -160,10 +169,19 @@ class CuratorLoader @Inject constructor(
             .put("avoid", JSONArray(taste.avoid))
         val root = JSONObject()
             .put("profileKey", profileKey)
-            .put("kind", "both")
+            .put("kind", prefs.kindWire())
             .put("count", count)
-            .put("wait", true)
+            // REFLEX (C1): wait=false → cache miss vrátí `pending` + mozek se zahřeje na pozadí; volající
+            // pro TENHLE load fallbackne (weighted) → žádné blokující 15-19 s. Kurátor doteče na příští
+            // otevření Domů (stale-while-revalidate). Osy níže laděné uživatelem v Nastavení.
+            .put("wait", false)
+            .put("discovery", prefs.discovery.toDouble())
             .put("taste", tasteJson)
+        prefs.mood.trim().takeIf { it.isNotEmpty() }?.let { root.put("mood", it) }
+        prefs.genres.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }
+            ?.let { root.put("genres", JSONArray(it)) }
+        prefs.surpriseWire().takeIf { it.isNotEmpty() }?.let { root.put("surprise", JSONArray(it)) }
+        prefs.model?.trim()?.takeIf { it.isNotEmpty() }?.let { root.put("model", it) }
         capAge()?.let { root.put("ageCap", it) }
         return root.toString()
     }

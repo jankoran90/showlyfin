@@ -302,6 +302,9 @@ fun TvSettingsScreen(
         // ── Detail obsahu ── (extrahováno do TvContentSettingsBlocks kvůli stropu 600ř)
         item { TvDetailContentBlock(detail, detailPrefs) }
 
+        // ── Kurátor (AUTEUR SHW-91) — osy mozku „Pro tebe" (jistota↔překvapení, druh, módy) ──
+        item { TvCuratorSettingsBlock() }
+
         // ── Filmotéka (CINEMATHEQUE SHW-90) — zdroje sjednocené plochy + výchozí osa ──
         item { TvFilmotekaSettingsBlock() }
 

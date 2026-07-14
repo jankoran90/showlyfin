@@ -20,6 +20,7 @@ import com.github.jankoran90.showlyfin.ui.phone.settings.SettingsCategoryScreen
 import com.github.jankoran90.showlyfin.ui.phone.settings.SettingsHome
 import com.github.jankoran90.showlyfin.ui.phone.settings.sections.AppearanceSettingsSection
 import com.github.jankoran90.showlyfin.ui.phone.settings.sections.ConnectionSettingsSection
+import com.github.jankoran90.showlyfin.ui.phone.settings.sections.CuratorSettingsSection
 import com.github.jankoran90.showlyfin.ui.phone.settings.sections.HomeTheaterSettingsSection
 import com.github.jankoran90.showlyfin.ui.phone.settings.sections.ListenSettingsSection
 import com.github.jankoran90.showlyfin.ui.phone.settings.sections.ProfilesCategorySection
@@ -65,6 +66,7 @@ fun SettingsScreen(
                 SettingsCategory.STREAMING -> StreamingSettingsSection(
                     uiState, viewModel, credLocked, expanded, onOpenUploader,
                 )
+                SettingsCategory.CURATOR -> CuratorSettingsSection()
                 SettingsCategory.LISTEN -> ListenSettingsSection(uiState, viewModel)
                 SettingsCategory.APPEARANCE -> AppearanceSettingsSection(uiState, viewModel, isAdmin, expanded)
                 SettingsCategory.PROFILES -> ProfilesCategorySection(uiState, viewModel, isAdmin)
