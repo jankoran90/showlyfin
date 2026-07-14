@@ -12,9 +12,10 @@ import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
-import com.google.gson.Gson
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import org.json.JSONArray
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -35,7 +36,6 @@ class CuratorLoader @Inject constructor(
     private val enricher: MediaEnricher,
     private val parental: ParentalControlsRepository,
     private val uploaderDs: UploaderRemoteDataSource,
-    private val gson: Gson,
     @param:Named("traktPreferences") private val appPrefs: SharedPreferences,
 ) {
     private fun capAge(): Int? = parental.profile.value.effectiveAgeCap
@@ -57,25 +57,17 @@ class CuratorLoader @Inject constructor(
         val taste = buildTaste()
         if (taste.isEmpty()) { Log.i(TAG, "forYou: studený vkus → fallback"); return emptyList() }
 
-        val request = RecommendRequest(
-            profileKey = key,
-            kind = "both",
-            count = limit.coerceIn(1, 60),
-            wait = true,
-            ageCap = capAge(),
-            taste = taste,
-        )
-        val raw = runCatching { uploaderDs.curatorRecommend(base, cookie, gson.toJson(request)) }
+        val requestJson = buildRequestJson(key, limit.coerceIn(1, 60), taste)
+        val raw = runCatching { uploaderDs.curatorRecommend(base, cookie, requestJson) }
             .onFailure { Log.w(TAG, "forYou: volání backendu selhalo", it) }
             .getOrNull() ?: return emptyList()
-        val resp = runCatching { gson.fromJson(raw, RecommendResponse::class.java) }
+        val parsed = runCatching { parseItems(raw) }
             .onFailure { Log.w(TAG, "forYou: parse odpovědi selhal", it) }
             .getOrNull() ?: return emptyList()
-        val base0 = resp.items.mapNotNull { it.toMediaItem() }
-        if (base0.isEmpty()) { Log.i(TAG, "forYou: source=${resp.source}, 0 položek"); return emptyList() }
-        val enriched = enricher.enrich(base0, withCertification = capAge() != null)
+        if (parsed.isEmpty()) { Log.i(TAG, "forYou: 0 položek"); return emptyList() }
+        val enriched = enricher.enrich(parsed, withCertification = capAge() != null)
         return ContentAgeGate.filter(capAge(), enriched, hideUnrated())
-            .also { Log.i(TAG, "forYou: source=${resp.source} → ${it.size} položek") }
+            .also { Log.i(TAG, "forYou: ${it.size} položek") }
     }
 
     /** Sestaví taste payload z Traktu (watched+plays, ratings, watchlist) + Favorites. */
@@ -148,24 +140,61 @@ class CuratorLoader @Inject constructor(
         return filter { seen.add(it.title.lowercase()) }
     }
 
-    private fun RecItem.toMediaItem(): MediaItem? {
-        val id = tmdbId ?: return null
-        return MediaItem(
-            traktId = 0L,
-            tmdbId = id,
-            imdbId = null,
-            title = title.orEmpty(),
-            year = year,
-            overview = null,
-            rating = null,
-            genres = null,
-            type = if (type == "show") MediaType.SHOW else MediaType.MOVIE,
-            posterPath = posterPath,
-            backdropPath = null,
-        )
+    // ── JSON (org.json — bez Gson závislosti v tomto modulu) ───────────────────
+    private fun buildRequestJson(profileKey: String, count: Int, taste: TastePayload): String {
+        fun entriesToJson(list: List<TasteEntry>, withPlays: Boolean): JSONArray {
+            val arr = JSONArray()
+            for (e in list) {
+                val o = JSONObject().put("title", e.title)
+                if (e.year != null) o.put("year", e.year)
+                if (withPlays && e.plays != null) o.put("plays", e.plays)
+                arr.put(o)
+            }
+            return arr
+        }
+        val tasteJson = JSONObject()
+            .put("loved", entriesToJson(taste.loved, withPlays = false))
+            .put("top", entriesToJson(taste.top, withPlays = true))
+            .put("recent", entriesToJson(taste.recent, withPlays = false))
+            .put("watchlist", entriesToJson(taste.watchlist, withPlays = false))
+            .put("avoid", JSONArray(taste.avoid))
+        val root = JSONObject()
+            .put("profileKey", profileKey)
+            .put("kind", "both")
+            .put("count", count)
+            .put("wait", true)
+            .put("taste", tasteJson)
+        capAge()?.let { root.put("ageCap", it) }
+        return root.toString()
     }
 
-    // ── DTO pro backend /curator/recommend ────────────────────────────────────
+    /** Odpověď `{items:[{tmdbId,type,title,year,posterPath}], source}` → [MediaItem] (dedup tmdbId). */
+    private fun parseItems(raw: String): List<MediaItem> {
+        val items = JSONObject(raw).optJSONArray("items") ?: return emptyList()
+        val out = ArrayList<MediaItem>(items.length())
+        val seen = HashSet<Long>()
+        for (i in 0 until items.length()) {
+            val o = items.optJSONObject(i) ?: continue
+            val id = o.optLong("tmdbId", 0L)
+            if (id <= 0L || !seen.add(id)) continue
+            out += MediaItem(
+                traktId = 0L,
+                tmdbId = id,
+                imdbId = null,
+                title = o.optString("title", ""),
+                year = o.optInt("year", 0).takeIf { it > 0 },
+                overview = null,
+                rating = null,
+                genres = null,
+                type = if (o.optString("type") == "show") MediaType.SHOW else MediaType.MOVIE,
+                posterPath = if (o.isNull("posterPath")) null else o.optString("posterPath").ifBlank { null },
+                backdropPath = null,
+            )
+        }
+        return out
+    }
+
+    // ── Interní model vkusu (bez serializace) ─────────────────────────────────
     private data class TasteEntry(val title: String, val year: Int?, val plays: Int? = null)
     private data class TastePayload(
         val loved: List<TasteEntry>,
@@ -176,16 +205,6 @@ class CuratorLoader @Inject constructor(
     ) {
         fun isEmpty(): Boolean = top.isEmpty() && recent.isEmpty() && loved.isEmpty()
     }
-    private data class RecommendRequest(
-        val profileKey: String,
-        val kind: String,
-        val count: Int,
-        val wait: Boolean,
-        val ageCap: Int?,
-        val taste: TastePayload,
-    )
-    private data class RecItem(val tmdbId: Long?, val type: String?, val title: String?, val year: Int?, val posterPath: String?)
-    private data class RecommendResponse(val items: List<RecItem> = emptyList(), val source: String? = null)
 
     private companion object {
         const val TAG = "AUTEUR_Curator"
