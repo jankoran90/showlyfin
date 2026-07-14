@@ -891,7 +891,8 @@ private fun SubtitleSettingsPanel(
             val rel = c.release.ifBlank { c.title }
             // Zdroj titulku z prefixu id (CAPTION/LINGUA): titulky.com → počet stažení; OS/AI → název zdroje.
             val src = when {
-                c.id.startsWith("os_") -> "OpenSubtitles"
+                // SUBWEAVE B: oficiální OS API má prefix `osf_` (addon = `os_`) — obojí je OpenSubtitles.
+                c.id.startsWith("os_") || c.id.startsWith("osf_") -> "OpenSubtitles"
                 c.id.startsWith("ai_") -> "AI překlad"
                 else -> ""
             }

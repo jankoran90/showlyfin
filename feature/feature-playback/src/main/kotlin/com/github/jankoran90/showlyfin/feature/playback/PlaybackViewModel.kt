@@ -4,7 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.domain.SubtitleStylePrefs
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
+import com.github.jankoran90.showlyfin.core.domain.putCappedLru
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleCandidate
@@ -12,10 +15,14 @@ import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.data.uploader.subtitle.SubtitleTranslationStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -31,6 +38,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import javax.inject.Inject
 import javax.inject.Named
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class PlaybackViewModel @Inject constructor(
     private val apiClient: ApiClient,
@@ -40,6 +48,7 @@ class PlaybackViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val translateStore: SubtitleTranslationStore,
     private val videoResumeStore: VideoResumeStore,
+    private val profileRepository: ProfileRepository,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -54,6 +63,60 @@ class PlaybackViewModel @Inject constructor(
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+
+    // ── SUBWEAVE C: per-profil titulkové volby + sync přes ProfileConfig ──────────
+    // Styl + offset se při tažení slideru / nudgeOffset generují mnohokrát; každý updateConfig pushuje
+    // na backend → zápisy DEBOUNCUJEME (lokální _state se mění instantně, sync doběhne po ustálení).
+    private val styleWrites = MutableSharedFlow<SubtitleStyle>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val offsetWrites = MutableSharedFlow<Pair<String, Long>>(extraBufferCapacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    private fun activeProfileId(): Long? = profileRepository.activeProfile.value?.id
+
+    init {
+        viewModelScope.launch {
+            styleWrites.debounce(400).collect { s ->
+                activeProfileId()?.let { id ->
+                    profileRepository.updateConfig(id) {
+                        it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction))
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            offsetWrites.debounce(400).collect { (key, ms) ->
+                activeProfileId()?.let { id ->
+                    profileRepository.updateConfig(id) { it.copy(subtitleOffsets = it.subtitleOffsets.putCappedLru(key, ms)) }
+                }
+            }
+        }
+        // Cross-device konvergence: styl změněný na jiném zařízení / přepnutí profilu → promítni do
+        // běžícího stavu (per-source výběr přebíráme až při dalším otevření zdroje, ne uprostřed sledování).
+        viewModelScope.launch {
+            profileRepository.activeConfig
+                .map { it.subtitleStyle }
+                .distinctUntilChanged()
+                .collect { sp ->
+                    if (sp != null) _state.update { st ->
+                        st.copy(
+                            subtitleStyle = st.subtitleStyle.copy(
+                                fontScale = sp.fontScale, colorArgb = sp.colorArgb,
+                                bottomPaddingFraction = sp.bottomPaddingFraction,
+                            ),
+                        )
+                    }
+                }
+        }
+        // Migrace: existující globální styl (staré prefs) jednorázově překlop do per-profil configu.
+        viewModelScope.launch {
+            val id = activeProfileId() ?: return@launch
+            if (profileRepository.activeConfig.value.subtitleStyle == null && prefs.contains("sub_font_scale")) {
+                val s = loadStyle()
+                profileRepository.updateConfig(id) {
+                    it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction))
+                }
+            }
+        }
+    }
 
     private var query: SubtitleQuery? = null
     // PICKUP: klíč pozice je oddělený od `query` (titulky), protože resume musí fungovat i BEZ imdb.
@@ -182,7 +245,17 @@ class PlaybackViewModel @Inject constructor(
                 null -> selectSubtitle(if (resp.best in resp.subtitles.indices) resp.best else 0, persist = false)
                 else -> {
                     val idx = resp.subtitles.indexOfFirst { it.id == storedId }
-                    selectSubtitle(if (idx >= 0) idx else (resp.best.takeIf { it in resp.subtitles.indices } ?: 0), persist = false)
+                    if (idx >= 0) {
+                        selectSubtitle(idx, persist = false)
+                    } else {
+                        // SUBWEAVE C durabilita: uložená stopa není v čerstvých kandidátech (přeházené
+                        // hledání / vypršelý zdroj) → dosyntetizuj ji z uloženého id a re-stáhni ze server
+                        // cache (stažené/AI titulky jsou na serveru trvalé). Chyba stažení → uživatel přepne ručně.
+                        val restored = SubtitleCandidate(id = storedId, title = "Uložený titulek", lang = "cs", imdbMatch = true)
+                        val merged = resp.subtitles + restored
+                        _state.update { it.copy(subtitleCandidates = merged) }
+                        selectSubtitle(merged.lastIndex, persist = false)
+                    }
                 }
             }
             // SUBWEAVE A: náš AI překlad nabízet VŽDY (i když jsou titulky nalezené) — user si může vynutit
@@ -326,20 +399,30 @@ class PlaybackViewModel @Inject constructor(
         saveStyle(s)
     }
 
-    // Globální styl (velikost/barva/pozice) — offset NE, ten je per-source (viz níže).
-    private fun loadStyle() = SubtitleStyle(
-        fontScale = prefs.getFloat("sub_font_scale", 1.0f),
-        colorArgb = prefs.getInt("sub_color_argb", 0xFFFFBF00.toInt()),
-        bottomPaddingFraction = prefs.getFloat("sub_bottom_pad", 0.08f),
-        offsetMs = 0L,
-    )
+    // Styl (velikost/barva/pozice) — per-profil v ProfileConfig (sync TV↔telefon). Offset NE, ten je
+    // per-source (viz níže). Fallback na staré globální prefs = profil bez configu / před migrací.
+    private fun loadStyle(): SubtitleStyle {
+        val sp = profileRepository.activeConfig.value.subtitleStyle
+        return if (sp != null) SubtitleStyle(sp.fontScale, sp.colorArgb, sp.bottomPaddingFraction, 0L)
+        else SubtitleStyle(
+            fontScale = prefs.getFloat("sub_font_scale", 1.0f),
+            colorArgb = prefs.getInt("sub_color_argb", 0xFFFFBF00.toInt()),
+            bottomPaddingFraction = prefs.getFloat("sub_bottom_pad", 0.08f),
+            offsetMs = 0L,
+        )
+    }
 
+    // Aktivní profil → debounced push do ProfileConfig (sync). Bez profilu → lokální prefs (jako dřív).
     private fun saveStyle(s: SubtitleStyle) {
-        prefs.edit()
-            .putFloat("sub_font_scale", s.fontScale)
-            .putInt("sub_color_argb", s.colorArgb)
-            .putFloat("sub_bottom_pad", s.bottomPaddingFraction)
-            .apply()
+        if (activeProfileId() != null) {
+            styleWrites.tryEmit(s)
+        } else {
+            prefs.edit()
+                .putFloat("sub_font_scale", s.fontScale)
+                .putInt("sub_color_argb", s.colorArgb)
+                .putFloat("sub_bottom_pad", s.bottomPaddingFraction)
+                .apply()
+        }
     }
 
     // ── Per-source paměť (offset + vybraná stopa) ────────────────────────────
@@ -360,10 +443,25 @@ class PlaybackViewModel @Inject constructor(
         val se = if (q.season != null && q.episode != null) "_s${q.season}e${q.episode}" else ""
         return "$base$se"
     }
-    private fun loadSourceOffset(key: String): Long = prefs.getLong("sub_off_$key", 0L)
-    private fun saveSourceOffset(key: String, ms: Long) = prefs.edit().putLong("sub_off_$key", ms).apply()
-    private fun loadSourceSelectedId(key: String): String? = prefs.getString("sub_sel_$key", null)
-    private fun saveSourceSelectedId(key: String, id: String) = prefs.edit().putString("sub_sel_$key", id).apply()
+    // Per-source offset/výběr — per-profil v ProfileConfig (sync). Fallback na prefs = bez profilu.
+    private fun loadSourceOffset(key: String): Long =
+        profileRepository.activeConfig.value.subtitleOffsets[key] ?: prefs.getLong("sub_off_$key", 0L)
+
+    private fun saveSourceOffset(key: String, ms: Long) {
+        if (activeProfileId() != null) offsetWrites.tryEmit(key to ms)
+        else prefs.edit().putLong("sub_off_$key", ms).apply()
+    }
+
+    private fun loadSourceSelectedId(key: String): String? =
+        profileRepository.activeConfig.value.subtitleSelections[key] ?: prefs.getString("sub_sel_$key", null)
+
+    // Výběr stopy = jednorázová akce (ne slider) → bez debounce, hned sync.
+    private fun saveSourceSelectedId(key: String, id: String) {
+        val pid = activeProfileId()
+        if (pid != null) viewModelScope.launch {
+            profileRepository.updateConfig(pid) { it.copy(subtitleSelections = it.subtitleSelections.putCappedLru(key, id)) }
+        } else prefs.edit().putString("sub_sel_$key", id).apply()
+    }
 
     private val cueTimeRegex = Regex(
         """(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})""",

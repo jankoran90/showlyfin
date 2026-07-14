@@ -18,6 +18,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-domain"))
+    implementation(project(":core:core-data")) // SUBWEAVE C: ProfileRepository (per-profil titulkové volby + sync)
     implementation(project(":core:core-ui")) // TENFOOT F2c: kanonický tvFocusBorder (záře+lift) pro TV transport lištu
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-uploader"))

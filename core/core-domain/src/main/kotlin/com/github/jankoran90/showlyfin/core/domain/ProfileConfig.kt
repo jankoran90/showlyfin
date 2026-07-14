@@ -82,6 +82,19 @@ data class ProfileConfig(
     /** Ostatní vzhledové/chování toggly (volné klíče → string hodnoty). */
     val appearance: Map<String, String> = emptyMap(),
     /**
+     * SUBWEAVE (SHW-89) Fáze C — styl titulků (velikost/barva/pozice) per-profil, synchronizovaný
+     * TV↔telefon. null = profil zatím nemá vlastní styl → čte se lokální fallback (migrace z prefs).
+     */
+    val subtitleStyle: SubtitleStylePrefs? = null,
+    /**
+     * Per-source výběr titulkové stopy: klíč = imdb(+s/e), hodnota = id stopy (`osf_`/`os_`/`ai_`/
+     * titulky id) nebo `"OFF"`. Durabilita: id nese odkaz do server cache (stažené/AI titulky trvalé),
+     * takže výběr přežije i přeházení výsledků hledání. **Cap ~300 (LRU)** — hlídá velikost synced JSON.
+     */
+    val subtitleSelections: Map<String, String> = emptyMap(),
+    /** Per-source posun synchronizace titulků (ms). Klíč jako [subtitleSelections]. Cap ~300 (LRU). */
+    val subtitleOffsets: Map<String, Long> = emptyMap(),
+    /**
      * Lock-mapa (Plan WARDEN W0): logické klíče ([LockKeys]), které jsou **admin-zamčené** =
      * uživatel je nesmí editovat a do efektivního configu se vždy berou ze **šablony**, ne z
      * uživatelského override. Smysl má jen na **šabloně**; na uživatelském override se ignoruje.
@@ -331,3 +344,26 @@ data class TraktCreds(
     val expiresAtMillis: Long = 0,
     val username: String? = null,
 )
+
+/**
+ * SUBWEAVE Fáze C — persistovaný styl titulků (bez offsetu; ten je per-source v
+ * [ProfileConfig.subtitleOffsets]). Zrcadlí runtime `SubtitleStyle` v feature-playback.
+ */
+@Serializable
+data class SubtitleStylePrefs(
+    val fontScale: Float = 1.0f,
+    val colorArgb: Int = 0xFFFFBF00.toInt(),
+    val bottomPaddingFraction: Float = 0.08f,
+)
+
+/**
+ * Vloží [key]→[value] a udrží mapu v LRU pořadí s tvrdým stropem [max] (nejstarší klíč vypadne).
+ * Slouží per-source titulkovým mapám v [ProfileConfig], aby synced JSON nerostl bez omezení.
+ */
+fun <V> Map<String, V>.putCappedLru(key: String, value: V, max: Int = 300): Map<String, V> {
+    val m = LinkedHashMap<String, V>(this)
+    m.remove(key) // re-insert → přesun na konec (nejnovější)
+    m[key] = value
+    while (m.size > max) m.remove(m.keys.first())
+    return m
+}
