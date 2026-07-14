@@ -56,17 +56,19 @@ fun TvHomeScreen(
         val libs = libraryState.rows.map { LibrarySummary(it.libraryId, it.libraryName, it.collectionType) }
         if (libs.isNotEmpty()) homeVm.syncLibraries(libs)
     }
-    // Lazy načtení řad (mimo JF knihovny — ty jedou přes LibraryRowsViewModel).
+    // Lazy načtení řad (jen ZAPNUTÉ; mimo JF knihovny — ty jedou přes LibraryRowsViewModel). `store.rows`
+    // vrací i vypnuté řady (konzument filtruje `enabled`) → bez filtru by se skryté řady načítaly i zobrazovaly.
     LaunchedEffect(rowConfigs) {
-        rowConfigs.filter { it.source != HomeRowSourceType.JELLYFIN_LIBRARY && it.source != HomeRowSourceType.JELLYFIN_LIBRARIES }
+        rowConfigs.filter { it.enabled && it.source != HomeRowSourceType.JELLYFIN_LIBRARY && it.source != HomeRowSourceType.JELLYFIN_LIBRARIES }
             .forEach { homeVm.ensureRowLoaded(it) }
     }
 
-    // Sestav ploché raily v pořadí rowConfigs. A1 fix: řada, která se ještě NAČÍTÁ, drží místo skeletonem
-    // (loading=true) místo aby chyběla a pak naskočila mezi ostatní (posun/„přehazování"). Doběhlá prázdná
-    // řada se vynechá (skryje). Pořadí je vždy dané rowConfigs, ne dokončením síťovek.
+    // Sestav ploché raily v pořadí rowConfigs, JEN ze ZAPNUTÝCH řad s obsahem. `store.rows` obsahuje i
+    // vypnuté (skryté) řady — filtr `enabled` je nutný, jinak by se skrytá řada zobrazila. Prázdná/načítající
+    // se řada se nezařadí (objeví se, až dorazí data). Skeleton (OTA 320) stažen — dělal „prázdné covery" u
+    // pomalu načítaných řad a zviditelnil skryté řady; stabilnější je klasické „zobraz, až jsou data".
     val rails: List<TvRail> = buildList {
-        rowConfigs.forEach { cfg ->
+        rowConfigs.filter { it.enabled }.forEach { cfg ->
             when (cfg.source) {
                 HomeRowSourceType.JELLYFIN_LIBRARY -> {
                     val libId = cfg.params[HomeRowParams.LIBRARY_ID]
@@ -79,13 +81,8 @@ fun TvHomeScreen(
                 HomeRowSourceType.JELLYFIN_LIBRARIES -> Unit // deprecated meta — migrováno pryč
                 else -> {
                     val st = states[cfg.id]
-                    when {
-                        st != null && st.items.isNotEmpty() ->
-                            add(TvRail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, st.items, cfg.id, cfg.showTitles, cfg.immersiveHeader))
-                        // Ještě se načítá (st==null = load nezačal / loading=true) → skeleton drží pozici.
-                        st == null || st.loading ->
-                            add(TvRail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, emptyList(), cfg.id, cfg.showTitles, cfg.immersiveHeader, loading = true))
-                        // st != null && !loading && prázdné = doběhlo prázdné → řadu vynech (skryje se).
+                    if (st != null && st.items.isNotEmpty()) {
+                        add(TvRail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, st.items, cfg.id, cfg.showTitles, cfg.immersiveHeader))
                     }
                 }
             }

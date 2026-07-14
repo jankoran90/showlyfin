@@ -1,22 +1,16 @@
 package com.github.jankoran90.showlyfin.ui.tv.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -70,12 +64,6 @@ data class TvRail(
     val showTitles: Boolean = true,
     /** KOLO2 (M): immersive hlavička (název/rok/popis fokusované karty nahoře) — per řada. */
     val immersiveHeader: Boolean = false,
-    /**
-     * A1 fix: řada se ještě NAČÍTÁ (data nedorazila). Drží pozici skeletonem místo aby chyběla a pak
-     * naskočila mezi ostatní (posun/„přehazování"). Prázdná + `loading=false` = doběhlo prázdné → řadu
-     * volající do seznamu vůbec nezařadí (skryje se).
-     */
-    val loading: Boolean = false,
 )
 
 /**
@@ -209,31 +197,6 @@ fun TvRailList(
     }
 }
 
-/**
- * A1 fix — placeholder řady, která se ještě načítá: pár šedých karet drží výšku/pozici, aby řada
- * po doběhnutí dat nenaskočila náhle a neposunula ostatní. Landscape styl = širší dlaždice.
- */
-@Composable
-private fun SkeletonRow(style: HomeCardStyle) {
-    val landscape = style == HomeCardStyle.LANDSCAPE
-    val w = if (landscape) 180.dp else 108.dp
-    val h = if (landscape) 104.dp else 156.dp
-    val color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-    ) {
-        repeat(6) {
-            Box(
-                Modifier
-                    .width(w)
-                    .height(h)
-                    .background(color, RoundedCornerShape(8.dp)),
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun RailSection(
@@ -266,13 +229,6 @@ private fun RailSection(
         // Uvnitř řady obnov DEFAULT BringIntoViewSpec (parent list má ScrollToTop) → vodorovný scroll LazyRow
         // funguje normálně a nepropaguje svislé cukání do LazyColumn.
         CompositionLocalProvider(LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
-            // A1 fix: řada se ještě načítá (data nedorazila) → skeleton karty drží pozici/výšku, aby se
-            // řada neobjevila náhle a neposunula ostatní. Po doběhnutí se buď naplní obsahem, nebo (prázdná)
-            // ji volající ze seznamu vypustí.
-            if (rail.items.isEmpty() && rail.loading) {
-                SkeletonRow(style = rail.style)
-                return@CompositionLocalProvider
-            }
             // COUCH DA4: rozestup karet z uživatelské volby (jeden multiplier pro všechny řady). Horizontální
             // contentPadding NEškálujeme (drží ořez u sidebaru), škáluje se jen mezera mezi kartami.
             val cardScale = LocalTvCardScale.current

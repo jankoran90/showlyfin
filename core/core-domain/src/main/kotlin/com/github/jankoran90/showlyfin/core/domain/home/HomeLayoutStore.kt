@@ -88,10 +88,16 @@ class HomeLayoutStore @Inject constructor(
     /** Posun řady o jedno místo (nahoru = dřív). No-op na kraji. */
     fun move(id: String, up: Boolean) {
         _rows.update { list ->
-            val i = list.indexOfFirst { it.id == id }
-            if (i < 0) return@update list
-            val j = if (up) i - 1 else i + 1
-            if (j < 0 || j >= list.size) return@update list
+            // Přesun mezi VIDITELNÝMI (zapnutými) řadami — cíl je sousední ZAPNUTÁ řada, ne libovolná
+            // sousední v plném seznamu (jinak by se řada „prohodila" se skrytou = uživateli se nic nezmění).
+            val enabled = list.filter { it.enabled }
+            val ei = enabled.indexOfFirst { it.id == id }
+            if (ei < 0) return@update list
+            val ej = if (up) ei - 1 else ei + 1
+            if (ej < 0 || ej >= enabled.size) return@update list
+            val i = list.indexOfFirst { it.id == enabled[ei].id }
+            val j = list.indexOfFirst { it.id == enabled[ej].id }
+            if (i < 0 || j < 0) return@update list
             list.toMutableList().also { it[i] = list[j]; it[j] = list[i] }
         }
         persistRows()
