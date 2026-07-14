@@ -53,6 +53,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -234,6 +236,10 @@ fun PlaybackScreen(
     var duration by remember { mutableLongStateOf(0L) }
     var controlsVisible by remember { mutableStateOf(true) }
     var resumeDecided by remember { mutableStateOf(false) }
+    // B fix: pozice, ke které se má přehrávání spustit (0 = od začátku). Nastaví ji dialog „Pokračovat/Od
+    // začátku"; prepare efekt ji předá ATOMICKY do setMediaItem(startPositionMs), místo aby po prepare
+    // volal seekTo na async MediaController (ten se ztrácel než session propagovala timeline → jelo od 0).
+    var resumeStartMs by remember { mutableLongStateOf(0L) }
     var playerError by remember { mutableStateOf<String?>(null) }
     // CASCADE Fáze 4: hlásíme selhání externího streamu jen jednou (onPlayerError může přijít víckrát).
     var failureReported by remember { mutableStateOf(false) }
@@ -330,13 +336,19 @@ fun PlaybackScreen(
     LaunchedEffect(state.streamUrl, controller) {
         val url = state.streamUrl ?: return@LaunchedEffect
         val c = controller ?: return@LaunchedEffect
-        timber.log.Timber.i("[Playback] setMediaItem external=${externalUrl != null} url=${url.take(90)}")
-        c.setMediaItem(buildMediaItem(url, state.title, state.posterUrl))
-        c.prepare()
-        if (state.resumePositionMs <= 0L) {
-            resumeDecided = true
-            c.playWhenReady = true
+        // Resume > 0 → počkej, až uživatel v dialogu rozhodne (nastaví resumeStartMs + resumeDecided).
+        // Prepare až s finální start pozicí, aby se seekTo neztratil na async MediaController (bug B).
+        if (state.resumePositionMs > 0L) {
+            snapshotFlow { resumeDecided }.first { it }
         }
+        val startMs = resumeStartMs // dialog nastavil; pro resume<=0 zůstává 0 = od začátku
+        timber.log.Timber.i("[Playback] setMediaItem external=${externalUrl != null} startMs=$startMs url=${url.take(90)}")
+        // Start pozice ATOMICKY s media item (Media3 pending seek se aplikuje při prepare, nezávisí na
+        // propagaci timeline z session zpět do controlleru).
+        c.setMediaItem(buildMediaItem(url, state.title, state.posterUrl), startMs)
+        c.prepare()
+        c.playWhenReady = true
+        resumeDecided = true // odemkne poll/ovládání i pro cestu bez dialogu (resume<=0)
     }
 
     // position/duration poll
@@ -623,13 +635,13 @@ fun PlaybackScreen(
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Button(onClick = {
-                                controller?.seekTo(state.resumePositionMs)
-                                controller?.playWhenReady = true
+                                // Start pozici předej prepare efektu (setMediaItem se startMs) — atomicky,
+                                // ne post-prepare seekTo (ten se na async controlleru ztrácel → bug B).
+                                resumeStartMs = state.resumePositionMs
                                 resumeDecided = true
                             }) { Text("Pokračovat (${fmtTime(state.resumePositionMs)})") }
                             Button(onClick = {
-                                controller?.seekTo(0L)
-                                controller?.playWhenReady = true
+                                resumeStartMs = 0L
                                 resumeDecided = true
                             }) { Text("Od začátku") }
                         }

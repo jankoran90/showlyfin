@@ -286,11 +286,12 @@ class TvHomeViewModel @Inject constructor(
         // COUCH (SHW-88) play-count vážená doporučení „na míru dle sledování".
         HomeRowSourceType.WEIGHTED_RECOMMENDATIONS ->
             traktLoader.weightedRecommendations(config.limit).map { it.toHomeRowItem(config) }
-        // AUTEUR (SHW-91) kurátorský mozek „Pro tebe"; prázdné/nedostupné → fallback weightedRecommendations.
+        // AUTEUR (SHW-91) kurátorský mozek „Pro tebe". Prázdné (mozek pending/down/studený vkus) → řada se
+        // NEzobrazí (viz filtr prázdných řad). ŽÁDNÝ fallback na weightedRecommendations — dělal duplicitní
+        // řadu se samostatnou „Na míru podle sledování" (WEIGHTED_RECOMMENDATIONS = totéž), navíc REFLEX
+        // wait=false to zhoršil (první load je vždy pending). Mechanická doporučení má vlastní řada.
         HomeRowSourceType.BRAIN_FOR_YOU ->
-            curatorLoader.forYou(config.limit)
-                .ifEmpty { traktLoader.weightedRecommendations(config.limit) }
-                .map { it.toHomeRowItem(config) }
+            curatorLoader.forYou(config.limit).map { it.toHomeRowItem(config) }
         // LIBRARY_TILES / GENRES / STUDIOS = dlaždicové navigační řady → 2. vlna (viz Known gaps).
         else -> emptyList()
         }

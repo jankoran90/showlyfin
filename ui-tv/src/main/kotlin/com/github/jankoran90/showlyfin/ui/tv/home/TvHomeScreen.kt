@@ -62,7 +62,9 @@ fun TvHomeScreen(
             .forEach { homeVm.ensureRowLoaded(it) }
     }
 
-    // Sestav ploché raily (jen neprázdné → domov je vzdušný, obsah hned).
+    // Sestav ploché raily v pořadí rowConfigs. A1 fix: řada, která se ještě NAČÍTÁ, drží místo skeletonem
+    // (loading=true) místo aby chyběla a pak naskočila mezi ostatní (posun/„přehazování"). Doběhlá prázdná
+    // řada se vynechá (skryje). Pořadí je vždy dané rowConfigs, ne dokončením síťovek.
     val rails: List<TvRail> = buildList {
         rowConfigs.forEach { cfg ->
             when (cfg.source) {
@@ -77,8 +79,13 @@ fun TvHomeScreen(
                 HomeRowSourceType.JELLYFIN_LIBRARIES -> Unit // deprecated meta — migrováno pryč
                 else -> {
                     val st = states[cfg.id]
-                    if (st != null && st.items.isNotEmpty()) {
-                        add(TvRail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, st.items, cfg.id, cfg.showTitles, cfg.immersiveHeader))
+                    when {
+                        st != null && st.items.isNotEmpty() ->
+                            add(TvRail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, st.items, cfg.id, cfg.showTitles, cfg.immersiveHeader))
+                        // Ještě se načítá (st==null = load nezačal / loading=true) → skeleton drží pozici.
+                        st == null || st.loading ->
+                            add(TvRail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, emptyList(), cfg.id, cfg.showTitles, cfg.immersiveHeader, loading = true))
+                        // st != null && !loading && prázdné = doběhlo prázdné → řadu vynech (skryje se).
                     }
                 }
             }

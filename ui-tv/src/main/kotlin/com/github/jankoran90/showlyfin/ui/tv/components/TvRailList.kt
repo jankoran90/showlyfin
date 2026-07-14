@@ -1,16 +1,22 @@
 package com.github.jankoran90.showlyfin.ui.tv.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,7 +28,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,6 +70,12 @@ data class TvRail(
     val showTitles: Boolean = true,
     /** KOLO2 (M): immersive hlavička (název/rok/popis fokusované karty nahoře) — per řada. */
     val immersiveHeader: Boolean = false,
+    /**
+     * A1 fix: řada se ještě NAČÍTÁ (data nedorazila). Drží pozici skeletonem místo aby chyběla a pak
+     * naskočila mezi ostatní (posun/„přehazování"). Prázdná + `loading=false` = doběhlo prázdné → řadu
+     * volající do seznamu vůbec nezařadí (skryje se).
+     */
+    val loading: Boolean = false,
 )
 
 /**
@@ -97,7 +108,10 @@ fun TvRailList(
     onRequestEditor: ((configId: String) -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
-    var focusedIndex by remember { mutableIntStateOf(0) }
+    // A2 fix: fokus vázán na STABILNÍ identitu řady (`configId`/`id`), ne na index do proměnlivého `rails`.
+    // Když async doběhne řada NAD fokusovanou, index by zůstal stálý a scroll skočil jinam; s id se pozice
+    // dopočítá vždy aktuálně (scroll-follow drží fokusovanou řadu na místě).
+    var focusedRailId by remember { mutableStateOf<String?>(null) }
     var focusedItem by remember { mutableStateOf<HomeRowItem?>(null) }
 
     // Immersive: fokusovaná karta → info nahoru (pozadí, gated `immersive` v TvShell) + lokální hero header
@@ -112,23 +126,28 @@ fun TvRailList(
     // `BringIntoViewSpec` na LazyColumn interpretuje jako potřebu svislého scrollu i při čistě VODOROVNÉM
     // projíždění karet. Řešení = spec, který na vertikální ose vrací VŽDY 0 (viz `NoAutoScrollBiv`), takže
     // vodorovný pohyb NIKDY nehne seznamem; svislé pozicování obstará tento efekt (klíčovaný jen na `focusedIndex`).
-    LaunchedEffect(focusedIndex) {
-        runCatching { listState.animateScrollToItem(focusedIndex.coerceAtLeast(0)) }
+    LaunchedEffect(focusedRailId, rails) {
+        val idx = rails.indexOfFirst { it.id == focusedRailId }
+        if (idx >= 0) runCatching { listState.animateScrollToItem(idx) }
     }
 
-    // Autofokus na PRVNÍ kartu PRVNÍ řady. Čeká na umístění řady, pak pár snímků a request.
+    // Autofokus na PRVNÍ kartu první řady S OBSAHEM (skeleton/loading řady přeskoč — nemají fokusovatelnou
+    // kartu). A2 fix: spustí se JEN JEDNOU (`didInitialFocus`), ne při každé změně první řady — jinak
+    // naskakující async řady opakovaně přebíjely fokus zpět nahoru („přehazování").
     val firstFocus = remember { FocusRequester() }
-    val firstRailId = rails.firstOrNull()?.id
-    LaunchedEffect(firstRailId) {
-        if (firstRailId == null) return@LaunchedEffect
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == firstRailId } }.first { it }
+    var didInitialFocus by remember { mutableStateOf(false) }
+    val firstContentRailId = rails.firstOrNull { it.items.isNotEmpty() }?.id
+    LaunchedEffect(firstContentRailId) {
+        if (firstContentRailId == null || didInitialFocus) return@LaunchedEffect
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == firstContentRailId } }.first { it }
         withFrameNanos { }
         withFrameNanos { }
         runCatching { firstFocus.requestFocus() }
+        didInitialFocus = true
     }
 
     fun openEditorForFocused() {
-        rails.getOrNull(focusedIndex)?.let { onRequestEditor?.invoke(it.configId) }
+        rails.firstOrNull { it.id == focusedRailId }?.let { onRequestEditor?.invoke(it.configId) }
     }
 
     val defaultBiv = LocalBringIntoViewSpec.current
@@ -174,18 +193,43 @@ fun TvRailList(
                         }
                     },
             ) {
-                itemsIndexed(rails, key = { _, r -> r.id }) { index, rail ->
+                itemsIndexed(rails, key = { _, r -> r.id }) { _, rail ->
                     RailSection(
                         rail = rail,
-                        firstCardFocus = if (index == 0) firstFocus else null,
+                        firstCardFocus = if (rail.id == firstContentRailId) firstFocus else null,
                         onItemClick = onItemClick,
-                        onItemFocused = { item -> focusedItem = item; focusedIndex = index },
+                        onItemFocused = { item -> focusedItem = item; focusedRailId = rail.id },
                         onItemLongPress = { onRequestEditor?.invoke(rail.configId) },
                         showLabel = rail.showTitles,
                         rowBringIntoViewSpec = defaultBiv,
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * A1 fix — placeholder řady, která se ještě načítá: pár šedých karet drží výšku/pozici, aby řada
+ * po doběhnutí dat nenaskočila náhle a neposunula ostatní. Landscape styl = širší dlaždice.
+ */
+@Composable
+private fun SkeletonRow(style: HomeCardStyle) {
+    val landscape = style == HomeCardStyle.LANDSCAPE
+    val w = if (landscape) 180.dp else 108.dp
+    val h = if (landscape) 104.dp else 156.dp
+    val color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        repeat(6) {
+            Box(
+                Modifier
+                    .width(w)
+                    .height(h)
+                    .background(color, RoundedCornerShape(8.dp)),
+            )
         }
     }
 }
@@ -222,6 +266,13 @@ private fun RailSection(
         // Uvnitř řady obnov DEFAULT BringIntoViewSpec (parent list má ScrollToTop) → vodorovný scroll LazyRow
         // funguje normálně a nepropaguje svislé cukání do LazyColumn.
         CompositionLocalProvider(LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
+            // A1 fix: řada se ještě načítá (data nedorazila) → skeleton karty drží pozici/výšku, aby se
+            // řada neobjevila náhle a neposunula ostatní. Po doběhnutí se buď naplní obsahem, nebo (prázdná)
+            // ji volající ze seznamu vypustí.
+            if (rail.items.isEmpty() && rail.loading) {
+                SkeletonRow(style = rail.style)
+                return@CompositionLocalProvider
+            }
             // COUCH DA4: rozestup karet z uživatelské volby (jeden multiplier pro všechny řady). Horizontální
             // contentPadding NEškálujeme (drží ořez u sidebaru), škáluje se jen mezera mezi kartami.
             val cardScale = LocalTvCardScale.current
