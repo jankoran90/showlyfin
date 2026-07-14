@@ -18,6 +18,7 @@ data class SidebarEntry(
 enum class SidebarItem(val label: String) {
     DOMU("Domů"),
     OBJEVOVAT("Objevovat"),
+    FILMOTEKA("Filmotéka"),
     TRAKT("Trakt"),
     KNIHOVNA("Knihovna"),
     OBLIBENE("Oblíbené"),
@@ -33,6 +34,7 @@ enum class SidebarItem(val label: String) {
         val DEFAULT: List<SidebarEntry> = listOf(
             SidebarEntry(DOMU.name, enabled = true),
             SidebarEntry(OBJEVOVAT.name, enabled = true),
+            SidebarEntry(FILMOTEKA.name, enabled = true),
             SidebarEntry(TRAKT.name, enabled = true),
             SidebarEntry(KNIHOVNA.name, enabled = true),
             SidebarEntry(OBLIBENE.name, enabled = false),

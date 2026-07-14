@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.data.tmdb.di
 
 import com.github.jankoran90.showlyfin.core.network.Config
+import com.github.jankoran90.showlyfin.data.tmdb.CachedTmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbInterceptor
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.api.TmdbApi
@@ -41,8 +42,10 @@ object TmdbModule {
     fun providesTmdbRetrofit(@Named("okHttpTmdb") okHttpClient: OkHttpClient, gson: Gson): Retrofit =
         Retrofit.Builder().client(okHttpClient).addConverterFactory(GsonConverterFactory.create(gson)).baseUrl(Config.TMDB_BASE_URL).build()
 
+    // CINEMATHEQUE (SHW-90): konzumenti dostávají cache dekorátor (in-memory details/translations/cert).
+    // Jeden binding pro TmdbRemoteDataSource → žádná Hilt kolize; sdílené napříč Home/Discover/Trakt/Filmotéka.
     @Provides
     @Singleton
     fun providesTmdbApi(@Named("retrofitTmdb") retrofit: Retrofit): TmdbRemoteDataSource =
-        TmdbApi(retrofit.create(TmdbService::class.java))
+        CachedTmdbRemoteDataSource(TmdbApi(retrofit.create(TmdbService::class.java)))
 }

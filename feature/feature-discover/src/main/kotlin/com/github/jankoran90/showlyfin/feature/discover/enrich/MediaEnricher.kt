@@ -6,6 +6,8 @@ import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,8 +29,12 @@ import javax.inject.Singleton
 class MediaEnricher @Inject constructor(
     private val tmdb: TmdbRemoteDataSource,
 ) {
+    // CINEMATHEQUE (SHW-90): strop paralelních TMDB dotazů. Enrich měl neomezenou paralelitu — Filmotéka se
+    // stovkami titulů by TMDB rate-limit rozstřelila. 6 souběžných + cache dekorátor drží zátěž rozumnou.
+    private val semaphore = Semaphore(6)
+
     suspend fun enrich(items: List<MediaItem>, withCertification: Boolean): List<MediaItem> = coroutineScope {
-        items.map { item -> async { enrichOne(item, withCertification) } }.awaitAll()
+        items.map { item -> async { semaphore.withPermit { enrichOne(item, withCertification) } } }.awaitAll()
     }
 
     suspend fun enrichOne(item: MediaItem, withCertification: Boolean): MediaItem = coroutineScope {

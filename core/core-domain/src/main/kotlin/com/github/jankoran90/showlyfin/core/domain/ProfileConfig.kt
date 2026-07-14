@@ -356,6 +356,8 @@ data class SubtitleStylePrefs(
     val bottomPaddingFraction: Float = 0.08f,
     /** Vzhled pozadí/okraje titulku (obrys/stín/podklad/bez). Default = lehký obrys. */
     val edge: SubtitleEdgePref = SubtitleEdgePref.OUTLINE,
+    /** Síla/intenzita okraje (obrys tloušťka / stín rozostření / podklad krytí). 1.0 = default. */
+    val edgeStrength: Float = 1.0f,
 )
 
 /** Vzhled okraje titulku — jak se text odděluje od obrazu. Zrcadlí runtime `SubtitleEdge`. */

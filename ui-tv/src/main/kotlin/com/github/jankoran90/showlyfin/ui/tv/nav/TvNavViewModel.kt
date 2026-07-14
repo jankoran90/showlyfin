@@ -8,7 +8,7 @@ import androidx.lifecycle.ViewModel
 import com.github.jankoran90.showlyfin.ui.tv.TvDestination
 
 /** Hlavní sekce shellu (přepínané sidebarem, mimo drill stack). Hledat = push destinace, ne sekce. */
-enum class TvSection { HOME, DISCOVER, TRAKT, LIBRARY, WATCHLIST, SETTINGS }
+enum class TvSection { HOME, DISCOVER, FILMOTEKA, TRAKT, LIBRARY, WATCHLIST, SETTINGS }
 
 /**
  * TENFOOT (SHW-87) — back stack TV shellu drží ViewModel (ne `remember`), aby PŘEŽIL rekreaci Activity.

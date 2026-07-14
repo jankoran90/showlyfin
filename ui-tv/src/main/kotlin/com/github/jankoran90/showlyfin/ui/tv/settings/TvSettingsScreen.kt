@@ -302,6 +302,9 @@ fun TvSettingsScreen(
         // ── Detail obsahu ── (extrahováno do TvContentSettingsBlocks kvůli stropu 600ř)
         item { TvDetailContentBlock(detail, detailPrefs) }
 
+        // ── Filmotéka (CINEMATHEQUE SHW-90) — zdroje sjednocené plochy + výchozí osa ──
+        item { TvFilmotekaSettingsBlock() }
+
         // ── Rodičovská kontrola (COUCH SHW-88) — věkový strop objevovacích ploch dětského profilu ──
         item { TvParentalSettingsBlock() }
 
