@@ -80,6 +80,13 @@ android {
         buildConfig = true
     }
 
+    // PASSPORT (SHW-93) — zrychlení release buildu pro časté iterace: lintVitalRelease (bezpečnostní
+    // analýza, u personal appky zbytečná) přidával 1–3 min ke každému release. Vypnuto → rychlejší OTA.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
