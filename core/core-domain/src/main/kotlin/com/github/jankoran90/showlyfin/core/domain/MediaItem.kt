@@ -20,6 +20,12 @@ data class MediaItem(
      * (jinak zbytečné síťové volání). Použití: [ContentAgeGate] pro dětský profil.
      */
     val certificationAge: Int? = null,
+    /**
+     * CINEMATHEQUE (SHW-90) F2 — kódy zemí původu (ISO-3166-1 alpha-2, VELKÁ písmena). null = neznámé.
+     * Plní [enrich] z TMDB details (u SHOW `origin_country` ∪ `production_countries`, u MOVIE
+     * `production_countries`). Použití: osa Země Filmotéky (regionsOf v CinematographyRegion).
+     */
+    val originCountries: List<String>? = null,
 ) {
     fun posterUrl(size: String = "w342") = posterPath?.let { "https://image.tmdb.org/t/p/$size$it" }
     fun backdropUrl(size: String = "w780") = backdropPath?.let { "https://image.tmdb.org/t/p/$size$it" }

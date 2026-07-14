@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.feature.discover.enrich
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbMovieDetails
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbShowDetails
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -51,6 +53,7 @@ class MediaEnricher @Inject constructor(
                 overviewCz = firstNonBlank(tr?.overview, details?.overview) ?: item.overviewCz,
                 genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
                 certificationAge = ageD.await() ?: item.certificationAge,
+                originCountries = countriesOfShow(details) ?: item.originCountries,
             )
         } else {
             val detailsD = async { runCatching { tmdb.fetchMovieDetails(tmdbId, LANG) }.getOrNull() }
@@ -64,12 +67,33 @@ class MediaEnricher @Inject constructor(
                 overviewCz = firstNonBlank(tr?.overview, details?.overview) ?: item.overviewCz,
                 genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
                 certificationAge = ageD.await() ?: item.certificationAge,
+                originCountries = countriesOfMovie(details) ?: item.originCountries,
             )
         }
     }
 
     private fun firstNonBlank(vararg values: String?): String? =
         values.firstOrNull { !it.isNullOrBlank() }
+
+    /** CINEMATHEQUE (SHW-90) F2 — země SHOW: `origin_country` ∪ `production_countries.iso_3166_1`. */
+    private fun countriesOfShow(details: TmdbShowDetails?): List<String>? {
+        if (details == null) return null
+        return normalizeCountries(
+            details.origin_country.orEmpty() + details.production_countries.orEmpty().mapNotNull { it.iso_3166_1 }
+        )
+    }
+
+    /** CINEMATHEQUE (SHW-90) F2 — země MOVIE: `production_countries.iso_3166_1`. */
+    private fun countriesOfMovie(details: TmdbMovieDetails?): List<String>? {
+        if (details == null) return null
+        return normalizeCountries(details.production_countries.orEmpty().mapNotNull { it.iso_3166_1 })
+    }
+
+    /** Uppercase + distinct; prázdné → null (nepřepisuj stávající hodnotu prázdnem). */
+    private fun normalizeCountries(codes: List<String>): List<String>? =
+        codes.mapNotNull { it.trim().takeIf { s -> s.isNotEmpty() }?.uppercase() }
+            .distinct()
+            .takeIf { it.isNotEmpty() }
 
     private companion object {
         const val LANG = "cs-CZ"

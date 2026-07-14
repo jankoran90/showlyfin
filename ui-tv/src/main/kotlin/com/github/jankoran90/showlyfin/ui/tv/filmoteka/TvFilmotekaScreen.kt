@@ -31,7 +31,7 @@ import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
 /**
  * CINEMATHEQUE (SHW-90) — sekce „Filmotéka": nahoře přepínač osy (Žánr | Země), pod ním immersive řady
  * ([TvRailList]) podle vybrané osy. Sjednocuje JF knihovnu, zapamatované zdroje, Trakt watchlist a Oblíbené
- * (dedup + věkový gate ve VM). **F1** = jen osa Žánr; chip „Země" je disabled (dodělá F2).
+ * (dedup + věkový gate ve VM). Osa Žánr = řady dle žánru; osa Země (F2) = regionální „kinematografie".
  */
 @Composable
 fun TvFilmotekaScreen(
@@ -82,7 +82,7 @@ fun TvFilmotekaScreen(
     }
 }
 
-/** Přepínač osy. Žánr aktivní; Země disabled ve F1 (dodělá F2). */
+/** Přepínač osy Filmotéky: Žánr | Země. Oba chipy D-pad-fokusovatelné; přepnutí jen přeskupí (bez fetch). */
 @Composable
 private fun AxisChips(
     axis: FilmotekaAxis,
@@ -98,9 +98,9 @@ private fun AxisChips(
         )
         FilterChip(
             selected = axis == FilmotekaAxis.COUNTRY,
-            enabled = false,
             onClick = { onSelect(FilmotekaAxis.COUNTRY) },
             label = { Text("Země") },
+            modifier = Modifier.tvFocusable(),
         )
     }
 }

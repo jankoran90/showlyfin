@@ -15,4 +15,7 @@ data class TmdbShowDetails(
     val tagline: String?,
     // TENFOOT WS-C (SHW-87): souhrn sezón (TMDB `tv/{id}` vrací pole `seasons`).
     val seasons: List<TmdbSeasonSummary>? = null,
+    // CINEMATHEQUE (SHW-90) F2 — země původu/produkce (osa Země Filmotéky).
+    val origin_country: List<String>? = null,
+    val production_countries: List<TmdbProductionCountry>? = null,
 )

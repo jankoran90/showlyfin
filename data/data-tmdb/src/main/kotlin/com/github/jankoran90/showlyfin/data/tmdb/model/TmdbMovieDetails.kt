@@ -15,6 +15,14 @@ data class TmdbMovieDetails(
     val imdb_id: String? = null,
     val belongs_to_collection: TmdbBelongsToCollection? = null,
     val production_companies: List<TmdbProductionCompany>? = null,
+    // CINEMATHEQUE (SHW-90) F2 — země produkce (osa Země Filmotéky).
+    val production_countries: List<TmdbProductionCountry>? = null,
+)
+
+/** CINEMATHEQUE (SHW-90) F2 — země produkce z TMDB (`production_countries`). ISO-3166-1 alpha-2. */
+data class TmdbProductionCountry(
+    val iso_3166_1: String? = null,
+    val name: String? = null,
 )
 
 data class TmdbProductionCompany(

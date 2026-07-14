@@ -7,9 +7,11 @@ import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.ContentAgeGate
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegion
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSettingsStore
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSource
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.regionsOf
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
@@ -67,7 +69,8 @@ data class FilmotekaUiState(
  * ([MediaEnricher]) a projde věkovým gate ([ContentAgeGate]) PŘED grupováním. Přepnutí osy jen přeskupí
  * už-obohacenou bázi (bez fetch). Reload na změnu profilu.
  *
- * **F1** = jen osa GENRE. Osa COUNTRY vrací prázdno (dodělá F2).
+ * Osa GENRE = řady dle žánru; osa COUNTRY (F2) = řady dle regionální „kinematografie" ([CinematographyRegion]),
+ * respektuje zapnuté regiony ([FilmotekaSettingsStore.enabledRegions]), OSTATNI vždy poslední.
  */
 @HiltViewModel
 class TvFilmotekaViewModel @Inject constructor(
@@ -215,7 +218,7 @@ class TvFilmotekaViewModel @Inject constructor(
         val all = combined.values.toList()
         val rails = when (axis) {
             FilmotekaAxis.GENRE -> groupByGenre(all)
-            FilmotekaAxis.COUNTRY -> emptyList() // F2 — osa Země
+            FilmotekaAxis.COUNTRY -> groupByCountry(all)
         }
         _state.value = FilmotekaUiState(axis = axis, rails = rails, loading = false)
     }
@@ -239,6 +242,31 @@ class TvFilmotekaViewModel @Inject constructor(
                 )
             }
             .filter { it.items.isNotEmpty() }
+    }
+
+    /**
+     * F2 — řady podle „kinematografie" ([CinematographyRegion]). Titul může být ve víc regionech (klíč karty
+     * nese region). Vypnuté regiony (mimo settings.enabledRegions) se skryjí; OSTATNI (fallback) vždy zobraz.
+     * Řazení = pořadí enumu (OSTATNI poslední). Prázdné regiony nevznikají.
+     */
+    private fun groupByCountry(items: List<MediaItem>): List<FilmotekaRail> {
+        val enabled = settings.enabledRegions.value
+        val byRegion = LinkedHashMap<CinematographyRegion, MutableList<MediaItem>>()
+        for (item in items) {
+            for (region in regionsOf(item.originCountries)) {
+                // Skryj vypnuté regiony; OSTATNI ukaž vždy.
+                if (region != CinematographyRegion.OSTATNI && region !in enabled) continue
+                byRegion.getOrPut(region) { mutableListOf() }.add(item)
+            }
+        }
+        return CinematographyRegion.entries.mapNotNull { region ->
+            val list = byRegion[region] ?: return@mapNotNull null
+            FilmotekaRail(
+                id = "filmo_country_${region.name}",
+                title = region.label,
+                items = list.map { it.toHomeRowItem("country_${region.name}") },
+            )
+        }.filter { it.items.isNotEmpty() }
     }
 
     // ── Mapování ────────────────────────────────────────────────────────────────

@@ -21,8 +21,8 @@ import javax.inject.Singleton
  * Pole:
  *  - [sources] — zapnuté zdroje (default všechny 4).
  *  - [defaultAxis] — výchozí osa (default GENRE).
- *  - [enabledRegions] — vybrané „kinematografie" pro osu Země (default prázdné = vše). **F2** — pole je
- *    připravené, ale ve F1 se nepoužívá (osa Země zatím prázdná).
+ *  - [enabledRegions] — zapnuté „kinematografie" pro osu Země (default všechny). Vypnutý region se v ose
+ *    Země nezobrazí; [CinematographyRegion.OSTATNI] (fallback) je vždy viditelný, netogluje se.
  */
 @Singleton
 class FilmotekaSettingsStore @Inject constructor(
@@ -42,8 +42,8 @@ class FilmotekaSettingsStore @Inject constructor(
     val defaultAxis: StateFlow<FilmotekaAxis> = _defaultAxis.asStateFlow()
 
     private val _enabledRegions = MutableStateFlow(loadRegions())
-    /** F2 — vybrané regiony pro osu Země. Prázdné = vše. Ve F1 se nečte. */
-    val enabledRegions: StateFlow<Set<String>> = _enabledRegions.asStateFlow()
+    /** F2 — zapnuté regiony pro osu Země (default všechny). [CinematographyRegion.OSTATNI] je vždy viditelný. */
+    val enabledRegions: StateFlow<Set<CinematographyRegion>> = _enabledRegions.asStateFlow()
 
     /** Přepni na nastavení daného profilu — přenačte všechny toky. Idempotentní (stejný profil = no-op). */
     fun switchProfile(id: Long?) {
@@ -66,11 +66,11 @@ class FilmotekaSettingsStore @Inject constructor(
         prefs.edit().putString(keyFor(KEY_AXIS), axis.name).apply()
     }
 
-    /** F2 — zapni/vypni region pro osu Země. Ve F1 nevoláno. */
-    fun setRegionEnabled(region: String, enabled: Boolean) {
+    /** F2 — zapni/vypni region pro osu Země. Ukládá se jako seznam jmen enumu (per profil). */
+    fun setRegionEnabled(region: CinematographyRegion, enabled: Boolean) {
         val next = _enabledRegions.value.toMutableSet().apply { if (enabled) add(region) else remove(region) }
         _enabledRegions.value = next
-        prefs.edit().putString(keyFor(KEY_REGIONS), json.encodeToString(next.toList())).apply()
+        prefs.edit().putString(keyFor(KEY_REGIONS), json.encodeToString(next.map { it.name })).apply()
     }
 
     private fun loadSources(): Set<FilmotekaSource> {
@@ -87,10 +87,13 @@ class FilmotekaSettingsStore @Inject constructor(
         return raw?.let { runCatching { FilmotekaAxis.valueOf(it) }.getOrNull() } ?: FilmotekaAxis.GENRE
     }
 
-    private fun loadRegions(): Set<String> {
+    private fun loadRegions(): Set<CinematographyRegion> {
         val raw = prefs.getString(keyFor(KEY_REGIONS), null) ?: prefs.getString(KEY_REGIONS, null)
-            ?: return emptySet()
-        return runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull()?.toSet() ?: emptySet()
+            ?: return ALL_REGIONS
+        return runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull()
+            ?.mapNotNull { name -> runCatching { CinematographyRegion.valueOf(name) }.getOrNull() }
+            ?.toSet()
+            ?: ALL_REGIONS
     }
 
     private companion object {
@@ -98,5 +101,6 @@ class FilmotekaSettingsStore @Inject constructor(
         const val KEY_AXIS = "default_axis"
         const val KEY_REGIONS = "regions_json"
         val ALL_SOURCES: Set<FilmotekaSource> = FilmotekaSource.entries.toSet()
+        val ALL_REGIONS: Set<CinematographyRegion> = CinematographyRegion.entries.toSet()
     }
 }
