@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegion
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSource
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
@@ -39,6 +40,7 @@ import com.github.jankoran90.showlyfin.feature.discover.filmoteka.TvFilmotekaSet
 fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
     val sources by vm.sources.collectAsStateWithLifecycle()
     val axis by vm.defaultAxis.collectAsStateWithLifecycle()
+    val allSort by vm.allSort.collectAsStateWithLifecycle()
     val enabledRegions by vm.enabledRegions.collectAsStateWithLifecycle()
     TvSettingsBlock(title = "Filmotéka") {
         TvToggleRow(
@@ -68,10 +70,18 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
         TvOptionStepperRow(
             label = "Výchozí osa",
             subtitle = "Podle čeho se Filmotéka po otevření přeskupí",
-            options = listOf(FilmotekaAxis.GENRE, FilmotekaAxis.COUNTRY),
+            options = listOf(FilmotekaAxis.ALL, FilmotekaAxis.GENRE, FilmotekaAxis.COUNTRY),
             selected = axis,
             labelOf = ::axisLabel,
             onSelect = vm::setDefaultAxis,
+        )
+        TvOptionStepperRow(
+            label = "Řazení řady „Vše\"",
+            subtitle = "Jak seřadit plochý výpis v ose Vše",
+            options = listOf(FilmotekaAllSort.RECENT, FilmotekaAllSort.ALPHABETICAL),
+            selected = allSort,
+            labelOf = ::allSortLabel,
+            onSelect = vm::setAllSort,
         )
         RegionSection(enabledRegions = enabledRegions, onToggle = vm::setRegion)
     }
@@ -128,6 +138,12 @@ private fun RegionSection(
 }
 
 private fun axisLabel(axis: FilmotekaAxis): String = when (axis) {
+    FilmotekaAxis.ALL -> "Vše"
     FilmotekaAxis.GENRE -> "Žánr"
     FilmotekaAxis.COUNTRY -> "Země"
+}
+
+private fun allSortLabel(sort: FilmotekaAllSort): String = when (sort) {
+    FilmotekaAllSort.RECENT -> "Nedávno přidané"
+    FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
 }

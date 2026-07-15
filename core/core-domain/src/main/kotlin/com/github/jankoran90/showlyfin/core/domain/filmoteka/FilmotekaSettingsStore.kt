@@ -41,6 +41,10 @@ class FilmotekaSettingsStore @Inject constructor(
     private val _defaultAxis = MutableStateFlow(loadAxis())
     val defaultAxis: StateFlow<FilmotekaAxis> = _defaultAxis.asStateFlow()
 
+    private val _allSort = MutableStateFlow(loadAllSort())
+    /** CONVERGE V1 — řazení plochého výpisu osy „Vše" (default RECENT = nedávno přidané). */
+    val allSort: StateFlow<FilmotekaAllSort> = _allSort.asStateFlow()
+
     private val _enabledRegions = MutableStateFlow(loadRegions())
     /** F2 — zapnuté regiony pro osu Země (default všechny). [CinematographyRegion.OSTATNI] je vždy viditelný. */
     val enabledRegions: StateFlow<Set<CinematographyRegion>> = _enabledRegions.asStateFlow()
@@ -52,6 +56,7 @@ class FilmotekaSettingsStore @Inject constructor(
         switched = true
         _sources.value = loadSources()
         _defaultAxis.value = loadAxis()
+        _allSort.value = loadAllSort()
         _enabledRegions.value = loadRegions()
     }
 
@@ -64,6 +69,11 @@ class FilmotekaSettingsStore @Inject constructor(
     fun setDefaultAxis(axis: FilmotekaAxis) {
         _defaultAxis.value = axis
         prefs.edit().putString(keyFor(KEY_AXIS), axis.name).apply()
+    }
+
+    fun setAllSort(sort: FilmotekaAllSort) {
+        _allSort.value = sort
+        prefs.edit().putString(keyFor(KEY_ALL_SORT), sort.name).apply()
     }
 
     /** F2 — zapni/vypni region pro osu Země. Ukládá se jako seznam jmen enumu (per profil). */
@@ -84,7 +94,13 @@ class FilmotekaSettingsStore @Inject constructor(
 
     private fun loadAxis(): FilmotekaAxis {
         val raw = prefs.getString(keyFor(KEY_AXIS), null) ?: prefs.getString(KEY_AXIS, null)
-        return raw?.let { runCatching { FilmotekaAxis.valueOf(it) }.getOrNull() } ?: FilmotekaAxis.GENRE
+        // CONVERGE V1 — „Vše" je nově výchozí osa (přehledný plochý vstup); kdo si dřív zvolil Žánr/Země, drží.
+        return raw?.let { runCatching { FilmotekaAxis.valueOf(it) }.getOrNull() } ?: FilmotekaAxis.ALL
+    }
+
+    private fun loadAllSort(): FilmotekaAllSort {
+        val raw = prefs.getString(keyFor(KEY_ALL_SORT), null) ?: prefs.getString(KEY_ALL_SORT, null)
+        return raw?.let { runCatching { FilmotekaAllSort.valueOf(it) }.getOrNull() } ?: FilmotekaAllSort.RECENT
     }
 
     private fun loadRegions(): Set<CinematographyRegion> {
@@ -99,6 +115,7 @@ class FilmotekaSettingsStore @Inject constructor(
     private companion object {
         const val KEY_SOURCES = "sources_json"
         const val KEY_AXIS = "default_axis"
+        const val KEY_ALL_SORT = "all_sort"
         const val KEY_REGIONS = "regions_json"
         val ALL_SOURCES: Set<FilmotekaSource> = FilmotekaSource.entries.toSet()
         val ALL_REGIONS: Set<CinematographyRegion> = CinematographyRegion.entries.toSet()

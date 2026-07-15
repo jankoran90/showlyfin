@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegion
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSettingsStore
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSource
@@ -26,6 +27,7 @@ class TvFilmotekaSettingsViewModel @Inject constructor(
 
     val sources: StateFlow<Set<FilmotekaSource>> = store.sources
     val defaultAxis: StateFlow<FilmotekaAxis> = store.defaultAxis
+    val allSort: StateFlow<FilmotekaAllSort> = store.allSort
     val enabledRegions: StateFlow<Set<CinematographyRegion>> = store.enabledRegions
 
     init {
@@ -36,5 +38,6 @@ class TvFilmotekaSettingsViewModel @Inject constructor(
 
     fun setSource(source: FilmotekaSource, enabled: Boolean) = store.setSourceEnabled(source, enabled)
     fun setDefaultAxis(axis: FilmotekaAxis) = store.setDefaultAxis(axis)
+    fun setAllSort(sort: FilmotekaAllSort) = store.setAllSort(sort)
     fun setRegion(region: CinematographyRegion, enabled: Boolean) = store.setRegionEnabled(region, enabled)
 }

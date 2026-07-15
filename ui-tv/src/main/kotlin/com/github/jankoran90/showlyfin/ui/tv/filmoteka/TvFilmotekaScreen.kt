@@ -82,7 +82,7 @@ fun TvFilmotekaScreen(
     }
 }
 
-/** Přepínač osy Filmotéky: Žánr | Země. Oba chipy D-pad-fokusovatelné; přepnutí jen přeskupí (bez fetch). */
+/** Přepínač osy Filmotéky: Vše | Žánr | Země. Všechny chipy D-pad-fokusovatelné; přepnutí jen přeskupí (bez fetch). */
 @Composable
 private fun AxisChips(
     axis: FilmotekaAxis,
@@ -90,6 +90,12 @@ private fun AxisChips(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FilterChip(
+            selected = axis == FilmotekaAxis.ALL,
+            onClick = { onSelect(FilmotekaAxis.ALL) },
+            label = { Text("Vše") },
+            modifier = Modifier.tvFocusable(),
+        )
         FilterChip(
             selected = axis == FilmotekaAxis.GENRE,
             onClick = { onSelect(FilmotekaAxis.GENRE) },

@@ -8,6 +8,7 @@ import com.github.jankoran90.showlyfin.core.domain.ContentAgeGate
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegion
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSettingsStore
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSource
@@ -28,6 +29,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -55,7 +57,7 @@ data class FilmotekaRail(
 
 /** Stav sekce Filmotéka. */
 data class FilmotekaUiState(
-    val axis: FilmotekaAxis = FilmotekaAxis.GENRE,
+    val axis: FilmotekaAxis = FilmotekaAxis.ALL,
     val rails: List<FilmotekaRail> = emptyList(),
     val loading: Boolean = true,
 )
@@ -113,6 +115,13 @@ class TvFilmotekaViewModel @Inject constructor(
         // Oblíbené reaktivně (per-profil sync běží async) → přemerguj bez plného reloadu.
         favorites.items
             .onEach { list -> refreshFavorites(list) }
+            .launchIn(viewModelScope)
+
+        // CONVERGE V1 — změna řazení osy „Vše" v Nastavení → přeskup (bez fetch). drop(1) = ignoruj
+        // iniciální emit (base ještě nemusí být načtená; reload/rebuild ho pokryjí).
+        settings.allSort
+            .drop(1)
+            .onEach { if (_state.value.axis == FilmotekaAxis.ALL) rebuild(FilmotekaAxis.ALL) }
             .launchIn(viewModelScope)
     }
 
@@ -217,10 +226,32 @@ class TvFilmotekaViewModel @Inject constructor(
         for (item in baseItems + favoriteItems) { val k = dedupKey(item) ?: continue; combined.putIfAbsent(k, item) }
         val all = combined.values.toList()
         val rails = when (axis) {
+            FilmotekaAxis.ALL -> groupAll(all)
             FilmotekaAxis.GENRE -> groupByGenre(all)
             FilmotekaAxis.COUNTRY -> groupByCountry(all)
         }
         _state.value = FilmotekaUiState(axis = axis, rails = rails, loading = false)
+    }
+
+    /**
+     * CONVERGE V1 — osa „Vše": JEDNA plochá řada všech titulů. RECENT (výchozí) = pořadí sběru (JF nejnovější
+     * první — gatherBase řadí DATE_CREATED desc; Working/Trakt/Oblíbené nemají spolehlivé datum, jdou za JF) =
+     * proxy „nedávno přidané". ALPHABETICAL = název A–Z přes český Collator. Věkový gate už proběhl v bázi.
+     */
+    private fun groupAll(items: List<MediaItem>): List<FilmotekaRail> {
+        if (items.isEmpty()) return emptyList()
+        val sorted = when (settings.allSort.value) {
+            FilmotekaAllSort.RECENT -> items
+            FilmotekaAllSort.ALPHABETICAL -> {
+                val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
+                items.sortedWith(Comparator { a, b -> coll.compare(a.displayTitle, b.displayTitle) })
+            }
+        }
+        val title = when (settings.allSort.value) {
+            FilmotekaAllSort.RECENT -> "Nedávno přidané"
+            FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
+        }
+        return listOf(FilmotekaRail(id = "filmo_all", title = title, items = sorted.map { it.toHomeRowItem("all") }))
     }
 
     /** Řady podle žánru, seřazené sestupně dle četnosti. Prázdné žánry nevznikají. */
