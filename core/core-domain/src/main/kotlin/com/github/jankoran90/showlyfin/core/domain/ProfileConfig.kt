@@ -313,7 +313,9 @@ data class CredentialBundle(
         jellyfin = jellyfin ?: other.jellyfin,
         abs = abs ?: other.abs,
         uploader = uploader ?: other.uploader,
-        trakt = trakt ?: other.trakt,
+        // Trakt token je per-PROFIL/per-ÚČET (osobní OAuth) — NIKDY nedědit ze šablony. Profily sdílející
+        // JF účet (honza+neli) mají stejný backendKey; dědění tokenu ze šablony = záměna účtu (2026-07-15).
+        trakt = trakt,
         streamFilterJson = streamFilterJson ?: other.streamFilterJson,
     )
 }

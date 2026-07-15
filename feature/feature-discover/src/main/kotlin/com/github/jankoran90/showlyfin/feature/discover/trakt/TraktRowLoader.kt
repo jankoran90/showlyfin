@@ -37,13 +37,16 @@ class TraktRowLoader @Inject constructor(
     private fun hideUnrated(): Boolean = parental.profile.value.hideUnratedForAge
     /** Watchlist, NEJNOVĚJI PŘIDANÉ PRVNÍ (listed_at desc — user 2026-07-13). [kind] = movies|shows|all. */
     suspend fun watchlist(kind: String = "all"): List<MediaItem> {
-        val raw = runCatching {
-            when (kind) {
-                "movies" -> authorizedTraktApi.fetchSyncMoviesWatchlist()
-                "shows" -> authorizedTraktApi.fetchSyncShowsWatchlist()
-                else -> authorizedTraktApi.fetchSyncMoviesWatchlist() + authorizedTraktApi.fetchSyncShowsWatchlist()
-            }
-        }.getOrElse { emptyList() }
+        // FIX (2026-07-15): filmy a seriály NEZÁVISLE — pád jednoho sub-volání (429/timeout v návalu paralelních
+        // Trakt requestů sekce Trakt) NESMÍ vynulovat druhý. Dřív jeden `runCatching` kolem obou → jeden timeout
+        // smazal CELÝ watchlist (i filmy) → řada zmizela ze sekce (v Home lazy load prošla).
+        suspend fun movies() = runCatching { authorizedTraktApi.fetchSyncMoviesWatchlist() }.getOrElse { emptyList() }
+        suspend fun shows() = runCatching { authorizedTraktApi.fetchSyncShowsWatchlist() }.getOrElse { emptyList() }
+        val raw = when (kind) {
+            "movies" -> movies()
+            "shows" -> shows()
+            else -> movies() + shows()
+        }
         Log.i(TAG, "watchlist($kind): ${raw.size} položek")
         return enrich(raw.sortedByDescending { it.lastListedMillis() })
     }

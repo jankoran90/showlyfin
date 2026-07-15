@@ -444,8 +444,15 @@ class ProfileRepository @Inject constructor(
             configGateway.fetchConfig(profile.backendKey())
         }?.takeIf { it.isNotBlank() }
         if (remoteJson != null) {
-            val canonical = ProfileConfig.toJson(ProfileConfig.fromJson(remoteJson))
             val current = dao.getById(profile.id) ?: profile
+            // TRVALÝ FIX (2026-07-15): Trakt token je per-PROFIL device/účet-specific — NIKDY ho nepřebírej
+            // z cross-device backend slotu. Profily se sdíleným JF účtem (honza+neli) mají stejný backendKey
+            // → jeden backend config slot → jinak si Trakt token navzájem přepisují (viz incident). Zachovej
+            // lokální `trakt` a přebírej z remote jen ostatní creds/nastavení.
+            val localTrakt = ProfileConfig.fromJson(current.configJson).credentials.trakt
+            val remoteCfg = ProfileConfig.fromJson(remoteJson)
+            val merged = remoteCfg.copy(credentials = remoteCfg.credentials.copy(trakt = localTrakt))
+            val canonical = ProfileConfig.toJson(merged)
             if (canonical != current.configJson) {
                 dao.update(current.copy(configJson = canonical))
                 changed = true
