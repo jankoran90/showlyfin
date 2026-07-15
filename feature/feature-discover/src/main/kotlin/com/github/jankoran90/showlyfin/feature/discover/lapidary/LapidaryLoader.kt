@@ -33,10 +33,10 @@ class LapidaryLoader @Inject constructor(
     private fun serverCookie(): String = appPrefs.getString("uploader_session_cookie", "").orEmpty()
 
     /** Klenoty jedné země (ISO). Prázdné = backend nedostupný / země zatím nezbuildovaná (`/gems/rebuild`). */
-    suspend fun catalog(countryIso: String): List<MediaItem> {
+    suspend fun catalog(countryIso: String, sort: String = "rank"): List<MediaItem> {
         val base = serverBase(); val cookie = serverCookie()
         if (base.isBlank()) return emptyList()
-        val raw = runCatching { uploaderDs.gemsCatalog(base, cookie, countryIso, status = "all", sort = "rank") }
+        val raw = runCatching { uploaderDs.gemsCatalog(base, cookie, countryIso, status = "all", sort = sort) }
             .onFailure { Log.w(TAG, "catalog $countryIso selhal", it) }.getOrNull() ?: return emptyList()
         val parsed = runCatching { parseItems(raw) }
             .onFailure { Log.w(TAG, "parse $countryIso selhal", it) }.getOrNull() ?: return emptyList()
@@ -58,6 +58,10 @@ class LapidaryLoader @Inject constructor(
             if (tmdb == null && imdb == null) continue
             val id = "tmdb:${tmdb ?: 0}|imdb:${imdb ?: ""}"
             if (!seen.add(id)) continue
+            // Backend `poster_path` je PLNÁ URL (https://image.tmdb.org/t/p/w342/xxx.jpg); MediaItem.posterUrl
+            // ale očekává FRAGMENT (/xxx.jpg) a prefix si přidá sám → z plné URL vytáhni fragment (jinak 2× prefix).
+            val posterRaw = if (o.isNull("poster_path")) null else o.optString("poster_path").ifBlank { null }
+            val posterFragment = posterRaw?.let { if (it.startsWith("http")) "/" + it.substringAfterLast('/') else it }
             out += MediaItem(
                 traktId = 0L,
                 tmdbId = tmdb,
@@ -68,7 +72,7 @@ class LapidaryLoader @Inject constructor(
                 rating = null,
                 genres = null,
                 type = MediaType.MOVIE,
-                posterPath = if (o.isNull("poster_path")) null else o.optString("poster_path").ifBlank { null },
+                posterPath = posterFragment,
                 originalTitle = o.optString("original_title").ifBlank { null },
             )
         }

@@ -322,6 +322,9 @@ fun TvSettingsScreen(
         // ── Filmotéka (CINEMATHEQUE SHW-90) — zdroje sjednocené plochy + výchozí osa ──
         item { TvFilmotekaSettingsBlock() }
 
+        // ── Vzácné klenoty (LAPIDARY SHW-96) — výběr zemí sekce + řazení ──
+        item { TvLapidarySettingsBlock() }
+
         // ── Rodičovská kontrola (COUCH SHW-88) — věkový strop objevovacích ploch dětského profilu ──
         item { TvParentalSettingsBlock() }
 

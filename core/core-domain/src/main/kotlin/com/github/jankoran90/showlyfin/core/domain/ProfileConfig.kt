@@ -101,6 +101,11 @@ data class ProfileConfig(
      */
     val curator: CuratorPrefs? = null,
     /**
+     * LAPIDARY (SHW-96) — per-profil nastavení sekce „Vzácné klenoty", synced TV↔telefon (vzor [curator]).
+     * null = default (všechny země, řazení dle kánonu). Dětský vs. dospělý profil může mít jiný výběr zemí.
+     */
+    val lapidary: LapidaryPrefs? = null,
+    /**
      * Lock-mapa (Plan WARDEN W0): logické klíče ([LockKeys]), které jsou **admin-zamčené** =
      * uživatel je nesmí editovat a do efektivního configu se vždy berou ze **šablony**, ne z
      * uživatelského override. Smysl má jen na **šabloně**; na uživatelském override se ignoruje.
@@ -442,6 +447,19 @@ enum class CuratorSurprise { NEAR, GENRES, UNKNOWN, ERA }
 /** Druh obsahu, který kurátor doporučuje. */
 @Serializable
 enum class CuratorKind { MOVIE, SHOW, BOTH }
+
+/**
+ * LAPIDARY (SHW-96) — per-profil nastavení sekce „Vzácné klenoty" (synced TV↔telefon přes [ProfileConfig.lapidary]).
+ */
+@Serializable
+data class LapidaryPrefs(
+    /** Zapnuté země (ISO, viz `LapidaryCountry`). **Prázdné = VŠECHNY podporované** (i budoucí přidané). */
+    val enabledCountries: Set<String> = emptySet(),
+    /** Řazení klenotů v řadě: "rank" (kánon TSPDT) | "vote" (hodnocení). */
+    val sort: String = "rank",
+) {
+    companion object { val DEFAULT = LapidaryPrefs() }
+}
 
 /**
  * Vloží [key]→[value] a udrží mapu v LRU pořadí s tvrdým stropem [max] (nejstarší klíč vypadne).

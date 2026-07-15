@@ -58,11 +58,13 @@ class TvLapidaryViewModel @Inject constructor(
         loadJob?.cancel()
         _state.value = _state.value.copy(loading = true)
         loadJob = viewModelScope.launch {
-            val countries = enabledCountries()
+            val prefs = profileRepository.activeConfig.value.lapidary
+            val countries = enabledCountries(prefs?.enabledCountries.orEmpty())
+            val sort = prefs?.sort ?: "rank"
             val rails = coroutineScope {
                 countries.map { c ->
                     async {
-                        val items = loader.catalog(c.iso)
+                        val items = loader.catalog(c.iso, sort)
                         if (items.isEmpty()) null
                         else LapidaryRail(
                             id = "lapidary_${c.iso}",
@@ -76,11 +78,9 @@ class TvLapidaryViewModel @Inject constructor(
         }
     }
 
-    /** Zapnuté země. C4 (S5) napojí per-profil `LapidaryPrefs.enabledCountries`; zatím všechny podporované. */
-    private fun enabledCountries(): List<LapidaryCountry> {
-        val enabled = LapidaryCountry.DEFAULT_ENABLED
-        return LapidaryCountry.entries.filter { it.iso in enabled }
-    }
+    /** Zapnuté země dle per-profil [com.github.jankoran90.showlyfin.core.domain.LapidaryPrefs]. Prázdné = všechny. */
+    private fun enabledCountries(enabled: Set<String>): List<LapidaryCountry> =
+        LapidaryCountry.entries.filter { enabled.isEmpty() || it.iso in enabled }
 
     private fun MediaItem.toHomeRowItem(countryIso: String) = HomeRowItem(
         key = "lapidary_${countryIso}_${tmdbId ?: imdbId ?: traktId}",
