@@ -543,6 +543,14 @@ class DetailViewModel @Inject constructor(
             )
         )
         _uiState.update { it.copy(isFavorite = now) }
+        // LAPIDARY (SHW-96): přidání filmu do Oblíbených = vědomý signál → nacachuj zdroj na pozadí.
+        if (now && item.type == MediaType.MOVIE) {
+            viewModelScope.launch {
+                workingSourceStore.triggerAutoCache(
+                    item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+                )
+            }
+        }
     }
 
     /** COMPASS C2 (SHW-44): přidat/odebrat osobu ze sheetu (herec/režisér) do/z Oblíbených. */
@@ -747,8 +755,24 @@ class DetailViewModel @Inject constructor(
                         else "Trakt seznam se neuložil: ${reason ?: "neznámá chyba"}. Zkus znovu.",
                 )
             }
+            // LAPIDARY (SHW-96): úspěšné PŘIDÁNÍ filmu do „chci vidět" = vědomý signál → nacachuj zdroj
+            // na pozadí (backend zapíše auto-WorkingSource → instant-play). Jen film (backend jede „movie").
+            if (ok && !currentlyIn && item.type == MediaType.MOVIE) {
+                workingSourceStore.triggerAutoCache(
+                    item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+                )
+            }
         }
     }
+
+    /** LAPIDARY (SHW-96): politika výběru zdroje dle aktivního profilu — dětský (CHILDREN/FAMILY) chce
+     *  CZ dabing + 5.1 + sdilej.cz, jinak originál zvuk. */
+    private fun cachePolicy(): String =
+        when (parentalControls.profile.value.effectiveAgeRating) {
+            com.github.jankoran90.showlyfin.core.domain.AgeRating.CHILDREN,
+            com.github.jankoran90.showlyfin.core.domain.AgeRating.FAMILY -> "child"
+            else -> "original"
+        }
 
     // ── Stream / Stáhnout (Stremio + Sdílej.cz + Smart Remux hub) ──────────────
 

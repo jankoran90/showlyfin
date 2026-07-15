@@ -34,6 +34,9 @@ interface UploaderService {
     @GET suspend fun getProfileWorkingSources(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @PUT suspend fun putProfileWorkingSources(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
     @PUT suspend fun putProfile(@Url url: String, @Header("Cookie") cookie: String, @Body request: ProfileMetaRequest): Response<ResponseBody>
+    // LAPIDARY (SHW-96) — vzácné klenoty: watchlist/favorite trigger (cache-one) + katalog sekce
+    @POST suspend fun gemsCacheOne(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+    @GET suspend fun gemsCatalog(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     // Plan WARDEN W3c — šablony + profilová meta (raw JSON pole přes ResponseBody)
     @GET suspend fun getTemplates(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @GET suspend fun getProfilesMeta(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>

@@ -34,6 +34,10 @@ interface UploaderRemoteDataSource {
     suspend fun putProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String, json: String)
     // AUTEUR (SHW-91) — kurátorský mozek: taste payload (raw JSON) → doporučení (raw JSON), nebo null při chybě.
     suspend fun curatorRecommend(baseUrl: String, sessionCookie: String, json: String): String?
+    // LAPIDARY (SHW-96) — vzácné klenoty. cacheOne = watchlist/favorite trigger (fire-and-forget, backend běží na pozadí,
+    // po nacachování zapíše auto-WorkingSource do profilu). gemsCatalog = obsah sekce (raw JSON {"items":[…]}), null při chybě.
+    suspend fun gemsCacheOne(baseUrl: String, sessionCookie: String, imdb: String, tmdb: Long, profile: String, policy: String, title: String, year: Int?)
+    suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, sort: String? = null): String?
     suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String? = null, loginPinHash: String? = null)
     // Plan WARDEN W3c — raw JSON: pole šablon (/api/templates) + pole profilových meta (/api/profiles).
     suspend fun getTemplates(baseUrl: String, sessionCookie: String): String?

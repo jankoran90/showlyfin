@@ -216,6 +216,34 @@ internal class UploaderApi(
         return if (resp.isSuccessful) resp.body()?.string() else null
     }
 
+    // LAPIDARY (SHW-96) — vzácné klenoty
+    override suspend fun gemsCacheOne(baseUrl: String, sessionCookie: String, imdb: String, tmdb: Long, profile: String, policy: String, title: String, year: Int?) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val q = buildList {
+            add("imdb=${enc(imdb)}")
+            if (tmdb > 0) add("tmdb=$tmdb")
+            if (profile.isNotBlank()) add("profile=${enc(profile)}")
+            add("policy=${enc(policy)}")
+            if (title.isNotBlank()) add("title=${enc(title)}")
+            if (year != null) add("year=$year")
+        }.joinToString("&")
+        val body = "".toRequestBody("application/json; charset=utf-8".toMediaType())
+        // fire-and-forget: backend nacachuje na pozadí + zapíše WorkingSource; chybu spolkni (trigger je best-effort)
+        runCatching { service.gemsCacheOne("$base/gems/cache-one?$q", cookie, body) }
+    }
+
+    override suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, sort: String?): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val q = buildList {
+            add("country=${enc(country)}")
+            if (!sort.isNullOrBlank()) add("sort=${enc(sort)}")
+        }.joinToString("&")
+        val resp = service.gemsCatalog("$base/gems/catalog?$q", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
     override suspend fun putProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String, json: String) {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

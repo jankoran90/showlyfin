@@ -36,6 +36,9 @@ data class WorkingSource(
     val title: String = "",
     val stream: UploaderStream = UploaderStream(),
     val savedAtMs: Long = 0L,
+    // LAPIDARY (SHW-96): true = auto-nacachováno naším enginem (cache-one); false = user-confirmed „👍".
+    // Backend auto-zápis NEPŘEPÍŠE user-confirmed. Flag musí přežít round-trip app→server (proto v modelu).
+    val auto: Boolean = false,
 )
 
 /** Obálka serverového JSONu `{"sources":[…]}` (endpoint /api/profiles/{key}/working-sources). */
@@ -99,8 +102,39 @@ class WorkingSourceStore @Inject constructor(
     private fun pushToServer() {
         val key = profileKey(); val base = serverBase(); val cookie = serverCookie()
         if (key.isBlank() || base.isBlank()) return
-        val snapshot = getAll()
-        scope.launch { pushNow(key, base, cookie, snapshot) }
+        scope.launch { pushMerged(key, base, cookie) }
+    }
+
+    /**
+     * Race-safe push (LAPIDARY SHW-96): sloučí lokální snapshot se serverem (novější `savedAtMs` vítězí)
+     * PŘED PUT. Bez tohoto by slepý PUT full-snapshotu přemazal auto-WorkingSource, který mezitím zapsal
+     * backend (cache-one na watchlist/favorite add). Zpevňuje i souběh dvou zařízení (TV↔telefon).
+     */
+    private suspend fun pushMerged(key: String, base: String, cookie: String) {
+        val local = getAll()
+        val server = parseServer(uploaderDs.getProfileWorkingSources(base, cookie, key)) ?: local
+        val byId = LinkedHashMap<String, WorkingSource>()
+        for (r in local + server) {
+            val id = identity(r)
+            val cur = byId[id]
+            if (cur == null || r.savedAtMs >= cur.savedAtMs) byId[id] = r
+        }
+        val merged = byId.values.sortedByDescending { it.savedAtMs }
+        replaceLocal(merged)
+        pushNow(key, base, cookie, merged)
+    }
+
+    /**
+     * LAPIDARY (SHW-96) — vědomý signál „tohle chci" (přidání do „chci vidět" / „oblíbené") → nacachuj
+     * zdroj na pozadí. Backend po nacachování zapíše auto-WorkingSource do profilu (objeví se v „Uloženo
+     * k přehrání" + instant-play + odznak). Fire-and-forget: klient chybu spolkne, backend běží na pozadí
+     * (RD až 30 min). policy = "child" (CZ dabing + 5.1 + sdilej.cz) | "original" (originál zvuk).
+     */
+    suspend fun triggerAutoCache(imdb: String?, tmdb: Long?, title: String, year: Int?, policy: String) {
+        val im = imdb?.takeIf { it.startsWith("tt") } ?: return   // backend vyžaduje imdb tt…
+        val key = profileKey(); val base = serverBase()
+        if (key.isBlank() || base.isBlank()) return
+        uploaderDs.gemsCacheOne(base, serverCookie(), im, tmdb ?: 0L, key, policy, title, year)
     }
 
     /**
