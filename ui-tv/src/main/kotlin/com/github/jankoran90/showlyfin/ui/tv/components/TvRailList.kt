@@ -64,6 +64,8 @@ data class TvRail(
     val showTitles: Boolean = true,
     /** KOLO2 (M): immersive hlavička (název/rok/popis fokusované karty nahoře) — per řada. */
     val immersiveHeader: Boolean = false,
+    /** COUCH Fáze B: přidej dlaždici „Zobrazit vše" na konec řady → drill do plné mřížky (viz `onShowAll`). */
+    val showAll: Boolean = false,
 )
 
 /**
@@ -94,6 +96,8 @@ fun TvRailList(
     onItemClick: (HomeRowItem) -> Unit,
     modifier: Modifier = Modifier,
     onRequestEditor: ((configId: String) -> Unit)? = null,
+    // COUCH Fáze B: drill do plné mřížky řady (dlaždice „Zobrazit vše" na konci `showAll` řad). `configId` = identita řady.
+    onShowAll: ((configId: String) -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
     // A2 fix: fokus vázán na STABILNÍ identitu řady (`configId`/`id`), ne na index do proměnlivého `rails`.
@@ -190,6 +194,11 @@ fun TvRailList(
                         onItemLongPress = { onRequestEditor?.invoke(rail.configId) },
                         showLabel = rail.showTitles,
                         rowBringIntoViewSpec = defaultBiv,
+                        onShowAll = if (rail.showAll && onShowAll != null) {
+                            { onShowAll(rail.configId) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -207,6 +216,7 @@ private fun RailSection(
     onItemLongPress: () -> Unit,
     showLabel: Boolean = true,
     rowBringIntoViewSpec: BringIntoViewSpec,
+    onShowAll: (() -> Unit)? = null,
 ) {
     // Vstup do řady (vertikální navigací i initial autofokus) směřuj VŽDY na 1. kartu. Bez tohoto default
     // directional focus search + souběžný snap-scroll (animateScrollToItem) přistál na 2. sloupci. Na první
@@ -252,6 +262,12 @@ private fun RailSection(
                             showLabel = showLabel,
                             onLongClick = onItemLongPress,
                         )
+                    }
+                }
+                // COUCH Fáze B: dlaždice „Zobrazit vše" na konci řady → drill do plné mřížky (jen `showAll` řady).
+                onShowAll?.let { showAll ->
+                    item(key = "__showall__") {
+                        TvShowAllCard(style = rail.style, onClick = showAll)
                     }
                 }
             }

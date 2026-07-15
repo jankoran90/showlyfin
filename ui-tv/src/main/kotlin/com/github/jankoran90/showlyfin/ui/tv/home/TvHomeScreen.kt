@@ -20,7 +20,7 @@ import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSourceType
 import com.github.jankoran90.showlyfin.core.domain.home.LibrarySummary
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
-import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowItem
+import com.github.jankoran90.showlyfin.ui.tv.components.toHomeRowItem
 import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRail
@@ -172,16 +172,3 @@ private fun List<HomeRowItem>.applyConfig(cfg: HomeRowConfig): List<HomeRowItem>
     }
     return r.take(cfg.limit.coerceIn(1, 60))
 }
-
-/** Jellyfin řadová položka → sjednocený [HomeRowItem]. */
-private fun LibraryRowItem.toHomeRowItem() = HomeRowItem(
-    key = "jf_$jellyfinId",
-    title = name,
-    year = year,
-    posterUrl = imageUrl,
-    landscapeUrl = landscapeUrl,
-    progressPct = progressPct,
-    watched = watched,
-    mediaItem = mediaItem,
-    jellyfinId = jellyfinId,
-)

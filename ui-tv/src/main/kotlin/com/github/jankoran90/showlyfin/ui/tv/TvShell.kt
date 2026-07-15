@@ -138,7 +138,14 @@ fun TvShell(
                         immersive = immersive,
                         onFocusItem = { rawInfo = it },
                     )
-                    TvSection.LIBRARY -> TvLibraryScreen(onOpenLibrary = onOpenLibrary)
+                    TvSection.LIBRARY -> TvLibraryScreen(
+                        onOpenLibrary = onOpenLibrary,
+                        onOpenDetail = onOpenDetail,
+                        onOpenJellyfinDetail = onOpenJellyfinDetail,
+                        immersive = immersive,
+                        immersiveHeader = immersiveHeader,
+                        onFocusItem = { rawInfo = it },
+                    )
                     TvSection.WATCHLIST -> TvWatchlistScreen(
                         onOpenDetail = onOpenDetail,
                         onBack = { onSelectSection(TvSection.HOME) },

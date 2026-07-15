@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.ui.tv.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Diamond
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -94,6 +96,53 @@ fun TvHomeCard(
             csfd?.let { CsfdMiniBadge(it, Modifier.align(Alignment.TopEnd).padding(6.dp)) }
             // „Hraje hned" — titul má uložený zdroj (WorkingSource) → instant play bez hledání.
             if (hasSavedSource) SavedSourceBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+        }
+    }
+}
+
+/**
+ * COUCH Fáze B — dlaždice „Zobrazit vše" na KONCI řady sekce (Knihovna): otevře plnou mřížku dané řady
+ * (drill). Respektuje rozměr [style] (stejná šířka/poměr jako karty v řadě → zarovnané), fokusovatelná
+ * stejným `tvFocusBorder`-před-`clickable` vzorem jako [TvHomeCard].
+ */
+@Composable
+fun TvShowAllCard(
+    style: HomeCardStyle,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cardScale = LocalTvCardScale.current
+    val shape = MaterialTheme.shapes.medium
+    val (width, ratio) = when (style) {
+        HomeCardStyle.LANDSCAPE -> (cardScale * TV_LANDSCAPE_WIDTH) to (16f / 9f)
+        HomeCardStyle.LIST -> (cardScale * TV_LIST_WIDTH) to (16f / 9f)
+        HomeCardStyle.FANART_DETAIL -> (cardScale * TV_DETAIL_WIDTH) to (16f / 9f)
+        HomeCardStyle.POSTER, HomeCardStyle.COVER -> (cardScale * TV_POSTER_WIDTH) to (2f / 3f)
+    }
+    Box(
+        modifier = modifier
+            .width(width)
+            .aspectRatio(ratio)
+            .tvFocusBorder(shape = shape)
+            .clip(shape)
+            .clickable(onClick = onClick)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Filled.GridView,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Zobrazit vše",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
