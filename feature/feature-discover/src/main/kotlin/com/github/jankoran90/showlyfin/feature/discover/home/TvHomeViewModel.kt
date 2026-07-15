@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.displayPreferencesApi
 import org.jellyfin.sdk.api.client.extensions.itemsApi
@@ -158,6 +159,8 @@ class TvHomeViewModel @Inject constructor(
 
     private val loadedHash = mutableMapOf<String, Int>()
     private val jobs = mutableMapOf<String, Job>()
+    // Progresivní load Trakt řad: serializuj Trakt API volání (jinak paralelní salva → 429). Viz ensureRowLoaded.
+    private val traktLoadMutex = kotlinx.coroutines.sync.Mutex()
 
     init {
         // COUCH per-profil: každý profil má vlastní layout domova. Nejdřív přepni store na layout profilu
@@ -228,7 +231,15 @@ class TvHomeViewModel @Inject constructor(
                     }
                 }
                 else -> {
-                    val items = runCatching { loadOnce(config) }
+                    // 🐞 Progresivní load Trakt řad: watchlist/historie/seznamy/reco se dřív načítaly VŠECHNY
+                    // současně (reloadAllRows i invalidateTraktRows spouští každou vlastním launch) → paralelní
+                    // salva na Trakt API → 429 rate-limit → některé řady zůstaly prázdné. Serializuj Trakt
+                    // volání jedním mutexem: řady doskakují postupně (progresivně) a bez burstu. Ostatní
+                    // zdroje (Jellyfin/TMDB) běží dál plně paralelně.
+                    val items = runCatching {
+                        if (config.source in TRAKT_SOURCES) traktLoadMutex.withLock { loadOnce(config) }
+                        else loadOnce(config)
+                    }
                         .onFailure { Timber.w(it, "[TvHome] load '${config.id}' selhal") }
                         .getOrElse { emptyList() }
                     emit(config, applyOps(items, config))

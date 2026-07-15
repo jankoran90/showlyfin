@@ -170,7 +170,13 @@ private fun SidebarRow(
                     when (e.key) {
                         Key.DirectionUp -> { onMove(true); true }
                         Key.DirectionDown -> { onMove(false); true }
-                        Key.DirectionCenter, Key.Enter, Key.Back -> { onExitReorder(); true }
+                        // 🐞 „držení déle → nabídka zmizí": do reorder režimu se vstupuje LONG-PRESSem OK
+                        // (combinedClickable.onLongClick po ~500 ms). Když OK držíš dál, Android chrlí
+                        // auto-repeat KeyDown(DirectionCenter) s repeatCount>0 — ty se dřív hned vyhodnotily
+                        // jako „OK hotovo" a režim vyskočil. Potvrď proto JEN čerstvým stiskem (repeatCount==0);
+                        // opakování z drženého vstupního stisku spolkni (true), ať nic nereaguje.
+                        Key.DirectionCenter, Key.Enter, Key.Back ->
+                            if (e.nativeKeyEvent.repeatCount == 0) { onExitReorder(); true } else true
                         else -> false
                     }
                 } else {

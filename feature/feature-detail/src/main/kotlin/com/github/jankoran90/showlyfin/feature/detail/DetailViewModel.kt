@@ -750,13 +750,23 @@ class DetailViewModel @Inject constructor(
                 timber.log.Timber.w(e, "[Watchlist] POST selhal (currentlyIn=$currentlyIn) pro '${item.title}'")
                 e.message?.take(90) ?: e.javaClass.simpleName
             }
+            // 🐞 Trakt 401 self-heal: TraktAuthenticator při 401 zkusí obnovit token; když je refresh_token
+            // definitivně mrtvý (Trakt neaktivní ~3 měsíce), zavolá revokeToken() → getToken()==null =
+            // odhlášení. Matoucí syrové „HTTP 401" nahraď jasnou výzvou k re-loginu (ne „zkus znovu" —
+            // opakování bez přihlášení nepomůže). Ostatní chyby (429/420/síť) zůstávají „zkus znovu".
+            val loggedOut = tokenProvider.getToken() == null
+            val authExpired = loggedOut || reason?.contains("401") == true
             _uiState.update {
                 it.copy(
                     isTogglingWatchlist = false,
                     // Při selhání revert na původní stav + hláška; při úspěchu ponech optimistický.
                     isInWatchlist = if (ok) !currentlyIn else currentlyIn,
-                    autoCastMessage = if (ok) it.autoCastMessage
-                        else "Trakt seznam se neuložil: ${reason ?: "neznámá chyba"}. Zkus znovu.",
+                    autoCastMessage = when {
+                        ok -> it.autoCastMessage
+                        authExpired -> "Trakt přihlášení vypršelo — titul se neuložil. Přihlas se znovu: " +
+                            "Nastavení → Účty → Trakt."
+                        else -> "Trakt seznam se neuložil: ${reason ?: "neznámá chyba"}. Zkus znovu."
+                    },
                 )
             }
             // LAPIDARY (SHW-96): úspěšné PŘIDÁNÍ filmu do „chci vidět" = vědomý signál → nacachuj zdroj
