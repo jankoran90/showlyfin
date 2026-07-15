@@ -136,6 +136,7 @@ fun TvShell(
                     TvSection.TRAKT -> TvTraktScreen(
                         onOpenDetail = onOpenDetail,
                         immersive = immersive,
+                        immersiveHeader = immersiveHeader,
                         onFocusItem = { rawInfo = it },
                     )
                     TvSection.LIBRARY -> TvLibraryScreen(
