@@ -86,6 +86,7 @@ fun TvJellyfinDetailRoute(
     onPlayStreamUrl: (String, String, SubtitleQuery?) -> Unit,
     onOpenEpisodes: (seriesId: String, name: String) -> Unit,
     onOpenJellyfinDetail: (String) -> Unit,
+    onOpenSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     resolveVm: TvJellyfinResolveViewModel = hiltViewModel(),
 ) {
@@ -101,6 +102,7 @@ fun TvJellyfinDetailRoute(
             onCollectionPartClick = onCollectionPartClick,
             onPlayJellyfin = onPlayJellyfin,
             onPlayStreamUrl = onPlayStreamUrl,
+            onOpenSettings = onOpenSettings,
             modifier = modifier,
         )
         JfResolve.Fallback -> JellyfinDetailScreen(

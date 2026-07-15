@@ -111,6 +111,8 @@ fun DetailScreen(
     autoCastAudioPath: String? = null,
     // LAPIDARY S4b: one-click z řady „Uloženo k přehrání" — po hydrataci přehraj zapamatovaný zdroj rovnou.
     autoplayRemembered: Boolean = false,
+    // CONVERGE V1 — TV: D-pad doleva od nejlevější akce → Nastavení (drill). null = feature vypnutá (telefon).
+    onOpenSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -353,6 +355,7 @@ fun DetailScreen(
             onPlayJellyfin = onPlayJellyfin,
             onOpenReviews = { showReviewsSheet = true },
             onCollectionPartClick = onCollectionPartClick,
+            onOpenSettings = onOpenSettings,
             modifier = modifier,
         )
         return

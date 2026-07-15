@@ -23,6 +23,8 @@ import com.github.jankoran90.showlyfin.ui.tv.components.TvImmersiveBackground
 import com.github.jankoran90.showlyfin.ui.tv.discover.TvDiscoverScreen
 import com.github.jankoran90.showlyfin.ui.tv.filmoteka.TvFilmotekaScreen
 import com.github.jankoran90.showlyfin.ui.tv.lapidary.TvLapidaryScreen
+import com.github.jankoran90.showlyfin.ui.tv.trakt.TvReauthPromptViewModel
+import com.github.jankoran90.showlyfin.ui.tv.trakt.TvTraktReauthDialog
 import com.github.jankoran90.showlyfin.ui.tv.trakt.TvTraktScreen
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeSidebar
@@ -71,6 +73,10 @@ fun TvShell(
 
     // COUCH T5: overlay přepínače profilu (spouští se z profilového tlačítka dole ve sidebaru).
     var showProfiles by remember { mutableStateOf(false) }
+
+    // CONVERGE V1: globální re-auth prompt při definitivním odhlášení z Traktu (mrtvý refresh_token).
+    val reauthVm: TvReauthPromptViewModel = hiltViewModel()
+    val showReauth by reauthVm.visible.collectAsStateWithLifecycle()
 
     // Immersive info z fokusované karty (debounce proti thrashingu při rychlém D-padu).
     var rawInfo by remember { mutableStateOf<ImmersiveInfo?>(null) }
@@ -157,6 +163,11 @@ fun TvShell(
         }
 
         if (showProfiles) TvProfileSwitcher(onDismiss = { showProfiles = false })
+
+        if (showReauth) TvTraktReauthDialog(
+            onRelogin = { reauthVm.dismiss(); onSelectSection(TvSection.SETTINGS) },
+            onDismiss = { reauthVm.dismiss() },
+        )
     }
     }
 }

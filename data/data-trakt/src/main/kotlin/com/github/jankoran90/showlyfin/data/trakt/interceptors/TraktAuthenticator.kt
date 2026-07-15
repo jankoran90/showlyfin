@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.data.trakt.interceptors
 
+import com.github.jankoran90.showlyfin.core.domain.trakt.TraktSessionSignal
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenRefreshException
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,7 @@ import kotlin.coroutines.cancellation.CancellationException
 @Singleton
 class TraktAuthenticator @Inject constructor(
     private val tokenProvider: TokenProvider,
+    private val sessionSignal: TraktSessionSignal,
 ) : Authenticator {
 
     @Synchronized
@@ -42,10 +44,11 @@ class TraktAuthenticator @Inject constructor(
                         Timber.w("Trakt: obnova tokenu dočasně selhala (${error.message}) — token ponechán.")
                         null
                     }
-                    // Definitivní (neplatný refresh_token) → odhlásit z Traktu.
+                    // Definitivní (neplatný refresh_token) → odhlásit z Traktu + signál na re-auth prompt.
                     else -> {
                         Timber.w("Trakt: refresh_token neplatný → odhlášení.")
                         tokenProvider.revokeToken()
+                        sessionSignal.signalReauthNeeded()
                         null
                     }
                 }

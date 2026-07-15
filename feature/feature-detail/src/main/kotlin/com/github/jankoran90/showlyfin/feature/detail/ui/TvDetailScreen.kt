@@ -84,6 +84,7 @@ internal fun TvDetailBody(
     onOpenReviews: () -> Unit,
     onCollectionPartClick: ((CollectionPart) -> Unit)?,
     modifier: Modifier = Modifier,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     // 4K TV: w1280 se na immersive fanartu roztaženém přes celou plochu pixeluje → plné rozlišení.
     val backdropUrl = displayItem.backdropUrl("original")
@@ -126,6 +127,7 @@ internal fun TvDetailBody(
             backdropUrl = backdropUrl,
             endTime = endTime,
             hasContentRows = hasContentRows,
+            onOpenSettings = onOpenSettings,
             modifier = modifier,
         )
         TvDetailLayout.CLASSIC_HERO -> ClassicHeroLayout(
@@ -137,6 +139,7 @@ internal fun TvDetailBody(
             onPlayJellyfin = onPlayJellyfin,
             onOpenReviews = onOpenReviews,
             onCollectionPartClick = onCollectionPartClick,
+            onOpenSettings = onOpenSettings,
             genres = genres,
             plot = plot,
             plotExpanded = plotExpanded,
@@ -165,6 +168,7 @@ private fun ClassicHeroLayout(
     onPlayJellyfin: ((String) -> Unit)?,
     onOpenReviews: () -> Unit,
     onCollectionPartClick: ((CollectionPart) -> Unit)?,
+    onOpenSettings: (() -> Unit)? = null,
     genres: List<String>?,
     plot: String?,
     plotExpanded: Boolean,
@@ -279,6 +283,7 @@ private fun ClassicHeroLayout(
                         uiState = uiState,
                         viewModel = viewModel,
                         onPlayJellyfin = onPlayJellyfin,
+                        onOpenSettings = onOpenSettings,
                     )
                 }
             }

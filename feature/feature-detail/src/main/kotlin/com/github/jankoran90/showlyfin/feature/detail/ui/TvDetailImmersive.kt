@@ -66,6 +66,7 @@ internal fun ImmersiveOverlayLayout(
     endTime: String?,
     hasContentRows: Boolean,
     modifier: Modifier = Modifier,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val scroll = rememberScrollState()
     BoxWithConstraints(
@@ -173,7 +174,12 @@ internal fun ImmersiveOverlayLayout(
                     }
 
                     val actions: @Composable () -> Unit = {
-                        TvDetailActions(uiState = uiState, viewModel = viewModel, onPlayJellyfin = onPlayJellyfin)
+                        TvDetailActions(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            onPlayJellyfin = onPlayJellyfin,
+                            onOpenSettings = onOpenSettings,
+                        )
                     }
                     val plotBlock: @Composable () -> Unit = {
                         if (!plot.isNullOrBlank()) {

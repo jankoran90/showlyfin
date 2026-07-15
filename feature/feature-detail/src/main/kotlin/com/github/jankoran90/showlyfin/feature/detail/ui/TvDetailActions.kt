@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -34,6 +35,12 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +68,9 @@ internal fun TvDetailActions(
     viewModel: DetailViewModel,
     onPlayJellyfin: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
+    // CONVERGE V1 — D-pad doleva od nejlevější akce (primární CTA) → skok do Nastavení (drill; BACK vrátí
+    // na tutéž kartu). null = feature vypnutá (telefon / route bez shellu).
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null
     val hasRemembered = uiState.rememberedSource != null
@@ -73,6 +83,8 @@ internal fun TvDetailActions(
 
     var showMore by remember { mutableStateOf(false) }
     val primaryFocus = remember { FocusRequester() }
+    // CONVERGE V1 — sleduj fokus primárního CTA, ať D-pad doleva JEN z něj (nejlevější akce) skočí do Nastavení.
+    var primaryFocused by remember { mutableStateOf(false) }
     // Po otevření karty rovnou zaostři primární CTA (paritně s přehrávačem).
     LaunchedEffect(hasSource) { runCatching { primaryFocus.requestFocus() } }
 
@@ -83,31 +95,47 @@ internal fun TvDetailActions(
         Row(
             modifier = Modifier
                 .focusGroup()
-                .focusProperties { enter = { primaryFocus } },
+                .focusProperties { enter = { primaryFocus } }
+                // CONVERGE V1 — D-pad doleva, když je fokus na primárním CTA (vlevo už nic není) → Nastavení.
+                // Preview na řadě odchytí dřív než fokus; gate `primaryFocused` = nekříží se s posunem
+                // vlevo z ostatních tlačítek (ta normálně přejdou na primární CTA).
+                .onPreviewKeyEvent { e ->
+                    if (onOpenSettings != null && primaryFocused &&
+                        e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft
+                    ) {
+                        onOpenSettings(); true
+                    } else {
+                        false
+                    }
+                },
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (hasSource) {
-                TvActionButton(
-                    icon = Icons.Filled.PlayArrow,
-                    label = "Přehrát",
-                    primary = true,
-                    focusRequester = primaryFocus,
-                    onClick = {
-                        when {
-                            inLibrary -> uiState.ownedJellyfinId?.let { onPlayJellyfin?.invoke(it) }
-                            hasRemembered -> uiState.rememberedSource?.let { viewModel.playStream(it) }
-                        }
-                    },
-                )
-            } else {
-                TvActionButton(
-                    icon = Icons.Filled.Search,
-                    label = "Hledat zdroje",
-                    primary = true,
-                    focusRequester = primaryFocus,
-                    onClick = { viewModel.openStreamPathChooser() },
-                )
+            // Box jen kvůli sledování fokusu primárního CTA (obě varianty sdílí primaryFocus).
+            // hasFocus (ne isFocused) = Box sám není fokusovatelný, fokus drží tlačítko uvnitř.
+            Box(Modifier.onFocusChanged { primaryFocused = it.hasFocus }) {
+                if (hasSource) {
+                    TvActionButton(
+                        icon = Icons.Filled.PlayArrow,
+                        label = "Přehrát",
+                        primary = true,
+                        focusRequester = primaryFocus,
+                        onClick = {
+                            when {
+                                inLibrary -> uiState.ownedJellyfinId?.let { onPlayJellyfin?.invoke(it) }
+                                hasRemembered -> uiState.rememberedSource?.let { viewModel.playStream(it) }
+                            }
+                        },
+                    )
+                } else {
+                    TvActionButton(
+                        icon = Icons.Filled.Search,
+                        label = "Hledat zdroje",
+                        primary = true,
+                        focusRequester = primaryFocus,
+                        onClick = { viewModel.openStreamPathChooser() },
+                    )
+                }
             }
 
             if (canDevice) {

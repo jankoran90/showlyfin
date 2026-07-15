@@ -126,6 +126,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             },
             onOpenEpisodes = { seriesId, name -> navigate(TvDestination.EpisodePicker(seriesId, name)) },
             onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
+            onOpenSettings = { navigate(TvDestination.Settings) },
         )
 
         is TvDestination.EpisodePicker -> EpisodePickerScreen(
@@ -138,6 +139,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         is TvDestination.Detail -> DetailScreen(
             item = dest.item,
             onBack = { back() },
+            // CONVERGE V1 — D-pad doleva od nejlevější akce v detailu → Nastavení jako drill; BACK vrátí na kartu.
+            onOpenSettings = { navigate(TvDestination.Settings) },
             // LAPIDARY S4b: one-click z řady „Uloženo k přehrání" → přehrát zapamatovaný zdroj rovnou.
             autoplayRemembered = dest.autoplay,
             // TENFOOT KOLO2 (N5): karty v sekcích detailu → tmdbId má přednost (nativní immersive detail),
