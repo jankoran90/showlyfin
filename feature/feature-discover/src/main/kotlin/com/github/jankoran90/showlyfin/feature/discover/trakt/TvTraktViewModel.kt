@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.discover.trakt
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,6 +37,7 @@ data class TvTraktUiState(
 @HiltViewModel
 class TvTraktViewModel @Inject constructor(
     private val loader: TraktRowLoader,
+    private val profileRepository: ProfileRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TvTraktUiState())
@@ -59,7 +61,12 @@ class TvTraktViewModel @Inject constructor(
                 // Pořadí: Watchlist (má data, default), Zhlédnuto, Doporučeno, pak userovy seznamy v pořadí z API.
                 (listOf(watchlist.await(), history.await(), recommended.await()) + lists.await()).filterNotNull()
             }
-            _state.update { it.copy(rows = rows, isLoading = false) }
+            // CONVERGE V1 — aplikuj per-profil řazení + skrývání řad (Nastavení → Řady Traktu).
+            val cfg = profileRepository.activeConfig.value
+            val ordered = cfg.orderedTraktRows(rows.map { it.id })
+                .mapNotNull { id -> rows.firstOrNull { it.id == id } }
+                .filter { cfg.isTraktRowVisible(it.id) }
+            _state.update { it.copy(rows = ordered, isLoading = false) }
         }
     }
 

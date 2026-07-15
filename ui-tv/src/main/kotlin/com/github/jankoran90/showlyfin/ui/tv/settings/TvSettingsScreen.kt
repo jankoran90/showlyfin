@@ -428,6 +428,12 @@ fun TvSettingsScreen(
             }
         }
 
+        // ── Řady knihovny (CONVERGE V1: řazení + skrývání knihoven v sekci Knihovna) ──
+        item { TvLibraryRowsSettingsBlock(libraries = libraries) }
+
+        // ── Řady Traktu (CONVERGE V1: řazení + skrývání řad sekce Trakt) ──
+        item { TvTraktRowsSettingsBlock() }
+
         // ── Systém ──
         item {
             TvSettingsBlock(title = "Systém") {

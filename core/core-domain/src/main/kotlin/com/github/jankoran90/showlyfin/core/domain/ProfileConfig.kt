@@ -106,6 +106,14 @@ data class ProfileConfig(
      */
     val lapidary: LapidaryPrefs? = null,
     /**
+     * CONVERGE (SHW-97) V1 — pořadí řad v sekci **Trakt** (klíče `watchlist`/`history`/`recommended` a
+     * dynamické `list_<traktId>`). Prázdné = kanonické (Watchlist, Zhlédnuto, Doporučeno, pak userovy
+     * seznamy z API). Neznámé/nové klíče se doplní na konec (robustní vůči novým seznamům). Vzor [libraryOrder].
+     */
+    val traktRowOrder: List<String> = emptyList(),
+    /** CONVERGE (SHW-97) V1 — skryté Trakt řady (klíče jako [traktRowOrder]). Prázdné = nic skryté. */
+    val hiddenTraktRows: Set<String> = emptySet(),
+    /**
      * Lock-mapa (Plan WARDEN W0): logické klíče ([LockKeys]), které jsou **admin-zamčené** =
      * uživatel je nesmí editovat a do efektivního configu se vždy berou ze **šablony**, ne z
      * uživatelského override. Smysl má jen na **šabloně**; na uživatelském override se ignoruje.
@@ -154,6 +162,20 @@ data class ProfileConfig(
 
     /** WEFT (SHW-75/W5): true = pořad se má profilu ukázat ve Sledovaných. */
     fun isFollowingSourceVisible(sourceKey: String): Boolean = sourceKey !in hiddenFollowingSourceKeys
+
+    /**
+     * CONVERGE V1 — Trakt řady v efektivním pořadí (dynamická sada [available] = co dnes existuje). Neznámé
+     * id z [traktRowOrder] zahodí, chybějící/nové doplní na konec. Mirror [orderedLibraryIds]. Skrývání řeší
+     * [isTraktRowVisible] zvlášť (jako whitelist u knihoven), ne tato metoda.
+     */
+    fun orderedTraktRows(available: List<String>): List<String> {
+        if (traktRowOrder.isEmpty()) return available
+        val known = traktRowOrder.filter { it in available }
+        return known + available.filterNot { it in known }
+    }
+
+    /** CONVERGE V1 — true = Trakt řada (id) se má profilu zobrazit (není ve [hiddenTraktRows]). */
+    fun isTraktRowVisible(id: String): Boolean = id !in hiddenTraktRows
 
     /** true = klíč je touto šablonou zamčený (uživatel needituje, bere se hodnota šablony). */
     fun isLocked(lockKey: String): Boolean = lockedKeys.contains(lockKey)

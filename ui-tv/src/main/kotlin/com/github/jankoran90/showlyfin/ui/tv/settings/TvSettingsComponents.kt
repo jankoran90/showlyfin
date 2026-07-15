@@ -313,6 +313,45 @@ fun TvActionChip(
     )
 }
 
+/**
+ * CONVERGE (SHW-97) V1 — řádek správy řady sekce (Knihovna/Trakt): název + přesun ↑/↓ + Zap/Vyp, vše
+ * D-pad chipy. Sdílený vzor pro bloky „Řady knihovny" a „Řady Traktu" (mirror `SidebarEditorRow` z domova).
+ * Skrytá řada = ztlumený název + `danger` chip „Vyp".
+ */
+@Composable
+fun TvRowReorderRow(
+    label: String,
+    index: Int,
+    count: Int,
+    visible: Boolean,
+    onMove: (up: Boolean) -> Unit,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (visible) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        TvActionChip(label = "↑", enabled = index > 0, onClick = { onMove(true) })
+        TvActionChip(label = "↓", enabled = index < count - 1, onClick = { onMove(false) })
+        TvActionChip(
+            label = if (visible) "Zap" else "Vyp",
+            enabled = true,
+            danger = !visible,
+            onClick = { onToggle(!visible) },
+        )
+    }
+}
+
 @Composable
 private fun RowLabel(label: String, subtitle: String?, modifier: Modifier = Modifier) {
     Column(modifier) {
