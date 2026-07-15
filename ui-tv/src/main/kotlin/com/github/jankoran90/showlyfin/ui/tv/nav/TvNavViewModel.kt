@@ -7,8 +7,12 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.github.jankoran90.showlyfin.ui.tv.TvDestination
 
-/** Hlavní sekce shellu (přepínané sidebarem, mimo drill stack). Hledat = push destinace, ne sekce. */
-enum class TvSection { HOME, DISCOVER, FILMOTEKA, LAPIDARY, TRAKT, LIBRARY, WATCHLIST, SETTINGS }
+/**
+ * Hlavní sekce shellu (přepínané sidebarem, mimo drill stack). Hledat = push destinace, ne sekce.
+ * Pozn.: [WATCHLIST] historicky renderuje **Oblíbené** (`TvWatchlistScreen`/`TvFavoritesViewModel`);
+ * skutečný Trakt watchlist je [WANT_TO_SEE] („Chci vidět", BESPOKE F1). Enum není perzistovaný (default HOME).
+ */
+enum class TvSection { HOME, FOR_YOU, FILMOTEKA, LAPIDARY, TRAKT, LIBRARY, WATCHLIST, WANT_TO_SEE, SETTINGS }
 
 /**
  * TENFOOT (SHW-87) — back stack TV shellu drží ViewModel (ne `remember`), aby PŘEŽIL rekreaci Activity.

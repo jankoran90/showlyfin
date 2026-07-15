@@ -17,10 +17,14 @@ data class SidebarEntry(
 /** Položky, které sidebar může zobrazit. Každá = přepnutí sekce shellu (kromě Hledat = push destinace). */
 enum class SidebarItem(val label: String) {
     DOMU("Domů"),
-    OBJEVOVAT("Objevovat"),
+    // BESPOKE (SHW-95) F1 — sekce „Pro tebe" (kurátor) nahradila Objevovat. Interní název `OBJEVOVAT`
+    // ZÁMĚRNĚ ponechán (uložené sidebar layouty profilů drží položky stringově dle name → přejmenování
+    // by ztratilo pozici/enabled); mění se jen label a cíl (dispatch → TvSection.FOR_YOU).
+    OBJEVOVAT("Pro tebe"),
     FILMOTEKA("Filmotéka"),
     KLENOTY("Vzácné klenoty"),
     TRAKT("Trakt"),
+    CHCI_VIDET("Chci vidět"),
     KNIHOVNA("Knihovna"),
     OBLIBENE("Oblíbené"),
     HLEDAT("Hledat"),
@@ -38,6 +42,7 @@ enum class SidebarItem(val label: String) {
             SidebarEntry(FILMOTEKA.name, enabled = true),
             SidebarEntry(KLENOTY.name, enabled = true),
             SidebarEntry(TRAKT.name, enabled = true),
+            SidebarEntry(CHCI_VIDET.name, enabled = true),
             SidebarEntry(KNIHOVNA.name, enabled = true),
             SidebarEntry(OBLIBENE.name, enabled = false),
             SidebarEntry(HLEDAT.name, enabled = true),

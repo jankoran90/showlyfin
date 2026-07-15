@@ -20,7 +20,8 @@ import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.LocalSavedSourceKeys
 import com.github.jankoran90.showlyfin.ui.tv.components.TvImmersiveBackground
-import com.github.jankoran90.showlyfin.ui.tv.discover.TvDiscoverScreen
+import com.github.jankoran90.showlyfin.ui.tv.foryou.TvForYouScreen
+import com.github.jankoran90.showlyfin.ui.tv.wanttosee.TvWantToSeeScreen
 import com.github.jankoran90.showlyfin.ui.tv.filmoteka.TvFilmotekaScreen
 import com.github.jankoran90.showlyfin.ui.tv.lapidary.TvLapidaryScreen
 import com.github.jankoran90.showlyfin.ui.tv.trakt.TvReauthPromptViewModel
@@ -59,7 +60,8 @@ fun TvShell(
     // COUCH R2: zamčený/dětský profil nevidí sekci Trakt (ani obsah mimo dětský).
     val traktAllowed by homeVm.traktAllowed.collectAsStateWithLifecycle()
     val sidebarItems = sidebarEntries.filter { it.enabled }.mapNotNull { SidebarItem.fromName(it.item) }
-        .filter { it != SidebarItem.TRAKT || traktAllowed }
+        // COUCH R2 / BESPOKE F1: zamčený/dětský profil nevidí Trakt ani „Chci vidět" (obojí = Trakt watchlist).
+        .filter { (it != SidebarItem.TRAKT && it != SidebarItem.CHCI_VIDET) || traktAllowed }
     // LAPIDARY (SHW-96) — klíče titulů s uloženým zdrojem → odznak „hraje hned" na kartách všech sekcí.
     val savedSourceKeys by homeVm.savedSourceKeys.collectAsStateWithLifecycle()
 
@@ -68,7 +70,7 @@ fun TvShell(
 
     // COUCH R2: kdyby se přepnul na dětský profil zatímco je otevřená sekce Trakt → hoď zpět na Domů.
     LaunchedEffect(traktAllowed, section) {
-        if (!traktAllowed && section == TvSection.TRAKT) onSelectSection(TvSection.HOME)
+        if (!traktAllowed && (section == TvSection.TRAKT || section == TvSection.WANT_TO_SEE)) onSelectSection(TvSection.HOME)
     }
 
     // COUCH T5: overlay přepínače profilu (spouští se z profilového tlačítka dole ve sidebaru).
@@ -97,10 +99,11 @@ fun TvShell(
                 onSelect = { item ->
                     when (item) {
                         SidebarItem.DOMU -> onSelectSection(TvSection.HOME)
-                        SidebarItem.OBJEVOVAT -> onSelectSection(TvSection.DISCOVER)
+                        SidebarItem.OBJEVOVAT -> onSelectSection(TvSection.FOR_YOU)
                         SidebarItem.FILMOTEKA -> onSelectSection(TvSection.FILMOTEKA)
                         SidebarItem.KLENOTY -> onSelectSection(TvSection.LAPIDARY)
                         SidebarItem.TRAKT -> onSelectSection(TvSection.TRAKT)
+                        SidebarItem.CHCI_VIDET -> onSelectSection(TvSection.WANT_TO_SEE)
                         SidebarItem.KNIHOVNA -> onSelectSection(TvSection.LIBRARY)
                         SidebarItem.OBLIBENE -> onSelectSection(TvSection.WATCHLIST)
                         SidebarItem.NASTAVENI -> onSelectSection(TvSection.SETTINGS)
@@ -120,9 +123,10 @@ fun TvShell(
                         onFocusItem = { rawInfo = it },
                         homeVm = homeVm,
                     )
-                    TvSection.DISCOVER -> TvDiscoverScreen(
+                    TvSection.FOR_YOU -> TvForYouScreen(
                         onOpenDetail = onOpenDetail,
                         immersive = immersive,
+                        immersiveHeader = immersiveHeader,
                         onFocusItem = { rawInfo = it },
                     )
                     TvSection.FILMOTEKA -> TvFilmotekaScreen(
@@ -157,6 +161,11 @@ fun TvShell(
                         onOpenDetail = onOpenDetail,
                         onBack = { onSelectSection(TvSection.HOME) },
                     )
+                    TvSection.WANT_TO_SEE -> TvWantToSeeScreen(
+                        onOpenDetail = onOpenDetail,
+                        immersive = immersive,
+                        onFocusItem = { rawInfo = it },
+                    )
                     TvSection.SETTINGS -> TvSettingsScreen(onBack = { onSelectSection(TvSection.HOME) })
                 }
             }
@@ -174,11 +183,12 @@ fun TvShell(
 
 private fun TvSection.toSidebarItem(): SidebarItem = when (this) {
     TvSection.HOME -> SidebarItem.DOMU
-    TvSection.DISCOVER -> SidebarItem.OBJEVOVAT
+    TvSection.FOR_YOU -> SidebarItem.OBJEVOVAT
     TvSection.FILMOTEKA -> SidebarItem.FILMOTEKA
     TvSection.LAPIDARY -> SidebarItem.KLENOTY
     TvSection.TRAKT -> SidebarItem.TRAKT
     TvSection.LIBRARY -> SidebarItem.KNIHOVNA
     TvSection.WATCHLIST -> SidebarItem.OBLIBENE
+    TvSection.WANT_TO_SEE -> SidebarItem.CHCI_VIDET
     TvSection.SETTINGS -> SidebarItem.NASTAVENI
 }
