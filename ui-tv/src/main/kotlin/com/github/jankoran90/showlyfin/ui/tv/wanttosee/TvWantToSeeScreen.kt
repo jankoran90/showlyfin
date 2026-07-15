@@ -71,7 +71,7 @@ fun TvWantToSeeScreen(
                 Centered { Text("Načítám…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             state.items.isEmpty() -> Centered {
                 Text(
-                    text = "Zatím tu nic není. Přidávej si filmy do „Chci vidět" v detailu — sejdou se ti tady.",
+                    text = "Zatím tu nic není. Filmy si sem přidáš tlačítkem Chci vidět v detailu.",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 48.dp),
