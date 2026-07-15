@@ -8,6 +8,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -54,9 +57,27 @@ class WorkingSourceStore @Inject constructor(
     private val prefs = context.getSharedPreferences("sieve_working_sources", Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * LAPIDARY (SHW-96) — reaktivní množina klíčů titulů s uloženým zdrojem ("tmdb:<id>" + "imdb:<id>"),
+     * pro odznak „hraje hned" na poster kartách napříč appkou. Aktualizuje se při každé změně lokální paměti
+     * (save/clear/sync). Eventuálně konzistentní: auto-zdroj zapsaný backendem se projeví po nejbližším [syncFromServer].
+     */
+    private val _savedKeys = MutableStateFlow<Set<String>>(emptySet())
+    val savedKeys: StateFlow<Set<String>> = _savedKeys.asStateFlow()
+
     init {
+        refreshSavedKeys()
         // Per-profil sync (SIEVE follow-up) — dotáhni zapamatované zdroje profilu ze serveru při startu.
         scope.launch { syncFromServer() }
+    }
+
+    private fun refreshSavedKeys() {
+        val keys = HashSet<String>()
+        for (r in getAll()) {
+            if (r.tmdb > 0L) keys.add("tmdb:${r.tmdb}")
+            if (r.imdb.isNotBlank()) keys.add("imdb:${r.imdb}")
+        }
+        _savedKeys.value = keys
     }
 
     // ── per-profil server sync (stejný vzor + bezpečnost jako FavoritesStore) ──
@@ -85,6 +106,7 @@ class WorkingSourceStore @Inject constructor(
             if (r.imdb.isNotBlank()) ed.putString(imdbKey(r.imdb), json)
         }
         ed.apply()
+        refreshSavedKeys()
     }
 
     private fun parseServer(raw: String?): List<WorkingSource>? {
@@ -210,6 +232,7 @@ class WorkingSourceStore @Inject constructor(
             if (!imdb.isNullOrBlank()) putString(imdbKey(imdb), json)
         }.commit()
         Timber.i("[SIEVE] uložen zdroj imdb=%s tmdb=%s (%s) commit=%b", imdb, tmdb, stream.name ?: stream.description ?: "?", ok)
+        refreshSavedKeys()
         pushToServer()  // SIEVE follow-up — propíše na profil (sync napříč zařízeními)
     }
 
@@ -218,6 +241,7 @@ class WorkingSourceStore @Inject constructor(
             if (tmdb != null && tmdb > 0L) remove(tmdbKey(tmdb))
             if (!imdb.isNullOrBlank()) remove(imdbKey(imdb))
         }.apply()
+        refreshSavedKeys()
         pushToServer()
     }
 

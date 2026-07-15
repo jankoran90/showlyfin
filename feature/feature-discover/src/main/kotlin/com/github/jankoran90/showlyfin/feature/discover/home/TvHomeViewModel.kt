@@ -90,6 +90,9 @@ class TvHomeViewModel @Inject constructor(
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
+    /** LAPIDARY (SHW-96) — klíče titulů s uloženým zdrojem (odznak „hraje hned" na kartách; poskytnuto shellem). */
+    val savedSourceKeys: StateFlow<Set<String>> = workingSources.savedKeys
+
     /** Řady k vykreslení (jen zapnuté, v uživatelově pořadí). JF knihovny render řeší zvlášť. */
     val rowConfigs: StateFlow<List<HomeRowConfig>> = store.rows
         .map { list -> list.filter { it.enabled } }

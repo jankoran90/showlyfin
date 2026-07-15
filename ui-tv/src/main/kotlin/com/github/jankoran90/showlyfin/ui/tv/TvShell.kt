@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +18,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.home.SidebarItem
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
+import com.github.jankoran90.showlyfin.ui.tv.components.LocalSavedSourceKeys
 import com.github.jankoran90.showlyfin.ui.tv.components.TvImmersiveBackground
 import com.github.jankoran90.showlyfin.ui.tv.discover.TvDiscoverScreen
 import com.github.jankoran90.showlyfin.ui.tv.filmoteka.TvFilmotekaScreen
@@ -54,6 +56,8 @@ fun TvShell(
     val traktAllowed by homeVm.traktAllowed.collectAsStateWithLifecycle()
     val sidebarItems = sidebarEntries.filter { it.enabled }.mapNotNull { SidebarItem.fromName(it.item) }
         .filter { it != SidebarItem.TRAKT || traktAllowed }
+    // LAPIDARY (SHW-96) — klíče titulů s uloženým zdrojem → odznak „hraje hned" na kartách všech sekcí.
+    val savedSourceKeys by homeVm.savedSourceKeys.collectAsStateWithLifecycle()
 
     // Back v ne-Home sekci = zpět na Domů (skládá se jen když je shell aktuální = žádný drill nahoře).
     BackHandler(enabled = section != TvSection.HOME) { onSelectSection(TvSection.HOME) }
@@ -72,6 +76,7 @@ fun TvShell(
     LaunchedEffect(rawInfo) { delay(120); shownInfo = rawInfo }
     LaunchedEffect(section) { rawInfo = null }
 
+    CompositionLocalProvider(LocalSavedSourceKeys provides savedSourceKeys) {
     Box(Modifier.fillMaxSize()) {
         if (immersive) TvImmersiveBackground(shownInfo)
 
@@ -141,6 +146,7 @@ fun TvShell(
         }
 
         if (showProfiles) TvProfileSwitcher(onDismiss = { showProfiles = false })
+    }
     }
 }
 

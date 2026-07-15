@@ -12,7 +12,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Diamond
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -61,6 +66,12 @@ fun TvHomeCard(
     val csfd = rememberCsfdCardRating(item.mediaItem?.imdbId, item.mediaItem?.tmdbId, item.title, item.year)
     // COUCH DA4: globální šířka karet z uživatelské volby (jeden multiplier pro všechny řady).
     val cardScale = LocalTvCardScale.current
+    // LAPIDARY (SHW-96): odznak „hraje hned" (uložený zdroj) — JEN v náhledu (karta), ne v detailu.
+    val savedKeys = LocalSavedSourceKeys.current
+    val hasSavedSource = item.mediaItem?.let { m ->
+        (m.tmdbId?.let { "tmdb:$it" in savedKeys } == true) ||
+            (m.imdbId?.takeIf { it.isNotBlank() }?.let { "imdb:$it" in savedKeys } == true)
+    } == true
     Box(modifier) {
         when (style) {
             HomeCardStyle.LANDSCAPE -> TvLandscapeCard(item, onClick, Modifier.width(cardScale * TV_LANDSCAPE_WIDTH), focusRequester, showLabel, onLongClick)
@@ -81,7 +92,28 @@ fun TvHomeCard(
         // Overlay ČSFD badge jen pro plakátové styly; LIST/FANART_DETAIL mají ČSFD přímo v textu.
         if (style == HomeCardStyle.POSTER || style == HomeCardStyle.COVER || style == HomeCardStyle.LANDSCAPE) {
             csfd?.let { CsfdMiniBadge(it, Modifier.align(Alignment.TopEnd).padding(6.dp)) }
+            // „Hraje hned" — titul má uložený zdroj (WorkingSource) → instant play bez hledání.
+            if (hasSavedSource) SavedSourceBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
         }
+    }
+}
+
+/** LAPIDARY (SHW-96) — malý diamantový odznak „hraje hned" (uložený zdroj) v rohu plakátu. */
+@Composable
+private fun SavedSourceBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.92f))
+            .padding(3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Diamond,
+            contentDescription = "Uložený zdroj — hraje hned",
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(12.dp),
+        )
     }
 }
 
