@@ -140,6 +140,10 @@ class TvHomeViewModel @Inject constructor(
     val immersiveHeader: StateFlow<Boolean> = store.immersiveHeader
     fun setImmersiveHeader(enabled: Boolean) = store.setImmersiveHeader(enabled)
 
+    /** CONVERGE (SHW-97): počet řádků popisu v immersive hlavičce (0 = auto). */
+    val immersiveHeaderLines: StateFlow<Int> = store.immersiveHeaderLines
+    fun setImmersiveHeaderLines(lines: Int) = store.setImmersiveHeaderLines(lines)
+
     // ── Inline editor (Kodi-like) — pass-through na [HomeLayoutStore] ──
     fun moveRow(id: String, up: Boolean) = store.move(id, up)
     fun setRowEnabled(id: String, enabled: Boolean) = store.setEnabled(id, enabled)

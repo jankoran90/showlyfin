@@ -71,6 +71,9 @@ fun TvHomeSidebar(
     onMove: (SidebarItem, up: Boolean) -> Unit = { _, _ -> },
     onOpenProfiles: () -> Unit = {},
     modifier: Modifier = Modifier,
+    // CONVERGE (SHW-97): externí fokus na PRVNÍ položku — když z detailu přijde D-pad doleva, sidebar se
+    // vysune a zaostří (uživatel odsud může do libovolné sekce; doprava fokus vrátí do obsahu).
+    firstItemFocus: FocusRequester? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     // COUCH T6: podržení položky → režim přesunu (D-pad nahoru/dolů posouvá, OK/Zpět potvrdí).
@@ -91,14 +94,18 @@ fun TvHomeSidebar(
             .padding(vertical = 28.dp, horizontal = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        items.forEach { item ->
+        items.forEachIndexed { index, item ->
             key(item) {
                 SidebarRow(
                     item = item,
                     expanded = expanded,
                     active = item == active,
                     reordering = reordering == item,
-                    focusRequester = if (reordering == item) reorderFocus else null,
+                    focusRequester = when {
+                        reordering == item -> reorderFocus
+                        index == 0 -> firstItemFocus
+                        else -> null
+                    },
                     onClick = { if (reordering != null) reordering = null else onSelect(item) },
                     onLongClick = { reordering = item },
                     onMove = { up -> onMove(item, up) },

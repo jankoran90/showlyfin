@@ -22,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,6 +38,7 @@ import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRail
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
+import com.github.jankoran90.showlyfin.ui.tv.components.TvSectionHeader
 import com.github.jankoran90.showlyfin.ui.tv.components.toImmersiveInfo
 import kotlin.math.roundToInt
 
@@ -68,34 +68,40 @@ fun TvForYouScreen(
         isTargetPlaced = { gridState.layoutInfo.visibleItemsInfo.any { it.index == 0 } },
     )
 
-    Column(modifier = modifier.fillMaxSize().tvOverscan()) {
-        Text(
-            text = "Pro tebe",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
-        )
+    // KÁNON (CONVERGE): přepínač Mřížka ↔ Immersive řada jako chipy VEDLE názvu sekce (per-sekce
+    // ViewModeStore.SECTION_FOR_YOU). V LIST modu je hlavička uvnitř TvRailList (sectionActions), v ostatních
+    // stavech ji kreslí TvSectionHeader nad obsahem — pořád jeden název „Pro tebe", žádné odsazení navíc.
+    val chips: @Composable () -> Unit = { ForYouChips(viewMode, viewModel::setViewMode) }
 
-        // Přepínač zobrazení: Mřížka ↔ Immersive řada (per-sekce ViewModeStore.SECTION_FOR_YOU).
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.padding(bottom = 12.dp),
-        ) {
-            FilterChip(
-                selected = viewMode == ViewMode.GRID,
-                onClick = { viewModel.setViewMode(ViewMode.GRID) },
-                label = { Text("Mřížka") },
-                modifier = Modifier.tvFocusable(),
-            )
-            FilterChip(
-                selected = viewMode == ViewMode.LIST,
-                onClick = { viewModel.setViewMode(ViewMode.LIST) },
-                label = { Text("Immersive řada") },
-                modifier = Modifier.tvFocusable(),
+    // LIST + obsah: celou sekci (název „Pro tebe" + chipy + immersive hero + řadu) vykreslí TvRailList sám,
+    // bez vnějšího tvOverscan (ten si TvRailList dělá interně — dvojitý overscan = odsazení, vzor Vzácné klenoty).
+    if (viewMode == ViewMode.LIST && state.items.isNotEmpty()) {
+        val rail = remember(state.items) {
+            TvRail(
+                id = "foryou",
+                title = "", // jednořadová sekce → název řady by jen duplikoval sectionTitle „Pro tebe"
+                style = HomeCardStyle.POSTER,
+                items = state.items.map { it.toForYouRowItem() },
+                configId = "foryou",
+                showTitles = true,
+                immersiveHeader = false,
             )
         }
+        TvRailList(
+            rails = listOf(rail),
+            sectionTitle = "Pro tebe",
+            immersive = immersive,
+            immersiveHeader = immersiveHeader,
+            onFocusItem = onFocusItem,
+            onItemClick = { item -> item.mediaItem?.let(onOpenDetail) },
+            modifier = modifier.fillMaxSize(),
+            sectionActions = { chips() },
+        )
+        return
+    }
 
+    Column(modifier = modifier.fillMaxSize().tvOverscan()) {
+        TvSectionHeader(title = "Pro tebe", actions = { chips() })
         when {
             state.loading && state.items.isEmpty() ->
                 Centered { Text("Načítám…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -106,28 +112,6 @@ fun TvForYouScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 48.dp),
-                )
-            }
-            viewMode == ViewMode.LIST -> {
-                val rail = remember(state.items) {
-                    TvRail(
-                        id = "foryou",
-                        title = "Pro tebe",
-                        style = HomeCardStyle.POSTER,
-                        items = state.items.map { it.toForYouRowItem() },
-                        configId = "foryou",
-                        showTitles = true,
-                        immersiveHeader = false,
-                    )
-                }
-                TvRailList(
-                    rails = listOf(rail),
-                    sectionTitle = "Pro tebe",
-                    immersive = immersive,
-                    immersiveHeader = immersiveHeader,
-                    onFocusItem = onFocusItem,
-                    onItemClick = { item -> item.mediaItem?.let(onOpenDetail) },
-                    modifier = Modifier.weight(1f),
                 )
             }
             else -> LazyVerticalGrid(
@@ -149,6 +133,25 @@ fun TvForYouScreen(
                 }
             }
         }
+    }
+}
+
+/** KÁNON přepínač zobrazení sekce: Mřížka ↔ Immersive řada. Umístěn VEDLE názvu sekce (TvSectionHeader actions). */
+@Composable
+private fun ForYouChips(viewMode: ViewMode, onSelect: (ViewMode) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FilterChip(
+            selected = viewMode == ViewMode.GRID,
+            onClick = { onSelect(ViewMode.GRID) },
+            label = { Text("Mřížka") },
+            modifier = Modifier.tvFocusable(),
+        )
+        FilterChip(
+            selected = viewMode == ViewMode.LIST,
+            onClick = { onSelect(ViewMode.LIST) },
+            label = { Text("Immersive řada") },
+            modifier = Modifier.tvFocusable(),
+        )
     }
 }
 

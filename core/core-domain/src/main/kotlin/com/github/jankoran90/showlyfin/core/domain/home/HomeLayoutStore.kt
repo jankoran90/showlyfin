@@ -54,6 +54,7 @@ class HomeLayoutStore @Inject constructor(
         _sidebar.value = loadSidebar()
         _immersiveBackground.value = prefs.getBoolean(keyFor(KEY_IMMERSIVE), prefs.getBoolean(KEY_IMMERSIVE, true))
         _immersiveHeader.value = prefs.getBoolean(keyFor(KEY_IMMERSIVE_HEADER), prefs.getBoolean(KEY_IMMERSIVE_HEADER, true))
+        _immersiveHeaderLines.value = prefs.getInt(keyFor(KEY_IMMERSIVE_HEADER_LINES), prefs.getInt(KEY_IMMERSIVE_HEADER_LINES, 0))
     }
     private var switched = false
 
@@ -81,6 +82,16 @@ class HomeLayoutStore @Inject constructor(
     fun setImmersiveHeader(enabled: Boolean) {
         _immersiveHeader.value = enabled
         prefs.edit().putBoolean(keyFor(KEY_IMMERSIVE_HEADER), enabled).apply()
+    }
+
+    private val _immersiveHeaderLines = MutableStateFlow(prefs.getInt(KEY_IMMERSIVE_HEADER_LINES, 0))
+    /** CONVERGE (SHW-97): počet řádků popisu v immersive hlavičce. 0 = AUTO (dopočítá se z dostupné výšky,
+     * ať se nic neuřízne pod obsahem ani při jiné velikosti UI/písma); 1..N = pevný počet řádků. */
+    val immersiveHeaderLines: StateFlow<Int> = _immersiveHeaderLines.asStateFlow()
+
+    fun setImmersiveHeaderLines(lines: Int) {
+        _immersiveHeaderLines.value = lines
+        prefs.edit().putInt(keyFor(KEY_IMMERSIVE_HEADER_LINES), lines).apply()
     }
 
     // ── Řady ──────────────────────────────────────────────────────────────────
@@ -243,6 +254,7 @@ class HomeLayoutStore @Inject constructor(
         private const val KEY_SIDEBAR = "sidebar_json"
         private const val KEY_IMMERSIVE = "immersive_bg"
         private const val KEY_IMMERSIVE_HEADER = "immersive_header"
+        private const val KEY_IMMERSIVE_HEADER_LINES = "immersive_header_lines"
         private const val KEY_SEEN_LIBS = "seen_library_ids"
 
         /** Default styl karty pro řadu knihovny dle collectionType. Konzistentní = plakát (žádné

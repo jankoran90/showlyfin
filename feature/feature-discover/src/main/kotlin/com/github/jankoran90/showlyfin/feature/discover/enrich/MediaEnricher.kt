@@ -46,11 +46,16 @@ class MediaEnricher @Inject constructor(
             val trD = async { runCatching { tmdb.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
             val ageD = async { if (withCertification) runCatching { tmdb.fetchShowCertificationAge(tmdbId) }.getOrNull() else null }
             val details = detailsD.await(); val tr = trD.await()
+            val czOverview = firstNonBlank(tr?.overview, details?.overview)
             item.copy(
                 posterPath = details?.poster_path ?: item.posterPath,
                 backdropPath = details?.backdrop_path ?: item.backdropPath,
                 titleCz = firstNonBlank(tr?.name, details?.name) ?: item.titleCz,
-                overviewCz = firstNonBlank(tr?.overview, details?.overview) ?: item.overviewCz,
+                overviewCz = czOverview ?: item.overviewCz,
+                // CONVERGE (SHW-97): EN fallback popisu, aby immersive header (fallbackuje na `overview`) nebyl
+                // prázdný u titulů bez CZ popisu (Local Hero, Kikudžiro…) — parita s kartou. Extra TMDB fetch
+                // JEN když CZ i stávající popis chybí.
+                overview = firstNonBlank(item.overview, enOverviewIfMissing(czOverview, item.overview, tmdbId, MediaType.SHOW)) ?: item.overview,
                 genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
                 certificationAge = ageD.await() ?: item.certificationAge,
                 originCountries = countriesOfShow(details) ?: item.originCountries,
@@ -61,11 +66,14 @@ class MediaEnricher @Inject constructor(
             val trD = async { runCatching { tmdb.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
             val ageD = async { if (withCertification) runCatching { tmdb.fetchMovieCertificationAge(tmdbId) }.getOrNull() else null }
             val details = detailsD.await(); val tr = trD.await()
+            val czOverview = firstNonBlank(tr?.overview, details?.overview)
             item.copy(
                 posterPath = details?.poster_path ?: item.posterPath,
                 backdropPath = details?.backdrop_path ?: item.backdropPath,
                 titleCz = firstNonBlank(tr?.title, details?.title) ?: item.titleCz,
-                overviewCz = firstNonBlank(tr?.overview, details?.overview) ?: item.overviewCz,
+                overviewCz = czOverview ?: item.overviewCz,
+                // CONVERGE (SHW-97): EN fallback popisu — viz SHOW větev. Parita immersive headeru s kartou.
+                overview = firstNonBlank(item.overview, enOverviewIfMissing(czOverview, item.overview, tmdbId, MediaType.MOVIE)) ?: item.overview,
                 genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
                 certificationAge = ageD.await() ?: item.certificationAge,
                 originCountries = countriesOfMovie(details) ?: item.originCountries,
@@ -76,6 +84,19 @@ class MediaEnricher @Inject constructor(
 
     private fun firstNonBlank(vararg values: String?): String? =
         values.firstOrNull { !it.isNullOrBlank() }
+
+    /**
+     * CONVERGE (SHW-97) — EN popis jako fallback JEN pro tituly bez českého i stávajícího popisu (niche/starší
+     * filmy, kde TMDB `cs-CZ` vrací prázdný overview). Vrací null, když popis už je → žádný zbytečný fetch
+     * navíc pro drtivou většinu (populárních) titulů. Cache dekorátor drží opakované dotazy levné.
+     */
+    private suspend fun enOverviewIfMissing(czOverview: String?, existing: String?, tmdbId: Long, type: MediaType): String? {
+        if (!czOverview.isNullOrBlank() || !existing.isNullOrBlank()) return null
+        return runCatching {
+            if (type == MediaType.SHOW) tmdb.fetchShowDetails(tmdbId, EN)?.overview
+            else tmdb.fetchMovieDetails(tmdbId, EN)?.overview
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
 
     /** CINEMATHEQUE (SHW-90) F2 — země SHOW: `origin_country` ∪ `production_countries.iso_3166_1`. */
     private fun countriesOfShow(details: TmdbShowDetails?): List<String>? {
@@ -99,5 +120,6 @@ class MediaEnricher @Inject constructor(
 
     private companion object {
         const val LANG = "cs-CZ"
+        const val EN = "en-US"
     }
 }

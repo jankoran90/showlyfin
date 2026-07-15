@@ -98,6 +98,9 @@ fun TvRailList(
     onRequestEditor: ((configId: String) -> Unit)? = null,
     // COUCH Fáze B: drill do plné mřížky řady (dlaždice „Zobrazit vše" na konci `showAll` řad). `configId` = identita řady.
     onShowAll: ((configId: String) -> Unit)? = null,
+    // CONVERGE (SHW-97) KÁNON: chipy/přepínač sekce (Mřížka↔Immersive řada, osa Filmotéky…) VEDLE názvu sekce
+    // v jedné řadě (viz [TvSectionHeader]) — ne ve vlastním Row nad TvRailList (to tlačilo obsah dolů).
+    sectionActions: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
     // A2 fix: fokus vázán na STABILNÍ identitu řady (`configId`/`id`), ne na index do proměnlivého `rails`.
@@ -144,14 +147,9 @@ fun TvRailList(
 
     val defaultBiv = LocalBringIntoViewSpec.current
     Column(modifier.fillMaxSize().tvOverscan()) {
-        // Titulek sekce NAHOŘE VLEVO — konzistentní napříč sekcemi (Domů/Objevovat/Hledat/Nastavení). VŽDY.
-        Text(
-            text = sectionTitle,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
-        )
+        // Titulek sekce NAHOŘE VLEVO + volitelné chipy VEDLE něj (KÁNON `TvSectionHeader`) — konzistentní
+        // napříč sekcemi (Domů/Pro tebe/Filmotéka/Vzácné klenoty/Trakt/Knihovna). VŽDY jen tady, nikde jinde.
+        TvSectionHeader(title = sectionTitle, actions = sectionActions)
         // Immersive hero = info PRÁVĚ fokusované karty (název/rok/žánr/popis). Master toggle `immersiveHeader`;
         // STABILNÍ výška (bez per-řada gate → žádné prázdné zóny ani přeblikávání). OFF → rovnou řady.
         // Immersive POZADÍ (fanart) je full-screen za vším v TvShell. Text se mění recompose (bez fade blikání).
@@ -229,13 +227,17 @@ private fun RailSection(
             .focusGroup()
             .focusProperties { enter = { enterFocus } },
     ) {
-        Text(
-            text = rail.title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
-        )
+        // Prázdný title = jednořadová sekce, kde by název řady jen duplikoval sectionTitle (např. „Pro tebe").
+        // KÁNON: takovou řadu nekresli s nadpisem — sectionTitle nahoře stačí.
+        if (rail.title.isNotBlank()) {
+            Text(
+                text = rail.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+            )
+        }
         // Uvnitř řady obnov DEFAULT BringIntoViewSpec (parent list má ScrollToTop) → vodorovný scroll LazyRow
         // funguje normálně a nepropaguje svislé cukání do LazyColumn.
         CompositionLocalProvider(LocalBringIntoViewSpec provides rowBringIntoViewSpec) {

@@ -1,11 +1,14 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
 import androidx.lifecycle.ViewModel
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.CzechOverviewProvider
+import com.github.jankoran90.showlyfin.core.ui.DirectorProvider
 import com.github.jankoran90.showlyfin.core.ui.looksCzech
 import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -21,10 +24,34 @@ import javax.inject.Inject
 class CardCsfdViewModel @Inject constructor(
     private val csfd: CsfdRepository,
     private val tmdb: TmdbRemoteDataSource,
-) : ViewModel(), CsfdRatingProvider, CzechOverviewProvider {
+) : ViewModel(), CsfdRatingProvider, CzechOverviewProvider, DirectorProvider {
 
     override suspend fun rating(imdbId: String?, tmdbId: Long?, title: String, year: Int?): Int? =
         csfd.getRating(imdbId.orEmpty(), tmdbId, title, year ?: 0)
+
+    /**
+     * TENFOOT: líné jméno režiséra pro immersive header (jen pro fokusovaný titul). Stejný zdroj
+     * a pravidlo rozpoznání jako detail filmu (`DetailViewModel.loadCast`): TMDB credits → z CREW
+     * ber jen přesný job Director/Co-Director. Vrať max 2 (joinnuto ", "); null když nic / bez id.
+     */
+    override suspend fun director(
+        imdbId: String?, tmdbId: Long?, type: MediaType, title: String, year: Int?,
+    ): String? {
+        val id = tmdbId ?: return null
+        val people = runCatching {
+            if (type == MediaType.MOVIE) tmdb.fetchMoviePeople(id) else tmdb.fetchShowPeople(id)
+        }.getOrNull() ?: return null
+        val crew = people[TmdbPerson.Type.CREW].orEmpty()
+        fun isDirector(p: TmdbPerson): Boolean {
+            val jobs = listOfNotNull(p.job) + p.jobs?.mapNotNull { it.job }.orEmpty()
+            return jobs.any { it.equals("Director", true) || it.equals("Co-Director", true) }
+        }
+        val names = crew.filter { it.id > 0 && isDirector(it) }
+            .distinctBy { it.id }
+            .mapNotNull { it.name?.takeIf { n -> n.isNotBlank() } }
+            .take(2)
+        return names.takeIf { it.isNotEmpty() }?.joinToString(", ")
+    }
 
     override suspend fun overview(
         imdbId: String?, tmdbId: Long?, title: String, titleCz: String?, year: Int?, fallback: String?,

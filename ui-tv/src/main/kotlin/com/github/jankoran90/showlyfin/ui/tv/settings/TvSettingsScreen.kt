@@ -85,6 +85,7 @@ fun TvSettingsScreen(
     val sidebar by homeVm.sidebar.collectAsStateWithLifecycle()
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
     val immersiveHeader by homeVm.immersiveHeader.collectAsStateWithLifecycle()
+    val immersiveHeaderLines by homeVm.immersiveHeaderLines.collectAsStateWithLifecycle()
     val allRows by homeVm.allRows.collectAsStateWithLifecycle()
     val libraryState by libraryVm.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -153,6 +154,16 @@ fun TvSettingsScreen(
                     subtitle = "Hlavní vypínač. Zapni pro jednotlivé řady v jejich editoru (podržení OK)",
                     checked = immersiveHeader,
                     onCheckedChange = homeVm::setImmersiveHeader,
+                )
+                // CONVERGE (SHW-97): počet řádků popisu v immersive hlavičce — Auto (dopočet dle výšky/písma,
+                // ať se nic neuřízne pod řadami) nebo pevně 1..6.
+                TvOptionStepperRow(
+                    label = "Řádků popisu v hlavičce",
+                    subtitle = "Auto = přizpůsobí se výšce a velikosti písma",
+                    options = listOf(0, 1, 2, 3, 4, 5, 6),
+                    selected = immersiveHeaderLines,
+                    labelOf = { if (it == 0) "Auto" else it.toString() },
+                    onSelect = homeVm::setImmersiveHeaderLines,
                 )
                 TvOptionStepperRow(
                     label = "Pozadí",

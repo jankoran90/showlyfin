@@ -27,6 +27,7 @@ import com.github.jankoran90.showlyfin.feature.discover.filmoteka.TvFilmotekaVie
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRail
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
+import com.github.jankoran90.showlyfin.ui.tv.components.TvSectionHeader
 
 /**
  * CINEMATHEQUE (SHW-90) — sekce „Filmotéka": nahoře přepínač osy (Žánr | Země), pod ním immersive řady
@@ -45,37 +46,41 @@ fun TvFilmotekaScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    Column(modifier.fillMaxSize()) {
-        AxisChips(
-            axis = state.axis,
-            onSelect = viewModel::setAxis,
-            modifier = Modifier.tvOverscan(vertical = 10.dp),
+    // KÁNON (CONVERGE): osa Filmotéky (Vše | Žánr | Země) jako chipy VEDLE názvu sekce — ne ve vlastním Row
+    // nad TvRailList (to tlačilo obsah dolů a osa byla vizuálně odtržená od titulku). V řadovém stavu je
+    // hlavička uvnitř TvRailList (sectionActions), v prázdném/loading nad obsahem přes TvSectionHeader.
+    val chips: @Composable () -> Unit = { AxisChips(axis = state.axis, onSelect = viewModel::setAxis) }
+
+    if (state.rails.isNotEmpty()) {
+        val rails = remember(state.rails) { state.rails.map { it.toTvRail() } }
+        TvRailList(
+            rails = rails,
+            sectionTitle = "Filmotéka",
+            immersive = immersive,
+            immersiveHeader = immersiveHeader,
+            onFocusItem = onFocusItem,
+            onItemClick = { item ->
+                val media = item.mediaItem
+                if (media != null) onOpenDetail(media)
+                else item.jellyfinId?.let(onOpenJellyfinDetail)
+            },
+            modifier = modifier.fillMaxSize(),
+            sectionActions = { chips() },
         )
-        when {
-            state.loading && state.rails.isEmpty() ->
-                Centered { Text("Načítám…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            state.rails.isEmpty() -> Centered {
+        return
+    }
+
+    Column(modifier.fillMaxSize().tvOverscan()) {
+        TvSectionHeader(title = "Filmotéka", actions = { chips() })
+        if (state.loading) {
+            Centered { Text("Načítám…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else {
+            Centered {
                 Text(
                     text = "Zatím nic — zapni zdroje v Nastavení → Filmotéka, nebo přidej tituly do knihovny.",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 48.dp),
-                )
-            }
-            else -> {
-                val rails = remember(state.rails) { state.rails.map { it.toTvRail() } }
-                TvRailList(
-                    rails = rails,
-                    sectionTitle = "Filmotéka",
-                    immersive = immersive,
-                    immersiveHeader = immersiveHeader,
-                    onFocusItem = onFocusItem,
-                    onItemClick = { item ->
-                        val media = item.mediaItem
-                        if (media != null) onOpenDetail(media)
-                        else item.jellyfinId?.let(onOpenJellyfinDetail)
-                    },
-                    modifier = Modifier.weight(1f),
                 )
             }
         }

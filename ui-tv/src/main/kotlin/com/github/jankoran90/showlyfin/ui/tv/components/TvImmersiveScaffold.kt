@@ -16,10 +16,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -27,8 +30,10 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.rememberCsfdCardRating
 import com.github.jankoran90.showlyfin.core.ui.rememberCzechOverview
+import com.github.jankoran90.showlyfin.core.ui.rememberDirector
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 
 /**
@@ -52,6 +57,8 @@ data class ImmersiveInfo(
     val tmdbId: Long?,
     val rawTitle: String,
     val titleCz: String?,
+    /** Typ pro líný TMDB credits lookup režiséra (movie vs. tv/aggregate_credits). */
+    val type: MediaType,
 )
 
 /** Full-screen fanart + čitelnostní scrim (vlevo tmavý → doprava průhledný, dole tmavý). Crossfade při změně. */
@@ -101,6 +108,13 @@ fun TvImmersiveBackground(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * CONVERGE (SHW-97) — počet řádků popisu v immersive hlavičce. 0 = AUTO (dopočítá se z výšky hero pásu
+ * a řádkování písma, ať se popis neuřízne pod obsah ani při jiné velikosti UI/písma); 1..N = pevný počet.
+ * Provided v [com.github.jankoran90.showlyfin.ui.tv.TvShell] z `HomeLayoutStore.immersiveHeaderLines`.
+ */
+val LocalImmersiveHeaderLines = staticCompositionLocalOf { 0 }
+
 /** Metadata header (Netflix hero) — vlevo nahoře nad řadami. Prázdné [info] → nic. */
 @Composable
 fun TvImmersiveHeader(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
@@ -111,12 +125,18 @@ fun TvImmersiveHeader(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
     val czOverview = rememberCzechOverview(
         info.imdbId, info.tmdbId, info.rawTitle, info.titleCz, info.year, info.overview,
     )
-    // Resume řady mají hotový meta řádek (S×E · epizoda); jinak poskládej rok · žánr · ČSFD % (fallback ★).
+    // TENFOOT: režisér líně ze STEJNÉHO zdroje co karty (jen pro fokusovaný titul; NE u resume epizod).
+    val director = rememberDirector(info.imdbId, info.tmdbId, info.type, info.rawTitle, info.year)
+    // Resume řady mají hotový meta řádek (S×E · epizoda); jinak poskládej rok · žánr · Režie X · ČSFD % (fallback ★).
     val meta = info.subtitleMeta?.takeIf { it.isNotBlank() } ?: listOfNotNull(
         info.year?.toString(),
         info.genre,
+        director?.takeIf { it.isNotBlank() }?.let { "Režie $it" },
         csfd?.let { "ČSFD $it%" } ?: info.tmdbRating?.takeIf { it > 0f }?.let { "★ %.1f".format(it) },
     ).joinToString(" · ").takeIf { it.isNotBlank() }
+    // CONVERGE (SHW-97): počet řádků popisu — ruční (>0) nebo AUTO (dopočet z hero pásu + řádkování písma).
+    val headerLines = LocalImmersiveHeaderLines.current
+    val descLines = if (headerLines > 0) headerLines else autoDescLines()
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -143,12 +163,29 @@ fun TvImmersiveHeader(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
                 text = it,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.82f),
-                maxLines = 3,
+                maxLines = descLines,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.widthIn(max = 760.dp).padding(top = 2.dp),
             )
         }
     }
+}
+
+/**
+ * AUTO počet řádků popisu: z výšky hero pásu (0.32f obrazovky, viz `TvRailList`) mínus název+meta, děleno
+ * řádkováním popisu. `fontSize.toDp()` respektuje škálu písma/UI → větší písmo = méně řádků, takže se popis
+ * neuřízne pod řady karet. Strop 1..8. Vzor sdílený všemi immersive sekcemi (nic overlapped/cropped).
+ */
+@Composable
+private fun autoDescLines(): Int {
+    val heroDp = (LocalConfiguration.current.screenHeightDp * 0.32f).dp
+    val density = LocalDensity.current
+    val typo = MaterialTheme.typography
+    fun lineDp(size: androidx.compose.ui.unit.TextUnit) = (with(density) { size.toDp() }) * 1.4f
+    val descLh = lineDp(typo.bodyMedium.fontSize)
+    val titleBlock = lineDp(typo.headlineLarge.fontSize) + lineDp(typo.titleSmall.fontSize) + 14.dp
+    val avail = (heroDp - titleBlock).coerceAtLeast(descLh)
+    return if (descLh > 0.dp) (avail / descLh).toInt().coerceIn(1, 8) else 3
 }
 
 /** Sestav [ImmersiveInfo] z položky řady domova (Trakt/TMDB [MediaItem] preferováno, jinak Jellyfin data). */
@@ -170,6 +207,7 @@ fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
         tmdbId = mi?.tmdbId,
         rawTitle = mi?.title ?: title,
         titleCz = mi?.titleCz,
+        type = mi?.type ?: MediaType.MOVIE,
     )
 }
 
@@ -186,4 +224,5 @@ fun MediaItem.toImmersiveInfo(): ImmersiveInfo = ImmersiveInfo(
     tmdbId = tmdbId,
     rawTitle = title,
     titleCz = titleCz,
+    type = type,
 )

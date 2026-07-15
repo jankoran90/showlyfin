@@ -68,8 +68,9 @@ internal fun TvDetailActions(
     viewModel: DetailViewModel,
     onPlayJellyfin: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
-    // CONVERGE V1 — D-pad doleva od nejlevější akce (primární CTA) → skok do Nastavení (drill; BACK vrátí
-    // na tutéž kartu). null = feature vypnutá (telefon / route bez shellu).
+    // CONVERGE (SHW-97) — D-pad doleva od nejlevější akce (primární CTA) → vysune navigační sidebar (výběr
+    // sekce/Nastavení). null = feature vypnutá (telefon / route bez shellu). Název historický (callback řeší
+    // navigátor).
     onOpenSettings: (() -> Unit)? = null,
 ) {
     val inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null

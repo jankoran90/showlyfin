@@ -2,6 +2,10 @@ package com.github.jankoran90.showlyfin.ui.tv.nav
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
@@ -31,6 +35,12 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
 
     fun navigate(dest: TvDestination) = navVm.navigate(dest)
     fun back() = navVm.back()
+
+    // CONVERGE (SHW-97): D-pad doleva z detailu → zavři detail (back) a signalizuj shellu, ať vysune a zaostří
+    // sidebar (uživatel odsud může do libovolné sekce i Nastavení; doprava fokus vrátí do obsahu). Nahrazuje
+    // dřívější přímý skok do Nastavení (překvapivé — bral volbu sekce).
+    var focusSidebar by remember { mutableStateOf(false) }
+    fun openSidebarFromDetail() { focusSidebar = true; back() }
 
     // TENFOOT KOLO2 (N5): proklik karty v sekci detailu (kolekce / od režiséra / studia / tvorba osoby).
     // Sdílené immersive Detailem i sjednoceným Jellyfin routem. tmdbId → nativní immersive detail (stub);
@@ -72,6 +82,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             onOpenLibrary = { id, name, collectionType ->
                 navigate(TvDestination.LibraryItems(id, name, collectionType))
             },
+            focusSidebar = focusSidebar,
+            onSidebarFocusConsumed = { focusSidebar = false },
         )
 
         TvDestination.Search -> TvSearchScreen(
@@ -126,7 +138,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             },
             onOpenEpisodes = { seriesId, name -> navigate(TvDestination.EpisodePicker(seriesId, name)) },
             onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
-            onOpenSettings = { navigate(TvDestination.Settings) },
+            // CONVERGE (SHW-97): doleva z detailu → vysuň sidebar (ne přímý skok do Nastavení).
+            onOpenSettings = { openSidebarFromDetail() },
         )
 
         is TvDestination.EpisodePicker -> EpisodePickerScreen(
@@ -139,8 +152,9 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         is TvDestination.Detail -> DetailScreen(
             item = dest.item,
             onBack = { back() },
-            // CONVERGE V1 — D-pad doleva od nejlevější akce v detailu → Nastavení jako drill; BACK vrátí na kartu.
-            onOpenSettings = { navigate(TvDestination.Settings) },
+            // CONVERGE (SHW-97) — D-pad doleva od nejlevější akce v detailu → vysuň sidebar (výběr sekce/
+            // Nastavení), místo dřívějšího přímého skoku do Nastavení.
+            onOpenSettings = { openSidebarFromDetail() },
             // LAPIDARY S4b: one-click z řady „Uloženo k přehrání" → přehrát zapamatovaný zdroj rovnou.
             autoplayRemembered = dest.autoplay,
             // TENFOOT KOLO2 (N5): karty v sekcích detailu → tmdbId má přednost (nativní immersive detail),
