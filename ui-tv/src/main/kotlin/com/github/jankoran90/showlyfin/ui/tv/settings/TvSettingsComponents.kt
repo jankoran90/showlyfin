@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.ui.tv.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,12 +17,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,21 +43,45 @@ import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
  * user feedback 2026-07-12). Barvy/tvary z motivu (design guard). Sdílené s domovem přes `tvFocusBorder`.
  */
 
-/** Blok Nastavení: nadpis + svislý seznam řádků. */
+/**
+ * Blok Nastavení: **kolapsibilní** nadpis (D-pad-fokusovatelný, OK rozbalí/sbalí) + svislý seznam řádků.
+ * CONVERGE V1 — dřív bylo VŠE rozbalené (dlouhý ovál), user chtěl jako telefonní appky: čistý přehled
+ * kategorií, obsah až po rozbalení. Default sbaleno; stav se pamatuje po dobu session ([rememberSaveable]).
+ */
 @Composable
 fun TvSettingsBlock(
     title: String,
     modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    var expanded by rememberSaveable(title) { mutableStateOf(initiallyExpanded) }
     Column(modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-        )
-        content()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .tvFocusBorder(shape = MaterialTheme.shapes.medium)
+                .clip(MaterialTheme.shapes.medium)
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Sbalit" else "Rozbalit",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(Modifier.padding(top = 4.dp)) { content() }
+        }
     }
 }
 
