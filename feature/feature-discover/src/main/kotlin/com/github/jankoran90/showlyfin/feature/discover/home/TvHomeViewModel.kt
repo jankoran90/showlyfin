@@ -83,6 +83,7 @@ class TvHomeViewModel @Inject constructor(
     private val parentalControls: ParentalControlsRepository,
     private val favorites: FavoritesStore,
     private val workingSources: WorkingSourceStore,
+    private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val profileRepository: ProfileRepository,
     private val apiClient: ApiClient,
     private val clientInfo: ClientInfo,
@@ -172,6 +173,21 @@ class TvHomeViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+
+        // COUCH: watchlist se změnil v detailu (přidání/odebrání „Chci vidět") → přenačti Trakt řady, aby se
+        // čerstvý titul objevil i v DOMOVSKÉ řadě (ne jen v sekci Trakt). `drop(1)` = ignoruj iniciální hodnotu.
+        traktSyncSignal.version
+            .drop(1)
+            .onEach { invalidateTraktRows() }
+            .launchIn(viewModelScope)
+    }
+
+    /** Přenačti Trakt řady (watchlist/historie/seznamy/reco) — jejich data závisí na Trakt sync stavu. */
+    private fun invalidateTraktRows() {
+        ownedIdsCache = null // „skryj co mám" filtr (owned ∋ watchlist) zastaral
+        val traktConfigs = rowConfigs.value.filter { it.source in TRAKT_SOURCES }
+        traktConfigs.forEach { loadedHash.remove(it.id) }
+        traktConfigs.forEach { ensureRowLoaded(it) }
     }
 
     /** Zahoď cache řad a přenačti všechny aktuálně zapnuté (po přepnutí profilu / vynuceně). */

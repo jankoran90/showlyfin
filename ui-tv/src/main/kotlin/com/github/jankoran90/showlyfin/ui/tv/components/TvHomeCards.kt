@@ -17,8 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -147,7 +147,10 @@ fun TvShowAllCard(
     }
 }
 
-/** LAPIDARY (SHW-96) — malý diamantový odznak „hraje hned" (uložený zdroj) v rohu plakátu. */
+/**
+ * LAPIDARY (SHW-96) — malý odznak „hraje hned" (uložený zdroj) v rohu plakátu. Ikona `PlayCircle`
+ * (instant play), NE Diamond — ten patří sekci Vzácné klenoty (kolize/matoucí, user 2026-07-15).
+ */
 @Composable
 private fun SavedSourceBadge(modifier: Modifier = Modifier) {
     Box(
@@ -158,7 +161,7 @@ private fun SavedSourceBadge(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = Icons.Filled.Diamond,
+            imageVector = Icons.Filled.PlayCircle,
             contentDescription = "Uložený zdroj — hraje hned",
             tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(12.dp),

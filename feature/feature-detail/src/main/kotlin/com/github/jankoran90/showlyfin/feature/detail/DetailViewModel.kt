@@ -63,6 +63,7 @@ class DetailViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val naTv: NaTvService,
     private val workingSourceStore: com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore,
+    private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val favoritesStore: com.github.jankoran90.showlyfin.data.uploader.FavoritesStore,
     // DINGO — per-zařízení preset přehrávání (preferuj H.264 pro slabé HEVC dekodéry v autě). Re-rank seznamu zdrojů.
     private val streamPresetStore: com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore,
@@ -765,6 +766,8 @@ class DetailViewModel @Inject constructor(
                     item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
                 )
             }
+            // COUCH: watchlist se změnil → domov přenačte Trakt řady (jinak čerstvý titul naskočí jen v sekci Trakt).
+            if (ok) traktSyncSignal.bump()
         }
     }
 
