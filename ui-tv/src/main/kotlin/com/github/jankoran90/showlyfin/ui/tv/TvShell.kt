@@ -20,6 +20,7 @@ import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvImmersiveBackground
 import com.github.jankoran90.showlyfin.ui.tv.discover.TvDiscoverScreen
 import com.github.jankoran90.showlyfin.ui.tv.filmoteka.TvFilmotekaScreen
+import com.github.jankoran90.showlyfin.ui.tv.lapidary.TvLapidaryScreen
 import com.github.jankoran90.showlyfin.ui.tv.trakt.TvTraktScreen
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeSidebar
@@ -85,6 +86,7 @@ fun TvShell(
                         SidebarItem.DOMU -> onSelectSection(TvSection.HOME)
                         SidebarItem.OBJEVOVAT -> onSelectSection(TvSection.DISCOVER)
                         SidebarItem.FILMOTEKA -> onSelectSection(TvSection.FILMOTEKA)
+                        SidebarItem.KLENOTY -> onSelectSection(TvSection.LAPIDARY)
                         SidebarItem.TRAKT -> onSelectSection(TvSection.TRAKT)
                         SidebarItem.KNIHOVNA -> onSelectSection(TvSection.LIBRARY)
                         SidebarItem.OBLIBENE -> onSelectSection(TvSection.WATCHLIST)
@@ -116,6 +118,13 @@ fun TvShell(
                         immersiveHeader = immersiveHeader,
                         onFocusItem = { rawInfo = it },
                     )
+                    TvSection.LAPIDARY -> TvLapidaryScreen(
+                        onOpenDetail = onOpenDetail,
+                        onOpenJellyfinDetail = onOpenJellyfinDetail,
+                        immersive = immersive,
+                        immersiveHeader = immersiveHeader,
+                        onFocusItem = { rawInfo = it },
+                    )
                     TvSection.TRAKT -> TvTraktScreen(
                         onOpenDetail = onOpenDetail,
                         immersive = immersive,
@@ -139,6 +148,7 @@ private fun TvSection.toSidebarItem(): SidebarItem = when (this) {
     TvSection.HOME -> SidebarItem.DOMU
     TvSection.DISCOVER -> SidebarItem.OBJEVOVAT
     TvSection.FILMOTEKA -> SidebarItem.FILMOTEKA
+    TvSection.LAPIDARY -> SidebarItem.KLENOTY
     TvSection.TRAKT -> SidebarItem.TRAKT
     TvSection.LIBRARY -> SidebarItem.KNIHOVNA
     TvSection.WATCHLIST -> SidebarItem.OBLIBENE

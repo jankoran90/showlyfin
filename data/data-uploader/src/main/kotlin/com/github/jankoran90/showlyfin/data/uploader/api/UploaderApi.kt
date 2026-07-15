@@ -233,11 +233,12 @@ internal class UploaderApi(
         runCatching { service.gemsCacheOne("$base/gems/cache-one?$q", cookie, body) }
     }
 
-    override suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, sort: String?): String? {
+    override suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, status: String, sort: String?): String? {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
         val q = buildList {
             add("country=${enc(country)}")
+            if (status.isNotBlank()) add("status=${enc(status)}")
             if (!sort.isNullOrBlank()) add("sort=${enc(sort)}")
         }.joinToString("&")
         val resp = service.gemsCatalog("$base/gems/catalog?$q", cookie)

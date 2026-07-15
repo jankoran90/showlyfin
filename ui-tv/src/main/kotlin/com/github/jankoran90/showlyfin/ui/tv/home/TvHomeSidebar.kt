@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.Favorite
@@ -206,6 +207,7 @@ private fun SidebarItem.icon(): ImageVector = when (this) {
     SidebarItem.DOMU -> Icons.Filled.Home
     SidebarItem.OBJEVOVAT -> Icons.Filled.Explore
     SidebarItem.FILMOTEKA -> Icons.Filled.Movie
+    SidebarItem.KLENOTY -> Icons.Filled.Diamond
     SidebarItem.TRAKT -> Icons.Filled.Recommend
     SidebarItem.KNIHOVNA -> Icons.Filled.VideoLibrary
     SidebarItem.OBLIBENE -> Icons.Filled.Favorite
