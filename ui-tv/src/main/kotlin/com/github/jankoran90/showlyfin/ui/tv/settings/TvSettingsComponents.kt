@@ -230,8 +230,12 @@ private fun StepperButton(
 }
 
 /**
- * TENFOOT F3 — účet Trakt na TV přes device-code (bez prohlížeče). Zobrazí velký kód + adresu k zadání na
- * jiném zařízení, tlačítko přihlásit/odhlásit je D-pad-fokusovatelné. Stav řídí sdílený [SettingsViewModel].
+ * TENFOOT F3 / CONVERGE (handoff t0 2026-07-15) — účet Trakt na TV. **Device-code login je Traktem ROZBITÝ**
+ * (Trakt překlopil OAuth na PKCE stack, aktivační stránka kódy neschválí + `app.trakt.tv/activate`=404) a TV
+ * nemá prohlížeč pro redirect login → na TV se přihlásit NELZE. Proto se přihlášení dělá na telefonu (Nastavení
+ * → Účty, tlačítko „Přihlásit přes Trakt" otevře prohlížeč) a **token se do TV sám převezme** z backendu
+ * (`ProfileRepository.syncConfigFromBackend`, adopce prázdného lokálu). Tady tedy jen stav + odhlášení + návod.
+ * `userCode`/`verificationUrl`/`onLogin` zůstávají v signatuře pro případ, že Trakt device-flow zas zprovozní.
  */
 @Composable
 fun TvTraktAccountRow(
@@ -253,28 +257,18 @@ fun TvTraktAccountRow(
                 subtitle = if (loggedIn) "Přihlášeno" else "Sledování historie a oblíbených",
                 modifier = Modifier.weight(1f),
             )
-            TvActionChip(
-                label = when {
-                    loggedIn -> "Odhlásit"
-                    userCode == null -> "Přihlásit"
-                    else -> "Čekám…"
-                },
-                enabled = loggedIn || userCode == null,
-                danger = loggedIn,
-                onClick = if (loggedIn) onLogout else onLogin,
-            )
+            if (loggedIn) {
+                TvActionChip(label = "Odhlásit", enabled = true, danger = true, onClick = onLogout)
+            }
         }
-        if (!loggedIn && userCode != null) {
+        if (!loggedIn) {
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "Otevři ${verificationUrl ?: "trakt.tv/activate"} na telefonu a zadej kód:",
+                text = "Přihlášení k Traktu přes TV je dočasně nedostupné (Trakt změnil způsob aktivace). " +
+                    "Přihlas se v mobilní appce Showlyfin (Nastavení → Účty) na tomtéž profilu — token se sem " +
+                    "pak sám převezme.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = userCode,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary,
             )
         }
         if (status != null) {

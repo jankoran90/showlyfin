@@ -39,6 +39,8 @@ class ViewModeStore @Inject constructor(
 
         // Klíče sekcí (per sekce ukládáme zvlášť).
         const val SECTION_DISCOVER = "discover"
+        // BESPOKE (SHW-95) F1 — sekce „Pro tebe" (mřížka ↔ immersive řada).
+        const val SECTION_FOR_YOU = "for_you"
         const val SECTION_WATCHLIST = "watchlist"
         const val SECTION_HISTORY = "history"
         const val SECTION_RD = "rd"

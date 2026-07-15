@@ -451,7 +451,12 @@ class ProfileRepository @Inject constructor(
             // lokální `trakt` a přebírej z remote jen ostatní creds/nastavení.
             val localTrakt = ProfileConfig.fromJson(current.configJson).credentials.trakt
             val remoteCfg = ProfileConfig.fromJson(remoteJson)
-            val merged = remoteCfg.copy(credentials = remoteCfg.credentials.copy(trakt = localTrakt))
+            // CONVERGE (handoff t0 2026-07-15): lokální trakt DÁL vyhrává (ochrana z hotfixu 332 proti záměně
+            // mezi profily se sdíleným backendKey), ALE prázdný lokál (null) adoptuje token z backendu →
+            // bootstrap nového zařízení (TV nemá prohlížeč pro login; token přihlášený na telefonu se sem
+            // převezme). Bezpečné, dokud mají profily různé jellyfinUserId (kořen: slot per profileUuid — otevřeno).
+            val mergedTrakt = localTrakt ?: remoteCfg.credentials.trakt
+            val merged = remoteCfg.copy(credentials = remoteCfg.credentials.copy(trakt = mergedTrakt))
             val canonical = ProfileConfig.toJson(merged)
             if (canonical != current.configJson) {
                 dao.update(current.copy(configJson = canonical))
