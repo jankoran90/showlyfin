@@ -35,6 +35,8 @@ import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
 @Composable
 fun TvHomeScreen(
     onOpenDetail: (MediaItem) -> Unit,
+    // LAPIDARY S4b: karta řady „Uloženo k přehrání" (playDirectly) → detail v režimu one-click (autoplay).
+    onOpenDetailPlay: (MediaItem) -> Unit = onOpenDetail,
     onOpenJellyfinDetail: (itemId: String) -> Unit,
     immersive: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
@@ -101,6 +103,8 @@ fun TvHomeScreen(
         val mi = item.mediaItem
         val jf = item.jellyfinId
         when {
+            // S4b: řada „Uloženo k přehrání" — zapamatovaný zdroj → přehraj rovnou (one-click).
+            mi != null && item.playDirectly -> onOpenDetailPlay(mi)
             mi != null -> onOpenDetail(mi)
             jf != null -> onOpenJellyfinDetail(jf)
         }

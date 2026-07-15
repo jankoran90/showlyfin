@@ -134,6 +134,9 @@ class DetailViewModel @Inject constructor(
     // resetuje se v load()), preferovaný cíl (tv=null → automatika, zenbook=deviceId docku) a příznak,
     // že běžící cast je hlasový (na odmítnutí ukázat hlášku místo pickeru).
     private var autoCastPending = false
+    // LAPIDARY S4b — one-click z řady „Uloženo k přehrání": po hydrataci detailu přehraj zapamatovaný
+    // zdroj rovnou (jednou). Guard proti dvojímu spuštění (rekompozice / návrat na tentýž titul).
+    private var autoplayRememberedPending = false
     private var voiceCastActive = false
     private var voiceCastDeviceId: String? = null
 
@@ -1222,6 +1225,22 @@ class DetailViewModel @Inject constructor(
             val stream = resolveFirstStreamForCast(path)
             if (stream == null) { failAutoCast("Na televizi jsem pro tenhle film nenašel žádný přehratelný zdroj."); return@launch }
             castStreamViaVoice(stream)
+        }
+    }
+
+    /**
+     * LAPIDARY S4b — one-click z řady „Uloženo k přehrání": po hydrataci detailu přehraj rovnou zapamatovaný
+     * (připnutý) zdroj lokálně (přes [playStream] → `pendingPlaybackUrl` → TV přehrávač). Když se zdroj mezitím
+     * ztratil (odepnut / smazán), tiše NEuděláme nic — zůstane otevřený detail (bezpečný fallback).
+     */
+    fun autoplayRemembered() {
+        if (autoplayRememberedPending) return
+        autoplayRememberedPending = true
+        viewModelScope.launch {
+            // Počkej na hydrataci detailu — rememberedSource se plní v load() (workingSourceStore.get).
+            val ready = withTimeoutOrNull(20_000) { uiState.first { !it.isLoading && it.item != null } }
+            if (ready == null) return@launch
+            _uiState.value.rememberedSource?.let { playStream(it) }
         }
     }
 

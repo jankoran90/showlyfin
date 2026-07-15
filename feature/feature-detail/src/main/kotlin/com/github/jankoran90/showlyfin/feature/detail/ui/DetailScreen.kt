@@ -109,6 +109,8 @@ fun DetailScreen(
     // PROJECTOR (HUB-74): hlasový cast — po načtení detailu rovnou castni na TV/Zenbook.
     autoCastTarget: String? = null,
     autoCastAudioPath: String? = null,
+    // LAPIDARY S4b: one-click z řady „Uloženo k přehrání" — po hydrataci přehraj zapamatovaný zdroj rovnou.
+    autoplayRemembered: Boolean = false,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -125,6 +127,10 @@ fun DetailScreen(
     // připnutý → knihovna → sdílej/RD dle path). Toast při odmítnutí (žádný zdroj / offline-only).
     LaunchedEffect(autoCastTarget, item.tmdbId) {
         if (autoCastTarget != null) viewModel.autoCastToTarget(autoCastTarget, autoCastAudioPath)
+    }
+    // LAPIDARY S4b: one-click — po hydrataci detailu přehraj zapamatovaný zdroj rovnou (guard ve VM = jednou).
+    LaunchedEffect(autoplayRemembered, item.tmdbId) {
+        if (autoplayRemembered) viewModel.autoplayRemembered()
     }
     LaunchedEffect(uiState.autoCastMessage) {
         uiState.autoCastMessage?.let {

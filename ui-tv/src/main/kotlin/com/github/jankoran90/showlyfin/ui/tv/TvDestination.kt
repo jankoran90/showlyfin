@@ -25,7 +25,7 @@ sealed interface TvDestination {
     data object Watchlist : TvDestination
 
     /** Karta obsahu — nativní immersive `TvDetailScreen` (fanart hero). */
-    data class Detail(val item: MediaItem) : TvDestination
+    data class Detail(val item: MediaItem, val autoplay: Boolean = false) : TvDestination
 
     /**
      * Přehrávač (reuse `feature-playback/PlaybackScreen`, který už umí TV D-pad beze změny).

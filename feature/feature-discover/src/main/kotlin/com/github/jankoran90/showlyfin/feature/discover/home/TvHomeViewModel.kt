@@ -322,8 +322,8 @@ class TvHomeViewModel @Inject constructor(
 
     /**
      * Řada „Uloženo k přehrání": tituly z [WorkingSourceStore.getAll] (nejnovější první). WorkingSource nenese
-     * poster → dohledáme přes TMDB paralelně. Klik → karta filmu, kde už je zapamatovaný zdroj předvybraný
-     * ([DetailViewModel] `rememberedSource`) = přehrání bez nového hledání. One-click z domova viz Known gaps.
+     * poster → dohledáme přes TMDB paralelně. S4b: položky nesou `playDirectly=true` → klik přehraje
+     * zapamatovaný zdroj rovnou (one-click), detail se otevře až po BACK z přehrávače.
      */
     private suspend fun loadSavedForPlayback(config: HomeRowConfig): List<HomeRowItem> {
         workingSources.refresh()
@@ -346,6 +346,8 @@ class TvHomeViewModel @Inject constructor(
                         posterUrl = item.posterUrl("w342"),
                         landscapeUrl = item.backdropUrl("w780"),
                         mediaItem = item,
+                        // S4b: každý titul tady MÁ zapamatovaný zdroj → klik přehraje rovnou (one-click).
+                        playDirectly = true,
                     )
                 }
             }.awaitAll()

@@ -66,6 +66,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             onSelectSection = { navVm.selectSection(it) },
             onOpenSearch = { navigate(TvDestination.Search) },
             onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            // LAPIDARY S4b: klik na kartu řady „Uloženo k přehrání" → detail v režimu one-click (autoplay).
+            onOpenDetailPlay = { item -> navigate(TvDestination.Detail(item, autoplay = true)) },
             onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
             onOpenLibrary = { id, name, collectionType ->
                 navigate(TvDestination.LibraryItems(id, name, collectionType))
@@ -136,6 +138,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         is TvDestination.Detail -> DetailScreen(
             item = dest.item,
             onBack = { back() },
+            // LAPIDARY S4b: one-click z řady „Uloženo k přehrání" → přehrát zapamatovaný zdroj rovnou.
+            autoplayRemembered = dest.autoplay,
             // TENFOOT KOLO2 (N5): karty v sekcích detailu → tmdbId má přednost (nativní immersive detail),
             // jinak jellyfinId přes resolver. Sdílená logika s Jellyfin routem (openCollectionPart).
             onCollectionPartClick = { part -> openCollectionPart(part) },

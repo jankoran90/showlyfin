@@ -22,6 +22,11 @@ data class HomeRowItem(
     val watched: Boolean = false,
     val mediaItem: MediaItem? = null,
     val jellyfinId: String? = null,
+    /**
+     * LAPIDARY S4b — položka řady „Uloženo k přehrání": má zapamatovaný zdroj → klik ji přehraje
+     * rovnou (one-click), místo otevření detailu. Konzument (TvHomeScreen) rozliší cestu kliku.
+     */
+    val playDirectly: Boolean = false,
 )
 
 /** Stav jedné řady na domově (lazy načítaná). */

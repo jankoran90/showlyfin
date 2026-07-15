@@ -45,6 +45,8 @@ fun TvShell(
     onSelectSection: (TvSection) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
+    // LAPIDARY S4b: klik na kartu řady „Uloženo k přehrání" → detail v režimu one-click (default = jako onOpenDetail).
+    onOpenDetailPlay: (MediaItem) -> Unit = onOpenDetail,
     onOpenJellyfinDetail: (itemId: String) -> Unit,
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
     homeVm: TvHomeViewModel = hiltViewModel(),
@@ -105,6 +107,7 @@ fun TvShell(
                 when (section) {
                     TvSection.HOME -> TvHomeScreen(
                         onOpenDetail = onOpenDetail,
+                        onOpenDetailPlay = onOpenDetailPlay,
                         onOpenJellyfinDetail = onOpenJellyfinDetail,
                         immersive = immersive,
                         immersiveHeader = immersiveHeader,
