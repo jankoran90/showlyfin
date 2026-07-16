@@ -585,7 +585,11 @@ class DetailViewModel @Inject constructor(
                 p.job.equals("Director", ignoreCase = true) || p.jobs?.any { it.job.equals("Director", ignoreCase = true) } == true
             }
             if (director != null && director.id > 0) {
-                val movies = tmdbApi.discoverMoviesByPerson(director.id)
+                // BUG (2026-07-16): dřív `discoverMoviesByPerson` = TMDB with_people (cast+crew dohromady)
+                // → do „Od stejného režiséra" prosakovaly filmy, kde ten člověk NEBYL režisér (jen herec/
+                // producent). Role-specific `moviesByPersonRole(DIRECTING)` bere z person/movie_credits jen
+                // crew s job Director (stejné pravidlo jako person sheet). Padne na TV i telefon.
+                val movies = tmdbApi.moviesByPersonRole(director.id, PersonRole.DIRECTING)
                 val header = "Od stejného režiséra" + (director.name?.let { ": $it" } ?: "")
                 val coll = moviesToCollection(header, movies, tmdbId)
                 if (coll != null) _uiState.update { it.copy(directorName = director.name, directorMovies = coll) }

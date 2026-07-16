@@ -117,6 +117,7 @@ private fun FilmyRailPage(rail: FilmyRail, onItemClick: (HomeRowItem) -> Unit) {
                     onClick = { onItemClick(item) },
                     watched = item.watched,
                     genreLine = mi.genres?.filter { it.isNotBlank() }?.take(3)?.joinToString(" · "),
+                    showDirector = true,
                 )
             } else {
                 FilmyJfRow(item = item, onClick = { onItemClick(item) })

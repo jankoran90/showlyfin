@@ -54,13 +54,20 @@ fun MediaRow(
     watched: Boolean = false,
     progressText: String? = null,
     /**
-     * CELLULOID (SHW-98) M2.2 — volitelný řádek žánrů pod titulkem (např. „Drama · Thriller").
+     * CELLULOID (SHW-98) M2.2 — volitelný řádek žánrů (např. „Drama · Thriller") na řádek s rokem.
      * Default null → showlyfin list-mode beze změny (varianta A); appka Filmy ho zapíná.
      */
     genreLine: String? = null,
+    /**
+     * CELLULOID (SHW-98) M2.2 — zobrazit režiséra na 2. řádku (líně přes [LocalDirectorProvider], TMDB).
+     * Default false → showlyfin list-mode beze změny; appka Filmy ho zapíná.
+     */
+    showDirector: Boolean = false,
 ) {
     val lazyRating = rememberCsfdCardRating(item.imdbId, item.tmdbId, item.title, item.year)
     val rating = csfdRating ?: (if (enableCsfd) lazyRating else null)
+    val director = if (showDirector)
+        rememberDirector(item.imdbId, item.tmdbId, item.type, item.title, item.year) else null
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -102,7 +109,20 @@ fun MediaRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            // 2. řádek: režisér (líně z TMDB přes rememberDirector). Zobrazí se jen když je znám.
+            if (!director.isNullOrBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = director,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.height(2.dp))
+            // 3. řádek: rok · žánry · ČSFD · stav.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 item.year?.let {
                     Text(
@@ -111,8 +131,19 @@ fun MediaRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (rating != null) {
+                if (!genreLine.isNullOrBlank()) {
                     if (item.year != null) DotSeparator()
+                    Text(
+                        text = genreLine,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                if (rating != null) {
+                    if (item.year != null || !genreLine.isNullOrBlank()) DotSeparator()
                     Text(
                         text = "ČSFD $rating %",
                         style = MaterialTheme.typography.labelMedium,
@@ -146,16 +177,6 @@ fun MediaRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-            if (!genreLine.isNullOrBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = genreLine,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
             Spacer(Modifier.height(4.dp))
             // Český popis = stejný fallback jako detail (TMDB cs → ČSFD), líně per řádek.

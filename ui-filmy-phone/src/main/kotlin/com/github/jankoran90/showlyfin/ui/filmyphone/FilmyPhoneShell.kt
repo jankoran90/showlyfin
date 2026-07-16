@@ -14,6 +14,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +27,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
+import com.github.jankoran90.showlyfin.ui.phone.CardCsfdViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
@@ -63,10 +68,18 @@ private fun FilmyShellContent() {
     var current by remember { mutableStateOf(FilmySection.HOME) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    // Obohacení karet/řádků (ČSFD %, český popis, režisér) — líně z TMDB/ČSFD + cache. Filmy má vlastní
+    // shell (ne ShowlyfinPhoneApp), proto providery zapojujeme tady, jinak by režie/ČSFD/popis byly null.
+    val cardCsfd: CardCsfdViewModel = hiltViewModel()
 
     // Zavřený → back gesto zavře menu místo odchodu z appky.
     BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
+    CompositionLocalProvider(
+        LocalCsfdRatingProvider provides cardCsfd,
+        LocalCzechOverviewProvider provides cardCsfd,
+        LocalDirectorProvider provides cardCsfd,
+    ) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -97,6 +110,7 @@ private fun FilmyShellContent() {
                 }
             }
         }
+    }
     }
 }
 
