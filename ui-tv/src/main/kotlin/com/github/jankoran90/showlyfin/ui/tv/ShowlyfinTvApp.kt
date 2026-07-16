@@ -39,6 +39,8 @@ fun ShowlyfinTvApp() {
     // ČSFD % + český popis na celé TV (parita s telefonem): stejný provider (CardCsfdViewModel) přes stejné
     // CompositionLocaly jako ShowlyfinPhoneApp → TV karty i immersive hero líně dotahují ČSFD/CZ z jednoho zdroje.
     val cardCsfd: CardCsfdViewModel = hiltViewModel()
+    // BESPOKE F3: sdílený mozek vlastního hvězdičkového hodnocení → LocalUserRatingProvider + dialog (MENU na kartě).
+    val ratingVm: com.github.jankoran90.showlyfin.feature.detail.rating.RatingViewModel = hiltViewModel()
 
     ShowlyfinPhoneTheme(
         themeState = theme,
@@ -59,10 +61,13 @@ fun ShowlyfinTvApp() {
                 LocalCsfdRatingProvider provides cardCsfd,
                 LocalCzechOverviewProvider provides cardCsfd,
                 LocalDirectorProvider provides cardCsfd,
+                com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider provides ratingVm,
                 // COUCH DA4: globální šířka/rozestupy karet mřížky (všechny TV řady + Objevovat).
                 LocalTvCardScale provides TvCardScale(widthScale = font.gridWidth, spacingScale = font.gridSpacing),
             ) {
                 TvNavigator()
+                // BESPOKE F3: hvězdičkový dialog nad obsahem (MENU na fokusnuté kartě / tlačítko v detailu).
+                com.github.jankoran90.showlyfin.feature.detail.rating.RatingDialogHost(ratingVm)
             }
         }
     }

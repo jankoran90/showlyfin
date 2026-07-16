@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Reviews
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -379,6 +380,13 @@ fun DetailScreen(
                         isMovie = uiState.item?.type == MediaType.MOVIE,
                         isFavorite = uiState.isFavorite,
                         onFavorite = { viewModel.toggleFavorite() },
+                        ratingTarget = uiState.item?.let { m ->
+                            com.github.jankoran90.showlyfin.core.ui.RatingTarget(
+                                tmdbId = m.tmdbId, imdbId = m.imdbId, traktId = m.traktId,
+                                title = uiState.tmdbCzTitle ?: m.displayTitle, year = m.year,
+                                isShow = m.type != MediaType.MOVIE,
+                            )
+                        },
                         inLibrary = uiState.isOwnedInLibrary && uiState.ownedJellyfinId != null,
                         hasRemembered = uiState.rememberedSource != null,
                         onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
@@ -692,6 +700,7 @@ private fun DetailActionBar(
     isMovie: Boolean,
     isFavorite: Boolean,
     onFavorite: () -> Unit,
+    ratingTarget: com.github.jankoran90.showlyfin.core.ui.RatingTarget? = null,
     inLibrary: Boolean,
     hasRemembered: Boolean,
     onPlayHere: (() -> Unit)?,
@@ -707,6 +716,17 @@ private fun DetailActionBar(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // BESPOKE F3 — vlastní hvězdičkové hodnocení (otevře sdílený dialog přes LocalUserRatingProvider).
+        val ratingProvider = com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider.current
+        if (ratingTarget != null && ratingProvider != null) {
+            val stars = com.github.jankoran90.showlyfin.core.ui.rememberCardRating(ratingTarget.tmdbId, ratingTarget.imdbId)
+            HeroAction(
+                Icons.Filled.Reviews,
+                if (stars != null) "Hodnocení $stars/10" else "Ohodnotit",
+                { ratingProvider.requestRate(ratingTarget) },
+                active = stars != null,
+            )
+        }
         order.forEach { key ->
             when (key) {
                 "favorite" -> if (isMovie) {

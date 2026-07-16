@@ -35,6 +35,7 @@ import javax.inject.Singleton
 class CuratorLoader @Inject constructor(
     private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
     private val favoritesStore: FavoritesStore,
+    private val userRatingStore: com.github.jankoran90.showlyfin.data.uploader.UserRatingStore,
     private val enricher: MediaEnricher,
     private val parental: ParentalControlsRepository,
     private val uploaderDs: UploaderRemoteDataSource,
@@ -75,7 +76,11 @@ class CuratorLoader @Inject constructor(
             .getOrNull() ?: return emptyList()
         if (parsed.isEmpty()) { Log.i(TAG, "forYou: 0 položek"); return emptyList() }
         val enriched = enricher.enrich(parsed, withCertification = capAge() != null)
+        // BESPOKE F3 — tvrdý skryt nízko hodnocených (≤4 hvězdy) titulů ze sekce „Pro tebe".
+        val disliked = userRatingStore.items.value.filter { it.stars <= AVOID_MAX }
+            .mapNotNull { it.tmdbId }.toSet()
         return ContentAgeGate.filter(capAge(), enriched, hideUnrated())
+            .filterNot { it.tmdbId != null && it.tmdbId in disliked }
             .also { Log.i(TAG, "forYou: ${it.size} položek") }
     }
 
@@ -126,10 +131,16 @@ class CuratorLoader @Inject constructor(
             .filter { it.kind == FavoriteKind.MOVIE && it.name.isNotBlank() }
             .map { TasteEntry(title = it.name, year = it.year) }
 
+        // BESPOKE F3 — vlastní hvězdy (lokální store, funguje i bez Traktu): ≥8 loved, ≤4 avoid.
+        val localRatings = userRatingStore.items.value.filter { it.title.isNotBlank() }
+        val lovedFromLocalRatings = localRatings.filter { it.stars >= LOVE_MIN }
+            .map { TasteEntry(title = it.title, year = it.year) }
+        localRatings.filter { it.stars <= AVOID_MAX }.forEach { avoid += it.title }
+
         val watchlist = watchlistD.await().mapNotNull { it.toEntry() }.take(WATCHLIST_CAP)
 
         TastePayload(
-            loved = (lovedFromFavorites + lovedFromRatings).dedupByTitle().take(LOVED_CAP),
+            loved = (lovedFromFavorites + lovedFromRatings + lovedFromLocalRatings).dedupByTitle().take(LOVED_CAP),
             top = top,
             recent = recent,
             watchlist = watchlist,

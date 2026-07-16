@@ -74,6 +74,14 @@ fun TvHomeCard(
         (m.tmdbId?.let { "tmdb:$it" in savedKeys } == true) ||
             (m.imdbId?.takeIf { it.isNotBlank() }?.let { "imdb:$it" in savedKeys } == true)
     } == true
+    // BESPOKE F3 — cíl hvězdičkového hodnocení (MENU na fokusnuté kartě); jen když karta nese MediaItem.
+    val ratingTarget = item.mediaItem?.let { m ->
+        com.github.jankoran90.showlyfin.core.ui.RatingTarget(
+            tmdbId = m.tmdbId, imdbId = m.imdbId, traktId = m.traktId,
+            title = m.displayTitle, year = m.year,
+            isShow = m.type != com.github.jankoran90.showlyfin.core.domain.MediaType.MOVIE,
+        )
+    }
     Box(modifier) {
         when (style) {
             HomeCardStyle.LANDSCAPE -> TvLandscapeCard(item, onClick, Modifier.width(cardScale * TV_LANDSCAPE_WIDTH), focusRequester, showLabel, onLongClick)
@@ -87,6 +95,7 @@ fun TvHomeCard(
                 focusRequester = focusRequester,
                 showLabel = showLabel,
                 onLongClick = onLongClick,
+                ratingTarget = ratingTarget,
             )
             HomeCardStyle.LIST -> TvListCard(item, csfd, onClick, Modifier.width(cardScale * TV_LIST_WIDTH), focusRequester, onLongClick)
             HomeCardStyle.FANART_DETAIL -> TvDetailCard(item, csfd, onClick, Modifier.width(cardScale * TV_DETAIL_WIDTH), focusRequester, onLongClick)

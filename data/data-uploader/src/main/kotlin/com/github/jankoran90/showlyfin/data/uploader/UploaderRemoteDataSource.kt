@@ -32,6 +32,9 @@ interface UploaderRemoteDataSource {
     // BESPOKE F2 — akumulovaná doporučení „Pro tebe" per profil (raw JSON {"recommendations":[…]})
     suspend fun getProfileRecommendations(baseUrl: String, sessionCookie: String, key: String): String?
     suspend fun putProfileRecommendations(baseUrl: String, sessionCookie: String, key: String, json: String)
+    // BESPOKE F3 — vlastní hodnocení filmů 1–10 hvězd per profil (raw JSON {"ratings":[…]})
+    suspend fun getProfileRatings(baseUrl: String, sessionCookie: String, key: String): String?
+    suspend fun putProfileRatings(baseUrl: String, sessionCookie: String, key: String, json: String)
     // SIEVE follow-up — Zapamatované zdroje per profil (raw JSON {"sources":[…]})
     suspend fun getProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String): String?
     suspend fun putProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String, json: String)

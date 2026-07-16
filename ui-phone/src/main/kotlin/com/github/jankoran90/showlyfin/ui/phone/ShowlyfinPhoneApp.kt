@@ -342,6 +342,8 @@ fun ShowlyfinApp(isTv: Boolean = false) {
         val naTvCoordinator: NaTvCoordinator = hiltViewModel()
         // CANVAS B: poskytovatel ČSFD hodnocení pro karty (líně + cache) → LocalCsfdRatingProvider.
         val cardCsfd: CardCsfdViewModel = hiltViewModel()
+        // BESPOKE F3: sdílený mozek vlastního hvězdičkového hodnocení → LocalUserRatingProvider + dialog.
+        val ratingVm: com.github.jankoran90.showlyfin.feature.detail.rating.RatingViewModel = hiltViewModel()
         // WEFT (SHW-75/W2): lookup propojených pořadů (TWINE) → proklik z Timeline / cover v přehrávači
         // u slinkovaného zdroje míří na SLOUČENOU obrazovku, ne na původní audio/video.
         val podcastLinkLookup: PodcastLinkLookupViewModel = hiltViewModel()
@@ -591,7 +593,10 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             LocalCsfdRatingProvider provides cardCsfd,
             LocalCzechOverviewProvider provides cardCsfd,
             LocalDirectorProvider provides cardCsfd,
+            com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider provides ratingVm,
         ) {
+        // BESPOKE F3: hvězdičkový dialog nad obsahem (long-press karty / tlačítko v detailu).
+        com.github.jankoran90.showlyfin.feature.detail.rating.RatingDialogHost(ratingVm)
         ModalNavigationDrawer(
             drawerState = drawerState,
             gesturesEnabled = !isTv && !isSubScreen,

@@ -31,5 +31,13 @@ fun MediaCard(
         inLibrary = inLibrary,
         watched = watched,
         progress = progress,
+        ratingTarget = RatingTarget(
+            tmdbId = item.tmdbId,
+            imdbId = item.imdbId,
+            traktId = item.traktId,
+            title = item.displayTitle,
+            year = item.year,
+            isShow = item.type != MediaType.MOVIE,
+        ),
     )
 }
