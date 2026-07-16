@@ -176,6 +176,8 @@ internal class AuthorizedTraktApi(
 
     override suspend fun postRatings(request: RatingRequest) = syncService.postRating(request)
 
+    override suspend fun postRemoveRatings(request: RatingRequest) = syncService.postRemoveRating(request)
+
     override suspend fun postRating(movie: Movie, rating: Int, ratedAt: String) {
         syncService.postRating(RatingRequest(movies = listOf(RatingRequestValue(rating, ratedAt, RatingRequestIds(movie.ids?.trakt ?: -1)))))
     }

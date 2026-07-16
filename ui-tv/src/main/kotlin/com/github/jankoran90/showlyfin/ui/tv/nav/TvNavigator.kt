@@ -4,11 +4,13 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
@@ -45,6 +47,12 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
     fun back() { sidebarOverlay = false; navVm.back() }
     fun openSidebarOverlay() { sidebarOverlay = true }
     fun selectSectionAndHome(section: TvSection) { navVm.selectSection(section); navVm.goHome(); sidebarOverlay = false }
+
+    // BESPOKE F4: notifikace „nová doporučení" (`showlyfin://foryou`) → přepni na sekci „Pro tebe".
+    val openForYouSignal by com.github.jankoran90.showlyfin.core.ui.ListenNavSignal.openForYou.collectAsStateWithLifecycle()
+    LaunchedEffect(openForYouSignal) {
+        if (openForYouSignal > 0) selectSectionAndHome(TvSection.FOR_YOU)
+    }
 
     // TENFOOT KOLO2 (N5): proklik karty v sekci detailu (kolekce / od režiséra / studia / tvorba osoby).
     // Sdílené immersive Detailem i sjednoceným Jellyfin routem. tmdbId → nativní immersive detail (stub);

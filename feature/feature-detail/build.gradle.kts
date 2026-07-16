@@ -19,6 +19,7 @@ android {
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-ui"))
+    implementation(project(":core:core-data"))   // BESPOKE F3: ProfileRepository (per-profil Trakt hodnocení)
     implementation(project(":data:data-trakt"))
     implementation(project(":data:data-tmdb"))
     implementation(project(":data:data-csfd"))

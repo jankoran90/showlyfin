@@ -44,6 +44,8 @@ interface AuthorizedTraktRemoteDataSource {
     suspend fun deleteRating(episode: Episode)
     suspend fun deleteRating(season: Season)
     suspend fun postRatings(request: RatingRequest)
+    /** BESPOKE F3 — hromadné odebrání hodnocení podle traktId (bez konstrukce Movie/Show). */
+    suspend fun postRemoveRatings(request: RatingRequest)
     suspend fun postRating(movie: Movie, rating: Int, ratedAt: String)
     suspend fun postRating(show: Show, rating: Int, ratedAt: String)
     suspend fun postRating(episode: Episode, rating: Int, ratedAt: String)

@@ -381,6 +381,16 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             }
         }
 
+        // BESPOKE F4: notifikace „nová doporučení" → přepni na Hlavní/Pro tebe (klíč sekce „objevit").
+        val openForYouSignal by ListenNavSignal.openForYou.collectAsStateWithLifecycle()
+        LaunchedEffect(openForYouSignal) {
+            if (openForYouSignal > 0) {
+                mainSubsection = com.github.jankoran90.showlyfin.core.domain.ProfileConfig.Sections.OBJEVIT
+                bottomTab = Destination.Hlavni
+                currentDestination = Destination.Hlavni
+            }
+        }
+
         // VERDICT: proklik z doporučovače `showlyfin://detail?tmdb=` → otevři detail filmu.
         // Stejná stub-cesta jako onCollectionPartClick (detail se hydratuje z tmdbId).
         val openDetailReq by ListenNavSignal.openDetail.collectAsStateWithLifecycle()

@@ -16,6 +16,9 @@ object ListenNavSignal {
     /** Boolean extra na launch intentu z notifikace audiopřehrávače. */
     const val EXTRA_OPEN_LISTEN = "showlyfin_open_listen"
 
+    /** BESPOKE F4: boolean extra na launch intentu z notifikace kurátora „nová doporučení". */
+    const val EXTRA_OPEN_FORYOU = "showlyfin_open_foryou"
+
     /** Broadcast: AudiobookPlayerService -> app obnovi Poslouchej widget pri zmene prehravani. */
     const val ACTION_LISTEN_STATE_CHANGED = "com.github.jankoran90.showlyfin.LISTEN_STATE_CHANGED"
 
@@ -35,6 +38,14 @@ object ListenNavSignal {
 
     fun requestOpenOvladac() {
         _openOvladac.value = _openOvladac.value + 1
+    }
+
+    /** BESPOKE F4: notifikace „nová doporučení" (`showlyfin://foryou`) → shell přepne na sekci „Pro tebe". */
+    private val _openForYou = MutableStateFlow(0L)
+    val openForYou = _openForYou.asStateFlow()
+
+    fun requestOpenForYou() {
+        _openForYou.value = _openForYou.value + 1
     }
 
     /**

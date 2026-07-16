@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handleIntent(intent)
         UpdateCheckWorker.enqueue(applicationContext)
+        com.github.jankoran90.showlyfin.services.CuratorCheckWorker.enqueue(applicationContext)
         runStartupUpdateCheck()
         maybeShowUpdateDialogFromIntent(intent)
         val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
@@ -161,6 +162,10 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent) {
         if (intent.getBooleanExtra(ListenNavSignal.EXTRA_OPEN_LISTEN, false)) {
             ListenNavSignal.requestOpenListen()
+        }
+        // BESPOKE F4 — proklik z notifikace „nová doporučení" → shell přepne na sekci „Pro tebe".
+        if (intent.getBooleanExtra(ListenNavSignal.EXTRA_OPEN_FORYOU, false)) {
+            ListenNavSignal.requestOpenForYou()
         }
         val uri = intent.data ?: return
         // CLASP (SHW-66): cíl odkazu z OBOU tvarů — `showlyfin://<host>?…` (legacy/OAuth) i nový https
