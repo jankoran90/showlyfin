@@ -25,6 +25,13 @@ data class TmdbSearchShowResponse(
     val results: List<TmdbSearchShowItem> = emptyList(),
 )
 
+// TENFOOT — TMDB `/find/{externalId}` (resolve tmdbId z IMDb id). Používá immersive header, když
+// položka sekce (JF Filmotéka) nese jen imdbId → dořeš tmdbId pro TMDB credits (režisér).
+data class TmdbFindResponse(
+    val movie_results: List<TmdbSearchMovieItem> = emptyList(),
+    val tv_results: List<TmdbSearchShowItem> = emptyList(),
+)
+
 data class TmdbSearchShowItem(
     val id: Long,
     val name: String? = null,

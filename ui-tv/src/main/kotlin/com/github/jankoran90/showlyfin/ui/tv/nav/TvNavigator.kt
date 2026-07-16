@@ -1,11 +1,14 @@
 package com.github.jankoran90.showlyfin.ui.tv.nav
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
@@ -33,14 +36,15 @@ import com.github.jankoran90.showlyfin.ui.tv.watchlist.TvWatchlistScreen
 fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
     val current = navVm.current
 
-    fun navigate(dest: TvDestination) = navVm.navigate(dest)
-    fun back() = navVm.back()
+    // CONVERGE (SHW-97): sidebar jako PŘEKRYV nad detailem — D-pad doleva z akcí detailu ho zobrazí (detail
+    // zůstane vzadu), výběr sekce skočí do shellu, doprava/Back/scrim schová. Nahrazuje dřívější přímý skok do
+    // Nastavení. Reset při jakékoli navigaci/zpět, ať nezůstane viset nad jinou destinací.
+    var sidebarOverlay by remember { mutableStateOf(false) }
 
-    // CONVERGE (SHW-97): D-pad doleva z detailu → zavři detail (back) a signalizuj shellu, ať vysune a zaostří
-    // sidebar (uživatel odsud může do libovolné sekce i Nastavení; doprava fokus vrátí do obsahu). Nahrazuje
-    // dřívější přímý skok do Nastavení (překvapivé — bral volbu sekce).
-    var focusSidebar by remember { mutableStateOf(false) }
-    fun openSidebarFromDetail() { focusSidebar = true; back() }
+    fun navigate(dest: TvDestination) { sidebarOverlay = false; navVm.navigate(dest) }
+    fun back() { sidebarOverlay = false; navVm.back() }
+    fun openSidebarOverlay() { sidebarOverlay = true }
+    fun selectSectionAndHome(section: TvSection) { navVm.selectSection(section); navVm.goHome(); sidebarOverlay = false }
 
     // TENFOOT KOLO2 (N5): proklik karty v sekci detailu (kolekce / od režiséra / studia / tvorba osoby).
     // Sdílené immersive Detailem i sjednoceným Jellyfin routem. tmdbId → nativní immersive detail (stub);
@@ -82,8 +86,6 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             onOpenLibrary = { id, name, collectionType ->
                 navigate(TvDestination.LibraryItems(id, name, collectionType))
             },
-            focusSidebar = focusSidebar,
-            onSidebarFocusConsumed = { focusSidebar = false },
         )
 
         TvDestination.Search -> TvSearchScreen(
@@ -122,7 +124,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
 
         // TENFOOT KOLO2 (N3): Jellyfin obsah → nativní immersive detail (resolver z jellyfinId dohledá
         // meta a deleguje na DetailScreen; telefonní JellyfinDetailScreen jen fallback bez tmdb/imdb).
-        is TvDestination.JellyfinDetail -> TvJellyfinDetailRoute(
+        is TvDestination.JellyfinDetail -> Box(Modifier.fillMaxSize()) {
+            TvJellyfinDetailRoute(
             itemId = dest.itemId,
             onBack = { back() },
             onCollectionPartClick = { part -> openCollectionPart(part) },
@@ -138,9 +141,18 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             },
             onOpenEpisodes = { seriesId, name -> navigate(TvDestination.EpisodePicker(seriesId, name)) },
             onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
-            // CONVERGE (SHW-97): doleva z detailu → vysuň sidebar (ne přímý skok do Nastavení).
-            onOpenSettings = { openSidebarFromDetail() },
-        )
+            // CONVERGE (SHW-97): doleva z detailu → vysuň sidebar overlay (ne přímý skok do Nastavení).
+            onOpenSettings = { openSidebarOverlay() },
+            )
+            if (sidebarOverlay) {
+                TvSidebarOverlay(
+                    activeSection = navVm.section,
+                    onSelectSection = { selectSectionAndHome(it) },
+                    onOpenSearch = { sidebarOverlay = false; navigate(TvDestination.Search) },
+                    onDismiss = { sidebarOverlay = false },
+                )
+            }
+        }
 
         is TvDestination.EpisodePicker -> EpisodePickerScreen(
             seriesId = dest.seriesId,
@@ -149,12 +161,13 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             onPlayEpisode = { epId -> navigate(TvDestination.Player(itemId = epId)) },
         )
 
-        is TvDestination.Detail -> DetailScreen(
+        is TvDestination.Detail -> Box(Modifier.fillMaxSize()) {
+            DetailScreen(
             item = dest.item,
             onBack = { back() },
-            // CONVERGE (SHW-97) — D-pad doleva od nejlevější akce v detailu → vysuň sidebar (výběr sekce/
-            // Nastavení), místo dřívějšího přímého skoku do Nastavení.
-            onOpenSettings = { openSidebarFromDetail() },
+            // CONVERGE (SHW-97) — D-pad doleva od nejlevější akce v detailu → vysuň sidebar overlay (výběr
+            // sekce/Nastavení nad detailem), místo dřívějšího přímého skoku do Nastavení.
+            onOpenSettings = { openSidebarOverlay() },
             // LAPIDARY S4b: one-click z řady „Uloženo k přehrání" → přehrát zapamatovaný zdroj rovnou.
             autoplayRemembered = dest.autoplay,
             // TENFOOT KOLO2 (N5): karty v sekcích detailu → tmdbId má přednost (nativní immersive detail),
@@ -171,7 +184,16 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
                 )
             },
             onPlayJellyfin = { jellyfinId -> navigate(TvDestination.Player(itemId = jellyfinId)) },
-        )
+            )
+            if (sidebarOverlay) {
+                TvSidebarOverlay(
+                    activeSection = navVm.section,
+                    onSelectSection = { selectSectionAndHome(it) },
+                    onOpenSearch = { sidebarOverlay = false; navigate(TvDestination.Search) },
+                    onDismiss = { sidebarOverlay = false },
+                )
+            }
+        }
 
         is TvDestination.Player -> PlaybackScreen(
             itemId = dest.itemId ?: "",

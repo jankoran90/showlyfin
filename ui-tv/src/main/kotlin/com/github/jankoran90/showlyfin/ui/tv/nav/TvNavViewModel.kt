@@ -43,4 +43,7 @@ class TvNavViewModel : ViewModel() {
 
     /** Zpět o JEDEN krok (nikdy neskáče na kořen naráz). */
     fun back() { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
+
+    /** CONVERGE (SHW-97): skok rovnou na kořen (shell) — pro výběr sekce ze sidebar overlaye nad detailem. */
+    fun goHome() { while (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
 }

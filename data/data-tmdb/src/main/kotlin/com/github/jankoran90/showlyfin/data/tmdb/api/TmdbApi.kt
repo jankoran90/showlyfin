@@ -136,6 +136,14 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
             else service.searchShows(query, language).results
         } catch (e: Throwable) { emptyList() }
 
+    override suspend fun findTmdbIdByImdb(imdbId: String, isShow: Boolean): Long? =
+        try {
+            if (imdbId.isBlank()) null
+            else service.findByExternalId(imdbId).let { r ->
+                if (isShow) r.tv_results.firstOrNull()?.id else r.movie_results.firstOrNull()?.id
+            }?.takeIf { it > 0 }
+        } catch (e: Throwable) { null }
+
     override suspend fun searchPeople(query: String, language: String): List<TmdbSearchPersonItem> =
         try {
             if (query.isBlank()) emptyList()

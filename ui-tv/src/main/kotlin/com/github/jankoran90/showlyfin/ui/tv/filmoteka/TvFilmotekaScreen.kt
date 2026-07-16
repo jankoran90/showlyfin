@@ -10,6 +10,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -45,6 +46,10 @@ fun TvFilmotekaScreen(
     viewModel: TvFilmotekaViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // CONVERGE — při každém vstupu do sekce obnov výchozí osu (Nastavení → Filmotéka, default „Vše"). VM je
+    // retained na úrovni shellu, takže bez tohoto by uvázlo runtime přepnutí osy (chip) z minulé návštěvy.
+    LaunchedEffect(Unit) { viewModel.applyDefaultAxis() }
 
     // KÁNON (CONVERGE): osa Filmotéky (Vše | Žánr | Země) jako chipy VEDLE názvu sekce — ne ve vlastním Row
     // nad TvRailList (to tlačilo obsah dolů a osa byla vizuálně odtržená od titulku). V řadovém stavu je

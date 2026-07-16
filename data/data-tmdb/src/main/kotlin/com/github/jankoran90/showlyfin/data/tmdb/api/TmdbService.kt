@@ -94,6 +94,13 @@ interface TmdbService {
         @Query("language") language: String = "cs-CZ",
     ): TmdbSearchShowResponse
 
+    // TENFOOT — resolve tmdbId z IMDb id (položky jen s imdbId, viz immersive header režisér).
+    @GET("find/{externalId}")
+    suspend fun findByExternalId(
+        @Path("externalId") externalId: String,
+        @Query("external_source") source: String = "imdb_id",
+    ): TmdbFindResponse
+
     // COMPASS C3 (SHW-44) — hledání lidí a vydavatelství.
     @GET("search/person?include_adult=false")
     suspend fun searchPeople(

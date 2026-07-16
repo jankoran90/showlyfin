@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.foryou.ForYouAccumulationStore
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import com.github.jankoran90.showlyfin.feature.discover.curator.CuratorLoader
@@ -33,14 +34,16 @@ data class ForYouUiState(
  * enrich + věkový gate interně → tady se NEopakuje. Přepínač zobrazení mřížka↔immersive řada přes
  * [ViewModeStore] (klíč `SECTION_FOR_YOU`), vzor [com.github.jankoran90.showlyfin.feature.discover.DiscoverViewModel].
  *
- * Pozn.: `forYou()` nestránkuje (backend vrací max ~60), takže mřížka je statická; perzistentní akumulace
- * napříč obměnami je F2 (Track 2).
+ * F2 (Track 2) — perzistentní AKUMULACE: `forYou()` vrací jen aktuální snímek (~60 dle vkusu), ten se přes
+ * [ForYouAccumulationStore] MERGuje s dřívějšími (dedup, strop, per-profil). Sekce tak roste místo aby se
+ * přepisovala; akumulace přežívá restart (načítá se v [reload] z prefs ještě před čerstvým dotazem).
  */
 @HiltViewModel
 class TvForYouViewModel @Inject constructor(
     private val curatorLoader: CuratorLoader,
     private val profileRepository: ProfileRepository,
     private val viewModeStore: ViewModeStore,
+    private val accumulationStore: ForYouAccumulationStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ForYouUiState())
@@ -54,19 +57,27 @@ class TvForYouViewModel @Inject constructor(
 
     init {
         // Per-profil: změna aktivního profilu → přenačti doporučení (kurátor si prefs/profil řeší interně).
+        // Akumulace je klíčovaná profilem → přepnutí profilu ukáže jeho vlastní rostoucí seznam (nemíchá se).
         profileRepository.activeProfile
-            .onEach { reload() }
+            .onEach { profile -> reload(profile?.id) }
             .launchIn(viewModelScope)
     }
 
     fun setViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_FOR_YOU, mode.storeKey)
 
-    private fun reload() {
+    /** Klíč akumulace pro daný profil (null = žádný aktivní profil → oddělený „none" kbelík). */
+    private fun profileKey(id: Long?): String = id?.let { "p$it" } ?: "none"
+
+    private fun reload(profileId: Long?) {
         loadJob?.cancel()
-        _state.value = _state.value.copy(loading = true)
+        val key = profileKey(profileId)
+        // Nejdřív ukaž akumulované z perzistence (přežije restart) — než doteče čerstvý snímek kurátora.
+        _state.value = ForYouUiState(items = accumulationStore.load(key), loading = true)
         loadJob = viewModelScope.launch {
-            val items = curatorLoader.forYou(limit = 60)
-            _state.value = ForYouUiState(items = items, loading = false)
+            val fresh = curatorLoader.forYou(limit = 60)
+            // Merge s dřívějšími (dedup + strop + per-profil). Prázdný `fresh` akumulaci NEMAŽE (viz store).
+            val merged = accumulationStore.accumulate(key, fresh)
+            _state.value = ForYouUiState(items = merged, loading = false)
         }
     }
 }

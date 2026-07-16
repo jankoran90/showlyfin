@@ -28,6 +28,9 @@ interface TmdbRemoteDataSource {
     suspend fun searchMovies(query: String, language: String = "cs-CZ"): List<TmdbSearchMovieItem>
     suspend fun searchShows(query: String, language: String = "cs-CZ"): List<TmdbSearchShowItem>
 
+    /** TENFOOT — resolve tmdbId z IMDb id (TMDB `/find`). null = nenalezeno / prázdné id. */
+    suspend fun findTmdbIdByImdb(imdbId: String, isShow: Boolean): Long?
+
     /** COMPASS C3 (SHW-44) — univerzální hledání lidí a vydavatelství. */
     suspend fun searchPeople(query: String, language: String = "cs-CZ"): List<TmdbSearchPersonItem>
     suspend fun searchCompanies(query: String): List<TmdbSearchCompanyItem>

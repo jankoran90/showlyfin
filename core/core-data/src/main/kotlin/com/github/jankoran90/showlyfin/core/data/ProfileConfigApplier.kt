@@ -93,8 +93,8 @@ class ProfileConfigApplier @Inject constructor(
             // Vzhled / volné toggly — klíč v mapě = kanonický pref klíč
             config.appearance.forEach { (key, value) -> putString(key, value) }
 
-            // TODO(Fáze 2): streamFilterJson je server-side (Uploader backend) → aplikace = push na
-            // backend při přepnutí profilu. Zatím se jen veze v balíku pro zálohu/obnovu.
+            // TODO(backlog, plans.md): streamFilterJson je server-side (Uploader backend) → aplikace = push
+            // na backend při přepnutí profilu. Zatím se jen veze v balíku pro zálohu/obnovu.
         }
     }
 

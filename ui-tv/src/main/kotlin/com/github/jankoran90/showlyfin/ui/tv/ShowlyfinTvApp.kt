@@ -27,7 +27,7 @@ import com.github.jankoran90.showlyfin.ui.tv.nav.TvNavigator
  * pro leanback zařízení.
  *
  * Theme: Fáze 1 sdílí `ShowlyfinPhoneTheme` + `Theme/Font PrefsViewModel` z ui-phone (dočasná závislost),
- * takže AMOLED/akcent/písmo platí na TV identicky jako na telefonu. TODO Fáze 3: extrakce do core-theme.
+ * takže AMOLED/akcent/písmo platí na TV identicky jako na telefonu. TODO(backlog, plans.md): Fáze 3 extrakce do core-theme.
  */
 @Composable
 fun ShowlyfinTvApp() {

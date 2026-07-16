@@ -11,9 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
@@ -55,10 +53,6 @@ fun TvShell(
     onOpenDetailPlay: (MediaItem) -> Unit = onOpenDetail,
     onOpenJellyfinDetail: (itemId: String) -> Unit,
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
-    // CONVERGE (SHW-97): true = po návratu z detailu (D-pad doleva) vysuň a zaostři sidebar. Po zaostření
-    // shell zavolá [onSidebarFocusConsumed] (jednorázový signál, ať se fokus nepřebíjí při rekompozici).
-    focusSidebar: Boolean = false,
-    onSidebarFocusConsumed: () -> Unit = {},
     homeVm: TvHomeViewModel = hiltViewModel(),
 ) {
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
@@ -94,17 +88,6 @@ fun TvShell(
     LaunchedEffect(rawInfo) { delay(120); shownInfo = rawInfo }
     LaunchedEffect(section) { rawInfo = null }
 
-    // CONVERGE (SHW-97): po návratu z detailu (D-pad doleva) zaostři sidebar (vysune se sám přes onFocusChanged).
-    val sidebarFocus = remember { FocusRequester() }
-    LaunchedEffect(focusSidebar) {
-        if (focusSidebar) {
-            withFrameNanos { }
-            withFrameNanos { }
-            runCatching { sidebarFocus.requestFocus() }
-            onSidebarFocusConsumed()
-        }
-    }
-
     CompositionLocalProvider(
         LocalSavedSourceKeys provides savedSourceKeys,
         LocalImmersiveHeaderLines provides immersiveHeaderLines,
@@ -118,7 +101,6 @@ fun TvShell(
                 active = section.toSidebarItem(),
                 onMove = { item, up -> homeVm.moveSidebar(item.name, up) },
                 onOpenProfiles = { showProfiles = true },
-                firstItemFocus = sidebarFocus,
                 onSelect = { item ->
                     when (item) {
                         SidebarItem.DOMU -> onSelectSection(TvSection.HOME)

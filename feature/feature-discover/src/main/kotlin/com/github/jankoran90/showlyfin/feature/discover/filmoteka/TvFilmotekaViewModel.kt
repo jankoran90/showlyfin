@@ -17,6 +17,7 @@ import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+import com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
@@ -86,6 +87,7 @@ class TvFilmotekaViewModel @Inject constructor(
     private val parentalControls: ParentalControlsRepository,
     private val profileRepository: ProfileRepository,
     private val settings: FilmotekaSettingsStore,
+    private val traktSyncSignal: TraktSyncSignal,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -123,11 +125,31 @@ class TvFilmotekaViewModel @Inject constructor(
             .drop(1)
             .onEach { if (_state.value.axis == FilmotekaAxis.ALL) rebuild(FilmotekaAxis.ALL) }
             .launchIn(viewModelScope)
+
+        // CONVERGE — přidání/odebrání „Chci vidět" v detailu ([DetailViewModel.toggleWatchlist]) bumpne sdílený
+        // Trakt signál → přenačti bázi, aby čerstvý titul naskočil i ve Filmotéce (ne jen v sekci Trakt/Domů;
+        // watchlist NENÍ reaktivní store, proto tenhle pull). drop(1) = ignoruj iniciální hodnotu. Oblíbené jsou
+        // řešené zvlášť reaktivně přes favorites.items výše.
+        traktSyncSignal.version
+            .drop(1)
+            .onEach { reload() }
+            .launchIn(viewModelScope)
     }
 
     /** Přepnutí osy — jen přeskupí už-obohacenou bázi (bez fetch). Volá UI z přepínače osy. */
     fun setAxis(axis: FilmotekaAxis) {
         if (_state.value.axis != axis) rebuild(axis)
+    }
+
+    /**
+     * CONVERGE — vstup do sekce: obnov VÝCHOZÍ osu z Nastavení (default „Vše"). VM je retained na úrovni
+     * shellu (TvShell přepíná sekce jen `when`em), takže bez tohoto by runtime přepnutí osy z minulé návštěvy
+     * uvázlo. Iniciální reload nastaví osu sám (loading==true) → skip, ať neblikneme prázdnou bází.
+     */
+    fun applyDefaultAxis() {
+        if (_state.value.loading) return
+        val target = settings.defaultAxis.value
+        if (_state.value.axis != target) rebuild(target)
     }
 
     /** Zahoď bázi a přenačti (po přepnutí profilu). */
