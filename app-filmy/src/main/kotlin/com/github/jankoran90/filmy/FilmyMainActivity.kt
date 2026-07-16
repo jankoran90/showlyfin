@@ -42,6 +42,7 @@ import javax.inject.Inject
 class FilmyMainActivity : ComponentActivity() {
 
     @Inject lateinit var profileRepository: ProfileRepository
+    @Inject lateinit var filmyProfileManager: FilmyProfileManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,9 +53,12 @@ class FilmyMainActivity : ComponentActivity() {
         maybeShowUpdateDialogFromIntent(intent)
         val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         lifecycleScope.launch {
-            profileRepository.migrateLegacyPrefsIfNeeded()
+            // CELLULOID M1.3 — Filmy má 2 PEVNÉ LOKÁLNÍ profily (Dospělý/Děti), NE backend roster
+            // showlyfinu (`seedTvRosterBestEffort` se ZÁMĚRNĚ nevolá — jinak by natáhl honza/neli/deti).
+            // migrateLegacyPrefs se taky nevolá (Filmy nikdy neměla legacy jellyfin_* prefs; volání by
+            // mohlo vytvořit stray profil PŘED ensureSeeded a shodit idempotenci count==0).
+            filmyProfileManager.ensureSeeded()
             profileRepository.restoreActive(preferTv = isTV)
-            if (isTV) profileRepository.seedTvRosterBestEffort()
         }
 
         val launcher = object : UpdateLauncher {
