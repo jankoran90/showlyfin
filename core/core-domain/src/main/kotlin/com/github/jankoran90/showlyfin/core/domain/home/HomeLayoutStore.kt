@@ -225,6 +225,9 @@ class HomeLayoutStore @Inject constructor(
         }
             // Migrace ≤293: starý meta zdroj zahoď — nahradí ho seed JELLYFIN_LIBRARY řad ([syncLibraries]).
             .filterNot { it.source == HomeRowSourceType.JELLYFIN_LIBRARIES }
+            // WEATHER (user 2026-07-16): odstraň Trakt DOPORUČENÍ/OBJEVOVÁNÍ řady i ze STARÝCH uložených
+            // layoutů (rozbité migrací Traktu na V3 + dětem nevhodné; user chce jen NAŠE + watchlist/historii).
+            .filterNot { it.id in DEPRECATED_ROW_IDS }
         if (stored.isEmpty()) return DEFAULT_ROWS
         // Merge: uložené v pořadí + nové default řady (podle id) na konec.
         val storedIds = stored.map { it.id }.toSet()
@@ -257,6 +260,14 @@ class HomeLayoutStore @Inject constructor(
         private const val KEY_IMMERSIVE_HEADER_LINES = "immersive_header_lines"
         private const val KEY_SEEN_LIBS = "seen_library_ids"
 
+        // WEATHER (user 2026-07-16): Trakt doporučovací/objevovací řady vyřazené z domova — strippnou se
+        // i z uložených layoutů ([loadRows]). Trakt je migrací na V3 rozbil (401) + ukazovaly dětem
+        // nevhodný obsah. Zůstává jen NÁŠ kurátor (brain_for_you) + Chci vidět + Historie.
+        private val DEPRECATED_ROW_IDS = setOf(
+            "couchmonkey_reco", "trakt_reco_movies", "trakt_reco_shows",
+            "weighted_reco", "trending_movies", "popular_shows",
+        )
+
         /** Default styl karty pro řadu knihovny dle collectionType. Konzistentní = plakát (žádné
          *  nahodilé landscape jako v ≤293); user přepíše v editoru. */
         fun defaultLibraryStyle(collectionType: String?): HomeCardStyle = HomeCardStyle.POSTER
@@ -278,63 +289,32 @@ class HomeLayoutStore @Inject constructor(
                 title = "Další díly",
                 cardStyle = HomeCardStyle.LANDSCAPE,
             ),
-            // COUCH T2 (user 2026-07-13): sloučená couchmonkey „Doporučeno" jako první-třídní řada domova.
-            // Zapnutá z výroby (kurátorská); prázdná bez přihlášení/couchmonkey listů → nezobrazí se. Merge
-            // v loadRows ji doplní i stávajícím uživatelům (na konec, dají se přesunout).
-            HomeRowConfig(
-                id = "couchmonkey_reco",
-                source = HomeRowSourceType.COUCHMONKEY_RECOMMENDATIONS,
-                title = "Doporučeno",
-                cardStyle = HomeCardStyle.POSTER,
-            ),
-            // AUTEUR (SHW-91): kurátorský mozek „Pro tebe" (LLM z vkusu Trakt+Favorites → TMDB). Zapnuto
-            // z výroby; merge v loadRows doplní i stávajícím uživatelům (nový id → append). Prázdné/mozek
-            // nedostupný → fallback na weighted uvnitř loadOnce, takže řada nezůstane prázdná při historii.
+            // AUTEUR (SHW-91): kurátorský mozek „Pro tebe" (LLM z vkusu Trakt+Favorites → TMDB) = NAŠE
+            // doporučení. Zapnuto z výroby; merge v loadRows doplní i stávajícím uživatelům (nový id → append).
             HomeRowConfig(
                 id = "brain_for_you",
                 source = HomeRowSourceType.BRAIN_FOR_YOU,
                 title = "Pro tebe (kurátor)",
                 cardStyle = HomeCardStyle.POSTER,
             ),
-            // COUCH per-profil (user 2026-07-13 „ne generický obsah, na míru dle profilu"): Trakt
-            // personalizovaná doporučení (dle watched historie profilu + počtu přehrání = Trakt algoritmus).
-            // DISCOVER filter „recommended" = authorizedTraktApi.fetchRecommended*. Prázdné bez Traktu / bez
-            // historie → řada se nezobrazí. Nahrazuje generické Trendy/Populární pro profil s Traktem.
+            // WEATHER (user 2026-07-16): z Traktu na Domů si necháváme JEN watchlist („Chci vidět") a historii.
+            // VŠECHNA Trakt DOPORUČENÍ/OBJEVOVÁNÍ pryč — jednak je Trakt migrací na V3 rozbil (401), jednak
+            // ukazovala dětem nevhodný obsah (Trendy: horory) a user chce jen NAŠE (kurátor). Odstraněné řady
+            // (couchmonkey_reco/trakt_reco_movies/trakt_reco_shows/weighted_reco/trending_movies/popular_shows)
+            // se navíc strippnou i ze STARÝCH uložených layoutů — viz DEPRECATED_ROW_IDS ve [loadRows].
             HomeRowConfig(
-                id = "trakt_reco_movies",
-                source = HomeRowSourceType.DISCOVER,
-                title = "Filmy pro tebe",
+                id = "trakt_watchlist",
+                source = HomeRowSourceType.TRAKT_WATCHLIST,
+                title = "Chci vidět",
                 cardStyle = HomeCardStyle.POSTER,
-                params = mapOf(HomeRowParams.TAB to "movies", HomeRowParams.FILTER to "recommended"),
+                params = mapOf(HomeRowParams.WATCHLIST_KIND to "all"),
             ),
             HomeRowConfig(
-                id = "trakt_reco_shows",
-                source = HomeRowSourceType.DISCOVER,
-                title = "Seriály pro tebe",
+                id = "trakt_history",
+                source = HomeRowSourceType.TRAKT_HISTORY,
+                title = "Historie",
                 cardStyle = HomeCardStyle.POSTER,
-                params = mapOf(HomeRowParams.TAB to "shows", HomeRowParams.FILTER to "recommended"),
-            ),
-            // COUCH (SHW-88): play-count vážená doporučení — z nejvíc přehrávaných titulů profilu.
-            // Prázdné bez Traktu / bez historie s přehráními → řada se nezobrazí.
-            HomeRowConfig(
-                id = "weighted_reco",
-                source = HomeRowSourceType.WEIGHTED_RECOMMENDATIONS,
-                title = "Na míru podle sledování",
-                cardStyle = HomeCardStyle.POSTER,
-            ),
-            HomeRowConfig(
-                id = "trending_movies",
-                source = HomeRowSourceType.DISCOVER,
-                title = "Trendy filmy",
-                cardStyle = HomeCardStyle.POSTER,
-                params = mapOf(HomeRowParams.TAB to "movies", HomeRowParams.FILTER to "trending"),
-            ),
-            HomeRowConfig(
-                id = "popular_shows",
-                source = HomeRowSourceType.DISCOVER,
-                title = "Populární seriály",
-                cardStyle = HomeCardStyle.POSTER,
-                params = mapOf(HomeRowParams.TAB to "shows", HomeRowParams.FILTER to "popular"),
+                params = mapOf(HomeRowParams.WATCHLIST_KIND to "all"),
             ),
             HomeRowConfig(
                 id = "favorites",

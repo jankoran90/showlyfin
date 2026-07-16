@@ -449,7 +449,8 @@ class ProfileRepository @Inject constructor(
             // z cross-device backend slotu. Profily se sdíleným JF účtem (honza+neli) mají stejný backendKey
             // → jeden backend config slot → jinak si Trakt token navzájem přepisují (viz incident). Zachovej
             // lokální `trakt` a přebírej z remote jen ostatní creds/nastavení.
-            val localTraktRaw = ProfileConfig.fromJson(current.configJson).credentials.trakt
+            val localCreds = ProfileConfig.fromJson(current.configJson).credentials
+            val localTraktRaw = localCreds.trakt
             val remoteCfg = ProfileConfig.fromJson(remoteJson)
             // CONVERGE (handoff t0 2026-07-15): lokální trakt DÁL vyhrává (ochrana z hotfixu 332 proti záměně
             // mezi profily se sdíleným backendKey), ALE prázdný lokál (null) adoptuje token z backendu →
@@ -465,7 +466,19 @@ class ProfileRepository @Inject constructor(
             val mergedTrakt = localTraktRaw.takeIf { it.isLive() }
                 ?: remoteCfg.credentials.trakt?.takeIf { it.isLive() }
                 ?: localTraktRaw
-            val merged = remoteCfg.copy(credentials = remoteCfg.credentials.copy(trakt = mergedTrakt))
+            // WEATHER (user 2026-07-16): JF/ABS/uploader creds jsou často LOKÁLNÍ (device login) a NEmusí
+            // být v cross-device backend bundlu. Honza měl backend bundle BEZ JF → sync jinak vynuloval jeho
+            // device JF (applyConfig remove → „JF nenastaven"). Backend vyhrává jen když creds SKUTEČNĚ nese
+            // (nová TV se z něj bootstrapuje); jinak zachovej lokál — stejný princip jako u traktu. Per-profil
+            // izolace (b129) drží: preservuje se JEN vlastní config TOHOTO profilu, ne cizí.
+            val merged = remoteCfg.copy(
+                credentials = remoteCfg.credentials.copy(
+                    trakt = mergedTrakt,
+                    jellyfin = remoteCfg.credentials.jellyfin ?: localCreds.jellyfin,
+                    abs = remoteCfg.credentials.abs ?: localCreds.abs,
+                    uploader = remoteCfg.credentials.uploader ?: localCreds.uploader,
+                ),
+            )
             val canonical = ProfileConfig.toJson(merged)
             if (canonical != current.configJson) {
                 dao.update(current.copy(configJson = canonical))
