@@ -25,8 +25,13 @@ object Config {
     var traktClientSecret: String = ""
     var tmdbApiKey: String = ""
 
+    // `prompt=login` VYNUTÍ přihlašovací obrazovku Traktu (ne tichý průchod existující session v prohlížeči).
+    // Root cause 2026-07-16: bez toho Trakt autorizoval účet, který měl user zrovna přihlášený v systémovém
+    // prohlížeči (dětský) → token dětského účtu se uložil pod dospělý profil (Honza viděl dětský watchlist).
+    // Google SSO: Trakt login → „Sign in with Google" → tam user musí přepnout na správný účet (Google jinak
+    // vezme aktivní session). Viz `2026-07-16 Trakt honza detsky ucet — root cause login bez volby uctu.md`.
     val traktAuthorizeUrl: String
-        get() = "https://trakt.tv/oauth/authorize?response_type=code&client_id=$traktClientId&redirect_uri=${URLEncoder.encode(TRAKT_REDIRECT_URL, "UTF-8")}"
+        get() = "https://trakt.tv/oauth/authorize?response_type=code&client_id=$traktClientId&redirect_uri=${URLEncoder.encode(TRAKT_REDIRECT_URL, "UTF-8")}&prompt=login"
 
     fun initialize(traktClientId: String, traktClientSecret: String, tmdbApiKey: String) {
         this.traktClientId = traktClientId

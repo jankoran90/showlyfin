@@ -52,6 +52,9 @@ data class SettingsUiState(
     val traktUserCode: String? = null,
     val traktVerificationUrl: String? = null,
     val traktStatus: String? = null,
+    /** Root cause 2026-07-16 — přihlášený Trakt účet (jméno/@username) u AKTIVNÍHO profilu, ať je záměna
+     * účtu (dětský vs dospělý přes Google SSO) hned vidět. Načteno z `users/me`. */
+    val traktAccountLabel: String? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
     val jellyfinServerUrl: String = "",
@@ -174,6 +177,7 @@ class SettingsViewModel @Inject constructor(
     private val box: com.github.jankoran90.showlyfin.data.maestro.BoxController,
     private val absPrefs: AbsPreferences,
     private val jellyfinAuth: com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService,
+    private val traktRemote: com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource,
     @ApplicationContext private val appContext: Context,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
@@ -248,6 +252,7 @@ class SettingsViewModel @Inject constructor(
 
     init {
         refreshJellyfinState()
+        refreshTraktAccountLabel()
         _uiState.update {
             it.copy(
                 traktLoggedIn = traktAuthManager.isLoggedIn(),
@@ -793,6 +798,24 @@ class SettingsViewModel @Inject constructor(
             )
         else null
         updateProfileConfig(activeId) { c -> c.copy(credentials = c.credentials.copy(trakt = trakt)) }
+        refreshTraktAccountLabel()
+    }
+
+    /**
+     * Root cause 2026-07-16 — načte jméno/@username přihlášeného Trakt účtu (`users/me`) a zobrazí ho u
+     * profilu, ať je záměna účtu (dětský vs dospělý přes Google SSO) okamžitě vidět. Bez tokenu / při chybě
+     * (401) → label = null (skryje se). `users/me` V3 migrace 401 NEházel (na rozdíl od `users/me/lists`).
+     */
+    private fun refreshTraktAccountLabel() {
+        viewModelScope.launch {
+            val hasToken = prefs.getString("TRAKT_ACCESS_TOKEN", "").orEmpty().isNotBlank()
+            val label = if (!hasToken) null else runCatching { traktRemote.fetchMyProfile() }.getOrNull()
+                ?.let { u ->
+                    val nm = u.name?.trim()?.takeIf { it.isNotBlank() }
+                    if (nm != null) "$nm (@${u.username})" else "@${u.username}"
+                }
+            _uiState.update { it.copy(traktAccountLabel = label) }
+        }
     }
 
     // ── Plan HELM — in-app admin editor (knihovny + PIN) ─────────────────────────

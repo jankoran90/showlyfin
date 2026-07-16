@@ -256,6 +256,14 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
             when {
                 uiState.traktLoggedIn -> {
                     Text("Přihlášen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    uiState.traktAccountLabel?.let { acc ->
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            "Účet: $acc",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(
                         onClick = { viewModel.logout() },

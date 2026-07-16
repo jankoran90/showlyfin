@@ -1,3 +1,3 @@
 package com.github.jankoran90.showlyfin.data.trakt.model
 
-data class User(val username: String)
+data class User(val username: String, val name: String? = null)
