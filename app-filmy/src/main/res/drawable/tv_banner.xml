@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- CELLULOID — TV banner appky Filmy: AMOLED tmavé pozadí, amber medailonek s F, wordmark náznak. -->
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr name="android:fillColor" xmlns:aapt="http://schemas.android.com/aapt">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="320"
+                android:endY="180"
+                android:type="linear">
+                <item android:offset="0" android:color="#FF141008" />
+                <item android:offset="0.6" android:color="#FF0A0A0A" />
+                <item android:offset="1" android:color="#FF000000" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Medailonek (amber radiální akcent) -->
+    <path
+        android:pathData="M82,90 m-58,0 a58,58 0 1,0 116,0 a58,58 0 1,0 -116,0">
+        <aapt:attr name="android:fillColor" xmlns:aapt="http://schemas.android.com/aapt">
+            <gradient
+                android:centerX="82"
+                android:centerY="90"
+                android:gradientRadius="58"
+                android:type="radial">
+                <item android:offset="0" android:color="#FF3A2A10" />
+                <item android:offset="0.7" android:color="#FF1A140A" />
+                <item android:offset="1" android:color="#FF0A0A0A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Písmeno F -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M58,58 L108,58 L108,72 L76,72 L76,84 L102,84 L102,98 L76,98 L76,122 L58,122 Z" />
+    <!-- Play akcent -->
+    <path
+        android:fillColor="#FF7A1A"
+        android:pathData="M88,102 L106,112 L88,122 Z" />
+
+    <!-- Wordmark náznak vpravo -->
+    <path android:fillColor="#FF7A1A" android:pathData="M170,128 L300,128 L300,132 L170,132 z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M170,68 L188,68 L188,74 L170,74 z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M194,68 L214,68 L214,74 L194,74 z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M220,68 L246,68 L246,74 L220,74 z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M170,84 L210,84 L210,108 L170,108 z" />
+    <path android:fillColor="#FFB66A" android:pathData="M214,84 L260,84 L260,108 L214,108 z" />
+    <path android:fillColor="#FF7A1A" android:pathData="M264,84 L294,84 L294,108 L264,108 z" />
+</vector>

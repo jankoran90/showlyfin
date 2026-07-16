@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- CELLULOID — písmeno F v bílé, centrované v safe zóně (18..90), s amber „play" akcentem. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,26
+                           L80,26
+                           L80,38
+                           L53,38
+                           L53,50
+                           L72,50
+                           L72,61
+                           L53,61
+                           L53,86
+                           L40,86
+                           Z" />
+    <!-- Play triangle — „watch" cue v amber akcentu -->
+    <path
+        android:fillColor="#FF7A1A"
+        android:pathData="M62,67 L78,76 L62,85 Z" />
+</vector>

@@ -22,6 +22,9 @@ dependencyResolutionManagement {
 rootProject.name = "Showlyfin"
 
 include(":app")
+// CELLULOID (SHW-98) — samostatná appka „Filmy" (sledovací část odtržená vedle showlyfinu).
+// Sdílí VŠECHNY sledovací moduly + ui-tv; liší se applicationId, brandingem a OTA kanálem.
+include(":app-filmy")
 
 // Core
 include(":core:core-data")
