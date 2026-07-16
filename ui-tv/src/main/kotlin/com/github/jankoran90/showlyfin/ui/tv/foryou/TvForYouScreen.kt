@@ -31,7 +31,7 @@ import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
-import com.github.jankoran90.showlyfin.feature.discover.foryou.TvForYouViewModel
+import com.github.jankoran90.showlyfin.feature.discover.foryou.ForYouViewModel
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
@@ -43,7 +43,7 @@ import com.github.jankoran90.showlyfin.ui.tv.components.toImmersiveInfo
 import kotlin.math.roundToInt
 
 /**
- * BESPOKE (SHW-95) F1/T1 — sekce „Pro tebe" (nahrazuje Objevovat). Kurátorská doporučení ([TvForYouViewModel]
+ * BESPOKE (SHW-95) F1/T1 — sekce „Pro tebe" (nahrazuje Objevovat). Kurátorská doporučení ([ForYouViewModel]
  * nad `CuratorLoader`) s přepínačem zobrazení **Mřížka ↔ Immersive řada**. Mřížka = plakáty ([TvMediaCard],
  * vzor `TvDiscoverScreen`); Immersive řada = fanart hero + popis ([TvRailList] immersive, vzor Filmotéky).
  * Fokusovaná karta hlásí [onFocusItem] nahoru (immersive pozadí shellu).
@@ -55,7 +55,7 @@ fun TvForYouScreen(
     immersiveHeader: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: TvForYouViewModel = hiltViewModel(),
+    viewModel: ForYouViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()

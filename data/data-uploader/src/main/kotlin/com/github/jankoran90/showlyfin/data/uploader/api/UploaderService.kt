@@ -30,6 +30,9 @@ interface UploaderService {
     // COMPASS follow-up — Oblíbené per profil (raw JSON: {"favorites":[…]})
     @GET suspend fun getProfileFavorites(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @PUT suspend fun putProfileFavorites(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+
+    @GET suspend fun getProfileRecommendations(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @PUT suspend fun putProfileRecommendations(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
     // SIEVE follow-up — Zapamatované zdroje per profil (raw JSON: {"sources":[…]})
     @GET suspend fun getProfileWorkingSources(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @PUT suspend fun putProfileWorkingSources(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>

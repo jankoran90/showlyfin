@@ -200,6 +200,21 @@ internal class UploaderApi(
         if (!resp.isSuccessful) throw HttpException(resp)
     }
 
+    override suspend fun getProfileRecommendations(baseUrl: String, sessionCookie: String, key: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val resp = service.getProfileRecommendations("$base/api/profiles/${enc(key)}/recommendations", cookie)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
+    override suspend fun putProfileRecommendations(baseUrl: String, sessionCookie: String, key: String, json: String) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val resp = service.putProfileRecommendations("$base/api/profiles/${enc(key)}/recommendations", cookie, body)
+        if (!resp.isSuccessful) throw HttpException(resp)
+    }
+
     override suspend fun getProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String): String? {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

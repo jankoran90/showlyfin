@@ -14,7 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
-import com.github.jankoran90.showlyfin.feature.discover.ui.DiscoverScreen
+import com.github.jankoran90.showlyfin.feature.discover.ui.ForYouScreen
 import com.github.jankoran90.showlyfin.feature.discover.ui.RdLibraryScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.ui.LibraryRowsScreen
 import com.github.jankoran90.showlyfin.feature.watchlist.history.HistoryScreen
@@ -25,14 +25,14 @@ import kotlinx.coroutines.launch
 private val ALL_SUBSECTIONS = listOf(
     ProfileConfig.Sections.KNIHOVNA to "Knihovna",
     ProfileConfig.Sections.CHCI_VIDET to "Chci vidět",
-    ProfileConfig.Sections.OBJEVIT to "Objevit",
+    ProfileConfig.Sections.OBJEVIT to "Pro tebe",  // BESPOKE: interní klíč „objevit" ponechán (uložené layouty), obsah = kurátorská sekce
     ProfileConfig.Sections.HISTORIE to "Historie",
     ProfileConfig.Sections.NA_RD to "Na RD",
 )
 
 /**
  * Sekce „Hlavní" — horizontálně swipovatelné podsekce: Knihovna (Trakt pohled na Jellyfin),
- * Chci vidět (Watchlist), Objevit (Discover), Na RD (filmy uložené na RealDebrid).
+ * Chci vidět (Watchlist), Pro tebe (kurátorská doporučení), Na RD (filmy uložené na RealDebrid).
  *
  * @param visibleSubsections klíče viditelných podsekcí (Plan PROFILES 1E). Prázdné = všechny.
  * @param onTraktItemClick otevři bohatý Trakt/TMDB detail
@@ -100,7 +100,7 @@ fun MainScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                ProfileConfig.Sections.OBJEVIT -> DiscoverScreen(
+                ProfileConfig.Sections.OBJEVIT -> ForYouScreen(
                     onItemClick = { item, jellyfinId ->
                         if (jellyfinId != null) onJellyfinItemClick(jellyfinId) else onTraktItemClick(item)
                     },
