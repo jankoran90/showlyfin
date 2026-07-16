@@ -230,12 +230,11 @@ private fun StepperButton(
 }
 
 /**
- * TENFOOT F3 / CONVERGE (handoff t0 2026-07-15) — účet Trakt na TV. **Device-code login je Traktem ROZBITÝ**
- * (Trakt překlopil OAuth na PKCE stack, aktivační stránka kódy neschválí + `app.trakt.tv/activate`=404) a TV
- * nemá prohlížeč pro redirect login → na TV se přihlásit NELZE. Proto se přihlášení dělá na telefonu (Nastavení
- * → Účty, tlačítko „Přihlásit přes Trakt" otevře prohlížeč) a **token se do TV sám převezme** z backendu
- * (`ProfileRepository.syncConfigFromBackend`, adopce prázdného lokálu). Tady tedy jen stav + odhlášení + návod.
- * `userCode`/`verificationUrl`/`onLogin` zůstávají v signatuře pro případ, že Trakt device-flow zas zprovozní.
+ * TENFOOT F3 — účet Trakt na TV přes DEVICE-CODE flow. **2026-07-16 ZNOVU ZPROVOZNĚNO:** device-code žije,
+ * jen se přesunula aktivační adresa na `auth.trakt.tv/activate` (staré `app.trakt.tv/activate`=404 vedlo 2026-07-15
+ * k mylnému „rozbito" a dočasnému vypnutí). Ověřeno živě: `POST /oauth/device/code`=200, `/oauth/device/token`
+ * poll=400 authorization_pending. TV prohlížeč není potřeba — user zadá kód na jiném zařízení. `onLogin` =
+ * `startTraktDeviceLogin`. Browser OAuth (`showlyfin://trakt`) na novém Trakt stacku NEfunguje (PKCE) — proto device.
  */
 @Composable
 fun TvTraktAccountRow(
@@ -263,13 +262,30 @@ fun TvTraktAccountRow(
         }
         if (!loggedIn) {
             Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Přihlášení k Traktu přes TV je dočasně nedostupné (Trakt změnil způsob aktivace). " +
-                    "Přihlas se v mobilní appce Showlyfin (Nastavení → Účty) na tomtéž profilu — token se sem " +
-                    "pak sám převezme.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (userCode != null) {
+                val vurl = verificationUrl ?: "https://auth.trakt.tv/activate"
+                Text(
+                    text = "Otevři na telefonu/PC $vurl a zadej kód. Přihlas se SPRÁVNÝM Trakt účtem " +
+                        "(dospělý profil = dospělý účet, dětský = dětský).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = userCode,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                Text(
+                    text = "Přihlášení přes kód: zobrazí se kód, který zadáš na auth.trakt.tv/activate " +
+                        "na telefonu nebo počítači (TV prohlížeč není potřeba).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                TvActionChip(label = "Přihlásit přes Trakt", enabled = true, onClick = onLogin)
+            }
         }
         if (status != null) {
             Spacer(Modifier.height(6.dp))
