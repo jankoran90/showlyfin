@@ -41,8 +41,12 @@ class FilmyApp : Application() {
                 versionName = BuildConfig.VERSION_NAME,
                 userAgent = "Filmy/${BuildConfig.VERSION_NAME}",
                 baseUrl = "https://upload.jankoran.cz",
-                updateManifestPath = "/api/appupdate",
-                updateApkPath = "/api/appupdate/apk",
+                // M1.4 — VLASTNÍ OTA kanál `filmy` (per-app endpoint na serveru). KRITICKÉ: sdílené
+                // `/api/appupdate` vrací manifest showlyfinu (v347) → Filmy (v1) by ho vyhodnotil jako
+                // „novější" a auto-nainstaloval showlyfin. Kanál `filmy` vrací jen filmy manifest
+                // (nebo 404 = žádný update, dokud nepublikujeme release).
+                updateManifestPath = "/api/appupdate/filmy",
+                updateApkPath = "/api/appupdate/filmy/apk",
                 notificationIconRes = R.drawable.ic_launcher_foreground,
                 launcherActivityClass = FilmyMainActivity::class.java,
                 isAppInForeground = { isInForeground },
