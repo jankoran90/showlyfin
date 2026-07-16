@@ -58,3 +58,5 @@ include(":feature:feature-listen")
 // mělká sdílená vrstva dala jen nouzově ovladatelný telefonní layout; TV teď má vlastní 10-foot shell).
 include(":ui-phone")
 include(":ui-tv")
+// CELLULOID (SHW-98) Fáze 2: telefonní vrstva appky „Filmy" (styl audioman, varianta A — ui-tv nedotčen)
+include(":ui-filmy-phone")

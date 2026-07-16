@@ -112,6 +112,10 @@ dependencies {
     // ui-phone (sdílené VM+téma) → tím i poslechový podgraf; přímo ho ale nevoláme (řeší Fáze 4).
     implementation(project(":ui-tv"))
 
+    // CELLULOID (SHW-98) Fáze 2: vlastní telefonní shell Filmy (styl audioman). Nahrazuje placeholder
+    // FilmyPhoneApp; TV větev zůstává na ShowlyfinTvApp (varianta A).
+    implementation(project(":ui-filmy-phone"))
+
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 

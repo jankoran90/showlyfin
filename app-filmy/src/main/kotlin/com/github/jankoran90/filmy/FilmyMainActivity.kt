@@ -27,6 +27,7 @@ import com.github.jankoran90.showlyfin.core.appservices.services.UpdateChecker
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdatePreferences
 import com.github.jankoran90.showlyfin.core.appservices.ui.UpdateOverlayController
 import com.github.jankoran90.showlyfin.core.appservices.ui.UpdateOverlayHost
+import com.github.jankoran90.showlyfin.ui.filmyphone.FilmyPhoneShell
 import com.github.jankoran90.showlyfin.ui.tv.ShowlyfinTvApp
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -36,7 +37,7 @@ import javax.inject.Inject
  * CELLULOID (SHW-98) — hostitelská aktivita appky „Filmy". Klon
  * [com.github.jankoran90.showlyfin.MainActivity] bez poslechových / Trakt-browser deep-linků
  * (Filmy Trakt = device-code, M1.3). Leanback → sdílený [ShowlyfinTvApp] (varianta A, nesaháno);
- * telefon → zatím tenký [FilmyPhoneApp] placeholder (plná telefonní vrstva = Fáze 2 M2.x).
+ * telefon → vlastní shell [FilmyPhoneShell] (Fáze 2, modul :ui-filmy-phone, styl audioman).
  */
 @AndroidEntryPoint
 class FilmyMainActivity : ComponentActivity() {
@@ -130,8 +131,8 @@ class FilmyMainActivity : ComponentActivity() {
             ) {
                 DebugCaptureGestureHost {
                     Box {
-                        // Leanback → sdílený TV shell (varianta A). Telefon → placeholder (Fáze 2).
-                        if (isTV) ShowlyfinTvApp() else FilmyPhoneApp()
+                        // Leanback → sdílený TV shell (varianta A). Telefon → vlastní shell Filmy (Fáze 2 M2.1+).
+                        if (isTV) ShowlyfinTvApp() else FilmyPhoneShell()
                         UpdateOverlayHost()
                     }
                 }
