@@ -50,7 +50,7 @@ class TraktDeviceAuthManager @Inject constructor(
                 TraktDeviceCode(
                     deviceCode = o.getString("device_code"),
                     userCode = o.getString("user_code"),
-                    verificationUrl = o.optString("verification_url", "https://trakt.tv/activate"),
+                    verificationUrl = o.optString("verification_url", "https://auth.trakt.tv/activate"),
                     expiresInSec = o.optLong("expires_in", 600),
                     intervalSec = o.optLong("interval", 5),
                 )

@@ -29,8 +29,6 @@ import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import com.github.jankoran90.showlyfin.core.network.Config
-import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -271,16 +269,27 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) { Text("Odhlásit z Trakt") }
                 }
-                isTvFormFactor() -> {
+                // Device-code flow pro TELEFON i TV (2026-07-16): Trakt migroval OAuth na nový stack
+                // (/api/auth/oauth2/authorize + PKCE), browser redirect `showlyfin://trakt` = „invalid url".
+                // Device flow (/oauth/device/code) redirect_uri ani PKCE nepoužívá → funguje. User zadá kód
+                // na auth.trakt.tv/activate, kde se přihlásí SPRÁVNÝM účtem (řeší i root cause záměny účtu).
+                else -> {
                     Text("Nepřihlášen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     uiState.traktUserCode?.let { code ->
+                        val vurl = uiState.traktVerificationUrl ?: "https://auth.trakt.tv/activate"
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "Otevři ${uiState.traktVerificationUrl ?: "trakt.tv/activate"} a zadej kód:",
+                            "Otevři $vurl a zadej kód. Přihlas se SPRÁVNÝM Trakt účtem " +
+                                "(dětský profil = dětský účet, dospělý = dospělý).",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(code, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(vurl))) },
+                            modifier = Modifier.fillMaxWidth().tvFocusable(),
+                        ) { Text("Otevřít v prohlížeči") }
                     }
                     Spacer(Modifier.height(12.dp))
                     Button(
@@ -293,15 +302,6 @@ private fun AdminTraktCard(uiState: SettingsUiState, viewModel: SettingsViewMode
                         Spacer(Modifier.height(8.dp))
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                }
-                else -> {
-                    Text("Nepřihlášen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Config.traktAuthorizeUrl))) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = ShowlyfinStatus.Danger),
-                    ) { Text("Přihlásit přes Trakt") }
                 }
             }
         }
