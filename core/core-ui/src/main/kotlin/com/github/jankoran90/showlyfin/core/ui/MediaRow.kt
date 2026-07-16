@@ -53,6 +53,11 @@ fun MediaRow(
     inLibrary: Boolean = false,
     watched: Boolean = false,
     progressText: String? = null,
+    /**
+     * CELLULOID (SHW-98) M2.2 — volitelný řádek žánrů pod titulkem (např. „Drama · Thriller").
+     * Default null → showlyfin list-mode beze změny (varianta A); appka Filmy ho zapíná.
+     */
+    genreLine: String? = null,
 ) {
     val lazyRating = rememberCsfdCardRating(item.imdbId, item.tmdbId, item.title, item.year)
     val rating = csfdRating ?: (if (enableCsfd) lazyRating else null)
@@ -141,6 +146,16 @@ fun MediaRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+            if (!genreLine.isNullOrBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = genreLine,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Spacer(Modifier.height(4.dp))
             // Český popis = stejný fallback jako detail (TMDB cs → ČSFD), líně per řádek.

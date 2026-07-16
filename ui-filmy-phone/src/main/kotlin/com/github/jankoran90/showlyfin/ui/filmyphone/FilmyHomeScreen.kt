@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -37,9 +41,9 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
  * CELLULOID (SHW-98) Fáze 2 M2.2 — telefonní domov appky „Filmy".
  *
  * Reuse datového mozku TV domova ([TvHomeViewModel] + [LibraryRowsViewModel] — obojí ve feature vrstvě,
- * bez TV závislosti), jen s telefonním renderem ([FilmyRailList]). Sestavení řad kopíruje logiku
- * `TvHomeScreen` (JF knihovny přes libraryState, ostatní přes `states`), bez TV editoru/immersive
- * (immersive header telefonně = M2.2b). Karta klik → detail (M2.3; zatím no-op ze shellu).
+ * bez TV závislosti), s telefonním renderem [FilmyHomeTabbed] (transpozice TV: řada = tab, obsah =
+ * svislý seznam řádků). Sestavení řad kopíruje logiku `TvHomeScreen` (JF knihovny přes libraryState,
+ * ostatní přes `states`), bez TV editoru/immersive. Řádek klik → detail (M2.3; zatím no-op ze shellu).
  */
 @Composable
 fun FilmyHomeScreen(
@@ -100,19 +104,26 @@ fun FilmyHomeScreen(
         }
     }
 
+    var showTraktLogin by remember { mutableStateOf(false) }
+
     when {
-        rails.isNotEmpty() -> FilmyRailList(rails = rails, onItemClick = ::clickItem, modifier = modifier)
+        // Domov = TRANSPOZICE TV: taby (řady) + swipe + svislý seznam řádků (M2.2 vize).
+        rails.isNotEmpty() -> FilmyHomeTabbed(rails = rails, onItemClick = ::clickItem, modifier = modifier)
         // Ještě se načítá: profil/config nedorazil, nebo aspoň jedna řada běží.
         states.isEmpty() || states.values.any { it.loading } ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         // Načtení doběhlo a nic není → profil nemá Trakt/JF obsah (typicky nepřihlášen). Věčný spinner = ne.
-        else -> FilmyHomeEmpty(modifier)
+        else -> FilmyHomeEmpty(modifier, onTraktLogin = { showTraktLogin = true })
+    }
+
+    if (showTraktLogin) {
+        FilmyTraktLoginDialog(onDismiss = { showTraktLogin = false })
     }
 }
 
-/** Prázdný domov — místo věčného spinneru srozumitelná výzva (nejčastěji: profil není přihlášen). */
+/** Prázdný domov — místo věčného spinneru srozumitelná výzva + přímé Trakt přihlášení. */
 @Composable
-private fun FilmyHomeEmpty(modifier: Modifier = Modifier) {
+private fun FilmyHomeEmpty(modifier: Modifier = Modifier, onTraktLogin: () -> Unit) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -131,11 +142,12 @@ private fun FilmyHomeEmpty(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = "Přihlas se k Traktu nebo Jellyfinu v Nastavení, ať se objeví filmy.",
+                text = "Přihlas se k Traktu, ať se objeví filmy podle tvého vkusu.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+            Button(onClick = onTraktLogin) { Text("Přihlásit se k Traktu") }
         }
     }
 }
