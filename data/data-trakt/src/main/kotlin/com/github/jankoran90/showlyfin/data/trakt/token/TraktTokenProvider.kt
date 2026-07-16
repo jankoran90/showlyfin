@@ -38,6 +38,11 @@ internal class TraktTokenProvider(
         private const val KEY_TOKEN_EXPIRES_AT = "TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP"
         // GLIDE — po dočasném selhání obnovy počkej, než zkusíš znovu (rozbije 429 bouři).
         private const val REFRESH_COOLDOWN_MS = 60_000L
+        // WEATHER v2 — po DEFINITIVNÍM selhání obnovy (mrtvý refresh_token po migraci Traktu na V3) drž
+        // dlouhý cooldown: refresh_token se sám neopraví, opakované pokusy jen blokují hot-path a berou
+        // 429. Access token dál funguje pro /sync. Po vypršení se zkusí obnova ještě jednou (kdyby se
+        // token na telefonu obnovil a přenesl na TV).
+        private const val AUTH_FAIL_COOLDOWN_MS = 600_000L
     }
 
     private var token: String? = null
@@ -111,25 +116,6 @@ internal class TraktTokenProvider(
         return false
     }
 
-    override suspend fun isAccessTokenLive(): Boolean {
-        val access = getToken() ?: return false
-        val request = Request.Builder()
-            .url("${Config.TRAKT_BASE_URL}users/settings")
-            .get()
-            .addHeader("Content-Type", "application/json")
-            .addHeader("trakt-api-version", "2")
-            .addHeader("trakt-api-key", Config.traktClientId)
-            .addHeader("Authorization", "Bearer $access")
-            .build()
-        return try {
-            // okHttpBase = čistý klient bez authenticatoru → žádná rekurze. 401 = token mrtvý;
-            // cokoli jiného (200/403/5xx) = token NENÍ prokazatelně mrtvý. Síť/výjimka → true (neodhlašuj).
-            okHttpClient.newCall(request).execute().use { it.code != 401 }
-        } catch (_: Throwable) {
-            true
-        }
-    }
-
     override suspend fun refreshToken(): OAuthResponse {
         val refreshToken = sharedPreferences.getString(KEY_REFRESH_TOKEN, null)
             ?: throw Error("Refresh token is not available")
@@ -165,7 +151,11 @@ internal class TraktTokenProvider(
                         // 429/5xx = rate-limit/server (DOČASNÉ → cooldown, token ponecháme).
                         val code = response.code
                         val authFailure = code == 400 || code == 401
-                        if (!authFailure) refreshCooldownUntil = System.currentTimeMillis() + REFRESH_COOLDOWN_MS
+                        // WEATHER v2 — i authFailure (mrtvý refresh_token po migraci V3) → cooldown, jinak KAŽDÁ
+                        // 401 z gated endpointu (/recommendations…) znovu spustí obnovu (400) a blokuje
+                        // @Synchronized hot-path i pro funkční requesty = nekonečné načítání (regrese 1.45.215).
+                        refreshCooldownUntil = System.currentTimeMillis() +
+                            (if (authFailure) AUTH_FAIL_COOLDOWN_MS else REFRESH_COOLDOWN_MS)
                         it.resumeWithException(TokenRefreshException("Refresh token call failed. $code", authFailure))
                     }
                     response.closeQuietly()
