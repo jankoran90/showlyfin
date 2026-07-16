@@ -83,10 +83,15 @@ fun TvShell(
     val showReauth by reauthVm.visible.collectAsStateWithLifecycle()
 
     // Immersive info z fokusované karty (debounce proti thrashingu při rychlém D-padu).
+    val activeProfileId by homeVm.activeProfileId.collectAsStateWithLifecycle()
     var rawInfo by remember { mutableStateOf<ImmersiveInfo?>(null) }
     var shownInfo by remember { mutableStateOf<ImmersiveInfo?>(null) }
     LaunchedEffect(rawInfo) { delay(120); shownInfo = rawInfo }
-    LaunchedEffect(section) { rawInfo = null }
+    // Hero (immersive header/pozadí) drží obsah POSLEDNĚ fokusované karty. Vynuluj ho nejen při změně
+    // sekce, ale i při PŘEPNUTÍ PROFILU — jinak zůstane viset karta předchozího profilu (přelév dat mezi
+    // profily; navíc bezpečnostní riziko: dospělý hero na dětském profilu). shownInfo nulujeme rovnou,
+    // ať hero zmizí okamžitě, ne až po debounce. Nová karta dostane fokus → onFocusItem hero překreslí.
+    LaunchedEffect(section, activeProfileId) { rawInfo = null; shownInfo = null }
 
     CompositionLocalProvider(
         LocalSavedSourceKeys provides savedSourceKeys,

@@ -111,6 +111,25 @@ internal class TraktTokenProvider(
         return false
     }
 
+    override suspend fun isAccessTokenLive(): Boolean {
+        val access = getToken() ?: return false
+        val request = Request.Builder()
+            .url("${Config.TRAKT_BASE_URL}users/settings")
+            .get()
+            .addHeader("Content-Type", "application/json")
+            .addHeader("trakt-api-version", "2")
+            .addHeader("trakt-api-key", Config.traktClientId)
+            .addHeader("Authorization", "Bearer $access")
+            .build()
+        return try {
+            // okHttpBase = čistý klient bez authenticatoru → žádná rekurze. 401 = token mrtvý;
+            // cokoli jiného (200/403/5xx) = token NENÍ prokazatelně mrtvý. Síť/výjimka → true (neodhlašuj).
+            okHttpClient.newCall(request).execute().use { it.code != 401 }
+        } catch (_: Throwable) {
+            true
+        }
+    }
+
     override suspend fun refreshToken(): OAuthResponse {
         val refreshToken = sharedPreferences.getString(KEY_REFRESH_TOKEN, null)
             ?: throw Error("Refresh token is not available")

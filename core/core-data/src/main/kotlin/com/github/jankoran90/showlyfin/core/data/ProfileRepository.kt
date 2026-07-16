@@ -449,13 +449,22 @@ class ProfileRepository @Inject constructor(
             // z cross-device backend slotu. Profily se sdíleným JF účtem (honza+neli) mají stejný backendKey
             // → jeden backend config slot → jinak si Trakt token navzájem přepisují (viz incident). Zachovej
             // lokální `trakt` a přebírej z remote jen ostatní creds/nastavení.
-            val localTrakt = ProfileConfig.fromJson(current.configJson).credentials.trakt
+            val localTraktRaw = ProfileConfig.fromJson(current.configJson).credentials.trakt
             val remoteCfg = ProfileConfig.fromJson(remoteJson)
             // CONVERGE (handoff t0 2026-07-15): lokální trakt DÁL vyhrává (ochrana z hotfixu 332 proti záměně
             // mezi profily se sdíleným backendKey), ALE prázdný lokál (null) adoptuje token z backendu →
             // bootstrap nového zařízení (TV nemá prohlížeč pro login; token přihlášený na telefonu se sem
             // převezme). Bezpečné, dokud mají profily různé jellyfinUserId (kořen: slot per profileUuid — otevřeno).
-            val mergedTrakt = localTrakt ?: remoteCfg.credentials.trakt
+            // FIX A (2026-07-16, emulátor): i EXPIROVANÝ lokální token ber jako null → adoptuj ČERSTVÝ z backendu.
+            // Mrtvý (past-expiry) lokál jinak přebíjel čerstvý backend token pushnutý z telefonu → TV/emulátor
+            // zůstal odhlášený i po re-loginu (ověřeno živě: 401 na sync/*, dialog „Trakt tě odhlásil").
+            val nowMs = System.currentTimeMillis()
+            fun TraktCreds?.isLive() =
+                this != null && accessToken.isNotBlank() && (expiresAtMillis <= 0L || expiresAtMillis > nowMs)
+            // Živý lokál vyhrává; jinak adoptuj živý backend; jinak ponech (i mrtvý) lokál kvůli refresh_tokenu.
+            val mergedTrakt = localTraktRaw.takeIf { it.isLive() }
+                ?: remoteCfg.credentials.trakt?.takeIf { it.isLive() }
+                ?: localTraktRaw
             val merged = remoteCfg.copy(credentials = remoteCfg.credentials.copy(trakt = mergedTrakt))
             val canonical = ProfileConfig.toJson(merged)
             if (canonical != current.configJson) {

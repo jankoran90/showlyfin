@@ -44,12 +44,23 @@ class TraktAuthenticator @Inject constructor(
                         Timber.w("Trakt: obnova tokenu dočasně selhala (${error.message}) — token ponechán.")
                         null
                     }
-                    // Definitivní (neplatný refresh_token) → odhlásit z Traktu + signál na re-auth prompt.
+                    // WEATHER (2026-07-16) — obnova selhala definitivně (neplatný refresh_token), ALE to
+                    // NEMUSÍ znamenat mrtvý access token. Trakt během přechodu na nový web (V3, červen–červenec
+                    // 2026) vrací 401 i na PLATNÝ token u některých endpointů (/recommendations, /users/me/lists
+                    // — ověřeno curlem: /sync a /users/settings = 200, ty dva = 401 se STEJNÝM tokenem) a staré
+                    // refresh_tokeny jsou po migraci mrtvé ("session not found") → obnova VŽDY selže. Dřív to
+                    // revokovalo CELOU session + dialog i když watchlist/hodnocení/sync fungují. Pojistka: ověř
+                    // access token proti /users/settings. Platný → NEODHLAŠUJ (jen tohle volání selže).
                     else -> {
-                        Timber.w("Trakt: refresh_token neplatný → odhlášení.")
-                        tokenProvider.revokeToken()
-                        sessionSignal.signalReauthNeeded()
-                        null
+                        if (tokenProvider.isAccessTokenLive()) {
+                            Timber.w("Trakt: obnova selhala, ale access token je platný (gated 401 / migrace V3) — token ponechán.")
+                            null
+                        } else {
+                            Timber.w("Trakt: refresh_token neplatný a access token mrtvý → odhlášení.")
+                            tokenProvider.revokeToken()
+                            sessionSignal.signalReauthNeeded()
+                            null
+                        }
                     }
                 }
             }

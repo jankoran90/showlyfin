@@ -12,6 +12,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -43,7 +45,16 @@ class TvTraktViewModel @Inject constructor(
     private val _state = MutableStateFlow(TvTraktUiState())
     val state: StateFlow<TvTraktUiState> = _state.asStateFlow()
 
-    init { load() }
+    private var lastProfileId: Long? = null
+
+    init {
+        // FIX C (2026-07-16): na přepnutí profilu (jiný Trakt účet) přenačti řady — jinak sekce Trakt drží
+        // watchlist/hodnocení/seznamy STARÉHO účtu, dokud se VM nevytvoří znovu (je retained na shellu).
+        // Vzor = RatingViewModel/TvFilmotekaViewModel (observují activeProfile). Iniciální emit = první load.
+        profileRepository.activeProfile
+            .onEach { p -> if (p?.id != lastProfileId) { lastProfileId = p?.id; load() } }
+            .launchIn(viewModelScope)
+    }
 
     fun load() {
         _state.update { it.copy(isLoading = true) }
