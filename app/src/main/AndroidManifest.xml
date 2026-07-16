@@ -81,7 +81,7 @@
 
         <!-- EVERGREEN (SHW-64) — výsledek tiché instalace přes PackageInstaller -->
         <receiver
-            android:name=".services.InstallResultReceiver"
+            android:name="com.github.jankoran90.showlyfin.core.appservices.services.InstallResultReceiver"
             android:exported="false" />
 
         <provider

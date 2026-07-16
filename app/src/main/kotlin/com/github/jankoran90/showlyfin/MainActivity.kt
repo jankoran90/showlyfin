@@ -19,15 +19,15 @@ import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 import com.github.jankoran90.showlyfin.core.ui.UpdateLauncher
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
-import com.github.jankoran90.showlyfin.debug.DebugCaptureGestureHost
-import com.github.jankoran90.showlyfin.debug.DebugCaptureManager
-import com.github.jankoran90.showlyfin.services.ApkInstaller
-import com.github.jankoran90.showlyfin.services.EXTRA_OPEN_UPDATE_DIALOG
-import com.github.jankoran90.showlyfin.services.UpdateCheckWorker
-import com.github.jankoran90.showlyfin.services.UpdateChecker
-import com.github.jankoran90.showlyfin.services.UpdatePreferences
-import com.github.jankoran90.showlyfin.ui.UpdateOverlayController
-import com.github.jankoran90.showlyfin.ui.UpdateOverlayHost
+import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureGestureHost
+import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureManager
+import com.github.jankoran90.showlyfin.core.appservices.services.ApkInstaller
+import com.github.jankoran90.showlyfin.core.appservices.services.EXTRA_OPEN_UPDATE_DIALOG
+import com.github.jankoran90.showlyfin.core.appservices.services.UpdateCheckWorker
+import com.github.jankoran90.showlyfin.core.appservices.services.UpdateChecker
+import com.github.jankoran90.showlyfin.core.appservices.services.UpdatePreferences
+import com.github.jankoran90.showlyfin.core.appservices.ui.UpdateOverlayController
+import com.github.jankoran90.showlyfin.core.appservices.ui.UpdateOverlayHost
 import com.github.jankoran90.showlyfin.ui.phone.ShowlyfinApp
 import com.github.jankoran90.showlyfin.ui.tv.ShowlyfinTvApp
 import dagger.hilt.android.AndroidEntryPoint
@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handleIntent(intent)
         UpdateCheckWorker.enqueue(applicationContext)
-        com.github.jankoran90.showlyfin.services.CuratorCheckWorker.enqueue(applicationContext)
+        com.github.jankoran90.showlyfin.core.appservices.services.CuratorCheckWorker.enqueue(applicationContext)
         runStartupUpdateCheck()
         maybeShowUpdateDialogFromIntent(intent)
         val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)

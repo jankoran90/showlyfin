@@ -99,6 +99,7 @@ dependencies {
     implementation(project(":core:core-data"))
     implementation(project(":core:core-network"))
     implementation(project(":core:core-ui"))
+    implementation(project(":core:core-appservices"))
 
     implementation(project(":data:data-trakt"))
     implementation(project(":data:data-tmdb"))

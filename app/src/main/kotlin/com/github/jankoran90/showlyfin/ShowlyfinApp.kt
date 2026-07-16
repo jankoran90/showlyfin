@@ -10,17 +10,19 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
+import com.github.jankoran90.showlyfin.core.appservices.AppServices
+import com.github.jankoran90.showlyfin.core.appservices.AppServicesConfig
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.widget.ListenWidget
-import com.github.jankoran90.showlyfin.services.DownloadsReporter
+import com.github.jankoran90.showlyfin.core.appservices.services.DownloadsReporter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.network.Config
-import com.github.jankoran90.showlyfin.debug.BufferTree
-import com.github.jankoran90.showlyfin.debug.DebugCaptureManager
+import com.github.jankoran90.showlyfin.core.appservices.debug.BufferTree
+import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureManager
 import com.github.jankoran90.showlyfin.widget.WidgetRefreshWorker
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
@@ -35,6 +37,22 @@ import java.util.Locale
 class ShowlyfinApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // CELLULOID M1.1 — naplň sdílené app-services PŘESNĚ dnešními showlyfin hodnotami (endpoint,
+        // User-Agent, verze z BuildConfig). Musí být první, workery i UpdateChecker čtou AppServices.config.
+        AppServices.init(
+            AppServicesConfig(
+                appKey = "showlyfin",
+                versionCode = BuildConfig.VERSION_CODE,
+                versionName = BuildConfig.VERSION_NAME,
+                userAgent = "Showlyfin/${BuildConfig.VERSION_NAME}",
+                baseUrl = "https://upload.jankoran.cz",
+                updateManifestPath = "/api/appupdate",
+                updateApkPath = "/api/appupdate/apk",
+                notificationIconRes = R.drawable.ic_launcher_foreground,
+                launcherActivityClass = MainActivity::class.java,
+                isAppInForeground = { isInForeground },
+            )
+        )
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         Timber.plant(BufferTree.INSTANCE)
         installCrashHandler()

@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.services
+package com.github.jankoran90.showlyfin.core.appservices.services
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,8 +14,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.github.jankoran90.showlyfin.MainActivity
-import com.github.jankoran90.showlyfin.R
+import com.github.jankoran90.showlyfin.core.appservices.AppServices
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,7 +84,7 @@ class CuratorCheckWorker(
             channel.description = "Upozornění na čerstvá kurátorská doporučení"
             nm.createNotificationChannel(channel)
         }
-        val intent = Intent(ctx, MainActivity::class.java).apply {
+        val intent = Intent(ctx, AppServices.config.launcherActivityClass).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(ListenNavSignal.EXTRA_OPEN_FORYOU, true)
         }
@@ -94,7 +93,7 @@ class CuratorCheckWorker(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(ctx, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(AppServices.config.notificationIconRes)
             .setContentTitle("Nová doporučení Pro tebe")
             .setContentText("Kurátor pro tebe vybral čerstvé filmy — klepni pro zobrazení")
             .setAutoCancel(true)

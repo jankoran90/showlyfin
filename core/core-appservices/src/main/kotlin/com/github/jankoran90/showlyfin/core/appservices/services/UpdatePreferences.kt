@@ -1,8 +1,8 @@
-package com.github.jankoran90.showlyfin.services
+package com.github.jankoran90.showlyfin.core.appservices.services
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.github.jankoran90.showlyfin.BuildConfig
+import com.github.jankoran90.showlyfin.core.appservices.AppServices
 
 object UpdatePreferences {
     private const val PREFS = "showlyfin_update_prefs"
@@ -68,7 +68,7 @@ object UpdatePreferences {
         // updatu zůstane uložená nabídka s versionCode == aktuální → bez tohoto guardu by se popup po
         // aktualizaci objevil ZNOVU (UpdateOverlayHost ji ukazuje z prefs na každém startu, dřív než
         // doběhne síťová kontrola, která prefs vyčistí).
-        if (versionCode <= BuildConfig.VERSION_CODE) return null
+        if (versionCode <= AppServices.config.versionCode) return null
         val notes = p.getString(KEY_LATEST_NOTES, null).orEmpty()
         return PendingUpdate(versionName, notes, versionCode)
     }

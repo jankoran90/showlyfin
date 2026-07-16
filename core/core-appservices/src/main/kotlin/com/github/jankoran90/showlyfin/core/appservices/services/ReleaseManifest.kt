@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.services
+package com.github.jankoran90.showlyfin.core.appservices.services
 
 /**
  * Manifest poslední ostré verze z našeho serveru (`GET /api/appupdate`).

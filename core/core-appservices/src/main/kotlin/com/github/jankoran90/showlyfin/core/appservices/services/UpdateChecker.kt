@@ -1,10 +1,10 @@
-package com.github.jankoran90.showlyfin.services
+package com.github.jankoran90.showlyfin.core.appservices.services
 
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
-import com.github.jankoran90.showlyfin.BuildConfig
+import com.github.jankoran90.showlyfin.core.appservices.AppServices
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,17 +17,15 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Výchozí server (zapečený) — přebije ho prefs `uploader_base_url`, pokud je nastaven. */
-private const val DEFAULT_BASE_URL = "https://upload.jankoran.cz"
 private const val PREFS_NAME = "trakt_prefs"
 private const val KEY_BASE_URL = "uploader_base_url"
 private const val APK_DIR_NAME = "updates"
 
 /**
- * Self-hosted auto-update (Plan CHANNEL) — žádný GitHub. Manifest `GET <base>/api/appupdate`
- * nese poslední `versionCode/versionName/notes`; porovnání přes [BuildConfig.VERSION_CODE];
- * APK z `<base>/api/appupdate/apk`. Endpointy jsou PUBLIC (bez tokenu). Base = uploader prefs
- * (`uploader_base_url`, ukládá GATEKEY) s fallbackem na [DEFAULT_BASE_URL].
+ * Self-hosted auto-update (Plan CHANNEL) — žádný GitHub. Manifest `GET <base><updateManifestPath>`
+ * nese poslední `versionCode/versionName/notes`; porovnání přes [AppServices] `config.versionCode`;
+ * APK z `<base><updateApkPath>`. Endpointy jsou PUBLIC (bez tokenu). Base = uploader prefs
+ * (`uploader_base_url`, ukládá GATEKEY) s fallbackem na `config.baseUrl`.
  */
 @Singleton
 class UpdateChecker @Inject constructor() {
@@ -41,14 +39,14 @@ class UpdateChecker @Inject constructor() {
     private fun baseUrl(context: Context): String {
         val stored = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_BASE_URL, null)?.trim()?.takeIf { it.isNotBlank() }
-        return (stored ?: DEFAULT_BASE_URL).trimEnd('/')
+        return (stored ?: AppServices.config.baseUrl).trimEnd('/')
     }
 
     suspend fun fetchManifest(context: Context): ReleaseManifest? = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
-                .url("${baseUrl(context)}/api/appupdate")
-                .header("User-Agent", "Showlyfin/${BuildConfig.VERSION_NAME}")
+                .url("${baseUrl(context)}${AppServices.config.updateManifestPath}")
+                .header("User-Agent", AppServices.config.userAgent)
                 .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@runCatching null
@@ -60,7 +58,7 @@ class UpdateChecker @Inject constructor() {
 
     fun isUpdateAvailable(manifest: ReleaseManifest?): Boolean {
         if (manifest == null) return false
-        return manifest.versionCode > BuildConfig.VERSION_CODE
+        return manifest.versionCode > AppServices.config.versionCode
     }
 
     suspend fun downloadApk(
@@ -70,14 +68,14 @@ class UpdateChecker @Inject constructor() {
     ): File? = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
-                .url("${baseUrl(context)}/api/appupdate/apk")
+                .url("${baseUrl(context)}${AppServices.config.updateApkPath}")
                 .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@runCatching null
                 val total = response.body?.contentLength()?.takeIf { it > 0 }
                     ?: manifest.size.takeIf { it > 0 } ?: 0L
                 val dir = File(context.filesDir, APK_DIR_NAME).apply { mkdirs() }
-                val outFile = File(dir, "showlyfin-${manifest.versionCode}.apk")
+                val outFile = File(dir, "${AppServices.config.appKey}-${manifest.versionCode}.apk")
                 if (outFile.exists()) outFile.delete()
                 response.body?.byteStream()?.use { input ->
                     FileOutputStream(outFile).use { output ->

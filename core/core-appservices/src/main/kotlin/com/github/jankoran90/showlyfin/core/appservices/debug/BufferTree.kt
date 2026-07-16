@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.debug
+package com.github.jankoran90.showlyfin.core.appservices.debug
 
 import android.util.Log
 import timber.log.Timber

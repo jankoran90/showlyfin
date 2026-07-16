@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.debug
+package com.github.jankoran90.showlyfin.core.appservices.debug
 
 import android.app.Activity
 import android.content.Context
@@ -9,7 +9,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.view.PixelCopy
 import androidx.core.view.drawToBitmap
-import com.github.jankoran90.showlyfin.BuildConfig
+import com.github.jankoran90.showlyfin.core.appservices.AppServices
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -147,14 +147,15 @@ object DebugCaptureManager {
     private fun upload(timestamp: String, screenshot: File?, log: File?): Boolean {
         return runCatching {
             val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+            val cfg = AppServices.config
             builder.addFormDataPart("timestamp", timestamp)
-            builder.addFormDataPart("version", BuildConfig.VERSION_NAME)
-            builder.addFormDataPart("version_code", BuildConfig.VERSION_CODE.toString())
+            builder.addFormDataPart("version", cfg.versionName)
+            builder.addFormDataPart("version_code", cfg.versionCode.toString())
             val metadataJson = buildString {
                 append('{')
                 append("\"timestamp\":\"").append(timestamp).append("\",")
-                append("\"version\":\"").append(BuildConfig.VERSION_NAME).append("\",")
-                append("\"versionCode\":").append(BuildConfig.VERSION_CODE)
+                append("\"version\":\"").append(cfg.versionName).append("\",")
+                append("\"versionCode\":").append(cfg.versionCode)
                 append('}')
             }
             builder.addFormDataPart(
@@ -179,7 +180,7 @@ object DebugCaptureManager {
             val request = Request.Builder()
                 .url(UPLOAD_URL)
                 .post(builder.build())
-                .header("User-Agent", "Showlyfin/${BuildConfig.VERSION_NAME}")
+                .header("User-Agent", cfg.userAgent)
                 .build()
             client.newCall(request).execute().use { response ->
                 response.isSuccessful

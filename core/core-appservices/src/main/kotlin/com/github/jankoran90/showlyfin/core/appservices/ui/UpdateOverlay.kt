@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.ui
+package com.github.jankoran90.showlyfin.core.appservices.ui
 
 import android.content.Context
 import androidx.compose.runtime.Composable
@@ -11,9 +11,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import com.github.jankoran90.showlyfin.services.PendingUpdate
-import com.github.jankoran90.showlyfin.services.UpdateChecker
-import com.github.jankoran90.showlyfin.services.UpdatePreferences
+import com.github.jankoran90.showlyfin.core.appservices.services.PendingUpdate
+import com.github.jankoran90.showlyfin.core.appservices.services.UpdateChecker
+import com.github.jankoran90.showlyfin.core.appservices.services.UpdatePreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

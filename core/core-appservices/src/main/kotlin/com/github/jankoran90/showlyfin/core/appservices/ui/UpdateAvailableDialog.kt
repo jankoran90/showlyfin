@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.ui
+package com.github.jankoran90.showlyfin.core.appservices.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column

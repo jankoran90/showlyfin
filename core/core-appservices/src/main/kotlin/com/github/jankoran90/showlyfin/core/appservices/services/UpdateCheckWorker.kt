@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.services
+package com.github.jankoran90.showlyfin.core.appservices.services
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,9 +14,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.github.jankoran90.showlyfin.MainActivity
-import com.github.jankoran90.showlyfin.R
-import com.github.jankoran90.showlyfin.ShowlyfinApp
+import com.github.jankoran90.showlyfin.core.appservices.AppServices
 import com.github.jankoran90.showlyfin.core.domain.InstallGuard
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
@@ -61,7 +59,7 @@ class UpdateCheckWorker(
         // Tichá instalace jen když se nic neutne: appka NENÍ v popředí a nic nehraje (i se zhaslou
         // obrazovkou — MediaSession na pozadí). Jinak nech na ruční instalaci a zkus příští cyklus.
         val canSilent = UpdatePreferences.isSilentInstallEnabled(ctx) &&
-            !ShowlyfinApp.isInForeground &&
+            !AppServices.config.isAppInForeground() &&
             !InstallGuard.playbackActive
         if (canSilent && ApkInstaller.install(ctx, apk)) {
             // Instalace běží asynchronně; výsledek (vč. fallbacku na dialog) řeší InstallResultReceiver.
@@ -81,7 +79,7 @@ class UpdateCheckWorker(
                 notificationManager.createNotificationChannel(channel)
             }
         }
-        val intent = Intent(ctx, MainActivity::class.java).apply {
+        val intent = Intent(ctx, AppServices.config.launcherActivityClass).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(EXTRA_OPEN_UPDATE_DIALOG, true)
         }
@@ -90,7 +88,7 @@ class UpdateCheckWorker(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(ctx, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(AppServices.config.notificationIconRes)
             .setContentTitle("Showlyfin $tag k dispozici")
             .setContentText("Klepněte pro instalaci")
             .setAutoCancel(true)

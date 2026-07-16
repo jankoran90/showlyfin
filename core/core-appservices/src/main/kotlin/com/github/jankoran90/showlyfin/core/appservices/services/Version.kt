@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.services
+package com.github.jankoran90.showlyfin.core.appservices.services
 
 data class Version(val major: Int, val minor: Int, val patch: Int) : Comparable<Version> {
     override fun compareTo(other: Version): Int = when {

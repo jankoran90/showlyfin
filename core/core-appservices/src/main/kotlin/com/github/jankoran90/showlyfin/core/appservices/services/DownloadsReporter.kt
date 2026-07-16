@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.services
+package com.github.jankoran90.showlyfin.core.appservices.services
 
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
