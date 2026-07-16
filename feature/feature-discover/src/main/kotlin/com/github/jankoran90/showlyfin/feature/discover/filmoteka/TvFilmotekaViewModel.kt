@@ -102,8 +102,21 @@ class TvFilmotekaViewModel @Inject constructor(
 
     private fun ageCap(): Int? = parentalControls.profile.value.effectiveAgeCap
     private fun hideUnrated(): Boolean = parentalControls.profile.value.hideUnratedForAge
+
+    /**
+     * CONVERGE bug (2026-07-16) — „Chci vidět" se ve Filmotéce nezobrazovalo, i když v sekci Trakt ano.
+     * Root cause: sekce Trakt volá `loader.watchlist("all")` BEZ guardu (autorizace přes interceptor +
+     * [TraktTokenProvider], který čte pref `TRAKT_ACCESS_TOKEN`), kdežto tady jsme fetch podmiňovali JEN
+     * per-profil `activeConfig.credentials.trakt.accessToken`. Na TV bývá tenhle config-token PRÁZDNÝ
+     * (login běží na telefonu / device-flow zapíše token rovnou do prefs, do backend configu se ale
+     * nepropíše) → guard=false → watchlist se do báze nikdy nesloučil (ani po reloadu/restartu).
+     * Fix: přijmi i pref-token = STEJNÝ zdroj pravdy, jaký reálně autorizuje API (a jaký vidí sekce Trakt).
+     * Dětský profil: [ProfileConfigApplier] při přepnutí na profil BEZ Traktu pref `TRAKT_ACCESS_TOKEN`
+     * odstraní → fallback je null → watchlist se nezahrne (+ [ContentAgeGate] jako druhá pojistka).
+     */
     private fun traktAllowed(): Boolean =
-        !profileRepository.activeConfig.value.credentials.trakt?.accessToken.isNullOrBlank()
+        !profileRepository.activeConfig.value.credentials.trakt?.accessToken.isNullOrBlank() ||
+            !prefs.getString(KEY_TRAKT_ACCESS_TOKEN, null).isNullOrBlank()
 
     init {
         // Per-profil: přepni nastavení Filmotéky na profil, pak přenačti obsah (jeden collector = pořadí).
@@ -382,6 +395,11 @@ class TvFilmotekaViewModel @Inject constructor(
         apiClient.update(baseUrl = serverUrl, accessToken = token, clientInfo = clientInfo, deviceInfo = deviceInfo)
         val userUuid = runCatching { UUID.fromString(userId) }.getOrNull() ?: return null
         return JfSession(serverUrl, token, userUuid)
+    }
+
+    private companion object {
+        /** Zrcadlí `TraktTokenProvider.KEY_ACCESS_TOKEN` (data-trakt) — reálný autorizační token API. */
+        const val KEY_TRAKT_ACCESS_TOKEN = "TRAKT_ACCESS_TOKEN"
     }
 }
 
