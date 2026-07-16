@@ -11,6 +11,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -46,7 +47,7 @@ fun ForYouScreen(
 
             state.items.isEmpty() ->
                 Text(
-                    text = "Kurátor zatím nemá doporučení. Zapni „Pro tebe" v Nastavení a přihlas se k Traktu — " +
+                    text = "Kurátor zatím nemá doporučení. Zapni kurátora v Nastavení a přihlas se k Traktu — " +
                         "doporučení se tu začnou hromadit.",
                     modifier = Modifier.align(Alignment.Center).padding(32.dp),
                     textAlign = TextAlign.Center,
