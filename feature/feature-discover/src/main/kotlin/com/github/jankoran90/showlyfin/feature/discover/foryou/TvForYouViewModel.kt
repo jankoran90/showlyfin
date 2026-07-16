@@ -34,9 +34,9 @@ data class ForYouUiState(
  * enrich + věkový gate interně → tady se NEopakuje. Přepínač zobrazení mřížka↔immersive řada přes
  * [ViewModeStore] (klíč `SECTION_FOR_YOU`), vzor [com.github.jankoran90.showlyfin.feature.discover.DiscoverViewModel].
  *
- * F2 (Track 2) — perzistentní AKUMULACE: `forYou()` vrací jen aktuální snímek (~60 dle vkusu), ten se přes
- * [ForYouAccumulationStore] MERGuje s dřívějšími (dedup, strop, per-profil). Sekce tak roste místo aby se
- * přepisovala; akumulace přežívá restart (načítá se v [reload] z prefs ještě před čerstvým dotazem).
+ * Perzistentní AKUMULACE (SHW-97, hotovo OTA 337): `forYou()` vrací jen aktuální snímek (~60 dle vkusu), ten
+ * se přes [ForYouAccumulationStore] MERGuje s dřívějšími (dedup, strop, per-profil). Sekce tak roste místo aby
+ * se přepisovala; akumulace přežívá restart (načítá se v [reload] z prefs ještě před čerstvým dotazem).
  */
 @HiltViewModel
 class TvForYouViewModel @Inject constructor(
