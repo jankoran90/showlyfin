@@ -40,7 +40,14 @@ fun TvTraktScreen(
 
     when {
         state.isLoading && state.rows.isEmpty() ->
-            Centered { Text("Načítám…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Centered {
+                Text(
+                    text = if (state.loadingTotal > 0)
+                        "Načítám Trakt… (${state.loadingDone} z ${state.loadingTotal} řad)"
+                    else "Načítám Trakt…",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
         state.rows.isEmpty() -> Centered {
             Text(
