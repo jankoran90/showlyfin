@@ -87,7 +87,14 @@ private fun FilmyShellContent() {
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                FilmySectionPlaceholder(current)
+                when (current) {
+                    // M2.2: domov = řady ve stylu TV (reuse TvHomeViewModel). Detail = M2.3 (zatím no-op).
+                    FilmySection.HOME -> FilmyHomeScreen(
+                        onOpenDetail = {},
+                        onOpenJellyfinDetail = {},
+                    )
+                    else -> FilmySectionPlaceholder(current)
+                }
             }
         }
     }

@@ -32,6 +32,10 @@ dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-data"))
+    // M2.2 domov: TvHomeViewModel + HomeRowItem (data mozek domova, bez TV závislosti).
+    implementation(project(":feature:feature-discover"))
+    // M2.2 domov: LibraryRowsViewModel + LibraryRowItem (JF knihovní řady domova).
+    implementation(project(":feature:feature-jellyfin-browser"))
     // Motiv (ShowlyfinPhoneTheme) + telefonní VM pro reuse. Gap Fáze 4 (viz hlavička).
     implementation(project(":ui-phone"))
 
@@ -39,6 +43,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.timber)
+    implementation(libs.coil.compose)   // AsyncImage v kartách (PosterCard/LandscapeCard)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
