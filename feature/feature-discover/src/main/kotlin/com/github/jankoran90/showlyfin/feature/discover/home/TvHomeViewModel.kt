@@ -106,7 +106,15 @@ class TvHomeViewModel @Inject constructor(
 
     // COUCH per-profil — Trakt sekce/řady jen když AKTIVNÍ profil má vlastní Trakt token v balíku
     // (deti až po vlastním device-loginu → dětský Trakt). Konzumenti (TvShell, loadOnce) beze změny.
-    private fun hasTrakt(c: ProfileConfig): Boolean = !c.credentials.trakt?.accessToken.isNullOrBlank()
+    // WEATHER (user 2026-07-16): na TV se Trakt přihlašuje z TELEFONU → token je v pref `TRAKT_ACCESS_TOKEN`
+    // (odtud ho čte i TraktTokenProvider pro reálné API), ale config `credentials.trakt` bývá na TV prázdný
+    // → původní hasTrakt(config) vracel false → traktAllowed=false → SKRYLY se VŠECHNY Trakt řady (watchlist,
+    // historie, kurátor), i když Trakt reálně funguje. Ber Trakt jako dostupný, když má token BUĎ config NEBO
+    // pref. Per-profil bezpečné: ProfileConfigApplier při přepnutí na profil bez Traktu (děti) pref smaže →
+    // hasTrakt=false → řady skryté (stejný vzor jako TvFilmotekaViewModel, OTA 337).
+    private fun hasTrakt(c: ProfileConfig): Boolean =
+        !c.credentials.trakt?.accessToken.isNullOrBlank() ||
+            !prefs.getString(KEY_TRAKT_ACCESS_TOKEN, null).isNullOrBlank()
     val traktAllowed: StateFlow<Boolean> = profileRepository.activeConfig
         .map { hasTrakt(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), hasTrakt(profileRepository.activeConfig.value))
@@ -628,6 +636,9 @@ class TvHomeViewModel @Inject constructor(
 
 /** Styl karty pro řadu (helper pro render). */
 fun HomeCardStyle.isLandscape(): Boolean = this == HomeCardStyle.LANDSCAPE
+
+/** WEATHER: pref klíč Trakt tokenu (zrcadlí TraktTokenProvider); zdroj pravdy pro „přihlášen k Traktu" na TV. */
+private const val KEY_TRAKT_ACCESS_TOKEN = "TRAKT_ACCESS_TOKEN"
 
 /** COUCH R2: Trakt zdroje řad — skryté pro zamčený/dětský profil. */
 private val TRAKT_SOURCES = setOf(
