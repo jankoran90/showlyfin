@@ -42,7 +42,7 @@ class FilmotekaSettingsStore @Inject constructor(
     val defaultAxis: StateFlow<FilmotekaAxis> = _defaultAxis.asStateFlow()
 
     private val _allSort = MutableStateFlow(loadAllSort())
-    /** CONVERGE V1 — řazení plochého výpisu osy „Vše" (default RECENT = nedávno přidané). */
+    /** CONVERGE V1 — řazení plochého výpisu osy „Vše" (default ABECEDNĚ od CELLULOID; přepínatelné na „nedávno přidané"). */
     val allSort: StateFlow<FilmotekaAllSort> = _allSort.asStateFlow()
 
     private val _enabledRegions = MutableStateFlow(loadRegions())
@@ -100,7 +100,9 @@ class FilmotekaSettingsStore @Inject constructor(
 
     private fun loadAllSort(): FilmotekaAllSort {
         val raw = prefs.getString(keyFor(KEY_ALL_SORT), null) ?: prefs.getString(KEY_ALL_SORT, null)
-        return raw?.let { runCatching { FilmotekaAllSort.valueOf(it) }.getOrNull() } ?: FilmotekaAllSort.RECENT
+        // CELLULOID (user 2026-07-17) — Filmotéka výchozí ABECEDNĚ (katalog). Uložená volba má přednost;
+        // „Nedávno přidané" je jen přepínač. Sdílené s TV Filmotékou (konzistentní, jen počáteční hodnota).
+        return raw?.let { runCatching { FilmotekaAllSort.valueOf(it) }.getOrNull() } ?: FilmotekaAllSort.ALPHABETICAL
     }
 
     private fun loadRegions(): Set<CinematographyRegion> {
