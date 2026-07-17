@@ -81,6 +81,8 @@ class CuratorLoader @Inject constructor(
             .mapNotNull { it.tmdbId }.toSet()
         return ContentAgeGate.filter(capAge(), enriched, hideUnrated())
             .filterNot { it.tmdbId != null && it.tmdbId in disliked }
+            // User 2026-07-17: nedoporučuj, co už uživatel zná (zhlédnuté ∪ watchlist ∪ hodnocené).
+            .filterNot { it.tmdbId != null && it.tmdbId in taste.knownIds }
             .also { Log.i(TAG, "forYou: ${it.size} položek") }
     }
 
@@ -112,15 +114,17 @@ class CuratorLoader @Inject constructor(
             .take(RECENT_CAP)
 
         // ratings: vysoké → loved, nízké → avoid; název dohledán přes watched mapu (RatingResultValue nemá title)
+        val movieRatings = movieRatingsD.await()
+        val showRatings = showRatingsD.await()
         val lovedFromRatings = mutableListOf<TasteEntry>()
         val avoid = mutableListOf<String>()
-        movieRatingsD.await().forEach { r ->
+        movieRatings.forEach { r ->
             val tmdb = r.movie.ids.tmdb ?: return@forEach
             val e = labelByTmdb[tmdb] ?: return@forEach
             if (r.rating >= LOVE_MIN) lovedFromRatings += e
             if (r.rating <= AVOID_MAX) avoid += e.title
         }
-        showRatingsD.await().forEach { r ->
+        showRatings.forEach { r ->
             val tmdb = r.show.ids.tmdb ?: return@forEach
             val e = labelByTmdb[tmdb] ?: return@forEach
             if (r.rating >= LOVE_MIN) lovedFromRatings += e
@@ -137,7 +141,15 @@ class CuratorLoader @Inject constructor(
             .map { TasteEntry(title = it.title, year = it.year) }
         localRatings.filter { it.stars <= AVOID_MAX }.forEach { avoid += it.title }
 
-        val watchlist = watchlistD.await().mapNotNull { it.toEntry() }.take(WATCHLIST_CAP)
+        val watchlistItems = watchlistD.await()
+        val watchlist = watchlistItems.mapNotNull { it.toEntry() }.take(WATCHLIST_CAP)
+
+        // Vše, co už uživatel zná → vyloučit z doporučení (user 2026-07-17): zhlédnuté ∪ watchlist ∪ hodnocené.
+        val knownIds = HashSet<Long>()
+        watched.forEach { it.getTmdbId()?.let(knownIds::add) }
+        watchlistItems.forEach { it.getTmdbId()?.let(knownIds::add) }
+        movieRatings.forEach { r -> r.movie.ids.tmdb?.let(knownIds::add) }
+        showRatings.forEach { r -> r.show.ids.tmdb?.let(knownIds::add) }
 
         TastePayload(
             loved = (lovedFromFavorites + lovedFromRatings + lovedFromLocalRatings).dedupByTitle().take(LOVED_CAP),
@@ -145,6 +157,7 @@ class CuratorLoader @Inject constructor(
             recent = recent,
             watchlist = watchlist,
             avoid = avoid.distinct().take(AVOID_CAP),
+            knownIds = knownIds,
         )
     }
 
@@ -231,8 +244,12 @@ class CuratorLoader @Inject constructor(
         val recent: List<TasteEntry>,
         val watchlist: List<TasteEntry>,
         val avoid: List<String>,
+        // Vše, co už uživatel zná (zhlédnuté ∪ watchlist ∪ hodnocené) → vyloučit z doporučení (user 2026-07-17).
+        val knownIds: Set<Long> = emptySet(),
     ) {
-        fun isEmpty(): Boolean = top.isEmpty() && recent.isEmpty() && loved.isEmpty()
+        // Watchlist se POČÍTÁ do vkusu (user 2026-07-17): když historie/zhlédnuté z Traktu zlobí (pomalý/
+        // padající endpoint), watchlist („Chci vidět") stačí jako signál → Pro tebe není prázdné.
+        fun isEmpty(): Boolean = top.isEmpty() && recent.isEmpty() && loved.isEmpty() && watchlist.isEmpty()
     }
 
     private companion object {

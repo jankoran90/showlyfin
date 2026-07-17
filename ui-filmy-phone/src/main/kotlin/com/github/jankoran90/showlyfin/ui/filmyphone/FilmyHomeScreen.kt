@@ -49,6 +49,8 @@ fun FilmyHomeScreen(
     onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
     onOpenJellyfinDetail: (itemId: String) -> Unit,
+    // M2.6: klik na položku řady „Uloženo k přehrání" (playDirectly) → otevři detail rovnou v režimu přehrání.
+    onOpenDetailPlay: (MediaItem) -> Unit = onOpenDetail,
     modifier: Modifier = Modifier,
     homeVm: TvHomeViewModel = hiltViewModel(),
     libraryVm: LibraryRowsViewModel = hiltViewModel(),
@@ -99,6 +101,8 @@ fun FilmyHomeScreen(
         val mi = item.mediaItem
         val jf = item.jellyfinId
         when {
+            // Řada „Uloženo k přehrání" (LAPIDARY) → detail rovnou spustí zapamatovaný zdroj (vzor TvHomeScreen).
+            mi != null && item.playDirectly -> onOpenDetailPlay(mi)
             mi != null -> onOpenDetail(mi)
             jf != null -> onOpenJellyfinDetail(jf)
         }

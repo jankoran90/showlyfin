@@ -64,7 +64,8 @@ fun FilmyPhoneShell() {
 
 /** Vstup do lehkého back-stacku detailů: bohatý titul ([Media]) nebo JF-only položka ([Jellyfin]) k dohledání. */
 private sealed interface FilmyDetailEntry {
-    data class Media(val item: MediaItem) : FilmyDetailEntry
+    // autoplay=true (LAPIDARY one-click z řady „Uloženo k přehrání") → po hydrataci přehraj zapamatovaný zdroj.
+    data class Media(val item: MediaItem, val autoplay: Boolean = false) : FilmyDetailEntry
     data class Jellyfin(val id: String) : FilmyDetailEntry
 }
 
@@ -147,6 +148,8 @@ private fun FilmyShellContent() {
                 onCollectionPartClick = pushCollectionPart,
                 onPlayJellyfin = { jfId -> playJellyfin(jfId, item.title) },
                 onPlayStreamUrl = { url, title, subQuery -> playStream(url, title, subQuery, item.posterUrl()) },
+                // M2.6 LAPIDARY: one-click z řady „Uloženo k přehrání" → přehraj zapamatovaný zdroj rovnou.
+                autoplayRemembered = detailEntry.autoplay,
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (detailEntry is FilmyDetailEntry.Jellyfin) {
@@ -185,6 +188,8 @@ private fun FilmyShellContent() {
                             .padding(padding),
                     ) {
                         val openDetail: (MediaItem) -> Unit = { detailStack = detailStack + FilmyDetailEntry.Media(it) }
+                        // M2.6 LAPIDARY: klik na „Uloženo k přehrání" → detail v režimu okamžitého přehrání.
+                        val openDetailPlay: (MediaItem) -> Unit = { detailStack = detailStack + FilmyDetailEntry.Media(it, autoplay = true) }
                         // M2.6: JF-only položka → dohledá se přes getItemMeta a otevře sdílený detail.
                         val openJfDetail: (String) -> Unit = { jf -> detailStack = detailStack + FilmyDetailEntry.Jellyfin(jf) }
                         when (current) {
@@ -193,6 +198,7 @@ private fun FilmyShellContent() {
                                 onMenu = onMenu,
                                 onOpenDetail = openDetail,
                                 onOpenJellyfinDetail = openJfDetail, // M2.6: JF-only detail zprovozněn
+                                onOpenDetailPlay = openDetailPlay,   // M2.6: one-click zapamatovaný zdroj
                             )
                             // M2.5: Pro tebe = kurátor (reuse ForYouViewModel).
                             FilmySection.FOR_YOU -> FilmyForYouScreen(onMenu = onMenu, onOpenDetail = openDetail)

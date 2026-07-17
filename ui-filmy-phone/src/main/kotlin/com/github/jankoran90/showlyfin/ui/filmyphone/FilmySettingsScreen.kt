@@ -17,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,7 @@ fun FilmySettingsScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by settingsVm.uiState.collectAsStateWithLifecycle()
     var showUploaderLogin by remember { mutableStateOf(false) }
+    var showTraktLogin by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize()) {
         FilmySectionBar(title = "Nastavení", onMenu = onMenu)
@@ -89,6 +91,42 @@ fun FilmySettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
+            // --- Účet Trakt (M2.6) ---
+            Text(
+                text = "Účet Trakt",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                text = "Doporučení „Pro tebe\", watchlist a historie se berou z Traktu. Tady se můžeš odhlásit " +
+                    "nebo přihlásit (např. přepnout účet).",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (settings.traktLoggedIn) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = "  Přihlášeno k Traktu",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { settingsVm.logout() }) { Text("Odhlásit") }
+                }
+            } else {
+                Button(onClick = { showTraktLogin = true }) {
+                    Text("Přihlásit se k Traktu")
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
             // --- Ladění a log ---
             Text(
                 text = "Ladění",
@@ -118,5 +156,8 @@ fun FilmySettingsScreen(
 
     if (showUploaderLogin) {
         FilmyUploaderLoginDialog(onDismiss = { showUploaderLogin = false })
+    }
+    if (showTraktLogin) {
+        FilmyTraktLoginDialog(onDismiss = { showTraktLogin = false })
     }
 }
