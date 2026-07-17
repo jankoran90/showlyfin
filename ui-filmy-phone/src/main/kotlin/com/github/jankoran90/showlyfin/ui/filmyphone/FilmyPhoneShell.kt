@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
@@ -159,6 +160,17 @@ private fun FilmyShellContent() {
         player = FilmyPlayer(itemId = jfId, title = title)
     }
     val popDetail: () -> Unit = { detailStack = detailStack.dropLast(1) }
+
+    // Parity: notifikace kurátora „nová doporučení" (FilmyMainActivity → EXTRA_OPEN_FORYOU) → přepni na
+    // sekci „Pro tebe" a zavři případný otevřený detail/přehrávač, ať je sekce reálně vidět.
+    val openForYou by ListenNavSignal.openForYou.collectAsStateWithLifecycle()
+    LaunchedEffect(openForYou) {
+        if (openForYou > 0) {
+            current = FilmySection.FOR_YOU
+            detailStack = emptyList()
+            player = null
+        }
+    }
 
     CompositionLocalProvider(
         LocalCsfdRatingProvider provides cardCsfd,

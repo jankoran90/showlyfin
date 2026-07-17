@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import com.github.jankoran90.showlyfin.core.ui.DebugCaptureLauncher
 import com.github.jankoran90.showlyfin.core.ui.FormFactor
 import com.github.jankoran90.showlyfin.core.ui.LocalDebugCaptureLauncher
+import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.LocalFormFactor
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
@@ -52,6 +53,7 @@ class FilmyMainActivity : ComponentActivity() {
         CuratorCheckWorker.enqueue(applicationContext)
         runStartupUpdateCheck()
         maybeShowUpdateDialogFromIntent(intent)
+        handleForYouIntent(intent)
         val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         lifecycleScope.launch {
             // CELLULOID M1.3 — Filmy má 2 PEVNÉ LOKÁLNÍ profily (Dospělý/Děti), NE backend roster
@@ -156,6 +158,15 @@ class FilmyMainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         maybeShowUpdateDialogFromIntent(intent)
+        handleForYouIntent(intent)
+    }
+
+    // Parity (CELLULOID): proklik notifikace kurátora „nová doporučení" (CuratorCheckWorker míří na tuto
+    // aktivitu s EXTRA_OPEN_FORYOU) → shell přepne na sekci „Pro tebe". Bez tohoto byl tap na notifikaci mrtvý.
+    private fun handleForYouIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(ListenNavSignal.EXTRA_OPEN_FORYOU, false) == true) {
+            ListenNavSignal.requestOpenForYou()
+        }
     }
 
     private fun maybeShowUpdateDialogFromIntent(intent: Intent?) {
