@@ -130,6 +130,9 @@ fun FilmySettingsScreen(
                 }
             }
 
+            // --- Nahrát historii do Traktu (M2.7 parita, reuse TraktHistoryImporter) ---
+            FilmyTraktImportSection()
+
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
             // --- Kurátor „Pro tebe" (M2.7 parita, reuse CuratorSettingsViewModel) ---
