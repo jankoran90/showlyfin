@@ -45,7 +45,17 @@ class CuratorLoader @Inject constructor(
 ) {
     private fun capAge(): Int? = parental.profile.value.effectiveAgeCap
     private fun hideUnrated(): Boolean = parental.profile.value.hideUnratedForAge
-    private fun profileKey(): String = appPrefs.getString("jellyfin_user_id", "").orEmpty()
+    // Kanonický backend klíč (shodný s FavoritesRepository/mirror/substrate `backendKey`):
+    // jellyfinUserId (prefer) → profileUuid (fallback). **Filmy profily nemají JF účet** → pref
+    // `jellyfin_user_id` je prázdný → BEZ fallbacku na profileUuid by `key.isBlank()` a curator by se
+    // serveru NIKDY nezeptal (Pro tebe navěky prázdné — bug do v1.0.10). Showlyfin má JF → pref plný →
+    // beze změny (pref má přednost). Fallback míří na profileUuid = `filmy-adult` = bucket mirroru.
+    private fun profileKey(): String {
+        val prefId = appPrefs.getString("jellyfin_user_id", "").orEmpty()
+        if (prefId.isNotBlank()) return prefId
+        val p = profileRepository.activeProfile.value
+        return p?.jellyfinUserId?.takeIf { it.isNotBlank() } ?: p?.profileUuid.orEmpty()
+    }
     private fun serverBase(): String = appPrefs.getString("uploader_base_url", "").orEmpty()
     private fun serverCookie(): String = appPrefs.getString("uploader_session_cookie", "").orEmpty()
 

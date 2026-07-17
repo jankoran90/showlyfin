@@ -151,6 +151,11 @@ fun FilmySettingsScreen(
                     onCheckedChange = { settingsVm.setLiveLogging(it) },
                 )
             }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            // --- O aplikaci (verze + changelog + kontrola aktualizace) ---
+            FilmyAboutSection()
         }
     }
 
