@@ -300,6 +300,16 @@ internal class UploaderApi(
         }.getOrNull()
     }
 
+    // SUBSTRATE F2c KROK 2 — po Trakt loginu kopni server mirror (server hned natáhne Trakt vkus).
+    override suspend fun mirrorRefresh(baseUrl: String, sessionCookie: String, key: String): MirrorRefreshResponse? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = "".toRequestBody("application/json; charset=utf-8".toMediaType())
+        return runCatching {
+            service.profileMirrorRefresh("$base/api/profiles/${enc(key)}/mirror/refresh", cookie, body)
+        }.getOrNull()
+    }
+
     override suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String?, loginPinHash: String?) {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

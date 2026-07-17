@@ -38,3 +38,21 @@ data class DeltaPushResponse(
 data class DeltaPushBody(
     val rows: List<DeltaRow> = emptyList(),
 )
+
+/**
+ * SUBSTRATE F2c KROK 2 — odpověď `POST /api/profiles/{key}/mirror/refresh` (server tahá Trakt vkus
+ * do serverového mirroru). [tokenStale] = uložený access token na serveru je mrtvý (V3 zeď) → appka
+ * musí pushnout čerstvý po re-loginu. [counts] = kolik řádků server natáhl.
+ */
+data class MirrorRefreshResponse(
+    val ok: Boolean = false,
+    val counts: MirrorCounts = MirrorCounts(),
+    val tokenStale: Boolean = false,
+    val error: String? = null,
+)
+
+data class MirrorCounts(
+    val watched: Int = 0,
+    val watchlist: Int = 0,
+    val ratings: Int = 0,
+)

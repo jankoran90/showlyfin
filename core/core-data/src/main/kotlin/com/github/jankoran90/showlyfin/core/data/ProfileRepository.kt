@@ -5,6 +5,7 @@ import com.github.jankoran90.showlyfin.core.data.dao.ProfileDao
 import com.github.jankoran90.showlyfin.core.data.dao.TemplateDao
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
+import com.github.jankoran90.showlyfin.core.domain.MirrorRefreshResult
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
@@ -221,6 +222,18 @@ class ProfileRepository @Inject constructor(
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
         Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
         configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId)
+    }
+
+    /**
+     * SUBSTRATE F2c KROK 2 — po Trakt (re)loginu appka pushne čerstvý token (přes [updateConfig]) a hned
+     * kopne server mirror, aby server natáhl aktuální Trakt vkus do serverového mirroru (kurátor „Pro
+     * tebe" z něj staví cold-start). Volej AŽ PO [updateConfig] (server musí mít čerstvý token). Best-effort.
+     */
+    suspend fun refreshTraktMirror(profileId: Long): MirrorRefreshResult? {
+        val profile = dao.getById(profileId) ?: return null
+        return runCatching { configGateway.refreshTraktMirror(profile.backendKey()) }
+            .onFailure { Timber.w(it, "[SUBSTRATE] refreshTraktMirror selhal key='${profile.backendKey()}'") }
+            .getOrNull()
     }
 
     // --- Šablony (Plan WARDEN W0) ---

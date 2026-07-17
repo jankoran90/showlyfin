@@ -50,6 +50,17 @@ data class JellyfinLibraryRef(
     val collectionType: String?,
 )
 
+/**
+ * SUBSTRATE (SHW-99) F2c KROK 2 — výsledek serverového Trakt mirror refreshe. [tokenStale] = uložený
+ * access token na serveru je mrtvý (V3 zeď) → appka musí pushnout čerstvý po re-loginu.
+ */
+data class MirrorRefreshResult(
+    val ok: Boolean,
+    val tokenStale: Boolean,
+    val watched: Int = 0,
+    val watchlist: Int = 0,
+)
+
 interface ProfileConfigGateway {
     companion object {
         /**
@@ -143,4 +154,12 @@ interface ProfileConfigGateway {
      * hash, nebo `""` = zrušit PIN. Best-effort; selhání se tiše ignoruje (lokál je už zapsaný).
      */
     suspend fun pushLoginPin(key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, pinHash: String)
+
+    /**
+     * SUBSTRATE F2c KROK 2 — kopne server mirror (`POST /api/profiles/{key}/mirror/refresh`), aby
+     * server hned natáhl čerstvý Trakt vkus do serverového mirroru (volá se PO pushi čerstvého tokenu
+     * po re-loginu). Best-effort; null = nedostupné / chyba. [MirrorRefreshResult.tokenStale] = token
+     * na serveru je mrtvý → potřeba pushnout nový.
+     */
+    suspend fun refreshTraktMirror(key: String): MirrorRefreshResult?
 }

@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.data.uploader
 
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef
+import com.github.jankoran90.showlyfin.core.domain.MirrorRefreshResult
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
 import com.github.jankoran90.showlyfin.core.domain.TemplatePayload
@@ -196,5 +197,18 @@ internal class UploaderProfileConfigGateway @Inject constructor(
         runCatching { remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId, loginPinHash = pinHash) }
             .onSuccess { Timber.i("[PUSH] gw.pushLoginPin OK '$key'") }
             .onFailure { Timber.i(it, "[PUSH] gw.pushLoginPin FAIL '$key': ${it.message}") }
+    }
+
+    // SUBSTRATE F2c KROK 2 — kopne server mirror po Trakt loginu (server hned natáhne Trakt vkus).
+    override suspend fun refreshTraktMirror(key: String): MirrorRefreshResult? {
+        if (!isAvailable() || key.isBlank()) return null
+        val resp = remote.mirrorRefresh(baseUrl(), cookie(), key) ?: return null
+        Timber.i("[SUBSTRATE] gw.refreshTraktMirror '$key' ok=${resp.ok} stale=${resp.tokenStale} watched=${resp.counts.watched} watchlist=${resp.counts.watchlist}")
+        return MirrorRefreshResult(
+            ok = resp.ok,
+            tokenStale = resp.tokenStale,
+            watched = resp.counts.watched,
+            watchlist = resp.counts.watchlist,
+        )
     }
 }

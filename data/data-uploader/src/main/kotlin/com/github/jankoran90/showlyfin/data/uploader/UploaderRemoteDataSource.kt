@@ -42,6 +42,8 @@ interface UploaderRemoteDataSource {
     // pull `?since=v` → null při chybě (offline safety); push dirty řádků → null při chybě.
     suspend fun getProfileDelta(baseUrl: String, sessionCookie: String, key: String, domain: String, since: Long): DeltaResponse?
     suspend fun postProfileDelta(baseUrl: String, sessionCookie: String, key: String, domain: String, rows: List<DeltaRow>): DeltaPushResponse?
+    // SUBSTRATE F2c KROK 2 — kopne server mirror po Trakt loginu (server hned natáhne Trakt vkus). null = chyba/offline.
+    suspend fun mirrorRefresh(baseUrl: String, sessionCookie: String, key: String): MirrorRefreshResponse?
     // AUTEUR (SHW-91) — kurátorský mozek: taste payload (raw JSON) → doporučení (raw JSON), nebo null při chybě.
     suspend fun curatorRecommend(baseUrl: String, sessionCookie: String, json: String): String?
     // LAPIDARY (SHW-96) — vzácné klenoty. cacheOne = watchlist/favorite trigger (fire-and-forget, backend běží na pozadí,

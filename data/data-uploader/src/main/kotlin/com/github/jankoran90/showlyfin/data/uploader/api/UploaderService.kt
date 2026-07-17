@@ -42,6 +42,8 @@ interface UploaderService {
     // SUBSTRATE (SHW-99) F2b — generický delta sync per profil+doména (typed JSON přes Gson converter)
     @GET suspend fun getProfileDelta(@Url url: String, @Header("Cookie") cookie: String): DeltaResponse
     @POST suspend fun postProfileDelta(@Url url: String, @Header("Cookie") cookie: String, @Body body: DeltaPushBody): DeltaPushResponse
+    // SUBSTRATE F2c KROK 2 — po Trakt loginu appka kopne server mirror (server hned natáhne Trakt vkus do mirroru)
+    @POST suspend fun profileMirrorRefresh(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): MirrorRefreshResponse
     @PUT suspend fun putProfile(@Url url: String, @Header("Cookie") cookie: String, @Body request: ProfileMetaRequest): Response<ResponseBody>
     // LAPIDARY (SHW-96) — vzácné klenoty: watchlist/favorite trigger (cache-one) + katalog sekce
     @POST suspend fun gemsCacheOne(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>

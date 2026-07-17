@@ -270,7 +270,7 @@ class SettingsViewModel @Inject constructor(
                 try {
                     traktAuthManager.authorize(code)
                     _uiState.update { it.copy(traktLoggedIn = true, isLoading = false) }
-                    captureTraktIntoActiveProfile() // Plan VAULT — Trakt per-profil
+                    captureTraktIntoActiveProfile(refreshMirror = true) // Plan VAULT — Trakt per-profil; SUBSTRATE F2c — kopni mirror
                 } catch (e: Throwable) {
                     _uiState.update { it.copy(isLoading = false, error = e.message ?: "Chyba autorizace") }
                 }
@@ -787,7 +787,7 @@ class SettingsViewModel @Inject constructor(
      * do sdílených `traktPreferences`; tady ho zrcadlíme do profilu, ať přežije přepnutí i fresh-install.
      * Odhlášení (prázdný token) → trakt = null (z balíku se vyčistí).
      */
-    private fun captureTraktIntoActiveProfile() {
+    private fun captureTraktIntoActiveProfile(refreshMirror: Boolean = false) {
         // CELLULOID M2.4 fix — Trakt login/logout (device i browser) změní stav autorizace. Bumpni signál,
         // ať domov ([TvHomeViewModel]) i Filmotéka ([TvFilmotekaViewModel]) přenačtou řady BEZ restartu/mazání
         // cache (device bug: po loginu domov visel na „přihlas se"). Před early-returnem → platí i bez profilu.
@@ -803,7 +803,21 @@ class SettingsViewModel @Inject constructor(
                 createdAtMillis = created, expiresAtMillis = expires,
             )
         else null
-        updateProfileConfig(activeId) { c -> c.copy(credentials = c.credentials.copy(trakt = trakt)) }
+        // SUBSTRATE F2c KROK 2 — po (re)loginu pushni čerstvý token na server a AŽ POTOM kopni mirror:
+        // server tahá access token jako neprůhledný bearer (server-side V3 refresh je mrtvý), takže jediná
+        // obnova serverového Trakt mirroru = čerstvý token z appky. Sekvenčně v JEDNÉ korutině, aby měl
+        // server token dřív, než mirror natáhne. Best-effort (offline / nepřihlášený backend token polkne).
+        viewModelScope.launch {
+            profileRepository.updateConfig(activeId) { c -> c.copy(credentials = c.credentials.copy(trakt = trakt)) }
+            if (refreshMirror && trakt != null) {
+                val res = profileRepository.refreshTraktMirror(activeId)
+                when {
+                    res == null -> Timber.i("[SUBSTRATE] mirror refresh po loginu přeskočen (backend nedostupný)")
+                    res.tokenStale -> Timber.w("[SUBSTRATE] mirror po loginu hlásí tokenStale — token na serveru mrtvý i po pushi (watched=${res.watched})")
+                    else -> Timber.i("[SUBSTRATE] mirror refresh po loginu OK: watched=${res.watched} watchlist=${res.watchlist}")
+                }
+            }
+        }
         refreshTraktAccountLabel()
     }
 
@@ -942,7 +956,7 @@ class SettingsViewModel @Inject constructor(
                             traktStatus = "Přihlášeno ✓",
                         )
                     }
-                    captureTraktIntoActiveProfile() // Plan VAULT — Trakt per-profil
+                    captureTraktIntoActiveProfile(refreshMirror = true) // Plan VAULT — Trakt per-profil; SUBSTRATE F2c — kopni mirror
                 }
                 is TraktDevicePollResult.Expired -> _uiState.update {
                     it.copy(traktUserCode = null, traktVerificationUrl = null, traktStatus = "Kód vypršel, zkus to znovu")
