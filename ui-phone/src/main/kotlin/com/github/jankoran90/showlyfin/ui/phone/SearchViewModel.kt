@@ -7,7 +7,7 @@ import com.github.jankoran90.showlyfin.data.tmdb.model.PersonRole
 import com.github.jankoran90.showlyfin.data.tmdb.model.czLabel
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
-import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,7 +79,7 @@ data class SearchUiState(
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val tmdb: TmdbRemoteDataSource,
-    private val favoritesStore: FavoritesStore,
+    private val favoritesStore: FavoritesRepository,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")

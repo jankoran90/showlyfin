@@ -64,7 +64,7 @@ class DetailViewModel @Inject constructor(
     private val naTv: NaTvService,
     private val workingSourceStore: com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
-    private val favoritesStore: com.github.jankoran90.showlyfin.data.uploader.FavoritesStore,
+    private val favoritesStore: com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository,
     // DINGO — per-zařízení preset přehrávání (preferuj H.264 pro slabé HEVC dekodéry v autě). Re-rank seznamu zdrojů.
     private val streamPresetStore: com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore,
     private val offlineManager: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,

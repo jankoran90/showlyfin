@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
-import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +19,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class TvFavoritesViewModel @Inject constructor(
-    private val favorites: FavoritesStore,
+    private val favorites: FavoritesRepository,
 ) : ViewModel() {
 
     init {

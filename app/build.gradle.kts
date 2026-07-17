@@ -97,6 +97,7 @@ dependencies {
 
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-data"))
+    implementation(project(":core:core-db")) // SUBSTRATE (SHW-99) — reaktivní datová páteř (substrate.db)
     implementation(project(":core:core-network"))
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-appservices"))

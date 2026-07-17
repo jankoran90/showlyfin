@@ -11,7 +11,7 @@ import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
 import com.github.jankoran90.showlyfin.data.trakt.model.SyncItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
-import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import kotlinx.coroutines.async
@@ -34,7 +34,7 @@ import javax.inject.Singleton
 @Singleton
 class CuratorLoader @Inject constructor(
     private val authorizedTraktApi: AuthorizedTraktRemoteDataSource,
-    private val favoritesStore: FavoritesStore,
+    private val favoritesStore: FavoritesRepository,
     private val userRatingStore: com.github.jankoran90.showlyfin.data.uploader.UserRatingStore,
     private val enricher: MediaEnricher,
     private val parental: ParentalControlsRepository,

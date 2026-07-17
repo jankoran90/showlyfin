@@ -19,6 +19,7 @@ android {
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-data"))
+    implementation(project(":core:core-db"))      // SUBSTRATE (SHW-99): FavoritesRepository (Room = zdroj pravdy)
     implementation(project(":core:core-ui"))
     implementation(project(":data:data-trakt"))
     implementation(project(":data:data-tmdb"))

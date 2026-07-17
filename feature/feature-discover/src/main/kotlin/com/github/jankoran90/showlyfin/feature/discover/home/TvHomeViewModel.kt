@@ -24,7 +24,7 @@ import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSourc
 import com.github.jankoran90.showlyfin.data.trakt.TraktRemoteDataSource
 import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
-import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.feature.discover.mapper.toMediaItem
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -82,7 +82,7 @@ class TvHomeViewModel @Inject constructor(
     private val tmdb: TmdbRemoteDataSource,
     private val enricher: MediaEnricher,
     private val parentalControls: ParentalControlsRepository,
-    private val favorites: FavoritesStore,
+    private val favorites: FavoritesRepository,
     private val workingSources: WorkingSourceStore,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val profileRepository: ProfileRepository,

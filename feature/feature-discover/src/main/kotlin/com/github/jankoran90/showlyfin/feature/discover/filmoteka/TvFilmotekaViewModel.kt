@@ -16,7 +16,7 @@ import com.github.jankoran90.showlyfin.core.domain.filmoteka.regionsOf
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
-import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
@@ -84,7 +84,7 @@ class TvFilmotekaViewModel @Inject constructor(
     private val deviceInfo: DeviceInfo,
     private val traktLoader: TraktRowLoader,
     private val enricher: MediaEnricher,
-    private val favorites: FavoritesStore,
+    private val favorites: FavoritesRepository,
     private val workingSources: WorkingSourceStore,
     private val parentalControls: ParentalControlsRepository,
     private val profileRepository: ProfileRepository,

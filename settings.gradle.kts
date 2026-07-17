@@ -28,6 +28,8 @@ include(":app-filmy")
 
 // Core
 include(":core:core-data")
+// SUBSTRATE (SHW-99) — reaktivní datová páteř: samostatná substrate.db (NE showlyfin.db) + sync broker.
+include(":core:core-db")
 include(":core:core-network")
 include(":core:core-domain")
 include(":core:core-ui")

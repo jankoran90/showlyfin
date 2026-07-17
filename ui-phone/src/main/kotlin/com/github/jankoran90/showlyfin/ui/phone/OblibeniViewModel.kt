@@ -7,7 +7,7 @@ import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.model.czLabel
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
-import com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +22,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class OblibeniViewModel @Inject constructor(
-    private val favorites: FavoritesStore,
+    private val favorites: FavoritesRepository,
     private val tmdb: TmdbRemoteDataSource,
 ) : ViewModel() {
 
