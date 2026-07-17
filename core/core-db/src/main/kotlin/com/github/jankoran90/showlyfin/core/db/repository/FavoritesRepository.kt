@@ -5,9 +5,10 @@ import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.db.dao.FavoriteDao
 import com.github.jankoran90.showlyfin.core.db.entity.FavoriteEntity
+import com.github.jankoran90.showlyfin.core.db.sync.FavoriteSyncableDao
+import com.github.jankoran90.showlyfin.core.db.sync.SyncEngine
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
-import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -30,17 +31,15 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
-/** Obálka serverového JSONu `{"favorites":[…]}` (endpoint `/api/profiles/{key}/favorites`). */
-private data class FavoritesEnvelope(val favorites: List<FavoriteItem> = emptyList())
-
 /**
- * SUBSTRATE (SHW-99) F1 — repozitář domény OBLÍBENÉ. **Room = jediný zdroj pravdy pro UI.**
+ * SUBSTRATE (SHW-99) F1+F2b — repozitář domény OBLÍBENÉ. **Room = jediný zdroj pravdy pro UI.**
  *
  * - [observe] = reaktivní [Flow] z Room (přepíná se dle AKTIVNÍHO profilu; UI se překreslí okamžitě).
  * - [add]/[remove] = optimistický zápis do Room (dirty=1, updatedAt=now; remove = **tombstone**) →
  *   Flow se aktualizuje HNED → na pozadí [sync] pushne na server.
- * - [sync] = pull `GET` + **UNION + tombstone-aware + LWW** merge + push celého blobu `PUT`
- *   (endpointy už existují; delta/verze až ve F2). Nikdy neztratit lokál kvůli prázdnému serveru.
+ * - [sync] = **F2b delta** přes generický [SyncEngine] (`POST/GET …/favorites/delta`): push dirty →
+ *   pull `?since=lastPullVersion` → union-safe merge do Room. Full-blob z F1 nahrazeno; server data sdílí
+ *   (delta i full-blob endpoint čtou stejný `substrate.sqlite3`), takže zpětně kompatibilní s v1.0.6.
  * - Profil-klíč = **profileUuid** (F0 nález: `jellyfin_user_id` kolidoval u sdílených JF účtů).
  * - Migrace: jednorázový import ze starého prefs blobu `compass_favorites` (flag [KEY_MIGRATED]).
  *
@@ -52,7 +51,8 @@ class FavoritesRepository @Inject constructor(
     @ApplicationContext context: Context,
     private val dao: FavoriteDao,
     private val profileRepository: ProfileRepository,
-    private val uploaderDs: UploaderRemoteDataSource,
+    private val syncEngine: SyncEngine,
+    private val favoriteSyncableDao: FavoriteSyncableDao,
     private val gson: Gson,
     @param:Named("traktPreferences") private val appPrefs: SharedPreferences,
 ) {
@@ -157,10 +157,10 @@ class FavoritesRepository @Inject constructor(
             add(item); true
         }
 
-    // ── sync broker (pull + merge + push) ────────────────────────────────────
+    // ── sync broker (F2b delta přes SyncEngine) ──────────────────────────────
     /**
-     * Pull server → UNION+tombstone+LWW merge do Room → push celého živého snapshotu (F1 full-blob).
-     * Offline/404 → nesahat na lokál (ochrana proti ztrátě dat).
+     * Delta sync domény `favorites` přes [SyncEngine]: push dirty → pull `?since` → union-safe merge do Room.
+     * Offline/chyba → engine nesahá na lokál (ochrana proti ztrátě dat). [syncMutex] serializuje cykly.
      */
     suspend fun sync(key: String = activeKey().orEmpty()) {
         if (key.isBlank()) return
@@ -168,60 +168,9 @@ class FavoritesRepository @Inject constructor(
         if (base.isBlank()) return  // nepřihlášeno k serveru → jen lokál
         syncMutex.withLock {
             runCatching {
-                val serverItems = parseServer(uploaderDs.getProfileFavorites(base, cookie, key))
-                if (serverItems != null) mergeServer(key, serverItems)
-
-                // Push: dirty lokál NEBO server prázdný/neúplný (UNION safety — server dorovnat).
-                val all = dao.getAll(key)
-                val liveSnapshot = all.filter { it.deleted == 0 }.map { it.toItem() }
-                val hasDirty = all.any { it.dirty == 1 }
-                val serverKeys = serverItems?.map { it.kind to it.id }?.toSet() ?: emptySet()
-                val liveKeys = liveSnapshot.map { it.kind to it.id }.toSet()
-                if (hasDirty || serverItems == null || serverKeys != liveKeys) {
-                    pushNow(key, base, cookie, liveSnapshot)
-                    dao.clearDirty(key, System.currentTimeMillis())
-                }
+                syncEngine.sync(DOMAIN, favoriteSyncableDao, key, base, cookie)
             }.onFailure { Timber.w(it, "[SUBSTRATE] sync oblíbených selhal") }
         }
-    }
-
-    /**
-     * UNION + tombstone-aware + LWW. Full-blob server nemá per-položku verzi → LWW děláme jen kde to jde
-     * (server [FavoriteItem.addedAtMs] vs lokál [FavoriteEntity.updatedAt]); jinak konzervativně chráníme
-     * lokál (nikdy neztratit) a dirty tombstones (pending removal) vyhrávají nad serverem.
-     */
-    private suspend fun mergeServer(key: String, server: List<FavoriteItem>) {
-        val localByKey = dao.getAll(key).associateBy { it.kind to it.refId }
-        val toUpsert = mutableListOf<FavoriteEntity>()
-        for (s in server) {
-            val local = localByKey[s.kind.name to s.id]
-            when {
-                local == null -> {
-                    // Server má, lokál ne → adoptuj čistě.
-                    toUpsert += s.toEntity(key, dirty = 0, deleted = 0)
-                }
-                local.deleted == 1 && local.dirty == 1 -> {
-                    // Pending removal (tombstone čeká na push) → NECHAT smazané (push ho pak odebere).
-                }
-                local.deleted == 1 && local.dirty == 0 -> {
-                    // Čistý tombstone: vzkřísit jen když je server prokazatelně novější (LWW).
-                    if (s.addedAtMs > local.updatedAt) {
-                        toUpsert += s.toEntity(key, dirty = 0, deleted = 0)
-                    }
-                }
-                else -> {
-                    // Živý lokál: obnov metadata ze serveru jen když není dirty (neztratit rozdělanou změnu).
-                    if (local.dirty == 0) {
-                        toUpsert += local.copy(
-                            name = s.name.ifBlank { local.name },
-                            imageUrl = s.imageUrl ?: local.imageUrl,
-                            year = s.year ?: local.year,
-                        )
-                    }
-                }
-            }
-        }
-        if (toUpsert.isNotEmpty()) dao.upsertAll(toUpsert)
     }
 
     // ── migrace prefs → Room ─────────────────────────────────────────────────
@@ -253,18 +202,6 @@ class FavoritesRepository @Inject constructor(
     private fun baseUrl(): String = appPrefs.getString("uploader_base_url", "").orEmpty()
     private fun cookie(): String = appPrefs.getString("uploader_session_cookie", "").orEmpty()
 
-    private fun parseServer(raw: String?): List<FavoriteItem>? {
-        if (raw == null) return null
-        return runCatching { gson.fromJson(raw, FavoritesEnvelope::class.java)?.favorites ?: emptyList() }
-            .onFailure { Timber.w(it, "[SUBSTRATE] parse server favorites") }.getOrNull()
-    }
-
-    private suspend fun pushNow(key: String, base: String, cookie: String, list: List<FavoriteItem>) {
-        runCatching {
-            uploaderDs.putProfileFavorites(base, cookie, key, gson.toJson(FavoritesEnvelope(list)))
-        }.onFailure { Timber.w(it, "[SUBSTRATE] push oblíbených selhal") }
-    }
-
     // ── mapování entity ↔ wire model ─────────────────────────────────────────
     private fun FavoriteEntity.toItem(): FavoriteItem = FavoriteItem(
         kind = runCatching { FavoriteKind.valueOf(kind) }.getOrDefault(FavoriteKind.MOVIE),
@@ -291,5 +228,7 @@ class FavoritesRepository @Inject constructor(
     private companion object {
         /** Flag jednorázové migrace prefs→Room (per-device, v traktPreferences). */
         const val KEY_MIGRATED = "substrate_favorites_migrated"
+        /** Serverová sync doména (delta endpointy `/api/profiles/{key}/favorites/delta`). */
+        const val DOMAIN = "favorites"
     }
 }

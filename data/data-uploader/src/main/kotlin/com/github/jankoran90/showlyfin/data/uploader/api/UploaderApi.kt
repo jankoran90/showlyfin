@@ -283,6 +283,23 @@ internal class UploaderApi(
         if (!resp.isSuccessful) throw HttpException(resp)
     }
 
+    // SUBSTRATE (SHW-99) F2b — generický delta sync (stejný auth/cookie mechanismus jako full-blob výše).
+    override suspend fun getProfileDelta(baseUrl: String, sessionCookie: String, key: String, domain: String, since: Long): DeltaResponse? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching {
+            service.getProfileDelta("$base/api/profiles/${enc(key)}/${enc(domain)}/delta?since=$since", cookie)
+        }.getOrNull()
+    }
+
+    override suspend fun postProfileDelta(baseUrl: String, sessionCookie: String, key: String, domain: String, rows: List<DeltaRow>): DeltaPushResponse? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching {
+            service.postProfileDelta("$base/api/profiles/${enc(key)}/${enc(domain)}/delta", cookie, DeltaPushBody(rows))
+        }.getOrNull()
+    }
+
     override suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String?, loginPinHash: String?) {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

@@ -39,9 +39,13 @@ interface FavoriteDao {
     @Query("SELECT * FROM favorite WHERE profileKey = :profileKey AND dirty = 1")
     suspend fun getDirty(profileKey: String): List<FavoriteEntity>
 
-    /** Po úspěšném pushi shodí dirty a povýší verzi. */
+    /** Po úspěšném pushi shodí dirty a povýší verzi (F1 full-blob — všechny dirty najednou). */
     @Query("UPDATE favorite SET dirty = 0, syncVersion = :version WHERE profileKey = :profileKey AND dirty = 1")
     suspend fun clearDirty(profileKey: String, version: Long)
+
+    /** SUBSTRATE F2b — po ACK delta pushe shodí dirty konkrétního řádku + ulož serverovou verzi. */
+    @Query("UPDATE favorite SET dirty = 0, syncVersion = :version WHERE profileKey = :profileKey AND kind = :kind AND refId = :refId")
+    suspend fun clearDirtyRow(profileKey: String, kind: String, refId: Long, version: Long)
 
     @Query("SELECT COUNT(*) FROM favorite WHERE profileKey = :profileKey")
     suspend fun count(profileKey: String): Int

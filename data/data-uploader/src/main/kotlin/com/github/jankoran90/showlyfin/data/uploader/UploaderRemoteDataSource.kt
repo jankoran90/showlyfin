@@ -38,6 +38,10 @@ interface UploaderRemoteDataSource {
     // SIEVE follow-up — Zapamatované zdroje per profil (raw JSON {"sources":[…]})
     suspend fun getProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String): String?
     suspend fun putProfileWorkingSources(baseUrl: String, sessionCookie: String, key: String, json: String)
+    // SUBSTRATE (SHW-99) F2b — generický delta sync per profil+doména (favorites/working-sources/ratings/…).
+    // pull `?since=v` → null při chybě (offline safety); push dirty řádků → null při chybě.
+    suspend fun getProfileDelta(baseUrl: String, sessionCookie: String, key: String, domain: String, since: Long): DeltaResponse?
+    suspend fun postProfileDelta(baseUrl: String, sessionCookie: String, key: String, domain: String, rows: List<DeltaRow>): DeltaPushResponse?
     // AUTEUR (SHW-91) — kurátorský mozek: taste payload (raw JSON) → doporučení (raw JSON), nebo null při chybě.
     suspend fun curatorRecommend(baseUrl: String, sessionCookie: String, json: String): String?
     // LAPIDARY (SHW-96) — vzácné klenoty. cacheOne = watchlist/favorite trigger (fire-and-forget, backend běží na pozadí,
