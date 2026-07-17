@@ -34,7 +34,6 @@ import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSourceType
 import com.github.jankoran90.showlyfin.core.domain.home.LibrarySummary
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
-import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowItem
 import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
 
 /**
@@ -157,19 +156,6 @@ private fun FilmyHomeEmpty(modifier: Modifier = Modifier, onTraktLogin: () -> Un
         }
     }
 }
-
-/** LibraryRowItem (JF knihovna) → HomeRowItem pro jednotný render (telefonní verze `ui-tv::toHomeRowItem`). */
-private fun LibraryRowItem.toHomeRowItem(): HomeRowItem = HomeRowItem(
-    key = jellyfinId,
-    title = name,
-    year = year,
-    posterUrl = imageUrl,
-    landscapeUrl = landscapeUrl,
-    progressPct = progressPct,
-    watched = watched,
-    mediaItem = mediaItem,
-    jellyfinId = jellyfinId,
-)
 
 /** Klientské operace pro řadu knihovny (skryj zhlédnuté + řazení + limit). Kopie z `TvHomeScreen`. */
 private fun List<HomeRowItem>.applyConfig(cfg: HomeRowConfig): List<HomeRowItem> {

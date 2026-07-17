@@ -1,18 +1,13 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -21,10 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
@@ -124,21 +116,32 @@ private fun FilmyShellContent() {
                             .fillMaxSize()
                             .padding(padding),
                     ) {
+                        val openDetail: (MediaItem) -> Unit = { detailStack = detailStack + it }
                         when (current) {
                             // M2.2 domov = řady (reuse TvHomeViewModel); M2.3 klik → detail (push na stack).
                             FilmySection.HOME -> FilmyHomeScreen(
                                 onMenu = onMenu,
-                                onOpenDetail = { detailStack = detailStack + it },
+                                onOpenDetail = openDetail,
                                 onOpenJellyfinDetail = {}, // JF-only detail = pozdější milník (jiná obrazovka)
                             )
+                            // M2.5: Pro tebe = kurátor (reuse ForYouViewModel).
+                            FilmySection.FOR_YOU -> FilmyForYouScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.4: Filmotéka = mřížka plakátů se sekcemi (reuse TvFilmotekaViewModel).
-                            FilmySection.FILMOTEKA -> FilmyFilmotekaScreen(
+                            FilmySection.FILMOTEKA -> FilmyFilmotekaScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            // M2.5: Vzácné klenoty = LAPIDARY řady (reuse TvLapidaryViewModel).
+                            FilmySection.GEMS -> FilmyGemsScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            // M2.5: Knihovna = JF řady (reuse LibraryRowsViewModel).
+                            FilmySection.LIBRARY -> FilmyLibraryScreen(
                                 onMenu = onMenu,
-                                onOpenDetail = { detailStack = detailStack + it },
+                                onOpenDetail = openDetail,
+                                onOpenJellyfinDetail = {}, // JF-only detail = pozdější milník
                             )
-                            // M2.3b: Nastavení = uploader login (ČSFD) + vypínač živého logu. Plné Nastavení = M2.5.
+                            // M2.5: Hledat = TMDB (reuse SearchViewModel).
+                            FilmySection.SEARCH -> FilmySearchScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            // M2.3b: Nastavení = uploader login (ČSFD) + vypínač živého logu.
                             FilmySection.SETTINGS -> FilmySettingsScreen(onMenu = onMenu)
-                            else -> FilmySectionPlaceholder(section = current, onMenu = onMenu)
+                            // M2.5: Profil = 2 pevné profily + PIN (reuse SettingsViewModel/ProfileRepository).
+                            FilmySection.PROFILE -> FilmyProfileScreen(onMenu = onMenu)
                         }
                     }
                 }
@@ -147,38 +150,3 @@ private fun FilmyShellContent() {
     }
 }
 
-/**
- * Dočasný obsah sekce (M2.1). Každá sekce dostane vlastní reuse-obrazovku v M2.2+; teď jen srozumitelně
- * ukáže, že navigace funguje a co se sem doplní.
- */
-@Composable
-private fun FilmySectionPlaceholder(section: FilmySection, onMenu: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        FilmySectionBar(title = section.label, onMenu = onMenu)
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(32.dp),
-            ) {
-                Icon(
-                    section.icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(56.dp),
-                )
-                Text(
-                    text = section.label,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Text(
-                    text = "Obsah této sekce se dotáhne v dalším milníku.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-    }
-}
