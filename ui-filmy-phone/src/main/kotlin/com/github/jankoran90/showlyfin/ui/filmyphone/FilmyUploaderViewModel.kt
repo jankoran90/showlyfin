@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
+import com.github.jankoran90.showlyfin.core.ui.clearCsfdEnrichmentCaches
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +47,9 @@ class FilmyUploaderViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             val ok = gateway.login(password)
+            // Po přihlášení zahoď ČSFD cache (dosud plná anglických fallbacků) → návrat na domov/detail
+            // dotáhne český popis bez restartu appky.
+            if (ok) clearCsfdEnrichmentCaches()
             _state.update {
                 it.copy(
                     loading = false,
