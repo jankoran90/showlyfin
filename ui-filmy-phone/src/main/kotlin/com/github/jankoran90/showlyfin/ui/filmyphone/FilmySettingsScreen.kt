@@ -147,6 +147,26 @@ fun FilmySettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
+            // --- Detail obsahu (M2.7 parita vlna 2, reuse DetailPrefsViewModel) ---
+            FilmyDetailContentSection()
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            // --- Přehrávač (M2.7 parita vlna 2, reuse SettingsViewModel) ---
+            FilmyPlayerSection()
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            // --- Obraz a zvuk (M2.7 parita vlna 2, reuse SettingsViewModel) ---
+            FilmyAudioSection()
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            // --- Rodičovská kontrola (M2.7 parita vlna 2, reuse ParentalPrefsViewModel) ---
+            FilmyParentalSection()
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
             // --- Ladění a log ---
             Text(
                 text = "Ladění",
