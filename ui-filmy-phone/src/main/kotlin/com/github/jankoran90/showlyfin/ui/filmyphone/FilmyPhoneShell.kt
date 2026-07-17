@@ -130,6 +130,8 @@ private fun FilmyShellContent() {
                                 onOpenDetail = { detailStack = detailStack + it },
                                 onOpenJellyfinDetail = {}, // JF-only detail = pozdější milník (jiná obrazovka)
                             )
+                            // M2.3b: Nastavení = zatím uploader login (české ČSFD popisky). Plné Nastavení = M2.5.
+                            FilmySection.SETTINGS -> FilmySettingsScreen()
                             else -> FilmySectionPlaceholder(current)
                         }
                     }
