@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,15 +10,20 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
@@ -34,6 +41,7 @@ import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.phone.CardCsfdViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
+import com.github.jankoran90.showlyfin.ui.phone.NaTvCoordinator
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
 import kotlinx.coroutines.launch
@@ -101,6 +109,35 @@ private fun FilmyShellContent() {
     // CASCADE: stejná (Activity-scoped) instance DetailViewModelu jako uvnitř DetailScreen — drží candidate
     // list `streams`; po chybě přehrávání (onPlaybackFailed) spustí dalšího kandidáta místo chyby.
     val detailVm: DetailViewModel = hiltViewModel()
+    // Parity catch-up (Filmy↔showlyfin): „Přehrát na TV" owned titulů (cast do Yellyfin session) — sdílený
+    // NaTvCoordinator z :ui-phone; hlášky (odesláno/není v knihovně) přes snackbar. Ovladač sekci Filmy nemá,
+    // takže požadavek na její otevření je no-op — cast na TV proběhne, jen bez controller obrazovky.
+    val naTvCoordinator: NaTvCoordinator = hiltViewModel()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        naTvCoordinator.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
+    }
+    // Stremio fallback (DMCA blok / RD selhal / nekompatibilní formát) → otevři titul ve Stremiu (vzor
+    // showlyfin `onStremioItem`). Bez appky Stremio → web download. Bez toho byla ta tlačítka mrtvá.
+    val onStremioItem: (MediaItem) -> Unit = { item ->
+        val mediaType = if (item.type == MediaType.MOVIE) "movie" else "series"
+        val targetId = item.imdbId ?: item.tmdbId?.toString()
+        if (targetId != null) {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("stremio:///detail/$mediaType/$targetId")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(intent)
+            } catch (_: Throwable) {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.stremio.com/downloads")).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
+        }
+    }
 
     // Klik na část kolekce s tmdbId → další (bohatý) detail na stacku.
     val pushCollectionPart: (CollectionPart) -> Unit = { part ->
@@ -131,6 +168,7 @@ private fun FilmyShellContent() {
     ) {
         val activePlayer = player
         val detailEntry = detailStack.lastOrNull()
+        Box(modifier = Modifier.fillMaxSize()) {
         if (activePlayer != null) {
             // M2.6: přehrávač je nad vším. Back = zavřít přehrávač (návrat na detail).
             BackHandler { player = null }
@@ -153,9 +191,14 @@ private fun FilmyShellContent() {
             DetailScreen(
                 item = item,
                 onBack = popDetail,
+                // Parity: název sekce u šipky Zpět (dřív prázdné).
+                sectionTitle = current.label,
                 onCollectionPartClick = pushCollectionPart,
                 onPlayJellyfin = { jfId -> playJellyfin(jfId, item.title) },
                 onPlayStreamUrl = { url, title, subQuery -> playStream(url, title, subQuery, item.posterUrl()) },
+                // Parity: „Přehrát na TV" (owned) + Stremio fallback (DMCA/RD selhal/nekompat) — dřív mrtvá tlačítka.
+                onNaTv = { mediaItem, jfId -> naTvCoordinator.playOnTv(mediaItem, jfId) },
+                onStremio = onStremioItem,
                 // M2.6 LAPIDARY: one-click z řady „Uloženo k přehrání" → přehraj zapamatovaný zdroj rovnou.
                 autoplayRemembered = detailEntry.autoplay,
                 modifier = Modifier.fillMaxSize(),
@@ -233,6 +276,9 @@ private fun FilmyShellContent() {
         }
         // BESPOKE F3: hvězdičkový dialog nad obsahem (spouštěč z detailu / MENU karty) — parita s TV.
         RatingDialogHost(ratingVm)
+        // Parity: snackbar (hlášky „Přehrát na TV" z NaTvCoordinatoru) nad vším obsahem.
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+        }
     }
 }
 

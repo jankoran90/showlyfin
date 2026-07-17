@@ -137,6 +137,16 @@ fun FilmySettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
+            // --- Filmotéka (M2.7 parita vlna 2, reuse TvFilmotekaSettingsViewModel) ---
+            FilmyFilmotekaSection()
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            // --- Vzácné klenoty (M2.7 parita vlna 2, reuse TvLapidarySettingsViewModel) ---
+            FilmyGemsSection()
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
             // --- Ladění a log ---
             Text(
                 text = "Ladění",
