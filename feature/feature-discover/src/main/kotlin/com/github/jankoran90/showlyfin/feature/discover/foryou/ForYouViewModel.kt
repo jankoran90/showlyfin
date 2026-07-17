@@ -75,7 +75,9 @@ class ForYouViewModel @Inject constructor(
             // 1) Dorovnej store se serverem pro AKTUÁLNÍ profil (adopce při přepnutí / union při shodě).
             recommendationsStore.syncNow()
             // 2) Čerstvý snímek kurátora → merge (dedup + strop + push na server). Prázdný snímek nemaže.
-            val fresh = curatorLoader.forYou(limit = 60)
+            //    pollUntilReady=true: sekce „Pro tebe" na `pending` (mozek počítá) počká a re-polluje →
+            //    tipy naskočí na této obrazovce bez zavření (SUBSTRATE F2c stale-while-revalidate).
+            val fresh = curatorLoader.forYou(limit = 60, pollUntilReady = true)
             recommendationsStore.accumulate(fresh)
             _loading.value = false
         }

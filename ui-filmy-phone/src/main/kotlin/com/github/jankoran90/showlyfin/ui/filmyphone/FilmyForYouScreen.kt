@@ -53,7 +53,7 @@ fun FilmyForYouScreen(
                 state.items.isEmpty() -> FilmyEmpty(
                     icon = Icons.Rounded.Recommend,
                     title = "Zatím žádná doporučení",
-                    text = "Přihlas se k Traktu a ohodnoť pár filmů — kurátor ti tu začne skládat tipy podle tvého vkusu.",
+                    text = "Kurátor tu skládá tipy podle tvého Trakt vkusu. Jestli je prázdno i po chvíli, přihlas se k Traktu v Nastavení a ohodnoť pár filmů.",
                 )
                 viewMode == ViewMode.LIST -> FilmyMediaList(state.items, onOpenDetail)
                 else -> FilmyMediaGrid(state.items, onOpenDetail)

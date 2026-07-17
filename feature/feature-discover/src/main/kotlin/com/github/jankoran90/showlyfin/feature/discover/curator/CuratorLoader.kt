@@ -16,6 +16,7 @@ import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -55,7 +56,7 @@ class CuratorLoader @Inject constructor(
      * Kurátorská doporučení „Pro tebe". Prázdné = backend/mozek nedostupný nebo studený vkus →
      * volající (TvHomeViewModel) může fallbacknout na `weightedRecommendations`.
      */
-    suspend fun forYou(limit: Int): List<MediaItem> {
+    suspend fun forYou(limit: Int, pollUntilReady: Boolean = false): List<MediaItem> {
         val prefs = prefs()
         // Master switch (C1): vypnutý kurátor → mozek NEvoláme, volající spadne na fallback (weighted).
         if (!prefs.enabled) { Log.i(TAG, "forYou: kurátor vypnutý → fallback"); return emptyList() }
@@ -72,13 +73,34 @@ class CuratorLoader @Inject constructor(
         if (taste.isEmpty()) Log.i(TAG, "forYou: prázdný lokální vkus → server použije Trakt mirror")
 
         val requestJson = buildRequestJson(key, limit.coerceIn(1, 60), taste, prefs)
-        val raw = runCatching { uploaderDs.curatorRecommend(base, cookie, requestJson) }
-            .onFailure { Log.w(TAG, "forYou: volání backendu selhalo", it) }
-            .getOrNull() ?: return emptyList()
-        val parsed = runCatching { parseItems(raw) }
-            .onFailure { Log.w(TAG, "forYou: parse odpovědi selhal", it) }
-            .getOrNull() ?: return emptyList()
-        if (parsed.isEmpty()) { Log.i(TAG, "forYou: 0 položek"); return emptyList() }
+        // REFLEX (C1): wait=false → cache miss vrátí `source=pending`, mozek se zahřeje na pozadí (~30 s).
+        // SUBSTRATE F2c fix: volající, který chce plný obsah (pollUntilReady = sekce „Pro tebe"), na `pending`
+        // POČKÁ a dotaz párkrát zopakuje (stale-while-revalidate) → doporučení naskočí na TÉTO obrazovce bez
+        // zavření/návratu. Home řada nechává pollUntilReady=false → okamžitý fallback (weighted), žádné blokování.
+        var attempt = 0
+        while (true) {
+            val raw = runCatching { uploaderDs.curatorRecommend(base, cookie, requestJson) }
+                .onFailure { Log.w(TAG, "forYou: volání backendu selhalo", it) }
+                .getOrNull() ?: return emptyList()
+            val source = runCatching { JSONObject(raw).optString("source") }.getOrNull().orEmpty()
+            val parsed = runCatching { parseItems(raw) }
+                .onFailure { Log.w(TAG, "forYou: parse odpovědi selhal", it) }
+                .getOrNull() ?: return emptyList()
+            if (parsed.isNotEmpty()) return postProcess(parsed, taste)
+            // Prázdno + mozek počítá na pozadí → počkej a zkus znovu (jen když to volající chce).
+            if (source == "pending" && pollUntilReady && attempt < PENDING_MAX_RETRIES) {
+                attempt++
+                Log.i(TAG, "forYou: mozek počítá (pending) → re-poll $attempt/$PENDING_MAX_RETRIES za ${PENDING_RETRY_MS}ms")
+                delay(PENDING_RETRY_MS)
+                continue
+            }
+            Log.i(TAG, "forYou: 0 položek (source=$source)")
+            return emptyList()
+        }
+    }
+
+    /** Enrich + věkový gate + skrytí nízko hodnocených/už známých. Sdílené pro první i re-poll odpověď. */
+    private suspend fun postProcess(parsed: List<MediaItem>, taste: TastePayload): List<MediaItem> {
         val enriched = enricher.enrich(parsed, withCertification = capAge() != null)
         // BESPOKE F3 — tvrdý skryt nízko hodnocených (≤4 hvězdy) titulů ze sekce „Pro tebe".
         val disliked = userRatingStore.items.value.filter { it.stars <= AVOID_MAX }
@@ -265,5 +287,7 @@ class CuratorLoader @Inject constructor(
         const val AVOID_CAP = 30
         const val LOVE_MIN = 8      // Trakt rating (1-10) ≥ 8 = „miluje"
         const val AVOID_MAX = 4     // ≤ 4 = palec dolů → veto
+        const val PENDING_MAX_RETRIES = 8   // re-poll na `pending` (mozek ~30 s) → strop ~48 s
+        const val PENDING_RETRY_MS = 6_000L
     }
 }
