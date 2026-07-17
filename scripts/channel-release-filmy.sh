@@ -28,8 +28,8 @@ rsync -az --delete \
   --exclude 'build/' --exclude '*/build/' --exclude '.gradle/' \
   -e 'ssh -p 2222' "$SRC/" "yellman@localhost:$ZSRC/"
 
-echo "==> 2/4 assembleRelease (podpis vlastním keystorem)…"
-$ZEN_SSH "source ~/.showlyfin-build.env && cd $ZSRC && ANDROID_HOME=\$HOME/Android/Sdk ./gradlew :app-filmy:assembleRelease --no-daemon --no-configuration-cache"
+echo "==> 2/4 assembleRelease (podpis vlastním keystorem, safe-build proti brown-outu)…"
+$ZEN_SSH "cd $ZSRC && ./gradlew --stop >/dev/null 2>&1 || true; source ~/.showlyfin-build.env && ANDROID_HOME=\$HOME/Android/Sdk ~/skripty/safe-build.sh :app-filmy:assembleRelease --no-daemon --no-configuration-cache"
 
 echo "==> 3/4 stahuju podepsaný APK na server…"
 APK="$TEMP/filmy-release.apk"
