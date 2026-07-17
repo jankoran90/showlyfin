@@ -553,6 +553,22 @@ fun DetailScreen(
                             }
                         }
                     }
+                    // CELLULOID M2.6 immersive: pod názvem kompaktní meta řádek — Režie + žánry (dosud
+                    // viditelné jen v sekci „Tvůrci" níž). Aditivní: nic neubírá, obohacuje hero obou appek.
+                    val directorLine = uiState.directors.mapNotNull { it.name }.filter { it.isNotBlank() }.take(2).joinToString(", ")
+                    val metaParts = buildList {
+                        if (directorLine.isNotBlank()) add("Režie: $directorLine")
+                        genres?.takeIf { it.isNotEmpty() }?.let { add(it.take(3).joinToString(" · ")) }
+                    }
+                    if (metaParts.isNotEmpty()) {
+                        Text(
+                            text = metaParts.joinToString("   ·   "),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.85f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(16.dp))

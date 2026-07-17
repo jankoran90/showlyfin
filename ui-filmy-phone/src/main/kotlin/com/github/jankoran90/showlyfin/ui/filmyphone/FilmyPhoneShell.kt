@@ -21,10 +21,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
+import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
+import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
+import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.phone.CardCsfdViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
@@ -58,39 +62,103 @@ fun FilmyPhoneShell() {
     }
 }
 
+/** Vstup do lehkého back-stacku detailů: bohatý titul ([Media]) nebo JF-only položka ([Jellyfin]) k dohledání. */
+private sealed interface FilmyDetailEntry {
+    data class Media(val item: MediaItem) : FilmyDetailEntry
+    data class Jellyfin(val id: String) : FilmyDetailEntry
+}
+
+/** M2.6: stav přehrávače nad detailem — externí stream (Real-Debrid/Stremio) NEBO Jellyfin item. */
+private data class FilmyPlayer(
+    val itemId: String? = null,
+    val externalUrl: String? = null,
+    val title: String = "",
+    val subtitleQuery: SubtitleQuery? = null,
+    val posterUrl: String? = null,
+)
+
 @Composable
 private fun FilmyShellContent() {
     var current by remember { mutableStateOf(FilmySection.HOME) }
     // M2.3: lehký back-stack detailů (klik na řádek/CollectionPart → push; back → pop). Prázdný = shell sekcí.
-    var detailStack by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    // M2.6: sjednocen na FilmyDetailEntry, aby uměl i JF-only položky (dohledání přes getItemMeta).
+    var detailStack by remember { mutableStateOf<List<FilmyDetailEntry>>(emptyList()) }
+    // M2.6: přehrávač nad detailem (null = nehraje se). Reuse sdíleného PlaybackScreen (ExoPlayer + FFmpeg).
+    var player by remember { mutableStateOf<FilmyPlayer?>(null) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     // Obohacení karet/řádků (ČSFD %, český popis, režisér) — líně z TMDB/ČSFD + cache. Filmy má vlastní
     // shell (ne ShowlyfinPhoneApp), proto providery zapojujeme tady, jinak by režie/ČSFD/popis byly null.
     val cardCsfd: CardCsfdViewModel = hiltViewModel()
+    // CASCADE: stejná (Activity-scoped) instance DetailViewModelu jako uvnitř DetailScreen — drží candidate
+    // list `streams`; po chybě přehrávání (onPlaybackFailed) spustí dalšího kandidáta místo chyby.
+    val detailVm: DetailViewModel = hiltViewModel()
+
+    // Klik na část kolekce s tmdbId → další (bohatý) detail na stacku.
+    val pushCollectionPart: (CollectionPart) -> Unit = { part ->
+        part.tmdbId?.let { tmdb ->
+            detailStack = detailStack + FilmyDetailEntry.Media(
+                MediaItem(
+                    traktId = 0L, tmdbId = tmdb, imdbId = null, title = part.title,
+                    year = part.year?.toIntOrNull(), overview = null, rating = null,
+                    genres = null, type = MediaType.MOVIE,
+                )
+            )
+        }
+    }
+    // M2.6: resolvnutá URL (Real-Debrid/Stremio) → spusť přehrávač. Poster do notifikace z titulu detailu.
+    val playStream: (String, String, SubtitleQuery?, String?) -> Unit = { url, title, subQuery, poster ->
+        player = FilmyPlayer(externalUrl = url, title = title, subtitleQuery = subQuery, posterUrl = poster)
+    }
+    val playJellyfin: (String, String) -> Unit = { jfId, title ->
+        player = FilmyPlayer(itemId = jfId, title = title)
+    }
+    val popDetail: () -> Unit = { detailStack = detailStack.dropLast(1) }
 
     CompositionLocalProvider(
         LocalCsfdRatingProvider provides cardCsfd,
         LocalCzechOverviewProvider provides cardCsfd,
         LocalDirectorProvider provides cardCsfd,
     ) {
-        val detailItem = detailStack.lastOrNull()
-        if (detailItem != null) {
-            // M2.3: karta detailu = sdílený DetailScreen (telefonní větev). Přehrávání/cast = pozdější milník
-            // (callbacky zatím null). Klik na film v řadách detailu (CollectionPart s tmdbId) → další detail.
-            BackHandler { detailStack = detailStack.dropLast(1) }
-            DetailScreen(
-                item = detailItem,
-                onBack = { detailStack = detailStack.dropLast(1) },
-                onCollectionPartClick = { part ->
-                    part.tmdbId?.let { tmdb ->
-                        detailStack = detailStack + MediaItem(
-                            traktId = 0L, tmdbId = tmdb, imdbId = null, title = part.title,
-                            year = part.year?.toIntOrNull(), overview = null, rating = null,
-                            genres = null, type = MediaType.MOVIE,
-                        )
-                    }
+        val activePlayer = player
+        val detailEntry = detailStack.lastOrNull()
+        if (activePlayer != null) {
+            // M2.6: přehrávač je nad vším. Back = zavřít přehrávač (návrat na detail).
+            BackHandler { player = null }
+            PlaybackScreen(
+                itemId = activePlayer.itemId ?: "",
+                externalUrl = activePlayer.externalUrl,
+                externalTitle = activePlayer.title,
+                subtitleQuery = activePlayer.subtitleQuery,
+                externalPosterUrl = activePlayer.posterUrl,
+                onBack = { player = null },
+                onPlaybackFailed = { code ->
+                    player = null            // zpět na detail, kde žije candidate list
+                    detailVm.onPlaybackFailed(code)
                 },
+            )
+        } else if (detailEntry is FilmyDetailEntry.Media) {
+            // M2.3/M2.6: karta detailu = sdílený DetailScreen (telefonní větev) + přehrávání.
+            val item = detailEntry.item
+            BackHandler(onBack = popDetail)
+            DetailScreen(
+                item = item,
+                onBack = popDetail,
+                onCollectionPartClick = pushCollectionPart,
+                onPlayJellyfin = { jfId -> playJellyfin(jfId, item.title) },
+                onPlayStreamUrl = { url, title, subQuery -> playStream(url, title, subQuery, item.posterUrl()) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (detailEntry is FilmyDetailEntry.Jellyfin) {
+            // M2.6: JF-only položka (z Knihovny/domova) — dohledej tmdb/imdb a otevři sdílený detail.
+            BackHandler(onBack = popDetail)
+            FilmyJellyfinDetail(
+                itemId = detailEntry.id,
+                onBack = popDetail,
+                onCollectionPartClick = pushCollectionPart,
+                onOpenJellyfinDetail = { jf -> detailStack = detailStack + FilmyDetailEntry.Jellyfin(jf) },
+                onPlayJellyfin = { jfId -> playJellyfin(jfId, "") },
+                onPlayStreamUrl = { url, title, subQuery -> playStream(url, title, subQuery, null) },
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
@@ -116,13 +184,15 @@ private fun FilmyShellContent() {
                             .fillMaxSize()
                             .padding(padding),
                     ) {
-                        val openDetail: (MediaItem) -> Unit = { detailStack = detailStack + it }
+                        val openDetail: (MediaItem) -> Unit = { detailStack = detailStack + FilmyDetailEntry.Media(it) }
+                        // M2.6: JF-only položka → dohledá se přes getItemMeta a otevře sdílený detail.
+                        val openJfDetail: (String) -> Unit = { jf -> detailStack = detailStack + FilmyDetailEntry.Jellyfin(jf) }
                         when (current) {
                             // M2.2 domov = řady (reuse TvHomeViewModel); M2.3 klik → detail (push na stack).
                             FilmySection.HOME -> FilmyHomeScreen(
                                 onMenu = onMenu,
                                 onOpenDetail = openDetail,
-                                onOpenJellyfinDetail = {}, // JF-only detail = pozdější milník (jiná obrazovka)
+                                onOpenJellyfinDetail = openJfDetail, // M2.6: JF-only detail zprovozněn
                             )
                             // M2.5: Pro tebe = kurátor (reuse ForYouViewModel).
                             FilmySection.FOR_YOU -> FilmyForYouScreen(onMenu = onMenu, onOpenDetail = openDetail)
@@ -134,7 +204,7 @@ private fun FilmyShellContent() {
                             FilmySection.LIBRARY -> FilmyLibraryScreen(
                                 onMenu = onMenu,
                                 onOpenDetail = openDetail,
-                                onOpenJellyfinDetail = {}, // JF-only detail = pozdější milník
+                                onOpenJellyfinDetail = openJfDetail, // M2.6: JF-only detail zprovozněn
                             )
                             // M2.5: Hledat = TMDB (reuse SearchViewModel).
                             FilmySection.SEARCH -> FilmySearchScreen(onMenu = onMenu, onOpenDetail = openDetail)

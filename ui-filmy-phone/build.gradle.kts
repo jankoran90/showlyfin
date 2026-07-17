@@ -34,10 +34,16 @@ dependencies {
     implementation(project(":core:core-data"))
     // M2.2 domov: TvHomeViewModel + HomeRowItem (data mozek domova, bez TV závislosti).
     implementation(project(":feature:feature-discover"))
-    // M2.2 domov: LibraryRowsViewModel + LibraryRowItem (JF knihovní řady domova).
+    // M2.2 domov: LibraryRowsViewModel + LibraryRowItem (JF knihovní řady domova) + JellyfinDetailScreen (JF-only fallback).
     implementation(project(":feature:feature-jellyfin-browser"))
     // M2.3 karta detailu: sdílený DetailScreen (telefonní větev) + DetailViewModel.
     implementation(project(":feature:feature-detail"))
+    // M2.6 přehrávání: sdílený PlaybackScreen (ExoPlayer + FFmpeg) — reuse, žádná nová logika.
+    implementation(project(":feature:feature-playback"))
+    // M2.6 JF-only detail: JellyfinLibraryService.getItemMeta → dohledání tmdb/imdb id pro sdílený detail.
+    implementation(project(":data:data-jellyfin"))
+    // M2.6 přehrávání: SubtitleQuery typ v callbacku onPlayStreamUrl (data-uploader je jen `implementation` ve feature-detail → není tranzitivní).
+    implementation(project(":data:data-uploader"))
     // Motiv (ShowlyfinPhoneTheme) + telefonní VM pro reuse. Gap Fáze 4 (viz hlavička).
     implementation(project(":ui-phone"))
 

@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,8 @@ fun FilmyProfileScreen(
 ) {
     val ui by vm.uiState.collectAsStateWithLifecycle()
     var pinFor by remember { mutableStateOf<ProfileEntity?>(null) }
+    // M2.6: dlouhý stisk na kartu → nastavit/změnit/zrušit PIN (typicky Dospělý, ať se děti nepřepnou).
+    var pinSetFor by remember { mutableStateOf<ProfileEntity?>(null) }
 
     Column(modifier.fillMaxSize()) {
         FilmySectionBar(title = "Profil", onMenu = onMenu)
@@ -74,6 +77,11 @@ fun FilmyProfileScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
+            Text(
+                text = "Podržením profilu nastavíš nebo zrušíš PIN.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             ui.profiles.forEach { p ->
                 ProfileCard(
                     profile = p,
@@ -85,6 +93,7 @@ fun FilmyProfileScreen(
                             else -> vm.switchProfile(p.id)
                         }
                     },
+                    onLongClick = { pinSetFor = p },
                 )
             }
         }
@@ -98,12 +107,23 @@ fun FilmyProfileScreen(
             verify = { pin -> PinHasher.verify(pin, target.loginPinHash) },
         )
     }
+
+    pinSetFor?.let { target ->
+        SetPinDialog(
+            profileName = target.name,
+            hasPin = !target.loginPinHash.isNullOrBlank(),
+            onDismiss = { pinSetFor = null },
+            onSave = { pin -> vm.setProfilePin(target.id, pin); pinSetFor = null },
+            onClear = { vm.clearProfilePin(target.id); pinSetFor = null },
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ProfileCard(profile: ProfileEntity, active: Boolean, onClick: () -> Unit) {
+private fun ProfileCard(profile: ProfileEntity, active: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
         colors = CardDefaults.cardColors(
             containerColor = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -175,5 +195,51 @@ private fun PinDialog(
             TextButton(onClick = { if (verify(pin)) onVerified() else error = true }) { Text("Přepnout") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
+    )
+}
+
+/** M2.6 — nastavení/změna/zrušení PINu profilu (reuse [SettingsViewModel.setProfilePin]/`clearProfilePin`). */
+@Composable
+private fun SetPinDialog(
+    profileName: String,
+    hasPin: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    var pin by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (hasPin) "Změnit PIN — $profileName" else "Nastavit PIN — $profileName") },
+        text = {
+            Column {
+                Text(
+                    "Zadej číselný PIN. Bez PINu se na profil může přepnout kdokoli.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.size(8.dp))
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { pin = it.filter(Char::isDigit) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(pin) },
+                enabled = pin.length >= 3,
+            ) { Text("Uložit") }
+        },
+        dismissButton = {
+            // Když PIN existuje, dej i možnost ho zrušit; jinak jen Zrušit dialog.
+            if (hasPin) {
+                TextButton(onClick = onClear) { Text("Zrušit PIN") }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Zavřít") }
+            }
+        },
     )
 }
