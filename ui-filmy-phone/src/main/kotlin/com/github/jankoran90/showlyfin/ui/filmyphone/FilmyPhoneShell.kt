@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.ui.Alignment
@@ -164,8 +165,12 @@ private fun FilmyShellContent() {
     // Parity: notifikace kurátora „nová doporučení" (FilmyMainActivity → EXTRA_OPEN_FORYOU) → přepni na
     // sekci „Pro tebe" a zavři případný otevřený detail/přehrávač, ať je sekce reálně vidět.
     val openForYou by ListenNavSignal.openForYou.collectAsStateWithLifecycle()
+    // rememberSaveable guard: každou hodnotu signálu zpracuj JEN jednou. Přežije re-create Activity (změna
+    // jazyka/písma/density mimo configChanges) → nepřepne násilně zpět na „Pro tebe" ani nezavře přehrávač.
+    var lastForYou by rememberSaveable { mutableStateOf(0L) }
     LaunchedEffect(openForYou) {
-        if (openForYou > 0) {
+        if (openForYou > 0 && openForYou != lastForYou) {
+            lastForYou = openForYou
             current = FilmySection.FOR_YOU
             detailStack = emptyList()
             player = null
