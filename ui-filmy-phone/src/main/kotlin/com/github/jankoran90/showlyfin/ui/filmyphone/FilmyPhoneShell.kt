@@ -25,8 +25,11 @@ import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
+import com.github.jankoran90.showlyfin.feature.detail.rating.RatingDialogHost
+import com.github.jankoran90.showlyfin.feature.detail.rating.RatingViewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.phone.CardCsfdViewModel
@@ -91,6 +94,10 @@ private fun FilmyShellContent() {
     // Obohacení karet/řádků (ČSFD %, český popis, režisér) — líně z TMDB/ČSFD + cache. Filmy má vlastní
     // shell (ne ShowlyfinPhoneApp), proto providery zapojujeme tady, jinak by režie/ČSFD/popis byly null.
     val cardCsfd: CardCsfdViewModel = hiltViewModel()
+    // BESPOKE F3 — vlastní hvězdičkové hodnocení (parita s TV `ShowlyfinTvApp`): sdílený mozek → provider
+    // (★ odznak na kartách + spouštěč hodnocení v detailu) + dialog host níže. Bez toho telefon hodnotit neuměl
+    // a kurátorův „palec dolů" filtr nedostával telefonem nastavená hodnocení.
+    val ratingVm: RatingViewModel = hiltViewModel()
     // CASCADE: stejná (Activity-scoped) instance DetailViewModelu jako uvnitř DetailScreen — drží candidate
     // list `streams`; po chybě přehrávání (onPlaybackFailed) spustí dalšího kandidáta místo chyby.
     val detailVm: DetailViewModel = hiltViewModel()
@@ -120,6 +127,7 @@ private fun FilmyShellContent() {
         LocalCsfdRatingProvider provides cardCsfd,
         LocalCzechOverviewProvider provides cardCsfd,
         LocalDirectorProvider provides cardCsfd,
+        LocalUserRatingProvider provides ratingVm,
     ) {
         val activePlayer = player
         val detailEntry = detailStack.lastOrNull()
@@ -223,6 +231,8 @@ private fun FilmyShellContent() {
                 }
             }
         }
+        // BESPOKE F3: hvězdičkový dialog nad obsahem (spouštěč z detailu / MENU karty) — parita s TV.
+        RatingDialogHost(ratingVm)
     }
 }
 
