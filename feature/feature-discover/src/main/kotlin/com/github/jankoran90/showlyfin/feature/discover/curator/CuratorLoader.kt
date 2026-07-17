@@ -65,7 +65,11 @@ class CuratorLoader @Inject constructor(
             return emptyList()
         }
         val taste = buildTaste()
-        if (taste.isEmpty()) { Log.i(TAG, "forYou: studený vkus → fallback"); return emptyList() }
+        // SUBSTRATE F2c: NEshort-circuituj na prázdný lokální vkus. Server umí postavit vkus ze svého Trakt
+        // MIRRORU (tažený serverem, nezávislý na pomalém/padajícím živém Traktu klienta na cold startu).
+        // Když má klient vkus, pošle ho (přednost); když ne, pošle prázdný → server použije mirror → Pro tebe
+        // naskočí i na cold startu. (Dřív se tady vracelo prázdno a server se vůbec nezavolal = bug.)
+        if (taste.isEmpty()) Log.i(TAG, "forYou: prázdný lokální vkus → server použije Trakt mirror")
 
         val requestJson = buildRequestJson(key, limit.coerceIn(1, 60), taste, prefs)
         val raw = runCatching { uploaderDs.curatorRecommend(base, cookie, requestJson) }
