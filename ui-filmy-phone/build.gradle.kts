@@ -36,6 +36,8 @@ dependencies {
     implementation(project(":feature:feature-discover"))
     // M2.2 domov: LibraryRowsViewModel + LibraryRowItem (JF knihovní řady domova).
     implementation(project(":feature:feature-jellyfin-browser"))
+    // M2.3 karta detailu: sdílený DetailScreen (telefonní větev) + DetailViewModel.
+    implementation(project(":feature:feature-detail"))
     // Motiv (ShowlyfinPhoneTheme) + telefonní VM pro reuse. Gap Fáze 4 (viz hlavička).
     implementation(project(":ui-phone"))
 
