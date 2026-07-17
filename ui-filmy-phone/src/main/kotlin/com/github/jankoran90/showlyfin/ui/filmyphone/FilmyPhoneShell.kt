@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
  *
  * Nahrazuje dřívější placeholder `FilmyPhoneApp`. Obaluje sdílený motiv showlyfinu
  * ([ShowlyfinPhoneTheme] — activity-scoped VM sdílené s TV/Nastavením) a staví shell ve stylu
- * audiomanu: postranní menu ([FilmyDrawer]) + horní lišta ([FilmyTopBar]) + přepínání sekcí.
+ * audiomanu: postranní menu ([FilmyDrawer]) + horní lišta sekce ([FilmySectionBar]) + přepínání sekcí.
  *
  * M2.1 = navigační kostra; sekce jsou zatím placeholdery. Reálný obsah (řady, karta detailu,
  * Filmotéka grid) reuse ze sdílených feature-* přijde v M2.2–M2.5. TV shell se NESAHÁ (varianta A).
@@ -104,6 +104,9 @@ private fun FilmyShellContent() {
         } else {
             // Zavřený → back gesto zavře menu místo odchodu z appky.
             BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
+            // ☰ otevře menu — každá sekce si kreslí vlastní horní pruh (FilmySectionBar) s tímto callbackem,
+            // takže ovladače sekce splynou s lištou (žádný samostatný TopAppBar s názvem = min chrome, M2.5).
+            val onMenu: () -> Unit = { scope.launch { drawerState.open() } }
             ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
@@ -115,9 +118,6 @@ private fun FilmyShellContent() {
             ) {
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
-                    topBar = {
-                        FilmyTopBar(title = current.label) { scope.launch { drawerState.open() } }
-                    },
                 ) { padding ->
                     Box(
                         modifier = Modifier
@@ -127,16 +127,18 @@ private fun FilmyShellContent() {
                         when (current) {
                             // M2.2 domov = řady (reuse TvHomeViewModel); M2.3 klik → detail (push na stack).
                             FilmySection.HOME -> FilmyHomeScreen(
+                                onMenu = onMenu,
                                 onOpenDetail = { detailStack = detailStack + it },
                                 onOpenJellyfinDetail = {}, // JF-only detail = pozdější milník (jiná obrazovka)
                             )
                             // M2.4: Filmotéka = mřížka plakátů se sekcemi (reuse TvFilmotekaViewModel).
                             FilmySection.FILMOTEKA -> FilmyFilmotekaScreen(
+                                onMenu = onMenu,
                                 onOpenDetail = { detailStack = detailStack + it },
                             )
-                            // M2.3b: Nastavení = zatím uploader login (české ČSFD popisky). Plné Nastavení = M2.5.
-                            FilmySection.SETTINGS -> FilmySettingsScreen()
-                            else -> FilmySectionPlaceholder(current)
+                            // M2.3b: Nastavení = uploader login (ČSFD) + vypínač živého logu. Plné Nastavení = M2.5.
+                            FilmySection.SETTINGS -> FilmySettingsScreen(onMenu = onMenu)
+                            else -> FilmySectionPlaceholder(section = current, onMenu = onMenu)
                         }
                     }
                 }
@@ -150,30 +152,33 @@ private fun FilmyShellContent() {
  * ukáže, že navigace funguje a co se sem doplní.
  */
 @Composable
-private fun FilmySectionPlaceholder(section: FilmySection) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(32.dp),
-        ) {
-            Icon(
-                section.icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(56.dp),
-            )
-            Text(
-                text = section.label,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                text = "Obsah této sekce se dotáhne v dalším milníku.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+private fun FilmySectionPlaceholder(section: FilmySection, onMenu: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        FilmySectionBar(title = section.label, onMenu = onMenu)
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(32.dp),
+            ) {
+                Icon(
+                    section.icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(56.dp),
+                )
+                Text(
+                    text = section.label,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = "Obsah této sekce se dotáhne v dalším milníku.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }

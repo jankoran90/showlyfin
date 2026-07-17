@@ -65,6 +65,7 @@ data class FilmyRail(
 fun FilmyHomeTabbed(
     rails: List<FilmyRail>,
     onItemClick: (HomeRowItem) -> Unit,
+    onMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pagerState = rememberPagerState(pageCount = { rails.size })
@@ -72,23 +73,25 @@ fun FilmyHomeTabbed(
     val selected = pagerState.currentPage.coerceIn(0, rails.lastIndex.coerceAtLeast(0))
 
     Column(modifier = modifier.fillMaxSize()) {
-        // Taby = řady. Transparentní pruh → čte se jako součást horní lišty (splynutí = M2.2b doladění).
-        ScrollableTabRow(
-            selectedTabIndex = selected,
-            modifier = Modifier.fillMaxWidth(),
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.primary,
-            edgePadding = 12.dp,
-            divider = {},
-        ) {
-            rails.forEachIndexed { i, rail ->
-                Tab(
-                    selected = selected == i,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
-                    text = { Text(rail.title, maxLines = 1) },
-                    selectedContentColor = MaterialTheme.colorScheme.primary,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        // Taby = řady, SPLYNULÉ s lištou: ☰ + záložky v jednom tenkém pruhu (M2.2b vize, minimal chrome).
+        FilmySectionBar(onMenu = onMenu) {
+            ScrollableTabRow(
+                selectedTabIndex = selected,
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.primary,
+                edgePadding = 4.dp, // ☰ vlevo už dává odstup
+                divider = {},
+            ) {
+                rails.forEachIndexed { i, rail ->
+                    Tab(
+                        selected = selected == i,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
+                        text = { Text(rail.title, maxLines = 1) },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         HorizontalPager(

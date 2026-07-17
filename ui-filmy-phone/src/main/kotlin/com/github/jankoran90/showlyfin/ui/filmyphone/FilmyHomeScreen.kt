@@ -47,6 +47,7 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
  */
 @Composable
 fun FilmyHomeScreen(
+    onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
     onOpenJellyfinDetail: (itemId: String) -> Unit,
     modifier: Modifier = Modifier,
@@ -107,13 +108,18 @@ fun FilmyHomeScreen(
     var showTraktLogin by remember { mutableStateOf(false) }
 
     when {
-        // Domov = TRANSPOZICE TV: taby (řady) + swipe + svislý seznam řádků (M2.2 vize).
-        rails.isNotEmpty() -> FilmyHomeTabbed(rails = rails, onItemClick = ::clickItem, modifier = modifier)
-        // Ještě se načítá: profil/config nedorazil, nebo aspoň jedna řada běží.
-        states.isEmpty() || states.values.any { it.loading } ->
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        // Načtení doběhlo a nic není → profil nemá Trakt/JF obsah (typicky nepřihlášen). Věčný spinner = ne.
-        else -> FilmyHomeEmpty(modifier, onTraktLogin = { showTraktLogin = true })
+        // Domov = TRANSPOZICE TV: taby (řady) splynulé s lištou (☰ + taby) + swipe + svislý seznam řádků.
+        rails.isNotEmpty() -> FilmyHomeTabbed(rails = rails, onItemClick = ::clickItem, onMenu = onMenu, modifier = modifier)
+        // Ještě se načítá / prázdno → titulková lišta (☰ + „Domů") + obsah pod ní.
+        else -> Column(modifier.fillMaxSize()) {
+            FilmySectionBar(title = "Domů", onMenu = onMenu)
+            if (states.isEmpty() || states.values.any { it.loading }) {
+                Box(Modifier.weight(1f).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else {
+                // Načtení doběhlo a nic není → profil nemá Trakt/JF obsah (typicky nepřihlášen). Věčný spinner = ne.
+                FilmyHomeEmpty(Modifier.weight(1f), onTraktLogin = { showTraktLogin = true })
+            }
+        }
     }
 
     if (showTraktLogin) {

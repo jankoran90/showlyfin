@@ -62,6 +62,7 @@ import com.github.jankoran90.showlyfin.feature.discover.filmoteka.TvFilmotekaVie
  */
 @Composable
 fun FilmyFilmotekaScreen(
+    onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
     vm: TvFilmotekaViewModel = hiltViewModel(),
@@ -77,6 +78,7 @@ fun FilmyFilmotekaScreen(
             axis = state.axis,
             allSort = state.allSort,
             viewMode = viewMode,
+            onMenu = onMenu,
             onAxis = vm::setAxis,
             onAllSort = vm::setAllSort,
             onToggleView = { viewMode = if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID },
@@ -92,27 +94,40 @@ fun FilmyFilmotekaScreen(
     }
 }
 
-/** Lišta os (+ view přepínač vpravo) a — jen pro osu „Vše" — druhá lišta řazení. Max 2 lišty (přání usera). */
+/**
+ * Lišta os splynulá s horní lištou (☰ + chipy os + přepínač zobrazení vpravo) a — jen pro osu „Vše" —
+ * druhá lišta řazení pod ní. Max 2 lišty (přání usera). Vzor ovladačů = princip „lišta v každé sekci".
+ */
 @Composable
 private fun FilmotekaChips(
     axis: FilmotekaAxis,
     allSort: FilmotekaAllSort,
     viewMode: ViewMode,
+    onMenu: () -> Unit,
     onAxis: (FilmotekaAxis) -> Unit,
     onAllSort: (FilmotekaAllSort) -> Unit,
     onToggleView: () -> Unit,
 ) {
     Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // Řada os: chipy scrollují vlevo, view-přepínač zůstává fixně vpravo (bez další lišty).
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // ☰ + chipy os (scroll) + přepínač zobrazení vpravo — jeden pruh (splynutí s lištou).
+        FilmySectionBar(
+            onMenu = onMenu,
+            trailing = {
+                IconButton(onClick = onToggleView) {
+                    if (viewMode == ViewMode.GRID) {
+                        Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = "Zobrazit jako seznam")
+                    } else {
+                        Icon(Icons.Rounded.GridView, contentDescription = "Zobrazit jako mřížku")
+                    }
+                }
+            },
+        ) {
             Row(
                 Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -120,18 +135,12 @@ private fun FilmotekaChips(
                     FilterChip(selected = axis == a, onClick = { onAxis(a) }, label = { Text(a.chipLabel) })
                 }
             }
-            IconButton(onClick = onToggleView) {
-                if (viewMode == ViewMode.GRID) {
-                    Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = "Zobrazit jako seznam")
-                } else {
-                    Icon(Icons.Rounded.GridView, contentDescription = "Zobrazit jako mřížku")
-                }
-            }
         }
         if (axis == FilmotekaAxis.ALL) {
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {

@@ -452,8 +452,14 @@ fun DetailScreen(
             val hasGallery = uiState.csfdId != null && uiState.uploaderConfigured
             val hasReviews = uiState.csfdReviews.isNotEmpty()
             // Žánry — předávají se do sekce „Tvůrci" jako druhý sloupec (VANTAGE D4), z fanartu pryč.
-            val genres = uiState.movieDetails?.genres?.map { it.name }
-                ?: uiState.showDetails?.genres?.map { it.name }
+            // Mapujeme genre_id → český název (TmdbGenres), ne anglické .name z TMDB detailu. Fallback na
+            // displayItem.genres (už české z karty), kdyby mapa žánr neznala nebo detail nedorazil.
+            val genres = uiState.movieDetails?.genres
+                ?.let { com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(it.map { g -> g.id }, isShow = false) }
+                ?.takeIf { it.isNotEmpty() }
+                ?: uiState.showDetails?.genres
+                    ?.let { com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(it.map { g -> g.id }, isShow = true) }
+                    ?.takeIf { it.isNotEmpty() }
                 ?: displayItem.genres
             // Výška se přizpůsobí obsahu (min 200dp) — fanart kreslíme na pozadí přes matchParentSize,
             // takže delší název / víc žánrů nikdy neořízne hero info.

@@ -88,8 +88,14 @@ internal fun TvDetailBody(
 ) {
     // 4K TV: w1280 se na immersive fanartu roztaženém přes celou plochu pixeluje → plné rozlišení.
     val backdropUrl = displayItem.backdropUrl("original")
-    val genres = uiState.movieDetails?.genres?.map { it.name }
-        ?: uiState.showDetails?.genres?.map { it.name }
+    // Mapujeme genre_id → český název (TmdbGenres), ne anglické .name z TMDB detailu. Fallback na
+    // displayItem.genres (už české z karty). Padne na TV i telefon (sdílený DetailScreen má stejnou opravu).
+    val genres = uiState.movieDetails?.genres
+        ?.let { com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(it.map { g -> g.id }, isShow = false) }
+        ?.takeIf { it.isNotEmpty() }
+        ?: uiState.showDetails?.genres
+            ?.let { com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(it.map { g -> g.id }, isShow = true) }
+            ?.takeIf { it.isNotEmpty() }
         ?: displayItem.genres
     val endTime = endTimeLabel(uiState.movieDetails?.runtime)
     var plotExpanded by remember { mutableStateOf(false) }
