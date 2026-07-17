@@ -57,6 +57,11 @@ fun FilmySettingsScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // --- Vzhled + Písmo (M2.7 parita s TV, reuse sdílených Theme/FontPrefs VM) ---
+            FilmyAppearanceSection()
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
             // --- České popisky (ČSFD) ---
             Text(
                 text = "České popisky (ČSFD)",
@@ -124,6 +129,11 @@ fun FilmySettingsScreen(
                     Text("Přihlásit se k Traktu")
                 }
             }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
+            // --- Kurátor „Pro tebe" (M2.7 parita, reuse CuratorSettingsViewModel) ---
+            FilmyCuratorSection()
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
