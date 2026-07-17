@@ -20,6 +20,7 @@ import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.trakt.TraktAuthManager
 import com.github.jankoran90.showlyfin.data.trakt.TraktDeviceAuthManager
 import com.github.jankoran90.showlyfin.data.trakt.TraktDevicePollResult
+import com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.StreamFilterPrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -179,6 +180,7 @@ class SettingsViewModel @Inject constructor(
     private val jellyfinAuth: com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService,
     private val traktRemote: com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource,
     @ApplicationContext private val appContext: Context,
+    private val traktSyncSignal: TraktSyncSignal,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -786,6 +788,10 @@ class SettingsViewModel @Inject constructor(
      * Odhlášení (prázdný token) → trakt = null (z balíku se vyčistí).
      */
     private fun captureTraktIntoActiveProfile() {
+        // CELLULOID M2.4 fix — Trakt login/logout (device i browser) změní stav autorizace. Bumpni signál,
+        // ať domov ([TvHomeViewModel]) i Filmotéka ([TvFilmotekaViewModel]) přenačtou řady BEZ restartu/mazání
+        // cache (device bug: po loginu domov visel na „přihlas se"). Před early-returnem → platí i bez profilu.
+        traktSyncSignal.bump()
         val activeId = _uiState.value.activeProfileId ?: return
         val access = prefs.getString("TRAKT_ACCESS_TOKEN", "").orEmpty()
         val refresh = prefs.getString("TRAKT_REFRESH_TOKEN", "").orEmpty()

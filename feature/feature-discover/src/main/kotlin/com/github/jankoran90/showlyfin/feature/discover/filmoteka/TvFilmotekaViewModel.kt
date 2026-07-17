@@ -61,6 +61,8 @@ data class FilmotekaUiState(
     val axis: FilmotekaAxis = FilmotekaAxis.ALL,
     val rails: List<FilmotekaRail> = emptyList(),
     val loading: Boolean = true,
+    /** Aktuální řazení osy „Vše" — pro telefonní chip (Nedávno / Abecedně). TV ho ignoruje. */
+    val allSort: FilmotekaAllSort = FilmotekaAllSort.RECENT,
 )
 
 /**
@@ -147,11 +149,29 @@ class TvFilmotekaViewModel @Inject constructor(
             .drop(1)
             .onEach { reload() }
             .launchIn(viewModelScope)
+
+        // CELLULOID M2.4 — auto-cache backend zapíše uložený zdroj (WorkingSource) → savedKeys se změní →
+        // přenačti, ať se titul objeví ve Filmotéce ŽIVĚ (dřív nutný restart). Padne i na TV = bonus.
+        // drop(1) = ignoruj iniciální emit (base pokryje reload z profilu výše).
+        workingSources.savedKeys
+            .drop(1)
+            .onEach { reload() }
+            .launchIn(viewModelScope)
     }
 
     /** Přepnutí osy — jen přeskupí už-obohacenou bázi (bez fetch). Volá UI z přepínače osy. */
     fun setAxis(axis: FilmotekaAxis) {
         if (_state.value.axis != axis) rebuild(axis)
+    }
+
+    /**
+     * CELLULOID M2.4 — telefonní chip řazení osy „Vše" (Nedávno / Abecedně). Uloží do Nastavení (per profil,
+     * sdílené s TV) a hned přeskup, jsme-li na ose ALL. TV mění řazení v Nastavení, tady přímo z plochy.
+     */
+    fun setAllSort(sort: FilmotekaAllSort) {
+        if (settings.allSort.value == sort) return
+        settings.setAllSort(sort)
+        if (_state.value.axis == FilmotekaAxis.ALL) rebuild(FilmotekaAxis.ALL)
     }
 
     /**
@@ -265,7 +285,7 @@ class TvFilmotekaViewModel @Inject constructor(
             FilmotekaAxis.GENRE -> groupByGenre(all)
             FilmotekaAxis.COUNTRY -> groupByCountry(all)
         }
-        _state.value = FilmotekaUiState(axis = axis, rails = rails, loading = false)
+        _state.value = FilmotekaUiState(axis = axis, rails = rails, loading = false, allSort = settings.allSort.value)
     }
 
     /**

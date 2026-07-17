@@ -119,6 +119,12 @@ class TvHomeViewModel @Inject constructor(
         .map { hasTrakt(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), hasTrakt(profileRepository.activeConfig.value))
 
+    // CELLULOID M2.4 fix — ŽIVÉ čtení dostupnosti Traktu pro guardy načítání. `traktAllowed` je
+    // WhileSubscribed StateFlow, který na telefonním shellu (Filmy) NIKDO nekolektuje (odebírá ho jen ui-tv) →
+    // jeho `.value` zamrzne na konstrukční hodnotě a po Trakt device-loginu se guardy nepustí bez restartu.
+    // Čti stejný zdroj pravdy přímo (jako TvFilmotekaViewModel.traktAllowed()).
+    private fun traktAllowedNow(): Boolean = hasTrakt(profileRepository.activeConfig.value)
+
     // COUCH (SHW-88) — věkový strop dětského profilu (null = bez omezení). Řídí enrich (tahat certifikace)
     // i filtr v applyOps. Reaktivní na přepnutí profilu.
     private val ageCap: StateFlow<Int?> = parentalControls.profile
@@ -131,7 +137,7 @@ class TvHomeViewModel @Inject constructor(
     @Volatile private var ownedIdsCache: Set<Long>? = null
     private suspend fun ownedIds(): Set<Long> {
         ownedIdsCache?.let { return it }
-        val ids = if (traktAllowed.value) runCatching { traktLoader.ownedTraktIds() }.getOrElse { emptySet() } else emptySet()
+        val ids = if (traktAllowedNow()) runCatching { traktLoader.ownedTraktIds() }.getOrElse { emptySet() } else emptySet()
         ownedIdsCache = ids
         return ids
     }
@@ -266,7 +272,7 @@ class TvHomeViewModel @Inject constructor(
 
     private suspend fun loadOnce(config: HomeRowConfig): List<HomeRowItem> {
         // COUCH R2: zamčený/dětský profil nevidí žádné Trakt řady (watchlist/historie/seznam/couchmonkey).
-        if (config.source in TRAKT_SOURCES && !traktAllowed.value) {
+        if (config.source in TRAKT_SOURCES && !traktAllowedNow()) {
             android.util.Log.i("COUCH_Home", "Trakt řada '${config.id}' skryta — zamčený profil")
             return emptyList()
         }
