@@ -62,7 +62,7 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
         )
         SettingSwitchRow(
             title = "Vynutit softwarové dekódování obrazu",
-            subtitle = "Když nějaký film (často HEVC/H.265) bliká, trhá se nebo hlásí „nelze přehrát", zapni — " +
+            subtitle = "Když nějaký film (často HEVC/H.265) bliká, trhá se nebo hlásí „nelze přehrát\", zapni — " +
                 "přehraje se softwarově (spolehlivější, o něco vyšší zátěž baterie). Vypnuto = appka zkusí " +
                 "softwarový dekodér sama až při chybě.",
             checked = forceSw,
