@@ -16,6 +16,8 @@ android {
 
 dependencies {
     implementation(project(":core:core-domain"))
+    implementation(libs.androidx.core.ktx)          // FileProvider (ShareCard)
+    implementation(libs.kotlinx.coroutines.android)  // ShareCard suspend render/odeslání
     val bom = platform(libs.androidx.compose.bom)
     implementation(bom)
     implementation(libs.androidx.compose.ui)

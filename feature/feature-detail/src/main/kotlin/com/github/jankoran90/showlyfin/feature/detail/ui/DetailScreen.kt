@@ -24,6 +24,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cast
@@ -151,6 +154,44 @@ fun DetailScreen(
     var showReviewsSheet by remember { mutableStateOf(false) }
     var plotExpanded by remember { mutableStateOf(false) }
     var plotOverflow by remember { mutableStateOf(false) }
+
+    // PLAKÁT (SHW-98): sdílecí karta filmu jako obrázek (pod „⋮"). Data se skládají zde (viditelná pro
+    // topBar.actions); žánry+popis stejnou fallback logikou jako hero/popis níž. Render+odeslání = core-ui ShareCard.
+    val shareScope = rememberCoroutineScope()
+    val onShareCard: () -> Unit = {
+        val shareGenres = uiState.movieDetails?.genres
+            ?.let { com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(it.map { g -> g.id }, isShow = false) }?.takeIf { it.isNotEmpty() }
+            ?: uiState.showDetails?.genres
+                ?.let { com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(it.map { g -> g.id }, isShow = true) }?.takeIf { it.isNotEmpty() }
+            ?: displayItem.genres
+        val tmdbOv = uiState.movieDetails?.overview ?: uiState.showDetails?.overview ?: displayItem.overview
+        val tmdbCz = uiState.tmdbCzOverview
+        val sharePlot = when {
+            tmdbCz?.takeIf { looksCzech(it) } != null -> tmdbCz
+            !uiState.csfdPlot.isNullOrBlank() -> uiState.csfdPlot
+            !tmdbCz.isNullOrBlank() -> tmdbCz
+            else -> tmdbOv?.takeIf { it.isNotBlank() }
+        }
+        val data = com.github.jankoran90.showlyfin.core.ui.ShareCardData(
+            title = displayTitle,
+            year = displayItem.year,
+            csfdPct = uiState.csfdRating,
+            directors = uiState.directors.mapNotNull { it.name },
+            genres = shareGenres.orEmpty(),
+            description = sharePlot,
+            reviews = uiState.csfdReviews.filter { (it.rating ?: 0) >= 70 }.take(2)
+                .map { com.github.jankoran90.showlyfin.core.ui.ShareReview(it.username, it.rating, it.text) },
+        )
+        shareScope.launch {
+            try {
+                com.github.jankoran90.showlyfin.core.ui.ShareCard.shareFilm(
+                    context, data, displayItem.posterUrl("w500"), displayItem.backdropUrl("w1280"),
+                )
+            } catch (e: Exception) {
+                Toast.makeText(context, "Sdílení karty se nepovedlo", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // Stremio stream resolved → přehraj externí URL
     LaunchedEffect(uiState.pendingPlaybackUrl) {
@@ -403,6 +444,7 @@ fun DetailScreen(
                         inWatchlist = uiState.isInWatchlist,
                         isTogglingWatchlist = uiState.isTogglingWatchlist,
                         onWatchlist = { viewModel.toggleWatchlist() },
+                        onShare = onShareCard,
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -740,6 +782,7 @@ private fun DetailActionBar(
     inWatchlist: Boolean,
     isTogglingWatchlist: Boolean,
     onWatchlist: () -> Unit,
+    onShare: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     // BESPOKE F3 — vlastní hvězdičkové hodnocení (sdílený dialog přes LocalUserRatingProvider).
@@ -812,6 +855,13 @@ private fun DetailActionBar(
                     leadingIcon = { Icon(Icons.Default.Download, null) },
                     onClick = { menuOpen = false; onDownload() },
                 )
+                if (onShare != null) {
+                    DropdownMenuItem(
+                        text = { Text("Sdílet kartu") },
+                        leadingIcon = { Icon(Icons.Default.Share, null) },
+                        onClick = { menuOpen = false; onShare() },
+                    )
+                }
                 if (!inLibrary && hasRemembered) {
                     DropdownMenuItem(
                         text = { Text("Odebrat zapamatovaný zdroj") },
