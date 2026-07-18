@@ -150,6 +150,20 @@ class ProfileRepository @Inject constructor(
         }
     }
 
+    /**
+     * CATALOGUE (SHW-98) — JEN uploader auto-login z build env (BEZ roster seedu). Filmy TV klon záměrně
+     * nevolá [seedTvRosterBestEffort] (natáhl by showlyfin roster honza/neli/deti), tím ale přišel i o login →
+     * `uploader_base_url` na TV zůstal prázdný → „Uploader není nastaven", žádné zdroje/odznaky/Přehrát. Tohle
+     * zapíše base_url+cookie do prefs jako telefon (idempotentní: `isAvailable()` guard = na už přihlášeném no-op).
+     */
+    suspend fun ensureUploaderLogin() {
+        runCatching {
+            if (!configGateway.isAvailable() && ProfileConfigGateway.autoLoginPassword.isNotBlank()) {
+                configGateway.login(ProfileConfigGateway.autoLoginPassword)
+            }
+        }
+    }
+
     suspend fun count(): Int = dao.count()
 
     suspend fun upsert(profile: ProfileEntity): Long {

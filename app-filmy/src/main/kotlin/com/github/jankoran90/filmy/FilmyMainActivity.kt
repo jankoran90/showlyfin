@@ -80,6 +80,11 @@ class FilmyMainActivity : ComponentActivity() {
             // migrateLegacyPrefs se taky nevolá (Filmy nikdy neměla legacy jellyfin_* prefs; volání by
             // mohlo vytvořit stray profil PŘED ensureSeeded a shodit idempotenci count==0).
             filmyProfileManager.ensureSeeded()
+            // CATALOGUE (SHW-98) — uploader auto-login z build env PŘED aktivací profilu, ať je `uploader_base_url`
+            // v prefs, než naskočí profil (→ TvHomeViewModel/telefon sync zdrojů, detail „Přehrát", odznaky).
+            // Filmy dřív volalo login jen na telefonu (manuální FilmyUploaderLogin); TV shell žádný trigger neměl
+            // → „Uploader není nastaven". Idempotentní (isAvailable() guard). Bez roster seedu (jen login).
+            profileRepository.ensureUploaderLogin()
             profileRepository.restoreActive(preferTv = isTV)
             // CELLULOID (SHW-98) — TVRDÁ pojistka profilového klíče. Diagnóza (telefon v1.0.18): DB aktivní
             // profil má správný klíč (AIRWAVE hlásí reálný účet 3bfabcbd…), ALE app-pref `jellyfin_user_id`
