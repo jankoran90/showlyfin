@@ -33,6 +33,16 @@ class FilmyProfileManager @Inject constructor(
     companion object {
         const val UUID_ADULT = "filmy-adult"
         const val UUID_KIDS = "filmy-kids"
+        // SUBSTRATE SJEDNOCENÍ (user 2026-07-18 „jedem paritně, neoddeluj to"): profilový klíč
+        // (`jellyfinUserId`) je bucket pro CELOU per-profil vrstvu na serveru (zapamatované zdroje,
+        // oblíbené, hodnocení, kurátor, Trakt mirror). Dřív měl Filmy VLASTNÍ synthetic klíče
+        // (filmy-adult/kids) → izolovaný ostrov, neviděl NIC uloženého v showlyfinu. Sjednocujeme na
+        // REÁLNÉ účty showlyfinu (Filmy = má showlyfin nahradit), takže Filmy telefon i TV vidí a sdílí
+        // vše obousměrně. User používá jen Trakt (yellman = na obou stejný) → config-sdílení bez rizika.
+        // Hodnoty = jellyfinUserId profilů showlyfinu (upload.jankoran.cz profiles.json); opaque JF GUID,
+        // ne tajemství (bez JF serveru+tokenu nepoužitelné).
+        const val KEY_ADULT = "3bfabcbd1c2b4246bc3979dcd9d9ccb7" // showlyfin „Honza" (JF yellman) — Dospělý
+        const val KEY_KIDS = "865883ea4c244f84ada7b88f3cb9b886"  // showlyfin „Děti" — Děti
         /** Výchozí věkový strop dětského profilu — blokuje 18+ i 16+. Uživatel upraví v Nastavení. */
         val KIDS_AGE_CAP: AgeRating = AgeRating.FAMILY
     }
@@ -54,7 +64,7 @@ class FilmyProfileManager @Inject constructor(
                 profileUuid = UUID_ADULT,
                 name = "Dospělý",
                 serverUrl = "",
-                jellyfinUserId = UUID_ADULT, // = profilový klíč pro per-profil vrstvu (kurátor/oblíbené/zdroje/hodnocení)
+                jellyfinUserId = KEY_ADULT, // reálný účet Honza → sdílí zdroje/oblíbené/hodnocení se showlyfinem
                 jellyfinToken = "",
                 isAdmin = true,
                 isDefault = true,
@@ -68,7 +78,7 @@ class FilmyProfileManager @Inject constructor(
                 profileUuid = UUID_KIDS,
                 name = "Děti",
                 serverUrl = "",
-                jellyfinUserId = UUID_KIDS, // vlastní bucket per-profil (oddělená doporučení Dospělý vs. Děti)
+                jellyfinUserId = KEY_KIDS, // reálný účet Děti → sdílí per-profil vrstvu se showlyfinem
                 jellyfinToken = "",
                 isAdmin = false,
                 isDefault = false,
@@ -81,21 +91,24 @@ class FilmyProfileManager @Inject constructor(
     }
 
     /**
-     * M2.6 MIGRACE — starší Filmy instalace naseedovaly profily s prázdným `jellyfinUserId`, čímž celá
-     * per-profil vrstva (kurátor „Pro tebe", oblíbené, uložené zdroje klenotů, hodnocení) tiše no-opovala
-     * (bucket klíčovaný prázdným `jellyfin_user_id` → short-circuit). Doplní stabilní klíč a přepíše
-     * kanonický pref aktivního profilu ([ProfileRepository.restoreActive] → setActive). Idempotentní.
+     * MIGRACE profilových klíčů — pokrývá dvě vlny:
+     * - M2.6: prázdný `jellyfinUserId` (prastaré buildy) → celá per-profil vrstva no-opovala.
+     * - SUBSTRATE SJEDNOCENÍ (2026-07-18): synthetic klíče `filmy-adult`/`filmy-kids` → REÁLNÉ účty
+     *   showlyfinu ([KEY_ADULT]/[KEY_KIDS]), aby Filmy vidělo/sdílelo zapamatované zdroje, oblíbené a
+     *   hodnocení uložené v showlyfinu (user: „jedem paritně"). Stávající instalace se přemapují při startu.
+     * Přepíše kanonický pref aktivního profilu ([ProfileRepository.restoreActive] → setActive). Idempotentní.
      */
     private suspend fun ensureProfileKeys() {
         var changed = false
         profileRepository.getAll().forEach { p ->
             val desired = when (p.profileUuid) {
-                UUID_ADULT -> UUID_ADULT
-                UUID_KIDS -> UUID_KIDS
+                UUID_ADULT -> KEY_ADULT
+                UUID_KIDS -> KEY_KIDS
                 else -> null
             }
-            if (desired != null && p.jellyfinUserId.isBlank()) {
-                Timber.i("[FILMY] migrace: doplňuji profilový klíč '$desired' (%s)", p.name)
+            // Přemapuj když je klíč prázdný NEBO ještě starý (synthetic filmy-adult/kids, či cokoli jiného).
+            if (desired != null && p.jellyfinUserId != desired) {
+                Timber.i("[FILMY] migrace klíče: '%s' → '%s' (%s)", p.jellyfinUserId, desired, p.name)
                 profileRepository.upsert(p.copy(jellyfinUserId = desired))
                 changed = true
             }

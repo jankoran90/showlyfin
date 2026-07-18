@@ -62,7 +62,7 @@ private val CATEGORIES = listOf(
  * → jejich tvorba (sheet). Dlouhý stisk → odebrat.
  */
 @Composable
-internal fun OblibeniScreen(
+fun OblibeniScreen(
     onOpenDetail: (tmdbId: Long, title: String) -> Unit,
     modifier: Modifier = Modifier,
     vm: OblibeniViewModel = hiltViewModel(),
