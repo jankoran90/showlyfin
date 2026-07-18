@@ -90,7 +90,9 @@ private data class FilmyPlayer(
 
 @Composable
 private fun FilmyShellContent() {
-    var current by remember { mutableStateOf(FilmySection.HOME) }
+    // Výchozí sekce dle prefu „Filmotéka jako výchozí" (user 2026-07-18) — jinak Domů. Aplikuje se při otevření appky.
+    val startCtx = LocalContext.current
+    var current by remember { mutableStateOf(FilmyShellPrefs.startSection(startCtx)) }
     // CELLULOID: drží rememberSaveable stav KAŽDÉ sekce (scroll pozice mřížky/seznamu, pager tab) i když
     // ji detail/přehrávač dočasně vystřídá v kompozici → po BACK zůstane scroll na místě. Ruční přepnutí
     // sekce v draweru stav té sekce zahodí (removeState) = úmyslný reset na vrch; reload appky = nový holder.

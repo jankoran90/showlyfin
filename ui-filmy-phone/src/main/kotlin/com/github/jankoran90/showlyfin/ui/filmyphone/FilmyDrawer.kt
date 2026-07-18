@@ -13,6 +13,7 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 /**
@@ -34,11 +35,9 @@ fun FilmyDrawer(
                 modifier = Modifier.padding(start = 20.dp, top = 28.dp, bottom = 16.dp),
             )
             DrawerSectionLabel("Objevování")
-            DrawerRow(FilmySection.HOME, current, onSelect)
-            DrawerRow(FilmySection.FOR_YOU, current, onSelect)
-            DrawerRow(FilmySection.FILMOTEKA, current, onSelect)
-            DrawerRow(FilmySection.GEMS, current, onSelect)
-            DrawerRow(FilmySection.SEARCH, current, onSelect)
+            // Pořadí dle prefu „Filmotéka jako výchozí" — když je zapnuto, Filmotéka je nahoře (user 2026-07-18).
+            val filmotekaFirst = FilmyShellPrefs.defaultFilmoteka(LocalContext.current)
+            FilmyShellPrefs.discoverOrder(filmotekaFirst).forEach { DrawerRow(it, current, onSelect) }
 
             DrawerSectionLabel("Knihovna")
             DrawerRow(FilmySection.LIBRARY, current, onSelect)

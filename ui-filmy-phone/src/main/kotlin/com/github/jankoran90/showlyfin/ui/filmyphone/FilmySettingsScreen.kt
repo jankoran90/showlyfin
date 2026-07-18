@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -48,6 +49,8 @@ fun FilmySettingsScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by settingsVm.uiState.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+    var defaultFilmoteka by remember { mutableStateOf(FilmyShellPrefs.defaultFilmoteka(ctx)) }
     var showUploaderLogin by remember { mutableStateOf(false) }
     var showTraktLogin by remember { mutableStateOf(false) }
 
@@ -120,6 +123,15 @@ fun FilmySettingsScreen(
 
             // ── OBJEVOVÁNÍ (kurátor + filmotéka + klenoty) ─────────────────────────
             FilmyCollapsibleSection("Objevování", Icons.Rounded.Explore) {
+                // CELLULOID (SHW-98) — Filmotéka jako výchozí obrazovka; jen dospělý účet (user 2026-07-18).
+                if (settings.autoRefreshSourcesAvailable) {
+                    SettingSwitchRow(
+                        title = "Filmotéka jako výchozí obrazovka",
+                        subtitle = "Po otevření appky naskočí rovnou Filmotéka a v menu bude nahoře. Jen pro dospělý účet. Projeví se při dalším otevření appky.",
+                        checked = defaultFilmoteka,
+                        onCheckedChange = { defaultFilmoteka = it; FilmyShellPrefs.setDefaultFilmoteka(ctx, it) },
+                    )
+                }
                 FilmyCuratorSection()
                 FilmyFilmotekaSection()
                 FilmyGemsSection()
