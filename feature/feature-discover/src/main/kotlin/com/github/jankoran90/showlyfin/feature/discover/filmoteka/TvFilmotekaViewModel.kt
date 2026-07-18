@@ -63,6 +63,8 @@ data class FilmotekaUiState(
     val loading: Boolean = true,
     /** Aktuální řazení osy „Vše" — pro telefonní chip (Nedávno / Abecedně). TV ho ignoruje. */
     val allSort: FilmotekaAllSort = FilmotekaAllSort.RECENT,
+    /** Počet unikátních titulů v bázi (po dedup+gate, napříč osami stejný) — pro telefonní ukazatel „N filmů". */
+    val total: Int = 0,
 )
 
 /**
@@ -285,7 +287,10 @@ class TvFilmotekaViewModel @Inject constructor(
             FilmotekaAxis.GENRE -> groupByGenre(all)
             FilmotekaAxis.COUNTRY -> groupByCountry(all)
         }
-        _state.value = FilmotekaUiState(axis = axis, rails = rails, loading = false, allSort = settings.allSort.value)
+        _state.value = FilmotekaUiState(
+            axis = axis, rails = rails, loading = false,
+            allSort = settings.allSort.value, total = all.size,
+        )
     }
 
     /**

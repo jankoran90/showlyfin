@@ -264,6 +264,8 @@ private fun FilmyShellContent() {
                                 onOpenJellyfinDetail = openJfDetail, // M2.6: JF-only detail zprovozněn
                                 onOpenDetailPlay = openDetailPlay,   // M2.6: one-click zapamatovaný zdroj
                             )
+                            // CINEMATHEQUE: Chci vidět = celý Trakt watchlist (parita s TV, reuse TvWantToSeeViewModel).
+                            FilmySection.WANT_TO_SEE -> FilmyWantToSeeScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.5: Pro tebe = kurátor (reuse ForYouViewModel).
                             FilmySection.FOR_YOU -> FilmyForYouScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.4: Filmotéka = mřížka plakátů se sekcemi (reuse TvFilmotekaViewModel).

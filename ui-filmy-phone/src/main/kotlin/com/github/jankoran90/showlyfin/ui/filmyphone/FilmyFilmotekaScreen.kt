@@ -78,6 +78,7 @@ fun FilmyFilmotekaScreen(
             axis = state.axis,
             allSort = state.allSort,
             viewMode = viewMode,
+            total = state.total,
             onMenu = onMenu,
             onAxis = vm::setAxis,
             onAllSort = vm::setAllSort,
@@ -103,6 +104,7 @@ private fun FilmotekaChips(
     axis: FilmotekaAxis,
     allSort: FilmotekaAllSort,
     viewMode: ViewMode,
+    total: Int,
     onMenu: () -> Unit,
     onAxis: (FilmotekaAxis) -> Unit,
     onAllSort: (FilmotekaAllSort) -> Unit,
@@ -112,10 +114,19 @@ private fun FilmotekaChips(
         Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // ☰ + chipy os (scroll) + přepínač zobrazení vpravo — jeden pruh (splynutí s lištou).
+        // ☰ + chipy os (scroll) + počet titulů + přepínač zobrazení vpravo — jeden pruh (splynutí s lištou).
         FilmySectionBar(
             onMenu = onMenu,
             trailing = {
+                if (total > 0) {
+                    Text(
+                        text = "$total filmů",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
                 IconButton(onClick = onToggleView) {
                     if (viewMode == ViewMode.GRID) {
                         Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = "Zobrazit jako seznam")
