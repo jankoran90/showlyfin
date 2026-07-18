@@ -1,6 +1,7 @@
 package com.github.jankoran90.filmy
 
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -33,6 +34,7 @@ import com.github.jankoran90.showlyfin.ui.tv.ShowlyfinTvApp
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * CELLULOID (SHW-98) — hostitelská aktivita appky „Filmy". Klon
@@ -45,6 +47,23 @@ class FilmyMainActivity : ComponentActivity() {
 
     @Inject lateinit var profileRepository: ProfileRepository
     @Inject lateinit var filmyProfileManager: FilmyProfileManager
+
+    // CELLULOID (SHW-98) — per-profil stores: po sjednocení profilového klíče je nutné PŘETÁHNOUT
+    // s NOVÝM klíčem. Při startu se totiž stihnou nasyncovat se STARÝM (filmy-adult) dřív, než doběhne
+    // migrace klíče v coroutine → jinak zůstanou prázdné (0 zdrojů/oblíbených/hodnocení) do dalšího cold-startu.
+    @Inject lateinit var workingSourceStore: com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
+    @Inject lateinit var favoritesStore: com.github.jankoran90.showlyfin.data.uploader.FavoritesStore
+    @Inject lateinit var userRatingStore: com.github.jankoran90.showlyfin.data.uploader.UserRatingStore
+    @Inject lateinit var recommendationsStore: com.github.jankoran90.showlyfin.data.uploader.RecommendationsStore
+    @Inject @Named("traktPreferences") lateinit var appPrefs: SharedPreferences
+
+    /** Replika core-data `dashUuid` (internal): 32-hex → 8-4-4-4-12, jinak beze změny. Musí sedět s formátem,
+     *  který zapisuje ProfileRepository.setActive, ať se app-pref `jellyfin_user_id` nerozchází. */
+    private fun toDashedUuid(raw: String): String {
+        val t = raw.trim()
+        if (t.length != 32 || !t.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }) return t
+        return "${t.substring(0, 8)}-${t.substring(8, 12)}-${t.substring(12, 16)}-${t.substring(16, 20)}-${t.substring(20)}"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +81,23 @@ class FilmyMainActivity : ComponentActivity() {
             // mohlo vytvořit stray profil PŘED ensureSeeded a shodit idempotenci count==0).
             filmyProfileManager.ensureSeeded()
             profileRepository.restoreActive(preferTv = isTV)
+            // CELLULOID (SHW-98) — TVRDÁ pojistka profilového klíče. Diagnóza (telefon v1.0.18): DB aktivní
+            // profil má správný klíč (AIRWAVE hlásí reálný účet 3bfabcbd…), ALE app-pref `jellyfin_user_id`
+            // zůstal na starém synthetic „filmy-adult" (per-profil stores z něj čtou → tahaly prázdný ostrov,
+            // 0 zdrojů/oblíbených → všude „hledat zdroje"). Příčina: `_activeProfile` se updatuje z DB i mimo
+            // `setActive` (backend config-sync), takže pref se nepřepíše. Tady app-pref natvrdo srovnáme s DB.
+            profileRepository.activeProfile.value?.jellyfinUserId?.takeIf { it.isNotBlank() }?.let { uid ->
+                val dashed = toDashedUuid(uid)
+                if (appPrefs.getString("jellyfin_user_id", "") != dashed) {
+                    appPrefs.edit().putString("jellyfin_user_id", dashed).apply()
+                }
+            }
+            // Klíč je teď sjednocený → přetáhni per-profil vrstvu s korektním klíčem, ať zapamatované zdroje /
+            // oblíbené / hodnocení naskočí BEZ druhého restartu.
+            workingSourceStore.refresh()
+            favoritesStore.refresh()
+            userRatingStore.refresh()
+            recommendationsStore.refresh()
         }
 
         val launcher = object : UpdateLauncher {
