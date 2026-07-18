@@ -10,12 +10,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,163 +58,94 @@ fun FilmySettingsScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // --- Vzhled + Písmo (M2.7 parita s TV, reuse sdílených Theme/FontPrefs VM) ---
-            FilmyAppearanceSection()
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- České popisky (ČSFD) ---
-            Text(
-                text = "České popisky (ČSFD)",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                text = "Filmy bez českého překladu na TMDB (např. asijské) berou popis, galerii a komentáře " +
-                    "z ČSFD přes server. Přihlas se jednou heslem a začnou chodit.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (state.configured) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Rounded.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text = "  Přihlášeno k serveru",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                }
-            } else {
-                Button(onClick = { showUploaderLogin = true }) {
-                    Text("Přihlásit k serveru")
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Účet Trakt (M2.6) ---
-            Text(
-                text = "Účet Trakt",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                text = "Doporučení „Pro tebe\", watchlist a historie se berou z Traktu. Tady se můžeš odhlásit " +
-                    "nebo přihlásit (např. přepnout účet).",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (settings.traktLoggedIn) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Rounded.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text = "  Přihlášeno k Traktu",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { settingsVm.logout() }) { Text("Odhlásit") }
-                }
-            } else {
-                Button(onClick = { showTraktLogin = true }) {
-                    Text("Přihlásit se k Traktu")
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Dohledat zdroje pro celý watchlist (dávkový backfill, reuse triggerAutoCache) ---
-            FilmyWatchlistCacheSection()
-
-            // CELLULOID (SHW-98) — živé dotahování nacachovaných zdrojů bez restartu; jen dospělý profil.
-            if (settings.autoRefreshSourcesAvailable) {
-                SettingSwitchRow(
-                    title = "Živě dotahovat zdroje (bez restartu)",
-                    subtitle = "Při otevření filmu dotáhne nově nacachovaný zdroj ze serveru, takže jde přehrát rovnou — bez vypínání a zapínání appky. Jen pro dospělý účet.",
-                    checked = settings.autoRefreshSources,
-                    onCheckedChange = { settingsVm.setAutoRefreshSources(it) },
+            // ── ÚČET (Trakt + server pro české popisky) ───────────────────────────
+            FilmyCollapsibleSection("Účet", Icons.Rounded.AccountCircle, initiallyExpanded = true) {
+                SettingSectionTitle("Účet Trakt")
+                Text(
+                    text = "Doporučení „Pro tebe\", watchlist a historie se berou z Traktu. Tady se můžeš odhlásit " +
+                        "nebo přihlásit (např. přepnout účet).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (settings.traktLoggedIn) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Text(
+                            text = "  Přihlášeno k Traktu",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { settingsVm.logout() }) { Text("Odhlásit") }
+                    }
+                } else {
+                    Button(onClick = { showTraktLogin = true }) { Text("Přihlásit se k Traktu") }
+                }
+
+                SettingSectionTitle("České popisky (ČSFD)")
+                Text(
+                    text = "Filmy bez českého překladu na TMDB (např. asijské) berou popis, galerii a komentáře " +
+                        "z ČSFD přes server. Přihlas se jednou heslem a začnou chodit.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (state.configured) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Text("  Přihlášeno k serveru", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                    }
+                } else {
+                    Button(onClick = { showUploaderLogin = true }) { Text("Přihlásit k serveru") }
+                }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Kurátor „Pro tebe" (M2.7 parita, reuse CuratorSettingsViewModel) ---
-            FilmyCuratorSection()
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Filmotéka (M2.7 parita vlna 2, reuse TvFilmotekaSettingsViewModel) ---
-            FilmyFilmotekaSection()
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Vzácné klenoty (M2.7 parita vlna 2, reuse TvLapidarySettingsViewModel) ---
-            FilmyGemsSection()
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Detail obsahu (M2.7 parita vlna 2, reuse DetailPrefsViewModel) ---
-            FilmyDetailContentSection()
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Přehrávač (M2.7 parita vlna 2, reuse SettingsViewModel) ---
-            FilmyPlayerSection()
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Obraz a zvuk (M2.7 parita vlna 2, reuse SettingsViewModel) ---
-            FilmyAudioSection()
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Rodičovská kontrola (M2.7 parita vlna 2, reuse ParentalPrefsViewModel) ---
-            FilmyParentalSection()
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- Ladění a log ---
-            Text(
-                text = "Ladění",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Živé logování",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "Periodicky posílá logy na server (pomáhá při ladění). Vypni, když není potřeba.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // ── ZDROJE A PŘEHRÁVÁNÍ ───────────────────────────────────────────────
+            FilmyCollapsibleSection("Zdroje a přehrávání", Icons.Rounded.Movie) {
+                FilmyWatchlistCacheSection()
+                // CELLULOID (SHW-98) — živé dotahování nacachovaných zdrojů bez restartu; jen dospělý profil.
+                if (settings.autoRefreshSourcesAvailable) {
+                    SettingSwitchRow(
+                        title = "Živě dotahovat zdroje (bez restartu)",
+                        subtitle = "Při otevření filmu dotáhne nově nacachovaný zdroj ze serveru, takže jde přehrát rovnou — bez vypínání a zapínání appky. Jen pro dospělý účet.",
+                        checked = settings.autoRefreshSources,
+                        onCheckedChange = { settingsVm.setAutoRefreshSources(it) },
                     )
                 }
-                Switch(
+                FilmyPlayerSection()
+                FilmyAudioSection()
+            }
+
+            // ── OBJEVOVÁNÍ (kurátor + filmotéka + klenoty) ─────────────────────────
+            FilmyCollapsibleSection("Objevování", Icons.Rounded.Explore) {
+                FilmyCuratorSection()
+                FilmyFilmotekaSection()
+                FilmyGemsSection()
+            }
+
+            // ── VZHLED (téma/písmo + detail obsahu) ───────────────────────────────
+            FilmyCollapsibleSection("Vzhled", Icons.Rounded.Palette) {
+                FilmyAppearanceSection()
+                FilmyDetailContentSection()
+            }
+
+            // ── RODIČOVSKÁ KONTROLA ───────────────────────────────────────────────
+            FilmyCollapsibleSection("Rodičovská kontrola", Icons.Rounded.ChildCare) {
+                FilmyParentalSection()
+            }
+
+            // ── APLIKACE (o aplikaci + ladění) ────────────────────────────────────
+            FilmyCollapsibleSection("Aplikace", Icons.Rounded.Info) {
+                FilmyAboutSection()
+                SettingSwitchRow(
+                    title = "Živé logování",
+                    subtitle = "Periodicky posílá logy na server (pomáhá při ladění). Vypni, když není potřeba.",
                     checked = settings.liveLogging,
                     onCheckedChange = { settingsVm.setLiveLogging(it) },
                 )
             }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-
-            // --- O aplikaci (verze + changelog + kontrola aktualizace) ---
-            FilmyAboutSection()
         }
     }
 

@@ -34,12 +34,16 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Reviews
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -712,9 +716,10 @@ fun DetailScreen(
 }
 
 /**
- * CANVAS (SHW-47) A3/A4: kompaktní kulatá akční lišta v hero (u Oblíbených). Pořadí podle
- * [order] (konfigurovatelné v Nastavení); každá akce se ukáže jen když dává v daném kontextu smysl
- * (v knihovně = Přehrát zde / Na TV; mimo = Stremio / Stáhnout; ⭐ zapamatovaný zdroj = Přehrát/Na TV).
+ * Kompaktní akční lišta detailu (telefon, v TopAppBar). Redesign CELLULOID (2026-07-18, user „zkompaktnit"):
+ * primární vyplněné „Přehrát" (v knihovně / zapamatovaný zdroj) + „na TV" hned vedle; když zdroj ještě není,
+ * ODLIŠNÉ obrysové „Hledat zdroje". Vše ostatní (hodnocení, oblíbené, watchlist, stáhnout, odebrat zdroj) je
+ * schované pod jedno přetékací „⋮". [order]/[isTogglingWatchlist] zůstávají v signatuře kvůli volajícímu.
  */
 @Composable
 private fun DetailActionBar(
@@ -737,45 +742,84 @@ private fun DetailActionBar(
     onWatchlist: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        // BESPOKE F3 — vlastní hvězdičkové hodnocení (otevře sdílený dialog přes LocalUserRatingProvider).
-        val ratingProvider = com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider.current
-        if (ratingTarget != null && ratingProvider != null) {
-            val stars = com.github.jankoran90.showlyfin.core.ui.rememberCardRating(ratingTarget.tmdbId, ratingTarget.imdbId)
-            HeroAction(
-                Icons.Filled.Reviews,
-                if (stars != null) "Hodnocení $stars/10" else "Ohodnotit",
-                { ratingProvider.requestRate(ratingTarget) },
-                active = stars != null,
-            )
-        }
-        order.forEach { key ->
-            when (key) {
-                "favorite" -> if (isMovie) {
-                    HeroAction(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "Oblíbené", onFavorite, active = isFavorite)
+    // BESPOKE F3 — vlastní hvězdičkové hodnocení (sdílený dialog přes LocalUserRatingProvider).
+    val ratingProvider = com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider.current
+    val stars = if (ratingTarget != null) {
+        com.github.jankoran90.showlyfin.core.ui.rememberCardRating(ratingTarget.tmdbId, ratingTarget.imdbId)
+    } else null
+
+    // Primární přehrávání: v knihovně = Přehrát zde; zapamatovaný zdroj = Přehrát; jinak zatím není co hrát.
+    val onPlayPrimary: (() -> Unit)? = when {
+        inLibrary -> onPlayHere
+        hasRemembered -> onPlayRemembered
+        else -> null
+    }
+    val onTv: (() -> Unit)? = when {
+        inLibrary -> onNaTv
+        hasRemembered -> onCastRemembered
+        else -> null
+    }
+
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        when {
+            // Máme co přehrát rovnou → vyplněné primární „Přehrát" (akcent) + „na TV" hned vedle.
+            onPlayPrimary != null -> {
+                Button(onClick = onPlayPrimary, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Přehrát")
                 }
-                "play" -> {
-                    val cb = if (inLibrary) onPlayHere else if (hasRemembered) onPlayRemembered else null
-                    if (cb != null) HeroAction(Icons.Default.PhoneAndroid, "Přehrát zde", cb)
+                if (onTv != null) {
+                    OutlinedIconButton(onClick = onTv) { Icon(Icons.Default.Cast, "Přehrát na TV") }
                 }
-                "tv" -> {
-                    val cb = if (inLibrary) onNaTv else if (hasRemembered) onCastRemembered else null
-                    if (cb != null) HeroAction(Icons.Default.Cast, "Přehrát na TV", cb)
+            }
+            // Ještě nemáme zdroj → ODLIŠNÉ obrysové „Hledat zdroje" (ať se neplete s instant-play).
+            !inLibrary -> {
+                OutlinedButton(onClick = onStremio, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+                    Icon(Icons.Default.Search, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Hledat zdroje")
                 }
-                "stremio" -> if (!inLibrary) HeroAction(Icons.Default.PlayArrow, "Přehrát", onStremio)
-                // NOMAD (SHW-60): „Stáhnout" si drží VLASTNÍ logiku (u streamů je download ≠ play); v jeho
-                // menu je volba „Do telefonu (offline)". Přehrání staženého souboru řeší PLAY akce (onPlayHere).
-                "download" -> HeroAction(Icons.Default.Download, "Stáhnout", onDownload)
-                "watchlist" -> HeroAction(
-                    if (inWatchlist) Icons.Default.Check else Icons.Default.Add,
-                    if (inWatchlist) "V seznamu" else "Chci vidět",
-                    onWatchlist, active = inWatchlist, loading = isTogglingWatchlist,
-                )
             }
         }
-        // Odebrání zapamatovaného zdroje (mimo lištu/pořadí, jen když je co odebrat).
-        if (!inLibrary && hasRemembered) {
-            HeroAction(Icons.Default.Delete, "Odebrat zapamatovaný zdroj", onRemoveRemembered, danger = true)
+
+        // Vše ostatní kompaktně pod jedno „⋮" (hodnocení, oblíbené, watchlist, stáhnout, odebrat zdroj).
+        var menuOpen by remember { mutableStateOf(false) }
+        Box {
+            IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "Další akce") }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                if (ratingTarget != null && ratingProvider != null) {
+                    DropdownMenuItem(
+                        text = { Text(if (stars != null) "Hodnocení $stars/10" else "Ohodnotit") },
+                        leadingIcon = { Icon(Icons.Filled.Reviews, null) },
+                        onClick = { menuOpen = false; ratingProvider.requestRate(ratingTarget) },
+                    )
+                }
+                if (isMovie) {
+                    DropdownMenuItem(
+                        text = { Text(if (isFavorite) "V oblíbených" else "Přidat do oblíbených") },
+                        leadingIcon = { Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, null) },
+                        onClick = { menuOpen = false; onFavorite() },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(if (inWatchlist) "Odebrat ze seznamu" else "Chci vidět") },
+                    leadingIcon = { Icon(if (inWatchlist) Icons.Default.Check else Icons.Default.Add, null) },
+                    onClick = { menuOpen = false; onWatchlist() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Stáhnout") },
+                    leadingIcon = { Icon(Icons.Default.Download, null) },
+                    onClick = { menuOpen = false; onDownload() },
+                )
+                if (!inLibrary && hasRemembered) {
+                    DropdownMenuItem(
+                        text = { Text("Odebrat zapamatovaný zdroj") },
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; onRemoveRemembered() },
+                    )
+                }
+            }
         }
     }
 }
