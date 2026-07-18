@@ -198,6 +198,11 @@ class TvHomeViewModel @Inject constructor(
         profileRepository.activeProfile
             .onEach { p ->
                 store.switchProfile(p?.id)
+                // PARITA s telefonem (FilmySourceAvailabilityViewModel.init → store.refresh()): TV dosud NIKDY
+                // proaktivně netáhla uložené zdroje ze serveru → savedSourceKeys odrážely jen lokální disk TV
+                // (prázdný, zdroje uložil telefon/backend) → odznaky/„Přehrát" na TV chyběly. Táhni ze serveru
+                // per profil (i iniciálně) — savedKeys i lokální get() se naplní pro odznaky i detail (user 2026-07-18).
+                workingSources.refresh()
                 if (firstProfileEmit) firstProfileEmit = false
                 else {
                     android.util.Log.i("COUCH_Home", "profil změněn → ${p?.name} (id=${p?.id}, trakt=${traktAllowed.value}) → reload")
