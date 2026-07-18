@@ -25,16 +25,20 @@ internal class CachedTmdbRemoteDataSource(
     private val movieCertAge = ConcurrentHashMap<Long, Holder<Int?>>()
     private val showCertAge = ConcurrentHashMap<Long, Holder<Int?>>()
 
+    // CELLULOID (SHW-98) FIX: details (poster/backdrop) cachujeme JEN při úspěchu. Dřív se cacheoval i null
+    // (transient/rate-limit fail) BEZ TTL → jeden neúspěch při cold-start burstu oslepil poster/fanart na
+    // CELOU session (řada „Uloženo k přehrání" + detail sdílí tenhle singleton). Null teď nechá příště zkusit
+    // znovu (self-heal); reálně neexistující id se dotáhne párkrát za session = zanedbatelné.
     override suspend fun fetchMovieDetails(tmdbId: Long, language: String?): TmdbMovieDetails? {
         val key = "$tmdbId|${language ?: ""}"
         movieDetails[key]?.let { return it.value }
-        return delegate.fetchMovieDetails(tmdbId, language).also { movieDetails[key] = Holder(it) }
+        return delegate.fetchMovieDetails(tmdbId, language).also { if (it != null) movieDetails[key] = Holder(it) }
     }
 
     override suspend fun fetchShowDetails(tmdbId: Long, language: String?): TmdbShowDetails? {
         val key = "$tmdbId|${language ?: ""}"
         showDetails[key]?.let { return it.value }
-        return delegate.fetchShowDetails(tmdbId, language).also { showDetails[key] = Holder(it) }
+        return delegate.fetchShowDetails(tmdbId, language).also { if (it != null) showDetails[key] = Holder(it) }
     }
 
     override suspend fun fetchMovieTranslation(tmdbId: Long, language: String): TmdbTranslation.Data? {

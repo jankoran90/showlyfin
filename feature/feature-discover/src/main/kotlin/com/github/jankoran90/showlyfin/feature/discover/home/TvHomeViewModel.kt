@@ -373,35 +373,38 @@ class TvHomeViewModel @Inject constructor(
     private suspend fun loadSavedForPlayback(config: HomeRowConfig): List<HomeRowItem> {
         workingSources.refresh()
         val saved = workingSources.getAll().take(config.limit.coerceIn(1, 60))
-        return coroutineScope {
-            saved.map { ws ->
-                async {
-                    // CELLULOID (SHW-98): working source je často jen imdb-keyed (tmdb=0) → fetchMovieDetails(0)
-                    // selže → řada „Uloženo k přehrání" bez coverů a detail těch filmů bez fanartu (detail nemá
-                    // tmdbId, odkud vzít backdrop). Dohledej tmdbId z imdb, ať cover i fanart naskočí.
-                    val tmdbId = ws.tmdb.takeIf { it > 0L }
-                        ?: ws.imdb.takeIf { it.isNotBlank() }
-                            ?.let { runCatching { tmdb.findTmdbIdByImdb(it, false) }.getOrNull() }
-                    val details = tmdbId?.let { runCatching { tmdb.fetchMovieDetails(it) }.getOrNull() }
-                    val tr = tmdbId?.let { runCatching { tmdb.fetchMovieTranslation(it, "cs") }.getOrNull() }
-                    val item = stub(tmdbId ?: 0L, ws.title, year = null, isShow = false).copy(
-                        title = ws.title,
-                        posterPath = details?.poster_path,
-                        backdropPath = details?.backdrop_path,
-                        titleCz = tr?.title?.takeIf { it.isNotBlank() },
-                        imdbId = ws.imdb.takeIf { it.isNotBlank() },
-                    )
-                    HomeRowItem(
-                        key = "saved_${ws.tmdb}",
-                        title = item.displayTitle,
-                        posterUrl = item.posterUrl("w342"),
-                        landscapeUrl = item.backdropUrl("w780"),
-                        mediaItem = item,
-                        // S4b: každý titul tady MÁ zapamatovaný zdroj → klik přehraje rovnou (one-click).
-                        playDirectly = true,
-                    )
-                }
-            }.awaitAll()
+        // CELLULOID (SHW-98) FIX: working source nenese poster/backdrop. Dřív si loadSavedForPlayback dělal
+        // VLASTNÍ neškrcený TMDB burst bez jazyka (`fetchMovieDetails(id)` → cache klíč „id|") → při cold-startu
+        // se stovkou souběžných dotazů rozstřelil o transient/rate-limit a CachedTmdbRemoteDataSource ten null
+        // NATRVALO zacacheoval; detail (stejný null-jazyk klíč) pak zdědil prázdno = řada bez coverů + černý
+        // fanart. Reuse SDÍLENÉHO MediaEnricheru (Semaphore(6), cs-CZ, cache sdílená s Objevit) — tatáž cesta,
+        // co plakáty na „Objevit" spolehlivě plní. Enricher navíc dohledá tmdbId z imdb (imdb-keyed working source).
+        val base = saved.map { ws ->
+            MediaItem(
+                traktId = 0L,
+                tmdbId = ws.tmdb.takeIf { it > 0L },
+                imdbId = ws.imdb.takeIf { it.isNotBlank() },
+                title = ws.title,
+                year = null,
+                overview = null,
+                rating = null,
+                genres = null,
+                type = MediaType.MOVIE,
+            )
+        }
+        val enriched = enricher.enrich(base, withCertification = ageCap.value != null)
+        val withPoster = enriched.count { it.posterPath != null }
+        Timber.i("[TvHome] Uloženo k přehrání: %d titulů, %d s posterem (enricher)", enriched.size, withPoster)
+        return saved.zip(enriched).map { (ws, item) ->
+            HomeRowItem(
+                key = "saved_${ws.tmdb}",
+                title = item.displayTitle,
+                posterUrl = item.posterUrl("w342"),
+                landscapeUrl = item.backdropUrl("w780"),
+                mediaItem = item,
+                // S4b: každý titul tady MÁ zapamatovaný zdroj → klik přehraje rovnou (one-click).
+                playDirectly = true,
+            )
         }
     }
 

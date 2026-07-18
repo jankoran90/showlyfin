@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.ui.Modifier
@@ -90,6 +91,10 @@ private data class FilmyPlayer(
 @Composable
 private fun FilmyShellContent() {
     var current by remember { mutableStateOf(FilmySection.HOME) }
+    // CELLULOID: drží rememberSaveable stav KAŽDÉ sekce (scroll pozice mřížky/seznamu, pager tab) i když
+    // ji detail/přehrávač dočasně vystřídá v kompozici → po BACK zůstane scroll na místě. Ruční přepnutí
+    // sekce v draweru stav té sekce zahodí (removeState) = úmyslný reset na vrch; reload appky = nový holder.
+    val sectionStateHolder = rememberSaveableStateHolder()
     // M2.3: lehký back-stack detailů (klik na řádek/CollectionPart → push; back → pop). Prázdný = shell sekcí.
     // M2.6: sjednocen na FilmyDetailEntry, aby uměl i JF-only položky (dohledání přes getItemMeta).
     var detailStack by remember { mutableStateOf<List<FilmyDetailEntry>>(emptyList()) }
@@ -228,6 +233,8 @@ private fun FilmyShellContent() {
                 drawerState = drawerState,
                 drawerContent = {
                     FilmyDrawer(current = current) { section ->
+                        // Ruční výběr sekce v draweru = úmyslný reset scrollu té sekce na vrch (i re-klik na aktuální).
+                        sectionStateHolder.removeState(section)
                         current = section
                         scope.launch { drawerState.close() }
                     }
@@ -246,6 +253,7 @@ private fun FilmyShellContent() {
                         val openDetailPlay: (MediaItem) -> Unit = { detailStack = detailStack + FilmyDetailEntry.Media(it, autoplay = true) }
                         // M2.6: JF-only položka → dohledá se přes getItemMeta a otevře sdílený detail.
                         val openJfDetail: (String) -> Unit = { jf -> detailStack = detailStack + FilmyDetailEntry.Jellyfin(jf) }
+                        sectionStateHolder.SaveableStateProvider(current) {
                         when (current) {
                             // M2.2 domov = řady (reuse TvHomeViewModel); M2.3 klik → detail (push na stack).
                             FilmySection.HOME -> FilmyHomeScreen(
@@ -272,6 +280,7 @@ private fun FilmyShellContent() {
                             FilmySection.SETTINGS -> FilmySettingsScreen(onMenu = onMenu)
                             // M2.5: Profil = 2 pevné profily + PIN (reuse SettingsViewModel/ProfileRepository).
                             FilmySection.PROFILE -> FilmyProfileScreen(onMenu = onMenu)
+                        }
                         }
                     }
                 }

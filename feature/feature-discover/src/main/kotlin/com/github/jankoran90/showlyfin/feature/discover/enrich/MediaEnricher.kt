@@ -55,6 +55,7 @@ class MediaEnricher @Inject constructor(
             val details = detailsD.await(); val tr = trD.await()
             val czOverview = firstNonBlank(tr?.overview, details?.overview)
             item.copy(
+                year = item.year ?: details?.first_air_date?.take(4)?.toIntOrNull(),
                 posterPath = details?.poster_path ?: item.posterPath,
                 backdropPath = details?.backdrop_path ?: item.backdropPath,
                 titleCz = firstNonBlank(tr?.name, details?.name) ?: item.titleCz,
@@ -71,6 +72,7 @@ class MediaEnricher @Inject constructor(
             val details = detailsD.await(); val tr = trD.await()
             val czOverview = firstNonBlank(tr?.overview, details?.overview)
             item.copy(
+                year = item.year ?: details?.release_date?.take(4)?.toIntOrNull(),
                 posterPath = details?.poster_path ?: item.posterPath,
                 backdropPath = details?.backdrop_path ?: item.backdropPath,
                 titleCz = firstNonBlank(tr?.title, details?.title) ?: item.titleCz,

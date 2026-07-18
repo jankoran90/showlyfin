@@ -286,7 +286,7 @@ class DetailViewModel @Inject constructor(
                 if (tmdbId != null) {
                     if (item.type == MediaType.MOVIE) {
                         coroutineScope {
-                            val detailsDeferred = async { tmdbApi.fetchMovieDetails(tmdbId) }
+                            val detailsDeferred = async { tmdbApi.fetchMovieDetails(tmdbId, "cs-CZ") }
                             val translationDeferred = async { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }
                             val details = detailsDeferred.await()
                             val translation = translationDeferred.await()
@@ -304,8 +304,10 @@ class DetailViewModel @Inject constructor(
                                     // matchnutých jen přes TMDB (např. arthouse bez imdb v Jellyfinu).
                                     item = item.copy(
                                         imdbId = item.imdbId ?: details?.imdb_id?.takeIf { id -> id.isNotBlank() },
-                                        posterPath = details?.poster_path,
-                                        backdropPath = details?.backdrop_path,
+                                        // FIX: NEpřepisuj null (transient TMDB fail / poisoned cache) přes už
+                                        // dodaný poster/backdrop (z enricheru na kartě) → jinak zmizí fanart.
+                                        posterPath = details?.poster_path ?: item.posterPath,
+                                        backdropPath = details?.backdrop_path ?: item.backdropPath,
                                     ),
                                     isLoading = false,
                                 )
@@ -320,7 +322,7 @@ class DetailViewModel @Inject constructor(
                         }
                     } else {
                         coroutineScope {
-                            val detailsDeferred = async { tmdbApi.fetchShowDetails(tmdbId) }
+                            val detailsDeferred = async { tmdbApi.fetchShowDetails(tmdbId, "cs-CZ") }
                             val translationDeferred = async { tmdbApi.fetchShowTranslation(tmdbId, "cs") }
                             val details = detailsDeferred.await()
                             val translation = translationDeferred.await()
@@ -340,8 +342,9 @@ class DetailViewModel @Inject constructor(
                                     // přes trakt/tmdb id (ne title), takže je to bezpečné.
                                     item = item.copy(
                                         title = details?.name?.takeIf { n -> n.isNotBlank() } ?: item.title,
-                                        posterPath = details?.poster_path,
-                                        backdropPath = details?.backdrop_path,
+                                        // FIX: viz movie větev — null z transient failu nepřepíše dodaný poster/backdrop.
+                                        posterPath = details?.poster_path ?: item.posterPath,
+                                        backdropPath = details?.backdrop_path ?: item.backdropPath,
                                     ),
                                     isLoading = false,
                                 )

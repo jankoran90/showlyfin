@@ -4,7 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -100,7 +100,9 @@ fun MediaRow(
             }
         }
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.height(RowCoverHeight).fillMaxWidth()) {
+        // VANTAGE (SHW-48) → CELLULOID: text sloupec smí povyrůst nad výšku coveru, aby se do list stylu
+        // vešly vždy 3 řádky popisku (dřív fixní výška = cover ořízl popis na 2 řádky, když byl i řádek rok·žánr).
+        Column(modifier = Modifier.heightIn(min = RowCoverHeight).fillMaxWidth()) {
             Text(
                 text = item.displayTitle,
                 style = MaterialTheme.typography.titleMedium,
@@ -190,8 +192,8 @@ fun MediaRow(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxHeight(),
                 )
             }
         }
