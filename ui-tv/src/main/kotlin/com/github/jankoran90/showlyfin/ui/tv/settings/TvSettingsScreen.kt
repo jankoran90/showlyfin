@@ -321,6 +321,27 @@ fun TvSettingsScreen(
                     labelOf = { if (it >= 60) "${it / 60} min" else "$it s" },
                     onSelect = { rdStall = it; rdPrefs.edit().putInt("rd_stall_timeout_sec", it).apply() },
                 )
+                // CATALOGUE — parita s telefonem (FilmyPlayerSection): vynutit SW dekódování. Raw trakt_prefs,
+                // konzument sdílený MoviePlayerService (běží i na TV).
+                var forceSw by remember {
+                    mutableStateOf(rdPrefs.getBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, PlayerPrefs.DEFAULT_FORCE_SW_DECODER))
+                }
+                TvToggleRow(
+                    label = "Vynutit softwarové dekódování obrazu",
+                    subtitle = "Když hardware dekodér selže (černý obraz u HEVC apod.), zkus softwarový. Pomalejší, ale spolehlivější",
+                    checked = forceSw,
+                    onCheckedChange = { forceSw = it; rdPrefs.edit().putBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, it).apply() },
+                )
+                // CATALOGUE — parita: živě dotahovat uložené zdroje bez restartu (konzument DetailViewModel, i TV).
+                // Jen dospělý profil (autoRefreshSourcesAvailable = effectiveAgeCap == null).
+                if (sys.autoRefreshSourcesAvailable) {
+                    TvToggleRow(
+                        label = "Živě dotahovat zdroje",
+                        subtitle = "Po otevření detailu sám dohledá uložený zdroj ze serveru, bez restartu appky",
+                        checked = sys.autoRefreshSources,
+                        onCheckedChange = settings::setAutoRefreshSources,
+                    )
+                }
             }
         }
 
@@ -364,6 +385,19 @@ fun TvSettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+                // CATALOGUE — parita s telefonem: počet položek v řadě na domově (pref UŽ čte TvHomeViewModel,
+                // chyběl jen ovladač). Raw trakt_prefs. Projeví se po obnovení domova.
+                val homeCtx = LocalContext.current
+                val homePrefs = remember { homeCtx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+                var rowLimit by remember { mutableStateOf(homePrefs.getInt("home_row_item_limit", 0)) }
+                TvOptionStepperRow(
+                    label = "Počet položek v řadě",
+                    subtitle = "Kolik titulů se přednačte v každé řadě na domově (víc = delší řady). Projeví se po obnovení domova",
+                    options = listOf(0, 20, 30, 40, 50, 60),
+                    selected = rowLimit,
+                    labelOf = { if (it == 0) "Výchozí" else "$it" },
+                    onSelect = { rowLimit = it; homePrefs.edit().putInt("home_row_item_limit", it).apply() },
                 )
                 Text(
                     text = "Řady domova",
