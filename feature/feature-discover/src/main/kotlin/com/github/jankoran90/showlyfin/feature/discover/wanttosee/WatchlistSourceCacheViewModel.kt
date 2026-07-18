@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
+import com.github.jankoran90.showlyfin.data.uploader.BackfillItem
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,11 +17,12 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * CELLULOID (SHW-98) — dávkové dohledání zdrojů pro CELÝ watchlist (user 2026-07-18 „ano chci to").
- * Dnes se auto-cache zdroje pouští jen při PŘIDÁNÍ do „Chci vidět" ([DetailViewModel.toggleWatchlist]).
- * Stávající tituly bez zdroje zůstaly prázdné. Tenhle job projde Trakt watchlist (filmy), najde ty BEZ
- * uloženého zdroje a na každý pošle `triggerAutoCache` (backend `/gems/cache-one` → RD na pozadí) S ROZESTUPEM,
- * ať nezahltí Real-Debrid. Backend cachuje na pozadí (fire-and-forget), WorkingSource se propíše sám.
+ * CATALOGUE (SHW-98) — dávkové dohledání zdrojů pro CELÝ watchlist. Auto-cache se sám pouští jen při PŘIDÁNÍ
+ * do „Chci vidět" ([DetailViewModel.toggleWatchlist]); starší tituly bez zdroje zůstaly prázdné. Dřív klient
+ * spamoval N× `cache-one` (fire-and-forget) → po pár filmech se to zaseklo a user musel ručně restartovat, přes
+ * hodiny nic nepřibývalo. TEĎ: klient JEDNOU pošle celý chybějící seznam na server (`/gems/cache-batch`), který
+ * má PERSISTENTNÍ FRONTU + worker s AUTO-RETRY — dohledává na pozadí přes hodiny i po zavření appky. Klient jen
+ * pollује stav (`/gems/cache-status`, kolik ještě čeká) a ukazuje živý průběh.
  *
  * Sdílený mezi telefonem (Nastavení blok + sekce „Chci vidět") a TV (sekce „Chci vidět") — parita shellů.
  */
@@ -40,8 +43,15 @@ class WatchlistSourceCacheViewModel @Inject constructor(
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
 
-    /** Rozestup mezi požadavky — RD/backend nesmí dostat 100 dotazů naráz. */
-    private val gapMs = 4000L
+    private var pollJob: Job? = null
+
+    init {
+        // Vstup do sekce: pokud server pořád něco dohledává (fronta neprázdná), navaž a ukazuj živý průběh.
+        viewModelScope.launch {
+            val remaining = workingSourceStore.cacheStatus() ?: return@launch
+            if (remaining > 0) startPolling(total = remaining)
+        }
+    }
 
     fun runBackfill() {
         if (_state.value is State.Running) return
@@ -59,17 +69,37 @@ class WatchlistSourceCacheViewModel @Inject constructor(
                 return@launch
             }
             val policy = cachePolicy()
-            missing.forEachIndexed { i, item ->
-                workingSourceStore.triggerAutoCache(item.imdbId, item.tmdbId, item.title, item.year, policy)
-                _state.value = State.Running(i + 1, missing.size)
-                if (i < missing.lastIndex) delay(gapMs)
+            val items = missing.map { BackfillItem(it.imdbId!!, it.tmdbId ?: 0L, it.title, it.year) }
+            // Jeden batch → server frontu převezme a maká sám (auto-retry). Pak sleduj kolik ubývá.
+            workingSourceStore.cacheBatch(items, policy)
+            startPolling(total = missing.size)
+        }
+    }
+
+    /** Sleduj serverovou frontu: `done = total - zbývá`. Prázdná fronta → hotovo. Odchod z obrazovky poll zruší
+     *  (viewModelScope), server běží dál — badge/„X z Y má zdroj" se dopočítá reaktivně, jak WorkingSource padají. */
+    private fun startPolling(total: Int) {
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch {
+            while (true) {
+                val remaining = workingSourceStore.cacheStatus()
+                if (remaining == null) { break }               // server nedostupný → nech stav být
+                if (remaining <= 0) {
+                    _state.value = State.Done(requested = total, already = 0)
+                    break
+                }
+                _state.value = State.Running(done = (total - remaining).coerceIn(0, total), total = total)
+                delay(POLL_MS)
             }
-            _state.value = State.Done(requested = missing.size, already = already)
         }
     }
 
     private fun cachePolicy(): String = when (parentalControls.profile.value.effectiveAgeRating) {
         AgeRating.CHILDREN, AgeRating.FAMILY -> "child"
         else -> "original"
+    }
+
+    private companion object {
+        const val POLL_MS = 8000L
     }
 }

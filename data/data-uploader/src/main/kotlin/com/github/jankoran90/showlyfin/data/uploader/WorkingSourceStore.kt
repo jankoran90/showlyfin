@@ -44,6 +44,9 @@ data class WorkingSource(
     val auto: Boolean = false,
 )
 
+/** CATALOGUE (SHW-98) — položka dávkového backfillu zdrojů (jeden film do serverové fronty). */
+data class BackfillItem(val imdb: String, val tmdb: Long, val title: String, val year: Int?)
+
 /** Obálka serverového JSONu `{"sources":[…]}` (endpoint /api/profiles/{key}/working-sources). */
 private data class WorkingSourcesEnvelope(val sources: List<WorkingSource> = emptyList())
 
@@ -157,6 +160,37 @@ class WorkingSourceStore @Inject constructor(
         val key = profileKey(); val base = serverBase()
         if (key.isBlank() || base.isBlank()) return
         uploaderDs.gemsCacheOne(base, serverCookie(), im, tmdb ?: 0L, key, policy, title, year)
+    }
+
+    /**
+     * CATALOGUE (SHW-98) — zařaď CELÝ chybějící watchlist do serverové fronty backfillu NAJEDNOU. Server pak
+     * dohledává na pozadí s auto-retry (přes hodiny, i po zavření appky) — nahrazuje spamování N× cache-one, co
+     * se po pár filmech zaseklo a muselo se ručně restartovat. Vrací počet nově zařazených.
+     */
+    suspend fun cacheBatch(items: List<BackfillItem>, policy: String): Int {
+        val key = profileKey(); val base = serverBase()
+        if (key.isBlank() || base.isBlank() || items.isEmpty()) return 0
+        val arr = org.json.JSONArray()
+        for (it in items) {
+            if (!it.imdb.startsWith("tt")) continue
+            arr.put(org.json.JSONObject().apply {
+                put("imdb", it.imdb)
+                if (it.tmdb > 0L) put("tmdb", it.tmdb)
+                if (it.title.isNotBlank()) put("title", it.title)
+                it.year?.let { y -> put("year", y) }
+            })
+        }
+        val body = org.json.JSONObject().apply {
+            put("profile", key); put("policy", policy); put("items", arr)
+        }.toString()
+        return uploaderDs.gemsCacheBatch(base, serverCookie(), body)
+    }
+
+    /** CATALOGUE — kolik filmů ještě čeká v serverové frontě backfillu (null = server nedostupný/chyba). */
+    suspend fun cacheStatus(): Int? {
+        val key = profileKey(); val base = serverBase()
+        if (key.isBlank() || base.isBlank()) return null
+        return uploaderDs.gemsCacheStatus(base, serverCookie(), key)
     }
 
     /**

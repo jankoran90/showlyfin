@@ -263,6 +263,28 @@ internal class UploaderApi(
         runCatching { service.gemsCacheOne("$base/gems/cache-one?$q", cookie, body) }
     }
 
+    // CATALOGUE (SHW-98) — dávkové zařazení watchlistu do serverové fronty backfillu; vrací počet nově zařazených.
+    override suspend fun gemsCacheBatch(baseUrl: String, sessionCookie: String, bodyJson: String): Int {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType())
+        return runCatching {
+            val resp = service.gemsCacheBatch("$base/gems/cache-batch", cookie, body)
+            val s = resp.body()?.string() ?: return 0
+            org.json.JSONObject(s).optInt("queued", 0)
+        }.getOrDefault(0)
+    }
+
+    override suspend fun gemsCacheStatus(baseUrl: String, sessionCookie: String, profile: String): Int? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching {
+            val resp = service.gemsCacheStatus("$base/gems/cache-status?profile=${enc(profile)}", cookie)
+            val s = resp.body()?.string() ?: return null
+            org.json.JSONObject(s).optInt("queued", 0)
+        }.getOrNull()
+    }
+
     override suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, status: String, sort: String?): String? {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
