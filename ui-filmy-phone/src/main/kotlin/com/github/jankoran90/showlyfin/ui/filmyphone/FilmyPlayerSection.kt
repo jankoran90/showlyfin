@@ -28,6 +28,11 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
     val ctx = LocalContext.current
     val rdPrefs = remember { ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE) }
     var rdStall by remember { mutableStateOf(rdPrefs.getInt("rd_stall_timeout_sec", 120)) }
+    // FISSION (SHW-98) — vynutit SW dekodér obrazu (Exynos/Tensor padá na některých HEVC). Stejný raw
+    // klíč `trakt_prefs` jako čte MoviePlayerService.
+    var forceSw by remember {
+        mutableStateOf(rdPrefs.getBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, PlayerPrefs.DEFAULT_FORCE_SW_DECODER))
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SettingSectionTitle("Přehrávač")
@@ -54,6 +59,14 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
             selected = rdStall,
             labelOf = { if (it >= 60) "${it / 60} min" else "$it s" },
             onSelect = { rdStall = it; rdPrefs.edit().putInt("rd_stall_timeout_sec", it).apply() },
+        )
+        SettingSwitchRow(
+            title = "Vynutit softwarové dekódování obrazu",
+            subtitle = "Když nějaký film (často HEVC/H.265) bliká, trhá se nebo hlásí „nelze přehrát", zapni — " +
+                "přehraje se softwarově (spolehlivější, o něco vyšší zátěž baterie). Vypnuto = appka zkusí " +
+                "softwarový dekodér sama až při chybě.",
+            checked = forceSw,
+            onCheckedChange = { forceSw = it; rdPrefs.edit().putBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, it).apply() },
         )
     }
 }

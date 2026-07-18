@@ -447,12 +447,20 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
-    // ── Per-source paměť (offset + vybraná stopa) ────────────────────────────
-    // Klíč zdroje = imdb (+ s/e u seriálů). Pamatuje se zpoždění a vybraná stopa
-    // jen pro konkrétní film/epizodu; nový zdroj startuje s defaultem (best + 0 s).
+    // ── Per-zdroj paměť (offset + vybraná stopa) ─────────────────────────────
+    // Klíč = imdb (+ s/e u seriálů) + KRÁTKÝ TAG RELEASU. Jiný release může mít jiné
+    // časování/délku/fps (user 2026-07-18) → posun i výběr stopy se pamatují PER ZDROJ,
+    // ne jen per film. Bez release (např. JF knihovna) padne na per-film klíč (tag prázdný).
     private fun sourceKey(q: SubtitleQuery): String {
         val se = if (q.season != null && q.episode != null) "_s${q.season}e${q.episode}" else ""
-        return "${q.imdb}$se"
+        return "${q.imdb}$se${releaseTag(q.release)}"
+    }
+
+    /** Stabilní krátký tag releasu (hex hash normalizovaného názvu) — ať klíč nebobtná
+     *  (ProfileConfig JSON má cap ~300 LRU). Prázdný string, když release chybí. */
+    private fun releaseTag(release: String?): String {
+        val norm = release?.lowercase()?.filter { it.isLetterOrDigit() }?.takeIf { it.isNotBlank() } ?: return ""
+        return "#" + Integer.toHexString(norm.hashCode())
     }
 
     /** PICKUP: stabilní klíč pozice přehrávání. Když máme imdb, použij ho (sdílí klíč s budoucí TV

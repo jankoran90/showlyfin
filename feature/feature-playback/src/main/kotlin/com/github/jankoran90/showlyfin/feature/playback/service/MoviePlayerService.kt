@@ -53,10 +53,41 @@ class MoviePlayerService : MediaSessionService() {
     /** Plan EVEN — DRC/normalizér FILMU. Default VYP; jen telefon (na TV hraje box = passthrough). */
     private var audioBoost: AudioBoost? = null
 
+    /** Stabilní audio session id (pin pro DRC) — sdílené i po rebuildu přehrávače na SW dekodér. */
+    private var audioSessionId: Int = 0
+
+    /** True = přehrávač aktuálně jede na SOFTWAROVÉM (FFmpeg) video dekodéru (pref nebo auto-fallback). */
+    private var swVideoActive = false
+
     override fun onCreate() {
         super.onCreate()
         // Plan EVEN — pinneme stabilní audio session id pro připojení filmového DRC (jen telefon).
-        val audioSessionId = C.generateAudioSessionIdV21(this)
+        audioSessionId = C.generateAudioSessionIdV21(this)
+        // FISSION (SHW-98): SW dekodér obrazu — buď natvrdo z prefs (uživatel vynutil), nebo default HW
+        // s auto-fallbackem na SW při decode chybě (ACTION_FORCE_SW). Exynos/Tensor padá na některých HEVC.
+        val forceSw = prefs.getBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, PlayerPrefs.DEFAULT_FORCE_SW_DECODER)
+        swVideoActive = forceSw
+        val player = buildPlayer(forceSwVideo = forceSw)
+        val drcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0)
+        if (drcLevel > 0) {
+            audioBoost = AudioBoost(audioSessionId).also { it.apply(drcLevel, AudioBoost.Profile.MOVIE) }
+        }
+        session = MediaSession.Builder(this, player)
+            // Media3 vyžaduje v rámci JEDNOHO procesu UNIKÁTNÍ session ID. Audioknihová
+            // AudiobookPlayerService drží MediaLibrarySession s výchozím prázdným ID ("") → bez
+            // vlastního ID by se obě session srazily ("Session ID must be unique. ID=") a služba by
+            // spadla už v onCreate → pád při přehrávání čehokoliv (RD/Jellyfin/NaVýbornou).
+            .setId("showlyfin_movie")
+            .apply { contentActivityPendingIntent()?.let { setSessionActivity(it) } }
+            .build()
+    }
+
+    /**
+     * Postaví ExoPlayer. [forceSwVideo] = preferovat NextLib FFmpeg video renderer (spolehlivé HEVC při
+     * selhání HW dekodéru). Volá se v [onCreate] i při auto-fallbacku (ACTION_FORCE_SW) — proto reuse
+     * [audioSessionId] (DRC drží), vlastní listener [InstallGuard], vypnutý text renderer (titulky kreslíme sami).
+     */
+    private fun buildPlayer(forceSwVideo: Boolean): ExoPlayer {
         // F2d (A/V lip-sync): na TV boxu s AVR (eARC, 5.1 passthrough) NEsmí do audio cesty NextLib FFmpeg SW
         // dekodér — mění latenci passthrough → video napřed. Na TV proto čistý DefaultRenderersFactory (bitstream
         // passthrough do AVR) + audio offload (jako yellyfin, který sync problém nemá). Telefon BEZE ZMĚNY
@@ -64,11 +95,15 @@ class MoviePlayerService : MediaSessionService() {
         val isTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         val boxAudio = isTv &&
             prefs.getBoolean(PlayerPrefs.TV_AUDIO_PASSTHROUGH_KEY, PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH)
-        val renderersFactory: RenderersFactory = if (boxAudio) {
+        // forceSwVideo → FFmpeg jako PREFEROVANÝ video renderer (i na TV; user si vynutil SW, lip-sync ustoupí).
+        val renderersFactory: RenderersFactory = if (boxAudio && !forceSwVideo) {
             DefaultRenderersFactory(applicationContext).setEnableDecoderFallback(true)
         } else {
             NextRenderersFactory(applicationContext)
-                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                .setExtensionRendererMode(
+                    if (forceSwVideo) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                    else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON,
+                )
                 .setEnableDecoderFallback(true)
         }
         val builder = ExoPlayer.Builder(this)
@@ -113,8 +148,8 @@ class MoviePlayerService : MediaSessionService() {
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                     .build()
             }
-        // Plan EVEN — filmové DRC je opt-in (default VYP). Když je zapnuté, připojí se na session id
-        // TOHOTO přehrávače = jen telefon. Na TV běží yellyfin/box → passthrough do AVR se nedotkne.
+        // Plan EVEN — filmové DRC (audioBoost) se připíná v onCreate na session id TOHOTO přehrávače
+        // (jen telefon; na TV běží box → passthrough). audioSessionId je pole = drží i po SW rebuildu.
         player.setAudioSessionId(audioSessionId)
         // EVERGREEN — tichá auto-instalace na pozadí nesmí utnout běžící film (i se zhasnutou obrazovkou).
         player.addListener(object : Player.Listener {
@@ -122,18 +157,29 @@ class MoviePlayerService : MediaSessionService() {
                 InstallGuard.playbackActive = isPlaying
             }
         })
-        val drcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0)
-        if (drcLevel > 0) {
-            audioBoost = AudioBoost(audioSessionId).also { it.apply(drcLevel, AudioBoost.Profile.MOVIE) }
-        }
-        session = MediaSession.Builder(this, player)
-            // Media3 vyžaduje v rámci JEDNOHO procesu UNIKÁTNÍ session ID. Audioknihová
-            // AudiobookPlayerService drží MediaLibrarySession s výchozím prázdným ID ("") → bez
-            // vlastního ID by se obě session srazily ("Session ID must be unique. ID=") a služba by
-            // spadla už v onCreate → pád při přehrávání čehokoliv (RD/Jellyfin/NaVýbornou).
-            .setId("showlyfin_movie")
-            .apply { contentActivityPendingIntent()?.let { setSessionActivity(it) } }
-            .build()
+        return player
+    }
+
+    /**
+     * FISSION auto-fallback: HW dekodér selhal (`ERROR_CODE_DECODING_FAILED`) → přestav přehrávač na
+     * SOFTWAROVÝ (FFmpeg) video renderer a nasaď TENTÝŽ zdroj od stejné pozice. Idempotentní (jen jednou —
+     * `swVideoActive`), aby se necyklilo, když nedekóduje ani SW. Controller zůstává navázaný (swap přes
+     * [MediaSession.setPlayer]) → UI ani pozice se neztratí.
+     */
+    private fun switchToSoftwareDecoder() {
+        val s = session ?: return
+        val old = s.player
+        if (swVideoActive || old.currentMediaItem == null) return
+        swVideoActive = true
+        val item = old.currentMediaItem!!
+        val pos = old.currentPosition.coerceAtLeast(0L)
+        val newPlayer = buildPlayer(forceSwVideo = true)
+        newPlayer.setMediaItem(item, pos)
+        newPlayer.prepare()
+        newPlayer.playWhenReady = true
+        s.setPlayer(newPlayer)
+        (old as? ExoPlayer)?.release()
+        android.util.Log.i("MoviePlayer", "[FISSION] auto-fallback na SW dekodér, resume @${pos}ms")
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
@@ -144,6 +190,10 @@ class MoviePlayerService : MediaSessionService() {
         if (intent?.action == ACTION_STOP) {
             session?.player?.run { stop(); clearMediaItems() }
             stopSelf()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_FORCE_SW) {
+            switchToSoftwareDecoder()
             return START_NOT_STICKY
         }
         return super.onStartCommand(intent, flags, startId)
@@ -195,5 +245,8 @@ class MoviePlayerService : MediaSessionService() {
     companion object {
         /** Intent akce: UI (Zpět) žádá ukončení přehrávání + zastavení služby. */
         const val ACTION_STOP = "com.github.jankoran90.showlyfin.MOVIE_STOP"
+
+        /** Intent akce: UI hlásí decode chybu → přestav přehrávač na SW dekodér a nasaď stejný zdroj. */
+        const val ACTION_FORCE_SW = "com.github.jankoran90.showlyfin.MOVIE_FORCE_SW"
     }
 }

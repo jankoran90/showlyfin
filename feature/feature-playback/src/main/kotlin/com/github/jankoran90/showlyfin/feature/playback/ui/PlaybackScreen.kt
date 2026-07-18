@@ -243,6 +243,8 @@ fun PlaybackScreen(
     var playerError by remember { mutableStateOf<String?>(null) }
     // CASCADE Fáze 4: hlásíme selhání externího streamu jen jednou (onPlayerError může přijít víckrát).
     var failureReported by remember { mutableStateOf(false) }
+    // FISSION: decode chyba (HW dekodér padl na HEVC) → zkusíme JEDNOU tentýž zdroj SW dekodérem.
+    var triedSwDecoder by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var currentSubtitle by remember { mutableStateOf<String?>(null) }
     // Krátký popis zdroje do lišty: rozlišení · video kodek · audio kodek · kanály.
@@ -280,6 +282,18 @@ fun PlaybackScreen(
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 timber.log.Timber.e(error, "[Playback] ExoPlayer error code=${error.errorCodeName} cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}")
+                // FISSION: HW video dekodér padl (typicky HEVC na Exynos/Tensor, ERROR_CODE_DECODING_FAILED)
+                // → přestav službu na SW (FFmpeg) dekodér a nasaď tentýž zdroj. Jen JEDNOU (necyklit).
+                if (error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FAILED &&
+                    !triedSwDecoder && (externalUrl != null || localVideoPath != null)
+                ) {
+                    triedSwDecoder = true
+                    context.startService(
+                        android.content.Intent(context, MoviePlayerService::class.java)
+                            .setAction(MoviePlayerService.ACTION_FORCE_SW),
+                    )
+                    return
+                }
                 // CASCADE Fáze 4: u externího streamu zkus dalšího kandidáta (auto-advance) místo chyby.
                 if (externalUrl != null && onPlaybackFailed != null && !failureReported) {
                     failureReported = true
@@ -330,6 +344,9 @@ fun PlaybackScreen(
             }
         }
     }
+
+    // FISSION: nový film (jiná URL) = znovu povol jednorázový SW-dekodér pokus.
+    LaunchedEffect(state.streamUrl) { triedSwDecoder = false }
 
     // Media prepare — jen video. Titulky kreslíme sami (overlay), takže se MediaItem
     // už nikdy nepřestavuje kvůli titulkům (žádný rebuffer při posunu / přepnutí stopy).

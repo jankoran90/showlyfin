@@ -39,8 +39,15 @@ class MediaEnricher @Inject constructor(
         items.map { item -> async { semaphore.withPermit { enrichOne(item, withCertification) } } }.awaitAll()
     }
 
-    suspend fun enrichOne(item: MediaItem, withCertification: Boolean): MediaItem = coroutineScope {
-        val tmdbId = item.tmdbId ?: return@coroutineScope item
+    suspend fun enrichOne(item0: MediaItem, withCertification: Boolean): MediaItem = coroutineScope {
+        // CELLULOID (SHW-98): položky jen s imdb (asijské/art-house z JF knihovny, např. „The Taste of Tea")
+        // dřív z enrichmentu rovnou vypadly → bez plakátu i českého názvu = prázdné karty a anglické tituly.
+        // Dohledej tmdbId z imdb, ať dostanou poster + titleCz (řadí se pak taky dle CZ názvu).
+        val tmdbId = item0.tmdbId
+            ?: item0.imdbId?.takeIf { it.isNotBlank() }
+                ?.let { runCatching { tmdb.findTmdbIdByImdb(it, item0.type == MediaType.SHOW) }.getOrNull() }
+            ?: return@coroutineScope item0
+        val item = if (item0.tmdbId == null) item0.copy(tmdbId = tmdbId) else item0
         if (item.type == MediaType.SHOW) {
             val detailsD = async { runCatching { tmdb.fetchShowDetails(tmdbId, LANG) }.getOrNull() }
             val trD = async { runCatching { tmdb.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }

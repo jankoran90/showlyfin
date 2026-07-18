@@ -25,4 +25,14 @@ object PlayerPrefs {
      */
     const val TV_AUDIO_PASSTHROUGH_KEY = "player_tv_audio_passthrough"
     const val DEFAULT_TV_AUDIO_PASSTHROUGH = true
+
+    /**
+     * Vynutit SOFTWAROVÝ (FFmpeg) dekodér obrazu místo hardwarového. Některé čipy (např. Exynos/Tensor)
+     * padají na určitých HEVC/H.265 releasech (`ERROR_CODE_DECODING_FAILED`, MediaCodec 0x80000000), i když
+     * hlásí podporu. `true` = NextLib FFmpeg jako preferovaný video renderer (spolehlivé, vyšší zátěž CPU/baterie);
+     * `false` = HW dekodér + AUTOMATICKÝ jednorázový fallback na SW při decode chybě. Čte `MoviePlayerService`,
+     * projeví se při příštím přehrání (nebo hned při auto-fallbacku). Telefon i TV.
+     */
+    const val FORCE_SW_DECODER_KEY = "player_force_sw_decoder"
+    const val DEFAULT_FORCE_SW_DECODER = false
 }
