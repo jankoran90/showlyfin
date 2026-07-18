@@ -132,6 +132,11 @@ fun FilmySettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
+            // --- Dohledat zdroje pro celý watchlist (dávkový backfill, reuse triggerAutoCache) ---
+            FilmyWatchlistCacheSection()
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+
             // --- Kurátor „Pro tebe" (M2.7 parita, reuse CuratorSettingsViewModel) ---
             FilmyCuratorSection()
 
