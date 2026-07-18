@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
@@ -54,7 +55,14 @@ fun TvFilmotekaScreen(
     // KÁNON (CONVERGE): osa Filmotéky (Vše | Žánr | Země) jako chipy VEDLE názvu sekce — ne ve vlastním Row
     // nad TvRailList (to tlačilo obsah dolů a osa byla vizuálně odtržená od titulku). V řadovém stavu je
     // hlavička uvnitř TvRailList (sectionActions), v prázdném/loading nad obsahem přes TvSectionHeader.
-    val chips: @Composable () -> Unit = { AxisChips(axis = state.axis, onSelect = viewModel::setAxis) }
+    val chips: @Composable () -> Unit = {
+        AxisChips(
+            axis = state.axis,
+            allSort = state.allSort,
+            onSelect = viewModel::setAxis,
+            onAllSort = viewModel::setAllSort,
+        )
+    }
 
     if (state.rails.isNotEmpty()) {
         val rails = remember(state.rails) { state.rails.map { it.toTvRail() } }
@@ -92,11 +100,17 @@ fun TvFilmotekaScreen(
     }
 }
 
-/** Přepínač osy Filmotéky: Vše | Žánr | Země. Všechny chipy D-pad-fokusovatelné; přepnutí jen přeskupí (bez fetch). */
+/**
+ * Přepínač osy Filmotéky: Vše | Žánr | Země + pro osu „Vše" řazení Nedávno | Abecedně (parita s telefonem —
+ * user 2026-07-18). Všechny chipy D-pad-fokusovatelné; přepnutí jen přeskupí bázi (bez fetch). Řazení se ukládá
+ * per profil (sdílené s Nastavením přes [TvFilmotekaViewModel.setAllSort]).
+ */
 @Composable
 private fun AxisChips(
     axis: FilmotekaAxis,
+    allSort: FilmotekaAllSort,
     onSelect: (FilmotekaAxis) -> Unit,
+    onAllSort: (FilmotekaAllSort) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -118,6 +132,21 @@ private fun AxisChips(
             label = { Text("Země") },
             modifier = Modifier.tvFocusable(),
         )
+        // Řazení jen dává smysl pro plochou osu „Vše" (Žánr/Země mají vlastní řazení řad).
+        if (axis == FilmotekaAxis.ALL) {
+            FilterChip(
+                selected = allSort == FilmotekaAllSort.RECENT,
+                onClick = { onAllSort(FilmotekaAllSort.RECENT) },
+                label = { Text("Nedávno") },
+                modifier = Modifier.tvFocusable(),
+            )
+            FilterChip(
+                selected = allSort == FilmotekaAllSort.ALPHABETICAL,
+                onClick = { onAllSort(FilmotekaAllSort.ALPHABETICAL) },
+                label = { Text("Abecedně") },
+                modifier = Modifier.tvFocusable(),
+            )
+        }
     }
 }
 
