@@ -25,13 +25,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.feature.discover.wanttosee.TvWantToSeeViewModel
+import com.github.jankoran90.showlyfin.feature.discover.wanttosee.WatchlistSourceCacheViewModel
 
 /**
  * CINEMATHEQUE — telefonní sekce „Chci vidět" appky Filmy = CELÝ Trakt watchlist (parita s TV
  * `TvWantToSeeScreen`). Dřív šel watchlist na telefon jen jako ořezaná řada v Domů (limit 30 → ~20 vidět);
  * user chtěl vidět všech 90+ jako na TV. Reuse sdíleného [TvWantToSeeViewModel] (žádný ořez). Plochý seznam
  * `MediaItem` → mřížka/seznam (přepínač v liště, výchozí seznam). V liště ukazatel „N filmů · X má uložený
- * zdroj" + tlačítko „dohledat zdroje" (backfill [FilmyWatchlistCacheViewModel]) s živým průběhem — user chtěl
+ * zdroj" + tlačítko „dohledat zdroje" (backfill [WatchlistSourceCacheViewModel]) s živým průběhem — user chtěl
  * status dohledávání vidět rovnou tady, ne zahrabaný v Nastavení (2026-07-18). Klik → sdílený DetailScreen.
  */
 @Composable
@@ -40,12 +41,12 @@ fun FilmyWantToSeeScreen(
     onOpenDetail: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
     vm: TvWantToSeeViewModel = hiltViewModel(),
-    cacheVm: FilmyWatchlistCacheViewModel = hiltViewModel(),
+    cacheVm: WatchlistSourceCacheViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val cacheState by cacheVm.state.collectAsStateWithLifecycle()
     var viewMode by remember { mutableStateOf(ViewMode.LIST) }
-    val running = cacheState is FilmyWatchlistCacheViewModel.State.Running
+    val running = cacheState is WatchlistSourceCacheViewModel.State.Running
 
     Column(modifier.fillMaxSize()) {
         FilmySectionBar(
@@ -95,11 +96,11 @@ fun FilmyWantToSeeScreen(
 }
 
 /** Průběh backfillu jako řádek pod titulkem — má přednost před statickým počtem, dokud běží / hlásí výsledek. */
-private fun cacheStatusLine(s: FilmyWatchlistCacheViewModel.State): String? = when (s) {
-    is FilmyWatchlistCacheViewModel.State.Running -> "Dohledávám zdroje na pozadí… ${s.done}/${s.total}"
-    is FilmyWatchlistCacheViewModel.State.Done ->
+private fun cacheStatusLine(s: WatchlistSourceCacheViewModel.State): String? = when (s) {
+    is WatchlistSourceCacheViewModel.State.Running -> "Dohledávám zdroje na pozadí… ${s.done}/${s.total}"
+    is WatchlistSourceCacheViewModel.State.Done ->
         if (s.requested == 0) null
         else "Spuštěno dohledání ${s.requested} filmů (na pozadí, chvíli to potrvá)."
-    is FilmyWatchlistCacheViewModel.State.Error -> "Chyba: ${s.message}"
-    FilmyWatchlistCacheViewModel.State.Idle -> null
+    is WatchlistSourceCacheViewModel.State.Error -> "Chyba: ${s.message}"
+    WatchlistSourceCacheViewModel.State.Idle -> null
 }
