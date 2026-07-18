@@ -376,9 +376,15 @@ class TvHomeViewModel @Inject constructor(
         return coroutineScope {
             saved.map { ws ->
                 async {
-                    val details = runCatching { tmdb.fetchMovieDetails(ws.tmdb) }.getOrNull()
-                    val tr = runCatching { tmdb.fetchMovieTranslation(ws.tmdb, "cs") }.getOrNull()
-                    val item = stub(ws.tmdb, ws.title, year = null, isShow = false).copy(
+                    // CELLULOID (SHW-98): working source je často jen imdb-keyed (tmdb=0) → fetchMovieDetails(0)
+                    // selže → řada „Uloženo k přehrání" bez coverů a detail těch filmů bez fanartu (detail nemá
+                    // tmdbId, odkud vzít backdrop). Dohledej tmdbId z imdb, ať cover i fanart naskočí.
+                    val tmdbId = ws.tmdb.takeIf { it > 0L }
+                        ?: ws.imdb.takeIf { it.isNotBlank() }
+                            ?.let { runCatching { tmdb.findTmdbIdByImdb(it, false) }.getOrNull() }
+                    val details = tmdbId?.let { runCatching { tmdb.fetchMovieDetails(it) }.getOrNull() }
+                    val tr = tmdbId?.let { runCatching { tmdb.fetchMovieTranslation(it, "cs") }.getOrNull() }
+                    val item = stub(tmdbId ?: 0L, ws.title, year = null, isShow = false).copy(
                         title = ws.title,
                         posterPath = details?.poster_path,
                         backdropPath = details?.backdrop_path,
