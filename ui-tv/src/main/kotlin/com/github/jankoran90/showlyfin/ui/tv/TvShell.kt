@@ -32,6 +32,8 @@ import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeScreen
 import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeSidebar
 import com.github.jankoran90.showlyfin.ui.tv.profile.TvProfileSwitcher
 import com.github.jankoran90.showlyfin.ui.tv.library.TvLibraryScreen
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
 import com.github.jankoran90.showlyfin.ui.tv.nav.TvSection
 import com.github.jankoran90.showlyfin.ui.tv.settings.TvSettingsScreen
 import com.github.jankoran90.showlyfin.ui.tv.watchlist.TvWatchlistScreen
@@ -92,6 +94,24 @@ fun TvShell(
     // profily; navíc bezpečnostní riziko: dospělý hero na dětském profilu). shownInfo nulujeme rovnou,
     // ať hero zmizí okamžitě, ne až po debounce. Nová karta dostane fokus → onFocusItem hero překreslí.
     LaunchedEffect(section, activeProfileId) { rawInfo = null; shownInfo = null }
+
+    // CATALOGUE — per-profil VÝCHOZÍ SEKCE (parita s telefonem, user 2026-07-18). Při COLD STARTU a při PŘEPNUTÍ
+    // profilu skoč na jeho uloženou výchozí sekci (pref `tv_default_section_<profileId>` = TvSection.name; nic
+    // uloženo = beze změny). `appliedDefaultForProfile` je rememberSaveable → PŘEŽIJE Activity recreation (TV box jde
+    // často na pozadí), takže recreation už NEaplikuje = neruší rozdělanou navigaci; přepnutí profilu (jiný pid) i
+    // cold start (process death → flag null) aplikují správně.
+    val defaultSectionCtx = LocalContext.current
+    var appliedDefaultForProfile by rememberSaveable { mutableStateOf<Long?>(null) }
+    LaunchedEffect(activeProfileId) {
+        val pid = activeProfileId ?: return@LaunchedEffect
+        if (appliedDefaultForProfile == pid) return@LaunchedEffect
+        appliedDefaultForProfile = pid
+        val saved = defaultSectionCtx
+            .getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE)
+            .getString("tv_default_section_$pid", null)
+        val target = saved?.let { runCatching { TvSection.valueOf(it) }.getOrNull() }
+        if (target != null && target != section) onSelectSection(target)
+    }
 
     CompositionLocalProvider(
         LocalSavedSourceKeys provides savedSourceKeys,

@@ -49,6 +49,7 @@ import com.github.jankoran90.showlyfin.feature.detail.TvDetailLayout
 import com.github.jankoran90.showlyfin.ui.phone.DetailPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
+import com.github.jankoran90.showlyfin.ui.tv.nav.TvSection
 import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.theme.Background
 import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinSkin
@@ -87,6 +88,7 @@ fun TvSettingsScreen(
     val immersiveHeader by homeVm.immersiveHeader.collectAsStateWithLifecycle()
     val immersiveHeaderLines by homeVm.immersiveHeaderLines.collectAsStateWithLifecycle()
     val allRows by homeVm.allRows.collectAsStateWithLifecycle()
+    val activePid by homeVm.activeProfileId.collectAsStateWithLifecycle()
     val libraryState by libraryVm.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var importMsg by remember { mutableStateOf<String?>(null) }
@@ -399,6 +401,27 @@ fun TvSettingsScreen(
                     labelOf = { if (it == 0) "Výchozí" else "$it" },
                     onSelect = { rowLimit = it; homePrefs.edit().putInt("home_row_item_limit", it).apply() },
                 )
+                // CATALOGUE — parita: per-profil VÝCHOZÍ SEKCE (kam se profil otevře po startu). Pref
+                // `tv_default_section_<profileId>`, aplikuje TvShell při startu/přepnutí profilu.
+                activePid?.let { pid ->
+                    var defSection by remember(pid) {
+                        mutableStateOf(
+                            homePrefs.getString("tv_default_section_$pid", null)
+                                ?.let { runCatching { TvSection.valueOf(it) }.getOrNull() } ?: TvSection.HOME
+                        )
+                    }
+                    TvOptionStepperRow(
+                        label = "Výchozí sekce",
+                        subtitle = "Kam se tento profil otevře po spuštění appky",
+                        options = listOf(
+                            TvSection.HOME, TvSection.FILMOTEKA, TvSection.FOR_YOU,
+                            TvSection.LAPIDARY, TvSection.LIBRARY, TvSection.WANT_TO_SEE,
+                        ),
+                        selected = defSection,
+                        labelOf = ::tvSectionLabel,
+                        onSelect = { defSection = it; homePrefs.edit().putString("tv_default_section_$pid", it.name).apply() },
+                    )
+                }
                 Text(
                     text = "Řady domova",
                     style = MaterialTheme.typography.titleSmall,
@@ -600,3 +623,16 @@ private fun drcLabel(level: Int): String = when (level) {
 }
 
 private fun hideDelayLabel(sec: Int): String = if (sec <= 0) "Nikdy" else "$sec s"
+
+/** CATALOGUE — český popisek sekce pro výběr „Výchozí sekce" (parita s telefonem). */
+private fun tvSectionLabel(s: TvSection): String = when (s) {
+    TvSection.HOME -> "Domů"
+    TvSection.FOR_YOU -> "Pro tebe"
+    TvSection.FILMOTEKA -> "Filmotéka"
+    TvSection.LAPIDARY -> "Vzácné klenoty"
+    TvSection.LIBRARY -> "Knihovna"
+    TvSection.WANT_TO_SEE -> "Chci vidět"
+    TvSection.TRAKT -> "Trakt"
+    TvSection.WATCHLIST -> "Oblíbené"
+    TvSection.SETTINGS -> "Nastavení"
+}
