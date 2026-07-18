@@ -101,9 +101,16 @@ class FilmyProfileManager @Inject constructor(
     private suspend fun ensureProfileKeys() {
         var changed = false
         profileRepository.getAll().forEach { p ->
-            val desired = when (p.profileUuid) {
-                UUID_ADULT -> KEY_ADULT
-                UUID_KIDS -> KEY_KIDS
+            // CELLULOID (SHW-98) fix „telefon nevidí zapamatované zdroje": některé starší instalace
+            // mají `profileUuid` ≠ filmy-adult/kids (prázdné/jiné) → UUID-based mapa migraci minula a
+            // `jellyfinUserId` zůstal na synthetic „filmy-adult" (prázdný ostrov na serveru: 0 zdrojů,
+            // 0 oblíbených). POJISTKA: přemapuj i podle STARÉHO synthetic `jellyfinUserId`, ať se
+            // dospělý profil vždy sjednotí na reálný účet showlyfinu ([KEY_ADULT]).
+            val desired = when {
+                p.profileUuid == UUID_ADULT -> KEY_ADULT
+                p.profileUuid == UUID_KIDS -> KEY_KIDS
+                p.jellyfinUserId == UUID_ADULT -> KEY_ADULT   // synthetic „filmy-adult" bez ohledu na profileUuid
+                p.jellyfinUserId == UUID_KIDS -> KEY_KIDS     // synthetic „filmy-kids"
                 else -> null
             }
             // Přemapuj když je klíč prázdný NEBO ještě starý (synthetic filmy-adult/kids, či cokoli jiného).
@@ -114,6 +121,7 @@ class FilmyProfileManager @Inject constructor(
             }
         }
         // Pref `jellyfin_user_id` se zapisuje jen v setActive → přepiš ho pro aktivní profil.
+        // (FilmyMainActivity volá restoreActive i tak, ale tady je to jistota hned po migraci.)
         if (changed) profileRepository.restoreActive()
     }
 }
