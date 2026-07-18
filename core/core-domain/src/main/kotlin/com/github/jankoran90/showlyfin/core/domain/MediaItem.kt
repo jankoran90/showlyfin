@@ -32,6 +32,13 @@ data class MediaItem(
      * zdrojů/titulků (A2). null = neznámý.
      */
     val originalTitle: String? = null,
+    /**
+     * CATALOGUE (SHW-98) — reálné „přidáno" v epoch millis, podle zdroje: JF `DateCreated`, Trakt watchlist
+     * `listed_at`, uložený zdroj `savedAtMs`, Oblíbené `addedAtMs`. null = neznámé. Slouží stabilnímu řazení
+     * Filmotéky „Nedávno přidané" (řazení podle reálného data, ne pořadí bucketů — uložení zdroje pak nepřeskládá
+     * seznam). Neplní se plošně; jen tam, kde zdroj datum má.
+     */
+    val addedAtMs: Long? = null,
 ) {
     fun posterUrl(size: String = "w342") = posterPath?.let { "https://image.tmdb.org/t/p/$size$it" }
     fun backdropUrl(size: String = "w780") = backdropPath?.let { "https://image.tmdb.org/t/p/$size$it" }

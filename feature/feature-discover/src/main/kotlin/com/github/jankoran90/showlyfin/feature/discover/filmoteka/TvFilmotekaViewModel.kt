@@ -46,6 +46,7 @@ import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
 import timber.log.Timber
+import java.time.ZoneOffset
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -210,7 +211,7 @@ class TvFilmotekaViewModel @Inject constructor(
         }
         val cap = ageCap()
         val base = list.filter { it.kind == FavoriteKind.MOVIE && it.id > 0L }
-            .map { fav -> stub(fav.id, null, fav.name, fav.year, isShow = false) }
+            .map { fav -> stub(fav.id, null, fav.name, fav.year, isShow = false, addedAtMs = fav.addedAtMs.takeIf { it > 0L }) }
         val enriched = enricher.enrich(base, withCertification = cap != null)
         favoriteItems = ContentAgeGate.filter(cap, enriched, hideUnrated())
         rebuild(_state.value.axis)
@@ -226,12 +227,25 @@ class TvFilmotekaViewModel @Inject constructor(
                 runCatching { traktLoader.watchlist("all") }.getOrElse { emptyList() }
             else emptyList()
         }
-        // Precedence = pořadí seznamů (putIfAbsent): JELLYFIN > WORKING > TRAKT_WATCHLIST.
+        val jf = jfD.await(); val ws = wsD.await(); val tk = tkD.await()
+        // Precedence PRO OBSAH (metadata): JELLYFIN > WORKING > TRAKT_WATCHLIST (putIfAbsent v tomto pořadí).
         val merged = LinkedHashMap<String, MediaItem>()
-        for (list in listOf(jfD.await(), wsD.await(), tkD.await())) {
+        for (list in listOf(jf, ws, tk)) {
             for (item in list) { val k = dedupKey(item) ?: continue; merged.putIfAbsent(k, item) }
         }
-        merged.values.toList()
+        // CATALOGUE — stabilní „přidáno": priorita JF datum > Trakt listed_at > uložený zdroj savedAtMs. Datum
+        // ČLENSTVÍ (JF/Trakt) MÁ PŘEDNOST před datem uložení zdroje → dohledání zdroje NEPŘESKLÁDÁ řazení
+        // „Nedávno přidané" (film si drží svou pozici, i když mu právě naskočil WorkingSource). Vkládá se na
+        // vítěze dedupu jako jeho `addedAtMs` (cestuje s položkou přes enrich → řadíme podle pole, ne mapy).
+        val recency = HashMap<String, Long>()
+        for (list in listOf(jf, tk, ws)) {
+            for (item in list) { val k = dedupKey(item) ?: continue; item.addedAtMs?.let { recency.putIfAbsent(k, it) } }
+        }
+        merged.values.map { item ->
+            val k = dedupKey(item)
+            val r = if (k != null) recency[k] else null
+            if (r != null) item.copy(addedAtMs = r) else item
+        }
     }
 
     private suspend fun loadJellyfinLibrary(): List<MediaItem> = coroutineScope {
@@ -249,7 +263,7 @@ class TvFilmotekaViewModel @Inject constructor(
                         recursive = true,
                         sortBy = listOf(ItemSortBy.DATE_CREATED),
                         sortOrder = listOf(SortOrder.DESCENDING),
-                        fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.GENRES),
+                        fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.GENRES, ItemFields.DATE_CREATED),
                         limit = 400,
                     ).content.items
                 }.getOrElse { Timber.w(it, "[Filmoteka] getItems '${view.name}' selhalo"); emptyList() }
@@ -271,6 +285,7 @@ class TvFilmotekaViewModel @Inject constructor(
                 rating = null,
                 genres = null,
                 type = MediaType.MOVIE,
+                addedAtMs = ws.savedAtMs.takeIf { it > 0L },
             )
         }
     }
@@ -294,14 +309,15 @@ class TvFilmotekaViewModel @Inject constructor(
     }
 
     /**
-     * CONVERGE V1 — osa „Vše": JEDNA plochá řada všech titulů. RECENT (výchozí) = pořadí sběru (JF nejnovější
-     * první — gatherBase řadí DATE_CREATED desc; Working/Trakt/Oblíbené nemají spolehlivé datum, jdou za JF) =
-     * proxy „nedávno přidané". ALPHABETICAL = název A–Z přes český Collator. Věkový gate už proběhl v bázi.
+     * CONVERGE V1 / CATALOGUE — osa „Vše": JEDNA plochá řada všech titulů. RECENT (výchozí) = podle reálného
+     * data přidání ([MediaItem.addedAtMs]: JF DateCreated / Trakt listed_at / uložený zdroj / Oblíbené), sestupně
+     * napříč VŠEMI zdroji (ne jen pořadí bucketů). Datum je stabilní vůči uložení zdroje → dohledání nepřeskládá
+     * seznam. Bez data → na konec. ALPHABETICAL = název A–Z přes český Collator. Věkový gate už proběhl v bázi.
      */
     private fun groupAll(items: List<MediaItem>): List<FilmotekaRail> {
         if (items.isEmpty()) return emptyList()
         val sorted = when (settings.allSort.value) {
-            FilmotekaAllSort.RECENT -> items
+            FilmotekaAllSort.RECENT -> items.sortedByDescending { it.addedAtMs ?: Long.MIN_VALUE }
             FilmotekaAllSort.ALPHABETICAL -> {
                 val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
                 items.sortedWith(Comparator { a, b -> coll.compare(a.displayTitle, b.displayTitle) })
@@ -387,6 +403,7 @@ class TvFilmotekaViewModel @Inject constructor(
             rating = null,
             genres = genres?.takeIf { it.isNotEmpty() },
             type = if (isShow) MediaType.SHOW else MediaType.MOVIE,
+            addedAtMs = dateCreated?.toInstant(ZoneOffset.UTC)?.toEpochMilli(),
         )
     }
 
@@ -396,7 +413,7 @@ class TvFilmotekaViewModel @Inject constructor(
         else -> null
     }
 
-    private fun stub(tmdbId: Long, imdbId: String?, title: String, year: Int?, isShow: Boolean) = MediaItem(
+    private fun stub(tmdbId: Long, imdbId: String?, title: String, year: Int?, isShow: Boolean, addedAtMs: Long? = null) = MediaItem(
         traktId = 0L,
         tmdbId = tmdbId,
         imdbId = imdbId,
@@ -406,6 +423,7 @@ class TvFilmotekaViewModel @Inject constructor(
         rating = null,
         genres = null,
         type = if (isShow) MediaType.SHOW else MediaType.MOVIE,
+        addedAtMs = addedAtMs,
     )
 
     // ── Jellyfin session (vzor TvHomeViewModel) ────────────────────────────────────

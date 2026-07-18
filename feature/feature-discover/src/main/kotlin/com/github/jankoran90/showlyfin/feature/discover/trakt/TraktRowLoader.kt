@@ -48,7 +48,8 @@ class TraktRowLoader @Inject constructor(
             else -> movies() + shows()
         }
         Log.i(TAG, "watchlist($kind): ${raw.size} položek")
-        return enrich(raw.sortedByDescending { it.lastListedMillis() })
+        // CATALOGUE — nes `listed_at` na položku (addedAtMs) pro stabilní řazení „Nedávno přidané" ve Filmotéce.
+        return enrich(raw.sortedByDescending { it.lastListedMillis() }) { it.lastListedMillis() }
     }
 
     /** Historie sledování (watched), nejnověji sledované první. [kind] jako u [watchlist]. */
@@ -172,8 +173,13 @@ class TraktRowLoader @Inject constructor(
      * pak **věkový gate** dětského profilu ([ContentAgeGate]). Filtr běží tady → pokrývá Trakt řady na
      * DOMOVĚ i v sekci TRAKT najednou; pro dospělý profil (cap=null) je no-op.
      */
-    private suspend fun enrich(items: List<SyncItem>): List<MediaItem> {
-        val base = items.mapNotNull { si -> si.movie?.toMediaItem() ?: si.show?.toMediaItem() }
+    private suspend fun enrich(
+        items: List<SyncItem>,
+        addedAtOf: (SyncItem) -> Long? = { null },
+    ): List<MediaItem> {
+        val base = items.mapNotNull { si ->
+            (si.movie?.toMediaItem() ?: si.show?.toMediaItem())?.copy(addedAtMs = addedAtOf(si))
+        }
         val enriched = enricher.enrich(base, withCertification = capAge() != null)
         return ContentAgeGate.filter(capAge(), enriched, hideUnrated())
     }
