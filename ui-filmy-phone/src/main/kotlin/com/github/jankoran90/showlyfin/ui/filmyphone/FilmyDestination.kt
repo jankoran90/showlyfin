@@ -39,11 +39,18 @@ enum class FilmySection(val label: String, val icon: ImageVector) {
 object FilmyShellPrefs {
     private const val PREFS = "trakt_prefs"
     const val KEY_DEFAULT_FILMOTEKA = "filmy_default_filmoteka"
+    /** PARITA POČTŮ (SHW-98): globální počet položek v řadě na Home. Zrcadlí `KEY_HOME_ROW_LIMIT` v TvHomeViewModel. */
+    const val KEY_HOME_ROW_LIMIT = "home_row_item_limit"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     fun defaultFilmoteka(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_DEFAULT_FILMOTEKA, false)
     fun setDefaultFilmoteka(ctx: Context, value: Boolean) =
         prefs(ctx).edit().putBoolean(KEY_DEFAULT_FILMOTEKA, value).apply()
+
+    /** Počet položek v řadě na úvodní obrazovce (0 = výchozí per-řada, jinak 20–60). */
+    fun homeRowLimit(ctx: Context): Int = prefs(ctx).getInt(KEY_HOME_ROW_LIMIT, 0)
+    fun setHomeRowLimit(ctx: Context, value: Int) =
+        prefs(ctx).edit().putInt(KEY_HOME_ROW_LIMIT, value).apply()
 
     /** Výchozí sekce při otevření appky. */
     fun startSection(ctx: Context): FilmySection =

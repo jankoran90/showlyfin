@@ -132,6 +132,17 @@ class TvHomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), parentalControls.profile.value.effectiveAgeCap)
     private fun hideUnrated(): Boolean = parentalControls.profile.value.hideUnratedForAge
 
+    // PARITA POČTŮ (SHW-98, user 2026-07-18 „v sekci domů míň výsledků v podsekci než Chci vidět"): globální
+    // uživatelský strop počtu položek v řadě (Nastavení Filmy → prefs). 0/absent = per-řada default z configu.
+    // Aplikuje se jako CENTRÁLNÍ ořez v applyOps (platí pro všechny řady jdoucí přes něj).
+    private fun rowLimit(config: HomeRowConfig): Int {
+        val user = prefs.getInt(KEY_HOME_ROW_LIMIT, 0)
+        return (if (user > 0) user else config.limit).coerceIn(1, 60)
+    }
+    // Over-fetch: natáhni VÍC kandidátů, ať po gate/owned/known filtru zbude plný počet (řešení „děr" pod
+    // deklarovaný počet u objevovacích řad Discover/Weighted/Brain, kde filtr běží až po ořezu).
+    private fun rowFetch(config: HomeRowConfig): Int = (rowLimit(config) * HOME_ROW_OVERFETCH).coerceIn(1, 60)
+
     // Owned trakt id (viděné ∪ hodnocené ∪ watchlist) — pro filtr „skryj co už mám" na reco/discover řadách.
     // Cache per profil; vyčištěno v [reloadAllRows]. Prázdné pro profil bez Traktu.
     @Volatile private var ownedIdsCache: Set<Long>? = null
@@ -333,13 +344,13 @@ class TvHomeViewModel @Inject constructor(
             traktLoader.couchmonkeyRecommendations().map { it.toHomeRowItem(config) }
         // COUCH (SHW-88) play-count vážená doporučení „na míru dle sledování".
         HomeRowSourceType.WEIGHTED_RECOMMENDATIONS ->
-            traktLoader.weightedRecommendations(config.limit).map { it.toHomeRowItem(config) }
+            traktLoader.weightedRecommendations(rowFetch(config)).map { it.toHomeRowItem(config) }
         // AUTEUR (SHW-91) kurátorský mozek „Pro tebe". Prázdné (mozek pending/down/studený vkus) → řada se
         // NEzobrazí (viz filtr prázdných řad). ŽÁDNÝ fallback na weightedRecommendations — dělal duplicitní
         // řadu se samostatnou „Na míru podle sledování" (WEIGHTED_RECOMMENDATIONS = totéž), navíc REFLEX
         // wait=false to zhoršil (první load je vždy pending). Mechanická doporučení má vlastní řada.
         HomeRowSourceType.BRAIN_FOR_YOU ->
-            curatorLoader.forYou(config.limit).map { it.toHomeRowItem(config) }
+            curatorLoader.forYou(rowFetch(config)).map { it.toHomeRowItem(config) }
         // LIBRARY_TILES / GENRES / STUDIOS = dlaždicové navigační řady → 2. vlna (viz Known gaps).
         else -> emptyList()
         }
@@ -413,7 +424,7 @@ class TvHomeViewModel @Inject constructor(
     private suspend fun loadDiscover(config: HomeRowConfig): List<HomeRowItem> {
         val isShow = config.params[HomeRowParams.TAB].equals("shows", ignoreCase = true)
         val filter = config.params[HomeRowParams.FILTER]?.lowercase() ?: "trending"
-        val limit = config.limit.coerceIn(1, 60)
+        val limit = rowFetch(config)   // over-fetch → applyOps ořízne na rowLimit (bez „děr" po owned filtru)
         val raw: List<MediaItem> = runCatching {
             when (filter) {
                 "popular" -> if (isShow) traktApi.fetchPopularShows("", "", limit, 1).map { it.toMediaItem() }
@@ -633,7 +644,7 @@ class TvHomeViewModel @Inject constructor(
             HomeRowSort.RANDOM -> r.shuffled()
             HomeRowSort.RECENT, HomeRowSort.DEFAULT -> r
         }
-        return r.take(config.limit.coerceIn(1, 60))
+        return r.take(rowLimit(config))
     }
 
     private fun stub(tmdbId: Long, title: String, year: Int?, isShow: Boolean) = MediaItem(
@@ -654,6 +665,11 @@ fun HomeCardStyle.isLandscape(): Boolean = this == HomeCardStyle.LANDSCAPE
 
 /** WEATHER: pref klíč Trakt tokenu (zrcadlí TraktTokenProvider); zdroj pravdy pro „přihlášen k Traktu" na TV. */
 private const val KEY_TRAKT_ACCESS_TOKEN = "TRAKT_ACCESS_TOKEN"
+
+/** PARITA POČTŮ (SHW-98): globální uživatelský počet položek v řadě Home (Nastavení Filmy). 0 = per-řada default. */
+const val KEY_HOME_ROW_LIMIT = "home_row_item_limit"
+/** Kolikrát víc kandidátů natáhnout, ať po filtrech (gate/owned/known) zbude plný počet (žádné „díry"). */
+private const val HOME_ROW_OVERFETCH = 2
 
 /** COUCH R2: Trakt zdroje řad — skryté pro zamčený/dětský profil. */
 private val TRAKT_SOURCES = setOf(

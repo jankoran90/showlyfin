@@ -51,6 +51,7 @@ fun FilmySettingsScreen(
     val settings by settingsVm.uiState.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var defaultFilmoteka by remember { mutableStateOf(FilmyShellPrefs.defaultFilmoteka(ctx)) }
+    var homeRowLimit by remember { mutableStateOf(FilmyShellPrefs.homeRowLimit(ctx)) }
     var showUploaderLogin by remember { mutableStateOf(false) }
     var showTraktLogin by remember { mutableStateOf(false) }
 
@@ -132,6 +133,16 @@ fun FilmySettingsScreen(
                         onCheckedChange = { defaultFilmoteka = it; FilmyShellPrefs.setDefaultFilmoteka(ctx, it) },
                     )
                 }
+                // PARITA POČTŮ (SHW-98, user 2026-07-18): kolik položek ukázat v každé řadě na úvodní obrazovce.
+                // Vyšší číslo = řada ukáže víc (blíž plné sekci). „Výchozí" = přednastavený počet dané řady.
+                SettingChips(
+                    label = "Počet položek v řadě na úvodní obrazovce",
+                    subtitle = "Vyšší číslo = v řadě uvidíš víc titulů (blíž plné sekci). Projeví se po obnovení obsahu.",
+                    options = listOf(0, 20, 30, 40, 50, 60),
+                    selected = homeRowLimit,
+                    labelOf = { if (it == 0) "Výchozí" else it.toString() },
+                    onSelect = { homeRowLimit = it; FilmyShellPrefs.setHomeRowLimit(ctx, it) },
+                )
                 FilmyCuratorSection()
                 FilmyFilmotekaSection()
                 FilmyGemsSection()
