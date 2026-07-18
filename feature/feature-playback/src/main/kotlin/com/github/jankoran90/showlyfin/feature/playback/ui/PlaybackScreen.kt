@@ -245,6 +245,11 @@ fun PlaybackScreen(
     var failureReported by remember { mutableStateOf(false) }
     // FISSION: decode chyba (HW dekodér padl na HEVC) → zkusíme JEDNOU tentýž zdroj SW dekodérem.
     var triedSwDecoder by remember { mutableStateOf(false) }
+    // Po SW přepnutí (MediaSession.setPlayer) je nutné ZNOVU připnout video plochu k novému přehrávači —
+    // PlayerView nepozná swap (controller je táž instance) → surface zůstane u zahozeného přehrávače = černý
+    // obraz (zvuk/titulky jedou). Přepneme, až nový přehrávač doběhne prepare (STATE_READY).
+    var pendingSwReattach by remember { mutableStateOf(false) }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var currentSubtitle by remember { mutableStateOf<String?>(null) }
     // Krátký popis zdroje do lišty: rozlišení · video kodek · audio kodek · kanály.
@@ -280,6 +285,13 @@ fun PlaybackScreen(
         val future = MediaController.Builder(context, token).buildAsync()
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                // FISSION: nový SW přehrávač je připraven → znovu připni video plochu (jinak černý obraz).
+                if (playbackState == Player.STATE_READY && pendingSwReattach) {
+                    pendingSwReattach = false
+                    playerViewRef?.let { pv -> pv.player = null; pv.player = controller }
+                }
+            }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 timber.log.Timber.e(error, "[Playback] ExoPlayer error code=${error.errorCodeName} cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}")
                 // FISSION: HW video dekodér padl (typicky HEVC na Exynos/Tensor, ERROR_CODE_DECODING_FAILED)
@@ -288,6 +300,7 @@ fun PlaybackScreen(
                     !triedSwDecoder && (externalUrl != null || localVideoPath != null)
                 ) {
                     triedSwDecoder = true
+                    pendingSwReattach = true
                     context.startService(
                         android.content.Intent(context, MoviePlayerService::class.java)
                             .setAction(MoviePlayerService.ACTION_FORCE_SW),
@@ -598,7 +611,7 @@ fun PlaybackScreen(
                         PlayerView(ctx).apply {
                             useController = false
                             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                        }
+                        }.also { playerViewRef = it }
                     },
                     // controller se připojí asynchronně → přiřaď ho do PlayerView, až je hotový.
                     update = { it.player = controller },
