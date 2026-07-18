@@ -149,6 +149,26 @@ class DetailViewModel @Inject constructor(
         load(item, force = true)
     }
 
+    /**
+     * CELLULOID (SHW-98) — živé dotažení auto-nacachovaného zdroje ze serveru při otevření detailu, BEZ restartu
+     * appky. Jen film, jen dospělý profil (`effectiveAgeCap == null`) a jen když je volba zapnutá v Nastavení
+     * (klíč [KEY_AUTO_REFRESH_SOURCES], default zap). Po sync znovu načte zapamatovaný zdroj a — pokud jsme ho
+     * ještě neměli a stále koukáme na tentýž titul — přepíše `rememberedSource` → film jde přehrát rovnou.
+     */
+    private fun maybeLiveRefreshSource(item: MediaItem) {
+        if (item.type != MediaType.MOVIE) return
+        if (!prefs.getBoolean(KEY_AUTO_REFRESH_SOURCES, true)) return
+        if (parentalControls.profile.value.effectiveAgeCap != null) return   // jen dospělý účet
+        viewModelScope.launch {
+            runCatching { workingSourceStore.syncNow() }
+            val fresh = workingSourceStore.get(item.imdbId, item.tmdbId)?.stream ?: return@launch
+            val cur = _uiState.value
+            if (cur.item?.tmdbId == item.tmdbId && cur.rememberedSource == null) {
+                _uiState.update { it.copy(rememberedSource = fresh) }
+            }
+        }
+    }
+
     private fun load(item: MediaItem, force: Boolean) {
         val current = _uiState.value.item
         if (!force && current != null) {
@@ -253,6 +273,7 @@ class DetailViewModel @Inject constructor(
                 error = null,
             )
         }
+        maybeLiveRefreshSource(item)
         loadJob = viewModelScope.launch {
             launch { loadJellyfinOwned(item) }
             launch { loadWatchlistMembership(item) }
@@ -2032,6 +2053,8 @@ class DetailViewModel @Inject constructor(
         // WINNOW item 1b: minimální reálná velikost přehrávatelného filmu/epizody (30 MB). Pod tím
         // je to návnada/decoy (Comet/RD servíruje ~stovky KB navzdory deklarované velikosti).
         const val MIN_PLAYABLE_BYTES = 30_000_000L
+        // CELLULOID (SHW-98) — musí sedět s SettingsViewModel.KEY_AUTO_REFRESH_SOURCES (jiný modul, sdílený jen string).
+        const val KEY_AUTO_REFRESH_SOURCES = "auto_refresh_sources_enabled"
     }
 }
 

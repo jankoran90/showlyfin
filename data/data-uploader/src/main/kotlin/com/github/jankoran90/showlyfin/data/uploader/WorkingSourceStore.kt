@@ -194,6 +194,13 @@ class WorkingSourceStore @Inject constructor(
         scope.launch { syncFromServer() }
     }
 
+    /**
+     * CELLULOID (SHW-98) — vynucený sync ze serveru „teď", AWAITABLE (na rozdíl od [refresh], co jen fire-and-forget
+     * launchne). Volá detail při otevření filmu, aby živě dotáhl auto-nacachovaný zdroj (backfill watchlistu)
+     * BEZ restartu appky. Po návratu je lokální paměť + [savedKeys] aktuální → [get] vrátí čerstvý zdroj.
+     */
+    suspend fun syncNow() = syncFromServer()
+
     private fun imdbKey(imdb: String) = "sieve_working_$imdb"
     private fun tmdbKey(tmdb: Long) = "sieve_working_tmdb_$tmdb"
 

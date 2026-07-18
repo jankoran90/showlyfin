@@ -87,6 +87,10 @@ data class SettingsUiState(
     val playerTvAudioPassthrough: Boolean = PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
+    // CELLULOID (SHW-98) — živě dotahovat auto-nacachované zdroje (backfill watchlistu) při otevření detailu,
+    // bez restartu appky. `available` = jen dospělý profil (effectiveAgeCap == null) → jinak řádek skryj.
+    val autoRefreshSources: Boolean = true,
+    val autoRefreshSourcesAvailable: Boolean = false,
     // Plan MAESTRO — ovládání domácí sestavy (AVR hlasitost + scéna „spustit z vypnuté TV").
     val avrEnabled: Boolean = false,
     val avrHost: String = "",
@@ -189,6 +193,8 @@ class SettingsViewModel @Inject constructor(
         private const val KEY_TOKEN = "jellyfin_token"
         private const val KEY_USER_ID = "jellyfin_user_id"
         const val KEY_LIVE_LOGGING = "live_logging_enabled"
+        // CELLULOID (SHW-98) — musí sedět s DetailViewModel.KEY_AUTO_REFRESH_SOURCES (jiný modul, sdílený jen string).
+        const val KEY_AUTO_REFRESH_SOURCES = "auto_refresh_sources_enabled"
         const val KEY_AVR_ENABLED = "avr_enabled"
         const val KEY_AVR_HOST = "avr_host"
         const val KEY_AVR_BOX_HOST = "avr_box_host"
@@ -315,6 +321,8 @@ class SettingsViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 liveLogging = prefs.getBoolean(KEY_LIVE_LOGGING, false),
+                autoRefreshSources = prefs.getBoolean(KEY_AUTO_REFRESH_SOURCES, true),
+                autoRefreshSourcesAvailable = parentalControlsRepository.profile.value.effectiveAgeCap == null,
                 uploaderBaseUrl = uploaderBase,
                 // Předvyplněné defaulty „Domácí sestava" (MAESTRO mapa) — user je vidí vyplněné a může editovat.
                 avrEnabled = prefs.avrEnabledOrDefault(),
@@ -571,6 +579,12 @@ class SettingsViewModel @Inject constructor(
     fun setLiveLogging(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_LIVE_LOGGING, enabled).apply()
         _uiState.update { it.copy(liveLogging = enabled) }
+    }
+
+    /** CELLULOID (SHW-98) — živé dotahování zdrojů bez restartu (jen dospělý profil). */
+    fun setAutoRefreshSources(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_REFRESH_SOURCES, enabled).apply()
+        _uiState.update { it.copy(autoRefreshSources = enabled) }
     }
 
     fun setAvrEnabled(enabled: Boolean) {

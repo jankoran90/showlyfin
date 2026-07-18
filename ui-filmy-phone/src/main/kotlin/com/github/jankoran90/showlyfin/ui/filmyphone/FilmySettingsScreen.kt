@@ -135,6 +135,16 @@ fun FilmySettingsScreen(
             // --- Dohledat zdroje pro celý watchlist (dávkový backfill, reuse triggerAutoCache) ---
             FilmyWatchlistCacheSection()
 
+            // CELLULOID (SHW-98) — živé dotahování nacachovaných zdrojů bez restartu; jen dospělý profil.
+            if (settings.autoRefreshSourcesAvailable) {
+                SettingSwitchRow(
+                    title = "Živě dotahovat zdroje (bez restartu)",
+                    subtitle = "Při otevření filmu dotáhne nově nacachovaný zdroj ze serveru, takže jde přehrát rovnou — bez vypínání a zapínání appky. Jen pro dospělý účet.",
+                    checked = settings.autoRefreshSources,
+                    onCheckedChange = { settingsVm.setAutoRefreshSources(it) },
+                )
+            }
+
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
             // --- Kurátor „Pro tebe" (M2.7 parita, reuse CuratorSettingsViewModel) ---
