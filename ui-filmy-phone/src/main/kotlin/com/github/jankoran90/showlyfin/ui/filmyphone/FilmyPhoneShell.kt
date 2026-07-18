@@ -32,6 +32,7 @@ import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalSourceAvailabilityProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
@@ -111,6 +112,8 @@ private fun FilmyShellContent() {
     // (★ odznak na kartách + spouštěč hodnocení v detailu) + dialog host níže. Bez toho telefon hodnotit neuměl
     // a kurátorův „palec dolů" filtr nedostával telefonem nastavená hodnocení.
     val ratingVm: RatingViewModel = hiltViewModel()
+    // CINEMATHEQUE: odznak „má uložený zdroj" na kartách/řádcích — provider napojený na WorkingSourceStore.
+    val sourceAvailVm: FilmySourceAvailabilityViewModel = hiltViewModel()
     // CASCADE: stejná (Activity-scoped) instance DetailViewModelu jako uvnitř DetailScreen — drží candidate
     // list `streams`; po chybě přehrávání (onPlaybackFailed) spustí dalšího kandidáta místo chyby.
     val detailVm: DetailViewModel = hiltViewModel()
@@ -177,6 +180,7 @@ private fun FilmyShellContent() {
         LocalCzechOverviewProvider provides cardCsfd,
         LocalDirectorProvider provides cardCsfd,
         LocalUserRatingProvider provides ratingVm,
+        LocalSourceAvailabilityProvider provides sourceAvailVm,
     ) {
         val activePlayer = player
         val detailEntry = detailStack.lastOrNull()

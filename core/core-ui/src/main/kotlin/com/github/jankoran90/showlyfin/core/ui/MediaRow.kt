@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Tv
@@ -64,6 +65,8 @@ fun MediaRow(
      */
     showDirector: Boolean = false,
 ) {
+    // CINEMATHEQUE (user 2026-07-18) — decentní odznak „má uložený zdroj" za názvem (reaktivní přes provider).
+    val hasSource = rememberHasSource(item.tmdbId, item.imdbId)
     val lazyRating = rememberCsfdCardRating(item.imdbId, item.tmdbId, item.title, item.year)
     val rating = csfdRating ?: (if (enableCsfd) lazyRating else null)
     val director = if (showDirector)
@@ -103,14 +106,26 @@ fun MediaRow(
         // VANTAGE (SHW-48) → CELLULOID: text sloupec smí povyrůst nad výšku coveru, aby se do list stylu
         // vešly vždy 3 řádky popisku (dřív fixní výška = cover ořízl popis na 2 řádky, když byl i řádek rok·žánr).
         Column(modifier = Modifier.heightIn(min = RowCoverHeight).fillMaxWidth()) {
-            Text(
-                text = item.displayTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = item.displayTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (hasSource) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Default.CloudDone,
+                        contentDescription = "Má uložený zdroj",
+                        modifier = Modifier.padding(top = 3.dp).size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
             // 2. řádek: režisér (líně z TMDB přes rememberDirector). Zobrazí se jen když je znám.
             if (!director.isNullOrBlank()) {
                 Spacer(Modifier.height(2.dp))
