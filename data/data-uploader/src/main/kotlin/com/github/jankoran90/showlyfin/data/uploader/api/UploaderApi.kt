@@ -246,6 +246,25 @@ internal class UploaderApi(
         return if (resp.isSuccessful) resp.body()?.string() else null
     }
 
+    // FILMYCAST — cast telefon→TV do Filmy appky (fronta příkazů). Profil = jellyfinUserId (query `?profile=`).
+    override suspend fun castCommand(baseUrl: String, sessionCookie: String, profile: String, bodyJson: String): Boolean {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType())
+        return runCatching {
+            service.castCommand("$base/api/cast/command?profile=${enc(profile)}", cookie, body).isSuccessful
+        }.getOrDefault(false)
+    }
+
+    override suspend fun castCommandGet(baseUrl: String, sessionCookie: String, profile: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching {
+            val resp = service.castCommandGet("$base/api/cast/command?profile=${enc(profile)}", cookie)
+            if (resp.isSuccessful) resp.body()?.string() else null
+        }.getOrNull()
+    }
+
     // LAPIDARY (SHW-96) — vzácné klenoty
     override suspend fun gemsCacheOne(baseUrl: String, sessionCookie: String, imdb: String, tmdb: Long, profile: String, policy: String, title: String, year: Int?) {
         val base = baseUrl.trimEnd('/')

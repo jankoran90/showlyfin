@@ -186,6 +186,31 @@ class WorkingSourceStore @Inject constructor(
         return uploaderDs.gemsCacheBatch(base, serverCookie(), body)
     }
 
+    /**
+     * FILMYCAST — cast telefon→TV do Filmy appky. Zařadí příkaz „přehraj tohle" do serverové fronty pod
+     * aktivním profilem (jellyfinUserId); TV shell frontu pollí a při čekajícím příkazu skočí do přehrávače.
+     * [sourceUrl] = už resolvnutá, TV-přehratelná URL (https / sdilej-proxy) — telefon ji připraví přes svůj
+     * resolve pipeline; prázdná = jen imdb (TV-side dohledání = follow-up). Vrací true při HTTP OK.
+     */
+    suspend fun castToTv(
+        imdb: String?, tmdb: Long?, title: String, year: Int?,
+        sourceUrl: String?, positionMs: Long, posterUrl: String?, subtitleQuery: String?,
+    ): Boolean {
+        val key = profileKey(); val base = serverBase()
+        if (key.isBlank() || base.isBlank()) return false
+        val body = org.json.JSONObject().apply {
+            imdb?.takeIf { it.isNotBlank() }?.let { put("imdb", it) }
+            if (tmdb != null && tmdb > 0L) put("tmdb", tmdb)
+            if (title.isNotBlank()) put("title", title)
+            year?.let { put("year", it) }
+            sourceUrl?.takeIf { it.isNotBlank() }?.let { put("sourceUrl", it) }
+            if (positionMs > 0L) put("positionMs", positionMs)
+            posterUrl?.takeIf { it.isNotBlank() }?.let { put("posterUrl", it) }
+            subtitleQuery?.takeIf { it.isNotBlank() }?.let { put("subtitleQuery", it) }
+        }.toString()
+        return uploaderDs.castCommand(base, serverCookie(), key, body)
+    }
+
     /** CATALOGUE — kolik filmů ještě čeká v serverové frontě backfillu (null = server nedostupný/chyba). */
     suspend fun cacheStatus(): Int? {
         val key = profileKey(); val base = serverBase()

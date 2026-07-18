@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Reviews
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -441,6 +442,8 @@ fun DetailScreen(
                         onRemoveRemembered = { viewModel.removeRememberedSource() },
                         onStremio = { viewModel.openStreamPathChooser() },
                         onDownload = { viewModel.openDownloadMenu() },
+                        // FILMYCAST — „Přehrát na Filmy TV" (poslat zapamatovaný zdroj do Filmy appky na TV).
+                        onCastToFilmyTv = { viewModel.castToFilmyTv() },
                         inWatchlist = uiState.isInWatchlist,
                         isTogglingWatchlist = uiState.isTogglingWatchlist,
                         onWatchlist = { viewModel.toggleWatchlist() },
@@ -779,6 +782,7 @@ private fun DetailActionBar(
     onRemoveRemembered: () -> Unit,
     onStremio: () -> Unit,
     onDownload: () -> Unit,
+    onCastToFilmyTv: (() -> Unit)? = null,
     inWatchlist: Boolean,
     isTogglingWatchlist: Boolean,
     onWatchlist: () -> Unit,
@@ -855,6 +859,14 @@ private fun DetailActionBar(
                     leadingIcon = { Icon(Icons.Default.Download, null) },
                     onClick = { menuOpen = false; onDownload() },
                 )
+                // FILMYCAST — pošli film do Filmy appky na TV (jiná cesta než „na TV" box výše: fronta příkazů).
+                if (isMovie && onCastToFilmyTv != null) {
+                    DropdownMenuItem(
+                        text = { Text("Přehrát na Filmy TV") },
+                        leadingIcon = { Icon(Icons.Default.Tv, null) },
+                        onClick = { menuOpen = false; onCastToFilmyTv() },
+                    )
+                }
                 if (onShare != null) {
                     DropdownMenuItem(
                         text = { Text("Sdílet kartu") },

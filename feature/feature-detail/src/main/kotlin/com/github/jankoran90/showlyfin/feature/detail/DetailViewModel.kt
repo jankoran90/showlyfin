@@ -1047,6 +1047,53 @@ class DetailViewModel @Inject constructor(
     /** Plan FERRY (SHW-37): zvolený stream pošli na TV (yellyfin) místo lokálního přehrání. */
     fun castStreamToTv(stream: UploaderStream) = playStream(stream, CastTarget.TV)
 
+    /**
+     * FILMYCAST — „Přehrát na Filmy TV": pošli zapamatovaný zdroj filmu do Filmy appky na TV. Reuse celého
+     * resolve pipeline ([playStream] → [deliver]), takže na TV odejde vždy plně resolvnutá přehratelná URL
+     * (https / sdilej-proxy / RD-resolved), ne syrový infoHash/sdilej://. Bez zapamatovaného zdroje jen
+     * hláška (dohledání zdroje TV-side = follow-up). Jen film.
+     */
+    fun castToFilmyTv() {
+        val item = _uiState.value.item ?: return
+        if (item.type != MediaType.MOVIE) return
+        val stream = _uiState.value.rememberedSource
+        if (stream == null) {
+            _uiState.update { it.copy(autoCastMessage = "Film zatím nemá uložený zdroj — nejdřív ho jednou přehraj, pak ho pošlu na Filmy TV.") }
+            return
+        }
+        playStream(stream, CastTarget.FILMY_TV)
+    }
+
+    /**
+     * FILMYCAST: resolvnutou URL zařaď jako cast příkaz na backend pod aktivním profilem. `subtitleQuery`
+     * složíme z originálního názvu (TV má imdb/title/year z příkazu → dohledá CZ titulky). positionMs = 0
+     * (telefonní resume store se sem zatím netahá; TV resumuje z vlastního lokálního prefu). Výsledek → hláška.
+     */
+    private fun sendFilmyCastCommand(url: String, title: String) {
+        _uiState.update { it.copy(isCastingToTv = true, isResolvingStream = false, showStreamPicker = false, streamError = null) }
+        viewModelScope.launch {
+            val st = _uiState.value
+            val item = st.item
+            val poster = (item?.posterPath ?: st.movieDetails?.poster_path)
+                ?.let { if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w342$it" }
+            val subQuery = st.pendingSubtitleQuery?.origTitle?.takeIf { it.isNotBlank() }
+                ?: item?.originalTitle?.takeIf { it.isNotBlank() }
+                ?: st.movieDetails?.original_title
+            val ok = runCatching {
+                workingSourceStore.castToTv(
+                    imdb = item?.imdbId, tmdb = item?.tmdbId, title = title, year = item?.year,
+                    sourceUrl = url, positionMs = 0L, posterUrl = poster, subtitleQuery = subQuery,
+                )
+            }.getOrDefault(false)
+            _uiState.update {
+                it.copy(
+                    isCastingToTv = false,
+                    autoCastMessage = if (ok) "Odesláno na Filmy TV ▶" else "Odeslání na Filmy TV selhalo — zkontroluj připojení a přihlášení.",
+                )
+            }
+        }
+    }
+
     /** Klik na konkrétní stream → přímé url / RD resolve → předá URL [target] (telefon / TV). */
     fun playStream(stream: UploaderStream, target: CastTarget = CastTarget.LOCAL) {
         if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
@@ -1413,6 +1460,7 @@ class DetailViewModel @Inject constructor(
                 }
             }
             CastTarget.TV -> castToTv(url, title)
+            CastTarget.FILMY_TV -> sendFilmyCastCommand(url, title)
         }
     }
 
@@ -2061,5 +2109,6 @@ class DetailViewModel @Inject constructor(
     }
 }
 
-/** Plan FERRY: kam doručit resolvnutý stream — lokální přehrávač telefonu, nebo TV (yellyfin). */
-enum class CastTarget { LOCAL, TV }
+/** Plan FERRY: kam doručit resolvnutý stream — lokální přehrávač telefonu, TV (yellyfin box), nebo
+ *  FILMYCAST = do Filmy appky na TV (fronta příkazů na backendu, TV shell ji pollí). */
+enum class CastTarget { LOCAL, TV, FILMY_TV }

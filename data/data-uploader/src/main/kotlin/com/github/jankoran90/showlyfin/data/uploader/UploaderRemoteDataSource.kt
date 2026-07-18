@@ -46,6 +46,10 @@ interface UploaderRemoteDataSource {
     suspend fun mirrorRefresh(baseUrl: String, sessionCookie: String, key: String): MirrorRefreshResponse?
     // AUTEUR (SHW-91) — kurátorský mozek: taste payload (raw JSON) → doporučení (raw JSON), nebo null při chybě.
     suspend fun curatorRecommend(baseUrl: String, sessionCookie: String, json: String): String?
+    // FILMYCAST — cast telefon→TV do Filmy appky. castCommand = zařaď příkaz (bodyJson) pro profil (jellyfinUserId);
+    // true = HTTP OK. castCommandGet = POP (vrátí+smaže) čekající příkaz pro profil → raw JSON (`{pending:…}`) nebo null.
+    suspend fun castCommand(baseUrl: String, sessionCookie: String, profile: String, bodyJson: String): Boolean
+    suspend fun castCommandGet(baseUrl: String, sessionCookie: String, profile: String): String?
     // LAPIDARY (SHW-96) — vzácné klenoty. cacheOne = watchlist/favorite trigger (fire-and-forget, backend běží na pozadí,
     // po nacachování zapíše auto-WorkingSource do profilu). gemsCatalog = obsah sekce (raw JSON {"items":[…]}), null při chybě.
     suspend fun gemsCacheOne(baseUrl: String, sessionCookie: String, imdb: String, tmdb: Long, profile: String, policy: String, title: String, year: Int?)

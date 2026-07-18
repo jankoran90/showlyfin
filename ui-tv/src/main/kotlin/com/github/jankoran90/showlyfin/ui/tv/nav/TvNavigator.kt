@@ -80,6 +80,21 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         }
     }
 
+    // FILMYCAST — přijímač castu telefon→TV. Pollí serverovou frontu příkazů (jen v popředí); při čekajícím
+    // příkazu skočí rovnou do přehrávače s už resolvnutou URL (telefon poslal přehratelný zdroj + titulky/plakát).
+    com.github.jankoran90.showlyfin.ui.tv.cast.TvCastReceiver(
+        onCast = { cmd ->
+            navigate(
+                TvDestination.Player(
+                    externalUrl = cmd.sourceUrl,
+                    externalTitle = cmd.title,
+                    subtitleQuery = cmd.subtitleQuery,
+                    externalPosterUrl = cmd.posterUrl,
+                ),
+            )
+        },
+    )
+
     BackHandler(enabled = navVm.canGoBack) { back() }
 
     when (val dest = current) {

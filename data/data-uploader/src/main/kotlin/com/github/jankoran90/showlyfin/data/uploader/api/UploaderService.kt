@@ -152,4 +152,8 @@ interface UploaderService {
 
     // AUTEUR (SHW-91) — kurátorský mozek (raw JSON body → raw JSON odpověď)
     @POST suspend fun curatorRecommend(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+
+    // FILMYCAST — cast telefon→TV do Filmy appky (fronta příkazů na backendu, POP jednorázově).
+    @POST suspend fun castCommand(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+    @GET suspend fun castCommandGet(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
 }
