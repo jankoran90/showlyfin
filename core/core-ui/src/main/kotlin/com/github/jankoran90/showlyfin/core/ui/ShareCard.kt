@@ -27,8 +27,9 @@ object ShareCard {
         posterUrl: String?,
         backdropUrl: String?,
     ) {
-        val poster = loadBitmap(posterUrl)
-        val backdrop = loadBitmap(backdropUrl)
+        // Zdroje ber ve vyšším rozlišení (supersamplovaný canvas jinak upscaluje malé náhledy).
+        val poster = loadBitmap(upscaleTmdb(posterUrl, "w780"))
+        val backdrop = loadBitmap(upscaleTmdb(backdropUrl, "w1280"))
         val bmp = ShareCardRenderer.render(data, poster, backdrop)
         val uri = withContext(Dispatchers.IO) {
             val dir = File(context.cacheDir, "share").apply { mkdirs() }
@@ -53,6 +54,14 @@ object ShareCard {
             Intent.createChooser(send, "Sdílet kartu filmu").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) },
         )
     }
+
+    /** U TMDB URL nahradí velikostní token (w500/h632/original) za [size] = ostřejší zdroj pro kartu. */
+    private fun upscaleTmdb(url: String?, size: String): String? =
+        if (url != null && url.contains("image.tmdb.org")) {
+            url.replace(Regex("/t/p/(w\\d+|h\\d+|original)/"), "/t/p/$size/")
+        } else {
+            url
+        }
 
     private suspend fun loadBitmap(url: String?): Bitmap? = withContext(Dispatchers.IO) {
         if (url.isNullOrBlank()) return@withContext null

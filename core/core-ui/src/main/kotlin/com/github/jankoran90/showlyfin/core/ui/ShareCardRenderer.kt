@@ -41,7 +41,10 @@ object ShareCardRenderer {
     private const val CARD_BG   = 0xFF161616.toInt()
     private const val CSFD_AMBER = 0xFFF5A623.toInt()  // konzistentní s CsfdComponents
 
-    // ── Rozměry (px, pevná šířka; výška dynamická dle obsahu) ──
+    // ── Rozměry (design-jednotky, pevná šířka; výška dynamická dle obsahu) ──
+    // Celý render probíhá v těchto jednotkách; výsledný bitmap je SCALE× větší (supersampling)
+    // = ostrý vektorový text/tvary/badge bez přepočítávání každé konstanty. 2× = 2160px výstup.
+    private const val SCALE = 2
     private const val W = 1080
     private const val PAD = 56
     private const val HEADER_H = 608          // 16:9 fanart přes celou šířku
@@ -116,8 +119,9 @@ object ShareCardRenderer {
         y += 24 + 56          // footer
         val totalH = y + PAD
 
-        val bmp = Bitmap.createBitmap(W, totalH, Bitmap.Config.ARGB_8888)
+        val bmp = Bitmap.createBitmap(W * SCALE, totalH * SCALE, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
+        c.scale(SCALE.toFloat(), SCALE.toFloat())   // vše dál kreslí v design-jednotkách, rasterizuje 2×
         c.drawColor(BG)
 
         // ── Header fanart (center-crop) + scrim ──
