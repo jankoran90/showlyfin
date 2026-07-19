@@ -30,7 +30,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -168,6 +170,20 @@ class TvFilmotekaViewModel @Inject constructor(
         // přenačti, ať se titul objeví ve Filmotéce ŽIVĚ (dřív nutný restart). Padne i na TV = bonus.
         // drop(1) = ignoruj iniciální emit (base pokryje reload z profilu výše).
         workingSources.savedKeys
+            .drop(1)
+            .onEach { reload() }
+            .launchIn(viewModelScope)
+
+        // ORCHARD (user 07-19) — ŽIVÝ refresh Filmotéky při změně ZDROJŮ (zapnutí/vypnutí Jellyfin/Working/…)
+        // a při změně výběru JF knihoven Filmotéky (filmotekaJfLibraries). Dřív se toggle projevil až po
+        // restartu appky / vymazání cache (user hlásil na TV). drop(1) = ignoruj iniciální emit.
+        settings.sources
+            .drop(1)
+            .onEach { reload() }
+            .launchIn(viewModelScope)
+        profileRepository.activeConfig
+            .map { it.filmotekaJfLibraries }
+            .distinctUntilChanged()
             .drop(1)
             .onEach { reload() }
             .launchIn(viewModelScope)

@@ -227,23 +227,30 @@ class WorkingSourceStore @Inject constructor(
      */
     private suspend fun syncFromServer() {
         val key = profileKey(); val base = serverBase(); val cookie = serverCookie()
+        // IZOLACE dospělý↔děti (content safety, user 07-19): profil se změnil → OKAMŽITĚ vyčisti lokál,
+        // JEŠTĚ PŘED serverovým fetchem a i offline / bez uploaderu. Jinak zdroje jednoho profilu prosáknou
+        // do druhého (dospělé mezi děti) — dřív se lokál čistil až po úspěšném server fetchi, takže při
+        // nedostupném serveru / prázdném klíči (early return) staré zdroje zůstaly. Bezpečnost > pohodlí
+        // (vlastní zdroje profilu se offline dočasně schovají, po připojení se dotáhnou).
+        val prev = lastSyncedProfile
+        val switched = prev != null && prev != key
+        if (switched) {
+            replaceLocal(emptyList())
+            lastSyncedProfile = key
+        }
         if (key.isBlank() || base.isBlank()) return
         runCatching {
             val server = parseServer(uploaderDs.getProfileWorkingSources(base, cookie, key)) ?: return
-            val prev = lastSyncedProfile
-            if (prev != null && prev != key) {
-                replaceLocal(server)
-            } else {
-                val byId = LinkedHashMap<String, WorkingSource>()
-                for (r in getAll() + server) {
-                    val id = identity(r)
-                    val cur = byId[id]
-                    if (cur == null || r.savedAtMs >= cur.savedAtMs) byId[id] = r
-                }
-                val merged = byId.values.sortedByDescending { it.savedAtMs }
-                replaceLocal(merged)
-                if (merged.size != server.size) pushNow(key, base, cookie, merged)
+            // Profil už izolován výše (po switchi je getAll() prázdný → merge = server 1:1). Stejný profil = merge.
+            val byId = LinkedHashMap<String, WorkingSource>()
+            for (r in getAll() + server) {
+                val id = identity(r)
+                val cur = byId[id]
+                if (cur == null || r.savedAtMs >= cur.savedAtMs) byId[id] = r
             }
+            val merged = byId.values.sortedByDescending { it.savedAtMs }
+            replaceLocal(merged)
+            if (merged.size != server.size) pushNow(key, base, cookie, merged)
             lastSyncedProfile = key
         }.onFailure { Timber.w(it, "[SIEVE] sync zdrojů selhal") }
     }
