@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -69,7 +71,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
-import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStreamQuality
 
 // Vypadá řetězec jako release filename? (rozlišení / rok / kodek / zdroj / release grupa -XXX)
 private val RELEASE_HINT = Regex(
@@ -123,15 +124,87 @@ internal fun isCzDub(stream: UploaderStream): Boolean {
     return false
 }
 
-internal fun qualityBadge(q: UploaderStreamQuality): String = buildList {
-    q.resolution?.let { add(it) }
-    q.videoCodec?.let { add(if (q.hdr) "$it HDR" else it) }
-    q.audioLanguage?.let { add(it) }
-    q.audioFormat?.let { add(it) }
-    q.channels?.let { add(it) }
-    q.sizeGB?.let { add("%.1f GB".format(it)) }
-    q.csfdPct?.let { add("ČSFD $it%") }
-}.joinToString(" · ")
+// D-b follow-up (user 18:40): parsování parametrů z názvu release, když strukturovaná `quality` pole chybí
+// (neprobnutý torrent/Comet). Ať je u KAŽDÉHO zdroje vidět rozlišení/video/zvuk/velikost pro porovnání.
+private val RE_RES = Regex("""(?i)\b(2160|1080|720|480)p\b|\b(4k|uhd)\b""")
+private val RE_VCODEC = Regex("""(?i)\b(x265|h\.?265|hevc)\b|\b(x264|h\.?264|avc)\b""")
+private val RE_CHANNELS = Regex("""(?i)\b(7\.1|5\.1|2\.0|2\.1)\b""")
+private val RE_AFORMAT = Regex("""(?i)\b(atmos|truehd|dts-?hd|dts|e-?ac-?3|ddp|dd\+|dd5\.?1|ac-?3|dolby digital\+?|aac)\b""")
+private val RE_HDR = Regex("""(?i)\b(hdr10\+?|hdr|dolby ?vision|dovi|\bdv\b)\b""")
+private val RE_SIZE = Regex("""(?i)\b(\d+(?:[.,]\d+)?)\s?(gb|mb)\b""")
+
+private fun parseRes(t: String): String? = RE_RES.find(t)?.let { m ->
+    m.groupValues[1].takeIf { it.isNotBlank() }?.let { "${it}p" } ?: "4K"
+}
+private fun parseVideo(t: String): String? = RE_VCODEC.find(t)?.let {
+    if (it.groupValues[1].isNotBlank()) "HEVC" else "H.264"
+}
+private fun parseAudioFmt(t: String): String? = RE_AFORMAT.find(t)?.value?.let { raw ->
+    val v = raw.lowercase()
+    when {
+        "atmos" in v -> "Atmos"; "truehd" in v -> "TrueHD"; "dts" in v -> "DTS"
+        "eac" in v || "e-ac" in v || "ddp" in v || "dd+" in v || "digital+" in v -> "DD+"
+        "ac-3" in v || "ac3" in v || "dd5" in v || "dolby digital" in v -> "DD"
+        "aac" in v -> "AAC"; else -> raw.uppercase()
+    }
+}
+private fun parseSize(t: String): String? = RE_SIZE.find(t)?.let { m ->
+    val num = m.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return null
+    if (m.groupValues[2].lowercase() == "mb") "%.0f MB".format(num) else "%.1f GB".format(num)
+}
+
+/**
+ * Parametry zdroje pro picker: rozlišení · video (+HDR) · zvuk (formát + 5.1/2.0) · [jazyk] · velikost.
+ * Strukturovaná `quality` pole (z RD probe) mají přednost; když chybí, dohledá z názvu release.
+ */
+internal fun streamQualityChips(stream: UploaderStream): List<String> {
+    val q = stream.quality
+    val t = listOfNotNull(stream.name, stream.description).joinToString(" ")
+    val out = ArrayList<String>(6)
+    (q.resolution?.takeIf { it.isNotBlank() } ?: parseRes(t))?.let { out.add(it) }
+    val vc = q.videoCodec?.takeIf { it.isNotBlank() } ?: parseVideo(t)
+    val hdr = q.hdr || RE_HDR.containsMatchIn(t)
+    when {
+        vc != null -> out.add(if (hdr) "$vc HDR" else vc)
+        hdr -> out.add("HDR")
+    }
+    val af = q.audioFormat?.takeIf { it.isNotBlank() } ?: parseAudioFmt(t)
+    val ch = q.channels?.takeIf { it.isNotBlank() } ?: RE_CHANNELS.find(t)?.value
+    listOfNotNull(af, ch).takeIf { it.isNotEmpty() }?.let { out.add(it.joinToString(" ")) }
+    q.audioLanguage?.takeIf { it.isNotBlank() }?.let { out.add(it.uppercase()) }
+    (q.sizeGB?.let { "%.1f GB".format(it) } ?: parseSize(t))?.let { out.add(it) }
+    q.csfdPct?.let { out.add("ČSFD $it%") }
+    return out
+}
+
+/** Řádek parametrů zdroje jako drobné chipy (prominentní, přehledné porovnání víc zdrojů). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QualityChips(stream: UploaderStream, modifier: Modifier = Modifier) {
+    val chips = streamQualityChips(stream)
+    if (chips.isEmpty()) return
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        chips.forEach { label ->
+            Box(
+                Modifier
+                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
 
 /**
  * Označení zdroje streamu (jen Stremio picker):
@@ -269,16 +342,8 @@ internal fun StreamRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            val badge = qualityBadge(stream.quality)
-            if (badge.isNotBlank()) {
-                Text(
-                    text = badge,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            // D-b follow-up: parametry zdroje jako chipy (rozlišení/video/zvuk 5.1-2.0/velikost) — vidět při výběru.
+            QualityChips(stream, Modifier.padding(top = 2.dp))
             stream.addon?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -327,10 +392,7 @@ private fun RememberedSourceRow(
             val name = (stream.description?.takeIf { looksLikeRelease(it) } ?: stream.name ?: stream.description)
                 ?.replace("\n", " ")?.trim()?.ifBlank { null } ?: "Uložený zdroj"
             Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val badge = qualityBadge(stream.quality)
-            if (badge.isNotBlank()) {
-                Text(badge, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            QualityChips(stream, Modifier.padding(top = 2.dp))
         }
         Icon(
             if (toTv) Icons.Default.Tv else Icons.Default.PlayArrow,
