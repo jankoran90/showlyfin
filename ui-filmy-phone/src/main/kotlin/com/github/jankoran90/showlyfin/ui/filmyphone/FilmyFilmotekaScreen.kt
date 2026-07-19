@@ -4,12 +4,15 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -22,11 +25,15 @@ import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,6 +77,8 @@ fun FilmyFilmotekaScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     // Výchozí = SEZNAM (bohaté řádky jako domov, přání usera 2026-07-17). Přepínač vpravo v liště.
     var viewMode by remember { mutableStateOf(ViewMode.LIST) }
+    // GENRE-FILTER — bottom sheet výběru žánrů (multi-select). Otevře se druhým klikem na „Žánr" (user 07-19).
+    var showGenreFilter by remember { mutableStateOf(false) }
     // VM je retained na úrovni shellu (sekce se přepínají when-em) → při vstupu obnov výchozí osu z Nastavení.
     LaunchedEffect(Unit) { vm.applyDefaultAxis() }
 
@@ -79,10 +88,17 @@ fun FilmyFilmotekaScreen(
             allSort = state.allSort,
             viewMode = viewMode,
             total = state.total,
+            genreFilterCount = state.genreFilter.size,
             onMenu = onMenu,
-            onAxis = vm::setAxis,
+            onAxis = { a ->
+                // 2. klik na už aktivní osu Žánr = otevři filtr žánrů (jinak přepni osu).
+                if (a == FilmotekaAxis.GENRE && state.axis == FilmotekaAxis.GENRE) showGenreFilter = true
+                else vm.setAxis(a)
+            },
             onAllSort = vm::setAllSort,
             onToggleView = { viewMode = if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID },
+            onOpenGenreFilter = { showGenreFilter = true },
+            onClearGenreFilter = vm::clearGenreFilter,
         )
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
@@ -92,6 +108,16 @@ fun FilmyFilmotekaScreen(
                 else -> FilmotekaGrid(state.rails, onOpenDetail)
             }
         }
+    }
+
+    if (showGenreFilter) {
+        GenreFilterSheet(
+            available = state.availableGenres,
+            selected = state.genreFilter,
+            onToggle = vm::toggleGenreFilter,
+            onClear = vm::clearGenreFilter,
+            onDismiss = { showGenreFilter = false },
+        )
     }
 }
 
@@ -105,10 +131,13 @@ private fun FilmotekaChips(
     allSort: FilmotekaAllSort,
     viewMode: ViewMode,
     total: Int,
+    genreFilterCount: Int,
     onMenu: () -> Unit,
     onAxis: (FilmotekaAxis) -> Unit,
     onAllSort: (FilmotekaAllSort) -> Unit,
     onToggleView: () -> Unit,
+    onOpenGenreFilter: () -> Unit,
+    onClearGenreFilter: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth(),
@@ -157,6 +186,25 @@ private fun FilmotekaChips(
             ) {
                 FilmotekaAllSort.entries.forEach { s ->
                     FilterChip(selected = allSort == s, onClick = { onAllSort(s) }, label = { Text(s.chipLabel) })
+                }
+            }
+        }
+        // GENRE-FILTER — druhý řádek u osy Žánr: otevři filtr (multi-select) + zrušit, když aktivní.
+        if (axis == FilmotekaAxis.GENRE) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = genreFilterCount > 0,
+                    onClick = onOpenGenreFilter,
+                    label = { Text(if (genreFilterCount > 0) "Filtr žánrů ($genreFilterCount)" else "Filtrovat žánry") },
+                )
+                if (genreFilterCount > 0) {
+                    FilterChip(selected = false, onClick = onClearGenreFilter, label = { Text("Zrušit filtr") })
                 }
             }
         }
@@ -267,3 +315,60 @@ private val FilmotekaAllSort.chipLabel: String
         FilmotekaAllSort.RECENT -> "Nedávno přidané"
         FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
     }
+
+/**
+ * GENRE-FILTER — spodní sheet výběru žánrů (multi-select). Filtruje se dle HLAVNÍHO žánru (parita s osou Žánr);
+ * prázdný výběr = vše. Nabídka [available] = žánry přítomné v bázi (dle četnosti). Sdílený VM = parita s TV.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun GenreFilterSheet(
+    available: List<String>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Filtr žánrů",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (selected.isNotEmpty()) {
+                    TextButton(onClick = onClear) { Text("Zrušit filtr") }
+                }
+            }
+            if (available.isEmpty()) {
+                Text(
+                    text = "Žádné žánry k dispozici.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    available.forEach { g ->
+                        FilterChip(
+                            selected = g in selected,
+                            onClick = { onToggle(g) },
+                            label = { Text(g) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

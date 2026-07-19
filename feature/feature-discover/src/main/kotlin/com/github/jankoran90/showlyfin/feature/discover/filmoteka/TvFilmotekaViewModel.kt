@@ -66,6 +66,14 @@ data class FilmotekaUiState(
     val allSort: FilmotekaAllSort = FilmotekaAllSort.RECENT,
     /** Počet unikátních titulů v bázi (po dedup+gate, napříč osami stejný) — pro telefonní ukazatel „N filmů". */
     val total: Int = 0,
+    /**
+     * GENRE-FILTER — aktivní filtr žánrů (multi-select). Prázdný = bez filtru (vše). Filtruje se dle HLAVNÍHO
+     * žánru titulu (první = nejvyšší váha, stejně jako grupování osy Žánr) → titul projde, je-li jeho hlavní
+     * žánr ve výběru. Karty/seznamy dál ukazují všechny žánry. Živý stav (neukládá se), reset při restartu.
+     */
+    val genreFilter: Set<String> = emptySet(),
+    /** Všechny hlavní žánry přítomné v bázi (dle četnosti sestupně) — nabídka pro picker filtru. */
+    val availableGenres: List<String> = emptyList(),
 )
 
 /**
@@ -102,6 +110,9 @@ class TvFilmotekaViewModel @Inject constructor(
     // Enrichnutá + věkově gatovaná báze (JF+Working+Trakt) a zvlášť Oblíbené (reaktivní). Grupování je merguje.
     @Volatile private var baseItems: List<MediaItem> = emptyList()
     @Volatile private var favoriteItems: List<MediaItem> = emptyList()
+
+    /** GENRE-FILTER — živý výběr žánrů (viz [FilmotekaUiState.genreFilter]). Drží se napříč přeskupením os. */
+    @Volatile private var genreFilter: Set<String> = emptySet()
 
     private var loadJob: Job? = null
 
@@ -175,6 +186,32 @@ class TvFilmotekaViewModel @Inject constructor(
         if (settings.allSort.value == sort) return
         settings.setAllSort(sort)
         if (_state.value.axis == FilmotekaAxis.ALL) rebuild(FilmotekaAxis.ALL)
+    }
+
+    /**
+     * GENRE-FILTER — přepni žánr ve filtru (multi-select). Prázdný filtr = bez omezení. Sdílené telefon+TV;
+     * hned přeskup na aktuální ose. Neukládá se (živý browsing filtr).
+     */
+    fun toggleGenreFilter(genre: String) {
+        val g = genre.trim()
+        if (g.isBlank()) return
+        genreFilter = if (g in genreFilter) genreFilter - g else genreFilter + g
+        rebuild(_state.value.axis)
+    }
+
+    /** GENRE-FILTER — nastav celý výběr žánrů najednou (prázdná množina = zrušit filtr). */
+    fun setGenreFilter(genres: Set<String>) {
+        val cleaned = genres.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        if (cleaned == genreFilter) return
+        genreFilter = cleaned
+        rebuild(_state.value.axis)
+    }
+
+    /** GENRE-FILTER — zruš filtr (zobraz vše). */
+    fun clearGenreFilter() {
+        if (genreFilter.isEmpty()) return
+        genreFilter = emptySet()
+        rebuild(_state.value.axis)
     }
 
     /**
@@ -297,15 +334,35 @@ class TvFilmotekaViewModel @Inject constructor(
         val combined = LinkedHashMap<String, MediaItem>()
         for (item in baseItems + favoriteItems) { val k = dedupKey(item) ?: continue; combined.putIfAbsent(k, item) }
         val all = combined.values.toList()
+        // Nabídka žánrů do pickeru = z PLNÉ báze (dřív než filtr), dle četnosti hlavního žánru sestupně.
+        val available = availableGenresOf(all)
+        // GENRE-FILTER — zúžení dle hlavního žánru (prázdný filtr = beze změny). Filtruj PŘED grupováním →
+        // padne uniformně na všechny osy (Vše/Žánr/Země). Zapomenuté žánry z filtru (už nejsou v bázi) neškodí.
+        val filtered = if (genreFilter.isEmpty()) all else all.filter { mainGenreOf(it) in genreFilter }
         val rails = when (axis) {
-            FilmotekaAxis.ALL -> groupAll(all)
-            FilmotekaAxis.GENRE -> groupByGenre(all)
-            FilmotekaAxis.COUNTRY -> groupByCountry(all)
+            FilmotekaAxis.ALL -> groupAll(filtered)
+            FilmotekaAxis.GENRE -> groupByGenre(filtered)
+            FilmotekaAxis.COUNTRY -> groupByCountry(filtered)
         }
         _state.value = FilmotekaUiState(
             axis = axis, rails = rails, loading = false,
             allSort = settings.allSort.value, total = all.size,
+            genreFilter = genreFilter, availableGenres = available,
         )
+    }
+
+    /** Hlavní žánr titulu = první neprázdný (nejvyšší váha dle TMDB řazení relevance). Sdílené filtrem i grupováním. */
+    private fun mainGenreOf(item: MediaItem): String? =
+        item.genres.orEmpty().firstOrNull { it.isNotBlank() }?.trim()
+
+    /** Všechny hlavní žánry v bázi, seřazené dle četnosti sestupně (tie-break český Collator). */
+    private fun availableGenresOf(items: List<MediaItem>): List<String> {
+        val counts = LinkedHashMap<String, Int>()
+        for (item in items) { val g = mainGenreOf(item) ?: continue; counts[g] = (counts[g] ?: 0) + 1 }
+        val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
+        return counts.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenComparator { a, b -> coll.compare(a.key, b.key) })
+            .map { it.key }
     }
 
     /**
@@ -337,7 +394,7 @@ class TvFilmotekaViewModel @Inject constructor(
             // Jen HLAVNÍ žánr (první = nejvyšší váha dle TMDB řazení relevance) → film v JEDNÉ sekci, ne duplikát
             // napříč všemi svými žánry (user 07-19). Karty/seznamy dál ukazují všechny žánry (toHomeRowItem), tohle
             // grupování řeší jen řady/sekce osy Žánr.
-            val g = item.genres.orEmpty().firstOrNull { it.isNotBlank() }?.trim()
+            val g = mainGenreOf(item)
             if (!g.isNullOrBlank()) byGenre.getOrPut(g) { mutableListOf() }.add(item)
         }
         return byGenre.entries

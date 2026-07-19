@@ -764,6 +764,16 @@ fun PlaybackScreen(
                                 .background(Color.Black.copy(alpha = 0.5f))
                                 .padding(horizontal = 24.dp, vertical = 16.dp),
                         ) {
+                            // Popis zdroje (rozlišení · video kodek · audio kodek · kanály) — parita s TV lištou
+                            // (user 07-19: „v telefonu to nevidím vůbec"). Prázdné, dokud se stopy nenačtou.
+                            if (sourceMeta.isNotBlank()) {
+                                Text(
+                                    text = sourceMeta,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(bottom = 6.dp),
+                                )
+                            }
                             Slider(
                                 value = if (scrubbing) scrubValue
                                 else position.toFloat().coerceIn(0f, duration.toFloat().coerceAtLeast(0f)),
