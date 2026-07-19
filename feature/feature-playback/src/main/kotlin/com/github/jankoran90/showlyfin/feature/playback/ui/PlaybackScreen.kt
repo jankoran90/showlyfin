@@ -51,6 +51,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -107,7 +108,9 @@ import com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleEdge
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleFont
 import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private fun Context.findActivity(): Activity? {
     var ctx: Context = this
@@ -281,10 +284,16 @@ fun PlaybackScreen(
     val controlsVisibleNow = rememberUpdatedState(controlsVisible)
     val menuOpenNow = rememberUpdatedState(showSubtitleMenu)
 
+    val stallScope = rememberCoroutineScope()
     DisposableEffect(Unit) {
         view.keepScreenOn = true
         val token = SessionToken(context, ComponentName(context, MoviePlayerService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
+        // RELAY (2026-07-19): stall watchdog — mrtvý/odpadlý odkaz UPROSTŘED přehrávání se NEprojeví jako chyba,
+        // jen nekonečné BUFFERING (buffered pozice stojí, error=null → onPlayerError se nezavolá). Když stream
+        // bufferuje > 30 s bez posunu buffered pozice, ber to jako mrtvý zdroj a spusť stejné zotavení jako u IO
+        // chyby (re-resolve čerstvého odkazu + pokračování z uložené pozice) přes `onPlaybackFailed`.
+        var stallJob: Job? = null
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -292,6 +301,20 @@ fun PlaybackScreen(
                 if (playbackState == Player.STATE_READY && pendingSwReattach) {
                     pendingSwReattach = false
                     playerViewRef?.let { pv -> pv.player = null; pv.player = controller }
+                }
+                stallJob?.cancel()
+                if (playbackState == Player.STATE_BUFFERING && externalUrl != null && onPlaybackFailed != null && !failureReported) {
+                    val startBuffered = controller?.bufferedPosition ?: 0L
+                    stallJob = stallScope.launch {
+                        delay(30_000)
+                        val c = controller ?: return@launch
+                        // pořád bufferuje a buffered pozice se za 30 s nehnula → zdroj přestal dodávat data.
+                        if (c.playbackState == Player.STATE_BUFFERING && c.bufferedPosition <= startBuffered + 250 && !failureReported) {
+                            failureReported = true
+                            timber.log.Timber.w("[RELAY] stall watchdog: buffering >30s bez posunu (buffered=${c.bufferedPosition}) → re-resolve zdroje")
+                            onPlaybackFailed("ERROR_CODE_IO_STALLED")
+                        }
+                    }
                 }
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -326,6 +349,7 @@ fun PlaybackScreen(
             }
         }, MoreExecutors.directExecutor())
         onDispose {
+            stallJob?.cancel()
             // PICKUP: ulož finální pozici externího streamu. Přehrávač NEuvolňujeme — drží ho služba,
             // takže navigace jinam v appce hraje dál na pozadí (controller jen odpojíme). Skutečné
             // ukončení (Zpět) řeší exitPlayback() → ACTION_STOP službě.
