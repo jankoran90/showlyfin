@@ -334,10 +334,11 @@ class TvFilmotekaViewModel @Inject constructor(
     private fun groupByGenre(items: List<MediaItem>): List<FilmotekaRail> {
         val byGenre = LinkedHashMap<String, MutableList<MediaItem>>()
         for (item in items) {
-            for (raw in item.genres.orEmpty()) {
-                val g = raw.trim()
-                if (g.isNotBlank()) byGenre.getOrPut(g) { mutableListOf() }.add(item)
-            }
+            // Jen HLAVNÍ žánr (první = nejvyšší váha dle TMDB řazení relevance) → film v JEDNÉ sekci, ne duplikát
+            // napříč všemi svými žánry (user 07-19). Karty/seznamy dál ukazují všechny žánry (toHomeRowItem), tohle
+            // grupování řeší jen řady/sekce osy Žánr.
+            val g = item.genres.orEmpty().firstOrNull { it.isNotBlank() }?.trim()
+            if (!g.isNullOrBlank()) byGenre.getOrPut(g) { mutableListOf() }.add(item)
         }
         return byGenre.entries
             .sortedByDescending { it.value.size }
