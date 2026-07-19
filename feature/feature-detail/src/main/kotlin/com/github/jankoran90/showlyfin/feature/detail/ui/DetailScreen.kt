@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Reviews
@@ -444,6 +445,8 @@ fun DetailScreen(
                         onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
                         onRemoveRemembered = { viewModel.removeRememberedSource() },
                         onStremio = { viewModel.openStreamPathChooser() },
+                        // REPRISE: přímý vstup do pickeru (strict=false → všechny zdroje s chipy) i když už zdroj máme.
+                        onPickSource = { viewModel.openStreamPicker() },
                         onDownload = { viewModel.openDownloadMenu() },
                         // FILMYCAST — „Přehrát na Filmy TV" (poslat zapamatovaný zdroj do Filmy appky na TV).
                         onCastToFilmyTv = { viewModel.castToFilmyTv() },
@@ -785,6 +788,7 @@ private fun DetailActionBar(
     onCastRemembered: () -> Unit,
     onRemoveRemembered: () -> Unit,
     onStremio: () -> Unit,
+    onPickSource: (() -> Unit)? = null,
     onDownload: () -> Unit,
     onCastToFilmyTv: (() -> Unit)? = null,
     inWatchlist: Boolean,
@@ -882,6 +886,15 @@ private fun DetailActionBar(
                         text = { Text("Sdílet kartu") },
                         leadingIcon = { Icon(Icons.Default.Share, null) },
                         onClick = { menuOpen = false; onShare() },
+                    )
+                }
+                // REPRISE (parita s TV „Zkusit jiný zdroj"): otevři picker i když už zdroj máme —
+                // ať jde přepnout na jiný cached/dostupný zdroj (chipy rozlišení/zvuk/velikost + ⭐ pin).
+                if (!inLibrary && hasRemembered && onPickSource != null) {
+                    DropdownMenuItem(
+                        text = { Text("Vybrat jiný zdroj") },
+                        leadingIcon = { Icon(Icons.Default.SwapHoriz, null) },
+                        onClick = { menuOpen = false; onPickSource() },
                     )
                 }
                 if (!inLibrary && hasRemembered) {
