@@ -85,11 +85,11 @@ class FilmotekaSettingsStore @Inject constructor(
 
     private fun loadSources(): Set<FilmotekaSource> {
         val raw = prefs.getString(keyFor(KEY_SOURCES), null) ?: prefs.getString(KEY_SOURCES, null)
-            ?: return ALL_SOURCES
+            ?: return DEFAULT_SOURCES
         return runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull()
             ?.mapNotNull { name -> runCatching { FilmotekaSource.valueOf(name) }.getOrNull() }
             ?.toSet()
-            ?: ALL_SOURCES
+            ?: DEFAULT_SOURCES
     }
 
     private fun loadAxis(): FilmotekaAxis {
@@ -120,6 +120,11 @@ class FilmotekaSettingsStore @Inject constructor(
         const val KEY_ALL_SORT = "all_sort"
         const val KEY_REGIONS = "regions_json"
         val ALL_SOURCES: Set<FilmotekaSource> = FilmotekaSource.entries.toSet()
+
+        // Výchozí zapnuté zdroje = vše KROMĚ Jellyfinu (user 07-19: JF do Filmotéky jen když ho vybere v Nastavení,
+        // default vypnuto — jinak by JF knihovny „skákaly" do Filmotéky bez souhlasu). Kdo měl JF dřív zapnutý
+        // (uložený sources_json), drží se jeho volby.
+        val DEFAULT_SOURCES: Set<FilmotekaSource> = ALL_SOURCES - FilmotekaSource.JELLYFIN
         val ALL_REGIONS: Set<CinematographyRegion> = CinematographyRegion.entries.toSet()
     }
 }

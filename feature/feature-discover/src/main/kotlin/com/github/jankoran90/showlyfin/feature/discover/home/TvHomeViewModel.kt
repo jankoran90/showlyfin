@@ -300,22 +300,26 @@ class TvHomeViewModel @Inject constructor(
         return when (config.source) {
         HomeRowSourceType.DISCOVER -> loadDiscover(config)
         HomeRowSourceType.CONTINUE_WATCHING -> loadJellyfin(config) { userUuid ->
-            resumeItems(userUuid, config.limit)
+            resumeItems(userUuid, config.limit, jellyfinLibraryUuids())
         }
         HomeRowSourceType.NEXT_UP -> loadJellyfin(config) { userUuid ->
-            nextUpItems(userUuid, config.limit)
+            nextUpItems(userUuid, config.limit, jellyfinLibraryUuids())
         }
         // Sloučené Pokračovat + Další díly — resume má přednost, dedup dle seriálu/položky.
         HomeRowSourceType.CONTINUE_WATCHING_COMBINED -> loadJellyfin(config) { userUuid ->
+            val libs = jellyfinLibraryUuids()
             val seen = mutableSetOf<String>()
-            (resumeItems(userUuid, config.limit) + nextUpItems(userUuid, config.limit))
+            (resumeItems(userUuid, config.limit, libs) + nextUpItems(userUuid, config.limit, libs))
                 .filter { dto -> seen.add((dto.seriesId ?: dto.id).toString()) }
                 .take(config.limit)
         }
-        // „Nejnovější v <knihovna>" — getLatestMedia pro konkrétní knihovnu.
+        // „Nejnovější v <knihovna>" — getLatestMedia pro konkrétní knihovnu. Gate na whitelist (nezobrazuj
+        // nezvolené knihovny — user 07-19).
         HomeRowSourceType.RECENTLY_ADDED -> {
             val parent = config.params[HomeRowParams.LIBRARY_ID].toUuidOrNull()
-            if (parent == null) emptyList() else loadJellyfin(config) { userUuid ->
+            val libs = jellyfinLibraryUuids()
+            if (parent == null || (libs != null && parent !in libs)) emptyList()
+            else loadJellyfin(config) { userUuid ->
                 apiClient.userLibraryApi.getLatestMedia(
                     userId = userUuid,
                     parentId = parent,
@@ -366,23 +370,66 @@ class TvHomeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun resumeItems(userUuid: UUID, limit: Int): List<BaseItemDto> =
-        apiClient.itemsApi.getResumeItems(
-            userId = userUuid,
-            limit = limit,
-            mediaTypes = listOf(JfMediaType.VIDEO),
-            fields = ROW_ITEM_FIELDS,
-            enableImages = true,
-        ).content.items
+    /**
+     * ORCHARD (user 07-19) — knihovny povolené na home = whitelist aktivního profilu. `null` = bez omezení
+     * (showlyfin / profil bez výběru → všechny, zpětná kompatibilita); prázdné = ŽÁDNÝ JF na home (Filmy opt-in,
+     * dokud user nevybere knihovnu); jinak scope resume/next-up jen na vybrané knihovny. Bez tohoto „Pokračovat"/
+     * „Další díly" táhly z CELÉHO serveru napříč nezvolenými knihovnami (spam home).
+     */
+    private fun jellyfinLibraryUuids(): List<UUID>? =
+        profileRepository.activeConfig.value.jellyfinLibraryWhitelist
+            ?.mapNotNull { it.toUuidOrNull() }
 
-    private suspend fun nextUpItems(userUuid: UUID, limit: Int): List<BaseItemDto> =
-        apiClient.tvShowsApi.getNextUp(
-            userId = userUuid,
-            limit = limit,
-            fields = ROW_ITEM_FIELDS,
-            // OTA 299: bez enableImages nechodí imageTags → landscape karta „Další díly" neměla still dílu.
-            enableImages = true,
-        ).content.items
+    private suspend fun resumeItems(userUuid: UUID, limit: Int, libraries: List<UUID>?): List<BaseItemDto> {
+        if (libraries == null) {
+            return apiClient.itemsApi.getResumeItems(
+                userId = userUuid,
+                limit = limit,
+                mediaTypes = listOf(JfMediaType.VIDEO),
+                fields = ROW_ITEM_FIELDS,
+                enableImages = true,
+            ).content.items
+        }
+        if (libraries.isEmpty()) return emptyList()
+        val seen = mutableSetOf<String>()
+        return libraries.flatMap { lib ->
+            runCatching {
+                apiClient.itemsApi.getResumeItems(
+                    userId = userUuid,
+                    parentId = lib,
+                    limit = limit,
+                    mediaTypes = listOf(JfMediaType.VIDEO),
+                    fields = ROW_ITEM_FIELDS,
+                    enableImages = true,
+                ).content.items
+            }.getOrElse { emptyList() }
+        }.filter { seen.add(it.id.toString()) }.take(limit)
+    }
+
+    private suspend fun nextUpItems(userUuid: UUID, limit: Int, libraries: List<UUID>?): List<BaseItemDto> {
+        if (libraries == null) {
+            return apiClient.tvShowsApi.getNextUp(
+                userId = userUuid,
+                limit = limit,
+                fields = ROW_ITEM_FIELDS,
+                // OTA 299: bez enableImages nechodí imageTags → landscape karta „Další díly" neměla still dílu.
+                enableImages = true,
+            ).content.items
+        }
+        if (libraries.isEmpty()) return emptyList()
+        val seen = mutableSetOf<String>()
+        return libraries.flatMap { lib ->
+            runCatching {
+                apiClient.tvShowsApi.getNextUp(
+                    userId = userUuid,
+                    parentId = lib,
+                    limit = limit,
+                    fields = ROW_ITEM_FIELDS,
+                    enableImages = true,
+                ).content.items
+            }.getOrElse { emptyList() }
+        }.filter { seen.add(it.id.toString()) }.take(limit)
+    }
 
     // ── SAVED_FOR_PLAYBACK (zapamatované zdroje) ───────────────────────────────
 
