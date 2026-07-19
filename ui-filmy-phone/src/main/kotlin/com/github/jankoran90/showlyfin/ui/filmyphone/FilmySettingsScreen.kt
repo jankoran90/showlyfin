@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -18,11 +19,13 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +57,9 @@ fun FilmySettingsScreen(
     var homeRowLimit by remember { mutableStateOf(FilmyShellPrefs.homeRowLimit(ctx)) }
     var showUploaderLogin by remember { mutableStateOf(false) }
     var showTraktLogin by remember { mutableStateOf(false) }
+    var showJellyfinLogin by remember { mutableStateOf(false) }
+    val jellyfinVm: FilmyJellyfinLoginViewModel = hiltViewModel()
+    val jellyfinState by jellyfinVm.state.collectAsStateWithLifecycle()
 
     Column(modifier.fillMaxSize()) {
         FilmySectionBar(title = "Nastavení", onMenu = onMenu)
@@ -103,6 +109,50 @@ fun FilmySettingsScreen(
                     }
                 } else {
                     Button(onClick = { showUploaderLogin = true }) { Text("Přihlásit k serveru") }
+                }
+
+                SettingSectionTitle("Účet Jellyfin")
+                Text(
+                    text = "Přihlas se k vlastnímu Jellyfin serveru a tvoje filmové knihovny se objeví v sekci " +
+                        "Knihovna a jako volitelný zdroj ve Filmotéce. Přihlášení je pro tento profil.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val jfServer = jellyfinState.connectedServer
+                if (jfServer != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Text(
+                            text = "  Přihlášeno: $jfServer",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { jellyfinVm.disconnect() }) { Text("Odhlásit") }
+                    }
+                    // Výběr knihoven — které se zobrazí na domově i v sekci Knihovna (opt-in, aby se domov nezaspamoval).
+                    LaunchedEffect(jfServer) { jellyfinVm.loadLibraries() }
+                    Text(
+                        text = "Vyber, které knihovny zobrazit. Zaškrtnuté se objeví na domově i v sekci Knihovna " +
+                            "(nezaškrtnuté zůstanou skryté, aby se domov nezaspamoval).",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (jellyfinState.librariesLoading && jellyfinState.libraries.isEmpty()) {
+                        Text("Načítám knihovny…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    jellyfinState.libraries.forEach { lib ->
+                        val checked = normalizeLibId(lib.id) in jellyfinState.selectedLibraryIds
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { jellyfinVm.toggleLibrary(lib.id) },
+                        ) {
+                            Checkbox(checked = checked, onCheckedChange = { jellyfinVm.toggleLibrary(lib.id) })
+                            Text(lib.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                        }
+                    }
+                } else {
+                    Button(onClick = { showJellyfinLogin = true }) { Text("Přihlásit k Jellyfinu") }
                 }
             }
 
@@ -178,4 +228,10 @@ fun FilmySettingsScreen(
     if (showTraktLogin) {
         FilmyTraktLoginDialog(onDismiss = { showTraktLogin = false })
     }
+    if (showJellyfinLogin) {
+        FilmyJellyfinLoginDialog(vm = jellyfinVm, onDismiss = { showJellyfinLogin = false })
+    }
 }
+
+/** Normalizace JF id knihovny (bez pomlček, malá písmena) — musí sedět s [FilmyJellyfinLoginViewModel]. */
+private fun normalizeLibId(id: String): String = id.replace("-", "").lowercase()
