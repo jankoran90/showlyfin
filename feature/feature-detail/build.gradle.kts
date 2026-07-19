@@ -27,6 +27,7 @@ dependencies {
     implementation(project(":data:data-jellyfin"))
     implementation(project(":data:data-uploader"))
     implementation(project(":data:data-offline"))   // NOMAD (SHW-60): stáhnout film z knihovny do telefonu
+    implementation(project(":data:data-maestro"))    // MAESTRO / D-c: probuzení AV sestavy při „Přehrát na TV"
     implementation(libs.jellyfin.sdk)
     implementation(libs.timber)
     implementation(libs.hilt.android)

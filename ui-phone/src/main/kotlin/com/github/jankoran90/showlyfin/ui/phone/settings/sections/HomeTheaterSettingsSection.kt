@@ -124,8 +124,9 @@ internal fun HomeTheaterSettingsSection(
  * receiver (pravý master obýváku, box jen digitálně zeslabuje); (2) „Přehrát na TV" umí probrat
  * celou sestavu z vypnutého stavu (receiver + box + spuštění Yellyfinu) přes IP boxu a jeho MAC.
  */
+// D-c: public (ne internal) — reuse ve Filmy Nastavení (ui-filmy-phone) pro blok „Domácí sestava".
 @Composable
-internal fun AvrSection(
+fun AvrSection(
     enabled: Boolean,
     host: String,
     boxHost: String,

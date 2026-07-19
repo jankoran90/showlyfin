@@ -68,6 +68,8 @@ class DetailViewModel @Inject constructor(
     // DINGO — per-zařízení preset přehrávání (preferuj H.264 pro slabé HEVC dekodéry v autě). Re-rank seznamu zdrojů.
     private val streamPresetStore: com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore,
     private val offlineManager: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
+    // MAESTRO / D-c: probuzení domácí AV sestavy před „Přehrát na Filmy TV".
+    private val homeTheaterScene: com.github.jankoran90.showlyfin.data.maestro.HomeTheaterScene,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -1079,11 +1081,29 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
+     * D-c (user 2026-07-19): „probudit celou sestavu" jako to uměl showlyfin. Před zařazením cast příkazu
+     * zapni AV receiver, televizi i box a spusť Filmy appku na boxu do popředí (jinak její cast poller, který
+     * běží jen v popředí, čekající příkaz nevyzvedne). Gate: sestava nakonfigurovaná (`avr_enabled` + IP) —
+     * jinak tiše přeskoč (uživatel má vše zapnuté / wake vypnutý v Nastavení → Domácí sestava). Best-effort.
+     */
+    private fun maybeWakeHomeTheater() {
+        val cfg = com.github.jankoran90.showlyfin.data.maestro.HomeTheaterConfig.from(prefs)
+        if (!cfg.configured) return
+        viewModelScope.launch {
+            runCatching { homeTheaterScene.wakeAndLaunch(cfg, FILMY_TV_PACKAGE) }
+                .onFailure { timber.log.Timber.w(it, "[MAESTRO] wake sestavy pro Filmy TV selhal") }
+        }
+    }
+
+    /**
      * FILMYCAST: resolvnutou URL zařaď jako cast příkaz na backend pod aktivním profilem. `subtitleQuery`
      * složíme z originálního názvu (TV má imdb/title/year z příkazu → dohledá CZ titulky). positionMs = 0
      * (telefonní resume store se sem zatím netahá; TV resumuje z vlastního lokálního prefu). Výsledek → hláška.
      */
     private fun sendFilmyCastCommand(url: String, title: String) {
+        // D-c: probuď domácí sestavu PARALELNĚ (AVR→TV→box→spusť Filmy appku), ať je box v popředí a jeho
+        // cast poller níže zařazený příkaz vyzvedne. Fire-and-forget; když sestava není nakonfigurovaná, no-op.
+        maybeWakeHomeTheater()
         _uiState.update { it.copy(isCastingToTv = true, isResolvingStream = false, showStreamPicker = false, streamError = null) }
         viewModelScope.launch {
             val st = _uiState.value
@@ -2125,6 +2145,8 @@ class DetailViewModel @Inject constructor(
         const val MIN_PLAYABLE_BYTES = 30_000_000L
         // CELLULOID (SHW-98) — musí sedět s SettingsViewModel.KEY_AUTO_REFRESH_SOURCES (jiný modul, sdílený jen string).
         const val KEY_AUTO_REFRESH_SOURCES = "auto_refresh_sources_enabled"
+        // D-c: applicationId Filmy TV appky (release) na boxu — kterou probouzí wake scéna do popředí.
+        const val FILMY_TV_PACKAGE = "com.github.jankoran90.filmy"
     }
 }
 

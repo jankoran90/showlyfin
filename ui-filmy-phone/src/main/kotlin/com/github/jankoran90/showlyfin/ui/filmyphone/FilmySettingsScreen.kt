@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
+import com.github.jankoran90.showlyfin.ui.phone.settings.sections.AvrSection
 
 /**
  * CELLULOID (SHW-98) M2.3b/M2.5 — Nastavení appky Filmy. Zatím: (1) přihlášení k serveru pro české
@@ -175,6 +177,36 @@ fun FilmySettingsScreen(
                 }
                 FilmyPlayerSection()
                 FilmyAudioSection()
+            }
+
+            // ── DOMÁCÍ SESTAVA (AVR) — D-c: „Přehrát na TV" probudí celý obývák ────
+            FilmyCollapsibleSection("Domácí sestava (AVR)", Icons.Rounded.Tv) {
+                Text(
+                    text = "Když je zapnuté, akce „Přehrát na TV\" (v ⋮ menu detailu filmu) nejdřív probudí celou " +
+                        "sestavu — zapne AV receiver, televizi i box, spustí appku Filmy na TV a přehraje film. " +
+                        "Jinak jen pošle příkaz a spoléhá, že je vše zapnuté. Vše musí být na stejné Wi‑Fi.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AvrSection(
+                    enabled = settings.avrEnabled,
+                    host = settings.avrHost,
+                    boxHost = settings.avrBoxHost,
+                    boxMac = settings.avrBoxMac,
+                    tvHost = settings.avrTvHost,
+                    defaultVolume = settings.avrDefaultVolume,
+                    volumeStep = settings.avrVolumeStep,
+                    boxPairing = settings.avrBoxPairing,
+                    boxPairStatus = settings.avrBoxPairStatus,
+                    onEnabled = { settingsVm.setAvrEnabled(it) },
+                    onHost = { settingsVm.setAvrHost(it) },
+                    onBoxHost = { settingsVm.setAvrBoxHost(it) },
+                    onBoxMac = { settingsVm.setAvrBoxMac(it) },
+                    onTvHost = { settingsVm.setAvrTvHost(it) },
+                    onDefaultVolume = { settingsVm.setAvrDefaultVolume(it) },
+                    onVolumeStep = { settingsVm.setAvrVolumeStep(it) },
+                    onPairBox = { settingsVm.pairBox() },
+                )
             }
 
             // ── OBJEVOVÁNÍ (kurátor + filmotéka + klenoty) ─────────────────────────
