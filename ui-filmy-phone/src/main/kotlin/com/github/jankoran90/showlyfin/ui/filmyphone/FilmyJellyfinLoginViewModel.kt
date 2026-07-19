@@ -1,6 +1,5 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
-import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
@@ -15,15 +14,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.jellyfin.sdk.api.client.ApiClient
-import org.jellyfin.sdk.api.client.extensions.userViewsApi
-import org.jellyfin.sdk.model.ClientInfo
-import org.jellyfin.sdk.model.DeviceInfo
-import org.jellyfin.sdk.model.UUID
-import org.jellyfin.sdk.model.api.BaseItemDto
-import timber.log.Timber
 import javax.inject.Inject
-import javax.inject.Named
 
 /**
  * ORCHARD — přihlášení appky Filmy k Jellyfin serveru (device-local) + výběr knihoven.
@@ -33,25 +24,21 @@ import javax.inject.Named
  * profily ([FilmyProfileManager]) mají správné JF `jellyfinUserId` (sdílené se showlyfin účty), ale prázdné
  * `serverUrl`/`jellyfinToken` → JF API vrací null (Knihovna prázdná, next-up mrtvý). Tento login je naplní.
  *
- * Výběr knihoven (whitelist): [LibraryRowsViewModel] zobrazuje JF knihovny jako řady i na DOMOVĚ. Bez omezení
- * (whitelist=null) by se domov ZASPAMOVAL všemi knihovnami — user to explicitně nechce („nejdřív vybrat které
- * se mají zobrazit"). Proto po přihlášení defaultně whitelist = PRÁZDNÝ (opt-in) a uživatel si knihovny naklikne
- * ([toggleLibrary]) → zapíše se do `jellyfinLibraryWhitelist` aktivního profilu.
+ * Výběr knihoven (whitelist): [com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel] zobrazuje
+ * JF knihovny jako řady i na DOMOVĚ. Bez omezení (whitelist=null) by se domov ZASPAMOVAL všemi knihovnami — user
+ * to explicitně nechce („nejdřív vybrat které se mají zobrazit"). Proto po přihlášení defaultně whitelist =
+ * PRÁZDNÝ (opt-in) a uživatel si knihovny naklikne ([toggleLibrary]) → `jellyfinLibraryWhitelist` aktivního profilu.
  *
- * Reuse: sdílený [JellyfinAuthService]; po úspěchu [ProfileRepository.setActive] propaguje token do kanonických
- * prefs → Knihovna/Filmotéka JF zdroj/next-up naskočí bez restartu. Backend sync creds NEpřepíše (`remote ?: local`).
+ * Reuse: sdílený [JellyfinAuthService] (auth + `listLibraries` přes jednorázové api, nesahá na aktivní session —
+ * proto NEinjektujeme raw JF SDK `ApiClient` do tohoto UI modulu). Po úspěchu [ProfileRepository.setActive]
+ * propaguje token do kanonických prefs → Knihovna/Filmotéka JF zdroj/next-up naskočí bez restartu. Backend sync
+ * creds NEpřepíše (`jellyfin = remote ?: local`).
  */
 @HiltViewModel
 class FilmyJellyfinLoginViewModel @Inject constructor(
     private val authService: JellyfinAuthService,
     private val profileRepository: ProfileRepository,
-    private val apiClient: ApiClient,
-    private val clientInfo: ClientInfo,
-    private val deviceInfo: DeviceInfo,
-    @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
-
-    data class JfLibrary(val id: String, val name: String)
 
     data class State(
         val loading: Boolean = false,
@@ -59,7 +46,7 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
         /** Non-null = přihlášeno (URL serveru), null = nepřihlášeno. */
         val connectedServer: String? = null,
         val librariesLoading: Boolean = false,
-        val libraries: List<JfLibrary> = emptyList(),
+        val libraries: List<JellyfinAuthService.JfLibrary> = emptyList(),
         /** Normalizovaná id knihoven zapnutých ve whitelistu (prázdné = žádná se nezobrazí). */
         val selectedLibraryIds: Set<String> = emptySet(),
     )
@@ -138,24 +125,14 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
         }
     }
 
-    /** Načte seznam JF knihoven uživatele (pro výběr, které zobrazit). Čte kanonické prefs (po setActive). */
+    /** Načte seznam JF knihoven (pro výběr, které zobrazit). Creds z aktivního profilu. */
     fun loadLibraries() {
+        val jf = profileRepository.activeConfig.value.credentials.jellyfin ?: return
+        if (jf.url.isBlank() || jf.token.isBlank() || jf.userId.isBlank()) return
         viewModelScope.launch {
-            val serverUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
-            val token = prefs.getString("jellyfin_token", "").orEmpty()
-            val userId = prefs.getString("jellyfin_user_id", "").orEmpty()
-            if (serverUrl.isBlank() || token.isBlank() || userId.isBlank()) return@launch
             _state.update { it.copy(librariesLoading = true) }
-            try {
-                apiClient.update(baseUrl = serverUrl, accessToken = token, clientInfo = clientInfo, deviceInfo = deviceInfo)
-                val views = apiClient.userViewsApi.getUserViews(userId = UUID.fromString(userId)).content
-                val libs = views.items.filter { it.isMediaLibrary() }
-                    .map { JfLibrary(id = it.id.toString(), name = it.name ?: "Knihovna") }
-                _state.update { it.copy(librariesLoading = false, libraries = libs) }
-            } catch (e: Throwable) {
-                Timber.w(e, "[ORCHARD] loadLibraries selhalo")
-                _state.update { it.copy(librariesLoading = false, error = "Nepodařilo se načíst knihovny: ${e.message}") }
-            }
+            val libs = authService.listLibraries(jf.url, jf.token, jf.userId)
+            _state.update { it.copy(librariesLoading = false, libraries = libs) }
         }
     }
 
@@ -166,9 +143,7 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
             val norm = normId(libraryId)
             profileRepository.updateConfig(active.id) { cfg ->
                 val current = cfg.jellyfinLibraryWhitelist.orEmpty()
-                val currentNorm = current.map(::normId)
-                val next = if (norm in currentNorm) {
-                    // odeber (porovnávej normalizovaně, ukládej původní tvar ostatních)
+                val next = if (current.any { normId(it) == norm }) {
                     current.filter { normId(it) != norm }
                 } else {
                     current + libraryId
@@ -198,13 +173,4 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return "https://$trimmed"
         return trimmed
     }
-}
-
-/** Filmové / seriálové / smíšené knihovny (RealDebrid/hudba/knihy vynech) — zrcadlí LibraryRowsViewModel. */
-private fun BaseItemDto.isMediaLibrary(): Boolean {
-    val ct = collectionType?.name?.uppercase()
-    val allowed = ct == null || ct == "MOVIES" || ct == "TVSHOWS" || ct == "MIXED"
-    if (!allowed) return false
-    val n = name?.lowercase() ?: return true
-    return !n.contains("realdebrid") && !n.contains("real-debrid")
 }

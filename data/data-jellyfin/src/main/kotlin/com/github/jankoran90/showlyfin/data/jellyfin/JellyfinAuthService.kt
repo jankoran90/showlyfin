@@ -4,6 +4,9 @@ import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 import org.jellyfin.sdk.api.client.extensions.authenticateUserByName
 import org.jellyfin.sdk.api.client.extensions.userApi
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
+import org.jellyfin.sdk.model.UUID
+import org.jellyfin.sdk.model.api.BaseItemDto
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,6 +22,9 @@ class JellyfinAuthService @Inject constructor(
     private val jellyfin: Jellyfin,
 ) {
     data class JfLogin(val token: String, val userId: String, val userName: String)
+
+    /** Jedna Jellyfin knihovna (pro výběr, které zobrazit). */
+    data class JfLibrary(val id: String, val name: String)
 
     sealed interface AuthOutcome {
         data class Success(val login: JfLogin) : AuthOutcome
@@ -69,5 +75,31 @@ class JellyfinAuthService @Inject constructor(
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * Vrátí filmové/seriálové/smíšené knihovny uživatele (přes jednorázové api — NEsahá na aktivní session).
+     * Pro výběr, které JF knihovny zobrazit (Filmy). RealDebrid/hudba/knihy vynechány.
+     */
+    suspend fun listLibraries(serverUrl: String, token: String, userId: String): List<JfLibrary> {
+        if (serverUrl.isBlank() || token.isBlank() || userId.isBlank()) return emptyList()
+        return try {
+            val api = jellyfin.createApi(baseUrl = serverUrl, accessToken = token)
+            val views = api.userViewsApi.getUserViews(userId = UUID.fromString(userId)).content
+            views.items.filter { it.isMediaLibrary() }
+                .map { JfLibrary(id = it.id.toString(), name = it.name ?: "Knihovna") }
+        } catch (e: Exception) {
+            Timber.w(e, "[VAULT] listLibraries selhalo")
+            emptyList()
+        }
+    }
+
+    /** Filmové / seriálové / smíšené knihovny (RealDebrid/hudba/knihy vynech). */
+    private fun BaseItemDto.isMediaLibrary(): Boolean {
+        val ct = collectionType?.name?.uppercase()
+        val allowed = ct == null || ct == "MOVIES" || ct == "TVSHOWS" || ct == "MIXED"
+        if (!allowed) return false
+        val n = name?.lowercase() ?: return true
+        return !n.contains("realdebrid") && !n.contains("real-debrid")
     }
 }
