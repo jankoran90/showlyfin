@@ -101,8 +101,8 @@ fun FilmyHomeScreen(
         val mi = item.mediaItem
         val jf = item.jellyfinId
         when {
-            // Řada „Uloženo k přehrání" (LAPIDARY) → detail rovnou spustí zapamatovaný zdroj (vzor TvHomeScreen).
-            mi != null && item.playDirectly -> onOpenDetailPlay(mi)
+            // Klik na kartu VŽDY jen otevře detail — žádný autoplay (user: nechci autoplay při otevření karty).
+            // Přehrání se spouští až explicitně z detailu. `playDirectly`/one-click zrušen.
             mi != null -> onOpenDetail(mi)
             jf != null -> onOpenJellyfinDetail(jf)
         }

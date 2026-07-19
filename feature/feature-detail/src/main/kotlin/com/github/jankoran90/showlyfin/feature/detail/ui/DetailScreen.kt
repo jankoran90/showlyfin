@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Reviews
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -801,7 +800,10 @@ private fun DetailActionBar(
         hasRemembered -> onPlayRemembered
         else -> null
     }
+    // Cast tlačítko (ikona Cast vedle „Přehrát"): u filmu se zapamatovaným zdrojem = přehraj rovnou v NAŠÍ Filmy
+    // appce na TV (fronta příkazů). Jinak legacy „na TV" (yellyfin box): knihovní JF položka / ostatní.
     val onTv: (() -> Unit)? = when {
+        isMovie && hasRemembered && onCastToFilmyTv != null -> onCastToFilmyTv
         inLibrary -> onNaTv
         hasRemembered -> onCastRemembered
         else -> null
@@ -859,14 +861,7 @@ private fun DetailActionBar(
                     leadingIcon = { Icon(Icons.Default.Download, null) },
                     onClick = { menuOpen = false; onDownload() },
                 )
-                // FILMYCAST — pošli film do Filmy appky na TV (jiná cesta než „na TV" box výše: fronta příkazů).
-                if (isMovie && onCastToFilmyTv != null) {
-                    DropdownMenuItem(
-                        text = { Text("Přehrát na Filmy TV") },
-                        leadingIcon = { Icon(Icons.Default.Tv, null) },
-                        onClick = { menuOpen = false; onCastToFilmyTv() },
-                    )
-                }
+                // FILMYCAST — přesunuto z ⋮ menu pod Cast tlačítko (viz `onTv` výše). User: akci chci pod cast button.
                 if (onShare != null) {
                     DropdownMenuItem(
                         text = { Text("Sdílet kartu") },

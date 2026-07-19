@@ -103,8 +103,8 @@ fun TvHomeScreen(
         val mi = item.mediaItem
         val jf = item.jellyfinId
         when {
-            // S4b: řada „Uloženo k přehrání" — zapamatovaný zdroj → přehraj rovnou (one-click).
-            mi != null && item.playDirectly -> onOpenDetailPlay(mi)
+            // Klik na kartu VŽDY jen otevře detail — žádný autoplay (user: nechci autoplay při otevření karty).
+            // Přehrání se spouští až explicitně z detailu (tlačítko Přehrát / zdroj). `playDirectly`/one-click zrušen.
             mi != null -> onOpenDetail(mi)
             jf != null -> onOpenJellyfinDetail(jf)
         }
