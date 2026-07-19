@@ -339,7 +339,7 @@ fun TvSettingsScreen(
                 var autoplayRemembered by remember { mutableStateOf(rdPrefs.getBoolean("autoplay_remembered_enabled", false)) }
                 TvToggleRow(
                     label = "Přehrát rovnou u zapamatovaného zdroje",
-                    subtitle = "Klik na kartu v řadě „Uloženo k přehrání" spustí přehrávání hned, místo otevření detailu",
+                    subtitle = "Klik na kartu v řadě \"Uloženo k přehrání\" spustí přehrávání hned, místo otevření detailu",
                     checked = autoplayRemembered,
                     onCheckedChange = { autoplayRemembered = it; rdPrefs.edit().putBoolean("autoplay_remembered_enabled", it).apply() },
                 )

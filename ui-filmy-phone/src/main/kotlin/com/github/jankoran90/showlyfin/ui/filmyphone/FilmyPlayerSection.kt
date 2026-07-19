@@ -72,7 +72,7 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
         )
         SettingSwitchRow(
             title = "Přehrát rovnou u zapamatovaného zdroje",
-            subtitle = "Klik na kartu v řadě „Uloženo k přehrání" spustí přehrávání hned, místo otevření detailu. " +
+            subtitle = "Klik na kartu v řadě \"Uloženo k přehrání\" spustí přehrávání hned, místo otevření detailu. " +
                 "Vypnuto = klik vždy jen otevře detail.",
             checked = autoplayRemembered,
             onCheckedChange = { autoplayRemembered = it; rdPrefs.edit().putBoolean("autoplay_remembered_enabled", it).apply() },
