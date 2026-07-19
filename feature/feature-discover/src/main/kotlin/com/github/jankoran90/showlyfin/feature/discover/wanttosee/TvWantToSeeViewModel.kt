@@ -1,13 +1,16 @@
 package com.github.jankoran90.showlyfin.feature.discover.wanttosee
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * Stav sekce „Chci vidět" — Trakt watchlist (nejnověji přidané první) + příznak načítání.
@@ -39,6 +43,8 @@ class TvWantToSeeViewModel @Inject constructor(
     private val traktLoader: TraktRowLoader,
     private val profileRepository: ProfileRepository,
     private val workingSources: WorkingSourceStore,
+    private val traktSyncSignal: TraktSyncSignal,
+    @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WantToSeeUiState())
@@ -48,6 +54,15 @@ class TvWantToSeeViewModel @Inject constructor(
 
     init {
         profileRepository.activeProfile
+            .onEach { reload() }
+            .launchIn(viewModelScope)
+
+        // CONVERGE — přidání/odebrání „Chci vidět" v detailu ([DetailViewModel.toggleWatchlist]) i Trakt LOGIN
+        // bumpne sdílený signál → přenačti (watchlist NENÍ reaktivní store). Bez tohohle „Chci vidět" po loginu
+        // zůstávalo prázdné, dokud Domů/Filmotéka (které signál poslouchají) se obnovily — sekce nikoli.
+        // drop(1) = iniciální emit pokryje reload z profilu výše.
+        traktSyncSignal.version
+            .drop(1)
             .onEach { reload() }
             .launchIn(viewModelScope)
 
@@ -65,12 +80,34 @@ class TvWantToSeeViewModel @Inject constructor(
         loadJob?.cancel()
         _state.value = _state.value.copy(loading = true)
         loadJob = viewModelScope.launch {
-            val items = traktLoader.watchlist("all")
+            var items = traktLoader.watchlist("all")
+            // Cold-start: nával paralelních Trakt requestů (Domů + Filmotéka + tato sekce naráz) může tuhle
+            // JEDINOU watchlist volání srazit 429/timeoutem (loader ho spolkne → prázdno), i když watchlist
+            // reálně máš. Retry než potvrdíme prázdný stav — nával odezní v pár s. JEN když je Trakt vůbec
+            // přihlášený, jinak (dětský profil bez Traktu) je prázdno správně a retry by zbytečně bušil.
+            var attempt = 0
+            while (items.isEmpty() && traktAllowed() && attempt < MAX_EMPTY_RETRY) {
+                delay(RETRY_DELAY_MS)
+                items = traktLoader.watchlist("all")
+                attempt++
+            }
             _state.value = WantToSeeUiState(items = items, loading = false, savedCount = countSaved(items))
         }
     }
 
+    /** Je Trakt přihlášený? (per-profil config-token NEBO pref-token = stejný zdroj pravdy jako autorizuje API;
+     *  vzor [com.github.jankoran90.showlyfin.feature.discover.filmoteka.TvFilmotekaViewModel].) */
+    private fun traktAllowed(): Boolean =
+        !profileRepository.activeConfig.value.credentials.trakt?.accessToken.isNullOrBlank() ||
+            !prefs.getString(KEY_TRAKT_ACCESS_TOKEN, null).isNullOrBlank()
+
     /** Kolik titulů watchlistu má lokálně zapamatovaný zdroj (per-profil, synchronní čtení z prefs). */
     private fun countSaved(items: List<MediaItem>): Int =
         items.count { workingSources.get(it.imdbId, it.tmdbId) != null }
+
+    private companion object {
+        const val KEY_TRAKT_ACCESS_TOKEN = "TRAKT_ACCESS_TOKEN"
+        const val MAX_EMPTY_RETRY = 3
+        const val RETRY_DELAY_MS = 1500L
+    }
 }
