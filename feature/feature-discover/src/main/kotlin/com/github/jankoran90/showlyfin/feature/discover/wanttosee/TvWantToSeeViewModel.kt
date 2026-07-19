@@ -80,6 +80,9 @@ class TvWantToSeeViewModel @Inject constructor(
         loadJob?.cancel()
         _state.value = _state.value.copy(loading = true)
         loadJob = viewModelScope.launch {
+            val cfgTok = profileRepository.activeConfig.value.credentials.trakt?.accessToken?.length ?: 0
+            val prefTok = prefs.getString(KEY_TRAKT_ACCESS_TOKEN, null)?.length ?: 0
+            timber.log.Timber.i("[WANTSEE] reload traktAllowed=%b cfgTokenLen=%d prefTokenLen=%d", traktAllowed(), cfgTok, prefTok)
             var items = traktLoader.watchlist("all")
             // Cold-start: nával paralelních Trakt requestů (Domů + Filmotéka + tato sekce naráz) může tuhle
             // JEDINOU watchlist volání srazit 429/timeoutem (loader ho spolkne → prázdno), i když watchlist
@@ -91,6 +94,7 @@ class TvWantToSeeViewModel @Inject constructor(
                 items = traktLoader.watchlist("all")
                 attempt++
             }
+            timber.log.Timber.i("[WANTSEE] reload DONE items=%d (after %d retry)", items.size, attempt)
             _state.value = WantToSeeUiState(items = items, loading = false, savedCount = countSaved(items))
         }
     }

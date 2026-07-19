@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.discover.trakt
 
 import android.util.Log
+import timber.log.Timber
 import com.github.jankoran90.showlyfin.core.domain.ContentAgeGate
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
@@ -40,13 +41,16 @@ class TraktRowLoader @Inject constructor(
         // FIX (2026-07-15): filmy a seriály NEZÁVISLE — pád jednoho sub-volání (429/timeout v návalu paralelních
         // Trakt requestů sekce Trakt) NESMÍ vynulovat druhý. Dřív jeden `runCatching` kolem obou → jeden timeout
         // smazal CELÝ watchlist (i filmy) → řada zmizela ze sekce (v Home lazy load prošla).
-        suspend fun movies() = runCatching { authorizedTraktApi.fetchSyncMoviesWatchlist() }.getOrElse { emptyList() }
-        suspend fun shows() = runCatching { authorizedTraktApi.fetchSyncShowsWatchlist() }.getOrElse { emptyList() }
+        suspend fun movies() = runCatching { authorizedTraktApi.fetchSyncMoviesWatchlist() }
+            .onFailure { Timber.w(it, "[WANTSEE] watchlist movies FAIL: %s", it.message) }.getOrElse { emptyList() }
+        suspend fun shows() = runCatching { authorizedTraktApi.fetchSyncShowsWatchlist() }
+            .onFailure { Timber.w(it, "[WANTSEE] watchlist shows FAIL: %s", it.message) }.getOrElse { emptyList() }
         val raw = when (kind) {
             "movies" -> movies()
             "shows" -> shows()
             else -> movies() + shows()
         }
+        Timber.i("[WANTSEE] watchlist(%s) raw=%d", kind, raw.size)
         Log.i(TAG, "watchlist($kind): ${raw.size} položek")
         // CATALOGUE — nes `listed_at` na položku (addedAtMs) pro stabilní řazení „Nedávno přidané" ve Filmotéce.
         return enrich(raw.sortedByDescending { it.lastListedMillis() }) { it.lastListedMillis() }
