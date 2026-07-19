@@ -40,6 +40,9 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
 ) : ViewModel() {
 
+    /** ORCHARD — plocha, pro kterou se vybírají JF knihovny (per-surface: Knihovna / Filmotéka / Domov). */
+    enum class JfSurface { LIBRARY, FILMOTEKA, HOME }
+
     data class State(
         val loading: Boolean = false,
         val error: String? = null,
@@ -47,8 +50,10 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
         val connectedServer: String? = null,
         val librariesLoading: Boolean = false,
         val libraries: List<JellyfinAuthService.JfLibrary> = emptyList(),
-        /** Normalizovaná id knihoven zapnutých ve whitelistu (prázdné = žádná se nezobrazí). */
-        val selectedLibraryIds: Set<String> = emptySet(),
+        /** Normalizovaná id vybraných knihoven PER PLOCHA. Prázdné = žádná; „null" (chybí klíč) semantiku
+         *  drží config (null=všechny) — v UI ukazujeme zaškrtnutí dle aktuálního configu (null → nic zaškrtnuto,
+         *  což u Knihovny znamená „všechny"; drobná nepřesnost akceptovaná, viz label). */
+        val selectedBySurface: Map<JfSurface, Set<String>> = emptyMap(),
     )
 
     private val _state = MutableStateFlow(State())
@@ -62,7 +67,11 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         connectedServer = url,
-                        selectedLibraryIds = cfg.jellyfinLibraryWhitelist.orEmpty().map(::normId).toSet(),
+                        selectedBySurface = mapOf(
+                            JfSurface.LIBRARY to cfg.jellyfinLibraryWhitelist.orEmpty().map(::normId).toSet(),
+                            JfSurface.FILMOTEKA to cfg.filmotekaJfLibraries.orEmpty().map(::normId).toSet(),
+                            JfSurface.HOME to cfg.homeJfLibraries.orEmpty().map(::normId).toSet(),
+                        ),
                     )
                 }
             }
@@ -92,8 +101,9 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
                     val userId = login.userId.ifBlank { active.jellyfinUserId }
                     val base = ProfileConfig.fromJson(active.configJson)
                     val merged = base.copy(
-                        // Default opt-in: dokud si user knihovny nevybere, žádná se nezobrazí (domov se nezaspamuje).
-                        jellyfinLibraryWhitelist = base.jellyfinLibraryWhitelist ?: emptyList(),
+                        // Home opt-in: dokud si user knihovny na domov nevybere, žádná se tam nezobrazí (nezaspamuje).
+                        // Knihovna zůstává null=všechny (user: „v knihovně klidně vše"). Filmotéka řeší JF-zdroj toggle.
+                        homeJfLibraries = base.homeJfLibraries ?: emptyList(),
                         credentials = base.credentials.copy(
                             jellyfin = JellyfinCreds(
                                 url = url,
@@ -136,19 +146,27 @@ class FilmyJellyfinLoginViewModel @Inject constructor(
         }
     }
 
-    /** Zapni/vypni knihovnu ve whitelistu (které se zobrazí na domově i v sekci Knihovna). Persist per profil. */
-    fun toggleLibrary(libraryId: String) {
+    /** Zapni/vypni knihovnu pro danou plochu (Knihovna/Filmotéka/Domov). Persist per profil. */
+    fun toggleLibrary(libraryId: String, surface: JfSurface) {
         val active = profileRepository.activeProfile.value ?: return
         viewModelScope.launch {
             val norm = normId(libraryId)
             profileRepository.updateConfig(active.id) { cfg ->
-                val current = cfg.jellyfinLibraryWhitelist.orEmpty()
+                val current = when (surface) {
+                    JfSurface.LIBRARY -> cfg.jellyfinLibraryWhitelist
+                    JfSurface.FILMOTEKA -> cfg.filmotekaJfLibraries
+                    JfSurface.HOME -> cfg.homeJfLibraries
+                }.orEmpty()
                 val next = if (current.any { normId(it) == norm }) {
                     current.filter { normId(it) != norm }
                 } else {
                     current + libraryId
                 }
-                cfg.copy(jellyfinLibraryWhitelist = next)
+                when (surface) {
+                    JfSurface.LIBRARY -> cfg.copy(jellyfinLibraryWhitelist = next)
+                    JfSurface.FILMOTEKA -> cfg.copy(filmotekaJfLibraries = next)
+                    JfSurface.HOME -> cfg.copy(homeJfLibraries = next)
+                }
             }
         }
     }

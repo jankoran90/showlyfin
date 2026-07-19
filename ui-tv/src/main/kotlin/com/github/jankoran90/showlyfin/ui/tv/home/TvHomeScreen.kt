@@ -52,7 +52,7 @@ fun TvHomeScreen(
 
     // COUCH R2: JF knihovní řady přenačti i při PŘEPNUTÍ profilu (nejen jednou) — jiný profil = jiné knihovny.
     val activeProfileId by homeVm.activeProfileId.collectAsStateWithLifecycle()
-    LaunchedEffect(activeProfileId) { libraryVm.load() }
+    LaunchedEffect(activeProfileId) { libraryVm.load(com.github.jankoran90.showlyfin.feature.jellyfin.LibrarySurface.HOME) }
     // Seed-once řad per knihovna, jakmile známe seznam (neprázdné) knihoven.
     LaunchedEffect(libraryState.rows) {
         val libs = libraryState.rows.map { LibrarySummary(it.libraryId, it.libraryName, it.collectionType) }

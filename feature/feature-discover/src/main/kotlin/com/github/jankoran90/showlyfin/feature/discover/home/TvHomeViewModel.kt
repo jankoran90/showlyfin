@@ -376,9 +376,11 @@ class TvHomeViewModel @Inject constructor(
      * dokud user nevybere knihovnu); jinak scope resume/next-up jen na vybrané knihovny. Bez tohoto „Pokračovat"/
      * „Další díly" táhly z CELÉHO serveru napříč nezvolenými knihovnami (spam home).
      */
-    private fun jellyfinLibraryUuids(): List<UUID>? =
-        profileRepository.activeConfig.value.jellyfinLibraryWhitelist
-            ?.mapNotNull { it.toUuidOrNull() }
+    private fun jellyfinLibraryUuids(): List<UUID>? {
+        val cfg = profileRepository.activeConfig.value
+        // Home výběr; fallback na Knihovnu (showlyfin paritu) když home-výběr není nastaven (null).
+        return (cfg.homeJfLibraries ?: cfg.jellyfinLibraryWhitelist)?.mapNotNull { it.toUuidOrNull() }
+    }
 
     private suspend fun resumeItems(userUuid: UUID, limit: Int, libraries: List<UUID>?): List<BaseItemDto> {
         if (libraries == null) {

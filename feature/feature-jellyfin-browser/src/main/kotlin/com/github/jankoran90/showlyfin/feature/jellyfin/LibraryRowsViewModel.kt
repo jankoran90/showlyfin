@@ -32,6 +32,9 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
 
+/** ORCHARD — plocha, pro kterou se JF knihovny filtrují (per-surface výběr): sekce Knihovna vs Domov. */
+enum class LibrarySurface { LIBRARY, HOME }
+
 /**
  * „Knihovna" pohledem z Traktu: pro každou Jellyfin filmovou/seriálovou knihovnu jedna
  * horizontální řada. Match Jellyfin položky na TMDB: providerId Tmdb → fallback title+year
@@ -53,7 +56,7 @@ class LibraryRowsViewModel @Inject constructor(
     // Nastavení → Detail z knihovny: bohatý (Trakt detail) vs jednoduchý (Jellyfin karta).
     private val detailRich get() = prefs.getBoolean("detail_mode_rich", true)
 
-    fun load() {
+    fun load(surface: LibrarySurface = LibrarySurface.LIBRARY) {
         viewModelScope.launch {
             val serverUrl = prefs.getString("jellyfin_server_url", "") ?: ""
             val token = prefs.getString("jellyfin_token", "") ?: ""
@@ -72,11 +75,15 @@ class LibraryRowsViewModel @Inject constructor(
                 )
                 val userUuid = UUID.fromString(userId)
                 val views = apiClient.userViewsApi.getUserViews(userId = userUuid).content
-                // Plan PROFILES 1E: whitelist knihoven z aktivního profilu (null = všechny).
-                // Plan VAULT: backend posílá ids BEZ pomlček, SDK UUID.toString() je S pomlčkami →
-                // bez normalizace je průnik vždy prázdný (= prázdná Knihovna u profilů s whitelistem).
-                val whitelist = profileRepository.activeConfig.value.jellyfinLibraryWhitelist
-                    ?.map { it.replace("-", "").lowercase() }?.toSet()
+                // ORCHARD (user 07-19) — PER-SURFACE výběr knihoven. Knihovna = jellyfinLibraryWhitelist;
+                // Home = homeJfLibraries (fallback na Knihovnu kvůli showlyfin paritě). null = všechny; prázdné =
+                // žádná. Plan VAULT: backend posílá ids BEZ pomlček, SDK UUID.toString() S pomlčkami → normalizuj.
+                val cfg = profileRepository.activeConfig.value
+                val selected = when (surface) {
+                    LibrarySurface.LIBRARY -> cfg.jellyfinLibraryWhitelist
+                    LibrarySurface.HOME -> cfg.homeJfLibraries ?: cfg.jellyfinLibraryWhitelist
+                }
+                val whitelist = selected?.map { it.replace("-", "").lowercase() }?.toSet()
                 val mediaViews = views.items.filter { it.isMediaLibrary() }
                     .let { list ->
                         if (whitelist == null) list

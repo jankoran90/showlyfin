@@ -61,7 +61,7 @@ fun FilmyHomeScreen(
     val activeProfileId by homeVm.activeProfileId.collectAsStateWithLifecycle()
 
     // JF knihovní řady přenačti při přepnutí profilu (jiný profil = jiné knihovny). Vzor TvHomeScreen.
-    LaunchedEffect(activeProfileId) { libraryVm.load() }
+    LaunchedEffect(activeProfileId) { libraryVm.load(com.github.jankoran90.showlyfin.feature.jellyfin.LibrarySurface.HOME) }
     LaunchedEffect(libraryState.rows) {
         val libs = libraryState.rows.map { LibrarySummary(it.libraryId, it.libraryName, it.collectionType) }
         if (libs.isNotEmpty()) homeVm.syncLibraries(libs)

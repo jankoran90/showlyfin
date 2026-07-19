@@ -130,27 +130,32 @@ fun FilmySettingsScreen(
                         )
                         TextButton(onClick = { jellyfinVm.disconnect() }) { Text("Odhlásit") }
                     }
-                    // Výběr knihoven — které se zobrazí na domově i v sekci Knihovna (opt-in, aby se domov nezaspamoval).
+                    // PER-SURFACE výběr knihoven — zvlášť pro Knihovnu, Filmotéku a Domov (user 07-19).
                     LaunchedEffect(jfServer) { jellyfinVm.loadLibraries() }
-                    Text(
-                        text = "Vyber, které knihovny zobrazit. Zaškrtnuté se objeví na domově i v sekci Knihovna " +
-                            "(nezaškrtnuté zůstanou skryté, aby se domov nezaspamoval).",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                     if (jellyfinState.librariesLoading && jellyfinState.libraries.isEmpty()) {
                         Text("Načítám knihovny…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    jellyfinState.libraries.forEach { lib ->
-                        val checked = normalizeLibId(lib.id) in jellyfinState.selectedLibraryIds
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().clickable { jellyfinVm.toggleLibrary(lib.id) },
-                        ) {
-                            Checkbox(checked = checked, onCheckedChange = { jellyfinVm.toggleLibrary(lib.id) })
-                            Text(lib.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
-                        }
-                    }
+                    JfLibraryPicker(
+                        title = "Knihovny v sekci Knihovna",
+                        subtitle = "Nic nezaškrtnuto = zobrazí se všechny.",
+                        libraries = jellyfinState.libraries,
+                        selected = jellyfinState.selectedBySurface[FilmyJellyfinLoginViewModel.JfSurface.LIBRARY].orEmpty(),
+                        onToggle = { jellyfinVm.toggleLibrary(it, FilmyJellyfinLoginViewModel.JfSurface.LIBRARY) },
+                    )
+                    JfLibraryPicker(
+                        title = "Knihovny na Domově",
+                        subtitle = "Zaškrtnuté se objeví na domově (řady, Pokračovat, Další díly). Nic = žádná.",
+                        libraries = jellyfinState.libraries,
+                        selected = jellyfinState.selectedBySurface[FilmyJellyfinLoginViewModel.JfSurface.HOME].orEmpty(),
+                        onToggle = { jellyfinVm.toggleLibrary(it, FilmyJellyfinLoginViewModel.JfSurface.HOME) },
+                    )
+                    JfLibraryPicker(
+                        title = "Knihovny ve Filmotéce",
+                        subtitle = "Nejdřív zapni JF zdroj Filmotéky (níže). Nic nezaškrtnuto = všechny.",
+                        libraries = jellyfinState.libraries,
+                        selected = jellyfinState.selectedBySurface[FilmyJellyfinLoginViewModel.JfSurface.FILMOTEKA].orEmpty(),
+                        onToggle = { jellyfinVm.toggleLibrary(it, FilmyJellyfinLoginViewModel.JfSurface.FILMOTEKA) },
+                    )
                 } else {
                     Button(onClick = { showJellyfinLogin = true }) { Text("Přihlásit k Jellyfinu") }
                 }
@@ -235,3 +240,27 @@ fun FilmySettingsScreen(
 
 /** Normalizace JF id knihovny (bez pomlček, malá písmena) — musí sedět s [FilmyJellyfinLoginViewModel]. */
 private fun normalizeLibId(id: String): String = id.replace("-", "").lowercase()
+
+/** ORCHARD — jeden per-surface výběr JF knihoven (zaškrtávátka). [selected] = normalizovaná id. */
+@Composable
+private fun JfLibraryPicker(
+    title: String,
+    subtitle: String,
+    libraries: List<com.github.jankoran90.showlyfin.data.jellyfin.JellyfinAuthService.JfLibrary>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
+) {
+    if (libraries.isEmpty()) return
+    SettingSectionTitle(title)
+    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    libraries.forEach { lib ->
+        val checked = normalizeLibId(lib.id) in selected
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().clickable { onToggle(lib.id) },
+        ) {
+            Checkbox(checked = checked, onCheckedChange = { onToggle(lib.id) })
+            Text(lib.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+        }
+    }
+}

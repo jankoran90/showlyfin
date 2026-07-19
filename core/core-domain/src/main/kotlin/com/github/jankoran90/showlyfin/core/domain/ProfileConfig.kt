@@ -43,8 +43,16 @@ data class ProfileConfig(
     // [migrateLegacySections]; nový kód je needituje ani neukládá (po migraci se nulují).
     val visibleSections: Set<String> = emptySet(),
     val visibleSectionsTv: Set<String>? = null,
-    /** Povolené Jellyfin library ids. null = všechny. Prázdný seznam = žádná (záměrně). */
+    /** Povolené Jellyfin library ids pro sekci KNIHOVNA. null = všechny. Prázdný seznam = žádná (záměrně). */
     val jellyfinLibraryWhitelist: List<String>? = null,
+    /**
+     * ORCHARD (user 07-19) — PER-SURFACE výběr JF knihoven. [jellyfinLibraryWhitelist] platí pro Knihovnu;
+     * tyto dvě pro Filmotéku a Home ZVLÁŠŤ (user chce vybrat, které JF knihovny se kde zobrazí — jinak se do
+     * Filmotéky/Home táhne vše bez ohledu na výběr Knihovny). Semantika stejná: null = všechny, prázdné = žádná.
+     * Home se defaultně nastaví na prázdné při JF loginu (opt-in, aby se domov nezaspamoval).
+     */
+    val filmotekaJfLibraries: List<String>? = null,
+    val homeJfLibraries: List<String>? = null,
     /**
      * Povolené Audiobookshelf knihovny (police) v sekci Poslech (Plan PROFILES Fáze 4E). Ids platí pro
      * audioknihy i podcasty. null = všechny. Prázdný seznam = žádná (skryje vše v Poslechu).
@@ -259,6 +267,8 @@ data class ProfileConfig(
                 subsectionOrder = template.subsectionOrder.ifEmpty { override.subsectionOrder },
                 libraryOrder = template.libraryOrder.ifEmpty { override.libraryOrder },
                 jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist ?: override.jellyfinLibraryWhitelist,
+                filmotekaJfLibraries = template.filmotekaJfLibraries ?: override.filmotekaJfLibraries,
+                homeJfLibraries = template.homeJfLibraries ?: override.homeJfLibraries,
                 absLibraryWhitelist = template.absLibraryWhitelist ?: override.absLibraryWhitelist,
                 hiddenPodcastIds = template.hiddenPodcastIds.ifEmpty { override.hiddenPodcastIds },
                 allowedGenres = template.allowedGenres.ifEmpty { override.allowedGenres },

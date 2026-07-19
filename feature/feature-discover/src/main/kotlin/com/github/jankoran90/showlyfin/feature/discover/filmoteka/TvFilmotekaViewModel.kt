@@ -287,9 +287,17 @@ class TvFilmotekaViewModel @Inject constructor(
 
     private suspend fun loadJellyfinLibrary(): List<MediaItem> = coroutineScope {
         val session = prepareJellyfin() ?: return@coroutineScope emptyList()
+        // ORCHARD (user 07-19) — Filmotéka respektuje SVŮJ výběr JF knihoven (filmotekaJfLibraries; null = všechny,
+        // prázdné = žádná). Dřív se táhly všechny JF knihovny bez ohledu na výběr → do Filmotéky prosakovalo vše.
+        val filmoWhitelist = profileRepository.activeConfig.value.filmotekaJfLibraries
+            ?.map { it.replace("-", "").lowercase() }?.toSet()
         val views = runCatching { apiClient.userViewsApi.getUserViews(session.userUuid).content.items }
             .getOrElse { Timber.w(it, "[Filmoteka] getUserViews selhalo"); emptyList() }
             .filter { it.isFilmotekaLibrary() }
+            .let { list ->
+                if (filmoWhitelist == null) list
+                else list.filter { it.id.toString().replace("-", "").lowercase() in filmoWhitelist }
+            }
         views.map { view ->
             async {
                 runCatching {
