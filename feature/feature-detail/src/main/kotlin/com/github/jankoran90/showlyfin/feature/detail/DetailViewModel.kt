@@ -1079,10 +1079,15 @@ class DetailViewModel @Inject constructor(
             val subQuery = st.pendingSubtitleQuery?.origTitle?.takeIf { it.isNotBlank() }
                 ?: item?.originalTitle?.takeIf { it.isNotBlank() }
                 ?: st.movieDetails?.original_title
+            // CROSS-DEVICE RESUME: telefonní pozice přehrávání filmu (kde jsi skončil) → pošli TV, ať naváže.
+            // Klíč = `resume_<imdb>` (shodný s `PlaybackViewModel.resumeKeyOf` pro film s imdb; ukládá
+            // `saveExternalPosition`). Bez imdb / bez uložené pozice = 0 → TV spustí od začátku / z vlastní pozice.
+            val resumePosMs = item?.imdbId?.takeIf { it.isNotBlank() }
+                ?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
             val ok = runCatching {
                 workingSourceStore.castToTv(
                     imdb = item?.imdbId, tmdb = item?.tmdbId, title = title, year = item?.year,
-                    sourceUrl = url, positionMs = 0L, posterUrl = poster, subtitleQuery = subQuery,
+                    sourceUrl = url, positionMs = resumePosMs, posterUrl = poster, subtitleQuery = subQuery,
                 )
             }.getOrDefault(false)
             _uiState.update {

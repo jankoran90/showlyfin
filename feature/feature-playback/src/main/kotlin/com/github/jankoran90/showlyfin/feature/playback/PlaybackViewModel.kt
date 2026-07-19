@@ -135,7 +135,7 @@ class PlaybackViewModel @Inject constructor(
     private var translateObserveJob: Job? = null
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
-    fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null, posterUrl: String? = null) {
+    fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null, posterUrl: String? = null, externalResumeMs: Long = 0L) {
         // PICKUP: u externích streamů (Stremio/RD) si pozici pamatujeme lokálně (Jellyfin ji řeší přes
         // server). Titulky vyžadují imdb (gate beze změny), ALE resume klíčujeme přes resumeKeyOf, který
         // má fallback na název+rok — obsah z Objevit/doporučení má imdb zatím prázdné (TMDB ho dohledá
@@ -144,8 +144,11 @@ class PlaybackViewModel @Inject constructor(
         // držíme dál (resume musí fungovat i bez titulků).
         query = subtitleQuery?.takeIf { it.imdb.isNotBlank() && it.autoSearch }
         resumeKey = subtitleQuery?.let { resumeKeyOf(it) }
-        val savedResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
-        timber.log.Timber.i("[PICKUP] loadExternal resumeKey=%s saved=%d autoSearch=%s url=%s", resumeKey, savedResume, subtitleQuery?.autoSearch, url.take(70))
+        val localResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
+        // CROSS-DEVICE RESUME: pozice z telefonu (cast příkaz) přebije lokální resume TV, když je >0
+        // (a je novější / dál — telefon právě odtud castoval). Bez ní = vlastní lokální resume TV.
+        val savedResume = externalResumeMs.takeIf { it > 0L } ?: localResume
+        timber.log.Timber.i("[PICKUP] loadExternal resumeKey=%s saved=%d (ext=%d local=%d) autoSearch=%s url=%s", resumeKey, savedResume, externalResumeMs, localResume, subtitleQuery?.autoSearch, url.take(70))
         // Nový stream → VŽDY vyhoď titulky z předchozího filmu. Bez tohohle by film bez vlastních
         // titulků (0 kandidátů / prázdné imdb → loadSubtitles se brzy vrátí) dál promítal cues
         // z minule přehraného filmu = „české titulky na úplně jiný film" (Old Joy). loadSubtitles

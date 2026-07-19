@@ -201,6 +201,8 @@ fun PlaybackScreen(
     subtitleQuery: SubtitleQuery? = null,
     // MARQUEE: plakát do notifikace u externích streamů (Stremio/RD); Jellyfin si ho odvodí ViewModel.
     externalPosterUrl: String? = null,
+    // CROSS-DEVICE RESUME (cast telefon→TV): start-pozice z telefonu (ms); >0 přebije lokální resume TV.
+    externalStartMs: Long = 0L,
     // NOMAD (SHW-60): offline přehrání staženého souboru z telefonu (file://) + lokální .srt + resume klíč.
     localVideoPath: String? = null,
     localSubtitlePath: String? = null,
@@ -216,7 +218,7 @@ fun PlaybackScreen(
 ) {
     LaunchedEffect(itemId, externalUrl, localVideoPath) {
         if (localVideoPath != null) viewModel.loadLocal(localVideoPath, localSubtitlePath, externalTitle, offlineKey, localPosterPath)
-        else if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl)
+        else if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl, externalStartMs)
         else viewModel.load(itemId, positionMs, resumeKey, externalTitle)
     }
 

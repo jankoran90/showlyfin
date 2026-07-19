@@ -90,6 +90,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
                     externalTitle = cmd.title,
                     subtitleQuery = cmd.subtitleQuery,
                     externalPosterUrl = cmd.posterUrl,
+                    externalStartMs = cmd.positionMs,   // cross-device resume: naváž kde telefon skončil
                 ),
             )
         },
@@ -224,6 +225,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             externalTitle = dest.externalTitle,
             subtitleQuery = dest.subtitleQuery,
             externalPosterUrl = dest.externalPosterUrl,
+            externalStartMs = dest.externalStartMs,
             onBack = { back() },
         )
     }

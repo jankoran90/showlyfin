@@ -37,6 +37,8 @@ sealed interface TvDestination {
         val externalTitle: String = "",
         val subtitleQuery: SubtitleQuery? = null,
         val externalPosterUrl: String? = null,
+        // CROSS-DEVICE RESUME (cast telefon→TV): start-pozice z telefonu (ms); 0 = od začátku / vlastní resume TV.
+        val externalStartMs: Long = 0L,
     ) : TvDestination
 
     /**
