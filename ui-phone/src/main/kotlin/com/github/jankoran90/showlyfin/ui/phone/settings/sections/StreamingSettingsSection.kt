@@ -188,6 +188,8 @@ internal fun StreamingSettingsSection(
                 val pp = remember { ppCtx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
                 var codec by remember { mutableStateOf(pp.getString(StreamPresetStore.KEY_CODEC, StreamPresetStore.CODEC_ANY) ?: StreamPresetStore.CODEC_ANY) }
                 var maxRes by remember { mutableStateOf(pp.getString(StreamPresetStore.KEY_MAXRES, StreamPresetStore.RES_ANY) ?: StreamPresetStore.RES_ANY) }
+                var cachedFirst by remember { mutableStateOf(pp.getBoolean(StreamPresetStore.KEY_CACHED_FIRST, true)) }
+                var preferBitstream by remember { mutableStateOf(pp.getBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.TV_PREFER_BITSTREAM_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_TV_PREFER_BITSTREAM)) }
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.padding(16.dp)) {
                         ListenInfoText("Nastav jednou pro tohle zařízení a nesahej. V autě (slabý head unit, který seká na HEVC) zvol H.264 — appka pak při výběru zdroje preferuje H.264 verzi filmu, když existuje. Doma na TV/AVR nech Auto. Volba je jen na tomhle zařízení, ostatní se nezmění.")
@@ -213,6 +215,19 @@ internal fun StreamingSettingsSection(
                             selected = maxRes,
                             onSelect = { maxRes = it; pp.edit().putString(StreamPresetStore.KEY_MAXRES, it).apply() },
                         )
+                        Spacer(Modifier.height(12.dp))
+                        // Bod 3 — cached zdroje první: plynulý, plně stažený RD zdroj má přednost před necachovaným.
+                        FilterSwitchRow("Preferovat cachované zdroje", cachedFirst) { v ->
+                            cachedFirst = v; pp.edit().putBoolean(StreamPresetStore.KEY_CACHED_FIRST, v).apply()
+                        }
+                        ListenInfoText("Plně stažené (cached) zdroje na Real-Debrid dej v nabídce první — hrají hned a plynule. Necachované (teprve by se stahovaly) spadnou níž.")
+                        Spacer(Modifier.height(8.dp))
+                        // Audio bitstream na TV — preferuj Dolby/DTS stopu (passthrough do AVR) místo dekódované PCM.
+                        FilterSwitchRow("TV: preferovat bitstream zvuk (Dolby/DTS)", preferBitstream) { v ->
+                            preferBitstream = v
+                            pp.edit().putBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.TV_PREFER_BITSTREAM_KEY, v).apply()
+                        }
+                        ListenInfoText("Když má film víc zvukových stop a jedna je Dolby Digital/DD+/DTS/TrueHD, na TV ji vyber přednostně → AVR dostane bitstream (rozsvítí Dolby/DTS) místo dekódované PCM. Filmy jen s AAC beze změny (AAC nejde poslat jako bitstream). Projeví se při příštím přehrání.")
                     }
                 }
             }

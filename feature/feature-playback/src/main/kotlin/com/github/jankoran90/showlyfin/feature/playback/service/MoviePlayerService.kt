@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.common.util.UnstableApi
@@ -130,14 +131,29 @@ class MoviePlayerService : MediaSessionService() {
             )
         if (boxAudio) {
             // Audio offload (parita s yellyfinem) — kratší DSP cesta při passthrough → stabilnější A/V sync.
+            // + BITSTREAM PREFERENCE (user 2026-07-19): má-li film víc audio stop, preferuj passthrough-able
+            //   kodek (DD/DD+/DTS/TrueHD) → AVR dostane bitstream místo dekódované PCM. U AAC-only beze změny.
+            val preferBitstream = prefs.getBoolean(
+                PlayerPrefs.TV_PREFER_BITSTREAM_KEY, PlayerPrefs.DEFAULT_TV_PREFER_BITSTREAM,
+            )
             builder.setTrackSelector(
                 DefaultTrackSelector(applicationContext).apply {
                     setParameters(
-                        buildUponParameters().setAudioOffloadPreferences(
-                            AudioOffloadPreferences.Builder()
-                                .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
-                                .build(),
-                        ),
+                        buildUponParameters()
+                            .setAudioOffloadPreferences(
+                                AudioOffloadPreferences.Builder()
+                                    .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+                                    .build(),
+                            )
+                            .apply {
+                                if (preferBitstream) {
+                                    setPreferredAudioMimeTypes(
+                                        MimeTypes.AUDIO_E_AC3_JOC, MimeTypes.AUDIO_E_AC3,
+                                        MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_DTS_HD,
+                                        MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_TRUEHD,
+                                    )
+                                }
+                            },
                     )
                 },
             )

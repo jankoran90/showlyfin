@@ -105,12 +105,13 @@ object RobustStreamHttp {
             val suspiciousFullBody = range != null && !range.trimStart().startsWith("bytes=0-") &&
                 resp.code == 200
             val flag = if (suspiciousFullBody) "  ⚠️RANGE-IGNORED(200-na-offset)" else ""
-            Timber.tag(TAG).i(
-                "REQ %s range=%s → %d in %dms cr=%s len=%s ar=%s%s",
-                hostPath(req.url.toString()), range ?: "-", resp.code, ms,
-                contentRange ?: "-", resp.header("Content-Length") ?: "-",
-                resp.header("Accept-Ranges") ?: "-", flag,
-            )
+            val line = "REQ ${hostPath(req.url.toString())} range=${range ?: "-"} → ${resp.code} in ${ms}ms " +
+                "cr=${contentRange ?: "-"} len=${resp.header("Content-Length") ?: "-"} " +
+                "ar=${resp.header("Accept-Ranges") ?: "-"}$flag"
+            Timber.tag(TAG).i(line)
+            // V release jde Timber jen do BufferTree (ne logcat) → duplikuj do android.util.Log, ať jde Range
+            // proof číst živě přes adb logcat z boxu. WARN u podezřelé odpovědi (RANGE-IGNORED) ať vyskočí.
+            if (suspiciousFullBody) android.util.Log.w(TAG, line) else android.util.Log.i(TAG, line)
             return resp
         }
 
@@ -134,14 +135,14 @@ object RobustStreamHttp {
             val code = (ex as? HttpDataSource.InvalidResponseCodeException)?.responseCode
             // Mrtvý efemérní odkaz — retry nemá smysl (vrátí to samé). Padni hned → RELAY re-resolve.
             if (code != null && code in DEAD_LINK_CODES) {
-                Timber.tag(TAG).w("HTTP %d (mrtvý odkaz) → fail-fast, RELAY re-resolve (pokus #%d)",
-                    code, loadErrorInfo.errorCount)
+                val m = "HTTP $code (mrtvý odkaz) → fail-fast, RELAY re-resolve (pokus #${loadErrorInfo.errorCount})"
+                Timber.tag(TAG).w(m); android.util.Log.w(TAG, m)
                 return C.TIME_UNSET
             }
             // Dočasné IO (timeout/reset/5xx/503): trpělivý lineární backoff, ať RD stihne „zteplat".
             val delay = min(loadErrorInfo.errorCount.toLong() * 2000L, 8000L)
-            Timber.tag(TAG).i("retry #%d za %dms (%s)",
-                loadErrorInfo.errorCount, delay, ex.javaClass.simpleName)
+            val m = "retry #${loadErrorInfo.errorCount} za ${delay}ms (${ex.javaClass.simpleName})"
+            Timber.tag(TAG).i(m); android.util.Log.i(TAG, m)
             return delay
         }
 

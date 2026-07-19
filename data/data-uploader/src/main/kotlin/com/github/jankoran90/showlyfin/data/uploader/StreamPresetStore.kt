@@ -30,6 +30,13 @@ class StreamPresetStore @Inject constructor(
         get() = prefs.getString(KEY_MAXRES, RES_ANY) ?: RES_ANY
         set(v) { prefs.edit().putString(KEY_MAXRES, v).apply() }
 
+    /** CACHED-FIRST (bod 3, user 2026-07-19): plně cachované RD zdroje (rdReady/rdSaved = 100% na RD,
+     *  hrají hned a plynule) preferovat před necachovanými (rdDownloadable = teprve by se stahovaly →
+     *  pomalé/zasekané). Default ZAP. Per-device (trakt_prefs). */
+    var cachedFirst: Boolean
+        get() = prefs.getBoolean(KEY_CACHED_FIRST, true)
+        set(v) { prefs.edit().putBoolean(KEY_CACHED_FIRST, v).apply() }
+
     /** Stabilní re-rank seznamu dle aktivního presetu (zachová serverové pořadí uvnitř skupin). */
     fun orderStreams(list: List<UploaderStream>): List<UploaderStream> {
         if (list.size < 2) return list
@@ -41,6 +48,9 @@ class StreamPresetStore @Inject constructor(
             val cap = resRank(r)
             out = out.sortedBy { resRank(it.quality.resolution) > cap }  // false (v limitu) první
         }
+        // Cached-first jako POSLEDNÍ (nejsilnější) stabilní pass → plynulý cached zdroj vždy nahoře,
+        // uvnitř cached/necached skupiny zůstane kodek/rozlišení řazení z předchozích passů.
+        if (cachedFirst) out = out.sortedByDescending { it.quality.rdReady || it.quality.rdSaved }
         return out
     }
 
@@ -72,5 +82,6 @@ class StreamPresetStore @Inject constructor(
         // Public — čte/píše i UI Nastavení přímo do trakt_prefs (per-device volba přehrávání).
         const val KEY_CODEC = "stream_preset_codec"
         const val KEY_MAXRES = "stream_preset_maxres"
+        const val KEY_CACHED_FIRST = "stream_preset_cached_first"
     }
 }

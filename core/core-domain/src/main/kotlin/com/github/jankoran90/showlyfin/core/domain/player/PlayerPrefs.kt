@@ -35,4 +35,14 @@ object PlayerPrefs {
      */
     const val FORCE_SW_DECODER_KEY = "player_force_sw_decoder"
     const val DEFAULT_FORCE_SW_DECODER = false
+
+    /**
+     * Na TV preferovat BITSTREAM (passthrough) zvukovou stopu — když má film víc audio stop a jedna z nich je
+     * passthrough-able kodek (Dolby Digital/DD+/DTS/TrueHD), vyber ji přednostně → AVR dostane bitstream (rozsvítí
+     * „Dolby/DTS") místo dekódované PCM. `true` = preferuj bitstream stopu; `false` = ponech výchozí výběr (nejvíc
+     * kanálů/bitrate). U filmů co mají JEN AAC/PCM beze změny (AAC nejde passthroughovat, PCM je správně). Čte
+     * `MoviePlayerService` (jen TV, boxAudio větev), projeví se při příštím přehrání.
+     */
+    const val TV_PREFER_BITSTREAM_KEY = "player_tv_prefer_bitstream"
+    const val DEFAULT_TV_PREFER_BITSTREAM = true
 }
