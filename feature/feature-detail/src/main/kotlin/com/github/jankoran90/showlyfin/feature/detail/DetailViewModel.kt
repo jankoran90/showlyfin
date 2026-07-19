@@ -172,6 +172,33 @@ class DetailViewModel @Inject constructor(
             if (cur.item?.tmdbId == item.tmdbId && cur.rememberedSource == null) {
                 _uiState.update { it.copy(rememberedSource = fresh) }
             }
+            // Bod 3 (2026-07-19): RD cachovaný torrent po čase EVIKUJE → zapamatovaný zdroj zvětrá, ale pořád
+            // se tváří jako cached (rdReady/rdSaved) → přehrávač na něj skočí „instant" → tichý zásek. Ověř,
+            // že je STÁLE stažený na RD; když ne, sesaď příznaky (→ playStream ukáže stahování místo záseku,
+            // hvězda/badge přestane lhát) a znovu nacachuj na pozadí, ať je příště zase instant.
+            reverifyRememberedCached(item)
+        }
+    }
+
+    /** Bod 3 re-verify jednoho zapamatovaného zdroje proti živému RD účtu. Levné (backend cache 60 s). */
+    private suspend fun reverifyRememberedCached(item: MediaItem) {
+        val rem = _uiState.value.rememberedSource ?: return
+        if (!(rem.quality.rdReady || rem.quality.rdSaved)) return  // downloadable/sdilej/url = není co ověřovat
+        val hash = rem.infoHash?.takeIf { it.isNotBlank() } ?: return  // jen RD torrent má infoHash
+        val stillCached = runCatching { uploaderDs.rdCached(uploaderBaseUrl, uploaderCookie, hash) }.getOrDefault(true)
+        if (stillCached) return
+        timber.log.Timber.w("[bod3] zapamatovaný zdroj hash=$hash už NENÍ cached na RD (evikován) → sesazuji na downloadable + re-cache")
+        val downgraded = rem.copy(quality = rem.quality.copy(rdReady = false, rdSaved = false, rdDownloadable = true))
+        _uiState.update { st ->
+            if (st.item?.tmdbId == item.tmdbId && sameSource(st.rememberedSource, rem)) {
+                st.copy(rememberedSource = downgraded)
+            } else st
+        }
+        // RD re-add na pozadí (backend ensure_cached) → až dotáhne, zapíše čerstvý cached WorkingSource.
+        runCatching {
+            workingSourceStore.triggerAutoCache(
+                item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+            )
         }
     }
 

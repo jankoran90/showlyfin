@@ -101,6 +101,17 @@ internal class UploaderApi(
         return service.rdProgress("$base/api/stremio/rd/progress/$torrentId?fileIdx=$fileIdx", cookie)
     }
 
+    override suspend fun rdCached(baseUrl: String, sessionCookie: String, infoHash: String): Boolean {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val h = infoHash.trim().lowercase()
+        if (h.isBlank()) return true  // bez hashe nelze rozhodnout → fail-safe „cached" (nesesazuj naslepo)
+        // FAIL-SAFE: chyba sítě/backendu → vrať true (STÁLE cached). Falešné sesazení dobrého zdroje
+        // (zbytečný re-download + lživá badge) je horší než minutí evikce (to pokryje RELAY při přehrávání).
+        return runCatching { service.rdCached("$base/api/stremio/rd/cached?hash=$h", cookie).cached }
+            .getOrDefault(true)
+    }
+
     override suspend fun rdSearch(baseUrl: String, sessionCookie: String, title: String, year: Int?): List<UploaderStream> {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

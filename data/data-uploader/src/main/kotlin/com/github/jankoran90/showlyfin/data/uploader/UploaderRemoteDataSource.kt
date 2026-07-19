@@ -10,6 +10,8 @@ interface UploaderRemoteDataSource {
     suspend fun resolveCometStream(baseUrl: String, sessionCookie: String, cometPath: String, ctx: UploaderResolveContext? = null): String
     suspend fun rdAdd(baseUrl: String, sessionCookie: String, infoHash: String?, fileIdx: Int, cometPath: String?): UploaderRdAddResponse
     suspend fun rdProgress(baseUrl: String, sessionCookie: String, torrentId: String, fileIdx: Int): UploaderRdProgressResponse
+    /** Bod 3 re-verify: je infoHash STÁLE stažený (cached) na RD účtu? (levné, cache 60 s). */
+    suspend fun rdCached(baseUrl: String, sessionCookie: String, infoHash: String): Boolean
     suspend fun rdSearch(baseUrl: String, sessionCookie: String, title: String, year: Int?): List<UploaderStream>
     // Plan WINNOW (SHW-41, item 2): bezpečný úklid RD — smaž torrenty z [hashes] kromě [keepHash]. Vrací počet smazaných.
     suspend fun rdCleanup(baseUrl: String, sessionCookie: String, keepHash: String?, hashes: List<String>): Int

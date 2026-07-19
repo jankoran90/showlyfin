@@ -133,6 +133,13 @@ data class UploaderRdProgressResponse(
     val error: String? = null,
 )
 
+/** Bod 3 re-verify — je zapamatovaný infoHash STÁLE stažený (cached) na RD? `cached=true` == 100 % downloaded. */
+data class UploaderRdCachedResponse(
+    val cached: Boolean = false,
+    val hash: String = "",
+    @SerializedName("torrent_id") val torrentId: String? = null,
+)
+
 // ── RD card-level match (Fáze F++) — filtr „jen co je na RD" v Objevit/Chci vidět ─
 
 data class RdMatchItem(
