@@ -54,9 +54,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
+import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.MediaRow
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
+import com.github.jankoran90.showlyfin.core.ui.cachedDirector
+import com.github.jankoran90.showlyfin.core.ui.warmDirector
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
 import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaRail
@@ -88,14 +95,43 @@ fun FilmyFilmotekaScreen(
     // název + popisek. Filtruje se render-time nad railama (bez fetch). Prázdný dotaz = beze změny.
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    // SEARCH-REŽISÉR (user 07-19): index režisérů pro hledání — provider + verze (roste, jak se dotahují).
+    val directorProvider = LocalDirectorProvider.current
+    var directorVersion by remember { mutableStateOf(0) }
     // VM je retained na úrovni shellu (sekce se přepínají when-em) → při vstupu obnov výchozí osu z Nastavení.
     LaunchedEffect(Unit) { vm.applyDefaultAxis() }
 
-    val displayRails = remember(state.rails, query) {
+    // Při otevřeném hledání dotáhni režiséry VŠECH položek Filmotéky do procesní cache (bounded souběh),
+    // ať jde hledat i podle režiséra napříč celou knihovnou, ne jen podle už zobrazených karet.
+    LaunchedEffect(searchOpen, state.rails, directorProvider) {
+        if (!searchOpen || directorProvider == null) return@LaunchedEffect
+        val items = state.rails.asSequence().flatMap { it.items.asSequence() }
+            .mapNotNull { it.mediaItem }
+            .filter { it.tmdbId != null || !it.imdbId.isNullOrBlank() }
+            .distinctBy { it.tmdbId ?: it.imdbId }
+            .toList()
+        val sem = Semaphore(6)
+        coroutineScope {
+            items.forEach { mi ->
+                launch {
+                    sem.withPermit {
+                        val name = warmDirector(directorProvider, mi.imdbId, mi.tmdbId, mi.type, mi.title, mi.year)
+                        if (name != null) directorVersion++
+                    }
+                }
+            }
+        }
+    }
+
+    val displayRails = remember(state.rails, query, directorVersion) {
         val q = normalizeSearch(query)
         if (q.isBlank()) state.rails
         else state.rails.map { rail ->
-            rail.copy(items = rail.items.filter { q in normalizeSearch(it.title + " " + (it.mediaItem?.overview ?: "")) })
+            rail.copy(items = rail.items.filter { item ->
+                val mi = item.mediaItem
+                val dir = mi?.let { cachedDirector(it.tmdbId, it.imdbId) } ?: ""
+                q in normalizeSearch(item.title + " " + (mi?.overview ?: "") + " " + dir)
+            })
         }.filter { it.items.isNotEmpty() }
     }
 

@@ -72,7 +72,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -571,6 +573,10 @@ fun DetailScreen(
                             )
                         }
                     }
+                    // SVĚTLÝ MOTIV (user 07-19): spodní scrim = colorScheme.background → na světlém motivu je
+                    // bílý, takže bílý text ve fanartu mizí. Jemný černý stín drží čitelnost bez ohledu na
+                    // motiv i jas fanartu (na AMOLED černé neškodí, na světlém je to ten rozdíl).
+                    val heroTextShadow = Shadow(color = Color.Black.copy(alpha = 0.75f), offset = Offset(0f, 1f), blurRadius = 6f)
                     // [název · rok · ČSFD] v JEDNOM řádku
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -578,7 +584,7 @@ fun DetailScreen(
                     ) {
                         Text(
                             text = displayTitle,
-                            style = MaterialTheme.typography.headlineSmall,
+                            style = MaterialTheme.typography.headlineSmall.copy(shadow = heroTextShadow),
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                             maxLines = 2,
@@ -586,7 +592,7 @@ fun DetailScreen(
                             modifier = Modifier.weight(1f, fill = false),
                         )
                         displayItem.year?.let {
-                            Text("$it", style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.85f))
+                            Text("$it", style = MaterialTheme.typography.titleMedium.copy(shadow = heroTextShadow), color = Color.White.copy(alpha = 0.85f))
                         }
                         // ČSFD hodnocení v % (místo TMDB); fallback na hvězdičkové hodnocení, když ČSFD chybí.
                         val csfdRating = uiState.csfdRating
@@ -604,7 +610,7 @@ fun DetailScreen(
                             displayItem.rating?.let { rating ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 2.dp))
-                                    Text("%.1f".format(rating), style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                    Text("%.1f".format(rating), style = MaterialTheme.typography.titleMedium.copy(shadow = heroTextShadow), color = Color.White)
                                 }
                             }
                         }
@@ -619,7 +625,7 @@ fun DetailScreen(
                     if (metaParts.isNotEmpty()) {
                         Text(
                             text = metaParts.joinToString("   ·   "),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyMedium.copy(shadow = heroTextShadow),
                             color = Color.White.copy(alpha = 0.85f),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
