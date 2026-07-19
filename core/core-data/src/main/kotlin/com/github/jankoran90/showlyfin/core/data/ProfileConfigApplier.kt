@@ -33,6 +33,12 @@ internal fun dashUuid(raw: String): String {
     return "${t.substring(0, 8)}-${t.substring(8, 12)}-${t.substring(12, 16)}-${t.substring(16, 20)}-${t.substring(20)}"
 }
 
+/** Platný Trakt OAuth access token = 64 hex znaků. Cokoli jiného (prázdné / useknuté 32) = poison → guard. */
+internal fun looksLikeTraktToken(raw: String?): Boolean {
+    val t = raw?.trim() ?: return false
+    return t.length == 64 && t.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
+}
+
 @Singleton
 class ProfileConfigApplier @Inject constructor(
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
@@ -80,12 +86,27 @@ class ProfileConfigApplier @Inject constructor(
             }
 
             // Trakt (per-profil OAuth tokeny, klíče zrcadlí TraktTokenProvider): null = ODHLÁSIT.
+            // 🔒 POISON-TOKEN GUARD (2026-07-19): v sync round-tripu se Trakt token občas uřízne na půl
+            // (platný = 64 hex; viděli jsme 32 → Trakt 401 → „Chci vidět prázdný", recidiva ~1 den). Nikdy
+            // NEPŘEPIŠ platný prefs token MALFORMOVANÝM z configu — ponech dobrý (další capture re-syncne prefs→config).
             val t = creds.trakt
             if (t != null) {
-                putString(K_TRAKT_ACCESS, t.accessToken)
-                putString(K_TRAKT_REFRESH, t.refreshToken)
-                putLong(K_TRAKT_CREATED, t.createdAtMillis)
-                putLong(K_TRAKT_EXPIRES, t.expiresAtMillis)
+                val incoming = t.accessToken
+                val current = prefs.getString(K_TRAKT_ACCESS, null)
+                // Jen NEPRÁZDNÝ malformovaný (=useknutý poison) blokujeme; prázdný token = legitimní odhlášení
+                // profilu (creds.trakt s blank tokenem) → aplikuj (jinak by se držel token předchozího profilu).
+                if (incoming.isNotBlank() && !looksLikeTraktToken(incoming) && looksLikeTraktToken(current)) {
+                    timber.log.Timber.w(
+                        "[TRAKT-GUARD] config token len=%d malformed → NEPŘEPÍŠE platný prefs token len=%d (ponechávám)",
+                        incoming.length, current?.length ?: 0,
+                    )
+                } else {
+                    timber.log.Timber.i("[TRAKT-GUARD] apply Trakt token len=%d", incoming.length)
+                    putString(K_TRAKT_ACCESS, incoming)
+                    putString(K_TRAKT_REFRESH, t.refreshToken)
+                    putLong(K_TRAKT_CREATED, t.createdAtMillis)
+                    putLong(K_TRAKT_EXPIRES, t.expiresAtMillis)
+                }
             } else {
                 remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES)
             }

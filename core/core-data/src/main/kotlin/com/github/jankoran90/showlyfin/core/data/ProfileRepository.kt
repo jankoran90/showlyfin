@@ -385,6 +385,7 @@ class ProfileRepository @Inject constructor(
         val profile = dao.getById(profileId) ?: return
         val override = ProfileConfig.fromJson(profile.configJson)
         if (override.credentials.trakt?.accessToken == access) return // shoda → nic
+        timber.log.Timber.i("[TRAKT-GUARD] capture prefs token→config profil=%d accessLen=%d", profileId, access.length)
         val newTrakt = TraktCreds(
             accessToken = access,
             refreshToken = prefs.getString("TRAKT_REFRESH_TOKEN", null).orEmpty(),

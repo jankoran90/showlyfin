@@ -70,6 +70,7 @@ internal class TraktTokenProvider(
     }
 
     override fun saveTokens(accessToken: String, refreshToken: String, expiresIn: Long, createdAt: Long) {
+        Timber.i("[TRAKT-GUARD] saveTokens accessLen=%d refreshLen=%d", accessToken.length, refreshToken.length)
         val createdAtMillis = createdAt.seconds.inWholeMilliseconds
         val expiresAtMillis = createdAtMillis + expiresIn.seconds.inWholeMilliseconds
         sharedPreferences.edit()
