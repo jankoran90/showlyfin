@@ -99,6 +99,7 @@ fun FilmyJellyfinDetail(
             onCollectionPartClick = onCollectionPartClick,
             onPlayJellyfin = onPlayJellyfin,
             onPlayStreamUrl = onPlayStreamUrl,
+            castInOverflow = true,
             modifier = modifier,
         )
         FilmyJfResolve.Fallback -> JellyfinDetailScreen(

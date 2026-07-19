@@ -121,6 +121,9 @@ fun DetailScreen(
     autoplayRemembered: Boolean = false,
     // CONVERGE V1 — TV: D-pad doleva od nejlevější akce → Nastavení (drill). null = feature vypnutá (telefon).
     onOpenSettings: (() -> Unit)? = null,
+    // ORCHARD (user 07-19, Filmy) — cast NEMÁ samostatné tlačítko, akce „Přehrát na TV" jde do ⋮ menu. Jen Filmy
+    // (showlyfin default false = ikona Cast vedle Přehrát beze změny).
+    castInOverflow: Boolean = false,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -447,6 +450,7 @@ fun DetailScreen(
                         isTogglingWatchlist = uiState.isTogglingWatchlist,
                         onWatchlist = { viewModel.toggleWatchlist() },
                         onShare = onShareCard,
+                        castInOverflow = castInOverflow,
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -786,6 +790,7 @@ private fun DetailActionBar(
     isTogglingWatchlist: Boolean,
     onWatchlist: () -> Unit,
     onShare: (() -> Unit)? = null,
+    castInOverflow: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // BESPOKE F3 — vlastní hvězdičkové hodnocení (sdílený dialog přes LocalUserRatingProvider).
@@ -818,7 +823,8 @@ private fun DetailActionBar(
                     Spacer(Modifier.width(6.dp))
                     Text("Přehrát")
                 }
-                if (onTv != null) {
+                // castInOverflow (Filmy) → cast NEMÁ tlačítko, jde do ⋮ menu jako „Přehrát na TV".
+                if (onTv != null && !castInOverflow) {
                     OutlinedIconButton(onClick = onTv) { Icon(Icons.Default.Cast, "Přehrát na TV") }
                 }
             }
@@ -837,6 +843,14 @@ private fun DetailActionBar(
         Box {
             IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "Další akce") }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                // ORCHARD (user 07-19, Filmy) — „Přehrát na TV" v menu místo Cast tlačítka. Jen když je co castnout.
+                if (castInOverflow && onTv != null) {
+                    DropdownMenuItem(
+                        text = { Text("Přehrát na TV") },
+                        leadingIcon = { Icon(Icons.Default.Cast, null) },
+                        onClick = { menuOpen = false; onTv() },
+                    )
+                }
                 if (ratingTarget != null && ratingProvider != null) {
                     DropdownMenuItem(
                         text = { Text(if (stars != null) "Hodnocení $stars/10" else "Ohodnotit") },

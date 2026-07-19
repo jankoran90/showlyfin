@@ -215,6 +215,8 @@ private fun FilmyShellContent() {
                 onStremio = onStremioItem,
                 // M2.6 LAPIDARY: one-click z řady „Uloženo k přehrání" → přehraj zapamatovaný zdroj rovnou.
                 autoplayRemembered = detailEntry.autoplay,
+                // ORCHARD (user 07-19) — Filmy: cast bez tlačítka, „Přehrát na TV" v ⋮ menu.
+                castInOverflow = true,
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (detailEntry is FilmyDetailEntry.Jellyfin) {
