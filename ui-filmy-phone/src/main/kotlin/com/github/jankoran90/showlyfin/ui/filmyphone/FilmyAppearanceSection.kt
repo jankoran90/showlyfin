@@ -1,9 +1,14 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,6 +48,24 @@ fun FilmyAppearanceSection(
             selected = theme.background,
             labelOf = { it.displayName },
             onSelect = themePrefs::setBackground,
+        )
+
+        // ORCHARD (user 07-19) — počet sloupců mřížky (Auto/2/3). Ukládá se do trakt_prefs „grid_columns"
+        // (0=auto dle šířky). Projeví se při návratu na obrazovku s mřížkou. Platí napříč Filmotéka/Knihovna/Hledat.
+        val ctx = LocalContext.current
+        var gridCols by remember {
+            mutableIntStateOf(ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE).getInt("grid_columns", 0))
+        }
+        SettingChips(
+            label = "Počet sloupců mřížky",
+            subtitle = "Kolik plakátů vedle sebe v zobrazení mřížky (Auto = podle šířky). Projeví se po návratu na seznam.",
+            options = listOf(0, 2, 3),
+            selected = gridCols,
+            labelOf = { if (it == 0) "Auto" else it.toString() },
+            onSelect = { v ->
+                gridCols = v
+                ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE).edit().putInt("grid_columns", v).apply()
+            },
         )
 
         SettingPercentSlider("Tónování ploch", value = theme.surfaceTint, onValue = themePrefs::setSurfaceTint)

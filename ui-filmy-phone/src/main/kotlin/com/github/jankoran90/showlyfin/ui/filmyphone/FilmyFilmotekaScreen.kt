@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ViewList
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,6 +32,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -79,8 +84,20 @@ fun FilmyFilmotekaScreen(
     var viewMode by remember { mutableStateOf(ViewMode.LIST) }
     // GENRE-FILTER — bottom sheet výběru žánrů (multi-select). Otevře se druhým klikem na „Žánr" (user 07-19).
     var showGenreFilter by remember { mutableStateOf(false) }
+    // SEARCH (user 07-19) — lupa → rozbalí input → živý fulltext filtr (case/diakritika insensitive) přes
+    // název + popisek. Filtruje se render-time nad railama (bez fetch). Prázdný dotaz = beze změny.
+    var searchOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
     // VM je retained na úrovni shellu (sekce se přepínají when-em) → při vstupu obnov výchozí osu z Nastavení.
     LaunchedEffect(Unit) { vm.applyDefaultAxis() }
+
+    val displayRails = remember(state.rails, query) {
+        val q = normalizeSearch(query)
+        if (q.isBlank()) state.rails
+        else state.rails.map { rail ->
+            rail.copy(items = rail.items.filter { q in normalizeSearch(it.title + " " + (it.mediaItem?.overview ?: "")) })
+        }.filter { it.items.isNotEmpty() }
+    }
 
     Column(modifier.fillMaxSize()) {
         FilmotekaChips(
@@ -99,13 +116,19 @@ fun FilmyFilmotekaScreen(
             onToggleView = { viewMode = if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID },
             onOpenGenreFilter = { showGenreFilter = true },
             onClearGenreFilter = vm::clearGenreFilter,
+            searchOpen = searchOpen,
+            onToggleSearch = { searchOpen = !searchOpen; if (!searchOpen) query = "" },
         )
+        if (searchOpen) {
+            FilmotekaSearchField(query = query, onQuery = { query = it }, onClose = { searchOpen = false; query = "" })
+        }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
                 state.loading -> CircularProgressIndicator()
                 state.rails.isEmpty() -> FilmotekaEmpty()
-                viewMode == ViewMode.LIST -> FilmotekaList(state.rails, onOpenDetail)
-                else -> FilmotekaGrid(state.rails, onOpenDetail)
+                displayRails.isEmpty() -> FilmotekaNoResults(query)
+                viewMode == ViewMode.LIST -> FilmotekaList(displayRails, onOpenDetail)
+                else -> FilmotekaGrid(displayRails, onOpenDetail)
             }
         }
     }
@@ -138,6 +161,8 @@ private fun FilmotekaChips(
     onToggleView: () -> Unit,
     onOpenGenreFilter: () -> Unit,
     onClearGenreFilter: () -> Unit,
+    searchOpen: Boolean,
+    onToggleSearch: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth(),
@@ -154,6 +179,13 @@ private fun FilmotekaChips(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
+                IconButton(onClick = onToggleSearch) {
+                    Icon(
+                        if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search,
+                        contentDescription = if (searchOpen) "Zavřít hledání" else "Hledat",
+                        tint = if (searchOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 IconButton(onClick = onToggleView) {
@@ -371,4 +403,44 @@ private fun GenreFilterSheet(
             }
         }
     }
+}
+
+/** SEARCH — normalizace pro fulltext: lowercase + odstranění diakritiky (case & diakritika insensitive). */
+private fun normalizeSearch(s: String): String =
+    java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
+        .replace("\\p{Mn}+".toRegex(), "")
+        .trim()
+
+/** SEARCH — rozbalený input pro fulltext filtr (auto-fokus, klávesnice hned). Filtruje živě přes onQuery. */
+@Composable
+private fun FilmotekaSearchField(query: String, onQuery: (String) -> Unit, onClose: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQuery,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .focusRequester(focus),
+        singleLine = true,
+        placeholder = { Text("Hledat v názvu a popisu…") },
+        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+        trailingIcon = {
+            IconButton(onClick = { if (query.isEmpty()) onClose() else onQuery("") }) {
+                Icon(Icons.Rounded.Close, contentDescription = "Vymazat")
+            }
+        },
+    )
+}
+
+/** SEARCH — prázdný výsledek hledání. */
+@Composable
+private fun FilmotekaNoResults(query: String) {
+    Text(
+        text = "Nic nenalezeno pro „$query\"",
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(24.dp),
+    )
 }
