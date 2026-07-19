@@ -10,8 +10,6 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -108,7 +106,12 @@ class MoviePlayerService : MediaSessionService() {
         }
         val builder = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory()))
+            // RELAY-CORE: robustní OkHttp zdroj (reconnect + pooling) + trpělivá/diferencovaná retry
+            // politika (viz RobustStreamHttp) — místo DefaultHttpDataSource s výchozí impatient policy.
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(RobustStreamHttp.dataSourceFactory(applicationContext))
+                    .setLoadErrorHandlingPolicy(RobustStreamHttp.loadErrorHandlingPolicy()),
+            )
             .setLoadControl(
                 DefaultLoadControl.Builder()
                     .setBufferDurationsMs(60_000, 300_000, 5_000, 10_000)
@@ -208,19 +211,6 @@ class MoviePlayerService : MediaSessionService() {
             launch,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-    }
-
-    /** DefaultDataSource (file:// i http(s)) nad HTTP factory s UA jako v původním inline přehrávači. */
-    private fun dataSourceFactory(): DefaultDataSource.Factory {
-        val upstream = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(30_000)
-            .setReadTimeoutMs(30_000)
-            .setUserAgent(
-                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
-                    "Chrome/124.0.0.0 Mobile Safari/537.36",
-            )
-        return DefaultDataSource.Factory(this, upstream)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {

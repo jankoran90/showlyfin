@@ -306,12 +306,16 @@ fun PlaybackScreen(
                 if (playbackState == Player.STATE_BUFFERING && externalUrl != null && onPlaybackFailed != null && !failureReported) {
                     val startBuffered = controller?.bufferedPosition ?: 0L
                     stallJob = stallScope.launch {
-                        delay(30_000)
+                        // RELAY-CORE: watchdog je BACKSTOP až za trpělivým OkHttp load-retry (6 pokusů,
+                        // backoff do 8 s ≈ přejede přes RD cold spell reconnectem téhož bajtu). Práh 45 s
+                        // proto nechá reconnect vyhrát u dočasného kolísání; sepne jen když je odkaz reálně
+                        // mrtvý → re-resolve čerstvého + pokračování z uložené pozice.
+                        delay(45_000)
                         val c = controller ?: return@launch
-                        // pořád bufferuje a buffered pozice se za 30 s nehnula → zdroj přestal dodávat data.
+                        // pořád bufferuje a buffered pozice se za 45 s nehnula → zdroj přestal dodávat data.
                         if (c.playbackState == Player.STATE_BUFFERING && c.bufferedPosition <= startBuffered + 250 && !failureReported) {
                             failureReported = true
-                            timber.log.Timber.w("[RELAY] stall watchdog: buffering >30s bez posunu (buffered=${c.bufferedPosition}) → re-resolve zdroje")
+                            timber.log.Timber.w("[RELAY] stall watchdog: buffering >45s bez posunu (buffered=${c.bufferedPosition}) → re-resolve zdroje")
                             onPlaybackFailed("ERROR_CODE_IO_STALLED")
                         }
                     }

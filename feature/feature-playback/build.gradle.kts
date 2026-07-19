@@ -40,6 +40,9 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.dash) // KAVKA: ČT video = DASH manifest (o2tv CDN)
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.datasource)
+    implementation(libs.androidx.media3.datasource.okhttp) // RELAY-CORE: robustní HTTP zdroj (reconnect + pooling)
+    implementation(platform(libs.okhttp.bom))
+    implementation(libs.okhttp)
     implementation(libs.androidx.media3.database)
     // MARQUEE (SHW-57): MediaSession/MediaController → ovládání filmu z notifikace/zámku/sluchátek.
     implementation(libs.androidx.media3.session)
