@@ -16,7 +16,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -180,9 +180,10 @@ internal fun TvDetailActions(
         // Overflow „Více" — vzácné akce (jen se zapamatovaným zdrojem), ať hlavní řada není přeplácaná.
         if (showMore && hasRemembered) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Parita s telefonem (⋮ „Vybrat jiný zdroj") — TÝŽ sdílený picker (⭐ pin + chipy, D-pad).
                 TvActionButton(
-                    icon = Icons.Filled.Refresh,
-                    label = "Zkusit jiný zdroj",
+                    icon = Icons.Filled.SwapHoriz,
+                    label = "Vybrat jiný zdroj",
                     primary = false,
                     onClick = { viewModel.openStreamPicker() },
                 )
