@@ -361,7 +361,10 @@ fun PlaybackScreen(
     }
 
     // FISSION: nový film (jiná URL) = znovu povol jednorázový SW-dekodér pokus.
-    LaunchedEffect(state.streamUrl) { triedSwDecoder = false }
+    // RELAY (2026-07-19): a taky zas povol hlášení chyby — jiná URL (re-resolve / další zdroj z CASCADE) je
+    // NOVÝ pokus, ať se případný pád zas propíše do auto-advance (jinak `failureReported` zůstane true po 1. chybě
+    // a víc zdrojů / re-resolve by se už nikdy neohlásilo). Ukončení hlídá VM (gate `ioRetriedKeys` + advance vpřed).
+    LaunchedEffect(state.streamUrl) { triedSwDecoder = false; failureReported = false }
 
     // Media prepare — jen video. Titulky kreslíme sami (overlay), takže se MediaItem
     // už nikdy nepřestavuje kvůli titulkům (žádný rebuffer při posunu / přepnutí stopy).

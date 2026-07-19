@@ -133,6 +133,10 @@ class DetailViewModel @Inject constructor(
     // nikdy nesáhneme na nesouvisející torrenty. Reset při načtení jiného filmu (`load`).
     private val attemptedRdHashes = LinkedHashSet<String>()
 
+    // RELAY (2026-07-19): zdroje, u kterých už proběhl auto re-resolve po IO/HTTP chybě (efemérní RD odkaz).
+    // Gate = jen 1× re-resolve téhož zdroje, ať se necyklí, když je zdroj fakt mrtvý. Reset při `load`.
+    private val ioRetriedKeys = LinkedHashSet<String>()
+
     // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook. Latch (VM je Activity-scoped → přežije mezi filmy,
     // resetuje se v load()), preferovaný cíl (tv=null → automatika, zenbook=deviceId docku) a příznak,
     // že běžící cast je hlasový (na odmítnutí ukázat hlášku místo pickeru).
@@ -184,6 +188,7 @@ class DetailViewModel @Inject constructor(
         lastPlayedStream = null
         episodeSelector = null   // TENFOOT WS-C: nový titul → zapomeň vybranou epizodu
         attemptedRdHashes.clear()
+        ioRetriedKeys.clear()
         // PROJECTOR: nový film → resetuj hlasový cast latch (VM je Activity-scoped).
         autoCastPending = false
         voiceCastActive = false
@@ -1604,8 +1609,76 @@ class DetailViewModel @Inject constructor(
      * v UŽIVATELOVĚ pořadí (`streams` je už seřazený dle jeho `fallbackOrder` — NEPŘEŘAZUJEME!).
      * Po vyčerpání kandidátů spadni na Stremio (původní chování).
      */
-    fun onPlaybackFailed(errorCode: String) =
+    fun onPlaybackFailed(errorCode: String) {
+        // RELAY (2026-07-19): RD/CDN odkaz je EFEMÉRNÍ — po čase vyprší nebo „zchladne" (RD evikce z cache) →
+        // ExoPlayer `ERROR_CODE_IO_BAD_HTTP_STATUS` (HTTP 404) / jiná IO chyba. Zapamatovaný zdroj, co včera hrál,
+        // pak „přestane jít" na VŠECH zařízeních. Manuální retry TÉHOŽ zdroje ale typicky projde (RD se zahřeje).
+        // Proto: u IO/HTTP chyby zkus 1× RE-RESOLVE téhož zdroje (čerstvý odkaz z infoHash/comet) PŘED skokem
+        // na jiný zdroj. Formát/kodek chyby (`isFormatError`) sem nepatří — soubor je fakt nehratelný.
+        val cur = lastPlayedStream
+        val key = cur?.let { ioRetryKey(it) }
+        if (isRetriableIoError(errorCode) && cur != null && !key.isNullOrBlank() &&
+            key !in ioRetriedKeys && isReResolvable(cur)) {
+            ioRetriedKeys.add(key)
+            timber.log.Timber.i("[RELAY] IO chyba ($errorCode) → 1× re-resolve téhož zdroje (efemérní odkaz)")
+            replayFreshResolve(cur, CastTarget.LOCAL)
+            return
+        }
         advancePastSource("Zdroj nešel přehrát, zkouším další", CastTarget.LOCAL, formatErrorCode = errorCode)
+    }
+
+    /** RELAY: IO/HTTP chyba přehrávače = mrtvý/zchladlý odkaz nebo síť (NE vadný kontejner/kodek → to `isFormatError`). */
+    private fun isRetriableIoError(code: String): Boolean = code.startsWith("ERROR_CODE_IO_")
+
+    /** RELAY: klíč zdroje pro gate „už jsem re-resolvnul" (infoHash → comet → url). */
+    private fun ioRetryKey(s: UploaderStream): String =
+        s.infoHash?.takeIf { it.isNotBlank() }
+            ?: s.cometPath?.takeIf { it.isNotBlank() }
+            ?: s.url.orEmpty()
+
+    /** RELAY: lze získat ČERSTVÝ odkaz? infoHash/comet (RD resolve) nebo sdilej:// (samonosná proxy). */
+    private fun isReResolvable(s: UploaderStream): Boolean =
+        !s.infoHash.isNullOrBlank() || !s.cometPath.isNullOrBlank() || (s.url?.startsWith("sdilej://") == true)
+
+    /** RELAY: kontext pro RD resolve (stejný jako v [playStream]). */
+    private fun buildResolveCtx(stream: UploaderStream): com.github.jankoran90.showlyfin.data.uploader.model.UploaderResolveContext? =
+        _uiState.value.item?.let { item ->
+            com.github.jankoran90.showlyfin.data.uploader.model.UploaderResolveContext(
+                imdb = item.imdbId, mediaType = mediaTypeStr(item),
+                season = episodeSelector?.season, episode = episodeSelector?.episode,
+                resolution = stream.quality.resolution, sizeGB = stream.quality.sizeGB,
+            )
+        }
+
+    /**
+     * RELAY: přehraj TENTÝŽ zdroj, ale s ČERSTVÝM odkazem — obejde uloženou (možná vypršelou) direct URL a
+     * vynutí nový resolve z infoHash/comet (sdilej:// = jen přestav samonosnou proxy). Když nelze / selže,
+     * spadni na skok na další zdroj. `lastPlayedStream` NEmění (drží ho pro případný následný advance).
+     */
+    private fun replayFreshResolve(stream: UploaderStream, target: CastTarget) {
+        val title = episodeSelector?.label
+            ?: _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
+            ?: _uiState.value.item?.title.orEmpty()
+        val direct = stream.url
+        if (direct?.startsWith("sdilej://") == true) {
+            buildSdilejProxyUrl(direct)?.let { deliver(it, title, target); return }
+        }
+        _uiState.update { it.copy(isResolvingStream = true, streamError = null, autoAdvanceInfo = "Obnovuji zdroj…") }
+        val ctx = buildResolveCtx(stream)
+        viewModelScope.launch {
+            // krátká pauza dá RD čas „zahřát" znovu zpřístupněný soubor (typický důvod přechodného 404).
+            delay(1200)
+            val fresh = runCatching {
+                when {
+                    !stream.cometPath.isNullOrBlank() -> uploaderDs.resolveCometStream(uploaderBaseUrl, uploaderCookie, stream.cometPath!!, ctx)
+                    !stream.infoHash.isNullOrBlank() -> uploaderDs.resolveStream(uploaderBaseUrl, uploaderCookie, stream.infoHash!!, stream.fileIdx, ctx)
+                    else -> null
+                }
+            }.getOrElse { e -> timber.log.Timber.w(e, "[RELAY] re-resolve selhal"); null }
+            if (fresh.isNullOrBlank()) advancePastSource("Zdroj nešel obnovit, zkouším další", target)
+            else deliver(fresh, title, target)
+        }
+    }
 
     /**
      * REPRISE (SHW-54): chyba přehrávače je v KONTEJNERU/KODEKU souboru (ne mrtvý zdroj / síť)?
