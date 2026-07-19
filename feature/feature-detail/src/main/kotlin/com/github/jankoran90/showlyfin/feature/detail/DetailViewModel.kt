@@ -994,6 +994,20 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
+     * D-b (user 07-19, screenshot): PŘÍMÝ výběr jiného cached zdroje v pickeru → OKAMŽITĚ se stane
+     * zapamatovaným (výchozím) zdrojem filmu, bez čekání na „přehraj → 👍" ([confirmWorkingSource]).
+     * ZÁMĚRNĚ NEuklízí ostatní RD torrenty ([cleanupRdKeepingSource]) — user chce mezi nacachovanými
+     * zdroji volně přepínat (zvolit jiný a klidně se vrátit), takže je necháváme na RD dostupné.
+     */
+    fun pinWorkingSource(stream: UploaderStream) {
+        val st = _uiState.value
+        val imdb = st.item?.imdbId
+        val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
+        workingSourceStore.save(imdb, st.item?.tmdbId, title, stream)
+        _uiState.update { it.copy(rememberedSource = stream) }
+    }
+
+    /**
      * Plan WINNOW (item 2, BEZPEČNĚ): trigger = uživatel potvrdil „zapamatovat torrent".
      * Smaž z RD účtu VŠECHNY ostatní verze TOHOTO filmu — kandidáti = co appka zkoušela
      * (`attemptedRdHashes`) ∪ všechny zdroje, co Comet pro film nabídl (`uiState.streams`) —

@@ -278,6 +278,7 @@ fun DetailScreen(
             runtimeMin = uiState.movieDetails?.runtime,
             rememberedSource = uiState.rememberedSource,
             onForgetRemembered = { viewModel.forgetWorkingSource() },
+            onPin = { viewModel.pinWorkingSource(it) },
             pathLabel = pathLabel,
             onBack = if (path != null) { { viewModel.backToStreamPathChooser() } } else null,
             defaultTitle = uiState.sdilejDefaultTitle,

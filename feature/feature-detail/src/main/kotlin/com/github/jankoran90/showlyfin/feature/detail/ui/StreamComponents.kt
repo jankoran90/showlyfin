@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -210,6 +211,9 @@ internal fun StreamRow(
     onClick: () -> Unit,
     showSourceBadge: Boolean = false,
     health: StreamHealth = StreamHealth.READY,
+    // D-b (user 07-19): přímé nastavení zdroje jako výchozího (⭐). null = pin akce se nezobrazí.
+    onPin: (() -> Unit)? = null,
+    isPinned: Boolean = false,
     // FUSE/TENFOOT (SHW-87): TV D-pad — volající připne fokus prstenec (`tvFocusable`, na telefonu no-op)
     // a případně `focusRequester` na první řádek, ať picker jde ovládat dálkovým ovladačem.
     modifier: Modifier = Modifier,
@@ -279,6 +283,18 @@ internal fun StreamRow(
                 Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        // D-b: ⭐ nastavit tento zdroj jako výchozí (zapamatovaný) — nezávisle na přehrání.
+        if (onPin != null) {
+            Icon(
+                imageVector = if (isPinned) Icons.Default.Star else Icons.Default.StarBorder,
+                contentDescription = if (isPinned) "Výchozí zdroj" else "Nastavit jako výchozí",
+                tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .height(24.dp)
+                    .tvFocusable()
+                    .clickable(onClick = onPin),
+            )
+        }
         trailingIcon()
     }
 }
@@ -346,6 +362,8 @@ internal fun StreamPickerSheet(
     runtimeMin: Int? = null,
     rememberedSource: UploaderStream? = null,
     onForgetRemembered: () -> Unit = {},
+    // D-b (user 07-19): přímý výběr jiného cached zdroje jako výchozího (⭐) bez čekání na potvrzení.
+    onPin: (UploaderStream) -> Unit = {},
     pathLabel: String? = null,
     onBack: (() -> Unit)? = null,
     // QUARRY (SHW-79): ruční úprava hledání na Sdílej.cz (jen cesta CZ dabing).
@@ -437,6 +455,8 @@ internal fun StreamPickerSheet(
                     .sortedBy { if (it.second == StreamHealth.READY) 0 else 1 }
                 val suspect = classified.filter { it.second == StreamHealth.SUSPECT }
                 val streamKey: (UploaderStream) -> String = { it.cometPath ?: it.infoHash ?: it.url ?: it.name.orEmpty() }
+                // D-b: klíč aktuálně zapamatovaného zdroje → řádek dostane plnou ⭐ místo obrysové.
+                val rememberedKey = rememberedSource?.let { streamKey(it) }
                 // TENFOOT (SHW-87): na TV nasměruj D-pad fokus rovnou na první výsledek, ať jde seznam
                 // ovládat dálkovým ovladačem (jinak fokus nemá kam přistát a nic nescrolluje).
                 val isTv = isTvFormFactor()
@@ -456,6 +476,8 @@ internal fun StreamPickerSheet(
                                 )
                             },
                             onClick = { if (!busy) { if (toTv) onCastToTv(s) else onPlay(s) } },
+                            onPin = { if (!busy) onPin(s) },
+                            isPinned = streamKey(s) == rememberedKey,
                             showSourceBadge = true,
                             health = h,
                             modifier = if (streamKey(s) == firstKey) {
