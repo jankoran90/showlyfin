@@ -33,6 +33,8 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
     var forceSw by remember {
         mutableStateOf(rdPrefs.getBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, PlayerPrefs.DEFAULT_FORCE_SW_DECODER))
     }
+    // Opt-in auto-přehrát u karty se zapamatovaným zdrojem (řada „Uloženo k přehrání"). Default OFF.
+    var autoplayRemembered by remember { mutableStateOf(rdPrefs.getBoolean("autoplay_remembered_enabled", false)) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SettingSectionTitle("Přehrávač")
@@ -67,6 +69,13 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
                 "softwarový dekodér sama až při chybě.",
             checked = forceSw,
             onCheckedChange = { forceSw = it; rdPrefs.edit().putBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, it).apply() },
+        )
+        SettingSwitchRow(
+            title = "Přehrát rovnou u zapamatovaného zdroje",
+            subtitle = "Klik na kartu v řadě „Uloženo k přehrání" spustí přehrávání hned, místo otevření detailu. " +
+                "Vypnuto = klik vždy jen otevře detail.",
+            checked = autoplayRemembered,
+            onCheckedChange = { autoplayRemembered = it; rdPrefs.edit().putBoolean("autoplay_remembered_enabled", it).apply() },
         )
     }
 }

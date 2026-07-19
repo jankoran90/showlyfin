@@ -165,6 +165,11 @@ class TvHomeViewModel @Inject constructor(
     val immersiveHeader: StateFlow<Boolean> = store.immersiveHeader
     fun setImmersiveHeader(enabled: Boolean) = store.setImmersiveHeader(enabled)
 
+    /** Přepínač „auto-přehrát u karty se zapamatovaným zdrojem" (řada „Uloženo k přehrání", `playDirectly`).
+     * Default OFF (user 07-19: „nechci autoplay při otevření karty") → klik jen otevře detail; opt-in v Nastavení.
+     * Čte se přímo při kliku (vždy aktuální hodnota), sdílené phone+TV (raw `trakt_prefs`). */
+    fun autoplayRememberedEnabled(): Boolean = prefs.getBoolean(KEY_AUTOPLAY_REMEMBERED, false)
+
     /** CONVERGE (SHW-97): počet řádků popisu v immersive hlavičce (0 = auto). */
     val immersiveHeaderLines: StateFlow<Int> = store.immersiveHeaderLines
     fun setImmersiveHeaderLines(lines: Int) = store.setImmersiveHeaderLines(lines)
@@ -673,6 +678,8 @@ private const val KEY_TRAKT_ACCESS_TOKEN = "TRAKT_ACCESS_TOKEN"
 
 /** PARITA POČTŮ (SHW-98): globální uživatelský počet položek v řadě Home (Nastavení Filmy). 0 = per-řada default. */
 const val KEY_HOME_ROW_LIMIT = "home_row_item_limit"
+/** Opt-in auto-přehrání u karty se zapamatovaným zdrojem (řada „Uloženo k přehrání"). Default false. */
+const val KEY_AUTOPLAY_REMEMBERED = "autoplay_remembered_enabled"
 /** Kolikrát víc kandidátů natáhnout, ať po filtrech (gate/owned/known) zbude plný počet (žádné „díry"). */
 private const val HOME_ROW_OVERFETCH = 2
 

@@ -101,8 +101,9 @@ fun FilmyHomeScreen(
         val mi = item.mediaItem
         val jf = item.jellyfinId
         when {
-            // Klik na kartu VŽDY jen otevře detail — žádný autoplay (user: nechci autoplay při otevření karty).
-            // Přehrání se spouští až explicitně z detailu. `playDirectly`/one-click zrušen.
+            // Default: klik jen otevře detail (user: nechci autoplay). Opt-in přepínač v Nastavení →
+            // u karty „Uloženo k přehrání" (playDirectly) rovnou přehraje zapamatovaný zdroj.
+            mi != null && item.playDirectly && homeVm.autoplayRememberedEnabled() -> onOpenDetailPlay(mi)
             mi != null -> onOpenDetail(mi)
             jf != null -> onOpenJellyfinDetail(jf)
         }
