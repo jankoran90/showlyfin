@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,13 +43,30 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
     val axis by vm.defaultAxis.collectAsStateWithLifecycle()
     val allSort by vm.allSort.collectAsStateWithLifecycle()
     val enabledRegions by vm.enabledRegions.collectAsStateWithLifecycle()
+    val jfLibraries by vm.jfLibraries.collectAsStateWithLifecycle()
+    val selectedFilmoLibs by vm.selectedFilmotekaLibs.collectAsStateWithLifecycle()
+    val jellyfinOn = FilmotekaSource.JELLYFIN in sources
     TvSettingsBlock(title = "Filmotéka") {
         TvToggleRow(
             label = "Jellyfin knihovna",
             subtitle = "Filmy a seriály z tvých Jellyfin knihoven",
-            checked = FilmotekaSource.JELLYFIN in sources,
+            checked = jellyfinOn,
             onCheckedChange = { vm.setSource(FilmotekaSource.JELLYFIN, it) },
         )
+        // ORCHARD (user 07-19) — per-library výběr JF knihoven Filmotéky (parita s telefonem). Zobraz jen když je
+        // JF zdroj zapnutý. Nic nezaškrtnuto = všechny knihovny.
+        if (jellyfinOn) {
+            LaunchedEffect(Unit) { vm.loadJfLibraries() }
+            jfLibraries.forEach { lib ->
+                val norm = lib.id.replace("-", "").lowercase()
+                TvToggleRow(
+                    label = "   ${lib.name}",
+                    subtitle = "Zobrazit tuto knihovnu ve Filmotéce (nic zaškrtnuté = všechny)",
+                    checked = norm in selectedFilmoLibs,
+                    onCheckedChange = { vm.toggleFilmotekaLibrary(lib.id) },
+                )
+            }
+        }
         TvToggleRow(
             label = "Zapamatované zdroje",
             subtitle = "Tituly s uloženým zdrojem přehrávání",
