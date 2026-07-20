@@ -43,6 +43,8 @@ class ViewModeStore @Inject constructor(
         const val SECTION_FOR_YOU = "for_you"
         // MIRROR (user 2026-07-20) — telefonní Filmotéka: perzistentní přepínač mřížka/seznam (dřív jen per-session).
         const val SECTION_FILMOTEKA = "filmoteka"
+        // QUARRY (user 2026-07-20) — telefonní Hledat: perzistentní přepínač mřížka/seznam.
+        const val SECTION_SEARCH = "search"
         const val SECTION_WATCHLIST = "watchlist"
         const val SECTION_HISTORY = "history"
         const val SECTION_RD = "rd"

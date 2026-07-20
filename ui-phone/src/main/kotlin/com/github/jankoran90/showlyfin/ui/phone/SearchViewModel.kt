@@ -5,18 +5,23 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.model.PersonRole
 import com.github.jankoran90.showlyfin.data.tmdb.model.czLabel
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -80,7 +85,19 @@ data class SearchUiState(
 class SearchViewModel @Inject constructor(
     private val tmdb: TmdbRemoteDataSource,
     private val favoritesStore: FavoritesRepository,
+    private val viewModeStore: ViewModeStore,
 ) : ViewModel() {
+
+    /**
+     * QUARRY (user 2026-07-20) — perzistentní přepínač mřížka/seznam sekce Hledat (appka Filmy; klíč
+     * `SECTION_SEARCH`). Default GRID (výsledky jsou plakáty). Sdílený VM; hlavní telefonní SearchScreen
+     * ho nepoužívá (jede vždy grid).
+     */
+    val viewMode: StateFlow<ViewMode> = viewModeStore.modes
+        .map { modes -> modes[ViewModeStore.SECTION_SEARCH]?.let { ViewMode.fromKey(it) } ?: ViewMode.GRID }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
+
+    fun setViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_SEARCH, mode.storeKey)
 
     private val queryFlow = MutableStateFlow("")
     private val scopeFlow = MutableStateFlow(SearchScope.FILMS)

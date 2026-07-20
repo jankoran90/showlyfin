@@ -13,7 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +35,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.core.ui.MediaRow
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
 import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
@@ -73,6 +77,18 @@ fun FilmySearchScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val sheet by vm.sheet.collectAsStateWithLifecycle()
+    val viewMode by vm.viewMode.collectAsStateWithLifecycle()
+    // RELEVANCE (user 2026-07-20) — u výchozího řazení strč výsledky BEZ plakátu na konec: obskurní tituly bez
+    // plakátu (často i bez IMDB → zdroje se pro ně stejně nenajdou) nemají zahlcovat vršek u krátkého dotazu.
+    // U explicitního řazení (Rok/Hodnocení/…) respektuj pořadí z VM. Klientsky, bez sítě.
+    val displayResults = remember(state.results, state.sortBy) {
+        if (state.sortBy == SearchSort.RELEVANCE) {
+            val (withPoster, without) = state.results.partition { it.hasArt() }
+            withPoster + without
+        } else {
+            state.results
+        }
+    }
 
     Column(modifier.fillMaxSize()) {
         FilmySectionBar(onMenu = onMenu) {
@@ -91,16 +107,32 @@ fun FilmySearchScreen(
                 ),
             )
         }
-        // Rozsah (Filmy / Seriály / Lidi) — appka o filmech, vydavatelství zatím vynecháváme.
+        // Rozsah (Filmy / Seriály / Lidi) + počítadlo + přepínač zobrazení vpravo (parita s Filmotékou/Pro tebe).
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            listOf(SearchScope.FILMS, SearchScope.SHOWS, SearchScope.PEOPLE).forEach { s ->
-                FilterChip(selected = state.scope == s, onClick = { vm.onScopeChange(s) }, label = { Text(s.label) })
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(SearchScope.FILMS, SearchScope.SHOWS, SearchScope.PEOPLE).forEach { s ->
+                    FilterChip(selected = state.scope == s, onClick = { vm.onScopeChange(s) }, label = { Text(s.label) })
+                }
+            }
+            if (state.results.isNotEmpty()) {
+                Text(
+                    text = "${state.results.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+                // Přepínač zobrazení dává smysl jen u filmů/seriálů (lidi jsou vždy portréty v mřížce).
+                if (state.scope != SearchScope.PEOPLE) {
+                    FilmyViewToggle(viewMode) {
+                        vm.setViewMode(if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID)
+                    }
+                }
             }
         }
         // ŘAZENÍ (user 2026-07-20) — kritéria vhodná pro hledání, filtrovaná dle rozsahu (rok/hodnocení jen u
@@ -144,8 +176,12 @@ fun FilmySearchScreen(
                     title = "Nic nenalezeno",
                     text = "Zkus jiný název nebo přepni rozsah.",
                 )
+                viewMode == ViewMode.LIST && state.scope != SearchScope.PEOPLE -> SearchResultsList(
+                    results = displayResults,
+                    onOpenDetail = onOpenDetail,
+                )
                 else -> SearchResultsGrid(
-                    results = state.results,
+                    results = displayResults,
                     onOpenDetail = onOpenDetail,
                     onOpenPerson = { p -> vm.openWorks(departmentToKind(p.department), p.id, p.name) },
                 )
@@ -198,6 +234,31 @@ private fun SearchResultsGrid(
             }
         }
     }
+}
+
+/** Seznam bohatých řádků (plakát + název + režie + rok · žánry) — parita s Filmotékou. Jen filmy/seriály. */
+@Composable
+private fun SearchResultsList(results: List<SearchResult>, onOpenDetail: (MediaItem) -> Unit) {
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        listItems(results, key = { "${it::class.simpleName}:${it.id}" }) { r ->
+            r.toMediaStub()?.let { mi ->
+                MediaRow(item = mi, onClick = { onOpenDetail(mi) }, showDirector = true)
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+            }
+        }
+    }
+}
+
+/** Má výsledek vizuál (plakát/portrét/logo)? RELEVANCE strká bez-vizuálu (obskurní) na konec. */
+private fun SearchResult.hasArt(): Boolean = when (this) {
+    is SearchResult.Movie -> posterUrl != null
+    is SearchResult.Show -> posterUrl != null
+    is SearchResult.Person -> profileUrl != null
+    is SearchResult.Company -> logoUrl != null
 }
 
 @Composable
