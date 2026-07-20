@@ -93,17 +93,19 @@ class ProfileConfigApplier @Inject constructor(
             if (t != null) {
                 val incoming = t.accessToken
                 val current = prefs.getString(K_TRAKT_ACCESS, null)
-                // Jen NEPRÁZDNÝ malformovaný (=useknutý poison) blokujeme; prázdný token = legitimní odhlášení
-                // profilu (creds.trakt s blank tokenem) → aplikuj (jinak by se držel token předchozího profilu).
-                // 🔒 FIX (user 2026-07-20 „Trakt zlobí každý den"): guard blokuje useknutý token VŽDY, ne jen
-                // když už v prefs leží platný `current`. Dřív podmínka `&& looksLikeTraktToken(current)` po
-                // přepnutí na dětský profil (který prefs vymaže) NECHYTALA → useknutý 32-znakový token se zapsal
-                // → Trakt 401 → denní recidiva. Teď: malformovaný neprázdný = nikdy nezapsat (ponech prefs jak jsou).
+                // 🔒 FIX (user 2026-07-20): apply() = „srovnej prefs na TENHLE profil". Malformovaný (useknutý
+                // poison) token NIKDY nezapisuj — ALE ANI NENECHÁVEJ starý v prefs: `current` je token PŘEDCHOZÍHO
+                // profilu (po přepnutí děti→dospělý je to platný DĚTSKÝ token) → jeho ponechání = CIZÍ Trakt
+                // watchlist/„Pro tebe"/historie prosákne do dospělého (user 07-20, „Chci vidět" ukazoval dětský
+                // obsah). Proto malformovaný incoming → VYČISTI Trakt prefs → aktivní profil bez Traktu → výzva
+                // k přihlášení (správně), nikdy cizí data. (Legacy poison v DB se re-loginem přepíše na 64-hex;
+                // adopci useknutého z backendu brání `ProfileRepository.isLive` = looksLikeTraktToken.)
                 if (incoming.isNotBlank() && !looksLikeTraktToken(incoming)) {
                     timber.log.Timber.w(
-                        "[TRAKT-GUARD] config token len=%d malformed → NEZAPÍŠE (prefs current len=%d ponechán)",
+                        "[TRAKT-GUARD] config token len=%d malformed → ČISTÍM Trakt prefs (current len=%d, zabránění cizímu tokenu)",
                         incoming.length, current?.length ?: 0,
                     )
+                    remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES)
                 } else {
                     timber.log.Timber.i("[TRAKT-GUARD] apply Trakt token len=%d", incoming.length)
                     putString(K_TRAKT_ACCESS, incoming)
