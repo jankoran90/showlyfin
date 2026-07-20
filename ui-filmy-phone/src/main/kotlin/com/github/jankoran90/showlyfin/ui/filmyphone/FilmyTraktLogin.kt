@@ -2,20 +2,33 @@ package com.github.jankoran90.showlyfin.ui.filmyphone
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -28,11 +41,12 @@ import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
  * CELLULOID (SHW-98) Fáze 2 M2.2 — telefonní Trakt device-code přihlášení.
  *
  * Reuse sdíleného [SettingsViewModel.startTraktDeviceLogin] (per-profil: token se po úspěchu zrcadlí
- * do balíku AKTIVNÍHO profilu přes `captureTraktIntoActiveProfile`). UI ukáže kód + URL
- * (`auth.trakt.tv/activate`) a polluje sama; po přihlášení se zavře a domov se naplní.
+ * do balíku AKTIVNÍHO profilu přes `captureTraktIntoActiveProfile`). UI ukáže kód + URL a polluje sama;
+ * po přihlášení se zavře a domov se naplní.
  *
- * Umístění: prázdný stav domova (odblokuje data) + později Profil/Nastavení. TV větev (`TvTraktAccountRow`)
- * se NESAHÁ — jen telefonní zrcadlo stejného toku.
+ * QUICKCODE (user 2026-07-20) — kód je nešikovný na opsání/zkopírování (userovi omylem skončil ve
+ * vyhledávači). Proto: (1) kód se při zobrazení SÁM zkopíruje do schránky; (2) tlačítko „Kopírovat kód"
+ * (fallback, když auto nechytne); (3) tlačítko „Otevřít auth.trakt.tv" rovnou do prohlížeče.
  */
 @Composable
 fun FilmyTraktLoginDialog(
@@ -40,11 +54,22 @@ fun FilmyTraktLoginDialog(
     vm: SettingsViewModel = hiltViewModel(),
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val clipboard = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
+    var copied by remember { mutableStateOf(false) }
 
     // Otevření dialogu = spusť tok (idempotentní — VM si hlídá běžící kód).
     LaunchedEffect(Unit) { vm.startTraktDeviceLogin() }
     // Po úspěchu zavři (data domova se přenačtou přepnutím profilu / observací).
     LaunchedEffect(state.traktLoggedIn) { if (state.traktLoggedIn) onDismiss() }
+    // QUICKCODE — jakmile kód dorazí, zkopíruj ho do schránky (ať ho user jen vloží na auth.trakt.tv).
+    val code = state.traktUserCode
+    LaunchedEffect(code) {
+        if (!code.isNullOrBlank()) {
+            runCatching { clipboard.setText(AnnotatedString(code)) }
+            copied = true
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -56,26 +81,14 @@ fun FilmyTraktLoginDialog(
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                val code = state.traktUserCode
                 if (code != null) {
                     Text(
-                        text = "Otevři v prohlížeči",
+                        text = "Otevři auth.trakt.tv a vlož kód",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = state.traktVerificationUrl ?: "auth.trakt.tv/activate",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
                         textAlign = TextAlign.Center,
-                    )
-                    Text(
-                        text = "a zadej kód",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -89,6 +102,28 @@ fun FilmyTraktLoginDialog(
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                         )
+                    }
+                    Text(
+                        text = if (copied) "Kód zkopírován do schránky ✓" else "auth.trakt.tv/activate",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            runCatching { clipboard.setText(AnnotatedString(code)) }
+                            copied = true
+                        }) {
+                            Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                            Text("Kopírovat kód")
+                        }
+                        Button(onClick = {
+                            val url = state.traktVerificationUrl?.takeIf { it.startsWith("http") } ?: "https://auth.trakt.tv/activate"
+                            runCatching { uriHandler.openUri(url) }
+                        }) {
+                            Icon(Icons.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                            Text("Otevřít web")
+                        }
                     }
                 } else {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
