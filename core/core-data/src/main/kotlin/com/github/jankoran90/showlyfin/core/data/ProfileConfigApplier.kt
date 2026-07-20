@@ -93,34 +93,41 @@ class ProfileConfigApplier @Inject constructor(
             // v prefs patří (stampuje apply I TraktTokenProvider.saveTokens). Rozliší PŘEPNUTÍ profilu (owner≠tenhle
             // → cizí token → NEPONECHAT = žádný leak) vs SYNC/re-apply téhož profilu (owner==tenhle → čerstvý
             // re-login token nesmět smazat). Řeší regresi 1.0.74 (prázdný watchlist u obou profilů) i leak 1.0.74-.
+            // 🔒 KEYRING PEVNOST (SHW-100, 1.0.77): AUTHORITATIVE-LOCAL princip (research 07-20, TOP #3) —
+            // živý Trakt token TOHOTO profilu v prefs je ZDROJ PRAVDY, config balík z backendu jen NÁVRH.
+            // Nikdy nepřepiš/nemaž živý vlastní token profilu. Řeší „přihlášení nedrží přes restart":
+            // setActive pouštěl apply() se STALE snapshotem balíku → stará větev (a) přepsala čerstvý prefs
+            // token STARÝM z balíku a null-balík větev bezpodmínečně mazala i platný token. 1.0.76 chránil
+            // jen proti MALFORMOVANÉMU incoming, ne proti VALIDNÍMU-ALE-STARÉMU. Owner rozliší PŘEPNUTÍ
+            // profilu (owner≠ → cizí token → nedržet, žádný leak) od RESUME/SYNC téhož profilu.
             val t = creds.trakt
-            if (t != null) {
-                val incoming = t.accessToken
-                val current = prefs.getString(K_TRAKT_ACCESS, null)
-                val owner = prefs.getLong(K_TRAKT_OWNER, 0L)
-                when {
-                    // (a) incoming validní (64-hex) → nasaď + zapiš vlastníka = tento profil
-                    incoming.isNotBlank() && looksLikeTraktToken(incoming) -> {
-                        timber.log.Timber.i("[TRAKT-GUARD] apply Trakt token len=%d owner=%d", incoming.length, ownerProfileId)
-                        putString(K_TRAKT_ACCESS, incoming)
-                        putString(K_TRAKT_REFRESH, t.refreshToken)
-                        putLong(K_TRAKT_CREATED, t.createdAtMillis)
-                        putLong(K_TRAKT_EXPIRES, t.expiresAtMillis)
-                        putLong(K_TRAKT_OWNER, ownerProfileId)
-                    }
-                    // (b) incoming malformed, ALE current patří TOMUTO profilu a je validní → PONECH (re-apply/
-                    //     sync/resume téhož profilu po re-loginu — nesmíme smazat čerstvý token = regrese 1.0.74).
-                    owner == ownerProfileId && looksLikeTraktToken(current) -> {
-                        timber.log.Timber.w("[TRAKT-GUARD] incoming malformed(len=%d), current validní patří profilu %d → PONECHÁVÁM", incoming.length, ownerProfileId)
-                    }
-                    // (c) jinak (cizí owner = token předchozího profilu, nebo current nevalidní) → VYČISTI (žádný leak).
-                    else -> {
-                        timber.log.Timber.w("[TRAKT-GUARD] čistím Trakt prefs (incomingLen=%d, owner=%d, profil=%d)", incoming.length, owner, ownerProfileId)
-                        remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
-                    }
+            val current = prefs.getString(K_TRAKT_ACCESS, null)
+            val owner = prefs.getLong(K_TRAKT_OWNER, 0L)
+            val expiresAt = prefs.getLong(K_TRAKT_EXPIRES, 0L)
+            val now = System.currentTimeMillis()
+            // živý = platný tvar (64 hex) a ne po expiraci (0 = neznámá expirace → ber jako živý, refresh vyřeší)
+            val currentLive = looksLikeTraktToken(current) && (expiresAt <= 0L || expiresAt > now)
+            val currentBelongsHere = currentLive && owner == ownerProfileId
+            when {
+                // (KEEP) živý token patří TOMUTO profilu → NESAHAT (restart/resume/sync téhož profilu).
+                currentBelongsHere -> {
+                    timber.log.Timber.i("[TRAKT-GUARD] KEEP — živý token profilu %d je autoritativní, nechávám beze změny", ownerProfileId)
                 }
-            } else {
-                remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
+                // (ADOPT) incoming validní (64 hex) → switch-in / bootstrap nové TV / adopce obnoveného tokenu.
+                t != null && looksLikeTraktToken(t.accessToken) -> {
+                    timber.log.Timber.i("[TRAKT-GUARD] ADOPT Trakt token len=%d owner=%d", t.accessToken.length, ownerProfileId)
+                    putString(K_TRAKT_ACCESS, t.accessToken)
+                    putString(K_TRAKT_REFRESH, t.refreshToken)
+                    putLong(K_TRAKT_CREATED, t.createdAtMillis)
+                    putLong(K_TRAKT_EXPIRES, t.expiresAtMillis)
+                    putLong(K_TRAKT_OWNER, ownerProfileId)
+                }
+                // (CLEAR) nic použitelného (cizí/mrtvý current, incoming null/poison) → vyčisti (žádný leak).
+                else -> {
+                    val inLen = if (t != null) t.accessToken.length.toString() else "null"
+                    timber.log.Timber.w("[TRAKT-GUARD] CLEAR Trakt prefs (currentLive=%b, owner=%d, profil=%d, incoming=%s)", currentLive, owner, ownerProfileId, inLen)
+                    remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
+                }
             }
 
             // Vzhled / volné toggly — klíč v mapě = kanonický pref klíč
