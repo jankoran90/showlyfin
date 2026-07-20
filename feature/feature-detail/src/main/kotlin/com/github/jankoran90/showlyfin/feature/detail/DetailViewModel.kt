@@ -1187,10 +1187,16 @@ class DetailViewModel @Inject constructor(
             ?: st.item?.title.orEmpty()
         // CONDUIT (SHW-58): český dabing (CZ/SK audio nebo sdílej bez detekce) → NEhledat automaticky
         // titulky (film je dabovaný), ale `SubtitleQuery` postavíme dál (drží resume klíč `resumeKeyOf`).
-        // Drž v synchru s `isCzDub` v StreamComponents.kt (stejné kritérium).
+        // LINGUA (user 2026-07-20): TITULKOVÝ release (originál audio + CZ TITULKY, název nese „titulky"/„subs")
+        // NENÍ dabing → titulky HLEDAT. Ida = polský originál + CZ titulky ze sdilej („…titulky.cz…") se dřív
+        // bral jako dabovaný (sdilej + lang=null) → auto-search titulků VYPNUTÝ → přehrávač nenabídl žádné,
+        // i když CZ titulky reálně existují. Tady je gate JEN pro rozhodnutí o titulcích (audio routing pickeru
+        // řeší isCzDubStream/isCzDub zvlášť — ty se nemění).
         val czDub = run {
             val lang = stream.quality.audioLanguage?.uppercase()
-            lang == "CZ" || lang == "SK" || (stream.url?.startsWith("sdilej://") == true && lang == null)
+            val name = ((stream.name ?: "") + " " + (stream.url ?: "")).lowercase()
+            val subtitled = "titulky" in name || "subs" in name || "subtitle" in name || "-tit" in name || ".tit" in name
+            !subtitled && (lang == "CZ" || lang == "SK" || (stream.url?.startsWith("sdilej://") == true && lang == null))
         }
         if (subTitle.isNotBlank() || subOrig.isNotBlank()) {
             _uiState.update {
