@@ -417,7 +417,10 @@ class ProfileRepository @Inject constructor(
             .apply()
         // Plan PROFILES: aplikuj config balík do kanonických prefs (ABS/Uploader/vzhled…).
         // Plan WARDEN W0: efektivní config = šablona ⊕ override. Applier PŘED publikací (viz updateConfig).
-        val config = effectiveConfigFor(profile)
+        // ORBIT — captureCurrentTraktIntoProfile výše mohl JUST-NOW zapsat čerstvý Trakt token do balíku
+        // tohoto profilu; načti ho znovu z DAO, ať effectiveConfigFor nestaví config ze STALE snapshotu.
+        val profileForConfig = dao.getById(profileId) ?: profile
+        val config = effectiveConfigFor(profileForConfig)
         configApplier.apply(config, profile.id)
         _activeConfig.value = config
         // Emise profilu AŽ po zápisu prefs + configu → observeři reloadují s korektními creds.

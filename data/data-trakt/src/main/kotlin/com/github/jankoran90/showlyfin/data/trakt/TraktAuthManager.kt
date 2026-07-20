@@ -29,7 +29,7 @@ class TraktAuthManager @Inject constructor(
         )
     }
 
-    fun isLoggedIn(): Boolean = tokenProvider.getToken() != null
+    fun isLoggedIn(): Boolean = tokenProvider.isTokenLive()
 
     fun logout() = tokenProvider.revokeToken()
 }

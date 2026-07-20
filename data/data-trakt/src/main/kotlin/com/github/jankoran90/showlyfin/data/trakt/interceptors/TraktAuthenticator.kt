@@ -32,9 +32,12 @@ class TraktAuthenticator @Inject constructor(
         return runBlocking(Dispatchers.IO) {
             try {
                 Timber.d("Refreshing tokens...")
-                val newToken = tokenProvider.refreshToken()
-                tokenProvider.saveTokens(newToken.access_token, newToken.refresh_token, newToken.expires_in, newToken.created_at)
-                response.request.newBuilder().header("Authorization", "Bearer ${newToken.access_token}").build()
+                val freshAccess = tokenProvider.refreshTokenSafely() ?: return@runBlocking null
+                // ORBIT — gated 401 (živý token; Trakt gatuje /recommendations, /users/me/lists ap.): safely
+                // vrátil TÝŽ token → neopakuj se stejným, jinak OkHttp točí retry až do limitu. Nech 401 propadnout.
+                val prevAccess = response.request.header("Authorization")?.removePrefix("Bearer ")?.trim()
+                if (freshAccess == prevAccess) return@runBlocking null
+                response.request.newBuilder().header("Authorization", "Bearer $freshAccess").build()
             } catch (error: Throwable) {
                 when {
                     error is CancellationException || error.message == "Canceled" -> null

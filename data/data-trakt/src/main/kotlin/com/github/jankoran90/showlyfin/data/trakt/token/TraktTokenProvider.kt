@@ -6,6 +6,8 @@ import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.data.trakt.model.OAuthResponse
 import com.google.gson.Gson
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -48,9 +50,15 @@ internal class TraktTokenProvider(
         // 429. Access token dál funguje pro /sync. Po vypršení se zkusí obnova ještě jednou (kdyby se
         // token na telefonu obnovil a přenesl na TV).
         private const val AUTH_FAIL_COOLDOWN_MS = 600_000L
+        // ORBIT — bezpečnostní rezerva: pokud druhá cesta obnovila token s platností kratší než tohle,
+        // ber ho jako „ještě ne čerstvý" a obnov (jinak by nová obnova zdvojila spend rotovaného tokenu).
+        private const val REFRESH_SKEW_MS = 30_000L
     }
 
     private var token: String? = null
+
+    // ORBIT — jeden sdílený zámek pro single-flight obnovu (Authenticator i Interceptor jdou přes něj).
+    private val refreshMutex = Mutex()
 
     // GLIDE — cooldown po dočasném selhání obnovy (429/5xx/síť), ať neběží bouře refresh volání.
     @Volatile
@@ -175,5 +183,25 @@ internal class TraktTokenProvider(
             it.invokeOnCancellation { call.cancel() }
             call.enqueue(callback)
         }
+    }
+
+    override suspend fun refreshTokenSafely(): String? = refreshMutex.withLock {
+        val now = System.currentTimeMillis()
+        // double-check: druhá cesta mohla obnovit, než jsme dostali zámek → NEspotřebovávej refresh_token znovu
+        val curAccess = sharedPreferences.getString(KEY_ACCESS_TOKEN, null)?.trim()
+        val curExpires = sharedPreferences.getLong(KEY_TOKEN_EXPIRES_AT, 0L)
+        if (!curAccess.isNullOrEmpty() && curExpires > now + REFRESH_SKEW_MS) {
+            return@withLock curAccess // už čerstvý díky druhé cestě → hotovo, žádný další spend
+        }
+        val fresh = refreshToken()                 // stávající síťové volání, spotřebuje aktuální refresh_token
+        saveTokens(fresh.access_token, fresh.refresh_token, fresh.expires_in, fresh.created_at)
+        fresh.access_token
+    }
+
+    override fun isTokenLive(): Boolean {
+        val access = sharedPreferences.getString(KEY_ACCESS_TOKEN, null)?.trim()
+        if (access.isNullOrEmpty() || access.length != 64) return false
+        val expiresAt = sharedPreferences.getLong(KEY_TOKEN_EXPIRES_AT, 0L)
+        return expiresAt <= 0L || expiresAt > System.currentTimeMillis()
     }
 }

@@ -21,8 +21,7 @@ class TraktRefreshTokenInterceptor @Inject constructor(
         if (tokenProvider.shouldRefresh()) {
             runBlocking(Dispatchers.IO) {
                 try {
-                    val refreshedTokens = tokenProvider.refreshToken()
-                    tokenProvider.saveTokens(refreshedTokens.access_token, refreshedTokens.refresh_token, refreshedTokens.expires_in, refreshedTokens.created_at)
+                    tokenProvider.refreshTokenSafely()
                 } catch (error: Throwable) {
                     if (error !is CancellationException && error.message != "Canceled") {
                         Timber.e(error)

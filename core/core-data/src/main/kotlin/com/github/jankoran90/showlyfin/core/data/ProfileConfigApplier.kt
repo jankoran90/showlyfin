@@ -113,8 +113,10 @@ class ProfileConfigApplier @Inject constructor(
                 currentBelongsHere -> {
                     timber.log.Timber.i("[TRAKT-GUARD] KEEP — živý token profilu %d je autoritativní, nechávám beze změny", ownerProfileId)
                 }
-                // (ADOPT) incoming validní (64 hex) → switch-in / bootstrap nové TV / adopce obnoveného tokenu.
-                t != null && looksLikeTraktToken(t.accessToken) -> {
+                // (ADOPT) incoming validní (64 hex) A NE po expiraci → switch-in / bootstrap nové TV / adopce
+                // obnoveného tokenu. <=0 = neznámá expirace (bootstrap nové TV) zůstává adoptovatelná.
+                t != null && looksLikeTraktToken(t.accessToken) &&
+                    (t.expiresAtMillis <= 0L || t.expiresAtMillis > now) -> {
                     timber.log.Timber.i("[TRAKT-GUARD] ADOPT Trakt token len=%d owner=%d", t.accessToken.length, ownerProfileId)
                     putString(K_TRAKT_ACCESS, t.accessToken)
                     putString(K_TRAKT_REFRESH, t.refreshToken)
