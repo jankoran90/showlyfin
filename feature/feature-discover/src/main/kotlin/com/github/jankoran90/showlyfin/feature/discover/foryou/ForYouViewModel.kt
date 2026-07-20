@@ -4,10 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegion
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSettingsStore
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.data.uploader.RecommendationsStore
 import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import com.github.jankoran90.showlyfin.feature.discover.curator.CuratorLoader
+import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaGrouping
+import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,10 +24,11 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Stav sekce „Pro tebe" — plochý seznam kurátorských doporučení + příznak načítání. */
+/** Stav sekce „Pro tebe" — plochý seznam kurátorských doporučení + příznak načítání. Konzument = TV/sdílený screen. */
 data class ForYouUiState(
     val items: List<MediaItem> = emptyList(),
     val loading: Boolean = true,
@@ -37,6 +44,11 @@ data class ForYouUiState(
  * TV↔telefon, přežije reinstall). `forYou()` vrací jen aktuální snímek (~60 dle vkusu); ten se MERGuje s
  * akumulovaným ([RecommendationsStore.accumulate]). Sekce roste místo aby se přepisovala. Reaktivní [state] čte
  * přímo ze [RecommendationsStore.items] → akumulované se ukáže okamžitě (i před doběhnutím čerstvého snímku).
+ *
+ * **MIRROR (user 2026-07-20)** — telefon appky Filmy dostává stejné nástroje jako Filmotéka: osy (Vše/Žánr/Země),
+ * filtr žánru+země, řazení osy „Vše", počítadlo, řady. Vystaveno zvlášť jako [filmotekaState] ([FilmotekaUiState]),
+ * grupováno SDÍLENÝM [FilmotekaGrouping.build] nad TÝMIŽ akumulovanými tipy (parita 1:1, žádný drift). TV/sdílený
+ * screen dál čte plochý [state]; filtry jsou živé (per-session), **akumulace beze změny**.
  */
 @HiltViewModel
 class ForYouViewModel @Inject constructor(
@@ -44,13 +56,51 @@ class ForYouViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val viewModeStore: ViewModeStore,
     private val recommendationsStore: RecommendationsStore,
+    private val settings: FilmotekaSettingsStore,
 ) : ViewModel() {
 
-    private val _loading = MutableStateFlow(true)
+    /** MIRROR — živé nástroje browsingu (osa/řazení/filtry) telefonní plochy „Pro tebe". Per-session (neukládá se). */
+    private data class Tools(
+        val axis: FilmotekaAxis = FilmotekaAxis.ALL,
+        val allSort: FilmotekaAllSort = FilmotekaAllSort.RECENT,
+        val genreFilter: Set<String> = emptySet(),
+        val countryFilter: Set<CinematographyRegion> = emptySet(),
+    )
 
+    private val _loading = MutableStateFlow(true)
+    private val _tools = MutableStateFlow(Tools())
+
+    /** Plochý stav (TV + sdílený ForYouScreen) — beze změny oproti původku. */
     val state: StateFlow<ForYouUiState> = combine(recommendationsStore.items, _loading) { items, loading ->
         ForYouUiState(items = items, loading = loading && items.isEmpty())
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ForYouUiState())
+
+    /**
+     * MIRROR — stav ve stejném tvaru jako Filmotéka ([FilmotekaUiState]) → sdílený telefonní browse UI ho renderuje
+     * 1:1. Přeskupuje se reaktivně na každou změnu akumulovaných tipů / nástrojů / zapnutých regionů (grouper je levý).
+     */
+    val filmotekaState: StateFlow<FilmotekaUiState> =
+        combine(recommendationsStore.items, _loading, _tools, settings.enabledRegions) { items, loading, tools, enabled ->
+            val result = FilmotekaGrouping.build(
+                all = items,
+                axis = tools.axis,
+                allSort = tools.allSort,
+                genreFilter = tools.genreFilter,
+                countryFilter = tools.countryFilter,
+                enabledRegions = enabled,
+            )
+            FilmotekaUiState(
+                axis = tools.axis,
+                rails = result.rails,
+                loading = loading && items.isEmpty(),
+                allSort = tools.allSort,
+                total = result.total,
+                genreFilter = tools.genreFilter,
+                availableGenres = result.availableGenres,
+                countryFilter = tools.countryFilter,
+                availableCountries = result.availableCountries,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, FilmotekaUiState())
 
     val viewMode: StateFlow<ViewMode> = viewModeStore.modes
         .map { ViewMode.fromKey(it[ViewModeStore.SECTION_FOR_YOU]) }
@@ -67,6 +117,31 @@ class ForYouViewModel @Inject constructor(
     }
 
     fun setViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_FOR_YOU, mode.storeKey)
+
+    // ── MIRROR: nástroje browsingu (parita s TvFilmotekaViewModel) ──────────────────
+
+    /** Přepnutí osy (Vše/Žánr/Země) — jen přeskupí (bez fetch). */
+    fun setAxis(axis: FilmotekaAxis) = _tools.update { if (it.axis == axis) it else it.copy(axis = axis) }
+
+    /** Řazení osy „Vše" (Nedávno / Abecedně). */
+    fun setAllSort(sort: FilmotekaAllSort) = _tools.update { if (it.allSort == sort) it else it.copy(allSort = sort) }
+
+    /** GENRE-FILTER — přepni žánr (multi-select, prázdný = vše). */
+    fun toggleGenreFilter(genre: String) {
+        val g = genre.trim()
+        if (g.isBlank()) return
+        _tools.update { it.copy(genreFilter = if (g in it.genreFilter) it.genreFilter - g else it.genreFilter + g) }
+    }
+
+    /** GENRE-FILTER — zruš filtr žánrů. */
+    fun clearGenreFilter() = _tools.update { if (it.genreFilter.isEmpty()) it else it.copy(genreFilter = emptySet()) }
+
+    /** COUNTRY-FILTER — přepni region (multi-select, prázdný = vše). */
+    fun toggleCountryFilter(region: CinematographyRegion) =
+        _tools.update { it.copy(countryFilter = if (region in it.countryFilter) it.countryFilter - region else it.countryFilter + region) }
+
+    /** COUNTRY-FILTER — zruš filtr země. */
+    fun clearCountryFilter() = _tools.update { if (it.countryFilter.isEmpty()) it else it.copy(countryFilter = emptySet()) }
 
     private fun reload() {
         loadJob?.cancel()

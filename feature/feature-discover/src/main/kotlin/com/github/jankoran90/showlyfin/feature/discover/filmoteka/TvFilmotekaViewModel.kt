@@ -12,7 +12,6 @@ import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSettingsStore
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSource
-import com.github.jankoran90.showlyfin.core.domain.filmoteka.regionsOf
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
@@ -79,8 +78,8 @@ data class FilmotekaUiState(
     val availableGenres: List<String> = emptyList(),
     /**
      * COUNTRY-FILTER (user 2026-07-20) — aktivní filtr zemí/regionů (multi-select), analogie genreFilter.
-     * Prázdný = bez filtru. Filtruje se dle HLAVNÍ země/regionu titulu ([mainRegionOf] = první region s
-     * největší vahou, stejně jako [mainGenreOf]). Živý stav, neukládá se.
+     * Prázdný = bez filtru. Filtruje se dle HLAVNÍ země/regionu titulu ([FilmotekaGrouping.mainRegionOf] = první
+     * region s největší vahou, stejně jako [FilmotekaGrouping.mainGenreOf]). Živý stav, neukládá se.
      */
     val countryFilter: Set<CinematographyRegion> = emptySet(),
     /** Všechny hlavní regiony přítomné v bázi (dle četnosti sestupně) — nabídka pro picker filtru země. */
@@ -382,145 +381,33 @@ class TvFilmotekaViewModel @Inject constructor(
 
     // ── Grupování (osa) ───────────────────────────────────────────────────────────
 
+    /**
+     * MIRROR (user 2026-07-20) — grupování/filtr delegováno na SDÍLENÝ [FilmotekaGrouping.build] (tentýž grouper
+     * volá i „Pro tebe" → obě sekce filtrují/grupují 1:1, žádný drift). Zde jen posbírej bázi (base>favorites),
+     * předej živé filtry + nastavení a výsledek promítni do stavu.
+     */
     private fun rebuild(axis: FilmotekaAxis) {
         // Base (JF+Working+Trakt) má přednost před Oblíbenými (putIfAbsent v pořadí base → favorites).
         val combined = LinkedHashMap<String, MediaItem>()
         for (item in baseItems + favoriteItems) { val k = dedupKey(item) ?: continue; combined.putIfAbsent(k, item) }
         val all = combined.values.toList()
-        // Nabídka žánrů/zemí do pickerů = z PLNÉ báze (dřív než filtr), dle četnosti hlavní hodnoty sestupně.
-        val available = availableGenresOf(all)
-        val availableC = availableCountriesOf(all)
-        // GENRE + COUNTRY FILTER — zúžení dle HLAVNÍHO žánru a HLAVNÍ země (prázdný filtr = beze změny). Filtruj
-        // PŘED grupováním → padne uniformně na všechny osy (Vše/Žánr/Země). Oba filtry se skládají (AND).
-        val filtered = all
-            .let { if (genreFilter.isEmpty()) it else it.filter { m -> mainGenreOf(m) in genreFilter } }
-            .let { if (countryFilter.isEmpty()) it else it.filter { m -> mainRegionOf(m) in countryFilter } }
-        val rails = when (axis) {
-            FilmotekaAxis.ALL -> groupAll(filtered)
-            FilmotekaAxis.GENRE -> groupByGenre(filtered)
-            FilmotekaAxis.COUNTRY -> groupByCountry(filtered)
-        }
+        val result = FilmotekaGrouping.build(
+            all = all,
+            axis = axis,
+            allSort = settings.allSort.value,
+            genreFilter = genreFilter,
+            countryFilter = countryFilter,
+            enabledRegions = settings.enabledRegions.value,
+        )
         _state.value = FilmotekaUiState(
-            axis = axis, rails = rails, loading = false,
-            allSort = settings.allSort.value, total = all.size,
-            genreFilter = genreFilter, availableGenres = available,
-            countryFilter = countryFilter, availableCountries = availableC,
+            axis = axis, rails = result.rails, loading = false,
+            allSort = settings.allSort.value, total = result.total,
+            genreFilter = genreFilter, availableGenres = result.availableGenres,
+            countryFilter = countryFilter, availableCountries = result.availableCountries,
         )
     }
 
-    /** Hlavní žánr titulu = první neprázdný (nejvyšší váha dle TMDB řazení relevance). Sdílené filtrem i grupováním. */
-    private fun mainGenreOf(item: MediaItem): String? =
-        item.genres.orEmpty().firstOrNull { it.isNotBlank() }?.trim()
-
-    /** Všechny hlavní žánry v bázi, seřazené dle četnosti sestupně (tie-break český Collator). */
-    private fun availableGenresOf(items: List<MediaItem>): List<String> {
-        val counts = LinkedHashMap<String, Int>()
-        for (item in items) { val g = mainGenreOf(item) ?: continue; counts[g] = (counts[g] ?: 0) + 1 }
-        val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
-        return counts.entries
-            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenComparator { a, b -> coll.compare(a.key, b.key) })
-            .map { it.key }
-    }
-
-    /**
-     * COUNTRY-FILTER (user 2026-07-20) — HLAVNÍ region titulu = první region dle váhy (pořadí zemí původu →
-     * pořadí enumu), analogie [mainGenreOf]. Prázdné/neznámé země → OSTATNI. Sdílené filtrem i grupováním osy Země.
-     */
-    private fun mainRegionOf(item: MediaItem): CinematographyRegion =
-        regionsOf(item.originCountries).firstOrNull() ?: CinematographyRegion.OSTATNI
-
-    /** Hlavní regiony v bázi dle četnosti sestupně (nabídka pickeru země). Respektuje zapnuté regiony; OSTATNI vždy. */
-    private fun availableCountriesOf(items: List<MediaItem>): List<CinematographyRegion> {
-        val enabled = settings.enabledRegions.value
-        val counts = LinkedHashMap<CinematographyRegion, Int>()
-        for (item in items) {
-            val r = mainRegionOf(item)
-            if (r != CinematographyRegion.OSTATNI && r !in enabled) continue
-            counts[r] = (counts[r] ?: 0) + 1
-        }
-        return counts.entries.sortedByDescending { it.value }.map { it.key }
-    }
-
-    /**
-     * CONVERGE V1 / CATALOGUE — osa „Vše": JEDNA plochá řada všech titulů. RECENT (výchozí) = podle reálného
-     * data přidání ([MediaItem.addedAtMs]: JF DateCreated / Trakt listed_at / uložený zdroj / Oblíbené), sestupně
-     * napříč VŠEMI zdroji (ne jen pořadí bucketů). Datum je stabilní vůči uložení zdroje → dohledání nepřeskládá
-     * seznam. Bez data → na konec. ALPHABETICAL = název A–Z přes český Collator. Věkový gate už proběhl v bázi.
-     */
-    private fun groupAll(items: List<MediaItem>): List<FilmotekaRail> {
-        if (items.isEmpty()) return emptyList()
-        val sorted = when (settings.allSort.value) {
-            FilmotekaAllSort.RECENT -> items.sortedByDescending { it.addedAtMs ?: Long.MIN_VALUE }
-            FilmotekaAllSort.ALPHABETICAL -> {
-                val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
-                items.sortedWith(Comparator { a, b -> coll.compare(a.displayTitle, b.displayTitle) })
-            }
-        }
-        val title = when (settings.allSort.value) {
-            FilmotekaAllSort.RECENT -> "Nedávno přidané"
-            FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
-        }
-        return listOf(FilmotekaRail(id = "filmo_all", title = title, items = sorted.map { it.toHomeRowItem("all") }))
-    }
-
-    /** Řady podle žánru, seřazené sestupně dle četnosti. Prázdné žánry nevznikají. */
-    private fun groupByGenre(items: List<MediaItem>): List<FilmotekaRail> {
-        val byGenre = LinkedHashMap<String, MutableList<MediaItem>>()
-        for (item in items) {
-            // Jen HLAVNÍ žánr (první = nejvyšší váha dle TMDB řazení relevance) → film v JEDNÉ sekci, ne duplikát
-            // napříč všemi svými žánry (user 07-19). Karty/seznamy dál ukazují všechny žánry (toHomeRowItem), tohle
-            // grupování řeší jen řady/sekce osy Žánr.
-            val g = mainGenreOf(item)
-            if (!g.isNullOrBlank()) byGenre.getOrPut(g) { mutableListOf() }.add(item)
-        }
-        return byGenre.entries
-            .sortedByDescending { it.value.size }
-            .map { (genre, list) ->
-                FilmotekaRail(
-                    id = "filmo_genre_$genre",
-                    title = genre,
-                    items = list.map { it.toHomeRowItem(genre) },
-                )
-            }
-            .filter { it.items.isNotEmpty() }
-    }
-
-    /**
-     * F2 — řady podle „kinematografie" ([CinematographyRegion]). Titul může být ve víc regionech (klíč karty
-     * nese region). Vypnuté regiony (mimo settings.enabledRegions) se skryjí; OSTATNI (fallback) vždy zobraz.
-     * Řazení = pořadí enumu (OSTATNI poslední). Prázdné regiony nevznikají.
-     */
-    private fun groupByCountry(items: List<MediaItem>): List<FilmotekaRail> {
-        val enabled = settings.enabledRegions.value
-        val byRegion = LinkedHashMap<CinematographyRegion, MutableList<MediaItem>>()
-        for (item in items) {
-            // Jen HLAVNÍ region (první = největší váha, jako mainGenreOf) → film v JEDNÉ sekci, ne duplikát
-            // napříč regiony (user 07-20 „jako u žánru"). Skryj vypnuté regiony; OSTATNI ukaž vždy.
-            val region = mainRegionOf(item)
-            if (region != CinematographyRegion.OSTATNI && region !in enabled) continue
-            byRegion.getOrPut(region) { mutableListOf() }.add(item)
-        }
-        return CinematographyRegion.entries.mapNotNull { region ->
-            val list = byRegion[region] ?: return@mapNotNull null
-            FilmotekaRail(
-                id = "filmo_country_${region.name}",
-                title = region.label,
-                items = list.map { it.toHomeRowItem("country_${region.name}") },
-            )
-        }.filter { it.items.isNotEmpty() }
-    }
-
     // ── Mapování ────────────────────────────────────────────────────────────────
-
-    private fun MediaItem.toHomeRowItem(axisValue: String) = HomeRowItem(
-        // Klíč nese hodnotu osy → titul může být ve víc řadách bez Compose key kolize.
-        key = "filmo_${axisValue}_${tmdbId ?: imdbId ?: traktId}",
-        title = displayTitle,
-        year = year,
-        posterUrl = posterUrl("w342"),
-        landscapeUrl = backdropUrl("w780"),
-        mediaItem = this,
-    )
 
     private fun BaseItemDto.toFilmotekaMediaItem(): MediaItem? {
         val tmdb = providerIds?.get("Tmdb")?.toLongOrNull()
