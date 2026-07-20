@@ -142,7 +142,15 @@ class PlaybackViewModel @Inject constructor(
         // později), takže gate na imdb by resume tiše vypnul (pozice se neuloží → dialog se nikdy nenabídne).
         // CONDUIT (SHW-58): u dabovaného zdroje (autoSearch=false) NEhledáme titulky, ale resume klíč
         // držíme dál (resume musí fungovat i bez titulků).
-        query = subtitleQuery?.takeIf { it.imdb.isNotBlank() && it.autoSearch }
+        // LINGUA (user 2026-07-20): NEgatuj hledání titulků na imdb — obsah z „Pro tebe"/Filmotéky (Ida) má
+        // imdb v čase přehrání PRÁZDNÉ (TMDB ho dotáhne až async, query je zmražený snapshot bez re-triggeru)
+        // → dřív se `loadSubtitles` nikdy nespustil → přehrávač nenabídl žádnou stopu („Vypnuto"). Backend i
+        // API klient prázdné imdb umí (placeholder + hledání dle title/origTitle/year), a funkční TV cast
+        // (buildTvSubtitles) gatuje taky JEN na autoSearch. Stačí mít podle čeho hledat (název). AI-překlad
+        // větev má vlastní imdb guard → při prázdném imdb se jen přeskočí, primární CZ titulky naskočí.
+        query = subtitleQuery?.takeIf {
+            it.autoSearch && (it.imdb.isNotBlank() || it.title.isNotBlank() || it.origTitle.isNotBlank())
+        }
         resumeKey = subtitleQuery?.let { resumeKeyOf(it) }
         val localResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
         // CROSS-DEVICE RESUME: pozice z telefonu (cast příkaz) přebije lokální resume TV, když je >0
