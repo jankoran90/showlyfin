@@ -77,6 +77,14 @@ data class FilmotekaUiState(
     val genreFilter: Set<String> = emptySet(),
     /** Všechny hlavní žánry přítomné v bázi (dle četnosti sestupně) — nabídka pro picker filtru. */
     val availableGenres: List<String> = emptyList(),
+    /**
+     * COUNTRY-FILTER (user 2026-07-20) — aktivní filtr zemí/regionů (multi-select), analogie genreFilter.
+     * Prázdný = bez filtru. Filtruje se dle HLAVNÍ země/regionu titulu ([mainRegionOf] = první region s
+     * největší vahou, stejně jako [mainGenreOf]). Živý stav, neukládá se.
+     */
+    val countryFilter: Set<CinematographyRegion> = emptySet(),
+    /** Všechny hlavní regiony přítomné v bázi (dle četnosti sestupně) — nabídka pro picker filtru země. */
+    val availableCountries: List<CinematographyRegion> = emptyList(),
 )
 
 /**
@@ -116,6 +124,9 @@ class TvFilmotekaViewModel @Inject constructor(
 
     /** GENRE-FILTER — živý výběr žánrů (viz [FilmotekaUiState.genreFilter]). Drží se napříč přeskupením os. */
     @Volatile private var genreFilter: Set<String> = emptySet()
+
+    /** COUNTRY-FILTER — živý výběr zemí/regionů (viz [FilmotekaUiState.countryFilter]). Drží se napříč osami. */
+    @Volatile private var countryFilter: Set<CinematographyRegion> = emptySet()
 
     private var loadJob: Job? = null
 
@@ -228,6 +239,22 @@ class TvFilmotekaViewModel @Inject constructor(
     fun clearGenreFilter() {
         if (genreFilter.isEmpty()) return
         genreFilter = emptySet()
+        rebuild(_state.value.axis)
+    }
+
+    /**
+     * COUNTRY-FILTER (user 2026-07-20) — přepni region ve filtru země (multi-select), analogie [toggleGenreFilter].
+     * Prázdný filtr = bez omezení. Filtruje dle hlavního regionu titulu. Sdílené telefon+TV; hned přeskup.
+     */
+    fun toggleCountryFilter(region: CinematographyRegion) {
+        countryFilter = if (region in countryFilter) countryFilter - region else countryFilter + region
+        rebuild(_state.value.axis)
+    }
+
+    /** COUNTRY-FILTER — zruš filtr země (zobraz vše). */
+    fun clearCountryFilter() {
+        if (countryFilter.isEmpty()) return
+        countryFilter = emptySet()
         rebuild(_state.value.axis)
     }
 
@@ -360,11 +387,14 @@ class TvFilmotekaViewModel @Inject constructor(
         val combined = LinkedHashMap<String, MediaItem>()
         for (item in baseItems + favoriteItems) { val k = dedupKey(item) ?: continue; combined.putIfAbsent(k, item) }
         val all = combined.values.toList()
-        // Nabídka žánrů do pickeru = z PLNÉ báze (dřív než filtr), dle četnosti hlavního žánru sestupně.
+        // Nabídka žánrů/zemí do pickerů = z PLNÉ báze (dřív než filtr), dle četnosti hlavní hodnoty sestupně.
         val available = availableGenresOf(all)
-        // GENRE-FILTER — zúžení dle hlavního žánru (prázdný filtr = beze změny). Filtruj PŘED grupováním →
-        // padne uniformně na všechny osy (Vše/Žánr/Země). Zapomenuté žánry z filtru (už nejsou v bázi) neškodí.
-        val filtered = if (genreFilter.isEmpty()) all else all.filter { mainGenreOf(it) in genreFilter }
+        val availableC = availableCountriesOf(all)
+        // GENRE + COUNTRY FILTER — zúžení dle HLAVNÍHO žánru a HLAVNÍ země (prázdný filtr = beze změny). Filtruj
+        // PŘED grupováním → padne uniformně na všechny osy (Vše/Žánr/Země). Oba filtry se skládají (AND).
+        val filtered = all
+            .let { if (genreFilter.isEmpty()) it else it.filter { m -> mainGenreOf(m) in genreFilter } }
+            .let { if (countryFilter.isEmpty()) it else it.filter { m -> mainRegionOf(m) in countryFilter } }
         val rails = when (axis) {
             FilmotekaAxis.ALL -> groupAll(filtered)
             FilmotekaAxis.GENRE -> groupByGenre(filtered)
@@ -374,6 +404,7 @@ class TvFilmotekaViewModel @Inject constructor(
             axis = axis, rails = rails, loading = false,
             allSort = settings.allSort.value, total = all.size,
             genreFilter = genreFilter, availableGenres = available,
+            countryFilter = countryFilter, availableCountries = availableC,
         )
     }
 
@@ -389,6 +420,25 @@ class TvFilmotekaViewModel @Inject constructor(
         return counts.entries
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenComparator { a, b -> coll.compare(a.key, b.key) })
             .map { it.key }
+    }
+
+    /**
+     * COUNTRY-FILTER (user 2026-07-20) — HLAVNÍ region titulu = první region dle váhy (pořadí zemí původu →
+     * pořadí enumu), analogie [mainGenreOf]. Prázdné/neznámé země → OSTATNI. Sdílené filtrem i grupováním osy Země.
+     */
+    private fun mainRegionOf(item: MediaItem): CinematographyRegion =
+        regionsOf(item.originCountries).firstOrNull() ?: CinematographyRegion.OSTATNI
+
+    /** Hlavní regiony v bázi dle četnosti sestupně (nabídka pickeru země). Respektuje zapnuté regiony; OSTATNI vždy. */
+    private fun availableCountriesOf(items: List<MediaItem>): List<CinematographyRegion> {
+        val enabled = settings.enabledRegions.value
+        val counts = LinkedHashMap<CinematographyRegion, Int>()
+        for (item in items) {
+            val r = mainRegionOf(item)
+            if (r != CinematographyRegion.OSTATNI && r !in enabled) continue
+            counts[r] = (counts[r] ?: 0) + 1
+        }
+        return counts.entries.sortedByDescending { it.value }.map { it.key }
     }
 
     /**
@@ -444,11 +494,11 @@ class TvFilmotekaViewModel @Inject constructor(
         val enabled = settings.enabledRegions.value
         val byRegion = LinkedHashMap<CinematographyRegion, MutableList<MediaItem>>()
         for (item in items) {
-            for (region in regionsOf(item.originCountries)) {
-                // Skryj vypnuté regiony; OSTATNI ukaž vždy.
-                if (region != CinematographyRegion.OSTATNI && region !in enabled) continue
-                byRegion.getOrPut(region) { mutableListOf() }.add(item)
-            }
+            // Jen HLAVNÍ region (první = největší váha, jako mainGenreOf) → film v JEDNÉ sekci, ne duplikát
+            // napříč regiony (user 07-20 „jako u žánru"). Skryj vypnuté regiony; OSTATNI ukaž vždy.
+            val region = mainRegionOf(item)
+            if (region != CinematographyRegion.OSTATNI && region !in enabled) continue
+            byRegion.getOrPut(region) { mutableListOf() }.add(item)
         }
         return CinematographyRegion.entries.mapNotNull { region ->
             val list = byRegion[region] ?: return@mapNotNull null

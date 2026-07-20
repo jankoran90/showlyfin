@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegion
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
@@ -89,8 +90,10 @@ fun FilmyFilmotekaScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     // Výchozí = SEZNAM (bohaté řádky jako domov, přání usera 2026-07-17). Přepínač vpravo v liště.
     var viewMode by remember { mutableStateOf(ViewMode.LIST) }
-    // GENRE-FILTER — bottom sheet výběru žánrů (multi-select). Otevře se druhým klikem na „Žánr" (user 07-19).
+    // GENRE-FILTER — bottom sheet výběru žánrů (multi-select). Otevře se klikem na tab „Žánr" (user 07-20).
     var showGenreFilter by remember { mutableStateOf(false) }
+    // COUNTRY-FILTER (user 07-20) — bottom sheet výběru zemí/regionů, analogie žánru. Otevře klik na tab „Země".
+    var showCountryFilter by remember { mutableStateOf(false) }
     // SEARCH (user 07-19) — lupa → rozbalí input → živý fulltext filtr (case/diakritika insensitive) přes
     // název + popisek. Filtruje se render-time nad railama (bez fetch). Prázdný dotaz = beze změny.
     var searchOpen by remember { mutableStateOf(false) }
@@ -141,17 +144,22 @@ fun FilmyFilmotekaScreen(
             allSort = state.allSort,
             viewMode = viewMode,
             total = state.total,
-            genreFilterCount = state.genreFilter.size,
+            genreFilter = state.genreFilter,
+            countryFilter = state.countryFilter,
             onMenu = onMenu,
             onAxis = { a ->
-                // 2. klik na už aktivní osu Žánr = otevři filtr žánrů (jinak přepni osu).
-                if (a == FilmotekaAxis.GENRE && state.axis == FilmotekaAxis.GENRE) showGenreFilter = true
-                else vm.setAxis(a)
+                // user 07-20 — klik na „Žánr"/„Země" přepne osu A rovnou otevře picker filtru (výběr → chip s křížkem).
+                vm.setAxis(a)
+                when (a) {
+                    FilmotekaAxis.GENRE -> showGenreFilter = true
+                    FilmotekaAxis.COUNTRY -> showCountryFilter = true
+                    else -> {}
+                }
             },
             onAllSort = vm::setAllSort,
             onToggleView = { viewMode = if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID },
-            onOpenGenreFilter = { showGenreFilter = true },
-            onClearGenreFilter = vm::clearGenreFilter,
+            onRemoveGenre = vm::toggleGenreFilter,
+            onRemoveCountry = vm::toggleCountryFilter,
             searchOpen = searchOpen,
             onToggleSearch = { searchOpen = !searchOpen; if (!searchOpen) query = "" },
         )
@@ -178,6 +186,15 @@ fun FilmyFilmotekaScreen(
             onDismiss = { showGenreFilter = false },
         )
     }
+    if (showCountryFilter) {
+        CountryFilterSheet(
+            available = state.availableCountries,
+            selected = state.countryFilter,
+            onToggle = vm::toggleCountryFilter,
+            onClear = vm::clearCountryFilter,
+            onDismiss = { showCountryFilter = false },
+        )
+    }
 }
 
 /**
@@ -190,13 +207,14 @@ private fun FilmotekaChips(
     allSort: FilmotekaAllSort,
     viewMode: ViewMode,
     total: Int,
-    genreFilterCount: Int,
+    genreFilter: Set<String>,
+    countryFilter: Set<CinematographyRegion>,
     onMenu: () -> Unit,
     onAxis: (FilmotekaAxis) -> Unit,
     onAllSort: (FilmotekaAllSort) -> Unit,
     onToggleView: () -> Unit,
-    onOpenGenreFilter: () -> Unit,
-    onClearGenreFilter: () -> Unit,
+    onRemoveGenre: (String) -> Unit,
+    onRemoveCountry: (CinematographyRegion) -> Unit,
     searchOpen: Boolean,
     onToggleSearch: () -> Unit,
 ) {
@@ -257,24 +275,51 @@ private fun FilmotekaChips(
                 }
             }
         }
-        // GENRE-FILTER — druhý řádek u osy Žánr: otevři filtr (multi-select) + zrušit, když aktivní.
-        if (axis == FilmotekaAxis.GENRE) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilterChip(
-                    selected = genreFilterCount > 0,
-                    onClick = onOpenGenreFilter,
-                    label = { Text(if (genreFilterCount > 0) "Filtr žánrů ($genreFilterCount)" else "Filtrovat žánry") },
-                )
-                if (genreFilterCount > 0) {
-                    FilterChip(selected = false, onClick = onClearGenreFilter, label = { Text("Zrušit filtr") })
-                }
-            }
+        // GENRE-FILTER (user 07-20) — druhý řádek u osy Žánr: JEN pojmenované chipy vybraných žánrů s křížkem
+        // (klik = zrušit ten žánr). Vstup do výběru = klik na tab „Žánr" (otevře picker). Prázdný výběr = žádný řádek.
+        if (axis == FilmotekaAxis.GENRE && genreFilter.isNotEmpty()) {
+            SelectedFilterChips(
+                labels = genreFilter.map { it to it },
+                onRemove = { onRemoveGenre(it) },
+            )
+        }
+        // COUNTRY-FILTER (user 07-20) — analogicky u osy Země: pojmenované chipy vybraných regionů s křížkem.
+        if (axis == FilmotekaAxis.COUNTRY && countryFilter.isNotEmpty()) {
+            SelectedFilterChips(
+                labels = countryFilter.map { it.label to it },
+                onRemove = onRemoveCountry,
+            )
+        }
+    }
+}
+
+/**
+ * SELECTED-FILTER (user 07-20) — řádek pojmenovaných chipů aktivního filtru (žánr/země) s křížkem na zrušení.
+ * [labels] = dvojice (popisek → hodnota); klik na chip (i křížek) zavolá [onRemove] s hodnotou. Generický pro
+ * žánr (String) i region (CinematographyRegion).
+ */
+@Composable
+private fun <T> SelectedFilterChips(labels: List<Pair<String, T>>, onRemove: (T) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        labels.forEach { (label, value) ->
+            FilterChip(
+                selected = true,
+                onClick = { onRemove(value) },
+                label = { Text(label) },
+                trailingIcon = {
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = "Zrušit filtr $label",
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+            )
         }
     }
 }
@@ -433,6 +478,64 @@ private fun GenreFilterSheet(
                             selected = g in selected,
                             onClick = { onToggle(g) },
                             label = { Text(g) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * COUNTRY-FILTER (user 2026-07-20) — spodní sheet výběru zemí/regionů (multi-select), analogie [GenreFilterSheet].
+ * Filtruje dle HLAVNÍ země s největší vahou (parita s osou Země); prázdný výběr = vše. Nabídka [available] =
+ * regiony přítomné v bázi (dle četnosti). Sdílený VM = parita s TV.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun CountryFilterSheet(
+    available: List<CinematographyRegion>,
+    selected: Set<CinematographyRegion>,
+    onToggle: (CinematographyRegion) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Filtr zemí",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (selected.isNotEmpty()) {
+                    TextButton(onClick = onClear) { Text("Zrušit filtr") }
+                }
+            }
+            if (available.isEmpty()) {
+                Text(
+                    text = "Žádné země k dispozici.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    available.forEach { region ->
+                        FilterChip(
+                            selected = region in selected,
+                            onClick = { onToggle(region) },
+                            label = { Text(region.label) },
                         )
                     }
                 }
