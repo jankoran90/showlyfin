@@ -36,6 +36,11 @@ internal class TraktTokenProvider(
         private const val KEY_REFRESH_TOKEN = "TRAKT_REFRESH_TOKEN"
         private const val KEY_TOKEN_CREATED_AT = "TRAKT_ACCESS_TOKEN_TIMESTAMP"
         private const val KEY_TOKEN_EXPIRES_AT = "TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP"
+        // KEYRING (SHW-100, user 2026-07-20) — OWNER = ID profilu, jemuž token patří (rozliší přepnutí vs sync
+        // v ProfileConfigApplier). OAuth login/refresh = vždy AKTIVNÍ profil → owner = active_profile_id ze
+        // StejnÉHO prefs souboru. Bez tohohle stampu by po re-loginu owner zůstal starý a sync-apply čerstvý token smazal.
+        private const val KEY_TOKEN_OWNER = "TRAKT_TOKEN_OWNER_PROFILE"
+        private const val KEY_ACTIVE_PROFILE_ID = "active_profile_id"
         // GLIDE — po dočasném selhání obnovy počkej, než zkusíš znovu (rozbije 429 bouři).
         private const val REFRESH_COOLDOWN_MS = 60_000L
         // WEATHER v2 — po DEFINITIVNÍM selhání obnovy (mrtvý refresh_token po migraci Traktu na V3) drž
@@ -78,6 +83,9 @@ internal class TraktTokenProvider(
             .putString(KEY_REFRESH_TOKEN, refreshToken)
             .putLong(KEY_TOKEN_CREATED_AT, createdAtMillis)
             .putLong(KEY_TOKEN_EXPIRES_AT, expiresAtMillis)
+            // KEYRING — token právě přihlášeného/obnoveného = patří AKTIVNÍMU profilu → stampuj owner (jinak
+            // by ho ProfileConfigApplier.apply při dalším syncu/resume smazal jako „cizí").
+            .putLong(KEY_TOKEN_OWNER, sharedPreferences.getLong(KEY_ACTIVE_PROFILE_ID, 0L))
             .commit()
         token = null
     }
@@ -90,6 +98,7 @@ internal class TraktTokenProvider(
         sharedPreferences.edit()
             .remove(KEY_ACCESS_TOKEN).remove(KEY_REFRESH_TOKEN)
             .remove(KEY_TOKEN_CREATED_AT).remove(KEY_TOKEN_EXPIRES_AT)
+            .remove(KEY_TOKEN_OWNER)   // KEYRING — ať owner nezůstane viset po odhlášení
             .commit()
         token = null
     }

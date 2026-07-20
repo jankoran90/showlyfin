@@ -43,7 +43,7 @@ internal fun looksLikeTraktToken(raw: String?): Boolean {
 class ProfileConfigApplier @Inject constructor(
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
-    fun apply(config: ProfileConfig) {
+    fun apply(config: ProfileConfig, ownerProfileId: Long) {
         val creds = config.credentials
         // Plan VAULT diag — co reálně dostává aktivní profil (JF/ABS creds + whitelisty). Čteno z live.log.
         timber.log.Timber.i(
@@ -89,32 +89,38 @@ class ProfileConfigApplier @Inject constructor(
             // 🔒 POISON-TOKEN GUARD (2026-07-19): v sync round-tripu se Trakt token občas uřízne na půl
             // (platný = 64 hex; viděli jsme 32 → Trakt 401 → „Chci vidět prázdný", recidiva ~1 den). Nikdy
             // NEPŘEPIŠ platný prefs token MALFORMOVANÝM z configu — ponech dobrý (další capture re-syncne prefs→config).
+            // 🔒 KEYRING (SHW-100, user 2026-07-20): per-profil Trakt token přes OWNER = ID profilu, jemuž token
+            // v prefs patří (stampuje apply I TraktTokenProvider.saveTokens). Rozliší PŘEPNUTÍ profilu (owner≠tenhle
+            // → cizí token → NEPONECHAT = žádný leak) vs SYNC/re-apply téhož profilu (owner==tenhle → čerstvý
+            // re-login token nesmět smazat). Řeší regresi 1.0.74 (prázdný watchlist u obou profilů) i leak 1.0.74-.
             val t = creds.trakt
             if (t != null) {
                 val incoming = t.accessToken
                 val current = prefs.getString(K_TRAKT_ACCESS, null)
-                // 🔒 FIX (user 2026-07-20): apply() = „srovnej prefs na TENHLE profil". Malformovaný (useknutý
-                // poison) token NIKDY nezapisuj — ALE ANI NENECHÁVEJ starý v prefs: `current` je token PŘEDCHOZÍHO
-                // profilu (po přepnutí děti→dospělý je to platný DĚTSKÝ token) → jeho ponechání = CIZÍ Trakt
-                // watchlist/„Pro tebe"/historie prosákne do dospělého (user 07-20, „Chci vidět" ukazoval dětský
-                // obsah). Proto malformovaný incoming → VYČISTI Trakt prefs → aktivní profil bez Traktu → výzva
-                // k přihlášení (správně), nikdy cizí data. (Legacy poison v DB se re-loginem přepíše na 64-hex;
-                // adopci useknutého z backendu brání `ProfileRepository.isLive` = looksLikeTraktToken.)
-                if (incoming.isNotBlank() && !looksLikeTraktToken(incoming)) {
-                    timber.log.Timber.w(
-                        "[TRAKT-GUARD] config token len=%d malformed → ČISTÍM Trakt prefs (current len=%d, zabránění cizímu tokenu)",
-                        incoming.length, current?.length ?: 0,
-                    )
-                    remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES)
-                } else {
-                    timber.log.Timber.i("[TRAKT-GUARD] apply Trakt token len=%d", incoming.length)
-                    putString(K_TRAKT_ACCESS, incoming)
-                    putString(K_TRAKT_REFRESH, t.refreshToken)
-                    putLong(K_TRAKT_CREATED, t.createdAtMillis)
-                    putLong(K_TRAKT_EXPIRES, t.expiresAtMillis)
+                val owner = prefs.getLong(K_TRAKT_OWNER, 0L)
+                when {
+                    // (a) incoming validní (64-hex) → nasaď + zapiš vlastníka = tento profil
+                    incoming.isNotBlank() && looksLikeTraktToken(incoming) -> {
+                        timber.log.Timber.i("[TRAKT-GUARD] apply Trakt token len=%d owner=%d", incoming.length, ownerProfileId)
+                        putString(K_TRAKT_ACCESS, incoming)
+                        putString(K_TRAKT_REFRESH, t.refreshToken)
+                        putLong(K_TRAKT_CREATED, t.createdAtMillis)
+                        putLong(K_TRAKT_EXPIRES, t.expiresAtMillis)
+                        putLong(K_TRAKT_OWNER, ownerProfileId)
+                    }
+                    // (b) incoming malformed, ALE current patří TOMUTO profilu a je validní → PONECH (re-apply/
+                    //     sync/resume téhož profilu po re-loginu — nesmíme smazat čerstvý token = regrese 1.0.74).
+                    owner == ownerProfileId && looksLikeTraktToken(current) -> {
+                        timber.log.Timber.w("[TRAKT-GUARD] incoming malformed(len=%d), current validní patří profilu %d → PONECHÁVÁM", incoming.length, ownerProfileId)
+                    }
+                    // (c) jinak (cizí owner = token předchozího profilu, nebo current nevalidní) → VYČISTI (žádný leak).
+                    else -> {
+                        timber.log.Timber.w("[TRAKT-GUARD] čistím Trakt prefs (incomingLen=%d, owner=%d, profil=%d)", incoming.length, owner, ownerProfileId)
+                        remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
+                    }
                 }
             } else {
-                remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES)
+                remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
             }
 
             // Vzhled / volné toggly — klíč v mapě = kanonický pref klíč
@@ -152,5 +158,6 @@ class ProfileConfigApplier @Inject constructor(
         const val K_TRAKT_REFRESH = "TRAKT_REFRESH_TOKEN"
         const val K_TRAKT_CREATED = "TRAKT_ACCESS_TOKEN_TIMESTAMP"
         const val K_TRAKT_EXPIRES = "TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP"
+        const val K_TRAKT_OWNER = "TRAKT_TOKEN_OWNER_PROFILE"
     }
 }

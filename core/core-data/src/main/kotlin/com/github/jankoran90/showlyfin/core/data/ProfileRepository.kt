@@ -230,7 +230,7 @@ class ProfileRepository @Inject constructor(
             val effective = effectiveConfigFor(updated)
             // Applier PŘED publikací do _activeConfig — observeři (ListenViewModel…) čtou kanonické
             // prefs, takže je musí applier stihnout zapsat dřív, než je emise configu probudí.
-            configApplier.apply(effective)
+            configApplier.apply(effective, updated.id)
             _activeConfig.value = effective
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
@@ -290,7 +290,7 @@ class ProfileRepository @Inject constructor(
         val active = _activeProfile.value ?: return
         if (active.templateUuid != uuid) return
         val effective = effectiveConfigFor(active)
-        configApplier.apply(effective)
+        configApplier.apply(effective, active.id)
         _activeConfig.value = effective
     }
 
@@ -316,7 +316,7 @@ class ProfileRepository @Inject constructor(
         if (_activeProfile.value?.id == profileId && updated != null) {
             _activeProfile.value = updated
             val effective = effectiveConfigFor(updated)
-            configApplier.apply(effective)
+            configApplier.apply(effective, updated.id)
             _activeConfig.value = effective
         }
         // Plan WARDEN W3c: write-through přiřazení na backend ("" = zrušit → backend uloží "").
@@ -418,7 +418,7 @@ class ProfileRepository @Inject constructor(
         // Plan PROFILES: aplikuj config balík do kanonických prefs (ABS/Uploader/vzhled…).
         // Plan WARDEN W0: efektivní config = šablona ⊕ override. Applier PŘED publikací (viz updateConfig).
         val config = effectiveConfigFor(profile)
-        configApplier.apply(config)
+        configApplier.apply(config, profile.id)
         _activeConfig.value = config
         // Emise profilu AŽ po zápisu prefs + configu → observeři reloadují s korektními creds.
         _activeProfile.value = profile
@@ -524,7 +524,7 @@ class ProfileRepository @Inject constructor(
             if (updated != null) {
                 _activeProfile.value = updated
                 val effective = effectiveConfigFor(updated)
-                configApplier.apply(effective)
+                configApplier.apply(effective, updated.id)
                 _activeConfig.value = effective
             }
         }
