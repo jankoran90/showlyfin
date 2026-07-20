@@ -106,6 +106,18 @@ class ForYouViewModel @Inject constructor(
         .map { ViewMode.fromKey(it[ViewModeStore.SECTION_FOR_YOU]) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
 
+    /**
+     * MIRROR (user 2026-07-20) — PERZISTENTNÍ přepínač mřížka/seznam telefonní plochy „Pro tebe" ([ViewModeStore],
+     * klíč `SECTION_FOR_YOU`; dřív jen per-session `remember`). Default = SEZNAM (telefon), na rozdíl od [viewMode]
+     * výše (GRID default, immersive řada na TV) — obojí čte tentýž uložený klíč, liší se jen fallback při nevyplnění.
+     */
+    val browseViewMode: StateFlow<ViewMode> = viewModeStore.modes
+        .map { modes -> modes[ViewModeStore.SECTION_FOR_YOU]?.let { ViewMode.fromKey(it) } ?: ViewMode.LIST }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.LIST)
+
+    /** MIRROR — ulož volbu zobrazení telefonní plochy „Pro tebe" (perzistentní, per-zařízení). */
+    fun setBrowseViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_FOR_YOU, mode.storeKey)
+
     private var loadJob: Job? = null
 
     init {

@@ -86,11 +86,11 @@ fun FilmyBrowseSection(
     onClearGenre: () -> Unit,
     onToggleCountry: (CinematographyRegion) -> Unit,
     onClearCountry: () -> Unit,
+    viewMode: ViewMode,
+    onToggleView: () -> Unit,
     emptyContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Výchozí = SEZNAM (bohaté řádky jako domov, přání usera 2026-07-17). Přepínač vpravo v liště. Per-session.
-    var viewMode by remember { mutableStateOf(ViewMode.LIST) }
     // GENRE/COUNTRY-FILTER — spodní sheety výběru. Otevřou se klikem na tab „Žánr"/„Země" (user 07-20).
     var showGenreFilter by remember { mutableStateOf(false) }
     var showCountryFilter by remember { mutableStateOf(false) }
@@ -155,7 +155,7 @@ fun FilmyBrowseSection(
                 }
             },
             onAllSort = onAllSort,
-            onToggleView = { viewMode = if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID },
+            onToggleView = onToggleView,
             onRemoveGenre = onToggleGenre,
             onRemoveCountry = onToggleCountry,
             searchOpen = searchOpen,

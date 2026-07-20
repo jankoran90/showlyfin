@@ -12,11 +12,13 @@ import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSettingsStore
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSource
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.data.uploader.isSavedPlayable
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
@@ -32,9 +34,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
@@ -111,11 +115,24 @@ class TvFilmotekaViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val settings: FilmotekaSettingsStore,
     private val traktSyncSignal: TraktSyncSignal,
+    private val viewModeStore: ViewModeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(FilmotekaUiState())
     val state: StateFlow<FilmotekaUiState> = _state.asStateFlow()
+
+    /**
+     * MIRROR (user 2026-07-20) — PERZISTENTNÍ přepínač mřížka/seznam telefonní Filmotéky ([ViewModeStore],
+     * klíč `SECTION_FILMOTEKA`; dřív jen per-session `remember` → po opuštění sekce se ztratil). Default =
+     * SEZNAM (přání usera 2026-07-17), ne GRID jako [ViewMode.fromKey] null-fallback. TV render ho nepoužívá.
+     */
+    val browseViewMode: StateFlow<ViewMode> = viewModeStore.modes
+        .map { modes -> modes[ViewModeStore.SECTION_FILMOTEKA]?.let { ViewMode.fromKey(it) } ?: ViewMode.LIST }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.LIST)
+
+    /** MIRROR — ulož volbu zobrazení telefonní Filmotéky (perzistentní, per-zařízení). */
+    fun setBrowseViewMode(mode: ViewMode) = viewModeStore.set(ViewModeStore.SECTION_FILMOTEKA, mode.storeKey)
 
     // Enrichnutá + věkově gatovaná báze (JF+Working+Trakt) a zvlášť Oblíbené (reaktivní). Grupování je merguje.
     @Volatile private var baseItems: List<MediaItem> = emptyList()

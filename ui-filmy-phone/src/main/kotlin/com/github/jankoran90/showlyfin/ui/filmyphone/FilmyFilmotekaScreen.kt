@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.TvFilmotekaViewModel
 
 /**
@@ -36,6 +37,7 @@ fun FilmyFilmotekaScreen(
     vm: TvFilmotekaViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val viewMode by vm.browseViewMode.collectAsStateWithLifecycle()
     // VM je retained na úrovni shellu (sekce se přepínají when-em) → při vstupu obnov výchozí osu z Nastavení.
     LaunchedEffect(Unit) { vm.applyDefaultAxis() }
 
@@ -49,6 +51,8 @@ fun FilmyFilmotekaScreen(
         onClearGenre = vm::clearGenreFilter,
         onToggleCountry = vm::toggleCountryFilter,
         onClearCountry = vm::clearCountryFilter,
+        viewMode = viewMode,
+        onToggleView = { vm.setBrowseViewMode(if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID) },
         emptyContent = { FilmotekaEmpty() },
         modifier = modifier,
     )

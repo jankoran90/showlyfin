@@ -41,6 +41,8 @@ class ViewModeStore @Inject constructor(
         const val SECTION_DISCOVER = "discover"
         // BESPOKE (SHW-95) F1 — sekce „Pro tebe" (mřížka ↔ immersive řada).
         const val SECTION_FOR_YOU = "for_you"
+        // MIRROR (user 2026-07-20) — telefonní Filmotéka: perzistentní přepínač mřížka/seznam (dřív jen per-session).
+        const val SECTION_FILMOTEKA = "filmoteka"
         const val SECTION_WATCHLIST = "watchlist"
         const val SECTION_HISTORY = "history"
         const val SECTION_RD = "rd"

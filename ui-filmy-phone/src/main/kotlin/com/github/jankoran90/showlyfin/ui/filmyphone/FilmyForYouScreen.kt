@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.feature.discover.foryou.ForYouViewModel
 
 /**
@@ -26,6 +27,7 @@ fun FilmyForYouScreen(
     vm: ForYouViewModel = hiltViewModel(),
 ) {
     val state by vm.filmotekaState.collectAsStateWithLifecycle()
+    val viewMode by vm.browseViewMode.collectAsStateWithLifecycle()
 
     FilmyBrowseSection(
         state = state,
@@ -37,6 +39,8 @@ fun FilmyForYouScreen(
         onClearGenre = vm::clearGenreFilter,
         onToggleCountry = vm::toggleCountryFilter,
         onClearCountry = vm::clearCountryFilter,
+        viewMode = viewMode,
+        onToggleView = { vm.setBrowseViewMode(if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID) },
         emptyContent = {
             FilmyEmpty(
                 icon = Icons.Rounded.Recommend,
