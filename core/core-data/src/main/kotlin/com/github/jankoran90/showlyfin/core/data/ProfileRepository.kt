@@ -488,8 +488,12 @@ class ProfileRepository @Inject constructor(
             // Mrtvý (past-expiry) lokál jinak přebíjel čerstvý backend token pushnutý z telefonu → TV/emulátor
             // zůstal odhlášený i po re-loginu (ověřeno živě: 401 na sync/*, dialog „Trakt tě odhlásil").
             val nowMs = System.currentTimeMillis()
+            // 🔒 FIX (user 2026-07-20 „Trakt zlobí každý den"): „live" vyžaduje i SPRÁVNÝ TVAR tokenu (plný 64-hex),
+            // ne jen neprázdnost. Dřív se useknutý (32-znakový) remote token adoptoval a uložil do DB balíku →
+            // odtud ho přepnutí profilu vytáhlo do prefs → Trakt 401. Teď: malformovaný token není „live" →
+            // neadoptuje se z backendu → lokální dobrý token přežije. (Zrcadlí [looksLikeTraktToken] guard z applieru.)
             fun TraktCreds?.isLive() =
-                this != null && accessToken.isNotBlank() && (expiresAtMillis <= 0L || expiresAtMillis > nowMs)
+                this != null && looksLikeTraktToken(accessToken) && (expiresAtMillis <= 0L || expiresAtMillis > nowMs)
             // Živý lokál vyhrává; jinak adoptuj živý backend; jinak ponech (i mrtvý) lokál kvůli refresh_tokenu.
             val mergedTrakt = localTraktRaw.takeIf { it.isLive() }
                 ?: remoteCfg.credentials.trakt?.takeIf { it.isLive() }

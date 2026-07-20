@@ -95,9 +95,13 @@ class ProfileConfigApplier @Inject constructor(
                 val current = prefs.getString(K_TRAKT_ACCESS, null)
                 // Jen NEPRÁZDNÝ malformovaný (=useknutý poison) blokujeme; prázdný token = legitimní odhlášení
                 // profilu (creds.trakt s blank tokenem) → aplikuj (jinak by se držel token předchozího profilu).
-                if (incoming.isNotBlank() && !looksLikeTraktToken(incoming) && looksLikeTraktToken(current)) {
+                // 🔒 FIX (user 2026-07-20 „Trakt zlobí každý den"): guard blokuje useknutý token VŽDY, ne jen
+                // když už v prefs leží platný `current`. Dřív podmínka `&& looksLikeTraktToken(current)` po
+                // přepnutí na dětský profil (který prefs vymaže) NECHYTALA → useknutý 32-znakový token se zapsal
+                // → Trakt 401 → denní recidiva. Teď: malformovaný neprázdný = nikdy nezapsat (ponech prefs jak jsou).
+                if (incoming.isNotBlank() && !looksLikeTraktToken(incoming)) {
                     timber.log.Timber.w(
-                        "[TRAKT-GUARD] config token len=%d malformed → NEPŘEPÍŠE platný prefs token len=%d (ponechávám)",
+                        "[TRAKT-GUARD] config token len=%d malformed → NEZAPÍŠE (prefs current len=%d ponechán)",
                         incoming.length, current?.length ?: 0,
                     )
                 } else {
