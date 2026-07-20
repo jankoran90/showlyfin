@@ -44,6 +44,20 @@ data class WorkingSource(
     val auto: Boolean = false,
 )
 
+/**
+ * SENTINEL (bod 3 část B) — počítá se tenhle uložený zdroj jako „hraje hned / uložený" (odznak na kartě +
+ * členství ve Filmotéce + řada „Uloženo k přehrání")? JEN když je reálně přehratelný CACHED — mirror
+ * `streamHealth`: `sdilej://` hraje přes proxy; RD torrent musí být `rdReady`/`rdSaved`. Auto zdroj, který
+ * backend cron nebo on-detail-open re-verify sesadil na pouhé `rdDownloadable` (RD ho po čase evikoval),
+ * do Filmotéky ani na ikonku NEPatří — jinak by lhal „uloženo" a klik by skončil zásekem/stahováním.
+ * 🔒 user-confirmed (`auto=false`) = VŽDY započítán (userova vědomá volba, backend ho taky nikdy nesahá).
+ */
+fun WorkingSource.isSavedPlayable(): Boolean =
+    !auto ||
+        stream.url?.startsWith("sdilej://") == true ||
+        stream.quality.rdReady ||
+        stream.quality.rdSaved
+
 /** CATALOGUE (SHW-98) — položka dávkového backfillu zdrojů (jeden film do serverové fronty). */
 data class BackfillItem(val imdb: String, val tmdb: Long, val title: String, val year: Int?)
 
@@ -77,6 +91,7 @@ class WorkingSourceStore @Inject constructor(
     private fun refreshSavedKeys() {
         val keys = HashSet<String>()
         for (r in getAll()) {
+            if (!r.isSavedPlayable()) continue      // SENTINEL bod 3 B — odznak/Filmotéka jen pro reálně cached
             if (r.tmdb > 0L) keys.add("tmdb:${r.tmdb}")
             if (r.imdb.isNotBlank()) keys.add("imdb:${r.imdb}")
         }

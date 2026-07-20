@@ -26,6 +26,7 @@ import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
+import com.github.jankoran90.showlyfin.data.uploader.isSavedPlayable
 import com.github.jankoran90.showlyfin.feature.discover.mapper.toMediaItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -442,7 +443,9 @@ class TvHomeViewModel @Inject constructor(
      */
     private suspend fun loadSavedForPlayback(config: HomeRowConfig): List<HomeRowItem> {
         workingSources.refresh()
-        val saved = workingSources.getAll().take(config.limit.coerceIn(1, 60))
+        // SENTINEL bod 3 B — „Uloženo k přehrání" je one-click přehrání (playDirectly) → jen reálně cached,
+        // jinak by klik na evikovaný/stahující se zdroj skončil zásekem.
+        val saved = workingSources.getAll().filter { it.isSavedPlayable() }.take(config.limit.coerceIn(1, 60))
         // CELLULOID (SHW-98) FIX: working source nenese poster/backdrop. Dřív si loadSavedForPlayback dělal
         // VLASTNÍ neškrcený TMDB burst bez jazyka (`fetchMovieDetails(id)` → cache klíč „id|") → při cold-startu
         // se stovkou souběžných dotazů rozstřelil o transient/rate-limit a CachedTmdbRemoteDataSource ten null

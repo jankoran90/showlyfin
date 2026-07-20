@@ -19,6 +19,7 @@ import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
+import com.github.jankoran90.showlyfin.data.uploader.isSavedPlayable
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
@@ -336,6 +337,7 @@ class TvFilmotekaViewModel @Inject constructor(
         workingSources.refresh()
         return workingSources.getAll().mapNotNull { ws ->
             if (ws.tmdb <= 0L && ws.imdb.isBlank()) return@mapNotNull null
+            if (!ws.isSavedPlayable()) return@mapNotNull null   // SENTINEL bod 3 B — Filmotéka jen reálně cached
             MediaItem(
                 traktId = 0L,
                 tmdbId = ws.tmdb.takeIf { it > 0L },
