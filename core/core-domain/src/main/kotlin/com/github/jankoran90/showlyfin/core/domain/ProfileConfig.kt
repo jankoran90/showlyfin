@@ -114,6 +114,12 @@ data class ProfileConfig(
      */
     val lapidary: LapidaryPrefs? = null,
     /**
+     * PROSPECT (SHW-102) — per-profil AUTO výběr zdroje (pořadí priorit, size cap, speed práh, addon fallback),
+     * synced TV↔telefon (vzor [lapidary]/[curator]). null = backendové defaulty. Dětský vs dospělý profil má
+     * vlastní konfiguraci (dospělý: originál audio + RD; dětský: CZ dabing + sdilej).
+     */
+    val sourcePrefs: SourcePrefs? = null,
+    /**
      * CONVERGE (SHW-97) V1 — pořadí řad v sekci **Trakt** (klíče `watchlist`/`history`/`recommended` a
      * dynamické `list_<traktId>`). Prázdné = kanonické (Watchlist, Zhlédnuto, Doporučeno, pak userovy
      * seznamy z API). Neznámé/nové klíče se doplní na konec (robustní vůči novým seznamům). Vzor [libraryOrder].
@@ -493,6 +499,51 @@ data class LapidaryPrefs(
     val sort: String = "rank",
 ) {
     companion object { val DEFAULT = LapidaryPrefs() }
+}
+
+/**
+ * PROSPECT (SHW-102, user 2026-07-21) — per-profil nastavení AUTO výběru zdroje (synced TV↔telefon přes
+ * [ProfileConfig.sourcePrefs]). Klíče/hodnoty ZRCADLÍ backend `services/gems/verify.py` (`_RANK_CRITERIA` +
+ * `ensure_cached`). Prázdný [priorityOrder] = backend použije zadrátovaný default dle policy (žádná regrese) —
+ * app posílá vlastní pořadí, jen když ho uživatel v Nastavení nastaví. „Čím víc nastavení, tím spokojenější."
+ */
+@Serializable
+data class SourcePrefs(
+    /**
+     * Pořadí kritérií řazení kandidátů (klíče [Criteria]). Prázdné = backend default
+     * (dospělý: cached→4K→5.1→originál→nejmenší). Neznámé klíče backend přeskočí (robustní vůči verzím).
+     */
+    val priorityOrder: List<String> = emptyList(),
+    /** Download-cap velikosti pro NECACHOVANÉ zdroje (GB). Cached zdroj je vždy exempt (hraje z RD hned). */
+    val maxSizeGB: Double = 40.0,
+    /** Min. propustnost zdroje (Mbps) pro speed-probe; pomalejší cached se přeskočí na další (stabilita). */
+    val minSpeedMbps: Double = 48.0,
+    /** Zapnout upfront „ochutnávku" rychlosti zdroje (speed-probe) před výběrem. */
+    val speedProbeEnabled: Boolean = true,
+    /** Povolit „SK/CZ Torrents" (CZ/SK dabing) jako KRAJNÍ fallback (za plným RD budgetem). */
+    val allowSkCzFallback: Boolean = true,
+    /** Povolit sdilej.cz (CZ dabing) jako KRAJNÍ fallback. */
+    val allowSdilejFallback: Boolean = true,
+) {
+    companion object {
+        val DEFAULT = SourcePrefs()
+
+        /** Klíče kritérií řazení — ZRCADLÍ backend `_RANK_CRITERIA` (verify.py). */
+        object Criteria {
+            const val CACHED = "cached"                 // instant na RD napřed
+            const val RESOLUTION = "resolution"         // 4K → 1080p → …
+            const val CHANNELS_51 = "channels51"        // 5.1 napřed
+            const val ORIGINAL_AUDIO = "originalAudio"  // originál stopa napřed (CZ/SK dozadu)
+            const val CZ_AUDIO = "czAudio"              // CZ/SK dabing napřed (dětský)
+            const val SMALLEST_SIZE = "smallestSize"    // menší dřív
+            const val LARGEST_SIZE = "largestSize"      // větší dřív
+            const val SIZE_SWEET = "sizeSweet"          // blízko 6 GB
+            val ALL = listOf(
+                CACHED, RESOLUTION, CHANNELS_51, ORIGINAL_AUDIO, CZ_AUDIO,
+                SMALLEST_SIZE, LARGEST_SIZE, SIZE_SWEET,
+            )
+        }
+    }
 }
 
 /**

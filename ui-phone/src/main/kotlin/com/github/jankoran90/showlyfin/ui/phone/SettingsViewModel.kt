@@ -11,6 +11,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
+import com.github.jankoran90.showlyfin.core.domain.SourcePrefs
 import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
@@ -78,6 +79,8 @@ data class SettingsUiState(
     val streamFilter: StreamFilterPrefs? = null,
     val streamFilterLoading: Boolean = false,
     val streamFilterError: String? = null,
+    // PROSPECT (SHW-102) — per-profil AUTO výběr zdroje (řazení/cap/speed/fallback), synced přes ProfileConfig.
+    val sourcePrefs: SourcePrefs = SourcePrefs.DEFAULT,
     // Plan EVEN — DRC/normalizér filmu (0 Vyp default / 1 Mírná / 2 Střední / 3 Noční); jen telefon.
     val movieDrcLevel: Int = 0,
     // TENFOOT F2c — TV transport lišta přehrávače: auto-skrytí ovládání (0 = nikdy) + krok převíjení (s).
@@ -310,6 +313,7 @@ class SettingsViewModel @Inject constructor(
                         lockedKeys = cfg.lockedKeys,
                         orderedSections = cfg.orderedSections(),
                         orderedSubsections = cfg.orderedSubsections(),
+                        sourcePrefs = cfg.sourcePrefs ?: SourcePrefs.DEFAULT,
                     )
                 }
                 refreshJellyfinState()
@@ -426,6 +430,17 @@ class SettingsViewModel @Inject constructor(
         val id = _uiState.value.activeProfileId ?: return
         viewModelScope.launch { profileRepository.updateConfig(id, transform) }
     }
+
+    // PROSPECT (SHW-102) — per-profil AUTO výběr zdroje. Zapisuje do ProfileConfig.sourcePrefs (synced TV↔telefon).
+    private fun updateSourcePrefs(transform: (SourcePrefs) -> SourcePrefs) =
+        updateActiveConfig { it.copy(sourcePrefs = transform(it.sourcePrefs ?: SourcePrefs.DEFAULT)) }
+
+    fun setSourcePriorityOrder(order: List<String>) = updateSourcePrefs { it.copy(priorityOrder = order) }
+    fun setSourceMaxSizeGB(v: Double) = updateSourcePrefs { it.copy(maxSizeGB = v.coerceIn(1.0, 200.0)) }
+    fun setSourceMinSpeedMbps(v: Double) = updateSourcePrefs { it.copy(minSpeedMbps = v.coerceIn(0.0, 1000.0)) }
+    fun setSourceSpeedProbeEnabled(v: Boolean) = updateSourcePrefs { it.copy(speedProbeEnabled = v) }
+    fun setSourceSkCzFallback(v: Boolean) = updateSourcePrefs { it.copy(allowSkCzFallback = v) }
+    fun setSourceSdilejFallback(v: Boolean) = updateSourcePrefs { it.copy(allowSdilejFallback = v) }
 
     fun setSkipSeconds(v: Int) = updateListen { skipSeconds = v }
     fun setRememberSpeed(v: Boolean) = updateListen { rememberSpeed = v }

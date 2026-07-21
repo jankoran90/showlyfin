@@ -68,6 +68,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
+import com.github.jankoran90.showlyfin.core.domain.SourcePrefs
 import com.github.jankoran90.showlyfin.feature.uploader.UploaderViewModel
 import com.github.jankoran90.showlyfin.core.network.Config
 import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
@@ -139,6 +140,10 @@ internal fun StreamingSettingsSection(
                 onToggleFallback = { k, e -> viewModel.toggleFallback(k, e) },
                 onReload = { viewModel.loadStreamFilter() },
             )
+            }
+            // PROSPECT (SHW-102) — per-profil AUTO výběr zdroje (řazení priorit, cap, speed-probe, fallback).
+            CollapsibleSettingsSection("Výběr zdroje (auto)", expandedMap) {
+                SourceSelectionSection(prefs = uiState.sourcePrefs, viewModel = viewModel)
             }
             // QUARRY (SHW-79): chování hledání zdroje na Sdílej.cz.
             CollapsibleSettingsSection("Sdílej.cz", expandedMap) {
@@ -272,6 +277,96 @@ internal fun FilterStepRow(label: String, onMinus: () -> Unit, onPlus: () -> Uni
         Spacer(Modifier.width(8.dp))
         OutlinedButton(onClick = onPlus, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) { Text("+") }
     }
+}
+
+
+/** PROSPECT (SHW-102) — per-profil AUTO výběr zdroje: priorita (presety), size cap, speed-probe, CZ-dab fallback. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SourceSelectionSection(prefs: SourcePrefs, viewModel: SettingsViewModel) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                "Jak appka AUTOMATICKY vybere zdroj filmu (řazení kandidátů). Platí per profil, synchronizuje se TV↔telefon.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            FilterLabel("Priorita výběru")
+            val presets = listOf(
+                "Kvalita (4K)" to listOf("cached", "resolution", "channels51", "originalAudio", "smallestSize"),
+                "5.1 zvuk první" to listOf("cached", "channels51", "resolution", "originalAudio", "smallestSize"),
+                "Nejmenší / rychlé" to listOf("cached", "smallestSize", "resolution"),
+                "CZ dabing" to listOf("czAudio", "resolution", "channels51", "cached", "smallestSize"),
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = prefs.priorityOrder.isEmpty(),
+                    onClick = { viewModel.setSourcePriorityOrder(emptyList()) },
+                    label = { Text("Výchozí") },
+                )
+                presets.forEach { (name, order) ->
+                    FilterChip(
+                        selected = prefs.priorityOrder == order,
+                        onClick = { viewModel.setSourcePriorityOrder(order) },
+                        label = { Text(name) },
+                    )
+                }
+            }
+            if (prefs.priorityOrder.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Pořadí: " + prefs.priorityOrder.joinToString("  ›  ") { sourceCriterionLabel(it) },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            FilterStepRow(
+                "Max. velikost necachovaných: ${prefs.maxSizeGB.toInt()} GB",
+                onMinus = { viewModel.setSourceMaxSizeGB(prefs.maxSizeGB - 5) },
+                onPlus = { viewModel.setSourceMaxSizeGB(prefs.maxSizeGB + 5) },
+            )
+            Text(
+                "Cachované na RD se hrají hned bez ohledu na velikost.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            FilterSwitchRow("Test rychlosti zdroje (přeskočí pomalé)", prefs.speedProbeEnabled) {
+                viewModel.setSourceSpeedProbeEnabled(it)
+            }
+            if (prefs.speedProbeEnabled) {
+                FilterStepRow(
+                    "Min. rychlost: ${prefs.minSpeedMbps.toInt()} Mbps",
+                    onMinus = { viewModel.setSourceMinSpeedMbps(prefs.minSpeedMbps - 8) },
+                    onPlus = { viewModel.setSourceMinSpeedMbps(prefs.minSpeedMbps + 8) },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            FilterSwitchRow("Krajní fallback: SK/CZ Torrents (CZ dabing)", prefs.allowSkCzFallback) {
+                viewModel.setSourceSkCzFallback(it)
+            }
+            FilterSwitchRow("Krajní fallback: Sdílej.cz (CZ dabing)", prefs.allowSdilejFallback) {
+                viewModel.setSourceSdilejFallback(it)
+            }
+        }
+    }
+}
+
+private fun sourceCriterionLabel(k: String): String = when (k) {
+    "cached" -> "Cached"
+    "resolution" -> "Rozlišení"
+    "channels51" -> "5.1"
+    "originalAudio" -> "Originál zvuk"
+    "czAudio" -> "CZ dabing"
+    "smallestSize" -> "Nejmenší"
+    "largestSize" -> "Největší"
+    "sizeSweet" -> "~6 GB"
+    else -> k
 }
 
 
