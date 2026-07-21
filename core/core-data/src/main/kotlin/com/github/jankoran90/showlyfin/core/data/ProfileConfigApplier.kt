@@ -100,6 +100,16 @@ class ProfileConfigApplier @Inject constructor(
             // živý (poison guard). Per-profil klíčování ruší i záměnu tokenů mezi profily se sdíleným backendKey.
             run {
                 val now = System.currentTimeMillis()
+                // 🔒 DEVICE FIX (2026-07-21, 1.0.82): kanonický slot TRAKT_ACCESS_TOKEN patří AKTIVNÍMU profilu.
+                // Apply běží i pro NEAKTIVNÍ profil (background sync, capture jiného profilu, re-apply) — a ten se
+                // kanonického slotu NESMÍ dotknout, jinak CLEAR smaže živý token právě přihlášeného profilu (DIAG
+                // 1.0.81: active=1, __p1 žil 64hex, ale KANON=0 owner=0 = CLEAR pro cizí profil). Per-profil store
+                // (__p<id>) je nedotčen; jen odvození kanonu se omezuje na aktivní profil. Neaktivní apply = no-op.
+                val activeId = prefs.getLong(K_ACTIVE_PROFILE, 0L)
+                if (ownerProfileId != activeId) {
+                    timber.log.Timber.i("[TRAKT-KEYRING] SKIP — apply pro neaktivní profil %d (aktivní=%d), kanon nedotčen", ownerProfileId, activeId)
+                    return@run
+                }
                 val kAcc = ppKey(K_TRAKT_ACCESS, ownerProfileId)
                 val kRef = ppKey(K_TRAKT_REFRESH, ownerProfileId)
                 val kCrt = ppKey(K_TRAKT_CREATED, ownerProfileId)
@@ -196,6 +206,9 @@ class ProfileConfigApplier @Inject constructor(
         const val K_UP_URL = "uploader_base_url"
         const val K_UP_PASS = "uploader_password"
         const val K_UP_COOKIE = "uploader_session_cookie"
+
+        // Aktivní profil (zrcadlí ProfileRepository.PREF_ACTIVE_PROFILE_ID) — kanonický Trakt slot patří jemu.
+        const val K_ACTIVE_PROFILE = "active_profile_id"
 
         // Plan VAULT — zrcadlí TraktTokenProvider klíče (data-trakt).
         const val K_TRAKT_ACCESS = "TRAKT_ACCESS_TOKEN"
