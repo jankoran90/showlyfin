@@ -341,8 +341,14 @@ class TvFilmotekaViewModel @Inject constructor(
         // ČLENSTVÍ (JF/Trakt) MÁ PŘEDNOST před datem uložení zdroje → dohledání zdroje NEPŘESKLÁDÁ řazení
         // „Nedávno přidané" (film si drží svou pozici, i když mu právě naskočil WorkingSource). Vkládá se na
         // vítěze dedupu jako jeho `addedAtMs` (cestuje s položkou přes enrich → řadíme podle pole, ne mapy).
+        // CATALOGUE (fix 2026-07-21) — „přidáno" = datum ČLENSTVÍ (JF DateCreated / Trakt listed_at), NIKDY datum
+        // přiděleného working-source zdroje (savedAtMs = kdy appka sehnala RD/sdílej zdroj, ne kdy sis film přidal).
+        // ws vyřazen z recency: jinak auto-cache/dohledání zdroje přeskládalo „Nedávno přidané" (Anora tmdb 1064213:
+        // watchlist 13.6, ale ws savedAtMs 18.7 ji chybně vynášel nahoru). Robustní i vůči výpadku Trakt fetche
+        // v jednom reloadu — titul bez členského data → addedAtMs=null → KONEC „Nedávno přidané" (self-heal příštím
+        // reloadem s načteným Traktem), NIKDY falešně nahoru. Working-only cached filmy (mimo watchlist/JF) → konec.
         val recency = HashMap<String, Long>()
-        for (list in listOf(jf, tk, ws)) {
+        for (list in listOf(jf, tk)) {
             for (item in list) { val k = dedupKey(item) ?: continue; item.addedAtMs?.let { recency.putIfAbsent(k, it) } }
         }
         merged.values.map { item ->

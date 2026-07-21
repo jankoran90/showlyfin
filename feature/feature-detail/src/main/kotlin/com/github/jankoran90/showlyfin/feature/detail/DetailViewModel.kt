@@ -1196,7 +1196,12 @@ class DetailViewModel @Inject constructor(
             val lang = stream.quality.audioLanguage?.uppercase()
             val name = ((stream.name ?: "") + " " + (stream.url ?: "")).lowercase()
             val subtitled = "titulky" in name || "subs" in name || "subtitle" in name || "-tit" in name || ".tit" in name
-            !subtitled && (lang == "CZ" || lang == "SK" || (stream.url?.startsWith("sdilej://") == true && lang == null))
+            // RUBRIC-follow (user 2026-07-21): sdílej zdroj s nedetekovaným audiem (lang==null) se DŘÍV bral jako
+            // dabing → titulky vypnuté (Tatík 2024, cizojazyčný film ze sdílej = 0 titulků, na rozdíl od RD). Sdílej
+            // nabízí zdroje i pro cizojazyčné filmy → titulková vrstva (dohledání OpenSubtitles + AI překlad) musí
+            // běžet STEJNĚ jako u RD. Gate teď JEN na explicitní CZ/SK audio (jako RD). Reálně-dabovaný sdílej film
+            // dostane nabídku titulků navíc (neškodí — výběr „OFF" je per-zdroj zapamatovaný).
+            !subtitled && (lang == "CZ" || lang == "SK")
         }
         if (subTitle.isNotBlank() || subOrig.isNotBlank()) {
             _uiState.update {
