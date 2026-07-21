@@ -85,50 +85,79 @@ class ProfileConfigApplier @Inject constructor(
                 remove(K_UP_COOKIE)
             }
 
-            // Trakt (per-profil OAuth tokeny, klíče zrcadlí TraktTokenProvider): null = ODHLÁSIT.
-            // 🔒 POISON-TOKEN GUARD (2026-07-19): v sync round-tripu se Trakt token občas uřízne na půl
-            // (platný = 64 hex; viděli jsme 32 → Trakt 401 → „Chci vidět prázdný", recidiva ~1 den). Nikdy
-            // NEPŘEPIŠ platný prefs token MALFORMOVANÝM z configu — ponech dobrý (další capture re-syncne prefs→config).
-            // 🔒 KEYRING (SHW-100, user 2026-07-20): per-profil Trakt token přes OWNER = ID profilu, jemuž token
-            // v prefs patří (stampuje apply I TraktTokenProvider.saveTokens). Rozliší PŘEPNUTÍ profilu (owner≠tenhle
-            // → cizí token → NEPONECHAT = žádný leak) vs SYNC/re-apply téhož profilu (owner==tenhle → čerstvý
-            // re-login token nesmět smazat). Řeší regresi 1.0.74 (prázdný watchlist u obou profilů) i leak 1.0.74-.
-            // 🔒 KEYRING PEVNOST (SHW-100, 1.0.77): AUTHORITATIVE-LOCAL princip (research 07-20, TOP #3) —
-            // živý Trakt token TOHOTO profilu v prefs je ZDROJ PRAVDY, config balík z backendu jen NÁVRH.
-            // Nikdy nepřepiš/nemaž živý vlastní token profilu. Řeší „přihlášení nedrží přes restart":
-            // setActive pouštěl apply() se STALE snapshotem balíku → stará větev (a) přepsala čerstvý prefs
-            // token STARÝM z balíku a null-balík větev bezpodmínečně mazala i platný token. 1.0.76 chránil
-            // jen proti MALFORMOVANÉMU incoming, ne proti VALIDNÍMU-ALE-STARÉMU. Owner rozliší PŘEPNUTÍ
-            // profilu (owner≠ → cizí token → nedržet, žádný leak) od RESUME/SYNC téhož profilu.
-            val t = creds.trakt
-            val current = prefs.getString(K_TRAKT_ACCESS, null)
-            val owner = prefs.getLong(K_TRAKT_OWNER, 0L)
-            val expiresAt = prefs.getLong(K_TRAKT_EXPIRES, 0L)
-            val now = System.currentTimeMillis()
-            // živý = platný tvar (64 hex) a ne po expiraci (0 = neznámá expirace → ber jako živý, refresh vyřeší)
-            val currentLive = looksLikeTraktToken(current) && (expiresAt <= 0L || expiresAt > now)
-            val currentBelongsHere = currentLive && owner == ownerProfileId
-            when {
-                // (KEEP) živý token patří TOMUTO profilu → NESAHAT (restart/resume/sync téhož profilu).
-                currentBelongsHere -> {
-                    timber.log.Timber.i("[TRAKT-GUARD] KEEP — živý token profilu %d je autoritativní, nechávám beze změny", ownerProfileId)
+            // Trakt (per-profil OAuth token) — SUBSTRATE PERZISTENCE REWRITE (2026-07-21, SHW-100 finální).
+            // Token je PER-ZAŘÍZENÍ tajemství vydané device-code flow; Trakt V3 zabil server-side refresh,
+            // takže se cross-device neobnoví. Držíme ho proto v LOKÁLNÍM per-profil store (klíče se suffixem
+            // __p<id>, viz ppKey), který je JEDINÝ zdroj pravdy pro daný profil. Kanonický slot
+            // TRAKT_ACCESS_TOKEN (z něj čtou interceptory + isLoggedIn) je jen ODVOZENÁ kopie tokenu AKTIVNÍHO
+            // profilu, kterou tady deterministicky nasazujeme.
+            //
+            // Tím MIZÍ celý owner-stamp KEEP/ADOPT/CLEAR aparát (1.0.71–1.0.78) i jeho root bug: apply() se
+            // stale/owner-mismatch snapshotem MAZAL čerstvý token při startu → „přihlášení nedrží přes restart".
+            // NOVÉ PRAVIDLO: živý lokální token profilu se z apply() NIKDY nepřepíše ani nesmaže (zruší ho jen
+            // explicitní revoke/odhlášení v TraktTokenProvider). Config balík z backendu slouží už JEN k
+            // BOOTSTRAPU profilu, který lokálně token ještě nemá (nové zařízení/TV), a to jen když je 64-hex a
+            // živý (poison guard). Per-profil klíčování ruší i záměnu tokenů mezi profily se sdíleným backendKey.
+            run {
+                val now = System.currentTimeMillis()
+                val kAcc = ppKey(K_TRAKT_ACCESS, ownerProfileId)
+                val kRef = ppKey(K_TRAKT_REFRESH, ownerProfileId)
+                val kCrt = ppKey(K_TRAKT_CREATED, ownerProfileId)
+                val kExp = ppKey(K_TRAKT_EXPIRES, ownerProfileId)
+
+                // Aktuální per-profil token (in-memory kopie — v edit transakci nelze re-readovat právě zapsané).
+                var localAccess = prefs.getString(kAcc, null)
+                var localRefresh = prefs.getString(kRef, null).orEmpty()
+                var localCreated = prefs.getLong(kCrt, 0L)
+                var localExp = prefs.getLong(kExp, 0L)
+
+                // MIGRACE (jednorázově, verze <1.0.79→): profil ještě nemá per-profil token, ale kanonický slot
+                // drží ŽIVÝ token stampovaný TÍMTO profilem → zrcadli ho do per-profil store, ať se přihlášený
+                // uživatel po update neodhlásí (bez nuceného re-loginu).
+                if (localAccess.isNullOrBlank()) {
+                    val canon = prefs.getString(K_TRAKT_ACCESS, null)
+                    val canonOwner = prefs.getLong(K_TRAKT_OWNER, 0L)
+                    val canonExp = prefs.getLong(K_TRAKT_EXPIRES, 0L)
+                    if (looksLikeTraktToken(canon) && canonOwner == ownerProfileId && (canonExp <= 0L || canonExp > now)) {
+                        localAccess = canon
+                        localRefresh = prefs.getString(K_TRAKT_REFRESH, null).orEmpty()
+                        localCreated = prefs.getLong(K_TRAKT_CREATED, 0L)
+                        localExp = canonExp
+                        putString(kAcc, localAccess); putString(kRef, localRefresh)
+                        putLong(kCrt, localCreated); putLong(kExp, localExp)
+                        timber.log.Timber.i("[TRAKT-KEYRING] MIGRACE kanon→per-profil %d", ownerProfileId)
+                    }
                 }
-                // (ADOPT) incoming validní (64 hex) A NE po expiraci → switch-in / bootstrap nové TV / adopce
-                // obnoveného tokenu. <=0 = neznámá expirace (bootstrap nové TV) zůstává adoptovatelná.
-                t != null && looksLikeTraktToken(t.accessToken) &&
-                    (t.expiresAtMillis <= 0L || t.expiresAtMillis > now) -> {
-                    timber.log.Timber.i("[TRAKT-GUARD] ADOPT Trakt token len=%d owner=%d", t.accessToken.length, ownerProfileId)
-                    putString(K_TRAKT_ACCESS, t.accessToken)
-                    putString(K_TRAKT_REFRESH, t.refreshToken)
-                    putLong(K_TRAKT_CREATED, t.createdAtMillis)
-                    putLong(K_TRAKT_EXPIRES, t.expiresAtMillis)
-                    putLong(K_TRAKT_OWNER, ownerProfileId)
-                }
-                // (CLEAR) nic použitelného (cizí/mrtvý current, incoming null/poison) → vyčisti (žádný leak).
-                else -> {
-                    val inLen = if (t != null) t.accessToken.length.toString() else "null"
-                    timber.log.Timber.w("[TRAKT-GUARD] CLEAR Trakt prefs (currentLive=%b, owner=%d, profil=%d, incoming=%s)", currentLive, owner, ownerProfileId, inLen)
-                    remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
+
+                val localLive = looksLikeTraktToken(localAccess) && (localExp <= 0L || localExp > now)
+                val ct = creds.trakt
+                when {
+                    // (SELECT) živý lokální token profilu = autoritativní → nasaď do kanonického slotu. NIKDY nemaž.
+                    localLive -> {
+                        timber.log.Timber.i("[TRAKT-KEYRING] SELECT lokální per-profil token profilu %d (autoritativní)", ownerProfileId)
+                        putString(K_TRAKT_ACCESS, localAccess)
+                        putString(K_TRAKT_REFRESH, localRefresh)
+                        putLong(K_TRAKT_CREATED, localCreated)
+                        putLong(K_TRAKT_EXPIRES, localExp)
+                        putLong(K_TRAKT_OWNER, ownerProfileId)
+                    }
+                    // (BOOTSTRAP) profil lokálně token nemá, ale backend balík nese ŽIVÝ 64-hex → nové zařízení/TV
+                    // se z něj přihlásí. Poison-safe (malformovaný/expirovaný se neadoptuje).
+                    ct != null && looksLikeTraktToken(ct.accessToken) &&
+                        (ct.expiresAtMillis <= 0L || ct.expiresAtMillis > now) -> {
+                        timber.log.Timber.i("[TRAKT-KEYRING] BOOTSTRAP profilu %d z backend configu (len=%d)", ownerProfileId, ct.accessToken.length)
+                        putString(kAcc, ct.accessToken); putString(kRef, ct.refreshToken)
+                        putLong(kCrt, ct.createdAtMillis); putLong(kExp, ct.expiresAtMillis)
+                        putString(K_TRAKT_ACCESS, ct.accessToken); putString(K_TRAKT_REFRESH, ct.refreshToken)
+                        putLong(K_TRAKT_CREATED, ct.createdAtMillis); putLong(K_TRAKT_EXPIRES, ct.expiresAtMillis)
+                        putLong(K_TRAKT_OWNER, ownerProfileId)
+                    }
+                    // (CLEAR) profil nemá použitelný token → vyčisti jen KANONICKÝ slot (per-profil store nech být;
+                    // mrtvý token neškodí, přepíše ho příští re-login). Žádný leak cizího tokenu mezi profily.
+                    else -> {
+                        timber.log.Timber.w("[TRAKT-KEYRING] CLEAR kanonický slot — profil %d nemá živý token", ownerProfileId)
+                        remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
+                    }
                 }
             }
 
@@ -139,6 +168,12 @@ class ProfileConfigApplier @Inject constructor(
             // na backend při přepnutí profilu. Zatím se jen veze v balíku pro zálohu/obnovu.
         }
     }
+
+    /**
+     * SUBSTRATE (2026-07-21) — klíč per-profil Trakt token store. Suffix `__p<id>` odděluje token každého
+     * profilu; zrcadlí schéma v [com.github.jankoran90.showlyfin.data.trakt.token.TraktTokenProvider.ppKey].
+     */
+    private fun ppKey(base: String, profileId: Long): String = "${base}__p$profileId"
 
     /** Doplní https:// když chybí scheme, odřízne koncové i úvodní „/". Prázdné nechá prázdné. */
     private fun normalizeUrl(raw: String): String {

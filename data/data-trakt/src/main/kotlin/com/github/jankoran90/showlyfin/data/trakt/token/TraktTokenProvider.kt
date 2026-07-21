@@ -86,15 +86,25 @@ internal class TraktTokenProvider(
         Timber.i("[TRAKT-GUARD] saveTokens accessLen=%d refreshLen=%d", accessToken.length, refreshToken.length)
         val createdAtMillis = createdAt.seconds.inWholeMilliseconds
         val expiresAtMillis = createdAtMillis + expiresIn.seconds.inWholeMilliseconds
-        sharedPreferences.edit()
+        val activeId = sharedPreferences.getLong(KEY_ACTIVE_PROFILE_ID, 0L)
+        val ed = sharedPreferences.edit()
             .putString(KEY_ACCESS_TOKEN, accessToken)
             .putString(KEY_REFRESH_TOKEN, refreshToken)
             .putLong(KEY_TOKEN_CREATED_AT, createdAtMillis)
             .putLong(KEY_TOKEN_EXPIRES_AT, expiresAtMillis)
             // KEYRING — token právě přihlášeného/obnoveného = patří AKTIVNÍMU profilu → stampuj owner (jinak
             // by ho ProfileConfigApplier.apply při dalším syncu/resume smazal jako „cizí").
-            .putLong(KEY_TOKEN_OWNER, sharedPreferences.getLong(KEY_ACTIVE_PROFILE_ID, 0L))
-            .commit()
+            .putLong(KEY_TOKEN_OWNER, activeId)
+        // SUBSTRATE (2026-07-21) — TRVALÁ per-profil kopie: login i refresh ji zapíšou pod klíč aktivního
+        // profilu. Odtud ji ProfileConfigApplier.select() při startu/přepnutí nasadí zpět do kanonického slotu.
+        // Toto je zdroj pravdy, který přežije restart i přepnutí profilu (řeší „přihlášení nedrží přes restart").
+        if (activeId > 0L) {
+            ed.putString(ppKey(KEY_ACCESS_TOKEN, activeId), accessToken)
+                .putString(ppKey(KEY_REFRESH_TOKEN, activeId), refreshToken)
+                .putLong(ppKey(KEY_TOKEN_CREATED_AT, activeId), createdAtMillis)
+                .putLong(ppKey(KEY_TOKEN_EXPIRES_AT, activeId), expiresAtMillis)
+        }
+        ed.commit()
         token = null
     }
 
@@ -103,13 +113,24 @@ internal class TraktTokenProvider(
         // „Domácí sestava" (avr_*) a dalších app prefs. Trakt token expiruje ~7 dní → 401 →
         // TraktAuthenticator zavolá revokeToken() → uživateli zmizela konfigurace AVR a hlasitost
         // spadla na box. Odhlášení Traktu smí smazat JEN Trakt klíče, nic víc.
-        sharedPreferences.edit()
+        val activeId = sharedPreferences.getLong(KEY_ACTIVE_PROFILE_ID, 0L)
+        val ed = sharedPreferences.edit()
             .remove(KEY_ACCESS_TOKEN).remove(KEY_REFRESH_TOKEN)
             .remove(KEY_TOKEN_CREATED_AT).remove(KEY_TOKEN_EXPIRES_AT)
             .remove(KEY_TOKEN_OWNER)   // KEYRING — ať owner nezůstane viset po odhlášení
-            .commit()
+        // SUBSTRATE (2026-07-21) — odhlášení/definitivní auth-fail zruší i TRVALOU per-profil kopii AKTIVNÍHO
+        // profilu (jeho token je mrtvý). Ostatní profily se nedotknou (per-profil izolace).
+        if (activeId > 0L) {
+            ed.remove(ppKey(KEY_ACCESS_TOKEN, activeId)).remove(ppKey(KEY_REFRESH_TOKEN, activeId))
+                .remove(ppKey(KEY_TOKEN_CREATED_AT, activeId)).remove(ppKey(KEY_TOKEN_EXPIRES_AT, activeId))
+        }
+        ed.commit()
         token = null
     }
+
+    /** SUBSTRATE (2026-07-21) — klíč TRVALÉ per-profil kopie Trakt tokenu; suffix `__p<id>` zrcadlí schéma v
+     * [com.github.jankoran90.showlyfin.core.data.ProfileConfigApplier.ppKey]. */
+    private fun ppKey(base: String, profileId: Long): String = "${base}__p$profileId"
 
     override fun shouldRefresh(): Boolean {
         if (isInRefreshCooldown()) return false
