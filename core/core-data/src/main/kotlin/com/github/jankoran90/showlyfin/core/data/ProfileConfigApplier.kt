@@ -39,12 +39,26 @@ internal fun looksLikeTraktToken(raw: String?): Boolean {
     return t.length == 64 && t.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
 }
 
+/**
+ * DEVICE DIAG (2026-07-21) — připiš jeden řádek rozhodovací stopy Trakt perzistence do prefs (klíč
+ * `TRAKT_DECISION_LOG`, ring posledních 40 řádků). Flood-imunní (ne BufferTree), čte ho DIAG dump ve snapshotu.
+ * Odstranit po vyřešení perzistence přihlášení.
+ */
+internal fun appendTraktDecision(prefs: SharedPreferences, line: String) {
+    val prev = prefs.getString("TRAKT_DECISION_LOG", "") ?: ""
+    val joined = (prev.split("\n").filter { it.isNotBlank() } + line).takeLast(40).joinToString("\n")
+    prefs.edit().putString("TRAKT_DECISION_LOG", joined).apply()
+}
+
 @Singleton
 class ProfileConfigApplier @Inject constructor(
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
     fun apply(config: ProfileConfig, ownerProfileId: Long) {
         val creds = config.credentials
+        // DEVICE DIAG (2026-07-21) — jeden řádek rozhodnutí Trakt větve, zapsaný do prefs PO edit bloku
+        // (flood-imunní, `[SIEVE]` spam nezaplaví). DIAG dump ho vypíše. Odstranit po vyřešení perzistence.
+        var decLine: String? = null
         // Plan VAULT diag — co reálně dostává aktivní profil (JF/ABS creds + whitelisty). Čteno z live.log.
         timber.log.Timber.i(
             "[VAULT] applyConfig jf=${creds.jellyfin != null}(url=${!creds.jellyfin?.url.isNullOrBlank()},tok=${!creds.jellyfin?.token.isNullOrBlank()},pw=${!creds.jellyfin?.password.isNullOrBlank()}) " +
@@ -106,8 +120,10 @@ class ProfileConfigApplier @Inject constructor(
                 // 1.0.81: active=1, __p1 žil 64hex, ale KANON=0 owner=0 = CLEAR pro cizí profil). Per-profil store
                 // (__p<id>) je nedotčen; jen odvození kanonu se omezuje na aktivní profil. Neaktivní apply = no-op.
                 val activeId = prefs.getLong(K_ACTIVE_PROFILE, 0L)
+                val t = now % 1_000_000L
                 if (ownerProfileId != activeId) {
                     timber.log.Timber.i("[TRAKT-KEYRING] SKIP — apply pro neaktivní profil %d (aktivní=%d), kanon nedotčen", ownerProfileId, activeId)
+                    decLine = "$t APPLY own=$ownerProfileId act=$activeId dec=SKIP-neaktivni"
                     return@run
                 }
                 val kAcc = ppKey(K_TRAKT_ACCESS, ownerProfileId)
@@ -141,6 +157,7 @@ class ProfileConfigApplier @Inject constructor(
 
                 val localLive = looksLikeTraktToken(localAccess) && (localExp <= 0L || localExp > now)
                 val ct = creds.trakt
+                val dbgBase = "$t APPLY own=$ownerProfileId act=$activeId localLen=${localAccess?.length ?: -1} localHex=${looksLikeTraktToken(localAccess)} localExp=$localExp ctLen=${ct?.accessToken?.length ?: -1}"
                 when {
                     // (SELECT) živý lokální token profilu = autoritativní → nasaď do kanonického slotu. NIKDY nemaž.
                     localLive -> {
@@ -150,6 +167,7 @@ class ProfileConfigApplier @Inject constructor(
                         putLong(K_TRAKT_CREATED, localCreated)
                         putLong(K_TRAKT_EXPIRES, localExp)
                         putLong(K_TRAKT_OWNER, ownerProfileId)
+                        decLine = "$dbgBase dec=SELECT"
                     }
                     // (BOOTSTRAP) profil lokálně token nemá, ale backend balík nese ŽIVÝ 64-hex → nové zařízení/TV
                     // se z něj přihlásí. Poison-safe (malformovaný/expirovaný se neadoptuje).
@@ -161,12 +179,14 @@ class ProfileConfigApplier @Inject constructor(
                         putString(K_TRAKT_ACCESS, ct.accessToken); putString(K_TRAKT_REFRESH, ct.refreshToken)
                         putLong(K_TRAKT_CREATED, ct.createdAtMillis); putLong(K_TRAKT_EXPIRES, ct.expiresAtMillis)
                         putLong(K_TRAKT_OWNER, ownerProfileId)
+                        decLine = "$dbgBase dec=BOOTSTRAP"
                     }
                     // (CLEAR) profil nemá použitelný token → vyčisti jen KANONICKÝ slot (per-profil store nech být;
                     // mrtvý token neškodí, přepíše ho příští re-login). Žádný leak cizího tokenu mezi profily.
                     else -> {
                         timber.log.Timber.w("[TRAKT-KEYRING] CLEAR kanonický slot — profil %d nemá živý token", ownerProfileId)
                         remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH); remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
+                        decLine = "$dbgBase dec=CLEAR"
                     }
                 }
             }
@@ -177,6 +197,7 @@ class ProfileConfigApplier @Inject constructor(
             // TODO(backlog, plans.md): streamFilterJson je server-side (Uploader backend) → aplikace = push
             // na backend při přepnutí profilu. Zatím se jen veze v balíku pro zálohu/obnovu.
         }
+        decLine?.let { appendTraktDecision(prefs, it) }
     }
 
     /**

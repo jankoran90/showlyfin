@@ -106,6 +106,13 @@ internal class TraktTokenProvider(
         }
         ed.commit()
         token = null
+        // DEVICE DIAG (2026-07-21) — flood-imunní stopa do prefs (ring 40 řádků), čte DIAG dump. Odstranit po fixu.
+        runCatching {
+            val prev = sharedPreferences.getString("TRAKT_DECISION_LOG", "") ?: ""
+            val line = "${System.currentTimeMillis() % 1_000_000L} SAVE active=$activeId accLen=${accessToken.length} wroteP=${activeId > 0L}"
+            val joined = (prev.split("\n").filter { it.isNotBlank() } + line).takeLast(40).joinToString("\n")
+            sharedPreferences.edit().putString("TRAKT_DECISION_LOG", joined).commit()
+        }
     }
 
     override fun revokeToken() {

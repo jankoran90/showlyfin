@@ -174,6 +174,13 @@ object DebugCaptureManager {
                     .append(" expires=").append(exp).append(" (").append(expTag(exp)).append(")\n")
             }
         }
+        val decisions = p.getString("TRAKT_DECISION_LOG", null)
+        if (!decisions.isNullOrBlank()) {
+            sb.append("--- rozhodovaci stopa (SAVE/APPLY, poradi shora dolu) ---\n")
+            sb.append(decisions).append('\n')
+        } else {
+            sb.append("--- rozhodovaci stopa: PRAZDNA ---\n")
+        }
         sb.append("===== [/TRAKT-DIAG] =====\n\n")
         return sb.toString()
     }
