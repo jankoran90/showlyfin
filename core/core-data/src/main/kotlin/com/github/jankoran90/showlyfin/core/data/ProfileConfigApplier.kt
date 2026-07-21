@@ -33,10 +33,19 @@ internal fun dashUuid(raw: String): String {
     return "${t.substring(0, 8)}-${t.substring(8, 12)}-${t.substring(12, 16)}-${t.substring(16, 20)}-${t.substring(20)}"
 }
 
-/** Platný Trakt OAuth access token = 64 hex znaků. Cokoli jiného (prázdné / useknuté 32) = poison → guard. */
+/**
+ * Platný Trakt OAuth access token = **64 znaků, bez mezer**.
+ *
+ * 🔒 ROOT CAUSE (prokázáno DIAG 2026-07-21, 1.0.83): PŮVODNÍ guard vyžadoval 64 **hex** znaků (token = sha).
+ * Jenže po migraci Traktu na V3 (2026) access token NENÍ čistě hex — je 64 znaků, ale obsahuje i nehexové
+ * znaky (přesto PLATNÝ, API vrací 200, watchlist se stáhne). Hex-only guard reálný token odmítal jako „poison"
+ * → `ProfileConfigApplier` CLEAR → „přihlášení nedrží přes restart". Přesně tenhle chybný předpoklad drží
+ * celou sérii oprav 1.0.71–1.0.83 v kruhu (DIAG: `localLen=64 localHex=false dec=CLEAR` na platném tokenu).
+ * Guard nadále chytá jediné, co reálně hrozí — **useknutí 64→32** (délka) a prázdno/mezery.
+ */
 internal fun looksLikeTraktToken(raw: String?): Boolean {
     val t = raw?.trim() ?: return false
-    return t.length == 64 && t.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
+    return t.length == 64 && t.none { it.isWhitespace() }
 }
 
 /**
