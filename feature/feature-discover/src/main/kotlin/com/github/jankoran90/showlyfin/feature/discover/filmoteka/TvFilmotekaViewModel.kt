@@ -209,6 +209,13 @@ class TvFilmotekaViewModel @Inject constructor(
             .drop(1)
             .onEach { reload() }
             .launchIn(viewModelScope)
+
+        // RUBRIC (SHW-104) — přepnutí hybridního seskupení žánrů jen PŘESKUPÍ už-obohacenou bázi (bez fetch),
+        // aby se řady/nabídka filtru ose Žánr překreslily ŽIVĚ. drop(1) = ignoruj iniciální emit.
+        settings.hybridGenres
+            .drop(1)
+            .onEach { rebuild(_state.value.axis) }
+            .launchIn(viewModelScope)
         profileRepository.activeConfig
             .map { it.filmotekaJfLibraries }
             .distinctUntilChanged()
@@ -415,6 +422,7 @@ class TvFilmotekaViewModel @Inject constructor(
             genreFilter = genreFilter,
             countryFilter = countryFilter,
             enabledRegions = settings.enabledRegions.value,
+            hybridGenres = settings.hybridGenres.value,
         )
         _state.value = FilmotekaUiState(
             axis = axis, rails = result.rails, loading = false,

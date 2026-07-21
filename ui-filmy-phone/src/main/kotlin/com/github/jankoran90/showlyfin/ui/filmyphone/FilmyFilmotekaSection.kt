@@ -25,6 +25,7 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
     val axis by vm.defaultAxis.collectAsStateWithLifecycle()
     val allSort by vm.allSort.collectAsStateWithLifecycle()
     val enabledRegions by vm.enabledRegions.collectAsStateWithLifecycle()
+    val hybridGenres by vm.hybridGenres.collectAsStateWithLifecycle()
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SettingSectionTitle("Filmotéka")
@@ -67,6 +68,12 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
             selected = allSort,
             labelOf = ::allSortLabel,
             onSelect = vm::setAllSort,
+        )
+        SettingSwitchRow(
+            title = "Hybridní žánry",
+            subtitle = "Slučovat žánry do kombinovaných řad (Akční komedie, Sci-fi horor, Superhrdinský…). Vypnuto = řada podle prvního žánru.",
+            checked = hybridGenres,
+            onCheckedChange = { vm.setHybridGenres(it) },
         )
         SettingMultiChips(
             label = "Kinematografie (osa Země)",

@@ -37,6 +37,7 @@ class TvFilmotekaSettingsViewModel @Inject constructor(
     val defaultAxis: StateFlow<FilmotekaAxis> = store.defaultAxis
     val allSort: StateFlow<FilmotekaAllSort> = store.allSort
     val enabledRegions: StateFlow<Set<CinematographyRegion>> = store.enabledRegions
+    val hybridGenres: StateFlow<Boolean> = store.hybridGenres
 
     // ORCHARD (user 07-19) — per-library výběr JF knihoven Filmotéky na TV (parita s telefonem). TV má JF creds
     // zděděné z telefonního loginu přes backend config. Nabídka knihoven z JF; výběr = filmotekaJfLibraries.
@@ -58,6 +59,7 @@ class TvFilmotekaSettingsViewModel @Inject constructor(
     fun setDefaultAxis(axis: FilmotekaAxis) = store.setDefaultAxis(axis)
     fun setAllSort(sort: FilmotekaAllSort) = store.setAllSort(sort)
     fun setRegion(region: CinematographyRegion, enabled: Boolean) = store.setRegionEnabled(region, enabled)
+    fun setHybridGenres(enabled: Boolean) = store.setHybridGenresEnabled(enabled)
 
     /** Načte JF knihovny (pro výběr). Creds z aktivního profilu (zděděné na TV z telefonu přes backend). */
     fun loadJfLibraries() {

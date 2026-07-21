@@ -26,18 +26,22 @@ data class FilmotekaGroupingResult(
 
 object FilmotekaGrouping {
 
-    /** Hlavní žánr titulu = první neprázdný (nejvyšší váha dle TMDB řazení relevance). */
-    fun mainGenreOf(item: MediaItem): String? =
-        item.genres.orEmpty().firstOrNull { it.isNotBlank() }?.trim()
+    /**
+     * Hlavní žánr titulu. `hybrid=true` (RUBRIC SHW-104) → unifikovaný hybridní žánr dle kaskády priorit
+     * ([GenreNormalizer]); `hybrid=false` → první žánr v pořadí, sjednocený na český název. Kanonizace
+     * vždy srovná Trakt EN slugy s TMDB českými názvy do jedné řady.
+     */
+    fun mainGenreOf(item: MediaItem, hybrid: Boolean): String? =
+        GenreNormalizer.mainGenre(item.genres, hybrid)
 
     /** Hlavní region titulu = první region dle váhy (analogie [mainGenreOf]); prázdné/neznámé → OSTATNI. */
     fun mainRegionOf(item: MediaItem): CinematographyRegion =
         regionsOf(item.originCountries).firstOrNull() ?: CinematographyRegion.OSTATNI
 
     /** Hlavní žánry v bázi dle četnosti sestupně (tie-break český Collator) — nabídka pickeru. */
-    fun availableGenresOf(items: List<MediaItem>): List<String> {
+    fun availableGenresOf(items: List<MediaItem>, hybrid: Boolean): List<String> {
         val counts = LinkedHashMap<String, Int>()
-        for (item in items) { val g = mainGenreOf(item) ?: continue; counts[g] = (counts[g] ?: 0) + 1 }
+        for (item in items) { val g = mainGenreOf(item, hybrid) ?: continue; counts[g] = (counts[g] ?: 0) + 1 }
         val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
         return counts.entries
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenComparator { a, b -> coll.compare(a.key, b.key) })
@@ -66,15 +70,16 @@ object FilmotekaGrouping {
         genreFilter: Set<String>,
         countryFilter: Set<CinematographyRegion>,
         enabledRegions: Set<CinematographyRegion>,
+        hybridGenres: Boolean,
     ): FilmotekaGroupingResult {
-        val available = availableGenresOf(all)
+        val available = availableGenresOf(all, hybridGenres)
         val availableC = availableCountriesOf(all, enabledRegions)
         val filtered = all
-            .let { if (genreFilter.isEmpty()) it else it.filter { m -> mainGenreOf(m) in genreFilter } }
+            .let { if (genreFilter.isEmpty()) it else it.filter { m -> mainGenreOf(m, hybridGenres) in genreFilter } }
             .let { if (countryFilter.isEmpty()) it else it.filter { m -> mainRegionOf(m) in countryFilter } }
         val rails = when (axis) {
             FilmotekaAxis.ALL -> groupAll(filtered, allSort)
-            FilmotekaAxis.GENRE -> groupByGenre(filtered)
+            FilmotekaAxis.GENRE -> groupByGenre(filtered, hybridGenres)
             FilmotekaAxis.COUNTRY -> groupByCountry(filtered, enabledRegions)
         }
         return FilmotekaGroupingResult(rails, all.size, available, availableC)
@@ -98,10 +103,10 @@ object FilmotekaGrouping {
     }
 
     /** Řady dle HLAVNÍHO žánru, sestupně dle četnosti. Film v jedné sekci. */
-    private fun groupByGenre(items: List<MediaItem>): List<FilmotekaRail> {
+    private fun groupByGenre(items: List<MediaItem>, hybrid: Boolean): List<FilmotekaRail> {
         val byGenre = LinkedHashMap<String, MutableList<MediaItem>>()
         for (item in items) {
-            val g = mainGenreOf(item)
+            val g = mainGenreOf(item, hybrid)
             if (!g.isNullOrBlank()) byGenre.getOrPut(g) { mutableListOf() }.add(item)
         }
         return byGenre.entries

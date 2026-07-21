@@ -79,15 +79,20 @@ class ForYouViewModel @Inject constructor(
      * MIRROR — stav ve stejném tvaru jako Filmotéka ([FilmotekaUiState]) → sdílený telefonní browse UI ho renderuje
      * 1:1. Přeskupuje se reaktivně na každou změnu akumulovaných tipů / nástrojů / zapnutých regionů (grouper je levý).
      */
+    // RUBRIC (SHW-104) — enabledRegions + hybridGenres do jednoho flow (combine má typovaný strop 5 argumentů).
+    private val filmotekaOptions: kotlinx.coroutines.flow.Flow<Pair<Set<CinematographyRegion>, Boolean>> =
+        combine(settings.enabledRegions, settings.hybridGenres) { regions, hybrid -> regions to hybrid }
+
     val filmotekaState: StateFlow<FilmotekaUiState> =
-        combine(recommendationsStore.items, _loading, _tools, settings.enabledRegions) { items, loading, tools, enabled ->
+        combine(recommendationsStore.items, _loading, _tools, filmotekaOptions) { items, loading, tools, opts ->
             val result = FilmotekaGrouping.build(
                 all = items,
                 axis = tools.axis,
                 allSort = tools.allSort,
                 genreFilter = tools.genreFilter,
                 countryFilter = tools.countryFilter,
-                enabledRegions = enabled,
+                enabledRegions = opts.first,
+                hybridGenres = opts.second,
             )
             FilmotekaUiState(
                 axis = tools.axis,

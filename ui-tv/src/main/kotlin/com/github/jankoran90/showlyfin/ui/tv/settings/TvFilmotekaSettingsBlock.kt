@@ -43,6 +43,7 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
     val axis by vm.defaultAxis.collectAsStateWithLifecycle()
     val allSort by vm.allSort.collectAsStateWithLifecycle()
     val enabledRegions by vm.enabledRegions.collectAsStateWithLifecycle()
+    val hybridGenres by vm.hybridGenres.collectAsStateWithLifecycle()
     val jfLibraries by vm.jfLibraries.collectAsStateWithLifecycle()
     val selectedFilmoLibs by vm.selectedFilmotekaLibs.collectAsStateWithLifecycle()
     val jellyfinOn = FilmotekaSource.JELLYFIN in sources
@@ -100,6 +101,12 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
             selected = allSort,
             labelOf = ::allSortLabel,
             onSelect = vm::setAllSort,
+        )
+        TvToggleRow(
+            label = "Hybridní žánry",
+            subtitle = "Slučovat žánry do kombinovaných řad (Akční komedie, Sci-fi horor, Superhrdinský…). Vypnuto = řada podle prvního žánru.",
+            checked = hybridGenres,
+            onCheckedChange = { vm.setHybridGenres(it) },
         )
         RegionSection(enabledRegions = enabledRegions, onToggle = vm::setRegion)
     }

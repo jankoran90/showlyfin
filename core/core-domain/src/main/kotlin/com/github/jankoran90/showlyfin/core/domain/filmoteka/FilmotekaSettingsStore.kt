@@ -49,6 +49,10 @@ class FilmotekaSettingsStore @Inject constructor(
     /** F2 — zapnuté regiony pro osu Země (default všechny). [CinematographyRegion.OSTATNI] je vždy viditelný. */
     val enabledRegions: StateFlow<Set<CinematographyRegion>> = _enabledRegions.asStateFlow()
 
+    private val _hybridGenres = MutableStateFlow(loadHybridGenres())
+    /** RUBRIC (SHW-104) — hybridní seskupení žánrů (Akční komedie, Sci-fi horor…) na ose Žánr; default ON. */
+    val hybridGenres: StateFlow<Boolean> = _hybridGenres.asStateFlow()
+
     /** Přepni na nastavení daného profilu — přenačte všechny toky. Idempotentní (stejný profil = no-op). */
     fun switchProfile(id: Long?) {
         if (id == activeId && switched) return
@@ -58,6 +62,7 @@ class FilmotekaSettingsStore @Inject constructor(
         _defaultAxis.value = loadAxis()
         _allSort.value = loadAllSort()
         _enabledRegions.value = loadRegions()
+        _hybridGenres.value = loadHybridGenres()
     }
 
     fun setSourceEnabled(source: FilmotekaSource, enabled: Boolean) {
@@ -81,6 +86,12 @@ class FilmotekaSettingsStore @Inject constructor(
         val next = _enabledRegions.value.toMutableSet().apply { if (enabled) add(region) else remove(region) }
         _enabledRegions.value = next
         prefs.edit().putString(keyFor(KEY_REGIONS), json.encodeToString(next.map { it.name })).apply()
+    }
+
+    /** RUBRIC (SHW-104) — zapni/vypni hybridní seskupení žánrů na ose Žánr (per profil). */
+    fun setHybridGenresEnabled(enabled: Boolean) {
+        _hybridGenres.value = enabled
+        prefs.edit().putBoolean(keyFor(KEY_HYBRID), enabled).apply()
     }
 
     private fun loadSources(): Set<FilmotekaSource> {
@@ -114,11 +125,16 @@ class FilmotekaSettingsStore @Inject constructor(
             ?: ALL_REGIONS
     }
 
+    /** RUBRIC — default ON. Per-profil klíč s fallbackem na globální (migrace) i na výchozí true. */
+    private fun loadHybridGenres(): Boolean =
+        prefs.getBoolean(keyFor(KEY_HYBRID), prefs.getBoolean(KEY_HYBRID, true))
+
     private companion object {
         const val KEY_SOURCES = "sources_json"
         const val KEY_AXIS = "default_axis"
         const val KEY_ALL_SORT = "all_sort"
         const val KEY_REGIONS = "regions_json"
+        const val KEY_HYBRID = "hybrid_genres"
         val ALL_SOURCES: Set<FilmotekaSource> = FilmotekaSource.entries.toSet()
 
         // Výchozí zapnuté zdroje = vše KROMĚ Jellyfinu (user 07-19: JF do Filmotéky jen když ho vybere v Nastavení,
