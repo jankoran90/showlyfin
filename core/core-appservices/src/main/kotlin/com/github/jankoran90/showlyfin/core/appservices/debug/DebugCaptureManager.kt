@@ -140,8 +140,42 @@ object DebugCaptureManager {
         } else {
             ""
         }
-        file.writeText(crashText + BufferTree.INSTANCE.formatLog())
+        val traktDiag = runCatching { traktStateDump(context) }
+            .getOrElse { "[TRAKT-DIAG] chyba dumpu: ${it.message}\n\n" }
+        file.writeText(crashText + traktDiag + BufferTree.INSTANCE.formatLog())
         return file
+    }
+
+    /**
+     * SUBSTRATE diag (2026-07-21) — flood-imunní snímek stavu `trakt_prefs` čtený PŘÍMO při capture (ne z
+     * BufferTree, který `[SIEVE]` spam zaplaví za ~60 ms). Ukáže, jestli `saveTokens` zapsal per-profil token
+     * (`__p<id>`) a jestli apply nechal/smazal kanonický slot. Na VRCHU logu, deterministicky.
+     */
+    private fun traktStateDump(context: Context): String {
+        val p = context.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        fun tokLen(k: String) = (p.getString(k, null) ?: "").length
+        fun expTag(exp: Long) = if (exp <= 0L || exp > now) "ziva" else "PO-EXPIRACI"
+        val sb = StringBuilder()
+        sb.append("===== [TRAKT-DIAG] stav trakt_prefs (flood-immune) =====\n")
+        sb.append("active_profile_id=").append(p.getLong("active_profile_id", -1L)).append('\n')
+        val canExp = p.getLong("TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP", 0L)
+        sb.append("KANON access.len=").append(tokLen("TRAKT_ACCESS_TOKEN"))
+            .append(" expires=").append(canExp).append(" (").append(expTag(canExp)).append(")")
+            .append(" owner=").append(p.getLong("TRAKT_TOKEN_OWNER_PROFILE", 0L)).append('\n')
+        val perProfile = p.all.keys.filter { it.startsWith("TRAKT_ACCESS_TOKEN__p") }.sorted()
+        if (perProfile.isEmpty()) {
+            sb.append("PER-PROFIL: ZADNE klice __p* — saveTokens per-profil NEZAPSAL!\n")
+        } else {
+            for (k in perProfile) {
+                val id = k.removePrefix("TRAKT_ACCESS_TOKEN__p")
+                val exp = p.getLong("TRAKT_ACCESS_TOKEN_EXPIRES_TIMESTAMP__p$id", 0L)
+                sb.append("  __p").append(id).append(" access.len=").append(tokLen(k))
+                    .append(" expires=").append(exp).append(" (").append(expTag(exp)).append(")\n")
+            }
+        }
+        sb.append("===== [/TRAKT-DIAG] =====\n\n")
+        return sb.toString()
     }
 
     private fun upload(timestamp: String, screenshot: File?, log: File?): Boolean {
