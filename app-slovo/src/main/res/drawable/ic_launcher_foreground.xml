@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- EXCISE (SHW-103) — písmeno „S" v bílé (blokové, styl Filmy „F"), centrované v safe zóně (18..90),
+         s amber symbolem mluveného slova (soundwave) vpravo dole. -->
+    <path android:fillColor="#FFFFFF" android:pathData="M32,24 H72 V36 H32 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M32,36 H44 V50 H32 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M32,50 H72 V62 H32 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M60,62 H72 V76 H60 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M32,76 H72 V88 H32 Z" />
+    <!-- Soundwave (mluvené slovo) — amber akcent -->
+    <path android:fillColor="#FF7A1A" android:pathData="M78,72 H81 V82 H78 Z" />
+    <path android:fillColor="#FF7A1A" android:pathData="M83,66 H86 V82 H83 Z" />
+    <path android:fillColor="#FF7A1A" android:pathData="M88,70 H91 V82 H88 Z" />
+</vector>

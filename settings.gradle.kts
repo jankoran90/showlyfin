@@ -25,6 +25,7 @@ include(":app")
 // CELLULOID (SHW-98) — samostatná appka „Filmy" (sledovací část odtržená vedle showlyfinu).
 // Sdílí VŠECHNY sledovací moduly + ui-tv; liší se applicationId, brandingem a OTA kanálem.
 include(":app-filmy")
+include(":app-slovo")   // EXCISE (SHW-103) — poslechová appka Slovo (jen telefon)
 
 // Core
 include(":core:core-data")
