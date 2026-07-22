@@ -63,3 +63,4 @@ include(":ui-phone")
 include(":ui-tv")
 // CELLULOID (SHW-98) Fáze 2: telefonní vrstva appky „Filmy" (styl audioman, varianta A — ui-tv nedotčen)
 include(":ui-filmy-phone")
+include(":ui-slovo-phone")   // EXCISE (SHW-103) — telefonní poslechový shell Slova
