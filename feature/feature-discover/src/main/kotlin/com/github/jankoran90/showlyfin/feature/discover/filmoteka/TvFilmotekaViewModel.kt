@@ -354,11 +354,10 @@ class TvFilmotekaViewModel @Inject constructor(
         merged.values.map { item ->
             val k = dedupKey(item)
             val r = if (k != null) recency[k] else null
-            // FIX (user 2026-07-22): working-ONLY film (r==null, není v JF/Trakt) MUSÍ dostat addedAtMs=null,
-            // ne si nechat ws.savedAtMs (řádek ~407) — jinak čerstvě cached/dohledaný zdroj vyskočí nahoru
-            // v „Nedávno přidané" (Daddio po RD cache). null → KONEC seznamu (Long.MIN_VALUE), jak slibuje
-            // komentář výše. Dřív `else item` savedAtMs ponechal = díra v fixu 1.0.86.
-            item.copy(addedAtMs = r)
+            // Membership datum (JF/Trakt) MÁ PŘEDNOST; working-only film si nechá své vlastní addedAtMs
+            // (= neměnné `firstSavedAtMs`, viz loadWorkingSources) → má „nějaké datum" a NEskáče při re-cache
+            // (user 2026-07-22: savedAtMs se bumpuje kvůli sync → nesmí hýbat pořadím „Nedávno přidané").
+            if (r != null) item.copy(addedAtMs = r) else item
         }
     }
 
@@ -408,7 +407,9 @@ class TvFilmotekaViewModel @Inject constructor(
                 rating = null,
                 genres = null,
                 type = MediaType.MOVIE,
-                addedAtMs = ws.savedAtMs.takeIf { it > 0L },
+                // NEMĚNNÉ datum prvního uložení (ne bumpovaný savedAtMs) → working-only film v „Nedávno
+                // přidané" neskáče při re-cache/re-rankingu. Starý záznam bez firstSavedAtMs → fallback savedAtMs.
+                addedAtMs = ws.firstSavedAtMs.takeIf { it > 0L } ?: ws.savedAtMs.takeIf { it > 0L },
             )
         }
     }

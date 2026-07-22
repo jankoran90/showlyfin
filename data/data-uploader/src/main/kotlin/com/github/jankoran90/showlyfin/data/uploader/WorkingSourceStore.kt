@@ -39,6 +39,12 @@ data class WorkingSource(
     val title: String = "",
     val stream: UploaderStream = UploaderStream(),
     val savedAtMs: Long = 0L,
+    // NEMĚNNÉ datum prvního uložení zdroje (user 2026-07-22). `savedAtMs` se bumpuje při každém přepisu
+    // zdroje (reverify/auto→auto) kvůli sync-mergi (novější vyhrává) → NESMÍ sloužit k řazení „Nedávno
+    // přidané" ve Filmotéce, jinak re-cache/re-ranking vynese film nahoru. `firstSavedAtMs` se set jednou
+    // (backend `upsert_profile_working_source` ho zachová) → stabilní datum working-only filmu. 0 = starý
+    // záznam bez pole → fallback na savedAtMs.
+    val firstSavedAtMs: Long = 0L,
     // LAPIDARY (SHW-96): true = auto-nacachováno naším enginem (cache-one); false = user-confirmed „👍".
     // Backend auto-zápis NEPŘEPÍŠE user-confirmed. Flag musí přežít round-trip app→server (proto v modelu).
     val auto: Boolean = false,
@@ -309,9 +315,14 @@ class WorkingSourceStore @Inject constructor(
 
     fun save(imdb: String?, tmdb: Long?, title: String, stream: UploaderStream) {
         if (imdb.isNullOrBlank() && (tmdb == null || tmdb <= 0L)) return
+        val now = System.currentTimeMillis()
+        // neměnné datum prvního uložení — při re-save (změna zdroje) ho zachovej z existujícího záznamu,
+        // ať working-only film neskáče v „Nedávno přidané" Filmotéky (savedAtMs se mění, firstSavedAtMs ne).
+        val existingFirst = get(imdb, tmdb)?.let { it.firstSavedAtMs.takeIf { f -> f > 0L } ?: it.savedAtMs.takeIf { s -> s > 0L } }
         val record = WorkingSource(
             imdb = imdb.orEmpty(), tmdb = tmdb ?: 0L, title = title, stream = stream,
-            savedAtMs = System.currentTimeMillis(),
+            savedAtMs = now,
+            firstSavedAtMs = existingFirst ?: now,
         )
         val json = gson.toJson(record)
         // commit() (synchronně) — kritická akce, ať se zaručeně zapíše dřív, než appku zabije/aktualizuje.
