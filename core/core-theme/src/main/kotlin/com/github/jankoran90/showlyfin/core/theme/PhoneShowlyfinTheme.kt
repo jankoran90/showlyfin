@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.ui.phone.theme
+package com.github.jankoran90.showlyfin.core.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
-import com.github.jankoran90.showlyfin.ui.phone.R
+import com.github.jankoran90.showlyfin.core.theme.R
 
 // UNISON/CHORUS kánon — AMOLED čistě černé pozadí + oranžový akcent (default). Barvy se generují
 // dynamicky přes MaterialKolor ze skin seedu; charakter ploch se ladí posuvníky ([withTunedScheme]).

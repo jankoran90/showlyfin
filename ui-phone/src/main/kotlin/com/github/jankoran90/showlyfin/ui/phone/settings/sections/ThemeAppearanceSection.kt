@@ -41,9 +41,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
-import com.github.jankoran90.showlyfin.ui.phone.theme.Background
-import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinSkin
+import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
+import com.github.jankoran90.showlyfin.core.theme.Background
+import com.github.jankoran90.showlyfin.core.theme.ShowlyfinSkin
 import kotlin.math.roundToInt
 
 /**

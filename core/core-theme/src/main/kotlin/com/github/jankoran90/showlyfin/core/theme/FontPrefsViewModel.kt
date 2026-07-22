@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.ui.phone
+package com.github.jankoran90.showlyfin.core.theme
 
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel

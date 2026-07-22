@@ -80,6 +80,7 @@ import java.util.Date
 import java.util.Locale
 import com.github.jankoran90.showlyfin.ui.phone.*
 import com.github.jankoran90.showlyfin.ui.phone.settings.*
+import com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel
 
 @Composable
 internal fun AppearanceSettingsSection(

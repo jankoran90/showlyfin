@@ -23,6 +23,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-domain"))
+    implementation(project(":core:core-theme"))   // EXCISE (SHW-103): sdílený motiv
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-data"))
     implementation(project(":core:core-db"))      // SUBSTRATE (SHW-99): FavoritesRepository (Room = zdroj pravdy)

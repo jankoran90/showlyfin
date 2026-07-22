@@ -30,6 +30,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-domain"))
+    implementation(project(":core:core-theme"))   // EXCISE (SHW-103): sdílený motiv
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-data"))
     // M2.2 domov: TvHomeViewModel + HomeRowItem (data mozek domova, bez TV závislosti).

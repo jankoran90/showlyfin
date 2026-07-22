@@ -47,12 +47,12 @@ import com.github.jankoran90.showlyfin.ui.tv.home.TvHomeRowEditor
 import com.github.jankoran90.showlyfin.feature.detail.DetailActionsPlacement
 import com.github.jankoran90.showlyfin.feature.detail.TvDetailLayout
 import com.github.jankoran90.showlyfin.ui.phone.DetailPrefsViewModel
-import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
+import com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
 import com.github.jankoran90.showlyfin.ui.tv.nav.TvSection
-import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
-import com.github.jankoran90.showlyfin.ui.phone.theme.Background
-import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinSkin
+import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
+import com.github.jankoran90.showlyfin.core.theme.Background
+import com.github.jankoran90.showlyfin.core.theme.ShowlyfinSkin
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 

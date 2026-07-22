@@ -34,6 +34,7 @@ include(":core:core-network")
 include(":core:core-domain")
 include(":core:core-ui")
 include(":core:core-appservices")
+include(":core:core-theme")   // EXCISE (SHW-103) — sdílený AMOLED motiv (Slovo + Filmy), vytažen z :ui-phone
 
 // Data
 include(":data:data-trakt")

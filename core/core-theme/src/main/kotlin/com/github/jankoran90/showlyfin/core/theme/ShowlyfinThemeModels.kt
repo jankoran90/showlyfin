@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.ui.phone.theme
+package com.github.jankoran90.showlyfin.core.theme
 
 import androidx.compose.ui.graphics.Color
 import com.materialkolor.PaletteStyle
@@ -92,7 +92,7 @@ object AccentTuning {
     fun clamp(v: Float): Float = v.coerceIn(0f, 1f)
 }
 
-/** Kompletní stav motivu Showlyfinu (bez písma — to drží [com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel]). */
+/** Kompletní stav motivu Showlyfinu (bez písma — to drží [com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel]). */
 data class ThemePrefsState(
     val background: Background = Background.Amoled,
     val skin: ShowlyfinSkin = ShowlyfinSkin.DEFAULT,

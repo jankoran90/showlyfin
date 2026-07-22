@@ -1,12 +1,7 @@
-package com.github.jankoran90.showlyfin.ui.phone
+package com.github.jankoran90.showlyfin.core.theme
 
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
-import com.github.jankoran90.showlyfin.ui.phone.theme.AccentTuning
-import com.github.jankoran90.showlyfin.ui.phone.theme.Background
-import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinSkin
-import com.github.jankoran90.showlyfin.ui.phone.theme.SurfaceTuning
-import com.github.jankoran90.showlyfin.ui.phone.theme.ThemePrefsState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +12,7 @@ import javax.inject.Named
 
 /**
  * CHORUS Osa 3 — perzistence motivu (pozadí + skin + dynamické posuvníky). Čte se v kořeni
- * [ShowlyfinApp] a předává do [com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme];
+ * [ShowlyfinApp] a předává do [com.github.jankoran90.showlyfin.core.theme.ShowlyfinPhoneTheme];
  * settery volají posuvníky/přepínače v Nastavení → Vzhled. Activity-scoped (jako FontPrefs) → stejná
  * instance v kořeni i v sekci → změna se projeví ŽIVĚ (i v náhledu).
  */

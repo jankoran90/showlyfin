@@ -103,7 +103,9 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.setup.MainLoginScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfileGateViewModel
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ProfilePickerScreen
 import com.github.jankoran90.showlyfin.feature.jellyfin.setup.ServerSetupScreen
-import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
+import com.github.jankoran90.showlyfin.core.theme.ShowlyfinPhoneTheme
+import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
+import com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel
 
 internal sealed interface Destination {
     // COMPASS C1: top-level cíle drawer (drawer = jediná nav, spodní lišta zrušena)

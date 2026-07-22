@@ -41,9 +41,9 @@ import com.github.jankoran90.showlyfin.feature.detail.rating.RatingViewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.phone.CardCsfdViewModel
-import com.github.jankoran90.showlyfin.ui.phone.FontPrefsViewModel
-import com.github.jankoran90.showlyfin.ui.phone.ThemePrefsViewModel
-import com.github.jankoran90.showlyfin.ui.phone.theme.ShowlyfinPhoneTheme
+import com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel
+import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
+import com.github.jankoran90.showlyfin.core.theme.ShowlyfinPhoneTheme
 import kotlinx.coroutines.launch
 
 /**
