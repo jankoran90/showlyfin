@@ -354,7 +354,11 @@ class TvFilmotekaViewModel @Inject constructor(
         merged.values.map { item ->
             val k = dedupKey(item)
             val r = if (k != null) recency[k] else null
-            if (r != null) item.copy(addedAtMs = r) else item
+            // FIX (user 2026-07-22): working-ONLY film (r==null, není v JF/Trakt) MUSÍ dostat addedAtMs=null,
+            // ne si nechat ws.savedAtMs (řádek ~407) — jinak čerstvě cached/dohledaný zdroj vyskočí nahoru
+            // v „Nedávno přidané" (Daddio po RD cache). null → KONEC seznamu (Long.MIN_VALUE), jak slibuje
+            // komentář výše. Dřív `else item` savedAtMs ponechal = díra v fixu 1.0.86.
+            item.copy(addedAtMs = r)
         }
     }
 
