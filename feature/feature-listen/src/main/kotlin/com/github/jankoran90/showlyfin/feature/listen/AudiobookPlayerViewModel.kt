@@ -7,6 +7,10 @@ import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.clearQueue
+import com.github.jankoran90.showlyfin.feature.listen.player.moveQueueItem
+import com.github.jankoran90.showlyfin.feature.listen.player.moveToFront
+import com.github.jankoran90.showlyfin.feature.listen.player.removeFromQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow

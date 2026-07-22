@@ -25,12 +25,7 @@ import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
-import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
-import com.github.jankoran90.showlyfin.data.abs.model.Podcast
-import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
-import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
-import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.R
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.google.common.collect.ImmutableList
@@ -59,6 +54,9 @@ import javax.inject.Inject
  * Video (Jellyfin) se v Android Auto NEzobrazuje (projekce video nevykreslí) → Auto = jen ABS.
  *
  * Periodicky synchronizuje pozici zpět na ABS (sessionId + duration jsou v extras MediaItemu).
+ *
+ * Anti-monolit: Android Auto browse strom = [AudiobookBrowseTree] (extension funkce), buildery
+ * položek = [AudiobookAutoMedia] (top-level internal). Tady zůstává player/session/notifikace/sync.
  */
 @AndroidEntryPoint
 class AudiobookPlayerService : MediaLibraryService() {
@@ -89,11 +87,13 @@ class AudiobookPlayerService : MediaLibraryService() {
         }
     }
 
-    /** Cache položek vrácených v onGetChildren (pro onGetItem). Přístup jen z main threadu. */
-    private val itemCache = HashMap<String, MediaItem>()
+    /** Cache položek vrácených v onGetChildren (pro onGetItem). Přístup jen z main threadu. Internal =
+     *  browse strom v [AudiobookBrowseTree] (directSourceEpisodes) do ní zapisuje. */
+    internal val itemCache = HashMap<String, MediaItem>()
 
-    /** Právě otevřená kniha (pro kapitoly v Auto + ±kapitola tlačítka). Jen main thread. */
-    private var currentPlayback: AbsPlayback? = null
+    /** Právě otevřená kniha (pro kapitoly v Auto + ±kapitola tlačítka). Jen main thread. Internal =
+     *  čte ji browse strom v [AudiobookBrowseTree]. */
+    internal var currentPlayback: AbsPlayback? = null
 
     // ---- Custom session commands (Android Auto / notifikace) ----
     private val cmdPrevChapter = SessionCommand(ACTION_PREV_CHAPTER, Bundle.EMPTY)
@@ -192,6 +192,8 @@ class AudiobookPlayerService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
     // ---- Android Auto browse strom + resolver + custom akce ----
+    // Strom (rootChildren/podcastSection/…) = extension funkce v AudiobookBrowseTree.kt;
+    // buildery položek (bookItem/trackItems/…) = AudiobookAutoMedia.kt.
 
     private val librarySessionCallback = object : MediaLibrarySession.Callback {
 
@@ -450,313 +452,6 @@ class AudiobookPlayerService : MediaLibraryService() {
         p.seekTo(idx, (target - idxOffMs).coerceAtLeast(0L))
     }
 
-    // ---- Strom: uzly ----
-
-    /**
-     * Root = CRUISE (SHW-70) přesně 4 záložky (AA strop ~4, bez overflow „víc"): **Pokračovat | Podcasty
-     * | <audioknihovny jako vlastní záložky, label Dětské/Dospělý>**. Kapitoly (jen při hrané knize
-     * s kapitolami) jdou ÚPLNĚ NAKONEC — kdyby přetekly přes 4, schová se nepodstatná Kapitoly, ne hlavní 4.
-     */
-    private suspend fun rootChildren(): List<MediaItem> {
-        val nodes = mutableListOf(
-            browsableNode(NODE_CONTINUE, "Pokračovat"),
-            browsableNode(NODE_PODCASTS, "Podcasty"),
-        )
-        // Každá audioknihovní knihovna = vlastní záložka (Dětské/Dospělý — oddělené knihovny, každá své obecenstvo).
-        if (repo.isConfigured) {
-            runCatching { repo.getAudiobookLibraries() }.getOrDefault(emptyList())
-                .forEach { nodes += browsableNode("$PREFIX_LIB${it.id}", audiobookTabLabel(it.name)) }
-        }
-        if (currentPlayback?.chapters?.isNotEmpty() == true) nodes += browsableNode(NODE_CHAPTERS, "Kapitoly")
-        return nodes
-    }
-
-    /** CRUISE: pevný label audioknihovní záložky v AA dle obecenstva (Dětské/Dospělý), fallback = název knihovny. */
-    private fun audiobookTabLabel(name: String): String {
-        val n = java.text.Normalizer.normalize(name.lowercase(), java.text.Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
-        return when {
-            n.contains("det") -> "Dětské"      // „Děti" / „Dětské" / „Pro děti" …
-            n.contains("dospel") -> "Dospělý"  // „Dospělí" / „Dospělý" …
-            else -> name
-        }
-    }
-
-    /**
-     * Sekce Podcasty → CRUISE (SHW-70): custom zdroje Poslechu (YouTube/RSS/NaVýbornou; premium pin nahoru,
-     * pak abecedně) jako browsable `src:<id>` + ABS podcast knihovny (pokud je profil má). ABS-only profil
-     * s jedinou knihovnou → expanduj rovnou (zachová původní chování); ABS-podcast kód NErušíme (in-app
-     * Poslech ho dál používá pro profily s ABS podcast knihovnou).
-     */
-    private suspend fun podcastSection(): List<MediaItem> {
-        sourcesRepo.refresh()
-        val custom = sourcesRepo.sources.value
-            .sortedWith(
-                compareByDescending<PodcastSource> { it.premium }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title },
-            )
-            .map(::sourceNode)
-        val absLibs = if (repo.isConfigured) {
-            runCatching { repo.getPodcastLibraries() }.getOrDefault(emptyList())
-        } else emptyList()
-        if (custom.isEmpty() && absLibs.size == 1) return libraryPodcasts(absLibs.first().id)
-        // CRUISE: „Nejnovější epizody" (čerstvé napříč zdroji) jako PRVNÍ položka v Podcasty (5. věc, co se
-        // nevejde jako 5. záložka nahoře → AA strop ~4). Jen když máme custom zdroje, ze kterých agregovat.
-        val latest = if (custom.isNotEmpty()) listOf(browsableNode(NODE_LATEST, "🆕 Nejnovější epizody")) else emptyList()
-        return latest + custom + absLibs.map { browsableNode("$PREFIX_PLIB${it.id}", it.name) }
-    }
-
-    /** CRUISE: „Nejnovější epizody" napříč VŠEMI custom zdroji — round-robin nejnovějších (feedy jsou newest-first). */
-    private suspend fun latestEpisodes(): List<MediaItem> {
-        sourcesRepo.refresh()
-        val perSource = sourcesRepo.sources.value.map { it.id to sourcesRepo.loadEpisodes(it) }
-        val result = mutableListOf<MediaItem>()
-        var i = 0
-        while (result.size < LATEST_LIMIT) {
-            var added = false
-            for ((sid, eps) in perSource) {
-                eps.getOrNull(i)?.let { result += directEpisodeItem(sid, it); added = true }
-                if (result.size >= LATEST_LIMIT) break
-            }
-            if (!added) break
-            i++
-        }
-        return result
-    }
-
-    /** CRUISE: epizody custom zdroje jako přehratelné položky S URI (cache v itemCache → play je najde). */
-    private suspend fun sourceEpisodes(sourceId: String): List<MediaItem> {
-        val src = sourcesRepo.sources.value.firstOrNull { it.id == sourceId } ?: return emptyList()
-        return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
-    }
-
-    /**
-     * CRUISE: CELÁ fronta epizod zdroje jako přehratelné direct položky (S URI). Při přehrávání z Android
-     * Auto se tím epizoda nepouští samostatně, ale jako playlist → AA dostane skip ⏮⏭ (předchozí/další
-     * EPIZODA, jedno ťuknutí — dlouhý stisk AA neumí) + auto-navázání další epizody; převíjení ±N vedle
-     * Play zůstává (sdílený seek increment jako u audioknih). Funguje i pro cold resume (refresh+feed).
-     */
-    private suspend fun directSourceEpisodes(sourceId: String): List<MediaItem> {
-        val src = sourcesRepo.sources.value.firstOrNull { it.id == sourceId }
-            ?: run { sourcesRepo.refresh(); sourcesRepo.sources.value.firstOrNull { it.id == sourceId } }
-            ?: return emptyList()
-        return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
-            .also { items -> items.forEach { itemCache[it.mediaId] = it } }
-    }
-
-    /**
-     * „Pokračovat" = VŠECHNO rozposlouchané dohromady (audioknihy + direct epizody RSS/YT/NaVýbornou),
-     * seřazené dle POSLEDNÍHO POSLECHU (nejnovější nahoře → starší). Čas: audiokniha `lastUpdate` (ABS
-     * mediaProgress), direct epizoda `updatedAt` (DirectResumeStore). Dřív: jen audioknihy řazené dle pozice.
-     */
-    private suspend fun continueItems(): List<MediaItem> {
-        val books: List<Pair<Long, MediaItem>> = if (repo.isConfigured) {
-            runCatching {
-                repo.getAudiobookLibraries()
-                    .flatMap { repo.getAudiobooks(it.id) }
-                    .filter { it.progress > 0.0 && !it.isFinished }
-                    .map { (it.lastUpdate ?: 0L) to bookItem(it) }
-            }.getOrDefault(emptyList())
-        } else emptyList()
-        return (books + continueDirectEntries())
-            .sortedByDescending { it.first }
-            .map { it.second }
-            .take(CONTINUE_LIMIT)
-    }
-
-    /** CRUISE: rozposlouchané direct epizody → (čas posledního poslechu, položka), resolvnuté přes feedy zdrojů. */
-    private suspend fun continueDirectEntries(): List<Pair<Long, MediaItem>> {
-        val marks = directResume.marks.value
-        if (marks.isEmpty()) return emptyList()
-        sourcesRepo.refresh()
-        val byKey = HashMap<String, Pair<SourceEpisode, String>>()
-        sourcesRepo.sources.value.forEach { src ->
-            sourcesRepo.loadEpisodes(src).forEach { ep -> ep.resumeKey?.let { byKey[it] = ep to src.id } }
-        }
-        return marks.entries.mapNotNull { (key, mark) ->
-            byKey[key]?.let { (ep, sid) -> mark.updatedAt to directEpisodeItem(sid, ep) }
-        }
-    }
-
-    private suspend fun libraryBooks(libraryId: String): List<MediaItem> =
-        repo.getAudiobooks(libraryId).map(::bookItem)
-
-    /** Podcasty v knihovně jako browsable uzly (klik → epizody). */
-    private suspend fun libraryPodcasts(libraryId: String): List<MediaItem> =
-        repo.getPodcasts(libraryId).map(::podcastNode)
-
-    /** Epizody podcastu jako playable položky (newest-first; respektuje skrývání přehraných). */
-    private suspend fun podcastEpisodes(podcastItemId: String): List<MediaItem> {
-        val eps = repo.getPodcastDetail(podcastItemId).episodes
-        val visible = if (repo.hideFinishedEpisodes) eps.filterNot { it.isFinished } else eps
-        val cover = repo.coverUrl(podcastItemId)
-        return visible.map { episodeItem(podcastItemId, it, cover) }
-    }
-
-    /** Kapitoly aktuální knihy jako playable položky (`chap:<index>`) — klik skočí na kapitolu. */
-    private fun chapterItems(): List<MediaItem> {
-        val pb = currentPlayback ?: return emptyList()
-        val artwork = pb.coverUrl?.let(Uri::parse)
-        return pb.chapters.mapIndexed { i, ch ->
-            MediaItem.Builder()
-                .setMediaId("$PREFIX_CHAPTER$i")
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(ch.title)
-                        .setArtist(pb.title)
-                        .setArtworkUri(artwork)
-                        .setIsBrowsable(false)
-                        .setIsPlayable(true)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_AUDIO_BOOK_CHAPTER)
-                        .build(),
-                )
-                .build()
-        }
-    }
-
-    // ---- MediaItem builders ----
-
-    /** Browsable (neplayable) uzel pro Android Auto menu. */
-    private fun browsableNode(id: String, title: String): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(id)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setIsBrowsable(true)
-                    .setIsPlayable(false)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_AUDIO_BOOKS)
-                    .build(),
-            )
-            .build()
-
-    /** Playable položka knihy (mediaId `abs:<itemId>`) — resolver ji expanduje na tracky. */
-    private fun bookItem(b: Audiobook): MediaItem =
-        MediaItem.Builder()
-            .setMediaId("$PREFIX_BOOK${b.id}")
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(b.title)
-                    .setArtist(b.author)
-                    .setArtworkUri(b.coverUrl?.let(Uri::parse))
-                    .setIsBrowsable(false)
-                    .setIsPlayable(true)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_AUDIO_BOOK)
-                    .build(),
-            )
-            .build()
-
-    /** Browsable uzel podcastu (mediaId `pod:<itemId>`) — klik vylistuje epizody. */
-    private fun podcastNode(p: Podcast): MediaItem =
-        MediaItem.Builder()
-            .setMediaId("$PREFIX_PODCAST${p.id}")
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(p.title)
-                    .setArtist(p.author)
-                    .setArtworkUri(p.coverUrl?.let(Uri::parse))
-                    .setIsBrowsable(true)
-                    .setIsPlayable(false)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_PODCASTS)
-                    .build(),
-            )
-            .build()
-
-    /** Playable epizoda (mediaId `epi:<itemId>|<episodeId>`) — resolver ji expanduje na single track. */
-    private fun episodeItem(itemId: String, ep: PodcastEpisode, coverUrl: String?): MediaItem =
-        MediaItem.Builder()
-            .setMediaId("$PREFIX_EPISODE$itemId|${ep.id}")
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(ep.title)
-                    .setSubtitle(ep.guest)   // host (+profese) jako podtitul i v Android Auto
-                    .setArtist(ep.guest)
-                    .setArtworkUri(coverUrl?.let(Uri::parse))
-                    .setIsBrowsable(false)
-                    .setIsPlayable(true)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
-                    .build(),
-            )
-            .build()
-
-    /** CRUISE: browsable uzel custom zdroje (`src:<id>`) — klik vylistuje epizody. */
-    private fun sourceNode(s: PodcastSource): MediaItem =
-        MediaItem.Builder()
-            .setMediaId("$PREFIX_SRC${s.id}")
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(s.title)
-                    .setArtworkUri(s.thumbnail?.let(Uri::parse))
-                    .setIsBrowsable(true)
-                    .setIsPlayable(false)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_PODCASTS)
-                    .build(),
-            )
-            .build()
-
-    /**
-     * CRUISE: přehratelná direct epizoda (`direct:<sourceId>|<episodeId>`) S URI = přímou stream URL
-     * (YT proxy / RSS enclosure). Cachuje se v itemCache → onSetMediaItems ji při tapnutí najde i po
-     * stripnutí URI (AA přenáší jen mediaId). Bez ABS session → syncNow() ji přeskočí.
-     */
-    private fun directEpisodeItem(sourceId: String, ep: SourceEpisode): MediaItem =
-        MediaItem.Builder()
-            .setUri(ep.streamUrl)
-            .setMediaId("$PREFIX_DIRECT$sourceId|${ep.id}")
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(ep.title)
-                    .setSubtitle(ep.subtitle)
-                    .setArtist(ep.subtitle)
-                    .setArtworkUri(ep.imageUrl?.let(Uri::parse))
-                    .setIsBrowsable(false)
-                    .setIsPlayable(true)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
-                    // CRUISE: resume klíč (sdílený s in-app) → zápis pozice z auta + „Pokračovat".
-                    .setExtras(Bundle().apply { ep.resumeKey?.let { putString(KEY_DIRECT_KEY, it) } })
-                    .build(),
-            )
-            .build()
-
-    /** Multi-track playlist z play session (shodné s AudiobookPlayerConnection). */
-    private fun trackItems(pb: AbsPlayback): List<MediaItem> {
-        val artwork = pb.coverUrl?.let(Uri::parse)
-        return pb.tracks.map { t ->
-            val extras = Bundle().apply {
-                putString(KEY_SESSION_ID, pb.sessionId)
-                putDouble(KEY_DURATION_SEC, pb.durationSec)
-                putDouble(KEY_TRACK_OFFSET_SEC, t.startOffsetSec)
-                putString(KEY_BOOK_TITLE, pb.title)
-                pb.author?.let { putString(KEY_BOOK_AUTHOR, it) }
-            }
-            MediaItem.Builder()
-                .setUri(t.url)
-                .setMediaId("${pb.sessionId}_${t.index}")
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(pb.title)
-                        .setArtist(pb.author)
-                        .setArtworkUri(artwork)
-                        .setExtras(extras)
-                        .build(),
-                )
-                .build()
-        }
-    }
-
-    /** Čas celé knihy [ms] → (index tracku, pozice v tracku ms). */
-    private fun trackPositionForBookMs(pb: AbsPlayback, bookMs: Long): Pair<Int, Long> {
-        val target = bookMs.coerceAtLeast(0L)
-        if (pb.tracks.size <= 1) return 0 to target
-        var idx = 0
-        for (i in pb.tracks.indices) {
-            val offMs = (pb.tracks[i].startOffsetSec * 1000).toLong()
-            if (offMs <= target + 1) idx = i else break
-        }
-        val idxOffMs = (pb.tracks[idx].startOffsetSec * 1000).toLong()
-        return idx to (target - idxOffMs).coerceAtLeast(0L)
-    }
-
     /** Spustí suspend blok na main scope a vystaví ho jako ListenableFuture (pro Auto callbacky). */
     private fun <T> future(block: suspend () -> T): ListenableFuture<T> {
         val f = SettableFuture.create<T>()
@@ -892,7 +587,8 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val ACTION_SLEEP = "com.github.jankoran90.showlyfin.SLEEP"
         private val SPEEDS = floatArrayOf(1.0f, 1.2f, 1.5f, 1.7f, 2.0f, 0.8f)
         private val SLEEP_STEPS = intArrayOf(15, 30, 45, 60)
-        private const val CONTINUE_LIMIT = 25
-        private const val LATEST_LIMIT = 40   // CRUISE: strop „Nejnovější epizody" napříč zdroji
+        // Internal = čtou je browse extension funkce v AudiobookBrowseTree.kt.
+        internal const val CONTINUE_LIMIT = 25
+        internal const val LATEST_LIMIT = 40   // CRUISE: strop „Nejnovější epizody" napříč zdroji
     }
 }

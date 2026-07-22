@@ -16,8 +16,6 @@ import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
 import com.github.jankoran90.showlyfin.feature.listen.service.AudiobookPlayerService
-import org.json.JSONArray
-import org.json.JSONObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,10 +40,11 @@ import javax.inject.Singleton
 class AudiobookPlayerConnection @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val repo: AbsRepository,
-    private val prefs: AbsPreferences,
+    internal val prefs: AbsPreferences,
     private val downloads: EpisodeDownloadManager,
     private val resumeStore: DirectResumeStore,
 ) {
+    // Internal (ne private) = čtou/píší je extension funkce fronty v AudiobookPlayerQueue.kt.
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     /** L2b: throttle pro periodický zápis resume pozice direct epizod (RSS/YT) z [pushState]. */
@@ -63,11 +62,11 @@ class AudiobookPlayerConnection @Inject constructor(
     val chapters = _chapters.asStateFlow()
 
     /** Fronta podcastových epizod. */
-    private val _queue = MutableStateFlow<List<QueuedEpisode>>(loadPersistedQueue())
+    internal val _queue = MutableStateFlow<List<QueuedEpisode>>(loadPersistedQueue(prefs))
     val queue = _queue.asStateFlow()
 
     /** Aktuálně hraná podcast epizoda (null = audiokniha → bez fronty/auto-mark). */
-    private var currentEpisode: QueuedEpisode? = null
+    internal var currentEpisode: QueuedEpisode? = null
     private var advancing = false
 
     // Stabilní titul/autor knihy — drží se mimo MediaItem metadata, protože systémovou metadata titulek
@@ -79,61 +78,6 @@ class AudiobookPlayerConnection @Inject constructor(
     /** Sleep „do konce kapitoly/epizody": cílový čas kapitoly (book ms) nebo -1 = do konce epizody. */
     private var sleepEndChapterMs: Long? = null
     private var sleepEndOfEpisode = false
-
-    private fun loadPersistedQueue(): List<QueuedEpisode> {
-        if (!prefs.persistQueue) return emptyList()
-        val json = prefs.queueJson.ifBlank { return emptyList() }
-        return runCatching {
-            val arr = JSONArray(json)
-            (0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
-                val directObj = o.optJSONObject("direct")
-                QueuedEpisode(
-                    itemId = o.getString("itemId"),
-                    episodeId = o.getString("episodeId"),
-                    title = o.optString("title"),
-                    coverUrl = if (o.isNull("coverUrl")) null else o.optString("coverUrl").takeIf { it.isNotBlank() },
-                    guest = if (o.isNull("guest")) null else o.optString("guest").takeIf { it.isNotBlank() },
-                    description = if (o.isNull("description")) null else o.optString("description").takeIf { it.isNotBlank() },
-                    podcastTitle = if (o.isNull("podcastTitle")) null else o.optString("podcastTitle").takeIf { it.isNotBlank() },
-                    direct = directObj?.let {
-                        DirectAudio(
-                            url = it.optString("url"),
-                            durationSec = it.optDouble("durationSec", 0.0),
-                            author = if (it.isNull("author")) null else it.optString("author").takeIf { a -> a.isNotBlank() },
-                        )
-                    }?.takeIf { it.url.isNotBlank() },
-                )
-            }
-        }.getOrElse { emptyList() }
-    }
-
-    private fun persistQueue() {
-        if (!prefs.persistQueue) { prefs.queueJson = ""; return }
-        val arr = JSONArray()
-        _queue.value.forEach { q ->
-            arr.put(
-                JSONObject()
-                    .put("itemId", q.itemId)
-                    .put("episodeId", q.episodeId)
-                    .put("title", q.title)
-                    .put("coverUrl", q.coverUrl ?: JSONObject.NULL)
-                    .put("guest", q.guest ?: JSONObject.NULL)
-                    .put("description", q.description ?: JSONObject.NULL)
-                    .put("podcastTitle", q.podcastTitle ?: JSONObject.NULL)
-                    .put(
-                        "direct",
-                        q.direct?.let {
-                            JSONObject()
-                                .put("url", it.url)
-                                .put("durationSec", it.durationSec)
-                                .put("author", it.author ?: JSONObject.NULL)
-                        } ?: JSONObject.NULL,
-                    ),
-            )
-        }
-        prefs.queueJson = arr.toString()
-    }
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -507,31 +451,8 @@ class AudiobookPlayerConnection @Inject constructor(
     }
 
     // ──────────────────────────── Fronta epizod ────────────────────────────
-
-    private fun setQueue(list: List<QueuedEpisode>) {
-        _queue.value = list
-        persistQueue()
-    }
-
-    private fun currentIndex(): Int =
-        _queue.value.indexOfFirst { it.episodeId == currentEpisode?.episodeId }
-
-    /** Přidá epizodu do fronty. [atFront] = hned ZA aktuálně hranou, jinak na konec. Bez duplicit. */
-    fun enqueue(episode: QueuedEpisode, atFront: Boolean) {
-        val without = _queue.value.filterNot { it.episodeId == episode.episodeId }
-        if (!atFront) { setQueue(without + episode); return }
-        val curIdx = without.indexOfFirst { it.episodeId == currentEpisode?.episodeId }
-        setQueue(
-            if (curIdx >= 0) without.toMutableList().apply { add(curIdx + 1, episode) }
-            else listOf(episode) + without,
-        )
-    }
-
-    fun removeFromQueue(episodeId: String) {
-        setQueue(_queue.value.filterNot { it.episodeId == episodeId })
-    }
-
-    fun clearQueue() = setQueue(emptyList())
+    // Perzistence + list-operace fronty (setQueue/enqueue/removeFromQueue/moveQueueItem/…) jsou
+    // extension funkce v AudiobookPlayerQueue.kt (anti-monolit). Tady zůstává přehrávací jádro.
 
     /** Vymaže CELOU frontu včetně aktuálně přehrávaného → přehrávač zůstane prázdný (neaktivní). */
     fun clearAll() {
@@ -543,21 +464,6 @@ class AudiobookPlayerConnection @Inject constructor(
         _chapters.value = emptyList()
         setQueue(emptyList())
         _state.value = PlayerState()
-    }
-
-    /** Přesun položky ve frontě (drag reorder). */
-    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
-        val q = _queue.value.toMutableList()
-        if (fromIndex !in q.indices || toIndex !in q.indices || fromIndex == toIndex) return
-        q.add(toIndex, q.removeAt(fromIndex))
-        setQueue(q)
-    }
-
-    /** Přesun epizody na začátek fronty (swipe akce). */
-    fun moveToFront(episodeId: String) {
-        val q = _queue.value
-        val idx = q.indexOfFirst { it.episodeId == episodeId }
-        if (idx > 0) moveQueueItem(idx, 0)
     }
 
     /**
