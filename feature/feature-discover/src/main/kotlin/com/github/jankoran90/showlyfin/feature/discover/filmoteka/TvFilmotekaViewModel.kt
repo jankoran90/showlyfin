@@ -354,10 +354,10 @@ class TvFilmotekaViewModel @Inject constructor(
         merged.values.map { item ->
             val k = dedupKey(item)
             val r = if (k != null) recency[k] else null
-            // Membership datum (JF/Trakt) MÁ PŘEDNOST; working-only film si nechá své vlastní addedAtMs
-            // (= neměnné `firstSavedAtMs`, viz loadWorkingSources) → má „nějaké datum" a NEskáče při re-cache
-            // (user 2026-07-22: savedAtMs se bumpuje kvůli sync → nesmí hýbat pořadím „Nedávno přidané").
-            if (r != null) item.copy(addedAtMs = r) else item
+            // Membership datum (JF DateCreated / Trakt listed_at) = datum přidání na seznam → řídí pořadí.
+            // Working-only film (r==null, není v JF/Trakt) → addedAtMs=null; finální datum (Oblíbené / měsíc
+            // zpět) mu přidělí `rebuild`, kde jsou vidět i Oblíbené (user 2026-07-22).
+            item.copy(addedAtMs = r)
         }
     }
 
@@ -425,7 +425,16 @@ class TvFilmotekaViewModel @Inject constructor(
         // Base (JF+Working+Trakt) má přednost před Oblíbenými (putIfAbsent v pořadí base → favorites).
         val combined = LinkedHashMap<String, MediaItem>()
         for (item in baseItems + favoriteItems) { val k = dedupKey(item) ?: continue; combined.putIfAbsent(k, item) }
-        val all = combined.values.toList()
+        // Datum „přidáno" pro řazení „Nedávno přidané" (user 2026-07-22): začátek Filmotéky MUSÍ sedět s „Chci
+        // vidět". Priorita: JF/Trakt datum (z gatherBase) → Oblíbené addedAtMs → jinak (jen stažený zdroj, mimo
+        // všechny seznamy) MĚSÍC ZPĚT (spadne pod čerstvé z Chci vidět, ale zůstane ve Filmotéce).
+        val favDates = HashMap<String, Long>()
+        for (f in favoriteItems) { val k = dedupKey(f) ?: continue; f.addedAtMs?.let { favDates.putIfAbsent(k, it) } }
+        val backdate = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+        val all = combined.values.map { item ->
+            if (item.addedAtMs != null) item
+            else item.copy(addedAtMs = (dedupKey(item)?.let { favDates[it] }) ?: backdate)
+        }
         val result = FilmotekaGrouping.build(
             all = all,
             axis = axis,
