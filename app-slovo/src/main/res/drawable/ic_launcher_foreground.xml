@@ -4,15 +4,26 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- EXCISE (SHW-103) — písmeno „S" v bílé (blokové, styl Filmy „F"), centrované v safe zóně (18..90),
-         s amber symbolem mluveného slova (soundwave) vpravo dole. -->
-    <path android:fillColor="#FFFFFF" android:pathData="M32,24 H72 V36 H32 Z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M32,36 H44 V50 H32 Z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M32,50 H72 V62 H32 Z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M60,62 H72 V76 H60 Z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M32,76 H72 V88 H32 Z" />
-    <!-- Soundwave (mluvené slovo) — amber akcent -->
-    <path android:fillColor="#FF7A1A" android:pathData="M78,72 H81 V82 H78 Z" />
-    <path android:fillColor="#FF7A1A" android:pathData="M83,66 H86 V82 H83 Z" />
-    <path android:fillColor="#FF7A1A" android:pathData="M88,70 H91 V82 H88 Z" />
+    <!-- EXCISE (SHW-103) — písmeno „S" (oblé, ne blokové, ať nesplývá s 5) v bílé, stroke; centrované
+         v safe zóně, s amber soundwave (mluvené slovo) vpravo — VŠE uvnitř kruhového ořezu adaptivní ikony. -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="11"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M62,40
+                          C62,31 55,26 46,26
+                          C37,26 30,31 30,39
+                          C30,47 36,50 46,53
+                          C56,56 62,60 62,69
+                          C62,78 55,83 46,83
+                          C37,83 30,78 30,69" />
+    <!-- Soundwave (mluvené slovo) — amber, rostoucí vlna, uvnitř safe kruhu -->
+    <path android:strokeColor="#FF7A1A" android:strokeWidth="6" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M67,71 V79" />
+    <path android:strokeColor="#FF7A1A" android:strokeWidth="6" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M74,60 V79" />
+    <path android:strokeColor="#FF7A1A" android:strokeWidth="6" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M81,67 V79" />
 </vector>
