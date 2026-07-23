@@ -27,6 +27,7 @@ dependencies {
     implementation(project(":feature:feature-listen"))  // ListenScreen + detaily + settings sekce + VM
     implementation(project(":feature:feature-playback")) // video epizody podcastů (PlaybackScreen)
     implementation(project(":data:data-uploader"))      // PodcastSource
+    implementation(project(":data:data-abs"))           // ABS login (AbsRepository/AbsPreferences) — sekce Účet
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

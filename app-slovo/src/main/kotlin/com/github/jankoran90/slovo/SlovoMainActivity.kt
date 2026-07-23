@@ -7,6 +7,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureGestureHost
 import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureManager
@@ -25,6 +27,8 @@ import com.github.jankoran90.showlyfin.core.ui.LocalFormFactor
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 import com.github.jankoran90.showlyfin.core.ui.UpdateLauncher
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
+import com.github.jankoran90.showlyfin.feature.listen.player.FavoriteSourcesStore
 import com.github.jankoran90.showlyfin.ui.slovophone.SlovoPhoneShell
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -41,12 +45,26 @@ class SlovoMainActivity : ComponentActivity() {
     @Inject lateinit var profileRepository: ProfileRepository
     @Inject lateinit var slovoProfileManager: SlovoProfileManager
 
+    // EXCISE (SHW-103) Fáze B — cross-device poslech: push/pull pozic + oblíbených na lifecycle.
+    @Inject lateinit var directResumeStore: DirectResumeStore
+    @Inject lateinit var favoriteSourcesStore: FavoriteSourcesStore
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         UpdateCheckWorker.enqueue(applicationContext)
         runStartupUpdateCheck()
         maybeShowUpdateDialogFromIntent(intent)
+        // Příchod appky do popředí = pull čerstvých pozic/oblíbených z jiného zařízení; odchod = push lokálních.
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                directResumeStore.syncNow()
+                favoriteSourcesStore.syncNow()
+            }
+            override fun onPause(owner: LifecycleOwner) {
+                directResumeStore.syncNow()
+            }
+        })
         lifecycleScope.launch {
             // Single-user: naseeduj 1 pevný profil (idempotentně).
             slovoProfileManager.ensureSeeded()

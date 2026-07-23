@@ -19,6 +19,7 @@ android {
 dependencies {
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-data"))
+    implementation(project(":core:core-db")) // EXCISE Fáze B: cross-device pozice (playback_state) + oblíbené pořady (saved_show)
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-network"))
     implementation(project(":data:data-abs"))

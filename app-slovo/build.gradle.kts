@@ -29,8 +29,8 @@ android {
         applicationId = "com.github.jankoran90.slovo"
         minSdk = 23
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -94,6 +94,7 @@ dependencies {
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-appservices"))
     implementation(project(":core:core-theme"))
+    implementation(project(":core:core-db")) // EXCISE Fáze B: SUBSTRATE (Hilt DAO/DB provideři pro cross-device poslech)
 
     // Poslechová data (audioknihy ABS, podcast zdroje, offline, JF video epizody, maestro).
     implementation(project(":data:data-abs"))

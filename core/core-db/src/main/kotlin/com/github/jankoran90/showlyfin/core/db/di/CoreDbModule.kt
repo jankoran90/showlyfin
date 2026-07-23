@@ -35,6 +35,34 @@ object CoreDbModule {
         }
     }
 
+    /**
+     * EXCISE (SHW-103) Fáze B — aditivní migrace v2→v3: poslechové sync domény `playback_state`
+     * (pozice ČT/YouTube/RSS) + `saved_show` (oblíbené pořady). NEdestruktivní, stávající tabulky beze změny.
+     */
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `playback_state` (" +
+                    "`profileKey` TEXT NOT NULL, `mediaKey` TEXT NOT NULL, " +
+                    "`posMs` INTEGER NOT NULL, `durMs` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, `syncVersion` INTEGER NOT NULL, " +
+                    "`dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`profileKey`, `mediaKey`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_state_profileKey` ON `playback_state` (`profileKey`)")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `saved_show` (" +
+                    "`profileKey` TEXT NOT NULL, `type` TEXT NOT NULL, `ref` TEXT NOT NULL, " +
+                    "`title` TEXT NOT NULL, `subtitle` TEXT, `thumbnail` TEXT, `summary` TEXT, " +
+                    "`episodeCount` INTEGER, `category` TEXT, `addedAt` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, `syncVersion` INTEGER NOT NULL, " +
+                    "`dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`profileKey`, `type`, `ref`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_saved_show_profileKey` ON `saved_show` (`profileKey`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun providesSubstrateDatabase(
@@ -43,11 +71,17 @@ object CoreDbModule {
         context,
         SubstrateDatabase::class.java,
         "substrate.db",
-    ).addMigrations(MIGRATION_1_2).build()
+    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
     @Provides
     fun providesFavoriteDao(db: SubstrateDatabase) = db.favoriteDao()
 
     @Provides
     fun providesSyncMetaDao(db: SubstrateDatabase) = db.syncMetaDao()
+
+    @Provides
+    fun providesPlaybackStateDao(db: SubstrateDatabase) = db.playbackStateDao()
+
+    @Provides
+    fun providesSavedShowDao(db: SubstrateDatabase) = db.savedShowDao()
 }

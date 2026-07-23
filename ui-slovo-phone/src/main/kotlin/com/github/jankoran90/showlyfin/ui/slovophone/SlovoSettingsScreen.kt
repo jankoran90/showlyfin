@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.HighQuality
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Sort
@@ -44,6 +46,9 @@ fun SlovoSettingsScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            SlovoCollapsibleSection("Účet / Audioknihy", Icons.Rounded.AccountCircle) {
+                SlovoAccountSection()
+            }
             SlovoCollapsibleSection("Vzhled", Icons.Rounded.Palette, initiallyExpanded = true) {
                 SlovoAppearanceSection()
             }
@@ -64,6 +69,9 @@ fun SlovoSettingsScreen(
             }
             SlovoCollapsibleSection("Kvalita videa", Icons.Rounded.HighQuality) {
                 PodcastVideoQualitySettingsSection()
+            }
+            SlovoCollapsibleSection("O aplikaci", Icons.Rounded.Info) {
+                SlovoAboutSection()
             }
         }
     }
