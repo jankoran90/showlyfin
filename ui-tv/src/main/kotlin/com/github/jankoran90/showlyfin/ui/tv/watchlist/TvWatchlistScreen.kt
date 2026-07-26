@@ -33,8 +33,12 @@ import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
+import com.github.jankoran90.showlyfin.core.ui.TvSectionSort
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
+import com.github.jankoran90.showlyfin.feature.discover.tv.TvSectionViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.tv.components.TvPosterCard
+import com.github.jankoran90.showlyfin.ui.tv.components.TvSortChip
 
 /**
  * TENFOOT (SHW-87) — nativní 10-foot „Oblíbené" na TV. Zdroj = per-profil [TvFavoritesViewModel]
@@ -48,8 +52,21 @@ fun TvWatchlistScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: TvFavoritesViewModel = hiltViewModel(),
+    sectionVm: TvSectionViewModel = hiltViewModel(),
 ) {
-    val movies by viewModel.movies.collectAsStateWithLifecycle()
+    val allMovies by viewModel.movies.collectAsStateWithLifecycle()
+    // FOYER (SHW-107, user 2026-07-26): vstup do sekce na TV = mřížka + ABECEDNĚ. Volba se pamatuje.
+    val modes by sectionVm.modes.collectAsStateWithLifecycle()
+    val sort = sectionVm.sortOf(modes, ViewModeStore.SECTION_WATCHLIST)
+    val movies = remember(allMovies, sort) {
+        when (sort) {
+            TvSectionSort.ABECEDNE -> allMovies.sortedBy { it.name.lowercase() }
+            TvSectionSort.NEDAVNO -> allMovies.sortedByDescending { it.addedAtMs }
+            TvSectionSort.ROK -> allMovies.sortedByDescending { it.year ?: 0 }
+            // Oblíbené nenesou hodnocení → chová se jako výchozí pořadí (žádné falešné řazení).
+            TvSectionSort.HODNOCENI, TvSectionSort.VYCHOZI -> allMovies
+        }
+    }
     val gridState = rememberLazyGridState()
     val firstItemFocus = remember { FocusRequester() }
     AutoFocusFirst(
@@ -79,6 +96,8 @@ fun TvWatchlistScreen(
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
+            // FOYER (SHW-107): na TV je výchozí řazení ABECEDNÍ; přepnutí se uloží (per sekce).
+            TvSortChip(sort = sort, onSort = { sectionVm.setSort(ViewModeStore.SECTION_WATCHLIST, it) })
         }
 
         if (movies.isEmpty()) {

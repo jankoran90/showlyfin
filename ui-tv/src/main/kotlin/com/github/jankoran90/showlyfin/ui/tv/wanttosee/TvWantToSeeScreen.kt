@@ -31,6 +31,10 @@ import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.wanttosee.TvWantToSeeViewModel
 import com.github.jankoran90.showlyfin.feature.discover.wanttosee.WatchlistSourceCacheViewModel
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
+import com.github.jankoran90.showlyfin.feature.discover.tv.TvSectionViewModel
+import com.github.jankoran90.showlyfin.feature.discover.tv.sortedBy
+import com.github.jankoran90.showlyfin.ui.tv.components.TvSortChip
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
@@ -55,8 +59,13 @@ fun TvWantToSeeScreen(
     modifier: Modifier = Modifier,
     viewModel: TvWantToSeeViewModel = hiltViewModel(),
     cacheViewModel: WatchlistSourceCacheViewModel = hiltViewModel(),
+    sectionVm: TvSectionViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val state0 by viewModel.state.collectAsStateWithLifecycle()
+    // FOYER (SHW-107, user 2026-07-26): TV vstup do sekce = mřížka + ABECEDNĚ; přepnutí se uloží.
+    val modes by sectionVm.modes.collectAsStateWithLifecycle()
+    val sort = sectionVm.sortOf(modes, ViewModeStore.SECTION_WANT_TO_SEE)
+    val state = remember(state0, sort) { state0.copy(items = state0.items.sortedBy(sort)) }
     val cacheState by cacheViewModel.state.collectAsStateWithLifecycle()
     val cardScale = LocalTvCardScale.current
     val gridState = rememberLazyGridState()
@@ -99,6 +108,8 @@ fun TvWantToSeeScreen(
                     enabled = !running,
                     onClick = { cacheViewModel.runBackfill() },
                 )
+                Spacer(Modifier.padding(start = 10.dp))
+                TvSortChip(sort = sort, onSort = { sectionVm.setSort(ViewModeStore.SECTION_WANT_TO_SEE, it) })
             }
         }
 

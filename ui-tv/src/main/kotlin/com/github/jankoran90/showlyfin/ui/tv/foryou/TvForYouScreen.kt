@@ -34,6 +34,10 @@ import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.foryou.ForYouViewModel
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
+import com.github.jankoran90.showlyfin.feature.discover.tv.TvSectionViewModel
+import com.github.jankoran90.showlyfin.feature.discover.tv.sortedBy
+import com.github.jankoran90.showlyfin.ui.tv.components.TvSortChip
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRail
@@ -56,8 +60,13 @@ fun TvForYouScreen(
     onFocusItem: (ImmersiveInfo?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ForYouViewModel = hiltViewModel(),
+    sectionVm: TvSectionViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val state0 by viewModel.state.collectAsStateWithLifecycle()
+    // FOYER (SHW-107, user 2026-07-26): TV vstup do sekce = mřížka (už výchozí) + ABECEDNĚ. Volba se pamatuje.
+    val modes by sectionVm.modes.collectAsStateWithLifecycle()
+    val sort = sectionVm.sortOf(modes, ViewModeStore.SECTION_FOR_YOU)
+    val state = remember(state0, sort) { state0.copy(items = state0.items.sortedBy(sort)) }
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val cardScale = LocalTvCardScale.current
     val gridState = rememberLazyGridState()
@@ -71,7 +80,10 @@ fun TvForYouScreen(
     // KÁNON (CONVERGE): přepínač Mřížka ↔ Immersive řada jako chipy VEDLE názvu sekce (per-sekce
     // ViewModeStore.SECTION_FOR_YOU). V LIST modu je hlavička uvnitř TvRailList (sectionActions), v ostatních
     // stavech ji kreslí TvSectionHeader nad obsahem — pořád jeden název „Pro tebe", žádné odsazení navíc.
-    val chips: @Composable () -> Unit = { ForYouChips(viewMode, viewModel::setViewMode) }
+    val chips: @Composable () -> Unit = {
+        ForYouChips(viewMode, viewModel::setViewMode)
+        TvSortChip(sort = sort, onSort = { sectionVm.setSort(ViewModeStore.SECTION_FOR_YOU, it) })
+    }
 
     // LIST + obsah: celou sekci (název „Pro tebe" + chipy + immersive hero + řadu) vykreslí TvRailList sám,
     // bez vnějšího tvOverscan (ten si TvRailList dělá interně — dvojitý overscan = odsazení, vzor Vzácné klenoty).

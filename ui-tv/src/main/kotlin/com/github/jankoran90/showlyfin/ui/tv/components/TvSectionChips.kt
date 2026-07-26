@@ -46,6 +46,24 @@ fun TvViewChips(
     }
 }
 
+/**
+ * FOYER — samotný chip řazení pro sekce, které mají JEN mřížku (Chci vidět, Oblíbené, Pro tebe…).
+ * Klik cykluje: Abecedně → Nedávno → Rok → Hodnocení → Výchozí → … Výchozí = ABECEDNĚ (TV).
+ */
+@Composable
+fun TvSortChip(
+    sort: TvSectionSort,
+    onSort: (TvSectionSort) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FilterChip(
+        selected = sort != TvSectionSort.VYCHOZI,
+        onClick = { onSort(sort.next()) },
+        label = { Text("Řazení: ${sort.label}") },
+        modifier = modifier.tvFocusable(),
+    )
+}
+
 /** Další řazení v kruhu (klik na chip cykluje). */
 private fun TvSectionSort.next(): TvSectionSort {
     val all = TvSectionSort.entries

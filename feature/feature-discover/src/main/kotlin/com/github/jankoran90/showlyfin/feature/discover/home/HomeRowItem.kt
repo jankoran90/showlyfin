@@ -27,6 +27,12 @@ data class HomeRowItem(
      * rovnou (one-click), místo otevření detailu. Konzument (TvHomeScreen) rozliší cestu kliku.
      */
     val playDirectly: Boolean = false,
+    /**
+     * FOYER (SHW-107) — karta je JELLYFIN KOLEKCE (BoxSet), ne film: klik otevře OBSAH kolekce
+     * (mřížka jejích položek), ne detail s hledáním zdroje. Bez tohoto se kolekce tvářila jako film
+     * s TMDB id kolekce → karta s cizím obsahem, u které nebylo co přehrát (user 2026-07-26).
+     */
+    val collection: Boolean = false,
 )
 
 /** Stav jedné řady na domově (lazy načítaná). */

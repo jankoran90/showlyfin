@@ -53,6 +53,15 @@ class FilmotekaSettingsStore @Inject constructor(
     /** RUBRIC (SHW-104) — hybridní seskupení žánrů (Akční komedie, Sci-fi horor…) na ose Žánr; default ON. */
     val hybridGenres: StateFlow<Boolean> = _hybridGenres.asStateFlow()
 
+    private val _showCollections = MutableStateFlow(loadShowCollections())
+    /**
+     * FOYER (SHW-107, user 2026-07-26) — karty KOLEKCÍ (Jellyfin BoxSet) ve Filmotéce. Default **VYPNUTO**:
+     * Jellyfin vrací kolekce i při dotazu na Movie/Series a Filmotéka je brala jako film (TMDB id kolekce →
+     * karta s cizím obsahem a bez čeho přehrát). S vypnutým přepínačem jsou vidět jen filmy zvlášť; se
+     * zapnutým přibude řada „Kolekce" s kartami, které OTEVŘOU obsah kolekce (ne fiktivní film).
+     */
+    val showCollections: StateFlow<Boolean> = _showCollections.asStateFlow()
+
     /** Přepni na nastavení daného profilu — přenačte všechny toky. Idempotentní (stejný profil = no-op). */
     fun switchProfile(id: Long?) {
         if (id == activeId && switched) return
@@ -63,6 +72,7 @@ class FilmotekaSettingsStore @Inject constructor(
         _allSort.value = loadAllSort()
         _enabledRegions.value = loadRegions()
         _hybridGenres.value = loadHybridGenres()
+        _showCollections.value = loadShowCollections()
     }
 
     fun setSourceEnabled(source: FilmotekaSource, enabled: Boolean) {
@@ -93,6 +103,15 @@ class FilmotekaSettingsStore @Inject constructor(
         _hybridGenres.value = enabled
         prefs.edit().putBoolean(keyFor(KEY_HYBRID), enabled).apply()
     }
+
+    /** FOYER — zapni/vypni karty kolekcí ve Filmotéce (per profil). */
+    fun setShowCollections(enabled: Boolean) {
+        _showCollections.value = enabled
+        prefs.edit().putBoolean(keyFor(KEY_SHOW_COLLECTIONS), enabled).apply()
+    }
+
+    private fun loadShowCollections(): Boolean =
+        prefs.getBoolean(keyFor(KEY_SHOW_COLLECTIONS), prefs.getBoolean(KEY_SHOW_COLLECTIONS, false))
 
     private fun loadSources(): Set<FilmotekaSource> {
         val raw = prefs.getString(keyFor(KEY_SOURCES), null) ?: prefs.getString(KEY_SOURCES, null)
@@ -135,6 +154,8 @@ class FilmotekaSettingsStore @Inject constructor(
         const val KEY_ALL_SORT = "all_sort"
         const val KEY_REGIONS = "regions_json"
         const val KEY_HYBRID = "hybrid_genres"
+        /** FOYER (SHW-107) — karty kolekcí (BoxSet) ve Filmotéce; default false. */
+        const val KEY_SHOW_COLLECTIONS = "show_collections"
         val ALL_SOURCES: Set<FilmotekaSource> = FilmotekaSource.entries.toSet()
 
         // Výchozí zapnuté zdroje = vše KROMĚ Jellyfinu (user 07-19: JF do Filmotéky jen když ho vybere v Nastavení,

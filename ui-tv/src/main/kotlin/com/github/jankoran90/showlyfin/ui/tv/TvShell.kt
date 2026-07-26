@@ -57,6 +57,8 @@ fun TvShell(
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
     // FOYER (SHW-107): „Zobrazit vše" u řady domova bez vlastní sekce → plná mřížka řady (drill).
     onOpenRowAll: (configId: String, title: String) -> Unit = { _, _ -> },
+    // FOYER: karta kolekce (Jellyfin BoxSet) → mřížka obsahu kolekce.
+    onOpenCollection: (collectionId: String, name: String) -> Unit = { _, _ -> },
     homeVm: TvHomeViewModel = hiltViewModel(),
 ) {
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
@@ -168,6 +170,8 @@ fun TvShell(
                     TvSection.FILMOTEKA -> TvFilmotekaScreen(
                         onOpenDetail = onOpenDetail,
                         onOpenJellyfinDetail = onOpenJellyfinDetail,
+                        // FOYER: kolekce (BoxSet) otevře svůj obsah jako mřížku knihovny.
+                        onOpenCollection = { id, name -> onOpenCollection(id, name) },
                         immersive = immersive,
                         immersiveHeader = immersiveHeader,
                         onFocusItem = { rawInfo = it },

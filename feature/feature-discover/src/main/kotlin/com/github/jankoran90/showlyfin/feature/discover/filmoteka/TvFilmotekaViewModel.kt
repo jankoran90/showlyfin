@@ -62,6 +62,11 @@ data class FilmotekaUiState(
     val countryFilter: Set<CinematographyRegion> = emptySet(),
     /** Všechny hlavní regiony přítomné v bázi (dle četnosti sestupně) — nabídka pro picker filtru země. */
     val availableCountries: List<CinematographyRegion> = emptyList(),
+    /**
+     * FOYER (SHW-107) — Jellyfin kolekce (BoxSet) jako VLASTNÍ karty; prázdné, když je přepínač „Karty
+     * kolekcí" vypnutý (default). Klik na kolekci otevře její obsah, ne detail filmu.
+     */
+    val collections: List<FilmotekaCollection> = emptyList(),
 )
 
 /**
@@ -107,6 +112,9 @@ class TvFilmotekaViewModel @Inject constructor(
     // Enrichnutá + věkově gatovaná báze (JF+Working+Trakt) a zvlášť Oblíbené (reaktivní). Grupování je merguje.
     @Volatile private var baseItems: List<MediaItem> = emptyList()
     @Volatile private var favoriteItems: List<MediaItem> = emptyList()
+
+    /** FOYER — načtené Jellyfin kolekce (prázdné při vypnutém přepínači). */
+    @Volatile private var collections: List<FilmotekaCollection> = emptyList()
 
     /** GENRE-FILTER — živý výběr žánrů (viz [FilmotekaUiState.genreFilter]). Drží se napříč přeskupením os. */
     @Volatile private var genreFilter: Set<String> = emptySet()
@@ -164,6 +172,12 @@ class TvFilmotekaViewModel @Inject constructor(
 
         // RUBRIC (SHW-104) — přepnutí hybridního seskupení žánrů jen PŘESKUPÍ už-obohacenou bázi (bez fetch),
         // aby se řady/nabídka filtru ose Žánr překreslily ŽIVĚ. drop(1) = ignoruj iniciální emit.
+        // FOYER (SHW-107) — přepnutí „Karty kolekcí" v Nastavení → přenačti (kolekce se dotahují zvlášť).
+        settings.showCollections
+            .drop(1)
+            .onEach { reload() }
+            .launchIn(viewModelScope)
+
         settings.hybridGenres
             .drop(1)
             .onEach { rebuild(_state.value.axis) }
@@ -250,6 +264,7 @@ class TvFilmotekaViewModel @Inject constructor(
         _state.value = _state.value.copy(loading = true)
         loadJob = viewModelScope.launch {
             baseItems = filmotekaBase.loadBase()
+            collections = filmotekaBase.loadCollections()
             rebuild(settings.defaultAxis.value)
         }
     }
@@ -285,6 +300,7 @@ class TvFilmotekaViewModel @Inject constructor(
             allSort = settings.allSort.value, total = result.total,
             genreFilter = genreFilter, availableGenres = result.availableGenres,
             countryFilter = countryFilter, availableCountries = result.availableCountries,
+            collections = collections,
         )
     }
 

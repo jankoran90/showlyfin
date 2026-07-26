@@ -112,6 +112,10 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             },
             // FOYER (SHW-107): dlaždice „Zobrazit vše" u řady bez vlastní sekce → plná mřížka řady.
             onOpenRowAll = { configId, title -> navigate(TvDestination.RowAll(configId, title)) },
+            // FOYER: kolekce = drill do jejího obsahu (parentItemType BOX_SET → nerekurzivní výpis členů).
+            onOpenCollection = { id, name ->
+                navigate(TvDestination.LibraryItems(id, name, collectionType = null, parentItemType = "BOX_SET"))
+            },
         )
 
         TvDestination.Search -> TvSearchScreen(

@@ -44,6 +44,7 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
     val allSort by vm.allSort.collectAsStateWithLifecycle()
     val enabledRegions by vm.enabledRegions.collectAsStateWithLifecycle()
     val hybridGenres by vm.hybridGenres.collectAsStateWithLifecycle()
+    val showCollections by vm.showCollections.collectAsStateWithLifecycle()
     val jfLibraries by vm.jfLibraries.collectAsStateWithLifecycle()
     val selectedFilmoLibs by vm.selectedFilmotekaLibs.collectAsStateWithLifecycle()
     val jellyfinOn = FilmotekaSource.JELLYFIN in sources
@@ -107,6 +108,15 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
             subtitle = "Slučovat žánry do kombinovaných řad (Akční komedie, Sci-fi horor, Superhrdinský…). Vypnuto = řada podle prvního žánru.",
             checked = hybridGenres,
             onCheckedChange = { vm.setHybridGenres(it) },
+        )
+        // FOYER (SHW-107, user 2026-07-26): Jellyfin vrací kolekce (BoxSet) i mezi filmy a Filmotéka je brala
+        // jako film → karta, u které nebylo co přehrát. Vypnuto (default) = jen filmy zvlášť; zapnuto = řada
+        // „Kolekce" s kartami, které otevřou obsah kolekce.
+        TvToggleRow(
+            label = "Karty kolekcí",
+            subtitle = "Zobrazit ve Filmotéce řadu „Kolekce\" (Jellyfin BoxSet). Vypnuto = jen jednotlivé filmy.",
+            checked = showCollections,
+            onCheckedChange = { vm.setShowCollections(it) },
         )
         RegionSection(enabledRegions = enabledRegions, onToggle = vm::setRegion)
     }

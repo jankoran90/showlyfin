@@ -48,6 +48,16 @@ import javax.inject.Singleton
  * CATALOGUE pravidlo (nechává se beze změny): „přidáno" = datum ČLENSTVÍ (JF `DateCreated` / Trakt
  * `listed_at`), NIKDY datum přiděleného working-source — jinak by dohledání zdroje přeskládalo pořadí.
  */
+/**
+ * FOYER (SHW-107) — jedna Jellyfin KOLEKCE (BoxSet) jako samostatná entita. Není to film: klik na ni
+ * otevře její OBSAH (mřížka položek kolekce), ne detail s hledáním zdroje.
+ */
+data class FilmotekaCollection(
+    val jellyfinId: String,
+    val name: String,
+    val posterUrl: String?,
+)
+
 @Singleton
 class FilmotekaBaseLoader @Inject constructor(
     private val apiClient: ApiClient,
@@ -200,6 +210,50 @@ class FilmotekaBaseLoader @Inject constructor(
         }
     }
 
+    /**
+     * FOYER (SHW-107) — KOLEKCE (Jellyfin BoxSet) jako VLASTNÍ karty, které umí otevřít svůj obsah
+     * (`TvDestination.LibraryItems` s `parentItemType=BOX_SET`), ne jako fiktivní film. Vrací prázdno,
+     * když je přepínač „Karty kolekcí" vypnutý (default) nebo Jellyfin zdroj není zapnutý.
+     */
+    suspend fun loadCollections(): List<FilmotekaCollection> = coroutineScope {
+        if (!settings.showCollections.value) return@coroutineScope emptyList()
+        if (FilmotekaSource.JELLYFIN !in settings.sources.value) return@coroutineScope emptyList()
+        val session = prepareJellyfin() ?: return@coroutineScope emptyList()
+        val filmoWhitelist = profileRepository.activeConfig.value.filmotekaJfLibraries
+            ?.map { it.replace("-", "").lowercase() }?.toSet()
+        val views = runCatching { apiClient.userViewsApi.getUserViews(session.userUuid).content.items }
+            .getOrElse { emptyList() }
+            .filter { it.isFilmotekaLibrary() }
+            .let { list ->
+                if (filmoWhitelist == null) list
+                else list.filter { it.id.toString().replace("-", "").lowercase() in filmoWhitelist }
+            }
+        views.map { view ->
+            async {
+                runCatching {
+                    apiClient.itemsApi.getItems(
+                        userId = session.userUuid,
+                        parentId = view.id,
+                        includeItemTypes = listOf(BaseItemKind.BOX_SET),
+                        recursive = true,
+                        sortBy = listOf(ItemSortBy.SORT_NAME),
+                        sortOrder = listOf(SortOrder.ASCENDING),
+                        limit = 100,
+                    ).content.items
+                }.getOrElse { Timber.w(it, "[Filmoteka] kolekce '${view.name}' selhaly"); emptyList() }
+            }
+        }.awaitAll().flatten()
+            .filter { it.type == BaseItemKind.BOX_SET }
+            .map {
+                FilmotekaCollection(
+                    jellyfinId = it.id.toString(),
+                    name = it.name.orEmpty(),
+                    posterUrl = it.jellyfinPosterUrl(session.serverUrl, session.token),
+                )
+            }
+            .distinctBy { it.jellyfinId }
+    }
+
     // ── Mapování ────────────────────────────────────────────────────────────────
 
     /**
@@ -209,6 +263,12 @@ class FilmotekaBaseLoader @Inject constructor(
      * si enricher nepřepisuje jen tak — a i kdyby, TMDB plakát je hezčí, tak je to výhra oběma směry.
      */
     private fun BaseItemDto.toFilmotekaMediaItem(serverUrl: String, token: String): MediaItem? {
+        // FOYER (SHW-107, DŮKAZ 2026-07-26): Jellyfin vrací BOX_SET (kolekce) i na dotaz `includeItemTypes=
+        // Movie,Series` (ověřeno proti serveru: „Harry Potter (kolekce)" Tmdb=1241 mezi 16 položkami knihovny
+        // Rodinné filmy). Bez téhle pojistky se kolekce mapovala na FILM s TMDB id KOLEKCE → enrich stáhl
+        // úplně jiný film → karta s cizím obsahem, u které není co přehrát (přesně userův report). Filmy
+        // uvnitř kolekce v seznamu ZŮSTÁVAJÍ (rekurzivní dotaz je vrací zvlášť) — nic se neztratí.
+        if (type != BaseItemKind.MOVIE && type != BaseItemKind.SERIES) return null
         val tmdb = providerIds?.get("Tmdb")?.toLongOrNull()
         val imdb = providerIds?.get("Imdb")?.takeIf { it.isNotBlank() }
         if (tmdb == null && imdb == null) return null
