@@ -85,8 +85,23 @@ class FilmotekaBaseLoader @Inject constructor(
         !profileRepository.activeConfig.value.credentials.trakt?.accessToken.isNullOrBlank() ||
             !prefs.getString(KEY_TRAKT_ACCESS_TOKEN, null).isNullOrBlank()
 
+    /**
+     * FOYER (SHW-107, user 2026-07-26 „na domově jen 3 filmy a nic z knihovny"): nastavení Filmotéky je
+     * per-profil, ale `switchProfile` volaly JEN obrazovky Filmotéky. Když se domov zeptal DŘÍV (nebo user
+     * sekci vůbec neotevřel), četl se cizí/globální stav zdrojů. Loader si proto profil srovná sám.
+     */
+    private fun ensureProfile() = settings.switchProfile(profileRepository.activeProfile.value?.id)
+
+    /**
+     * Kolik položek přinesla POSLEDNÍ Jellyfin část sběru. 0 při zapnutém JF zdroji = knihovna se nenačetla
+     * (creds po přepnutí profilu ještě nedosedly / server neodpověděl) → výsledek se NECACHUJE a domov to
+     * zkusí znovu, místo aby zůstal viset na neúplném seznamu.
+     */
+    @Volatile private var lastJellyfinCount: Int = 0
+
     /** Báze bez Oblíbených: JF ∪ working ∪ Trakt watchlist → dedup → enrich → věkový gate. */
     suspend fun loadBase(enabled: Set<FilmotekaSource> = settings.sources.value): List<MediaItem> {
+        ensureProfile()
         val cap = ageCap()
         val enriched = enricher.enrich(gather(enabled), withCertification = cap != null)
         return ContentAgeGate.filter(cap, enriched, hideUnrated())
@@ -131,6 +146,7 @@ class FilmotekaBaseLoader @Inject constructor(
         // Krátká cache: řada domova by jinak při KAŽDÉM startu protáhla celou knihovnu enrichem (stovky TMDB
         // dotazů) — a to i když si sekci Filmotéka vůbec neotevřeš. Klíč nese ID profilu, takže přepnutí
         // profilu cache NIKDY nepoužije (žádný přelév obsahu mezi dospělým a dětským).
+        ensureProfile()
         val pid = profileRepository.activeProfile.value?.id
         val now = System.currentTimeMillis()
         recentCache
@@ -141,9 +157,19 @@ class FilmotekaBaseLoader @Inject constructor(
         val base = loadBase(enabled)
         val favs = loadFavorites(favorites.items.value, enabled)
         val all = mergeWithFavorites(base, favs).sortedByDescending { it.addedAtMs ?: 0L }
-        recentCache = RecentCache(pid, now, all)
+        // Neúplný sběr (JF zapnutý, ale knihovna nic nevrátila) se NEUKLÁDÁ — jinak by se do řady na deset
+        // minut zafixoval seznam bez knihovny (přesně to, co user viděl na dětském profilu).
+        val jellyfinMissing = FilmotekaSource.JELLYFIN in enabled && lastJellyfinCount == 0
+        if (!jellyfinMissing) recentCache = RecentCache(pid, now, all)
         return all.take(limit.coerceAtLeast(1))
     }
+
+    /**
+     * Byl POSLEDNÍ sběr úplný? False = Jellyfin zdroj je zapnutý, ale knihovna nevrátila nic (creds ještě
+     * nedosedly / server mlčel). Volající (řada domova) si podle toho může říct o jeden opakovaný pokus.
+     */
+    fun lastLoadComplete(): Boolean =
+        FilmotekaSource.JELLYFIN !in settings.sources.value || lastJellyfinCount > 0
 
     /** Zahoď cache „nedávno přidané" (přepnutí profilu / ruční refresh domova). */
     fun invalidateRecent() { recentCache = null }
@@ -163,6 +189,7 @@ class FilmotekaBaseLoader @Inject constructor(
             else emptyList()
         }
         val jf = jfD.await(); val ws = wsD.await(); val tk = tkD.await()
+        lastJellyfinCount = jf.size
         val merged = LinkedHashMap<String, MediaItem>()
         for (list in listOf(jf, ws, tk)) {
             for (item in list) { val k = dedupKey(item) ?: continue; merged.putIfAbsent(k, item) }

@@ -355,8 +355,17 @@ class TvHomeViewModel @Inject constructor(
         HomeRowSourceType.SAVED_FOR_PLAYBACK -> loadSavedForPlayback(config)
         // FOYER (SHW-107) — „Filmotéka — nedávno přidané": celá Filmotéka (JF ∪ zapamatované ∪ Chci vidět ∪
         // Oblíbené) seřazená dle data přidání. Báze i řazení = sdílený loader → 1:1 se sekcí Filmotéka.
-        HomeRowSourceType.FILMOTEKA_RECENT ->
-            filmotekaBase.recentlyAdded(rowFetch(config)).map { it.toHomeRowItem(config) }
+        HomeRowSourceType.FILMOTEKA_RECENT -> {
+            var items = filmotekaBase.recentlyAdded(rowFetch(config))
+            // Po přepnutí profilu / studeném startu nemusí být Jellyfin ještě přihlášený → knihovna vrátí
+            // nic a řada by na tom uvízla (user 2026-07-26: na dětském profilu 3 filmy a nic z knihovny).
+            // Jeden opakovaný pokus po chvíli; cache se neúplný výsledek stejně neuloží.
+            if (!filmotekaBase.lastLoadComplete()) {
+                kotlinx.coroutines.delay(4_000)
+                items = filmotekaBase.recentlyAdded(rowFetch(config))
+            }
+            items.map { it.toHomeRowItem(config) }
+        }
         // COUCH T1/T2 — Trakt řady přes sdílený loader (OAuth; nepřihlášený/prázdný → řada se nezobrazí).
         HomeRowSourceType.TRAKT_WATCHLIST ->
             traktLoader.watchlist(config.params[HomeRowParams.WATCHLIST_KIND] ?: "all").map { it.toHomeRowItem(config) }

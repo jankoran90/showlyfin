@@ -120,6 +120,65 @@ class WorkingSourceStore @Inject constructor(
         else -> "hash:${r.stream.cometPath ?: r.stream.infoHash ?: r.stream.url ?: ""}"
     }
 
+    // ── NÁHROBKY smazaných zdrojů (FOYER SHW-107, user 2026-07-26) ────────────────
+    //
+    // BUG (prokázáno z kódu + dat backendu): „odeber zdroj" NIKDY nedržel. `clear()` smazal lokální záznam
+    // a zavolal push, jenže `pushMerged`/`syncFromServer` dělají SJEDNOCENÍ lokálu se serverem — smazaná
+    // položka na serveru pořád je, takže se merge vrátila zpátky (a `replaceLocal` ji zapsala i do lokálu).
+    // Mazání tak bylo konstrukčně nemožné: čím víc syncu, tím jistější návrat (user: Červená želva).
+    // Řešení = náhrobek: identita + čas smazání. Merge náhrobek respektuje (zahodí serverový záznam, který
+    // není NOVĚJŠÍ než smazání) a PUT pak pošle seznam bez něj → zmizí i na serveru. Nové ULOŽENÍ téhož
+    // filmu náhrobek ruší (user si zdroj vědomě vrátil). Náhrobky starší [TOMB_TTL_MS] se zahazují.
+    private fun tombKey(identity: String) = "sieve_tomb_$identity"
+
+    /** Jak dlouho náhrobek platí (90 dní) — pak se uklidí, ať prefs nerostou donekonečna. */
+    private val TOMB_TTL_MS = 90L * 24 * 60 * 60 * 1000
+
+    private fun tombstones(): Map<String, Long> {
+        val now = System.currentTimeMillis()
+        val out = HashMap<String, Long>()
+        val stale = ArrayList<String>()
+        for ((k, v) in prefs.all) {
+            if (!k.startsWith("sieve_tomb_")) continue
+            val at = (v as? Long) ?: continue
+            if (now - at > TOMB_TTL_MS) stale += k else out[k.removePrefix("sieve_tomb_")] = at
+        }
+        if (stale.isNotEmpty()) prefs.edit().apply { stale.forEach { remove(it) } }.apply()
+        return out
+    }
+
+    private fun addTombstones(imdb: String?, tmdb: Long?) {
+        val now = System.currentTimeMillis()
+        prefs.edit().apply {
+            if (tmdb != null && tmdb > 0L) putLong(tombKey("tmdb:$tmdb"), now)
+            if (!imdb.isNullOrBlank()) putLong(tombKey("imdb:$imdb"), now)
+        }.apply()
+    }
+
+    private fun clearTombstones(imdb: String?, tmdb: Long?) {
+        prefs.edit().apply {
+            if (tmdb != null && tmdb > 0L) remove(tombKey("tmdb:$tmdb"))
+            if (!imdb.isNullOrBlank()) remove(tombKey("imdb:$imdb"))
+        }.apply()
+    }
+
+    /** Vyhoď záznamy, které uživatel smazal a od té doby je nikdo nepřepsal novějším uložením. */
+    private fun applyTombstones(list: List<WorkingSource>): List<WorkingSource> {
+        val tombs = tombstones()
+        if (tombs.isEmpty()) return list
+        return list.filterNot { r ->
+            val byTmdb = if (r.tmdb > 0L) tombs["tmdb:${r.tmdb}"] else null
+            val byImdb = if (r.imdb.isNotBlank()) tombs["imdb:${r.imdb}"] else null
+            val deletedAt = maxOf(byTmdb ?: 0L, byImdb ?: 0L)
+            if (deletedAt <= 0L) return@filterNot false
+            // Smazané uživatelem: AUTO záznam (backend cache-one/backfill ho po čase klidně vyrobí znovu)
+            // zůstane odklizený po celou dobu platnosti náhrobku — jinak by se film vrátil sám od sebe a
+            // mazání by zase nedávalo smysl. Ručně uložený zdroj (auto=false) respektuje čas: novější
+            // uložení než smazání = uživatel si ho vědomě vrátil na jiném zařízení → nech ho být.
+            r.auto || r.savedAtMs <= deletedAt
+        }
+    }
+
     /** Přepíše lokální paměť daným seznamem (smaže staré sieve_ klíče, zapíše nové pod tmdb+imdb). */
     private fun replaceLocal(list: List<WorkingSource>) {
         val ed = prefs.edit()
@@ -165,7 +224,7 @@ class WorkingSourceStore @Inject constructor(
             val cur = byId[id]
             if (cur == null || r.savedAtMs >= cur.savedAtMs) byId[id] = r
         }
-        val merged = byId.values.sortedByDescending { it.savedAtMs }
+        val merged = applyTombstones(byId.values.sortedByDescending { it.savedAtMs })
         replaceLocal(merged)
         pushNow(key, base, cookie, merged)
     }
@@ -269,8 +328,9 @@ class WorkingSourceStore @Inject constructor(
                 val cur = byId[id]
                 if (cur == null || r.savedAtMs >= cur.savedAtMs) byId[id] = r
             }
-            val merged = byId.values.sortedByDescending { it.savedAtMs }
+            val merged = applyTombstones(byId.values.sortedByDescending { it.savedAtMs })
             replaceLocal(merged)
+            // Liší se od serveru (merge přidala, nebo náhrobek ubral) → srovnej i server.
             if (merged.size != server.size) pushNow(key, base, cookie, merged)
             lastSyncedProfile = key
         }.onFailure { Timber.w(it, "[SIEVE] sync zdrojů selhal") }
@@ -331,11 +391,15 @@ class WorkingSourceStore @Inject constructor(
             if (!imdb.isNullOrBlank()) putString(imdbKey(imdb), json)
         }.commit()
         Timber.i("[SIEVE] uložen zdroj imdb=%s tmdb=%s (%s) commit=%b", imdb, tmdb, stream.name ?: stream.description ?: "?", ok)
+        // Vědomé uložení ruší dřívější smazání (jinak by ho náhrobek hned zase odklidil).
+        clearTombstones(imdb, tmdb)
         refreshSavedKeys()
         pushToServer()  // SIEVE follow-up — propíše na profil (sync napříč zařízeními)
     }
 
     fun clear(imdb: String?, tmdb: Long?) {
+        // Náhrobek MUSÍ vzniknout dřív, než se rozjede push/sync — jinak by se záznam vrátil ze serveru.
+        addTombstones(imdb, tmdb)
         prefs.edit().apply {
             if (tmdb != null && tmdb > 0L) remove(tmdbKey(tmdb))
             if (!imdb.isNullOrBlank()) remove(imdbKey(imdb))
