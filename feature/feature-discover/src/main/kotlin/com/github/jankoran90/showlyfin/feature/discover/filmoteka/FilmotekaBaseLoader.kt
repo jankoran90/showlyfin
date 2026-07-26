@@ -128,13 +128,29 @@ class FilmotekaBaseLoader @Inject constructor(
      * s osou „Vše" a řazením „Nedávno" → klik na „Celá filmotéka" navazuje bez překvapení.
      */
     suspend fun recentlyAdded(limit: Int): List<MediaItem> {
+        // Krátká cache: řada domova by jinak při KAŽDÉM startu protáhla celou knihovnu enrichem (stovky TMDB
+        // dotazů) — a to i když si sekci Filmotéka vůbec neotevřeš. Klíč nese ID profilu, takže přepnutí
+        // profilu cache NIKDY nepoužije (žádný přelév obsahu mezi dospělým a dětským).
+        val pid = profileRepository.activeProfile.value?.id
+        val now = System.currentTimeMillis()
+        recentCache
+            ?.takeIf { it.profileId == pid && now - it.atMs < RECENT_CACHE_TTL_MS }
+            ?.let { return it.items.take(limit.coerceAtLeast(1)) }
+
         val enabled = settings.sources.value
         val base = loadBase(enabled)
         val favs = loadFavorites(favorites.items.value, enabled)
-        return mergeWithFavorites(base, favs)
-            .sortedByDescending { it.addedAtMs ?: 0L }
-            .take(limit.coerceAtLeast(1))
+        val all = mergeWithFavorites(base, favs).sortedByDescending { it.addedAtMs ?: 0L }
+        recentCache = RecentCache(pid, now, all)
+        return all.take(limit.coerceAtLeast(1))
     }
+
+    /** Zahoď cache „nedávno přidané" (přepnutí profilu / ruční refresh domova). */
+    fun invalidateRecent() { recentCache = null }
+
+    private data class RecentCache(val profileId: Long?, val atMs: Long, val items: List<MediaItem>)
+
+    @Volatile private var recentCache: RecentCache? = null
 
     // ── Sběr ────────────────────────────────────────────────────────────────────
 
@@ -331,6 +347,8 @@ class FilmotekaBaseLoader @Inject constructor(
     private companion object {
         /** Zrcadlí `TraktTokenProvider.KEY_ACCESS_TOKEN` (data-trakt) — reálný autorizační token API. */
         const val KEY_TRAKT_ACCESS_TOKEN = "TRAKT_ACCESS_TOKEN"
+        /** Jak dlouho platí cache řady „Filmotéka — nedávno přidané" (10 min). */
+        const val RECENT_CACHE_TTL_MS = 10L * 60 * 1000
     }
 }
 

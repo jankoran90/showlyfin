@@ -240,6 +240,9 @@ class TvHomeViewModel @Inject constructor(
         android.util.Log.i("COUCH_Home", "reloadAllRows: ${rowConfigs.value.size} řad")
         loadedHash.clear()
         ownedIdsCache = null
+        // FOYER (SHW-107): i cache Filmotéky pro řadu „nedávno přidané" — jinak by po přepnutí profilu /
+        // vynuceném refreshi mohla ještě 10 minut vracet starý obsah.
+        filmotekaBase.invalidateRecent()
         jobs.values.forEach { it.cancel() }
         jobs.clear()
         _states.value = emptyMap()
