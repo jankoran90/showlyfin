@@ -119,6 +119,8 @@ fun TvShowAllCard(
     style: HomeCardStyle,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // FOYER (SHW-107): popisek dle řady („Celá filmotéka“ u Filmotéky, jinak „Zobrazit vše“).
+    label: String = "Zobrazit vše",
 ) {
     val cardScale = LocalTvCardScale.current
     val shape = MaterialTheme.shapes.medium
@@ -147,7 +149,7 @@ fun TvShowAllCard(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "Zobrazit vše",
+                text = label,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

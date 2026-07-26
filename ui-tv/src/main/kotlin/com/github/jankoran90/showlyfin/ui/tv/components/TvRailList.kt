@@ -66,6 +66,8 @@ data class TvRail(
     val immersiveHeader: Boolean = false,
     /** COUCH Fáze B: přidej dlaždici „Zobrazit vše" na konec řady → drill do plné mřížky (viz `onShowAll`). */
     val showAll: Boolean = false,
+    /** FOYER (SHW-107): popisek té dlaždice — „Celá filmotéka“ u Filmotéky, jinak „Zobrazit vše“. */
+    val showAllLabel: String = "Zobrazit vše",
 )
 
 /**
@@ -269,7 +271,7 @@ private fun RailSection(
                 // COUCH Fáze B: dlaždice „Zobrazit vše" na konci řady → drill do plné mřížky (jen `showAll` řady).
                 onShowAll?.let { showAll ->
                     item(key = "__showall__") {
-                        TvShowAllCard(style = rail.style, onClick = showAll)
+                        TvShowAllCard(style = rail.style, onClick = showAll, label = rail.showAllLabel)
                     }
                 }
             }

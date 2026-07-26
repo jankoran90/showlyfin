@@ -154,7 +154,8 @@ class HomeLayoutStore @Inject constructor(
     /** Obnovit výchozí sadu řad. Vyčistí i „seen" knihovny → při dalším [syncLibraries] se naseedují znovu. */
     fun resetRows() {
         _rows.value = DEFAULT_ROWS
-        prefs.edit().remove(keyFor(KEY_SEEN_LIBS)).apply()
+        // DEFAULT_ROWS už je ve FOYER pořadí → označ verzi, ať migrace nešahá na čerstvý reset.
+        prefs.edit().remove(keyFor(KEY_SEEN_LIBS)).putInt(keyFor(KEY_LAYOUT_VERSION), LAYOUT_VERSION_FOYER).apply()
         persistRows()
     }
 
@@ -209,8 +210,11 @@ class HomeLayoutStore @Inject constructor(
 
     // ── Perzistence ─────────────────────────────────────────────────────────────
 
-    private fun persistRows() {
-        prefs.edit().putString(keyFor(KEY_ROWS), json.encodeToString(_rows.value)).apply()
+    private fun persistRows() = persistRowsList(_rows.value)
+
+    /** Zápis konkrétního seznamu (migrace persistuje výsledek dřív, než ho dostane [_rows]). */
+    private fun persistRowsList(rows: List<HomeRowConfig>) {
+        prefs.edit().putString(keyFor(KEY_ROWS), json.encodeToString(rows)).apply()
     }
 
     private fun persistSidebar() {
@@ -231,7 +235,27 @@ class HomeLayoutStore @Inject constructor(
         if (stored.isEmpty()) return DEFAULT_ROWS
         // Merge: uložené v pořadí + nové default řady (podle id) na konec.
         val storedIds = stored.map { it.id }.toSet()
-        return stored + DEFAULT_ROWS.filter { it.id !in storedIds }
+        val merged = stored + DEFAULT_ROWS.filter { it.id !in storedIds }
+        // FOYER (SHW-107) — jednorázové přeskládání na nový výchozí začátek domova (user 2026-07-26 volba „a").
+        // Běží JEDNOU per profil (`layout_version`), pak si user pořadí přehazuje sám v editoru řady.
+        if (prefs.getInt(keyFor(KEY_LAYOUT_VERSION), 0) >= LAYOUT_VERSION_FOYER) return merged
+        prefs.edit().putInt(keyFor(KEY_LAYOUT_VERSION), LAYOUT_VERSION_FOYER).apply()
+        return migrateToFoyerOrder(merged)
+    }
+
+    /**
+     * FOYER (SHW-107) — vynes „Další díly" a „Filmotéka — nedávno přidané" na začátek domova; zbytek si
+     * DRŽÍ uživatelovo pořadí. Chybějící Filmotéka řada se doplní z [DEFAULT_ROWS]; skryté („enabled=false")
+     * řady se přesunem NEodkrývají — jen se posunou (uživatel je schoval schválně). Idempotentní.
+     */
+    private fun migrateToFoyerOrder(rows: List<HomeRowConfig>): List<HomeRowConfig> {
+        val head = FOYER_HEAD_ROW_IDS.mapNotNull { id ->
+            rows.firstOrNull { it.id == id } ?: DEFAULT_ROWS.firstOrNull { it.id == id }
+        }
+        val headIds = head.map { it.id }.toSet()
+        val result = head + rows.filterNot { it.id in headIds }
+        persistRowsList(result)
+        return result
     }
 
     private fun loadSidebar(): List<SidebarEntry> {
@@ -259,6 +283,15 @@ class HomeLayoutStore @Inject constructor(
         private const val KEY_IMMERSIVE_HEADER = "immersive_header"
         private const val KEY_IMMERSIVE_HEADER_LINES = "immersive_header_lines"
         private const val KEY_SEEN_LIBS = "seen_library_ids"
+        /** FOYER (SHW-107) — verze rozvržení; < [LAYOUT_VERSION_FOYER] = přeskládat začátek domova jednou. */
+        private const val KEY_LAYOUT_VERSION = "layout_version"
+        private const val LAYOUT_VERSION_FOYER = 2
+
+        /** Id řady „Filmotéka — nedávno přidané" (drill „Celá filmotéka" ji pozná i z UI). */
+        const val FILMOTEKA_RECENT_ROW_ID = "filmoteka_recent"
+
+        /** FOYER — řady, které patří na začátek domova (v tomto pořadí). */
+        private val FOYER_HEAD_ROW_IDS = listOf("next_up", FILMOTEKA_RECENT_ROW_ID)
 
         // WEATHER (user 2026-07-16): Trakt doporučovací/objevovací řady vyřazené z domova — strippnou se
         // i z uložených layoutů ([loadRows]). Trakt je migrací na V3 rozbil (401) + ukazovaly dětem
@@ -275,18 +308,27 @@ class HomeLayoutStore @Inject constructor(
         /** Výchozí domov: vzdušná Kodi-like sada. Obsah hned nahoře (Pokračovat), pak Trakt.
          *  JF knihovny se přidávají dynamicky per knihovna ([syncLibraries]) — ne natvrdo zde. */
         val DEFAULT_ROWS: List<HomeRowConfig> = listOf(
+            // FOYER (SHW-107, user 2026-07-26): domov začíná „Další díly", hned pod ním „Filmotéka —
+            // nedávno přidané". Teprve pak zbytek. Pořadí platí i pro STÁVAJÍCÍ uložené layouty — přeskládá
+            // je jednorázová migrace ([migrateToFoyerOrder], `layout_version` → 2, user volba „a").
             HomeRowConfig(
-                id = "continue",
-                source = HomeRowSourceType.CONTINUE_WATCHING,
-                title = "Pokračovat ve sledování",
+                id = "next_up",
+                source = HomeRowSourceType.NEXT_UP,
+                title = "Další díly",
                 cardStyle = HomeCardStyle.LANDSCAPE,
                 // KOLO2 (M): z výroby jen první řada má immersive hlavičku zapnutou.
                 immersiveHeader = true,
             ),
             HomeRowConfig(
-                id = "next_up",
-                source = HomeRowSourceType.NEXT_UP,
-                title = "Další díly",
+                id = FILMOTEKA_RECENT_ROW_ID,
+                source = HomeRowSourceType.FILMOTEKA_RECENT,
+                title = "Filmotéka — nedávno přidané",
+                cardStyle = HomeCardStyle.POSTER,
+            ),
+            HomeRowConfig(
+                id = "continue",
+                source = HomeRowSourceType.CONTINUE_WATCHING,
+                title = "Pokračovat ve sledování",
                 cardStyle = HomeCardStyle.LANDSCAPE,
             ),
             // AUTEUR (SHW-91): kurátorský mozek „Pro tebe" (LLM z vkusu Trakt+Favorites → TMDB) = NAŠE

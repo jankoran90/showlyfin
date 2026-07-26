@@ -55,6 +55,8 @@ fun TvShell(
     onOpenDetailPlay: (MediaItem) -> Unit = onOpenDetail,
     onOpenJellyfinDetail: (itemId: String) -> Unit,
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
+    // FOYER (SHW-107): „Zobrazit vše" u řady domova bez vlastní sekce → plná mřížka řady (drill).
+    onOpenRowAll: (configId: String, title: String) -> Unit = { _, _ -> },
     homeVm: TvHomeViewModel = hiltViewModel(),
 ) {
     val immersive by homeVm.immersiveBackground.collectAsStateWithLifecycle()
@@ -151,6 +153,10 @@ fun TvShell(
                         immersive = immersive,
                         immersiveHeader = immersiveHeader,
                         onFocusItem = { rawInfo = it },
+                        // FOYER: kam vede „Zobrazit vše" / „Celá filmotéka" na konci řady.
+                        onOpenSection = onSelectSection,
+                        onOpenLibrary = onOpenLibrary,
+                        onOpenRowAll = onOpenRowAll,
                         homeVm = homeVm,
                     )
                     TvSection.FOR_YOU -> TvForYouScreen(

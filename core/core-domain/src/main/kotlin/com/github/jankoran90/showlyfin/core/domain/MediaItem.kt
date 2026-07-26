@@ -39,8 +39,16 @@ data class MediaItem(
      * seznam). Neplní se plošně; jen tam, kde zdroj datum má.
      */
     val addedAtMs: Long? = null,
+    /**
+     * FOYER (SHW-107, user 2026-07-26 „některé filmy nemají načtené obrázky coveru") — HOTOVÁ URL plakátu
+     * z JINÉHO zdroje než TMDB (typicky Jellyfin `Images/Primary`). Použije se, jen když TMDB [posterPath]
+     * chybí (titul se na TMDB netrefil, nebo tam plakát není) → karta místo prázdna ukáže obrázek ze serveru.
+     * Plní ten, kdo položku vyrábí ze serverových dat (viz `FilmotekaBaseLoader`); enrich ho nepřepisuje.
+     */
+    val fallbackPosterUrl: String? = null,
 ) {
-    fun posterUrl(size: String = "w342") = posterPath?.let { "https://image.tmdb.org/t/p/$size$it" }
+    fun posterUrl(size: String = "w342") =
+        posterPath?.let { "https://image.tmdb.org/t/p/$size$it" } ?: fallbackPosterUrl
     fun backdropUrl(size: String = "w780") = backdropPath?.let { "https://image.tmdb.org/t/p/$size$it" }
 
     /**

@@ -52,6 +52,12 @@ sealed interface TvDestination {
         val parentItemType: String? = null,
     ) : TvDestination
 
+    /**
+     * FOYER (SHW-107) — „Zobrazit vše" pro řadu domova bez vlastní sekce: plná mřížka jejích načtených
+     * položek (TV default = mřížka + abecedně). [configId] = `HomeRowConfig.id`, [title] = název řady.
+     */
+    data class RowAll(val configId: String, val title: String) : TvDestination
+
     /** Jellyfin detail z jellyfinId — resolver dohledá meta → nativní immersive; telefonní `JellyfinDetailScreen` jen fallback bez tmdb/imdb. */
     data class JellyfinDetail(val itemId: String) : TvDestination
 

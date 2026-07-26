@@ -85,6 +85,8 @@ class TvHomeViewModel @Inject constructor(
     private val parentalControls: ParentalControlsRepository,
     private val favorites: FavoritesRepository,
     private val workingSources: WorkingSourceStore,
+    // FOYER (SHW-107) — řada „Filmotéka — nedávno přidané" čte TUTÉŽ bázi jako sekce Filmotéka.
+    private val filmotekaBase: com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaBaseLoader,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val profileRepository: ProfileRepository,
     private val apiClient: ApiClient,
@@ -348,6 +350,10 @@ class TvHomeViewModel @Inject constructor(
         }
         // NOVÝ zdroj: tituly se zapamatovaným zdrojem přehrávání (WorkingSourceStore).
         HomeRowSourceType.SAVED_FOR_PLAYBACK -> loadSavedForPlayback(config)
+        // FOYER (SHW-107) — „Filmotéka — nedávno přidané": celá Filmotéka (JF ∪ zapamatované ∪ Chci vidět ∪
+        // Oblíbené) seřazená dle data přidání. Báze i řazení = sdílený loader → 1:1 se sekcí Filmotéka.
+        HomeRowSourceType.FILMOTEKA_RECENT ->
+            filmotekaBase.recentlyAdded(rowFetch(config)).map { it.toHomeRowItem(config) }
         // COUCH T1/T2 — Trakt řady přes sdílený loader (OAuth; nepřihlášený/prázdný → řada se nezobrazí).
         HomeRowSourceType.TRAKT_WATCHLIST ->
             traktLoader.watchlist(config.params[HomeRowParams.WATCHLIST_KIND] ?: "all").map { it.toHomeRowItem(config) }

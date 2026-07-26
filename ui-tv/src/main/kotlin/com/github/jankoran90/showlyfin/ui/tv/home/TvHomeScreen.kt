@@ -25,6 +25,7 @@ import com.github.jankoran90.showlyfin.feature.jellyfin.LibraryRowsViewModel
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRail
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
+import com.github.jankoran90.showlyfin.ui.tv.nav.TvSection
 
 /**
  * TENFOOT (SHW-87) — TV domov (Kodi Arctic Fuse styl). Skládá uživatelskou konfiguraci řad ([TvHomeViewModel])
@@ -40,6 +41,11 @@ fun TvHomeScreen(
     onOpenJellyfinDetail: (itemId: String) -> Unit,
     immersive: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
+    // FOYER (SHW-107) — cíle dlaždice „Zobrazit vše“ na konci řady: vlastní sekce / Jellyfin knihovna /
+    // generická mřížka načtených položek řady. Shell je zná (drží navigaci), domov jen řekne KAM.
+    onOpenSection: (TvSection) -> Unit = {},
+    onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit = { _, _, _ -> },
+    onOpenRowAll: (configId: String, title: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     immersiveHeader: Boolean = true,
     homeVm: TvHomeViewModel = hiltViewModel(),
@@ -77,15 +83,13 @@ fun TvHomeScreen(
                     val libRow = libraryState.rows.firstOrNull { it.libraryId == libId }
                     val items = libRow?.items?.map { it.toHomeRowItem() }?.applyConfig(cfg).orEmpty()
                     if (items.isNotEmpty()) {
-                        add(TvRail(cfg.id, cfg.title.ifBlank { libRow?.libraryName.orEmpty() }, cfg.cardStyle, items, cfg.id, cfg.showTitles, cfg.immersiveHeader))
+                        add(cfg.toRail(cfg.title.ifBlank { libRow?.libraryName.orEmpty() }, items))
                     }
                 }
                 HomeRowSourceType.JELLYFIN_LIBRARIES -> Unit // deprecated meta — migrováno pryč
                 else -> {
                     val st = states[cfg.id]
-                    if (st != null && st.items.isNotEmpty()) {
-                        add(TvRail(cfg.id, cfg.resolvedTitle(), cfg.cardStyle, st.items, cfg.id, cfg.showTitles, cfg.immersiveHeader))
-                    }
+                    if (st != null && st.items.isNotEmpty()) add(cfg.toRail(cfg.resolvedTitle(), st.items))
                 }
             }
         }
@@ -111,6 +115,22 @@ fun TvHomeScreen(
         }
     }
 
+    // FOYER — klik na „Zobrazit vše“: řada se svou sekcí do ní skočí (tam je VŠECHNO), řada knihovny
+    // otevře mřížku knihovny, zbytek generickou mřížku načtených položek řady.
+    fun showAll(configId: String) {
+        val cfg = rowConfigs.firstOrNull { it.id == configId } ?: return
+        val section = sectionTargetOf(cfg.source)
+        val libId = cfg.params[HomeRowParams.LIBRARY_ID]
+        when {
+            section != null -> onOpenSection(section)
+            libId != null -> {
+                val libRow = libraryState.rows.firstOrNull { it.libraryId == libId }
+                onOpenLibrary(libId, cfg.title.ifBlank { libRow?.libraryName.orEmpty() }, libRow?.collectionType)
+            }
+            else -> onOpenRowAll(cfg.id, cfg.resolvedTitle())
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         TvRailList(
             rails = rails,
@@ -120,6 +140,7 @@ fun TvHomeScreen(
             onFocusItem = onFocusItem,
             onItemClick = ::clickItem,
             onRequestEditor = { configId -> editingId = configId },
+            onShowAll = ::showAll,
             modifier = modifier,
         )
 
@@ -158,6 +179,39 @@ fun TvHomeScreen(
             )
         }
     }
+}
+
+/**
+ * FOYER (SHW-107) — jedna řada domova → [TvRail]: ukáže jen prvních [HomeRowConfig.displayLimit] karet
+ * (výchozí 5) a na konec přidá dlaždici „Zobrazit vše“ / „Celá filmotéka“, když je za ní ještě co ukázat
+ * (víc načtených položek NEBO řada míří do vlastní sekce, kde je toho vždycky víc).
+ */
+private fun HomeRowConfig.toRail(title: String, all: List<HomeRowItem>): TvRail {
+    val shown = all.take(displayLimit.coerceIn(1, 60))
+    return TvRail(
+        id = id,
+        title = title,
+        style = cardStyle,
+        items = shown,
+        configId = id,
+        showTitles = showTitles,
+        immersiveHeader = immersiveHeader,
+        showAll = showAll && (all.size > shown.size || sectionTargetOf(source) != null),
+        showAllLabel = if (source == HomeRowSourceType.FILMOTEKA_RECENT) "Celá filmotéka" else "Zobrazit vše",
+    )
+}
+
+/**
+ * FOYER — řada, která má SVOU sekci v levém menu: „Zobrazit vše“ ji otevře (uživatel tam vidí úplně
+ * všechno, ne jen načtený vzorek). Řada bez sekce (Pokračovat, Historie, Uloženo k přehrání…) padá na
+ * generickou mřížku načtených položek ([TvDestination.RowAll]).
+ */
+internal fun sectionTargetOf(source: HomeRowSourceType): TvSection? = when (source) {
+    HomeRowSourceType.FILMOTEKA_RECENT -> TvSection.FILMOTEKA
+    HomeRowSourceType.TRAKT_WATCHLIST -> TvSection.WANT_TO_SEE
+    HomeRowSourceType.FAVORITES -> TvSection.WATCHLIST
+    HomeRowSourceType.BRAIN_FOR_YOU -> TvSection.FOR_YOU
+    else -> null
 }
 
 /** Klientské operace pro řadu knihovny (skryj zhlédnuté + řazení + limit). */

@@ -57,5 +57,18 @@ class ViewModeStore @Inject constructor(
 
         /** Per-řada styl karet Knihovny (přebíjí globální). Hodnota = ViewMode.storeKey. */
         fun libraryRowStyleKey(libraryId: String) = "libstyle_$libraryId"
+
+        /**
+         * FOYER (SHW-107, user 2026-07-26 „jen na TV") — ODDĚLENÉ klíče pro TV: vstup do sekce má na TV
+         * výchozí MŘÍŽKU a ABECEDNÍ řazení, telefon si dál drží svoje (jiný klíč = žádné míchání).
+         * Prázdná hodnota = TV default; jakmile uživatel jednou přepne, drží se (volba „4b").
+         */
+        fun tvViewModeKey(sectionKey: String) = "tv_$sectionKey"
+        fun tvSortKey(sectionKey: String) = "tvsort_$sectionKey"
+
+        /** FOYER — sekce, které na TV umí plochou mřížku (drill z domova má vlastní klíč). */
+        const val SECTION_LAPIDARY = "lapidary"
+        const val SECTION_WANT_TO_SEE = "want_to_see"
+        const val SECTION_ROW_ALL = "row_all"
     }
 }

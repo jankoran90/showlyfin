@@ -110,6 +110,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             onOpenLibrary = { id, name, collectionType ->
                 navigate(TvDestination.LibraryItems(id, name, collectionType))
             },
+            // FOYER (SHW-107): dlaždice „Zobrazit vše" u řady bez vlastní sekce → plná mřížka řady.
+            onOpenRowAll = { configId, title -> navigate(TvDestination.RowAll(configId, title)) },
         )
 
         TvDestination.Search -> TvSearchScreen(
@@ -177,6 +179,19 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
                 )
             }
         }
+
+        // FOYER (SHW-107) — plná mřížka jedné řady domova (TV default mřížka + abecedně).
+        is TvDestination.RowAll -> com.github.jankoran90.showlyfin.ui.tv.home.TvRowAllScreen(
+            configId = dest.configId,
+            title = dest.title,
+            onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            onOpenDetailPlay = { item -> navigate(TvDestination.Detail(item, autoplay = true)) },
+            onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
+            onBack = { back() },
+            // Immersive pozadí žije v shellu (TvShell), drill si ho nekreslí → info nikam neposíláme.
+            immersive = false,
+            onFocusItem = {},
+        )
 
         is TvDestination.EpisodePicker -> EpisodePickerScreen(
             seriesId = dest.seriesId,

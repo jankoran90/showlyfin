@@ -19,8 +19,19 @@ data class HomeRowConfig(
     val title: String = "",
     val cardStyle: HomeCardStyle = HomeCardStyle.POSTER,
     val sort: HomeRowSort = HomeRowSort.DEFAULT,
-    /** Kolik položek načíst (strop, výkon). */
+    /** Kolik položek načíst (strop, výkon). NENÍ počet zobrazených karet — viz [displayLimit]. */
     val limit: Int = 30,
+    /**
+     * FOYER (SHW-107, user 2026-07-26): kolik karet řada REÁLNĚ UKÁŽE na domově; zbytek je za dlaždicí
+     * „Zobrazit vše" ([showAll]). Oddělené od [limit] (strop načtení) schválně — drill potřebuje celý
+     * načtený seznam, řada jen prvních pár. Přidané pole → staré uložené layouty dostanou default 5.
+     */
+    val displayLimit: Int = 5,
+    /**
+     * FOYER (SHW-107): dlaždice „Zobrazit vše" / „Celá filmotéka" na konci řady → drill do plné mřížky
+     * (nebo do odpovídající sekce, viz UI). Kreslí se jen když má řada víc položek, než ukazuje.
+     */
+    val showAll: Boolean = true,
     val enabled: Boolean = true,
     /**
      * Popisek pod/na kartě. Immersive Netflix styl skrývá popisky (řídí editor / globální přepínač).
@@ -53,6 +64,14 @@ enum class HomeRowSourceType(val label: String) {
     DISCOVER("Objevovat (Trakt)"),
     /** Oblíbené z per-profil [data.uploader.FavoritesStore] (TOTÉŽ co telefonní „Oblíbené", parita). */
     FAVORITES("Oblíbené"),
+
+    /**
+     * FOYER (SHW-107, user 2026-07-26): NEDÁVNO PŘIDANÉ z celé Filmotéky — tatáž báze, jakou ukazuje sekce
+     * Filmotéka (Jellyfin knihovna ∪ zapamatované zdroje ∪ Trakt „Chci vidět" ∪ Oblíbené, dedup + věkový
+     * gate), seřazená podle data přidání. NEPLÉST s [RECENTLY_ADDED] = jen `getLatestMedia` JEDNÉ Jellyfin
+     * knihovny. Dlaždice „Zobrazit vše" u téhle řady vede rovnou do sekce Filmotéka („Celá filmotéka").
+     */
+    FILMOTEKA_RECENT("Filmotéka — nedávno přidané"),
     /**
      * NOVÝ zdroj: tituly se zapamatovaným zdrojem přehrávání z [data.uploader.WorkingSourceStore]
      * („uloženo k přehrání"). Klik = přímé přehrání bez hledání zdroje. Samostatná sekce místo cpaní do oblíbených.

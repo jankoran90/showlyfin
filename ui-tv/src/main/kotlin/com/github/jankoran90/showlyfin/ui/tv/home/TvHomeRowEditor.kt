@@ -151,8 +151,26 @@ fun TvHomeRowEditor(
                 onCheckedChange = { onUpdate(config.copy(immersiveHeader = it)) },
             )
 
+            // FOYER (SHW-107, user 2026-07-26): kolik karet řada UKÁŽE (výchozí 5); zbytek je za dlaždicí
+            // „Zobrazit vše“. Odděleno od „Načíst položek“ (strop stahování) — to je výkonový strop.
             TvOptionStepperRow(
-                label = "Počet položek",
+                label = "Karet v řadě",
+                subtitle = "‹ › kolik karet je vidět; zbytek otevře „Zobrazit vše“",
+                options = listOf(3, 4, 5, 6, 8, 10, 12, 15, 20),
+                selected = config.displayLimit.coerceIn(1, 60),
+                labelOf = { "$it" },
+                onSelect = { onUpdate(config.copy(displayLimit = it)) },
+            )
+
+            TvToggleRow(
+                label = "Dlaždice „Zobrazit vše“",
+                checked = config.showAll,
+                onCheckedChange = { onUpdate(config.copy(showAll = it)) },
+            )
+
+            TvOptionStepperRow(
+                label = "Načíst položek",
+                subtitle = "‹ › strop stahování (kolik je za „Zobrazit vše“)",
                 options = listOf(10, 20, 30, 40, 60),
                 selected = config.limit.coerceIn(1, 60),
                 labelOf = { "$it" },
