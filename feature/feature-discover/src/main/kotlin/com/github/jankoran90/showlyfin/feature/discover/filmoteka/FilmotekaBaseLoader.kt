@@ -210,8 +210,13 @@ class FilmotekaBaseLoader @Inject constructor(
             for (item in list) { val k = dedupKey(item) ?: continue; merged.putIfAbsent(k, item) }
         }
         // Recency JEN z členských seznamů (JF/Trakt) — working-source datum sem nesmí (přeskládalo pořadí).
+        // FOYER (SHW-107, user 2026-07-27): TRAKT „Chci vidět" MÁ PŘEDNOST před datem z Jellyfinu —
+        // „datum přidání do Filmotéky = datum přidání do Chci vidět". Dřív vyhrával JF `DateCreated`
+        // (pořadí `jf, tk` + putIfAbsent), takže film, který si přidal do watchlistu dávno, ale do knihovny
+        // teprve nedávno přibyl, vyskočil ve Filmotéce nahoru a pořadí přestalo sedět se sekcí Chci vidět.
+        // JF datum zůstává pro tituly, které ve watchlistu NEJSOU (tam je jediné, co o „přidání" víme).
         val recency = HashMap<String, Long>()
-        for (list in listOf(jf, tk)) {
+        for (list in listOf(tk, jf)) {
             for (item in list) { val k = dedupKey(item) ?: continue; item.addedAtMs?.let { recency.putIfAbsent(k, it) } }
         }
         merged.values
