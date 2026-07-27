@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import com.github.jankoran90.showlyfin.core.domain.FilmotekaPrefs
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -122,6 +123,52 @@ class FilmotekaSettingsStore @Inject constructor(
 
     private fun loadShowCollections(): Boolean =
         prefs.getBoolean(keyFor(KEY_SHOW_COLLECTIONS), prefs.getBoolean(KEY_SHOW_COLLECTIONS, false))
+
+    // ── SYNC most (FOYER SHW-107) ────────────────────────────────────────────────
+    //
+    // Běh čte pořád LOKÁLNÍ prefs (rychlé, offline), ale hodnoty se drží v souladu se synchronizovaným
+    // profilem: [applySynced] nalije to, co přišlo ze serveru, [snapshot] vrátí aktuální stav k odeslání.
+    // Most (feature vrstva) obojí propojí — core-domain nesmí vidět ProfileRepository (obrácená závislost,
+    // stejně jako u HomeLayoutStore.switchProfile).
+
+    /** Nalij hodnoty ze synchronizovaného profilu do lokálních prefs. Neznámé/prázdné položky ignoruje. */
+    fun applySynced(prefs: FilmotekaPrefs?) {
+        if (prefs == null) return
+        prefs.sources.mapNotNull { runCatching { FilmotekaSource.valueOf(it) }.getOrNull() }
+            .toSet()
+            .takeIf { prefs.sources.isNotEmpty() }
+            ?.let { set ->
+                _sources.value = set
+                this.prefs.edit().putString(keyFor(KEY_SOURCES), json.encodeToString(set.map { it.name })).apply()
+            }
+        prefs.defaultAxis.takeIf { it.isNotBlank() }
+            ?.let { raw -> runCatching { FilmotekaAxis.valueOf(raw) }.getOrNull() }
+            ?.let { setDefaultAxis(it) }
+        prefs.allSort.takeIf { it.isNotBlank() }
+            ?.let { raw -> runCatching { FilmotekaAllSort.valueOf(raw) }.getOrNull() }
+            ?.let { setAllSort(it) }
+        prefs.enabledRegions.mapNotNull { runCatching { CinematographyRegion.valueOf(it) }.getOrNull() }
+            .toSet()
+            .takeIf { prefs.enabledRegions.isNotEmpty() }
+            ?.let { set ->
+                _enabledRegions.value = set
+                this.prefs.edit().putString(keyFor(KEY_REGIONS), json.encodeToString(set.map { it.name })).apply()
+            }
+        setHybridGenresEnabled(prefs.hybridGenres)
+        setShowCollections(prefs.showCollections)
+        setOnlyWithSource(prefs.onlyWithSource)
+    }
+
+    /** Aktuální stav k odeslání do synchronizovaného profilu. */
+    fun snapshot(): FilmotekaPrefs = FilmotekaPrefs(
+        sources = _sources.value.map { it.name }.sorted(),
+        defaultAxis = _defaultAxis.value.name,
+        allSort = _allSort.value.name,
+        enabledRegions = _enabledRegions.value.map { it.name }.sorted(),
+        hybridGenres = _hybridGenres.value,
+        showCollections = _showCollections.value,
+        onlyWithSource = _onlyWithSource.value,
+    )
 
     /** FOYER — zapni/vypni „jen tituly s dohledaným zdrojem" (per profil). */
     fun setOnlyWithSource(enabled: Boolean) {

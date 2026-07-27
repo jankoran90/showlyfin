@@ -120,6 +120,12 @@ data class ProfileConfig(
      */
     val sourcePrefs: SourcePrefs? = null,
     /**
+     * FOYER (SHW-107, user 2026-07-27 „jdi do toho") — per-profil nastavení Filmotéky SYNCED napříč
+     * zařízeními (dřív jen lokální prefs `tv_filmoteka`, takže TV a telefon se nastavovaly zvlášť).
+     * null = zařízení si drží svoje lokální hodnoty a při první změně je samo vystrčí sem (migrace).
+     */
+    val filmotekaPrefs: FilmotekaPrefs? = null,
+    /**
      * CONVERGE (SHW-97) V1 — pořadí řad v sekci **Trakt** (klíče `watchlist`/`history`/`recommended` a
      * dynamické `list_<traktId>`). Prázdné = kanonické (Watchlist, Zhlédnuto, Doporučeno, pak userovy
      * seznamy z API). Neznámé/nové klíče se doplní na konec (robustní vůči novým seznamům). Vzor [libraryOrder].
@@ -274,6 +280,7 @@ data class ProfileConfig(
                 libraryOrder = template.libraryOrder.ifEmpty { override.libraryOrder },
                 jellyfinLibraryWhitelist = template.jellyfinLibraryWhitelist ?: override.jellyfinLibraryWhitelist,
                 filmotekaJfLibraries = template.filmotekaJfLibraries ?: override.filmotekaJfLibraries,
+                filmotekaPrefs = template.filmotekaPrefs ?: override.filmotekaPrefs,
                 homeJfLibraries = template.homeJfLibraries ?: override.homeJfLibraries,
                 absLibraryWhitelist = template.absLibraryWhitelist ?: override.absLibraryWhitelist,
                 hiddenPodcastIds = template.hiddenPodcastIds.ifEmpty { override.hiddenPodcastIds },
@@ -557,3 +564,29 @@ fun <V> Map<String, V>.putCappedLru(key: String, value: V, max: Int = 300): Map<
     while (m.size > max) m.remove(m.keys.first())
     return m
 }
+
+/**
+ * FOYER (SHW-107) — per-profil nastavení sekce Filmotéka, SYNCED přes [ProfileConfig.filmotekaPrefs]
+ * (vzor PROSPECT [SourcePrefs]). Hodnoty jsou stringy/booly = forward-compat: neznámou hodnotu zařízení
+ * přeskočí a spadne na svůj default, starší build neznámé pole ignoruje (`ignoreUnknownKeys`).
+ *
+ * Zdrojem pravdy pro BĚH je pořád lokální `FilmotekaSettingsStore` (rychlé čtení bez sítě); most
+ * `FilmotekaPrefsSync` obě strany drží v souladu: příchozí config → store, změna ve store → config.
+ */
+@Serializable
+data class FilmotekaPrefs(
+    /** Zapnuté zdroje Filmotéky — jména `FilmotekaSource` (JELLYFIN/WORKING/TRAKT_WATCHLIST/FAVORITES). */
+    val sources: List<String> = emptyList(),
+    /** Výchozí osa po otevření sekce — jméno `FilmotekaAxis` (ALL/GENRE/COUNTRY). */
+    val defaultAxis: String = "",
+    /** Řazení ploché osy „Vše" — jméno `FilmotekaAllSort` (RECENT/ALPHABETICAL). */
+    val allSort: String = "",
+    /** Zapnuté regiony osy Země — jména `CinematographyRegion`. */
+    val enabledRegions: List<String> = emptyList(),
+    /** Hybridní seskupení žánrů (Akční komedie, Sci-fi horor…). */
+    val hybridGenres: Boolean = true,
+    /** Karty kolekcí (Jellyfin BoxSet) ve Filmotéce. */
+    val showCollections: Boolean = false,
+    /** Jen tituly s dohledaným zdrojem / z JF knihovny. */
+    val onlyWithSource: Boolean = false,
+)

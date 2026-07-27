@@ -70,6 +70,9 @@ class FilmotekaBaseLoader @Inject constructor(
     private val parentalControls: ParentalControlsRepository,
     private val profileRepository: ProfileRepository,
     private val settings: FilmotekaSettingsStore,
+    // FOYER (SHW-107): most lokální nastavení ↔ synchronizovaný profil. Injektuje se tady schválně —
+    // vznikne, jakmile Filmotéku použije sekce NEBO řada domova, tedy vždy když na nastavení záleží.
+    @Suppress("unused") private val prefsSync: FilmotekaPrefsSync,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
 
