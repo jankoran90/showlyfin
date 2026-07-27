@@ -197,12 +197,19 @@ class FilmotekaBaseLoader @Inject constructor(
     private suspend fun gather(enabled: Set<FilmotekaSource>): List<MediaItem> = coroutineScope {
         val jfD = async { if (FilmotekaSource.JELLYFIN in enabled) loadJellyfinLibrary() else emptyList() }
         val wsD = async { if (FilmotekaSource.WORKING in enabled) loadWorkingSources() else emptyList() }
+        // FOYER (SHW-107, user 2026-07-27, DŮKAZ z jeho dat): watchlist se tahal JEN když je zapnutý jako
+        // ZDROJ Filmotéky. Jenže on ho jako zdroj zapnutý nemá → Filmotéka měla přesně jeho 99 uložených
+        // zdrojů a ŽÁDNÉ datum z „Chci vidět" → řadila podle času uložení zdroje (jeho pořadí sedělo 1:1:
+        // Návrat detektiva 07-26, Yannick/Dream Scenario/Dìdi/Kvílení 07-22…). Watchlist proto tahej VŽDY,
+        // když je Trakt dostupný — jako ZDROJ DATA („kdy jsem si film přidal"), i když z něj tituly nebereme.
+        // Členství (co ve Filmotéce vůbec je) dál řídí přepínač zdroje níže.
         val tkD = async {
-            if (FilmotekaSource.TRAKT_WATCHLIST in enabled && traktAllowed())
-                runCatching { traktLoader.watchlist("all") }.getOrElse { emptyList() }
+            if (traktAllowed()) runCatching { traktLoader.watchlist("all") }.getOrElse { emptyList() }
             else emptyList()
         }
-        val jf = jfD.await(); val ws = wsD.await(); val tk = tkD.await()
+        val jf = jfD.await(); val ws = wsD.await(); val tkAll = tkD.await()
+        // Tituly z watchlistu vstupují do Filmotéky jen se zapnutým zdrojem; DATA z nich bereme vždy.
+        val tk = if (FilmotekaSource.TRAKT_WATCHLIST in enabled) tkAll else emptyList()
         lastJellyfinCount = jf.size
         // FOYER (SHW-107, user 2026-07-27): „jen tituly s dohledaným zdrojem" — do Filmotéky (a tím i do řady
         // na domově) pusť jen to, co jde reálně pustit: má uložený PŘEHRATELNÝ zdroj, nebo je přímo v Jellyfin
@@ -224,7 +231,7 @@ class FilmotekaBaseLoader @Inject constructor(
         // teprve nedávno přibyl, vyskočil ve Filmotéce nahoru a pořadí přestalo sedět se sekcí Chci vidět.
         // JF datum zůstává pro tituly, které ve watchlistu NEJSOU (tam je jediné, co o „přidání" víme).
         val recency = HashMap<String, Long>()
-        for (list in listOf(tk, jf)) {
+        for (list in listOf(tkAll, jf)) {
             for (item in list) { val k = dedupKey(item) ?: continue; item.addedAtMs?.let { recency.putIfAbsent(k, it) } }
         }
         merged.values
