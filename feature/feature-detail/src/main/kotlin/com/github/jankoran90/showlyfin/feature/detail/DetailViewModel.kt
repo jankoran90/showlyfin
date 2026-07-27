@@ -1329,8 +1329,7 @@ class DetailViewModel @Inject constructor(
     private fun ctvError(r: com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result): String =
         when (r) {
             is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.DrmRequired ->
-                "Česká televize tenhle titul pouští jen s ochranou DRM, kterou appka zatím neumí. " +
-                    "Zkus jiný zdroj."
+                "Česká televize u tohohle titulu nevrátila ani chráněnou variantu. Zkus jiný zdroj."
             is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.OutsideCz ->
                 "Česká televize pouští tenhle titul jen z Česka. Jsi mimo domácí síť?"
             is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.Failed ->

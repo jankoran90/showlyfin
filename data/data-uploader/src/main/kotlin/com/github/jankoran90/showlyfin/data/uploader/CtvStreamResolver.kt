@@ -30,16 +30,26 @@ class CtvStreamResolver @Inject constructor(
     sealed interface Result {
         /** Hotová adresa DASH manifestu (`.mpd` / token URL s přesměrováním). */
         data class Ok(val url: String) : Result
-        /** ČT titul chrání Widevine DRM — dnes neumíme (viz Known gaps). */
+        /** ČT odmítla nešifrovanou variantu — titul je chráněný Widevine (zkusíme DRM stream). */
         data object DrmRequired : Result
         /** Mimo ČR / IP bez licence. */
         data object OutsideCz : Result
         data class Failed(val reason: String) : Result
     }
 
-    suspend fun resolve(idec: String): Result = withContext(Dispatchers.IO) {
+    /**
+     * Nejdřív zkusí čistý stream (vlastní produkce ČT), a když ČT odpoví „vyžaduje DRM", požádá znovu
+     * o šifrovanou variantu — tu přehrajeme přes Widevine (licenční server řeší přehrávač podle značky
+     * `encryption=wv` v URL, stejně jako webový přehrávač ČT).
+     */
+    suspend fun resolve(idec: String): Result {
+        val plain = request(idec, drm = false)
+        return if (plain is Result.DrmRequired) request(idec, drm = true) else plain
+    }
+
+    private suspend fun request(idec: String, drm: Boolean): Result = withContext(Dispatchers.IO) {
         if (idec.isBlank()) return@withContext Result.Failed("prázdné idec")
-        val url = "$PLAYLIST$idec?canPlayDrm=false&streamType=dash"
+        val url = "$PLAYLIST$idec?canPlayDrm=$drm&streamType=dash"
         val req = Request.Builder().url(url)
             .header("Origin", "https://www.ceskatelevize.cz")
             .header("Referer", "https://www.ceskatelevize.cz/")

@@ -172,6 +172,14 @@ private val SUBTITLE_COLORS = listOf(
 
 // Titulky NErenderuje ExoPlayer — kreslíme je vlastním overlayem (viz SubtitleOverlay),
 // aby šel posun/přepnutí stopy aplikovat okamžitě bez re-prepare videa (žádný rebuffer).
+/**
+ * VLTAVA (SHW-110): licenční server Widevine České televize. Nakoupené zahraniční filmy v iVysílání jsou
+ * šifrované (manifest má `ContentProtection urn:uuid:edef8ba9…`), vlastní produkce ČT ne. Adresa i výchozí
+ * „public" token jsou z jejich vlastního webového přehrávače (`widevineLicenseServerUrl`).
+ * Poznávací znamení šifrovaného streamu je přímo v URL (`encryption=wv`) — tak si ho značí i ČT.
+ */
+private const val CTV_WIDEVINE_LICENSE = "https://ivys-wvproxy.o2tv.cz/license"
+
 private fun buildMediaItem(url: String, title: String, posterUrl: String?): MediaItem =
     MediaItem.Builder()
         .setUri(url)
@@ -194,6 +202,15 @@ private fun buildMediaItem(url: String, title: String, posterUrl: String?): Medi
                 url.contains("/api/ctv/manifest/") -> setMimeType(MimeTypes.APPLICATION_MPD)
                 url.contains("o2tv.cz") || url.contains("o2-tv.cz") || url.endsWith(".mpd") ->
                     setMimeType(MimeTypes.APPLICATION_MPD)
+            }
+            // VLTAVA: šifrovaný ČT stream → Widevine session proti jejich licenčnímu serveru.
+            if (url.contains("encryption=wv")) {
+                setDrmConfiguration(
+                    MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                        .setLicenseUri(CTV_WIDEVINE_LICENSE)
+                        .setMultiSession(false)
+                        .build(),
+                )
             }
         }
         .build()
