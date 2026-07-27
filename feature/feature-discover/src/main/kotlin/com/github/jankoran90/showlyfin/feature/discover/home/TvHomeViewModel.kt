@@ -223,8 +223,24 @@ class TvHomeViewModel @Inject constructor(
         // čerstvý titul objevil i v DOMOVSKÉ řadě (ne jen v sekci Trakt). `drop(1)` = ignoruj iniciální hodnotu.
         traktSyncSignal.version
             .drop(1)
-            .onEach { invalidateTraktRows() }
+            .onEach { invalidateTraktRows(); invalidateFilmotekaRow() }
             .launchIn(viewModelScope)
+
+        // FOYER (SHW-107, user 2026-07-27): řada „Filmotéka — nedávno přidané" musí sledovat TYTÉŽ signály
+        // jako sekce Filmotéka (ta se přenačítá na Trakt sync i na změnu uložených zdrojů) — jinak se obě
+        // rozejdou a domov ukazuje jiné pořadí/obsah než sekce (přesně userův screenshot 12:13 vs 12:06).
+        workingSources.savedKeys
+            .drop(1)
+            .onEach { invalidateFilmotekaRow() }
+            .launchIn(viewModelScope)
+    }
+
+    /** Přenačti řadu Filmotéky (a zahoď její cache) — obsah závisí na watchlistu i uložených zdrojích. */
+    private fun invalidateFilmotekaRow() {
+        val cfg = rowConfigs.value.firstOrNull { it.source == HomeRowSourceType.FILMOTEKA_RECENT } ?: return
+        filmotekaBase.invalidateRecent()
+        loadedHash.remove(cfg.id)
+        ensureRowLoaded(cfg)
     }
 
     /** Přenačti Trakt řady (watchlist/historie/seznamy/reco) — jejich data závisí na Trakt sync stavu. */
