@@ -36,8 +36,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
@@ -59,14 +65,16 @@ fun TvSearchScreen(
     onOpenDetail: (MediaItem) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // VLTAVA (SHW-110) F6 — ČT titul nemá TMDB identitu → vlastní karta (`TvCtvScreen`).
+    onOpenCtv: (CtvTitle) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val queryFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { queryFocus.requestFocus() } }
 
-    // Na TV nabízíme jen filmy/seriály (osoby/vydavatelství = telefonní works-sheet).
-    val tvScopes = remember { listOf(SearchScope.FILMS, SearchScope.SHOWS) }
+    // Na TV nabízíme filmy/seriály (osoby/vydavatelství = telefonní works-sheet) + VLTAVA F6 ČT iVysílání.
+    val tvScopes = remember { listOf(SearchScope.FILMS, SearchScope.SHOWS, SearchScope.CTV) }
     // Zahoď výsledky mimo film/seriál (kdyby VM měl zbytkový jiný rozsah) — na TV je neumíme otevřít.
     val movieShow = state.results.filter { it is SearchResult.Movie || it is SearchResult.Show }
 
@@ -123,6 +131,29 @@ fun TvSearchScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // VLTAVA F6 — ČT iVysílání: 16:9 karty (iVysílání nemá plakáty), ťuk → TvCtvScreen.
+            state.scope == SearchScope.CTV -> {
+                val ctv = state.results.filterIsInstance<SearchResult.Ctv>()
+                if (ctv.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            "Česká televize nic takového nenabízí",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 14.dp),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    ) {
+                        items(ctv, key = { it.id }) { r -> TvCtvResultCard(r.title, onClick = { onOpenCtv(r.title) }) }
+                    }
+                }
+            }
             movieShow.isEmpty() -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 Text(
                     "Nic nenalezeno",
@@ -147,6 +178,41 @@ fun TvSearchScreen(
                 }
             }
         }
+    }
+}
+
+/** VLTAVA F6 — karta ČT titulu v mřížce hledání: 16:9 náhled + název + typ/rok. */
+@Composable
+private fun TvCtvResultCard(title: CtvTitle, onClick: () -> Unit) {
+    Column(
+        Modifier.tvFocusBorder(shape = RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
+            if (title.thumbnail != null) {
+                AsyncImage(
+                    model = title.thumbnail,
+                    contentDescription = title.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Text(
+            title.title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+        )
+        Text(
+            listOfNotNull(if (title.isMovie) "Film" else "Pořad s díly", title.year?.toString()).joinToString(" · "),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 6.dp),
+        )
     }
 }
 

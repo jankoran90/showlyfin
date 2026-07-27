@@ -811,6 +811,17 @@ internal class UploaderApi(
         return "$base/api/ctv/manifest/$idec.mpd?key=$key"
     }
 
+    // VLTAVA (SHW-110) F6 — hledání v ČT iVysílání; chyba sítě/serveru = prázdný seznam (hledání
+    // v ostatních rozsazích nesmí spadnout kvůli ČT).
+    override suspend fun searchCtv(baseUrl: String, sessionCookie: String, query: String, limit: Int): List<CtvTitle> {
+        val base = baseUrl.trimEnd('/')
+        if (base.isBlank() || query.isBlank()) return emptyList()
+        val q = URLEncoder.encode(query, "UTF-8")
+        return runCatching {
+            service.searchCtvTitles("$base/api/ctv/search?q=$q&limit=$limit", cookieOf(sessionCookie)).results
+        }.getOrElse { emptyList() }
+    }
+
     override suspend fun warmCtv(baseUrl: String, sessionCookie: String, idec: String) {
         val base = baseUrl.trimEnd('/')
         // /api/ctv/resolve vrací {ok}; getYtResolve je generický GET (Response<ResponseBody>) → reuse.

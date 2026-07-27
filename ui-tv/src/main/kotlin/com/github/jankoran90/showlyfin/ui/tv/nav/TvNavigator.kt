@@ -120,7 +120,22 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
 
         TvDestination.Search -> TvSearchScreen(
             onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            // VLTAVA F6: rozsah „Česká televize" → vlastní karta (ČT titul nemá TMDB identitu).
+            onOpenCtv = { title -> navigate(TvDestination.CtvTitleDest(title)) },
             onBack = { back() },
+        )
+
+        is TvDestination.CtvTitleDest -> com.github.jankoran90.showlyfin.ui.tv.ctv.TvCtvScreen(
+            title = dest.title,
+            onPlay = { url, label, poster ->
+                navigate(
+                    TvDestination.Player(
+                        externalUrl = url,
+                        externalTitle = label,
+                        externalPosterUrl = poster,
+                    ),
+                )
+            },
         )
 
         TvDestination.Settings -> TvSettingsScreen(onBack = { back() })

@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.tv
 
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 
 /**
@@ -63,4 +64,10 @@ sealed interface TvDestination {
 
     /** Výběr epizod seriálu — legacy fallback (reuse telefonní `EpisodePickerScreen`; seriál s tmdb jde immersit). */
     data class EpisodePicker(val seriesId: String, val seriesName: String) : TvDestination
+
+    /**
+     * VLTAVA (SHW-110) F6 — karta titulu z ČT iVysílání (`TvCtvScreen`). Vlastní destinace, protože
+     * ČT titul nemá TMDB identitu, na které stojí [Detail].
+     */
+    data class CtvTitleDest(val title: CtvTitle) : TvDestination
 }

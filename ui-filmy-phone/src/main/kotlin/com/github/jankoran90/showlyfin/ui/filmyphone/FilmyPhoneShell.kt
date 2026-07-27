@@ -34,6 +34,7 @@ import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalSourceAvailabilityProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider
+import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 import com.github.jankoran90.showlyfin.feature.detail.rating.RatingDialogHost
@@ -78,6 +79,8 @@ private sealed interface FilmyDetailEntry {
     // autoplay=true (LAPIDARY one-click z řady „Uloženo k přehrání") → po hydrataci přehraj zapamatovaný zdroj.
     data class Media(val item: MediaItem, val autoplay: Boolean = false) : FilmyDetailEntry
     data class Jellyfin(val id: String) : FilmyDetailEntry
+    // VLTAVA (SHW-110) F6: titul z ČT iVysílání — bez TMDB identity, vlastní karta ([FilmyCtvScreen]).
+    data class Ctv(val title: CtvTitle) : FilmyDetailEntry
 }
 
 /** M2.6: stav přehrávače nad detailem — externí stream (Real-Debrid/Stremio) NEBO Jellyfin item. */
@@ -219,6 +222,15 @@ private fun FilmyShellContent() {
                 castInOverflow = true,
                 modifier = Modifier.fillMaxSize(),
             )
+        } else if (detailEntry is FilmyDetailEntry.Ctv) {
+            // VLTAVA F6: karta ČT titulu (film = Přehrát, pořad = díly). Odkaz resolvuje zařízení.
+            BackHandler(onBack = popDetail)
+            FilmyCtvScreen(
+                title = detailEntry.title,
+                onBack = popDetail,
+                onPlay = { url, label, poster -> playStream(url, label, null, poster) },
+                modifier = Modifier.fillMaxSize(),
+            )
         } else if (detailEntry is FilmyDetailEntry.Jellyfin) {
             // M2.6: JF-only položka (z Knihovny/domova) — dohledej tmdb/imdb a otevři sdílený detail.
             BackHandler(onBack = popDetail)
@@ -284,8 +296,12 @@ private fun FilmyShellContent() {
                                 onOpenDetail = openDetail,
                                 onOpenJellyfinDetail = openJfDetail, // M2.6: JF-only detail zprovozněn
                             )
-                            // M2.5: Hledat = TMDB (reuse SearchViewModel).
-                            FilmySection.SEARCH -> FilmySearchScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            // M2.5: Hledat = TMDB + VLTAVA F6 rozsah „Česká televize" (ČT iVysílání).
+                            FilmySection.SEARCH -> FilmySearchScreen(
+                                onMenu = onMenu,
+                                onOpenDetail = openDetail,
+                                onOpenCtv = { t -> detailStack = detailStack + FilmyDetailEntry.Ctv(t) },
+                            )
                             // M2.3b: Nastavení = uploader login (ČSFD) + vypínač živého logu.
                             FilmySection.SETTINGS -> FilmySettingsScreen(onMenu = onMenu)
                             // M2.5: Profil = 2 pevné profily + PIN (reuse SettingsViewModel/ProfileRepository).

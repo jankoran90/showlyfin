@@ -176,6 +176,13 @@ interface UploaderRemoteDataSource {
     /** Pre-warm resolve cache ČT dílu (best-effort). */
     suspend fun warmCtv(baseUrl: String, sessionCookie: String, idec: String)
 
+    /**
+     * VLTAVA (SHW-110) F6 — hledání titulů v ČT iVysílání (záložka „Česká televize" v Hledat).
+     * Vrací filmy i pořady s díly; přehrávací odkaz si z `ctv:<idec>` vytáhne ZAŘÍZENÍ
+     * (`CtvStreamResolver`), protože playlist API ČT je geoblokované na náš server.
+     */
+    suspend fun searchCtv(baseUrl: String, sessionCookie: String, query: String, limit: Int = 20): List<CtvTitle>
+
     // PRESET (SHW-65) — dynamický správce zdrojů Poslechu: sdílený store + hledání podle názvu + RSS epizody
     suspend fun listSources(baseUrl: String, sessionCookie: String): List<PodcastSource>
     suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?): List<PodcastSource>

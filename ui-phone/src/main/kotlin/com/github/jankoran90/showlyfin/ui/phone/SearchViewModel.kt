@@ -1,7 +1,9 @@
 package com.github.jankoran90.showlyfin.ui.phone
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.model.PersonRole
 import com.github.jankoran90.showlyfin.data.tmdb.model.czLabel
@@ -24,10 +26,16 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Named
 
-/** COMPASS C3 (SHW-44) — rozsah univerzálního hledání (volba hlavního parametru); výchozí = Filmy. */
+/**
+ * COMPASS C3 (SHW-44) — rozsah univerzálního hledání (volba hlavního parametru); výchozí = Filmy.
+ *
+ * VLTAVA (SHW-110) F6 přidal [CTV]: hledá se přímo v ČT iVysílání, ne na TMDB. Bez toho nešly najít
+ * tituly, které TMDB nezná (typicky české dokumenty a archiv — „Dakar 2025 – Síla odhodlání").
+ */
 enum class SearchScope(val label: String) {
-    FILMS("Filmy"), SHOWS("Seriály"), PEOPLE("Lidi"), COMPANIES("Vydavatelství")
+    FILMS("Filmy"), SHOWS("Seriály"), PEOPLE("Lidi"), COMPANIES("Vydavatelství"), CTV("Česká televize")
 }
 
 /**
@@ -38,7 +46,7 @@ enum class SearchScope(val label: String) {
 enum class SearchSort(val label: String, val scopes: Set<SearchScope>) {
     RELEVANCE("Relevance", SearchScope.entries.toSet()),
     NAME("Název", SearchScope.entries.toSet()),
-    YEAR("Rok", setOf(SearchScope.FILMS, SearchScope.SHOWS)),
+    YEAR("Rok", setOf(SearchScope.FILMS, SearchScope.SHOWS, SearchScope.CTV)),
     RATING("Hodnocení", setOf(SearchScope.FILMS, SearchScope.SHOWS)),
     POPULARITY("Oblíbenost", setOf(SearchScope.FILMS, SearchScope.SHOWS, SearchScope.PEOPLE)),
     ;
@@ -62,6 +70,12 @@ sealed interface SearchResult {
         val popularity: Double? = null,
     ) : SearchResult
     data class Company(override val id: Long, val name: String, val logoUrl: String?) : SearchResult
+
+    /**
+     * VLTAVA (SHW-110) F6 — titul z ČT iVysílání. Nemá TMDB identitu, takže si nese celý [title]
+     * z backendu (vč. `idec`/`episodesAnchor`) a otevírá se vlastní obrazovkou, ne sdíleným detailem.
+     */
+    data class Ctv(override val id: Long, val title: com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle) : SearchResult
 }
 
 data class SearchUiState(
@@ -86,7 +100,13 @@ class SearchViewModel @Inject constructor(
     private val tmdb: TmdbRemoteDataSource,
     private val favoritesStore: FavoritesRepository,
     private val viewModeStore: ViewModeStore,
+    // VLTAVA F6 — rozsah „Česká televize" jde přes náš backend (ČT GraphQL), ne přes TMDB.
+    private val uploaderDs: UploaderRemoteDataSource,
+    @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
+
+    private val uploaderBase get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     /**
      * QUARRY (user 2026-07-20) — perzistentní přepínač mřížka/seznam sekce Hledat (appka Filmy; klíč
@@ -174,6 +194,11 @@ class SearchViewModel @Inject constructor(
             SearchScope.COMPANIES -> tmdb.searchCompanies(q).map {
                 SearchResult.Company(it.id, it.name ?: "", logo(it.logo_path))
             }
+            // VLTAVA F6 — ČT iVysílání přes backend (`/api/ctv/search`). `sidp` je číselný řetězec;
+            // kdyby to ČT někdy změnila, drž stabilní klíč aspoň z hashe (jen pro `key` v mřížce).
+            SearchScope.CTV -> uploaderDs.searchCtv(uploaderBase, uploaderCookie, q).map { t ->
+                SearchResult.Ctv(t.sidp.toLongOrNull() ?: t.sidp.hashCode().toLong(), t)
+            }
         }
         rawResults = results
         val st = _state.value
@@ -204,11 +229,13 @@ class SearchViewModel @Inject constructor(
         is SearchResult.Show -> title
         is SearchResult.Person -> name
         is SearchResult.Company -> name
+        is SearchResult.Ctv -> title.title
     }
 
     private fun SearchResult.yearKey(): Double? = when (this) {
         is SearchResult.Movie -> year?.toIntOrNull()?.toDouble()
         is SearchResult.Show -> year?.toIntOrNull()?.toDouble()
+        is SearchResult.Ctv -> title.year?.toDouble()
         else -> null
     }
 

@@ -54,6 +54,7 @@ import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
 import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
+import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
 import com.github.jankoran90.showlyfin.feature.detail.ui.PersonFilmographySheet
 import com.github.jankoran90.showlyfin.ui.phone.SearchResult
 import com.github.jankoran90.showlyfin.ui.phone.SearchScope
@@ -73,6 +74,8 @@ fun FilmySearchScreen(
     onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
+    // VLTAVA F6 — ČT titul nemá TMDB identitu → vlastní karta ([FilmyCtvScreen]), ne sdílený detail.
+    onOpenCtv: (CtvTitle) -> Unit = {},
     vm: SearchViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -116,7 +119,7 @@ fun FilmySearchScreen(
                 Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf(SearchScope.FILMS, SearchScope.SHOWS, SearchScope.PEOPLE).forEach { s ->
+                listOf(SearchScope.FILMS, SearchScope.SHOWS, SearchScope.PEOPLE, SearchScope.CTV).forEach { s ->
                     FilterChip(selected = state.scope == s, onClick = { vm.onScopeChange(s) }, label = { Text(s.label) })
                 }
             }
@@ -127,8 +130,8 @@ fun FilmySearchScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
-                // Přepínač zobrazení dává smysl jen u filmů/seriálů (lidi jsou vždy portréty v mřížce).
-                if (state.scope != SearchScope.PEOPLE) {
+                // Přepínač zobrazení dává smysl jen u filmů/seriálů (lidi = portréty v mřížce, ČT = 16:9 karty).
+                if (state.scope == SearchScope.FILMS || state.scope == SearchScope.SHOWS) {
                     FilmyViewToggle(viewMode) {
                         vm.setViewMode(if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID)
                     }
@@ -169,12 +172,21 @@ fun FilmySearchScreen(
                 state.query.isBlank() -> FilmyEmpty(
                     icon = Icons.Rounded.Search,
                     title = "Co budeme hledat?",
-                    text = "Napiš název filmu, seriálu nebo jméno režiséra či herce.",
+                    text = if (state.scope == SearchScope.CTV) {
+                        "Napiš název pořadu nebo filmu z iVysílání České televize."
+                    } else {
+                        "Napiš název filmu, seriálu nebo jméno režiséra či herce."
+                    },
                 )
                 state.results.isEmpty() -> FilmyEmpty(
                     icon = Icons.Rounded.Search,
                     title = "Nic nenalezeno",
                     text = "Zkus jiný název nebo přepni rozsah.",
+                )
+                // VLTAVA F6 — ČT má vlastní (landscape) karty: iVysílání nemá plakáty, jen 16:9 náhledy.
+                state.scope == SearchScope.CTV -> CtvResultsList(
+                    results = displayResults,
+                    onOpenCtv = onOpenCtv,
                 )
                 viewMode == ViewMode.LIST && state.scope != SearchScope.PEOPLE -> SearchResultsList(
                     results = displayResults,
@@ -259,6 +271,56 @@ private fun SearchResult.hasArt(): Boolean = when (this) {
     is SearchResult.Show -> posterUrl != null
     is SearchResult.Person -> profileUrl != null
     is SearchResult.Company -> logoUrl != null
+    is SearchResult.Ctv -> title.thumbnail != null
+}
+
+/**
+ * VLTAVA F6 — výsledky z ČT iVysílání: 16:9 náhled + název + typ (Film / Pořad · díly) a žánry.
+ * Klik → [FilmyCtvScreen] (přehrání / seznam dílů).
+ */
+@Composable
+private fun CtvResultsList(results: List<SearchResult>, onOpenCtv: (CtvTitle) -> Unit) {
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        listItems(results.filterIsInstance<SearchResult.Ctv>(), key = { it.id }) { r ->
+            val t = r.title
+            Row(
+                Modifier.fillMaxWidth().clickable { onOpenCtv(t) },
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(width = 128.dp, height = 72.dp).clip(RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (t.thumbnail != null) {
+                        AsyncImage(
+                            model = t.thumbnail, contentDescription = t.title,
+                            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Icon(Icons.Rounded.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        t.title, style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                    val sub = buildList {
+                        add(if (t.isMovie) "Film" else "Pořad s díly")
+                        t.year?.let { add(it.toString()) }
+                        t.genres?.firstOrNull()?.let { add(it) }
+                    }.joinToString(" · ")
+                    Text(sub, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+        }
+    }
 }
 
 @Composable

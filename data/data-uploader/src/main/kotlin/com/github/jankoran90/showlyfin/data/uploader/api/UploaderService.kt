@@ -138,6 +138,8 @@ interface UploaderService {
 
     // KAVKA (SHW-76) — ČT iVysílání podcast feed (díly pořadu; přehrání přes DASH manifest proxy)
     @GET suspend fun getCtvFeed(@Url url: String, @Header("Cookie") cookie: String): CtvShowFeed
+    // VLTAVA (SHW-110) F6 — hledání titulů v ČT iVysílání (film/pořad + idec k přehrání)
+    @GET suspend fun searchCtvTitles(@Url url: String, @Header("Cookie") cookie: String): CtvSearchResponse
 
     // PRESET (SHW-65) — dynamický správce zdrojů Poslechu (sdílený store + hledání + RSS feed)
     @GET suspend fun listSources(@Url url: String, @Header("Cookie") cookie: String): SourcesResponse

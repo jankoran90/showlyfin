@@ -14,6 +14,31 @@ data class CtvShowFeed(
     val episodes: List<CtvEpisode> = emptyList(),
 )
 
+/**
+ * VLTAVA (SHW-110) F6 — titul z ČT iVysílání nalezený hledáním (`/api/ctv/search`).
+ *
+ * ČT sama říká, jestli jde o jednorázový [FILM][isMovie] (→ [stream] `ctv:<idec>`, hraje se rovnou)
+ * nebo o pořad s díly (→ [episodesAnchor] pro `/api/ctv/feed`). Nic z toho nemá TMDB identitu —
+ * proto tahle vlastní cesta: TMDB spoustu ČT titulů (Dakar, archivní dokumenty) vůbec nezná.
+ */
+data class CtvTitle(
+    val sidp: String = "",
+    val type: String? = null,         // "movie" | "series"
+    val title: String = "",
+    val year: Int? = null,
+    val duration: Double? = null,     // sekundy
+    val description: String? = null,
+    val thumbnail: String? = null,    // landscape karta ČT (16:9)
+    val genres: List<String>? = null,
+    val idec: String? = null,
+    val episodesAnchor: String? = null,
+    val stream: String? = null,       // `ctv:<idec>` u filmu; null u pořadu s díly
+) {
+    val isMovie: Boolean get() = !type.equals("series", ignoreCase = true)
+}
+
+data class CtvSearchResponse(val results: List<CtvTitle> = emptyList())
+
 data class CtvEpisode(
     val id: String,                   // idec (15 číslic) — klíč pro resolve/manifest
     val title: String = "",
