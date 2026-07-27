@@ -136,10 +136,18 @@ class FilmotekaBaseLoader @Inject constructor(
         for (item in base + favoriteItems) { val k = dedupKey(item) ?: continue; combined.putIfAbsent(k, item) }
         val favDates = HashMap<String, Long>()
         for (f in favoriteItems) { val k = dedupKey(f) ?: continue; f.addedAtMs?.let { favDates.putIfAbsent(k, it) } }
-        val backdate = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+        // FOYER (SHW-107, user 2026-07-27 „Filmotéka neumí držet pořadí Chci vidět") — PRYČ S UMĚLÝM
+        // „MĚSÍC ZPĚT". Dřív dostal KAŽDÝ titul bez členského data TENTÝŽ syntetický čas (dnes − 30 dní),
+        // takže: (a) jejich vzájemné pořadí bylo náhodné (= pořadí, v jakém zdroje odpověděly), a hlavně
+        // (b) přeskočily reálně starší položky z „Chci vidět" (film přidaný do watchlistu v únoru měl
+        // únor, kdežto „nedatovaný" dostal minulý měsíc → vyskočil nad něj). DŮKAZ z jeho profilu:
+        // Dìdi/Rye Lane/Yannick/Poor Things mají watchlist datum 2025-11 až 2026-06, ale zdroj uložený
+        // 2026-07-18/22 — a stály nahoře. Nově má každý titul SVŮJ skutečný čas: členství (Chci vidět /
+        // Jellyfin, řeší [gather]) → Oblíbené → datum PRVNÍHO uložení zdroje (neměnné, viz `firstSavedAtMs`,
+        // takže re-cache pořadím nehne). Nic z toho = null → řadí se na konec, ne doprostřed.
         return combined.values.map { item ->
             if (item.addedAtMs != null) item
-            else item.copy(addedAtMs = (dedupKey(item)?.let { favDates[it] }) ?: backdate)
+            else item.copy(addedAtMs = dedupKey(item)?.let { favDates[it] })
         }
     }
 
@@ -221,7 +229,9 @@ class FilmotekaBaseLoader @Inject constructor(
         }
         merged.values
             .filter { allowedKeys == null || dedupKey(it)?.let { k -> k in allowedKeys } == true }
-            .map { item -> item.copy(addedAtMs = dedupKey(item)?.let { recency[it] }) }
+            // Členské datum (Chci vidět → Jellyfin) VYHRÁVÁ; když titul v žádném seznamu není, nech mu
+            // jeho vlastní (u zapamatovaného zdroje = NEMĚNNÉ datum prvního uložení) místo zahození na null.
+            .map { item -> item.copy(addedAtMs = dedupKey(item)?.let { recency[it] } ?: item.addedAtMs) }
     }
 
     private suspend fun loadJellyfinLibrary(): List<MediaItem> = coroutineScope {
