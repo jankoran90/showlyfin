@@ -187,9 +187,13 @@ private fun buildMediaItem(url: String, title: String, posterUrl: String?): Medi
         // neuhodl a hrál to jako progresivní. Vynutíme HLS MediaSource (itag 95/96 = 720p/1080p+audio).
         // KAVKA (SHW-76): ČT video proxy (/api/ctv/manifest/…mpd) = DASH (o2tv CDN, až 1080p) → vynutíme DASH.
         .apply {
+            // VLTAVA (SHW-110): ČT resolvovaná PŘÍMO ZAŘÍZENÍM vrací token adresu o2tv CDN, která teprve
+            // přesměruje na manifest — v URL tedy `.mpd` být nemusí. Poznáme ji podle CDN hostitele.
             when {
                 url.contains("/api/yt/hls/") -> setMimeType(MimeTypes.APPLICATION_M3U8)
                 url.contains("/api/ctv/manifest/") -> setMimeType(MimeTypes.APPLICATION_MPD)
+                url.contains("o2tv.cz") || url.contains("o2-tv.cz") || url.endsWith(".mpd") ->
+                    setMimeType(MimeTypes.APPLICATION_MPD)
             }
         }
         .build()

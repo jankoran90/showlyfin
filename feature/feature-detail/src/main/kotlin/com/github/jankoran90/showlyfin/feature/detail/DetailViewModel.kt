@@ -67,6 +67,8 @@ class DetailViewModel @Inject constructor(
     private val favoritesStore: com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository,
     // DINGO — per-zařízení preset přehrávání (preferuj H.264 pro slabé HEVC dekodéry v autě). Re-rank seznamu zdrojů.
     private val streamPresetStore: com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore,
+    // VLTAVA (SHW-110): ČT iVysílání — odkaz na video si tahá ZAŘÍZENÍ (playlist API je na server geoblokované).
+    private val ctvResolver: com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver,
     private val offlineManager: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
     // MAESTRO / D-c: probuzení domácí AV sestavy před „Přehrát na Filmy TV".
     private val homeTheaterScene: com.github.jankoran90.showlyfin.data.maestro.HomeTheaterScene,
@@ -1272,6 +1274,23 @@ class DetailViewModel @Inject constructor(
             }
             return
         }
+        // 0b) VLTAVA: ČT iVysílání (`ctv:<idec>`) → hotovou adresu si vytáhne TOHLE zařízení (playlist API
+        //     je geoblokované na náš server; doma na české IP projde). Musí být PŘED přímou url — `ctv:`
+        //     je taky `direct`. Uložený zdroj drží jen `idec`, takže nezestárne (CDN odkaz je krátkodobý).
+        val ctvIdec = com.github.jankoran90.showlyfin.data.uploader.ctvIdecOrNull(direct)
+        if (ctvIdec != null) {
+            _uiState.update { it.copy(isResolvingStream = true, streamError = null) }
+            viewModelScope.launch {
+                when (val r = ctvResolver.resolve(ctvIdec)) {
+                    is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.Ok -> {
+                        timber.log.Timber.i("[VLTAVA] ČT play idec=%s", ctvIdec)
+                        deliver(r.url, title, target)
+                    }
+                    else -> _uiState.update { it.copy(isResolvingStream = false, streamError = ctvError(r)) }
+                }
+            }
+            return
+        }
         // 1) přímá url (Ready (RD)) → hraj rovnou (deliver napřed ověří, že to není návnada).
         if (!direct.isNullOrBlank()) {
             timber.log.Timber.i("[Stremio] play direct url addon=${stream.addon}")
@@ -1305,6 +1324,19 @@ class DetailViewModel @Inject constructor(
         }
         _uiState.update { it.copy(streamError = "Stream nemá URL, cometPath ani infoHash.") }
     }
+
+    /** VLTAVA: proč ČT zdroj nehraje — pravdivá hláška místo černé obrazovky. */
+    private fun ctvError(r: com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result): String =
+        when (r) {
+            is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.DrmRequired ->
+                "Česká televize tenhle titul pouští jen s ochranou DRM, kterou appka zatím neumí. " +
+                    "Zkus jiný zdroj."
+            is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.OutsideCz ->
+                "Česká televize pouští tenhle titul jen z Česka. Jsi mimo domácí síť?"
+            is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.Failed ->
+                "Zdroj z České televize se nepodařilo otevřít: ${r.reason}"
+            is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.Ok -> ""
+        }
 
     /** Necachovaný torrent: přidá na RD a pollí progress, dokud se nestáhne → pak přehraje (Fáze F). */
     private fun startRdDownload(stream: UploaderStream, title: String, target: CastTarget = CastTarget.LOCAL) {
@@ -1698,9 +1730,11 @@ class DetailViewModel @Inject constructor(
             ?: s.cometPath?.takeIf { it.isNotBlank() }
             ?: s.url.orEmpty()
 
-    /** RELAY: lze získat ČERSTVÝ odkaz? infoHash/comet (RD resolve) nebo sdilej:// (samonosná proxy). */
+    /** RELAY: lze získat ČERSTVÝ odkaz? infoHash/comet (RD resolve), sdilej:// nebo ctv: (obojí samonosné). */
     private fun isReResolvable(s: UploaderStream): Boolean =
-        !s.infoHash.isNullOrBlank() || !s.cometPath.isNullOrBlank() || (s.url?.startsWith("sdilej://") == true)
+        !s.infoHash.isNullOrBlank() || !s.cometPath.isNullOrBlank() ||
+            (s.url?.startsWith("sdilej://") == true) ||
+            com.github.jankoran90.showlyfin.data.uploader.ctvIdecOrNull(s.url) != null
 
     /** RELAY: kontext pro RD resolve (stejný jako v [playStream]). */
     private fun buildResolveCtx(stream: UploaderStream): com.github.jankoran90.showlyfin.data.uploader.model.UploaderResolveContext? =
@@ -1724,6 +1758,18 @@ class DetailViewModel @Inject constructor(
         val direct = stream.url
         if (direct?.startsWith("sdilej://") == true) {
             buildSdilejProxyUrl(direct)?.let { deliver(it, title, target); return }
+        }
+        // VLTAVA: ČT odkaz je krátkodobý ze své podstaty → obnova = prostě resolvnout `idec` znovu.
+        com.github.jankoran90.showlyfin.data.uploader.ctvIdecOrNull(direct)?.let { idec ->
+            _uiState.update { it.copy(isResolvingStream = true, streamError = null, autoAdvanceInfo = "Obnovuji zdroj…") }
+            viewModelScope.launch {
+                when (val r = ctvResolver.resolve(idec)) {
+                    is com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver.Result.Ok ->
+                        deliver(r.url, title, target)
+                    else -> _uiState.update { it.copy(isResolvingStream = false, streamError = ctvError(r)) }
+                }
+            }
+            return
         }
         _uiState.update { it.copy(isResolvingStream = true, streamError = null, autoAdvanceInfo = "Obnovuji zdroj…") }
         val ctx = buildResolveCtx(stream)
