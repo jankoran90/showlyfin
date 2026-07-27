@@ -589,6 +589,30 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * CURTAIN (SHW-109): po návratu z přehrávače přenačti per-epizoda stav z Jellyfinu (fajfka + posun
+     * odznaku „Pokračovat"). Nutné zvlášť: `load()` má na tentýž titul early-return a ViewModel žije dál
+     * (Activity scope), takže by se dokoukaná epizoda projevila až po restartu appky.
+     * Sezónu ZÁMĚRNĚ nepřepínáme (uživatel se dívá na tu svou), měníme jen příznaky.
+     */
+    fun refreshEpisodeStatus() {
+        val item = _uiState.value.item ?: return
+        if (item.type != MediaType.SHOW) return
+        val jfId = _uiState.value.ownedJellyfinId ?: return
+        viewModelScope.launch {
+            val status = runCatching { jellyfinLibraryService.getSeriesEpisodeStatus(jfId) }.getOrNull() ?: return@launch
+            if (_uiState.value.item?.isSameAs(item) != true) return@launch
+            _uiState.update {
+                it.copy(
+                    episodeWatched = status.watched,
+                    episodeProgress = status.progress,
+                    nextUpEpisode = status.nextUp,
+                    episodeJellyfinIds = status.episodeIds,
+                )
+            }
+        }
+    }
+
     /** COMPASS C2 (SHW-44): přidat/odebrat tento film do/z Oblíbených. */
     fun toggleFavorite() {
         val item = _uiState.value.item ?: return

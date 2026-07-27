@@ -50,6 +50,7 @@ class PlaybackViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val translateStore: SubtitleTranslationStore,
     private val videoResumeStore: VideoResumeStore,
+    private val watchedReporter: WatchedReporter,
     private val profileRepository: ProfileRepository,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -127,6 +128,9 @@ class PlaybackViewModel @Inject constructor(
     private var query: SubtitleQuery? = null
     // PICKUP: klíč pozice je oddělený od `query` (titulky), protože resume musí fungovat i BEZ imdb.
     private var resumeKey: String? = null
+    // CURTAIN (SHW-109): co právě běží, ať to jde po dokoukání označit za zhlédnuté. U seriálu z knihovny
+    // drží DOŘEŠENOU epizodu (ne id seriálu — to se přehrát nedá), u streamu imdb z `SubtitleQuery`.
+    private var watchTarget: WatchedReporter.Target? = null
     // REWIND (SHW-68): klíč lokálního resume VIDEA (JF-item playback). Předaný z volajícího (NaVýbornou
     // video → sdílený klíč s RSS epizodou). Null = neukládáme lokálně (např. film z Detailu = jen server).
     private var videoResumeKey: String? = null
@@ -152,6 +156,14 @@ class PlaybackViewModel @Inject constructor(
             it.autoSearch && (it.imdb.isNotBlank() || it.title.isNotBlank() || it.origTitle.isNotBlank())
         }
         resumeKey = subtitleQuery?.let { resumeKeyOf(it) }
+        // CURTAIN: stream mimo knihovnu — Jellyfin id nemáme, zůstává imdb (Trakt, opt-in) a úklid resume.
+        setWatchTarget(
+            WatchedReporter.Target(
+                imdbId = subtitleQuery?.imdb,
+                isEpisode = subtitleQuery?.season != null,
+                externalResumeKey = resumeKey,
+            ),
+        )
         val localResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
         // CROSS-DEVICE RESUME: pozice z telefonu (cast příkaz) přebije lokální resume TV, když je >0
         // (a je novější / dál — telefon právě odtud castoval). Bez ní = vlastní lokální resume TV.
@@ -185,6 +197,8 @@ class PlaybackViewModel @Inject constructor(
     fun loadLocal(videoPath: String, subtitlePath: String?, title: String, offlineKey: String, posterPath: String? = null) {
         query = null
         resumeKey = offlineKey.takeIf { it.isNotBlank() }
+        // CURTAIN: offline soubor — hlásit není kam, ale dokoukané nemá zůstat v „Pokračovat".
+        setWatchTarget(WatchedReporter.Target(externalResumeKey = resumeKey))
         val savedResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
         val videoUri = android.net.Uri.fromFile(java.io.File(videoPath)).toString()
         val posterUri = posterPath?.let { android.net.Uri.fromFile(java.io.File(it)).toString() }
@@ -213,6 +227,33 @@ class PlaybackViewModel @Inject constructor(
         val key = videoResumeKey ?: return
         videoResumeStore.save(key, positionMs, durationMs)
     }
+
+    // ── CURTAIN (SHW-109): dokoukáno → označit zhlédnuté + zavřít přehrávač ──────────
+    /** Nová položka v přehrávači → přepiš cíl hlášení a zapomeň guard (tentýž díl jde označit znovu). */
+    private fun setWatchTarget(target: WatchedReporter.Target) {
+        watchTarget = target
+        watchedReporter.forget(target)
+    }
+
+    /**
+     * Tik průběhu (volá [ui.PlaybackScreen] ze stejné smyčky, co ukládá pozici). Po překročení prahu
+     * (default 85 % délky) označí titul za zhlédnutý — čekat na úplný konec nejde, závěrečné titulky
+     * nikdo nedokouká.
+     */
+    fun notePlaybackProgress(positionMs: Long, durationMs: Long) {
+        val target = watchTarget ?: return
+        if (!watchedReporter.isFinished(positionMs, durationMs)) return
+        viewModelScope.launch { watchedReporter.markWatched(target) }
+    }
+
+    /** Přehrávání doběhlo do konce (`STATE_ENDED`) → označ zhlédnuté bez ohledu na práh. */
+    fun notePlaybackEnded() {
+        val target = watchTarget ?: return
+        viewModelScope.launch { watchedReporter.markWatched(target) }
+    }
+
+    /** Má se přehrávač po dokoukání sám zavřít (návrat o krok zpět)? */
+    fun exitOnFinishEnabled(): Boolean = watchedReporter.exitOnFinish()
 
     /** PICKUP: ulož/aktualizuj pozici externího streamu pro pozdější „Pokračovat".
      *  Ukládá jen smysluplný úsek (od ~5 s); v posledních 30 s = dokoukáno → resume zahodí. */
@@ -574,6 +615,16 @@ class PlaybackViewModel @Inject constructor(
                         playItem = episode
                     }
                 }
+
+                // CURTAIN: hlásit se bude DOŘEŠENÁ epizoda (u seriálu), ne id seriálu — to Jellyfin
+                // označit „zhlédnuto" umí, ale znamenalo by to celý seriál.
+                setWatchTarget(
+                    WatchedReporter.Target(
+                        jellyfinItemId = playItemId,
+                        isEpisode = playItem?.type == BaseItemKind.EPISODE,
+                        videoResumeKey = resumeKey,
+                    ),
+                )
 
                 val userResumeMs = (playItem?.userData?.playbackPositionTicks ?: 0L) / 10_000L
                 // REWIND: vezmi pozdější ze serverového (jiný klient / box) a lokálního resume (telefon).

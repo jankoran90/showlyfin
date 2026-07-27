@@ -194,7 +194,14 @@ private fun ClassicHeroLayout(
     ) {
         // Fanart NESMÍ zabrat celou výšku — jinak fokus na sekce dole odscrolluje hero pryč. S obsahem
         // pod hero dej sekcím prostor (0.58), jinak plný immersive hero (0.70). Hero je FIXNÍ (mimo scroll).
-        val heroHeight = maxHeight * (if (hasSections) 0.58f else 0.70f)
+        // CURTAIN (SHW-109): u seriálu je pod hero lišta sezón I řada epizod — do 0.42 se nevešly a fokus
+        // na epizodě odscrolloval chipy sezón zpola pod hero (user: „lišta sezón se překrývá").
+        val showsSeasonBar = uiState.showSeasons && displayItem.type == MediaType.SHOW && uiState.seasons.isNotEmpty()
+        val heroHeight = maxHeight * when {
+            !hasSections -> 0.70f
+            showsSeasonBar -> 0.48f
+            else -> 0.58f
+        }
         Column(Modifier.fillMaxSize()) {
             Box(
                 Modifier

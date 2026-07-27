@@ -21,6 +21,7 @@ dependencies {
     implementation(project(":core:core-data")) // SUBWEAVE C: ProfileRepository (per-profil titulkové volby + sync)
     implementation(project(":core:core-ui")) // TENFOOT F2c: kanonický tvFocusBorder (záře+lift) pro TV transport lištu
     implementation(project(":data:data-jellyfin"))
+    implementation(project(":data:data-trakt")) // CURTAIN (SHW-109): dokoukaný film ze streamu → Trakt historie (opt-in)
     implementation(project(":data:data-uploader"))
     implementation(libs.timber)
     implementation(libs.hilt.android)

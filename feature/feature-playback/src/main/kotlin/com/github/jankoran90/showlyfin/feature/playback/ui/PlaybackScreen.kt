@@ -272,6 +272,9 @@ fun PlaybackScreen(
     // TENFOOT F2c: fokus přistane na ⏯ v TV transport liště; interactionTick resetuje auto-hide při navigaci.
     val barFocusRequester = remember { FocusRequester() }
     var interactionTick by remember { mutableStateOf(0) }
+    // CURTAIN (SHW-109): přehrávání doběhlo do konce. Listener žije v DisposableEffect (dřív než
+    // `exitPlayback`), takže odchod řešíme přes tenhle příznak v efektu níž.
+    var playbackFinished by remember { mutableStateOf(false) }
 
     // Seekbar (ruční přesouvání) + gesta jas/hlasitost
     var scrubbing by remember { mutableStateOf(false) }
@@ -303,6 +306,11 @@ fun PlaybackScreen(
                     playerViewRef?.let { pv -> pv.player = null; pv.player = controller }
                 }
                 stallJob?.cancel()
+                // CURTAIN: dokoukáno do konce → označ zhlédnuté (Jellyfin) a (dle nastavení) zavři přehrávač.
+                if (playbackState == Player.STATE_ENDED) {
+                    viewModel.notePlaybackEnded()
+                    playbackFinished = true
+                }
                 if (playbackState == Player.STATE_BUFFERING && externalUrl != null && onPlaybackFailed != null && !failureReported) {
                     val startBuffered = controller?.bufferedPosition ?: 0L
                     stallJob = stallScope.launch {
@@ -449,6 +457,9 @@ fun PlaybackScreen(
             delay(5000)
             if (externalUrl != null || localVideoPath != null) viewModel.saveExternalPosition(c.currentPosition, c.duration)
             else viewModel.saveVideoPosition(c.currentPosition, c.duration)
+            // CURTAIN: za prahem (default 85 % délky) je titul dokoukaný, i když se závěrečné titulky
+            // nedokoukají. Hlášení je idempotentní (guard ve WatchedReporteru), takže tik nevadí.
+            viewModel.notePlaybackProgress(c.currentPosition, c.duration)
         }
     }
     // auto-hide controls (ne když je otevřený panel titulků/zvuku). TENFOOT F2c: timeout konfigurovatelný
@@ -546,6 +557,15 @@ fun PlaybackScreen(
             )
         }
         onBack()
+    }
+
+    // CURTAIN: po dokoukání ven z přehrávače (user 2026-07-27: „ať se prostě vrátí o krok zpět"). Krátká
+    // prodleva nechá doběhnout uložení stavu a nevypadá to jako pád. Vypnutelné v Nastavení → Přehrávač.
+    LaunchedEffect(playbackFinished) {
+        if (!playbackFinished) return@LaunchedEffect
+        if (!viewModel.exitOnFinishEnabled()) return@LaunchedEffect
+        delay(700)
+        exitPlayback()
     }
 
     BackHandler {

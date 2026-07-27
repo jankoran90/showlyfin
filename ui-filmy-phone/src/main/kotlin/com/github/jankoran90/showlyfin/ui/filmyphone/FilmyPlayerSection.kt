@@ -70,6 +70,30 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
             checked = forceSw,
             onCheckedChange = { forceSw = it; rdPrefs.edit().putBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, it).apply() },
         )
+        // CURTAIN (SHW-109) — konec přehrávání. Parita s TV `TvSettingsScreen` blok Přehrávač.
+        SettingChips(
+            label = "Zhlédnuto od",
+            subtitle = "Kolik procent stopáže stačí, aby se film/díl označil za zhlédnutý. Závěrečné titulky " +
+                "nikdo nedokouká, takže čekání na úplný konec by znamenalo, že se skoro nic neoznačí.",
+            options = PlayerPrefs.MARK_WATCHED_PCT_OPTIONS,
+            selected = sys.playerMarkWatchedPct,
+            labelOf = { if (it >= 100) "Až konec" else "$it %" },
+            onSelect = vm::setPlayerMarkWatchedPct,
+        )
+        SettingSwitchRow(
+            title = "Po dokoukání zavřít přehrávač",
+            subtitle = "Když film nebo díl doběhne, appka se sama vrátí o krok zpět (na detail). Vypnuto = " +
+                "přehrávač zůstane stát na poslední scéně.",
+            checked = sys.playerExitOnFinish,
+            onCheckedChange = vm::setPlayerExitOnFinish,
+        )
+        SettingSwitchRow(
+            title = "Hlásit dokoukané filmy na Trakt",
+            subtitle = "Týká se filmů přehraných ze streamu (mimo Jellyfin knihovnu). Pozor: Trakt umí při " +
+                "zápisu do historie sám odebrat film z \"Chci vidět\", což změní i obsah Filmotéky.",
+            checked = sys.playerTraktMarkWatched,
+            onCheckedChange = vm::setPlayerTraktMarkWatched,
+        )
         SettingSwitchRow(
             title = "Přehrát rovnou u zapamatovaného zdroje",
             subtitle = "Klik na kartu v řadě \"Uloženo k přehrání\" spustí přehrávání hned, místo otevření detailu. " +

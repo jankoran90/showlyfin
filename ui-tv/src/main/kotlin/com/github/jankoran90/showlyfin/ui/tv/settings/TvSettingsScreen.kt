@@ -334,6 +334,27 @@ fun TvSettingsScreen(
                     checked = forceSw,
                     onCheckedChange = { forceSw = it; rdPrefs.edit().putBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, it).apply() },
                 )
+                // CURTAIN (SHW-109) — konec přehrávání. Parita s telefonem (FilmyPlayerSection).
+                TvOptionStepperRow(
+                    label = "Zhlédnuto od",
+                    subtitle = "Kolik procent stopáže stačí, aby se film/díl označil za zhlédnutý (závěrečné titulky nikdo nedokouká)",
+                    options = PlayerPrefs.MARK_WATCHED_PCT_OPTIONS,
+                    selected = sys.playerMarkWatchedPct,
+                    labelOf = { if (it >= 100) "Až konec" else "$it %" },
+                    onSelect = settings::setPlayerMarkWatchedPct,
+                )
+                TvToggleRow(
+                    label = "Po dokoukání zavřít přehrávač",
+                    subtitle = "Když díl doběhne, vrátíme se sami o krok zpět na detail",
+                    checked = sys.playerExitOnFinish,
+                    onCheckedChange = settings::setPlayerExitOnFinish,
+                )
+                TvToggleRow(
+                    label = "Hlásit dokoukané filmy na Trakt",
+                    subtitle = "Jen filmy ze streamu. Pozor: Trakt je pak umí sám odebrat z \"Chci vidět\" (změní Filmotéku)",
+                    checked = sys.playerTraktMarkWatched,
+                    onCheckedChange = settings::setPlayerTraktMarkWatched,
+                )
                 // CATALOGUE — parita s telefonem (FilmyPlayerSection): opt-in autoplay u karty „Uloženo k přehrání".
                 // Raw trakt_prefs, čte TvHomeViewModel.autoplayRememberedEnabled() při kliku. Default OFF.
                 var autoplayRemembered by remember { mutableStateOf(rdPrefs.getBoolean("autoplay_remembered_enabled", false)) }

@@ -88,6 +88,10 @@ data class SettingsUiState(
     val playerSeekStepSec: Int = PlayerPrefs.DEFAULT_SEEK_STEP_SEC,
     // TENFOOT F2d — na TV boxu passthrough zvuku do AVR (bez FFmpeg SW decode) kvůli A/V lip-sync.
     val playerTvAudioPassthrough: Boolean = PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH,
+    // CURTAIN (SHW-109) — konec přehrávání: od kolika % je titul zhlédnutý, zavřít po dokoukání, Trakt historie.
+    val playerMarkWatchedPct: Int = PlayerPrefs.DEFAULT_MARK_WATCHED_PCT,
+    val playerExitOnFinish: Boolean = PlayerPrefs.DEFAULT_EXIT_ON_FINISH,
+    val playerTraktMarkWatched: Boolean = PlayerPrefs.DEFAULT_TRAKT_MARK_WATCHED,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
     // CELLULOID (SHW-98) — živě dotahovat auto-nacachované zdroje (backfill watchlistu) při otevření detailu,
@@ -271,6 +275,9 @@ class SettingsViewModel @Inject constructor(
                 playerControlsHideSec = prefs.getInt(PlayerPrefs.CONTROLS_HIDE_SEC_KEY, PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC),
                 playerSeekStepSec = prefs.getInt(PlayerPrefs.SEEK_STEP_SEC_KEY, PlayerPrefs.DEFAULT_SEEK_STEP_SEC),
                 playerTvAudioPassthrough = prefs.getBoolean(PlayerPrefs.TV_AUDIO_PASSTHROUGH_KEY, PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH),
+                playerMarkWatchedPct = prefs.getInt(PlayerPrefs.MARK_WATCHED_PCT_KEY, PlayerPrefs.DEFAULT_MARK_WATCHED_PCT),
+                playerExitOnFinish = prefs.getBoolean(PlayerPrefs.EXIT_ON_FINISH_KEY, PlayerPrefs.DEFAULT_EXIT_ON_FINISH),
+                playerTraktMarkWatched = prefs.getBoolean(PlayerPrefs.TRAKT_MARK_WATCHED_KEY, PlayerPrefs.DEFAULT_TRAKT_MARK_WATCHED),
             )
         }
         viewModelScope.launch {
@@ -479,6 +486,24 @@ class SettingsViewModel @Inject constructor(
     fun setPlayerTvAudioPassthrough(v: Boolean) {
         prefs.edit().putBoolean(PlayerPrefs.TV_AUDIO_PASSTHROUGH_KEY, v).apply()
         _uiState.update { it.copy(playerTvAudioPassthrough = v) }
+    }
+
+    /** CURTAIN (SHW-109) — od kolika % délky je titul zhlédnutý (závěrečné titulky nikdo nedokouká). */
+    fun setPlayerMarkWatchedPct(v: Int) {
+        prefs.edit().putInt(PlayerPrefs.MARK_WATCHED_PCT_KEY, v).apply()
+        _uiState.update { it.copy(playerMarkWatchedPct = v) }
+    }
+
+    /** CURTAIN — po dokoukání sám zavřít přehrávač (návrat o krok zpět). */
+    fun setPlayerExitOnFinish(v: Boolean) {
+        prefs.edit().putBoolean(PlayerPrefs.EXIT_ON_FINISH_KEY, v).apply()
+        _uiState.update { it.copy(playerExitOnFinish = v) }
+    }
+
+    /** CURTAIN — hlásit dokoukaný film ze streamu do Trakt historie (default vyp, viz [PlayerPrefs]). */
+    fun setPlayerTraktMarkWatched(v: Boolean) {
+        prefs.edit().putBoolean(PlayerPrefs.TRAKT_MARK_WATCHED_KEY, v).apply()
+        _uiState.update { it.copy(playerTraktMarkWatched = v) }
     }
     fun setContinuePodcastAfterQueue(v: Boolean) = updateListen { continuePodcastAfterQueue = v }
     fun setPersistQueue(v: Boolean) = updateListen { persistQueue = v }

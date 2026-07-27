@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.feature.detail.DetailActionsPlacement
@@ -76,7 +77,15 @@ internal fun ImmersiveOverlayLayout(
     ) {
         // Hero drží prostor pro fanart+blok; zbytek viewportu (0.40) je na první řadu obsahu bez scrollu.
         // Bez obsahových řad (samotný popis) dej hero víc plochy.
-        val heroHeight = maxHeight * (if (hasContentRows) 0.60f else 0.72f)
+        // CURTAIN (SHW-109, user 07-27 „lišta sezón se překrývá"): u seriálu je první sekce DVOJITÁ —
+        // lišta sezón NAD řadou epizod. Do zbylých 40 % se to nevešlo, fokus na kartě epizody proto scrollem
+        // vytáhl chipy sezón zpola pod hero (vypadalo to jako překryv). Seriál se sezónami → nižší hero.
+        val showsSeasonBar = uiState.showSeasons && displayItem.type == MediaType.SHOW && uiState.seasons.isNotEmpty()
+        val heroHeight = maxHeight * when {
+            !hasContentRows -> 0.72f
+            showsSeasonBar -> 0.50f
+            else -> 0.60f
+        }
 
         // AUTO-KOMPAKT: kolik řádků popisu se vejde do bloku, aby blok nepřerostl hero (a první řada zůstala vidět).
         // Rezerva = název (~56) + žánry (~28) + akce (~64) + spacing/padding (~84). lineHeight bodyLarge ~24 dp.

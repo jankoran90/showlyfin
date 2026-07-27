@@ -80,6 +80,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
@@ -137,6 +138,15 @@ fun DetailScreen(
         viewModel.load(item)
         // TENFOOT KOLO2 (K): po návratu (back) na tento titul obnov stashnutou filmografii, pokud tu je.
         viewModel.reopenPendingPersonSheet(item)
+        // CURTAIN: na TV je přehrávač destinace TÉŽE Activity → detail se sem vrací novou kompozicí (ne
+        // ON_RESUME). Obnovu stavu epizod proto pověsíme i sem; bez načteného seriálu je to no-op.
+        viewModel.refreshEpisodeStatus()
+    }
+
+    // CURTAIN (SHW-109): návrat z přehrávače → přenačti fajfky/„Pokračovat" u epizod. `load()` má na tentýž
+    // titul early-return, takže bez tohohle by dokoukaný díl vypadal pořád jako nezhlédnutý.
+    LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshEpisodeStatus()
     }
 
     // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook — jednou po vstupu (auto-výběr zdroje řeší VM:
