@@ -40,6 +40,8 @@ class TvFilmotekaSettingsViewModel @Inject constructor(
     val hybridGenres: StateFlow<Boolean> = store.hybridGenres
     /** FOYER (SHW-107) — karty kolekcí (Jellyfin BoxSet) ve Filmotéce; default vypnuto. */
     val showCollections: StateFlow<Boolean> = store.showCollections
+    /** FOYER (SHW-107) — jen tituly s dohledaným zdrojem / z JF knihovny; default vypnuto. */
+    val onlyWithSource: StateFlow<Boolean> = store.onlyWithSource
 
     // ORCHARD (user 07-19) — per-library výběr JF knihoven Filmotéky na TV (parita s telefonem). TV má JF creds
     // zděděné z telefonního loginu přes backend config. Nabídka knihoven z JF; výběr = filmotekaJfLibraries.
@@ -61,6 +63,9 @@ class TvFilmotekaSettingsViewModel @Inject constructor(
     fun setDefaultAxis(axis: FilmotekaAxis) = store.setDefaultAxis(axis)
     fun setAllSort(sort: FilmotekaAllSort) = store.setAllSort(sort)
     fun setRegion(region: CinematographyRegion, enabled: Boolean) = store.setRegionEnabled(region, enabled)
+    /** FOYER — zapni/vypni „jen tituly s dohledaným zdrojem" (skryje to, co se teprve shání). */
+    fun setOnlyWithSource(enabled: Boolean) = store.setOnlyWithSource(enabled)
+
     /** FOYER — zapni/vypni karty kolekcí (vypnuto = kolekce se neukazují, filmy uvnitř zůstávají zvlášť). */
     fun setShowCollections(enabled: Boolean) = store.setShowCollections(enabled)
 

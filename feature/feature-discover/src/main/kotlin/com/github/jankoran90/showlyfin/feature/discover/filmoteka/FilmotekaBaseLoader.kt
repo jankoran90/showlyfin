@@ -114,7 +114,10 @@ class FilmotekaBaseLoader @Inject constructor(
     ): List<MediaItem> {
         if (FilmotekaSource.FAVORITES !in enabled) return emptyList()
         val cap = ageCap()
-        val base = list.filter { it.kind == FavoriteKind.MOVIE && it.id > 0L }
+        // „Jen s dohledaným zdrojem" musí platit i pro Oblíbené — ta jdou mimo [gather], takže by filtr obešla.
+        val savedKeys = if (settings.onlyWithSource.value) workingSources.savedKeys.value else null
+        val source = if (savedKeys == null) list else list.filter { "tmdb:${it.id}" in savedKeys }
+        val base = source.filter { it.kind == FavoriteKind.MOVIE && it.id > 0L }
             .map { fav -> stub(fav.id, null, fav.name, fav.year, isShow = false, addedAtMs = fav.addedAtMs.takeIf { it > 0L }) }
         val enriched = enricher.enrich(base, withCertification = cap != null)
         return ContentAgeGate.filter(cap, enriched, hideUnrated())
@@ -171,7 +174,7 @@ class FilmotekaBaseLoader @Inject constructor(
     fun lastLoadComplete(): Boolean =
         FilmotekaSource.JELLYFIN !in settings.sources.value || lastJellyfinCount > 0
 
-    /** Zahoď cache „nedávno přidané" (přepnutí profilu / ruční refresh domova). */
+    /** Zahoď cache „nedávno přidané" (přepnutí profilu / změna nastavení / ruční refresh domova). */
     fun invalidateRecent() { recentCache = null }
 
     private data class RecentCache(val profileId: Long?, val atMs: Long, val items: List<MediaItem>)
@@ -190,6 +193,15 @@ class FilmotekaBaseLoader @Inject constructor(
         }
         val jf = jfD.await(); val ws = wsD.await(); val tk = tkD.await()
         lastJellyfinCount = jf.size
+        // FOYER (SHW-107, user 2026-07-27): „jen tituly s dohledaným zdrojem" — do Filmotéky (a tím i do řady
+        // na domově) pusť jen to, co jde reálně pustit: má uložený PŘEHRATELNÝ zdroj, nebo je přímo v Jellyfin
+        // knihovně (ta hraje ze serveru). Tituly z „Chci vidět"/Oblíbených, kterým se zdroj teprve shání, se
+        // schovají, dokud auto-cache nedoběhne. Filtr běží PŘED enrichem = ušetří i TMDB dotazy.
+        val playableOnly = settings.onlyWithSource.value
+        val allowedKeys: Set<String>? = if (!playableOnly) null else buildSet {
+            jf.forEach { dedupKey(it)?.let(::add) }
+            ws.forEach { dedupKey(it)?.let(::add) }
+        }
         val merged = LinkedHashMap<String, MediaItem>()
         for (list in listOf(jf, ws, tk)) {
             for (item in list) { val k = dedupKey(item) ?: continue; merged.putIfAbsent(k, item) }
@@ -199,7 +211,9 @@ class FilmotekaBaseLoader @Inject constructor(
         for (list in listOf(jf, tk)) {
             for (item in list) { val k = dedupKey(item) ?: continue; item.addedAtMs?.let { recency.putIfAbsent(k, it) } }
         }
-        merged.values.map { item -> item.copy(addedAtMs = dedupKey(item)?.let { recency[it] }) }
+        merged.values
+            .filter { allowedKeys == null || dedupKey(it)?.let { k -> k in allowedKeys } == true }
+            .map { item -> item.copy(addedAtMs = dedupKey(item)?.let { recency[it] }) }
     }
 
     private suspend fun loadJellyfinLibrary(): List<MediaItem> = coroutineScope {

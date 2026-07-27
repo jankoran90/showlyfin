@@ -172,6 +172,12 @@ class TvFilmotekaViewModel @Inject constructor(
 
         // RUBRIC (SHW-104) — přepnutí hybridního seskupení žánrů jen PŘESKUPÍ už-obohacenou bázi (bez fetch),
         // aby se řady/nabídka filtru ose Žánr překreslily ŽIVĚ. drop(1) = ignoruj iniciální emit.
+        // FOYER (SHW-107) — přepnutí „Jen s dohledaným zdrojem" → přenačti bázi (filtr běží při sběru).
+        settings.onlyWithSource
+            .drop(1)
+            .onEach { filmotekaBase.invalidateRecent(); reload() }
+            .launchIn(viewModelScope)
+
         // FOYER (SHW-107) — přepnutí „Karty kolekcí" v Nastavení → přenačti (kolekce se dotahují zvlášť).
         settings.showCollections
             .drop(1)

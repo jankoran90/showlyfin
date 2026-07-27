@@ -62,6 +62,15 @@ class FilmotekaSettingsStore @Inject constructor(
      */
     val showCollections: StateFlow<Boolean> = _showCollections.asStateFlow()
 
+    private val _onlyWithSource = MutableStateFlow(loadOnlyWithSource())
+    /**
+     * FOYER (SHW-107, user 2026-07-27 „ve Filmotéce by měly být vidět až po uložení zdroje, tj. i na home"):
+     * ukaž JEN tituly, které jdou reálně pustit — mají dohledaný zdroj (working source) NEBO jsou přímo
+     * v Jellyfin knihovně (ta hraje ze serveru, žádné dohledávání nepotřebuje). Vypnuto (default) = Filmotéka
+     * ukazuje i tituly z „Chci vidět"/Oblíbených, kterým se zdroj teprve shání. Platí i pro řadu na domově.
+     */
+    val onlyWithSource: StateFlow<Boolean> = _onlyWithSource.asStateFlow()
+
     /** Přepni na nastavení daného profilu — přenačte všechny toky. Idempotentní (stejný profil = no-op). */
     fun switchProfile(id: Long?) {
         if (id == activeId && switched) return
@@ -73,6 +82,7 @@ class FilmotekaSettingsStore @Inject constructor(
         _enabledRegions.value = loadRegions()
         _hybridGenres.value = loadHybridGenres()
         _showCollections.value = loadShowCollections()
+        _onlyWithSource.value = loadOnlyWithSource()
     }
 
     fun setSourceEnabled(source: FilmotekaSource, enabled: Boolean) {
@@ -112,6 +122,15 @@ class FilmotekaSettingsStore @Inject constructor(
 
     private fun loadShowCollections(): Boolean =
         prefs.getBoolean(keyFor(KEY_SHOW_COLLECTIONS), prefs.getBoolean(KEY_SHOW_COLLECTIONS, false))
+
+    /** FOYER — zapni/vypni „jen tituly s dohledaným zdrojem" (per profil). */
+    fun setOnlyWithSource(enabled: Boolean) {
+        _onlyWithSource.value = enabled
+        prefs.edit().putBoolean(keyFor(KEY_ONLY_WITH_SOURCE), enabled).apply()
+    }
+
+    private fun loadOnlyWithSource(): Boolean =
+        prefs.getBoolean(keyFor(KEY_ONLY_WITH_SOURCE), prefs.getBoolean(KEY_ONLY_WITH_SOURCE, false))
 
     private fun loadSources(): Set<FilmotekaSource> {
         val raw = prefs.getString(keyFor(KEY_SOURCES), null) ?: prefs.getString(KEY_SOURCES, null)
@@ -156,6 +175,8 @@ class FilmotekaSettingsStore @Inject constructor(
         const val KEY_HYBRID = "hybrid_genres"
         /** FOYER (SHW-107) — karty kolekcí (BoxSet) ve Filmotéce; default false. */
         const val KEY_SHOW_COLLECTIONS = "show_collections"
+        /** FOYER (SHW-107) — jen tituly s dohledaným zdrojem / z JF knihovny; default false. */
+        const val KEY_ONLY_WITH_SOURCE = "only_with_source"
         val ALL_SOURCES: Set<FilmotekaSource> = FilmotekaSource.entries.toSet()
 
         // Výchozí zapnuté zdroje = vše KROMĚ Jellyfinu (user 07-19: JF do Filmotéky jen když ho vybere v Nastavení,

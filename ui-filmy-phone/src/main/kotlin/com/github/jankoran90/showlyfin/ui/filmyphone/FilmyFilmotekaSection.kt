@@ -26,6 +26,8 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
     val allSort by vm.allSort.collectAsStateWithLifecycle()
     val enabledRegions by vm.enabledRegions.collectAsStateWithLifecycle()
     val hybridGenres by vm.hybridGenres.collectAsStateWithLifecycle()
+    val showCollections by vm.showCollections.collectAsStateWithLifecycle()
+    val onlyWithSource by vm.onlyWithSource.collectAsStateWithLifecycle()
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SettingSectionTitle("Filmotéka")
@@ -68,6 +70,20 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
             selected = allSort,
             labelOf = ::allSortLabel,
             onSelect = vm::setAllSort,
+        )
+        SettingSwitchRow(
+            title = "Jen s dohledaným zdrojem",
+            subtitle = "Ukázat jen tituly, které jdou hned pustit — mají uložený zdroj nebo jsou v Jellyfin " +
+                "knihovně. Vypnuto = uvidíš i filmy z „Chci vidět\" a Oblíbených, kterým se zdroj teprve shání. " +
+                "Platí i pro řadu Filmotéka na domovské obrazovce.",
+            checked = onlyWithSource,
+            onCheckedChange = { vm.setOnlyWithSource(it) },
+        )
+        SettingSwitchRow(
+            title = "Karty kolekcí",
+            subtitle = "Zobrazit řadu „Kolekce\" (Jellyfin BoxSet). Vypnuto = jen jednotlivé filmy.",
+            checked = showCollections,
+            onCheckedChange = { vm.setShowCollections(it) },
         )
         SettingSwitchRow(
             title = "Hybridní žánry",

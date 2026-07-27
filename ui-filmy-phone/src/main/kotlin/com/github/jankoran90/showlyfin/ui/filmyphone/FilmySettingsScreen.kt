@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -231,8 +232,13 @@ fun FilmySettingsScreen(
                     onSelect = { homeRowLimit = it; FilmyShellPrefs.setHomeRowLimit(ctx, it) },
                 )
                 FilmyCuratorSection()
-                FilmyFilmotekaSection()
                 FilmyGemsSection()
+            }
+
+            // ── FILMOTÉKA (user 2026-07-27: na telefonu se ztrácela uvnitř „Objevování" — parita s TV,
+            // kde má vlastní blok. Zdroje (vč. Jellyfin knihovny) se přepínají PER PROFIL.) ─────────
+            FilmyCollapsibleSection("Filmotéka", Icons.Rounded.VideoLibrary) {
+                FilmyFilmotekaSection()
             }
 
             // ── VZHLED (téma/písmo + detail obsahu) ───────────────────────────────
