@@ -48,6 +48,10 @@ class FilmyMainActivity : ComponentActivity() {
     @Inject lateinit var profileRepository: ProfileRepository
     @Inject lateinit var filmyProfileManager: FilmyProfileManager
 
+    // EMBER (SHW-108) — hlídač: tiché prodloužení Trakt tokenu pošli i na server (jinak serverová kopie
+    // stárne mezi ručními loginy a zrcadlo Traktu / kurátor „Pro tebe" tiše dojedou na starém tokenu).
+    @Inject lateinit var traktTokenServerSync: com.github.jankoran90.showlyfin.core.data.TraktTokenServerSync
+
     // CELLULOID (SHW-98) — per-profil stores: po sjednocení profilového klíče je nutné PŘETÁHNOUT
     // s NOVÝM klíčem. Při startu se totiž stihnou nasyncovat se STARÝM (filmy-adult) dřív, než doběhne
     // migrace klíče v coroutine → jinak zůstanou prázdné (0 zdrojů/oblíbených/hodnocení) do dalšího cold-startu.
@@ -86,6 +90,8 @@ class FilmyMainActivity : ComponentActivity() {
             // → „Uploader není nastaven". Idempotentní (isAvailable() guard). Bez roster seedu (jen login).
             profileRepository.ensureUploaderLogin()
             profileRepository.restoreActive(preferTv = isTV)
+            // EMBER — až PO restoreActive (hlídač potřebuje znát aktivní profil, jinak by push zahodil).
+            traktTokenServerSync.start()
             // CELLULOID (SHW-98) — TVRDÁ pojistka profilového klíče. Diagnóza (telefon v1.0.18): DB aktivní
             // profil má správný klíč (AIRWAVE hlásí reálný účet 3bfabcbd…), ALE app-pref `jellyfin_user_id`
             // zůstal na starém synthetic „filmy-adult" (per-profil stores z něj čtou → tahaly prázdný ostrov,

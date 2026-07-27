@@ -379,12 +379,13 @@ class ProfileRepository @Inject constructor(
      * návratu na profil přepsal prefs STARÝM (rotací zneplatněným) tokenem z balíku → 401 → odhlášení.
      * Zároveň zrcadlí legacy token (jen v prefs, bez per-profil balíku) do balíku, aby ho gate uviděl.
      * Idempotentní: shodný token = no-op. Best-effort push na backend (cross-device).
+     * Vrací `true`, když se balík reálně změnil (volající pak smí kopnout server mirror).
      */
-    private suspend fun captureCurrentTraktIntoProfile(profileId: Long) {
-        val access = prefs.getString("TRAKT_ACCESS_TOKEN", null)?.takeIf { it.isNotBlank() } ?: return
-        val profile = dao.getById(profileId) ?: return
+    private suspend fun captureCurrentTraktIntoProfile(profileId: Long): Boolean {
+        val access = prefs.getString("TRAKT_ACCESS_TOKEN", null)?.takeIf { it.isNotBlank() } ?: return false
+        val profile = dao.getById(profileId) ?: return false
         val override = ProfileConfig.fromJson(profile.configJson)
-        if (override.credentials.trakt?.accessToken == access) return // shoda → nic
+        if (override.credentials.trakt?.accessToken == access) return false // shoda → nic
         timber.log.Timber.i("[TRAKT-GUARD] capture prefs token→config profil=%d accessLen=%d", profileId, access.length)
         val newTrakt = TraktCreds(
             accessToken = access,
@@ -398,6 +399,24 @@ class ProfileRepository @Inject constructor(
         dao.update(profile.copy(configJson = newJson))
         // Best-effort write-through (gateway polyká chyby); NEaplikujeme — prefs už ten token drží.
         configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId)
+        return true
+    }
+
+    /**
+     * EMBER (SHW-108, user 2026-07-27) — pošli AKTUÁLNÍ Trakt token aktivního profilu na server.
+     * Dřív se token na backend dostal JEN po ručním (re)loginu ([SettingsViewModel]); TICHÉ prodloužení
+     * ([TraktTokenProvider.saveTokens]) o serveru nevědělo, takže serverová kopie postupně zestárla a
+     * server-side věci nad vkusem (zrcadlo Traktu → kurátor „Pro tebe", scrobble) tiše dojely na starém
+     * tokenu. Zařízení = zdroj pravdy; tohle je jeho hlásná trouba na server.
+     * Idempotentní (shodný token = no-op, žádný síťový provoz). Mirror kopneme jen při reálné změně.
+     */
+    suspend fun syncTraktTokenToServer(kickMirror: Boolean = true): Boolean {
+        val activeId = prefs.getLong(PREF_ACTIVE_PROFILE_ID, 0L).takeIf { it > 0L } ?: return false
+        val changed = runCatching { captureCurrentTraktIntoProfile(activeId) }
+            .onFailure { Timber.w(it, "[EMBER] push Trakt tokenu na server selhal") }
+            .getOrDefault(false)
+        if (changed && kickMirror) refreshTraktMirror(activeId)
+        return changed
     }
 
     suspend fun setActive(profileId: Long) {
