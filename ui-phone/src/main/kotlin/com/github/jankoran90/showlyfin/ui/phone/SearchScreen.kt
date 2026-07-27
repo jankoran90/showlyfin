@@ -228,6 +228,9 @@ internal fun SearchScreen(
                             onStar = { vm.toggleFavorite(FavoriteItem(FavoriteKind.COMPANY, result.id, result.name, result.logoUrl)) },
                             onClick = { vm.openWorks(FavoriteKind.COMPANY, result.id, result.name) },
                         )
+                        // VLTAVA F6: rozsah „Česká televize" nabízí jen appka Filmy (FilmySearchScreen),
+                        // sem se takový výsledek nikdy nedostane — showlyfin hledá čistě TMDB.
+                        is SearchResult.Ctv -> Unit
                     }
                 }
             }
