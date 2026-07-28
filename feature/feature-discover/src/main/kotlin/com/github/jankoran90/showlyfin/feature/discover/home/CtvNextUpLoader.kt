@@ -44,7 +44,9 @@ class CtvNextUpLoader @Inject constructor(
 
     // Cache NESE profil: uložené ČT pořady jsou per profil, takže po přepnutí nesmí přežít (jinak by
     // dětský domov ukázal pořady dospělého, dokud nevyprší TTL).
-    private data class Cached(val profileKey: String, val atMs: Long, val items: List<HomeRowItem>)
+    // `watchedStamp` = otisk sady zhlédnutých dílů: jakmile se změní, cache je neplatná (jinak by řada
+    // až 10 minut nabízela díl, který už je dokoukaný — user 2026-07-28).
+    private data class Cached(val profileKey: String, val watchedStamp: Int, val atMs: Long, val items: List<HomeRowItem>)
 
     @Volatile private var cache: Cached? = null
 
@@ -55,7 +57,8 @@ class CtvNextUpLoader @Inject constructor(
         if (limit <= 0 || baseUrl.isBlank()) return emptyList()
         val now = System.currentTimeMillis()
         val profileKey = prefs.getString("jellyfin_user_id", "").orEmpty()
-        cache?.takeIf { it.profileKey == profileKey && now - it.atMs < CACHE_TTL_MS }
+        val watchedStamp = watchedStore.watched.value.hashCode()
+        cache?.takeIf { it.profileKey == profileKey && it.watchedStamp == watchedStamp && now - it.atMs < CACHE_TTL_MS }
             ?.let { return it.items.take(limit) }
 
         // Jen POŘADY s díly; ČT film žádné „další díly" nemá (ten patří do Filmotéky jako film).
@@ -64,14 +67,14 @@ class CtvNextUpLoader @Inject constructor(
             ShowRef(sidp = sidp, title = ws.title, poster = ws.poster)
         }.take(MAX_SHOWS)
         if (shows.isEmpty()) {
-            cache = Cached(profileKey, now, emptyList())
+            cache = Cached(profileKey, watchedStamp, now, emptyList())
             return emptyList()
         }
 
         val items = coroutineScope {
             shows.map { show -> async { nextEpisodeOf(show) } }.awaitAll()
         }.filterNotNull()
-        cache = Cached(profileKey, now, items)
+        cache = Cached(profileKey, watchedStamp, now, items)
         Timber.i("[VLTAVA] Další díly ČT: %d pořadů → %d položek", shows.size, items.size)
         return items.take(limit)
     }

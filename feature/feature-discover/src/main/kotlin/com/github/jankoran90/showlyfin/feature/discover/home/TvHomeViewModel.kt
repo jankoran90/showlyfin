@@ -89,6 +89,8 @@ class TvHomeViewModel @Inject constructor(
     private val filmotekaBase: com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaBaseLoader,
     // VLTAVA F6c — ČT pořady z Filmotéky do řady „Další díly" (Jellyfin část zůstává, ČT se připojí za ni).
     private val ctvNextUp: CtvNextUpLoader,
+    // VLTAVA F6c — zhlédnuté ČT díly řídí, co ukáže řada „Další díly" → musí ji přenačíst.
+    private val ctvWatched: com.github.jankoran90.showlyfin.core.domain.resume.CtvWatchedStore,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val profileRepository: ProfileRepository,
     private val apiClient: ApiClient,
@@ -240,6 +242,25 @@ class TvHomeViewModel @Inject constructor(
             .drop(1)
             .onEach { invalidateFilmotekaRow() }
             .launchIn(viewModelScope)
+
+        // 🔴 VLTAVA F6c (user 2026-07-28 „když začnu koukat na Magické hlubiny od prvního dílu, tak
+        // v Další díly je pořád Jezera a bažiny — nereaguje to na to, co sleduju"): řada se skládala
+        // jednou a držela se 10 min v cache, takže označení dílu za zhlédnutý s ní nehnulo. Teď na
+        // změnu zhlédnutých ČT dílů cache zahodíme a řadu přenačteme.
+        ctvWatched.watched
+            .drop(1)
+            .onEach { invalidateCtvNextUpRow() }
+            .launchIn(viewModelScope)
+    }
+
+    /** Přenačti řady, kam patří ČT „další díly" (zahodí i cache loaderu). */
+    private fun invalidateCtvNextUpRow() {
+        ctvNextUp.invalidate()
+        val configs = rowConfigs.value.filter {
+            it.source == HomeRowSourceType.NEXT_UP || it.source == HomeRowSourceType.CONTINUE_WATCHING_COMBINED
+        }
+        configs.forEach { loadedHash.remove(it.id) }
+        configs.forEach { ensureRowLoaded(it) }
     }
 
     /** Přenačti řadu Filmotéky (a zahoď její cache) — obsah závisí na watchlistu i uložených zdrojích. */
