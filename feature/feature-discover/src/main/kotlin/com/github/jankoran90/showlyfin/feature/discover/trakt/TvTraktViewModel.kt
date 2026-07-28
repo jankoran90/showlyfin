@@ -107,7 +107,7 @@ class TvTraktViewModel @Inject constructor(
 
     /** Obohacené Trakt [MediaItem] → [HomeRowItem] (mirror `TvHomeViewModel` mapperu). */
     private fun MediaItem.toHomeRowItem(railId: String) = HomeRowItem(
-        key = "trakt_${railId}_${type}_${tmdbId ?: traktId}",
+        key = "trakt_${railId}_${type}_${tmdbId ?: imdbId ?: traktId}",
         title = displayTitle,
         year = year,
         posterUrl = posterUrl("w342"),

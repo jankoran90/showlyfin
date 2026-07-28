@@ -504,7 +504,11 @@ class TvHomeViewModel @Inject constructor(
         Timber.i("[TvHome] Uloženo k přehrání: %d titulů, %d s posterem (enricher)", enriched.size, withPoster)
         return saved.zip(enriched).map { (ws, item) ->
             HomeRowItem(
-                key = "saved_${ws.tmdb}",
+                // 🔴 VLTAVA F6b (user 2026-07-28 „appka vypadává, když jich dám do filmotéky víc z ČT"):
+                // klíč MUSÍ nést identitu i pro titul BEZ TMDB (ČT = `ctvid:<sidp>` v `imdb`, `tmdb`=0).
+                // Dřív dostaly všechny ČT položky týž klíč `saved_0` → Compose seznam neunese dva stejné
+                // klíče (IllegalArgumentException) → padal celý domov včetně řady Filmotéky.
+                key = "saved_${ws.tmdb.takeIf { it > 0L } ?: ws.imdb}",
                 title = item.displayTitle,
                 posterUrl = item.posterUrl("w342"),
                 landscapeUrl = item.backdropUrl("w780"),
@@ -536,7 +540,7 @@ class TvHomeViewModel @Inject constructor(
         // Sdílený enricher (poster/backdrop + CZ titulek + žánry + certifikace jen když aktivní strop).
         return enricher.enrich(raw, withCertification = ageCap.value != null).map { item ->
             HomeRowItem(
-                key = "disc_${item.type}_${item.tmdbId ?: item.traktId}",
+                key = "disc_${item.type}_${item.tmdbId ?: item.imdbId ?: item.traktId}",
                 title = item.displayTitle,
                 year = item.year,
                 posterUrl = item.posterUrl("w342"),
@@ -548,7 +552,9 @@ class TvHomeViewModel @Inject constructor(
 
     /** COUCH T1/T2 — obohacené Trakt [MediaItem] (z [TraktRowLoader]) → [HomeRowItem] pro řadu domova. */
     private fun MediaItem.toHomeRowItem(config: HomeRowConfig) = HomeRowItem(
-        key = "trakt_${config.id}_${type}_${tmdbId ?: traktId}",
+        // imdbId v řetězci = tituly BEZ TMDB (ČT `ctvid:<sidp>`, jen-imdb z knihovny) mají každý svůj
+        // klíč. Bez toho padaly na `traktId`=0 do jednoho klíče → duplicita → pád řady (viz `saved_` výš).
+        key = "trakt_${config.id}_${type}_${tmdbId ?: imdbId ?: traktId}",
         title = displayTitle,
         year = year,
         posterUrl = posterUrl("w342"),

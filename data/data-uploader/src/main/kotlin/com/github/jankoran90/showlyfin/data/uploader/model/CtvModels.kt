@@ -29,6 +29,8 @@ data class CtvTitle(
     val duration: Double? = null,     // sekundy
     val description: String? = null,
     val thumbnail: String? = null,    // landscape karta ČT (16:9)
+    /** Svislý plakát 2:3 — ČT ho má jen u části pořadů (jinak null → padáme na [thumbnail]). */
+    val poster: String? = null,
     val genres: List<String>? = null,
     val idec: String? = null,
     val episodesAnchor: String? = null,

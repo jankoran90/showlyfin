@@ -174,7 +174,7 @@ private fun Centered(content: @Composable () -> Unit) {
 
 /** MediaItem → řadový model pro immersive řadu (vzor `TvTraktViewModel.toHomeRowItem`). */
 private fun MediaItem.toForYouRowItem(): HomeRowItem = HomeRowItem(
-    key = "foryou_${type}_${tmdbId ?: traktId}",
+    key = "foryou_${type}_${tmdbId ?: imdbId ?: traktId}",
     title = displayTitle,
     year = year,
     posterUrl = posterUrl("w342"),

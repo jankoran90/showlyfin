@@ -132,7 +132,9 @@ class CtvTitleViewModel @Inject constructor(
                     resolution = "1080p", audioLanguage = "CZ", source = "WEB", videoCodec = "H.264",
                 ),
             ),
-            poster = t.thumbnail,
+            // Obálka do Filmotéky: nejdřív svislý plakát ČT (sedí do karet 2:3), jinak 16:9 náhled
+            // (karta si ho pak vykreslí celý, viz `wideArtwork` v PosterCard) — user 2026-07-28.
+            poster = t.poster ?: t.thumbnail,
         )
         _state.update { it.copy(inFilmoteka = true) }
     }

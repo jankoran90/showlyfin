@@ -60,6 +60,9 @@ fun TvMediaCard(
         posterUrl = item.posterUrl("w342"),
         title = item.title,
         year = item.year,
+        // VLTAVA F6b — ČT titul bez svislého plakátu nese 16:9 grafiku → vykresli ji celou (parita
+        // s telefonem, viz PosterCard.wideArtwork). Název je na TV pod kartou, takže zůstane čitelný.
+        wideArtwork = item.imdbId?.startsWith("ctvid:") == true && item.posterPath == null,
         onClick = onClick,
         modifier = modifier,
         focusRequester = focusRequester,
@@ -97,6 +100,8 @@ fun TvPosterCard(
     showLabel: Boolean = true,
     onLongClick: (() -> Unit)? = null,
     ratingTarget: RatingTarget? = null,
+    /** Široká grafika 16:9 místo plakátu 2:3 (ČT iVysílání) → vykreslit celou, ne oříznout. */
+    wideArtwork: Boolean = false,
 ) {
     val shape = MaterialTheme.shapes.medium   // tvar z theme (design guard: žádný inline RoundedCornerShape)
     val ratingProvider = LocalUserRatingProvider.current
@@ -128,7 +133,7 @@ fun TvPosterCard(
             AsyncImage(
                 model = posterUrl,
                 contentDescription = title,
-                contentScale = ContentScale.Crop,
+                contentScale = if (wideArtwork) ContentScale.Fit else ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
             userStars?.let {
