@@ -592,6 +592,30 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
+     * user 2026-07-28 („budu potřebovat něco jako označit řady a díly jako zhlédnuté") — označ/odznač
+     * CELOU SEZÓNU. Bez toho je dohánění rozkoukaného seriálu klikání po jednom dílu.
+     * Zapisuje se do Jellyfinu ([JellyfinLibraryService.markPlayed]) po epizodách, protože přesně ty
+     * máme namapované na id ([DetailUiState.episodeJellyfinIds]); epizoda mimo knihovnu se přeskočí.
+     */
+    fun markSeasonWatched(season: Int, watched: Boolean) {
+        val ids = _uiState.value.episodeJellyfinIds.filterKeys { it.first == season }
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val done = mutableSetOf<Pair<Int, Int>>()
+            for ((key, jfId) in ids) {
+                if (jellyfinLibraryService.markPlayed(jfId, watched)) done += key
+            }
+            if (done.isEmpty()) return@launch
+            _uiState.update { st ->
+                val w = st.episodeWatched.toMutableSet()
+                if (watched) w.addAll(done) else w.removeAll(done)
+                st.copy(episodeWatched = w)
+            }
+            Timber.i("[CURTAIN] sezóna %d: %d epizod → zhlédnuto=%b", season, done.size, watched)
+        }
+    }
+
+    /**
      * CURTAIN (SHW-109): po návratu z přehrávače přenačti per-epizoda stav z Jellyfinu (fajfka + posun
      * odznaku „Pokračovat"). Nutné zvlášť: `load()` má na tentýž titul early-return a ViewModel žije dál
      * (Activity scope), takže by se dokoukaná epizoda projevila až po restartu appky.

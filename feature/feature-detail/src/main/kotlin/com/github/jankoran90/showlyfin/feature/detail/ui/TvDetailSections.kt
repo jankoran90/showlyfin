@@ -99,6 +99,7 @@ internal fun TvDetailSections(
                 nextUp = uiState.nextUpEpisode,
                 // KOLO2 (J): long-press na epizodě → přepni zhlédnuto (VM zapíše do Jellyfinu; no-op mimo knihovnu).
                 onToggleWatched = { s, e -> viewModel.toggleEpisodeWatched(s, e) },
+                onMarkSeasonWatched = { s, w -> viewModel.markSeasonWatched(s, w) },
             )
         }
 

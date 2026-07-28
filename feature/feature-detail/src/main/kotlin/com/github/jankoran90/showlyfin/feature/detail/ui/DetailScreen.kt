@@ -775,6 +775,13 @@ fun DetailScreen(
                     isLoadingEpisodes = uiState.isLoadingEpisodes,
                     onSelectSeason = { viewModel.selectSeason(it) },
                     onPlayEpisode = { s, e, t -> viewModel.playEpisode(s, e, t) },
+                    // user 2026-07-28: telefon dosud NEUKAZOVAL zhlédnuté epizody ani je neuměl přepnout
+                    // (TV to má od KOLO2) → fajfky, progres, „další díl" a označení celé sezóny i tady.
+                    watched = uiState.episodeWatched,
+                    progress = uiState.episodeProgress,
+                    nextUp = uiState.nextUpEpisode,
+                    onToggleWatched = { s, e -> viewModel.toggleEpisodeWatched(s, e) },
+                    onMarkSeasonWatched = { s, w -> viewModel.markSeasonWatched(s, w) },
                 )
             }
 

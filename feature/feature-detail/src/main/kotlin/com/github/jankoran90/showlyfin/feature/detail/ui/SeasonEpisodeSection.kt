@@ -71,6 +71,8 @@ fun SeasonEpisodeSection(
     progress: Map<Pair<Int, Int>, Int> = emptyMap(),
     nextUp: Pair<Int, Int>? = null,
     onToggleWatched: ((season: Int, episode: Int) -> Unit)? = null,
+    /** Označ/odznač CELOU sezónu (user 2026-07-28) — jinak se rozkoukaný seriál dohání po jednom dílu. */
+    onMarkSeasonWatched: ((season: Int, watched: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (seasons.isEmpty()) return
@@ -96,6 +98,19 @@ fun SeasonEpisodeSection(
                     modifier = Modifier.tvFocusable(shape = RoundedCornerShape(8.dp)),
                 )
             }
+            // „Označit sezónu" na konci lišty — text se řídí stavem, ať je jasné, co klik udělá.
+            if (onMarkSeasonWatched != null && episodes.isNotEmpty()) {
+                item {
+                    val season = selectedSeason ?: seasons.first().season_number
+                    val allWatched = episodes.all { (it.season_number ?: season) to it.episode_number in watched }
+                    FilterChip(
+                        selected = false,
+                        onClick = { onMarkSeasonWatched(season, !allWatched) },
+                        label = { Text(if (allWatched) "Odznačit sezónu" else "Označit sezónu") },
+                        modifier = Modifier.tvFocusable(shape = RoundedCornerShape(8.dp)),
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(10.dp))
         if (isLoadingEpisodes) {
@@ -116,9 +131,13 @@ fun SeasonEpisodeSection(
                 )
             } else {
                 episodes.forEach { ep ->
+                    val key = (ep.season_number ?: season) to ep.episode_number
                     EpisodeRow(
                         episode = ep,
+                        watched = key in watched,
                         onClick = { onPlayEpisode(ep.season_number ?: season, ep.episode_number, ep.name) },
+                        // Parita s TV (tam long-press funguje od KOLO2) — telefon fajfku ani přepínač neměl.
+                        onLongClick = onToggleWatched?.let { cb -> { cb(key.first, key.second) } },
                     )
                 }
             }
@@ -219,6 +238,7 @@ private fun TvEpisodeCard(
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
+            // Zhlédnutá epizoda = fajfka přes náhled (parita s TV stripem).
             val still = episode.stillUrl()
             if (still != null) {
                 AsyncImage(
@@ -297,15 +317,21 @@ private fun TvEpisodeCard(
     }
 }
 
-/** Telefon: vertikální řádek epizody (beze změny — WS-C). */
+/** Telefon: vertikální řádek epizody — fajfka „zhlédnuto" + dlouhý stisk = přepnutí (user 2026-07-28). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun EpisodeRow(episode: TmdbEpisode, onClick: () -> Unit) {
+private fun EpisodeRow(
+    episode: TmdbEpisode,
+    onClick: () -> Unit,
+    watched: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .tvFocusable(shape = RoundedCornerShape(10.dp))
             .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -333,6 +359,19 @@ private fun EpisodeRow(episode: TmdbEpisode, onClick: () -> Unit) {
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Zhlédnuto = fajfka přes náhled (parita s TV stripem, kde to bylo od KOLO2).
+            if (watched) {
+                Box(
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = "Zhlédnuto",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         }
         Column(Modifier.weight(1f)) {
             Text(
@@ -343,7 +382,8 @@ private fun EpisodeRow(episode: TmdbEpisode, onClick: () -> Unit) {
                 },
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = if (watched) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
