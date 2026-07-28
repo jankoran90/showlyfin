@@ -422,6 +422,11 @@ class ProfileRepository @Inject constructor(
 
     suspend fun setActive(profileId: Long) {
         val profile = dao.getById(profileId) ?: return
+        // 🔴 Kdo byl aktivní PŘED tímhle voláním — `setActive` totiž běží i při KAŽDÉM startu appky
+        // (`restoreActive`) se stejným profilem. Signál „profil se přepnul" smí odejít jen při REÁLNÉ
+        // změně; jinak vznikne smyčka start → re-create → start (user 2026-07-28: „bliká co půl vteřiny
+        // endlessly"). Čte se před zápisem prefs níž.
+        val previousActiveId = prefs.getLong(PREF_ACTIVE_PROFILE_ID, 0L)
         // COUCH per-profil: rotovaný/legacy Trakt token patří POSLEDNÍMU aktivnímu profilu — zrcadli ho
         // do jeho balíku DŘÍV, než applier níže přepíše prefs tokenem z balíku aktivovaného profilu.
         prefs.getLong(PREF_ACTIVE_PROFILE_ID, 0L).takeIf { it > 0L }?.let { captureCurrentTraktIntoProfile(it) }
@@ -452,7 +457,9 @@ class ProfileRepository @Inject constructor(
         // user 2026-07-28: skořápka si na tenhle signál vynutí re-create Activity → veškerý obsah
         // (i ten držený v `remember`/už načtených ViewModelech) se postaví znovu nad NOVÝM profilem.
         // Až ÚPLNĚ NAKONEC: prefs, config i backendový balík už sedí, takže reload čte správná data.
-        ProfileSwitchSignal.notifySwitched()
+        // JEN při reálné změně profilu (viz `previousActiveId`) — obnova téhož profilu při startu
+        // appky NENÍ přepnutí a re-create by se zacyklil.
+        if (previousActiveId != profileId) ProfileSwitchSignal.notifySwitched(profileId)
     }
 
     /**

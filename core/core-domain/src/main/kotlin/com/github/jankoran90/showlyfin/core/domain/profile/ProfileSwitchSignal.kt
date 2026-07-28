@@ -24,6 +24,20 @@ object ProfileSwitchSignal {
     /** Roste s každým dokončeným přepnutím profilu. 0 = od startu appky se nepřepínalo. */
     val switches: StateFlow<Long> = _switches.asStateFlow()
 
-    /** Zavolá [com.github.jankoran90.showlyfin.core.data.ProfileRepository] po dokončení přepnutí. */
-    fun notifySwitched() { _switches.value = _switches.value + 1 }
+    /** Poslední profil, o kterém jsme dali vědět — druhá pojistka proti smyčce (viz níž). */
+    @Volatile private var lastProfileId: Long = 0L
+
+    /**
+     * Zavolá [com.github.jankoran90.showlyfin.core.data.ProfileRepository] po dokončení přepnutí.
+     *
+     * 🔴 POJISTKA: tentýž profil signál NIKDY nezopakuje. `setActive` běží i při startu appky
+     * (obnova posledního profilu) — bezpodmínečné hlášení = re-create → start → hlášení → **smyčka**
+     * (user 2026-07-28: „bliká co půl vteřiny endlessly"). Guard je i ve volajícím; tady je záměrně
+     * podruhé, protože cena chyby je nepoužitelná appka.
+     */
+    fun notifySwitched(profileId: Long) {
+        if (profileId == lastProfileId) return
+        lastProfileId = profileId
+        _switches.value = _switches.value + 1
+    }
 }
