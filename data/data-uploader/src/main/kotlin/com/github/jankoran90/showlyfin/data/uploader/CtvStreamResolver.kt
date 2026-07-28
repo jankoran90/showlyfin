@@ -88,4 +88,26 @@ class CtvStreamResolver @Inject constructor(
 fun ctvIdecOrNull(url: String?): String? =
     url?.takeIf { it.startsWith(CTV_SCHEME) }?.removePrefix(CTV_SCHEME)?.takeIf { it.isNotBlank() }
 
+/** `ctvid:<sidp>` → `sidp` = IDENTITA ČT titulu ve Filmotéce (VLTAVA F6b); null u čehokoli jiného. */
+fun ctvSidpOrNull(identity: String?): String? =
+    identity?.takeIf { it.startsWith(CTV_ID_SCHEME) }?.removePrefix(CTV_ID_SCHEME)?.takeIf { it.isNotBlank() }
+
+/** Adresa VIDEA jednoho dílu/filmu ČT — resolvuje ji zařízení (`CtvStreamResolver`). */
 const val CTV_SCHEME = "ctv:"
+
+/**
+ * VLTAVA F6b — IDENTITA ČT titulu (pořadu i filmu) v uložených zdrojích. Schválně JINÝ prefix než
+ * [CTV_SCHEME]: tohle je `sidp` pořadu (trvalý), ne `idec` konkrétního videa. Sedí do pole `imdb`
+ * ve [WorkingSource], protože ČT titul žádné imdb/tmdb nemá — a klíčování zůstane jednotné.
+ */
+const val CTV_ID_SCHEME = "ctvid:"
+
+/**
+ * VLTAVA F6b — „stream" ČT POŘADU s díly: přehrát se nedá jeden odkaz, karta musí nabídnout díly.
+ * Uložený zdroj ho drží proto, aby pořad mohl být plnohodnotným členem Filmotéky.
+ */
+const val CTV_SHOW_SCHEME = "ctvshow:"
+
+/** `ctvshow:<sidp>` → `sidp`; null u čehokoli jiného. */
+fun ctvShowSidpOrNull(url: String?): String? =
+    url?.takeIf { it.startsWith(CTV_SHOW_SCHEME) }?.removePrefix(CTV_SHOW_SCHEME)?.takeIf { it.isNotBlank() }

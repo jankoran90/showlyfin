@@ -183,6 +183,12 @@ interface UploaderRemoteDataSource {
      */
     suspend fun searchCtv(baseUrl: String, sessionCookie: String, query: String, limit: Int = 20): List<CtvTitle>
 
+    /**
+     * VLTAVA F6b — čerstvá metadata ČT titulu podle `sidp` (popis, obrázek, `idec` k přehrání).
+     * Uložený zdroj drží jen identitu `ctvid:<sidp>`, protože `idec` je krátkodobá věc. null = nepovedlo se.
+     */
+    suspend fun getCtvTitle(baseUrl: String, sessionCookie: String, sidp: String): CtvTitle?
+
     // PRESET (SHW-65) — dynamický správce zdrojů Poslechu: sdílený store + hledání podle názvu + RSS epizody
     suspend fun listSources(baseUrl: String, sessionCookie: String): List<PodcastSource>
     suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?): List<PodcastSource>

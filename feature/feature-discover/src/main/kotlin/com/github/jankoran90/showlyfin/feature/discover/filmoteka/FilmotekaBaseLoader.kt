@@ -12,6 +12,8 @@ import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
+import com.github.jankoran90.showlyfin.data.uploader.ctvShowSidpOrNull
+import com.github.jankoran90.showlyfin.data.uploader.ctvSidpOrNull
 import com.github.jankoran90.showlyfin.data.uploader.isSavedPlayable
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
@@ -276,6 +278,11 @@ class FilmotekaBaseLoader @Inject constructor(
         return workingSources.getAll().mapNotNull { ws ->
             if (ws.tmdb <= 0L && ws.imdb.isBlank()) return@mapNotNull null
             if (!ws.isSavedPlayable()) return@mapNotNull null   // SENTINEL bod 3 B — jen reálně cached
+            // VLTAVA (SHW-110) F6b — titul z ČT iVysílání: nemá TMDB ani IMDb identitu, drží ji syntetickou
+            // (`ctvid:<sidp>`). Plakát nese s sebou (enricher nemá co dohledat) a POŘAD s díly je SHOW,
+            // aby ho karta uměla otevřít seznamem dílů, ne jako film.
+            val isCtv = ctvSidpOrNull(ws.imdb) != null
+            val isCtvShow = ctvShowSidpOrNull(ws.stream.url) != null
             MediaItem(
                 traktId = 0L,
                 tmdbId = ws.tmdb.takeIf { it > 0L },
@@ -285,7 +292,8 @@ class FilmotekaBaseLoader @Inject constructor(
                 overview = null,
                 rating = null,
                 genres = null,
-                type = MediaType.MOVIE,
+                type = if (isCtvShow) MediaType.SHOW else MediaType.MOVIE,
+                fallbackPosterUrl = ws.poster?.takeIf { isCtv && it.isNotBlank() },
                 // NEMĚNNÉ datum prvního uložení → working-only film v „Nedávno přidané" neskáče při re-cache.
                 addedAtMs = ws.firstSavedAtMs.takeIf { it > 0L } ?: ws.savedAtMs.takeIf { it > 0L },
             )

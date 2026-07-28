@@ -822,6 +822,13 @@ internal class UploaderApi(
         }.getOrElse { emptyList() }
     }
 
+    override suspend fun getCtvTitle(baseUrl: String, sessionCookie: String, sidp: String): CtvTitle? {
+        val base = baseUrl.trimEnd('/')
+        if (base.isBlank() || sidp.isBlank()) return null
+        val s = URLEncoder.encode(sidp, "UTF-8")
+        return runCatching { service.getCtvTitle("$base/api/ctv/title?sidp=$s", cookieOf(sessionCookie)) }.getOrNull()
+    }
+
     override suspend fun warmCtv(baseUrl: String, sessionCookie: String, idec: String) {
         val base = baseUrl.trimEnd('/')
         // /api/ctv/resolve vrací {ok}; getYtResolve je generický GET (Response<ResponseBody>) → reuse.

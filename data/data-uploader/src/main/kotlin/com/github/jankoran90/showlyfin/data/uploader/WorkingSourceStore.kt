@@ -48,6 +48,9 @@ data class WorkingSource(
     // LAPIDARY (SHW-96): true = auto-nacachováno naším enginem (cache-one); false = user-confirmed „👍".
     // Backend auto-zápis NEPŘEPÍŠE user-confirmed. Flag musí přežít round-trip app→server (proto v modelu).
     val auto: Boolean = false,
+    // VLTAVA (SHW-110) F6b: hotová URL plakátu pro tituly BEZ TMDB identity (ČT iVysílání) — jinak by
+    // karta ve Filmotéce zůstala prázdná (enricher nemá co dohledat). U běžných filmů zůstává null.
+    val poster: String? = null,
 )
 
 /**
@@ -373,7 +376,7 @@ class WorkingSourceStore @Inject constructor(
         return null
     }
 
-    fun save(imdb: String?, tmdb: Long?, title: String, stream: UploaderStream) {
+    fun save(imdb: String?, tmdb: Long?, title: String, stream: UploaderStream, poster: String? = null) {
         if (imdb.isNullOrBlank() && (tmdb == null || tmdb <= 0L)) return
         val now = System.currentTimeMillis()
         // neměnné datum prvního uložení — při re-save (změna zdroje) ho zachovej z existujícího záznamu,
@@ -383,6 +386,7 @@ class WorkingSourceStore @Inject constructor(
             imdb = imdb.orEmpty(), tmdb = tmdb ?: 0L, title = title, stream = stream,
             savedAtMs = now,
             firstSavedAtMs = existingFirst ?: now,
+            poster = poster,
         )
         val json = gson.toJson(record)
         // commit() (synchronně) — kritická akce, ať se zaručeně zapíše dřív, než appku zabije/aktualizuje.

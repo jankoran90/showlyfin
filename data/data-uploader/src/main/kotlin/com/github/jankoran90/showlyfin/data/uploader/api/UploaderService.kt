@@ -140,6 +140,8 @@ interface UploaderService {
     @GET suspend fun getCtvFeed(@Url url: String, @Header("Cookie") cookie: String): CtvShowFeed
     // VLTAVA (SHW-110) F6 — hledání titulů v ČT iVysílání (film/pořad + idec k přehrání)
     @GET suspend fun searchCtvTitles(@Url url: String, @Header("Cookie") cookie: String): CtvSearchResponse
+    // VLTAVA F6b — metadata jednoho ČT titulu podle sidp (dohydratace uloženého titulu ve Filmotéce)
+    @GET suspend fun getCtvTitle(@Url url: String, @Header("Cookie") cookie: String): CtvTitle
 
     // PRESET (SHW-65) — dynamický správce zdrojů Poslechu (sdílený store + hledání + RSS feed)
     @GET suspend fun listSources(@Url url: String, @Header("Cookie") cookie: String): SourcesResponse

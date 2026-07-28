@@ -16,8 +16,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -65,31 +68,34 @@ fun TvCtvScreen(
         }
     }
 
+    // Titul otevřený z Filmotéky nese jen identitu + název, zbytek dotáhne VM → kresli z jeho stavu.
+    val head = state.title ?: title
+
     Column(modifier.fillMaxSize().tvOverscan()) {
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.fillMaxWidth()) {
-            if (title.thumbnail != null) {
+            if (head.thumbnail != null) {
                 AsyncImage(
-                    model = title.thumbnail,
-                    contentDescription = title.title,
+                    model = head.thumbnail,
+                    contentDescription = head.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.width(320.dp).height(180.dp).clip(RoundedCornerShape(12.dp)),
                 )
             }
             Column(Modifier.weight(1f)) {
-                Text(title.title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+                Text(head.title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
                 val meta = buildList {
-                    add(if (title.isMovie) "Film" else "Pořad s díly")
-                    title.year?.let { add(it.toString()) }
-                    title.genres?.take(2)?.let { addAll(it) }
+                    add(if (head.isMovie) "Film" else "Pořad s díly")
+                    head.year?.let { add(it.toString()) }
+                    head.genres?.take(2)?.let { addAll(it) }
                     add("Česká televize")
                 }.joinToString(" · ")
                 Text(
                     meta, style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
                 )
-                if (!title.description.isNullOrBlank()) {
+                if (!head.description.isNullOrBlank()) {
                     Text(
-                        title.description!!, style = MaterialTheme.typography.bodyMedium,
+                        head.description!!, style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface, maxLines = 4,
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp),
                     )
@@ -100,24 +106,43 @@ fun TvCtvScreen(
                         color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 10.dp),
                     )
                 }
-                val movieIdec = title.idec.takeIf { title.isMovie && !it.isNullOrBlank() }
-                if (movieIdec != null) {
-                    Button(
-                        onClick = { vm.playIdec(movieIdec, title.title, title.thumbnail) },
-                        enabled = state.resolvingIdec == null,
-                        // Akcentní prstenec by na akcentním tlačítku splynul → kontrastní barva (viz tvFocusBorder).
-                        modifier = Modifier.padding(top = 16.dp)
-                            .tvFocusBorder(color = MaterialTheme.colorScheme.onPrimary),
-                    ) {
-                        if (state.resolvingIdec != null) {
-                            CircularProgressIndicator(
-                                strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        } else {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                Row(
+                    Modifier.padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val movieIdec = head.idec.takeIf { head.isMovie && !it.isNullOrBlank() }
+                    if (movieIdec != null) {
+                        Button(
+                            onClick = { vm.playIdec(movieIdec, head.title, head.thumbnail) },
+                            enabled = state.resolvingIdec == null,
+                            // Akcentní prstenec by na akcentním tlačítku splynul → kontrastní barva (viz tvFocusBorder).
+                            modifier = Modifier.tvFocusBorder(color = MaterialTheme.colorScheme.onPrimary),
+                        ) {
+                            if (state.resolvingIdec != null) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            } else {
+                                Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                            }
+                            Text("Přehrát", modifier = Modifier.padding(start = 10.dp))
                         }
-                        Text("Přehrát", modifier = Modifier.padding(start = 10.dp))
+                    }
+                    // VLTAVA F6b — parita s telefonem: ČT titul do Filmotéky (per profil, i u dětí).
+                    OutlinedButton(
+                        onClick = { vm.toggleFilmoteka() },
+                        modifier = Modifier.tvFocusBorder(),
+                    ) {
+                        Icon(
+                            if (state.inFilmoteka) Icons.Rounded.Check else Icons.Rounded.Add,
+                            contentDescription = null,
+                        )
+                        Text(
+                            if (state.inFilmoteka) "Ve Filmotéce" else "Do Filmotéky",
+                            modifier = Modifier.padding(start = 10.dp),
+                        )
                     }
                 }
             }

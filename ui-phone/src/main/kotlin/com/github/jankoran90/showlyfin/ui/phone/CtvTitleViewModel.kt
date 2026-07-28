@@ -3,10 +3,16 @@ package com.github.jankoran90.showlyfin.ui.phone
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.uploader.CTV_ID_SCHEME
+import com.github.jankoran90.showlyfin.data.uploader.CTV_SCHEME
+import com.github.jankoran90.showlyfin.data.uploader.CTV_SHOW_SCHEME
 import com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
+import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
+import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStreamQuality
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +34,7 @@ import javax.inject.Named
 class CtvTitleViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val ctvResolver: CtvStreamResolver,
+    private val workingSources: WorkingSourceStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -40,6 +47,8 @@ class CtvTitleViewModel @Inject constructor(
         val episodes: List<CtvEpisode> = emptyList(),
         val resolvingIdec: String? = null,
         val error: String? = null,
+        // VLTAVA F6b — je titul ve Filmotéce (= má uložený zdroj pod identitou `ctvid:<sidp>`)?
+        val inFilmoteka: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -56,18 +65,26 @@ class CtvTitleViewModel @Inject constructor(
     fun load(title: CtvTitle) {
         if (loadedFor == title.sidp) return
         loadedFor = title.sidp
-        _state.value = UiState(title = title)
-        // Film žádné díly nemá — kotva epizod je jen u pořadů (ČT sama říká `type`).
-        val anchor = title.episodesAnchor
-        if (title.isMovie || anchor.isNullOrBlank()) return
-        _state.update { it.copy(loadingEpisodes = true) }
+        _state.value = UiState(title = title, inFilmoteka = isSaved(title.sidp))
         viewModelScope.launch {
-            runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, title.sidp, limit = 100) }
+            // F6b: titul otevřený z Filmotéky nese jen identitu (`ctvid:<sidp>`) + název → dotáhni zbytek
+            // (popis, obrázek, `idec` k přehrání). `idec` schválně NEUKLÁDÁME — je krátkodobé.
+            val full = if (title.idec.isNullOrBlank() && title.episodesAnchor.isNullOrBlank()) {
+                uploaderDs.getCtvTitle(baseUrl, cookie, title.sidp)?.also { fresh ->
+                    _state.update { it.copy(title = fresh) }
+                } ?: title
+            } else {
+                title
+            }
+            // Film žádné díly nemá — kotva epizod je jen u pořadů (ČT sama říká `type`).
+            if (full.isMovie || full.episodesAnchor.isNullOrBlank()) return@launch
+            _state.update { it.copy(loadingEpisodes = true) }
+            runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, full.sidp, limit = 100) }
                 .onSuccess { feed ->
                     _state.update { it.copy(loadingEpisodes = false, episodes = feed.episodes) }
                 }
                 .onFailure { e ->
-                    Timber.w(e, "[VLTAVA] díly ČT pořadu %s se nenačetly", title.sidp)
+                    Timber.w(e, "[VLTAVA] díly ČT pořadu %s se nenačetly", full.sidp)
                     loadedFor = null
                     _state.update {
                         it.copy(loadingEpisodes = false, error = "Díly pořadu se nepodařilo načíst.")
@@ -75,6 +92,53 @@ class CtvTitleViewModel @Inject constructor(
                 }
         }
     }
+
+    /**
+     * VLTAVA F6b — přepínač „mám to ve Filmotéce". ČT titul nemá TMDB ani IMDb identitu, takže se
+     * ukládá jako zapamatovaný zdroj pod **syntetickou identitou** `ctvid:<sidp>`; tím je v jednom
+     * kroku (a) členem Filmotéky a (b) rovnou přehratelný. Zapisuje se jako **user-confirmed**
+     * (`auto=false`), takže se ho serverový reverify ani auto-cache nikdy nedotknou.
+     *
+     * Zdroj = `ctv:<idec>` u filmu, `ctvshow:<sidp>` u pořadu s díly (ten se otevře seznamem dílů).
+     */
+    fun toggleFilmoteka() {
+        val t = _state.value.title ?: return
+        val identity = CTV_ID_SCHEME + t.sidp
+        if (_state.value.inFilmoteka) {
+            workingSources.clear(identity, null)
+            _state.update { it.copy(inFilmoteka = false) }
+            return
+        }
+        val url = when {
+            t.isMovie && !t.idec.isNullOrBlank() -> CTV_SCHEME + t.idec
+            !t.isMovie -> CTV_SHOW_SCHEME + t.sidp
+            else -> null
+        }
+        if (url == null) {
+            _state.update { it.copy(error = "Tenhle titul zatím nemá co přehrát.") }
+            return
+        }
+        val yr = t.year?.let { " ($it)" } ?: ""
+        workingSources.save(
+            imdb = identity,
+            tmdb = null,
+            title = t.title,
+            stream = UploaderStream(
+                name = "Česká televize",
+                description = "${t.title}$yr · iVysílání · CZ",
+                url = url,
+                addon = "Česká televize",
+                quality = UploaderStreamQuality(
+                    resolution = "1080p", audioLanguage = "CZ", source = "WEB", videoCodec = "H.264",
+                ),
+            ),
+            poster = t.thumbnail,
+        )
+        _state.update { it.copy(inFilmoteka = true) }
+    }
+
+    private fun isSaved(sidp: String): Boolean =
+        workingSources.get(CTV_ID_SCHEME + sidp, null) != null
 
     /** Přehraj film (idec titulu) nebo konkrétní díl — resolve běží TADY, na zařízení. */
     fun playIdec(idec: String, label: String, posterUrl: String?) {

@@ -34,6 +34,7 @@ import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalSourceAvailabilityProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider
+import com.github.jankoran90.showlyfin.data.uploader.ctvSidpOrNull
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
@@ -268,9 +269,27 @@ private fun FilmyShellContent() {
                             .fillMaxSize()
                             .padding(padding),
                     ) {
-                        val openDetail: (MediaItem) -> Unit = { detailStack = detailStack + FilmyDetailEntry.Media(it) }
+                        // VLTAVA F6b: titul z ČT (syntetická identita `ctvid:<sidp>`) NEMÁ TMDB kartu —
+                        // otevři jeho vlastní ČT kartu. Jediné místo, kde se to rozhoduje, ať to platí
+                        // pro Filmotéku, domov i řadu „Uloženo k přehrání".
+                        val entryFor: (MediaItem, Boolean) -> FilmyDetailEntry = { item, autoplay ->
+                            val sidp = ctvSidpOrNull(item.imdbId)
+                            if (sidp != null) {
+                                FilmyDetailEntry.Ctv(
+                                    CtvTitle(
+                                        sidp = sidp,
+                                        type = if (item.type == MediaType.SHOW) "series" else "movie",
+                                        title = item.title,
+                                        thumbnail = item.posterUrl(),
+                                    ),
+                                )
+                            } else {
+                                FilmyDetailEntry.Media(item, autoplay = autoplay)
+                            }
+                        }
+                        val openDetail: (MediaItem) -> Unit = { detailStack = detailStack + entryFor(it, false) }
                         // M2.6 LAPIDARY: klik na „Uloženo k přehrání" → detail v režimu okamžitého přehrání.
-                        val openDetailPlay: (MediaItem) -> Unit = { detailStack = detailStack + FilmyDetailEntry.Media(it, autoplay = true) }
+                        val openDetailPlay: (MediaItem) -> Unit = { detailStack = detailStack + entryFor(it, true) }
                         // M2.6: JF-only položka → dohledá se přes getItemMeta a otevře sdílený detail.
                         val openJfDetail: (String) -> Unit = { jf -> detailStack = detailStack + FilmyDetailEntry.Jellyfin(jf) }
                         sectionStateHolder.SaveableStateProvider(current) {

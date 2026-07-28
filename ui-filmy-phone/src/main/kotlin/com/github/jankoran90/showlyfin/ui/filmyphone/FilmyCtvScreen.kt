@@ -19,8 +19,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,16 +71,20 @@ fun FilmyCtvScreen(
         }
     }
 
+    // Titul otevřený z Filmotéky přijde jen s identitou + názvem; zbytek (popis, obrázek, `idec`)
+    // dotáhne VM. Kreslíme proto VŽDY z jeho stavu a parametr je jen výchozí hodnota.
+    val head = state.title ?: title
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
-                if (title.thumbnail != null) {
+                if (head.thumbnail != null) {
                     AsyncImage(
-                        model = title.thumbnail,
-                        contentDescription = title.title,
+                        model = head.thumbnail,
+                        contentDescription = head.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -96,12 +103,12 @@ fun FilmyCtvScreen(
         }
         item {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text(title.title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                Text(head.title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
                 val meta = buildList {
-                    title.year?.let { add(it.toString()) }
-                    title.genres?.take(2)?.let { addAll(it) }
+                    head.year?.let { add(it.toString()) }
+                    head.genres?.take(2)?.let { addAll(it) }
                     add("Česká televize")
-                    minutesOf(title.duration)?.let { add(it) }
+                    minutesOf(head.duration)?.let { add(it) }
                 }.joinToString(" · ")
                 Text(
                     meta,
@@ -109,9 +116,9 @@ fun FilmyCtvScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
                 )
-                if (!title.description.isNullOrBlank()) {
+                if (!head.description.isNullOrBlank()) {
                     Text(
-                        title.description!!,
+                        head.description!!,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(top = 10.dp),
@@ -125,24 +132,44 @@ fun FilmyCtvScreen(
                         modifier = Modifier.padding(top = 10.dp).clickable { vm.dismissError() },
                     )
                 }
-                // Film → přehraj rovnou. Pořad bez dílů (a bez idec) by neměl co nabídnout.
-                val movieIdec = title.idec.takeIf { title.isMovie && !it.isNullOrBlank() }
-                if (movieIdec != null) {
-                    Button(
-                        onClick = { vm.playIdec(movieIdec, title.title, title.thumbnail) },
-                        enabled = state.resolvingIdec == null,
-                        modifier = Modifier.padding(top = 14.dp),
-                    ) {
-                        if (state.resolvingIdec != null) {
-                            CircularProgressIndicator(
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        } else {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                // Zobrazuj VŽDY živý stav z VM (po dohydrataci z Filmotéky zná `idec` až on, ne parametr).
+                val shown = head
+                Row(
+                    Modifier.padding(top = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Film → přehraj rovnou. Pořad se přehrává po dílech (níž).
+                    val movieIdec = shown.idec.takeIf { shown.isMovie && !it.isNullOrBlank() }
+                    if (movieIdec != null) {
+                        Button(
+                            onClick = { vm.playIdec(movieIdec, shown.title, shown.thumbnail) },
+                            enabled = state.resolvingIdec == null,
+                        ) {
+                            if (state.resolvingIdec != null) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            } else {
+                                Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                            }
+                            Text("Přehrát", modifier = Modifier.padding(start = 8.dp))
                         }
-                        Text("Přehrát", modifier = Modifier.padding(start = 8.dp))
+                    }
+                    // VLTAVA F6b — titul z ČT do Filmotéky (uloží se jako zapamatovaný zdroj pod vlastní
+                    // identitou, takže je rovnou i přehratelný). Per profil → u dětí se objeví jen to,
+                    // co se přidá na dětském profilu.
+                    OutlinedButton(onClick = { vm.toggleFilmoteka() }) {
+                        Icon(
+                            if (state.inFilmoteka) Icons.Rounded.Check else Icons.Rounded.Add,
+                            contentDescription = null,
+                        )
+                        Text(
+                            if (state.inFilmoteka) "Ve Filmotéce" else "Do Filmotéky",
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
                     }
                 }
             }

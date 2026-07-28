@@ -40,6 +40,10 @@ class MediaEnricher @Inject constructor(
     }
 
     suspend fun enrichOne(item0: MediaItem, withCertification: Boolean): MediaItem = coroutineScope {
+        // VLTAVA (SHW-110) F6b — titul z ČT iVysílání nese SYNTETICKOU identitu (`ctvid:<sidp>`), na TMDB
+        // ho nikdo nenajde (proto vlastní cesta vůbec vznikla). Bez tohohle skipu by za každou ČT položku
+        // odešel zbytečný TMDB dotaz. Vlastní data (název, plakát z ČT) si položka nese sama.
+        if (item0.imdbId?.startsWith("ctvid:") == true) return@coroutineScope item0
         // CELLULOID (SHW-98): položky jen s imdb (asijské/art-house z JF knihovny, např. „The Taste of Tea")
         // dřív z enrichmentu rovnou vypadly → bez plakátu i českého názvu = prázdné karty a anglické tituly.
         // Dohledej tmdbId z imdb, ať dostanou poster + titleCz (řadí se pak taky dle CZ názvu).

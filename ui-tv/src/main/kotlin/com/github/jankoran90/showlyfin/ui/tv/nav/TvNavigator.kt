@@ -44,6 +44,28 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
     var sidebarOverlay by remember { mutableStateOf(false) }
 
     fun navigate(dest: TvDestination) { sidebarOverlay = false; navVm.navigate(dest) }
+
+    /**
+     * VLTAVA (SHW-110) F6b — titul z ČT iVysílání (syntetická identita `ctvid:<sidp>`) nemá TMDB kartu →
+     * otevři jeho vlastní ČT obrazovku. Jediné rozhodovací místo pro celou TV (Filmotéka, domov, řady).
+     */
+    fun openMediaDetail(item: MediaItem, autoplay: Boolean = false) {
+        val sidp = com.github.jankoran90.showlyfin.data.uploader.ctvSidpOrNull(item.imdbId)
+        if (sidp != null) {
+            navigate(
+                TvDestination.CtvTitleDest(
+                    com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle(
+                        sidp = sidp,
+                        type = if (item.type == MediaType.SHOW) "series" else "movie",
+                        title = item.title,
+                        thumbnail = item.posterUrl(),
+                    ),
+                ),
+            )
+        } else {
+            navigate(TvDestination.Detail(item, autoplay = autoplay))
+        }
+    }
     fun back() { sidebarOverlay = false; navVm.back() }
     fun openSidebarOverlay() { sidebarOverlay = true }
     fun selectSectionAndHome(section: TvSection) { navVm.selectSection(section); navVm.goHome(); sidebarOverlay = false }
@@ -103,9 +125,9 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             section = navVm.section,
             onSelectSection = { navVm.selectSection(it) },
             onOpenSearch = { navigate(TvDestination.Search) },
-            onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            onOpenDetail = { item -> openMediaDetail(item) },
             // LAPIDARY S4b: klik na kartu řady „Uloženo k přehrání" → detail v režimu one-click (autoplay).
-            onOpenDetailPlay = { item -> navigate(TvDestination.Detail(item, autoplay = true)) },
+            onOpenDetailPlay = { item -> openMediaDetail(item, autoplay = true) },
             onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
             onOpenLibrary = { id, name, collectionType ->
                 navigate(TvDestination.LibraryItems(id, name, collectionType))
@@ -119,7 +141,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         )
 
         TvDestination.Search -> TvSearchScreen(
-            onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            onOpenDetail = { item -> openMediaDetail(item) },
             // VLTAVA F6: rozsah „Česká televize" → vlastní karta (ČT titul nemá TMDB identitu).
             onOpenCtv = { title -> navigate(TvDestination.CtvTitleDest(title)) },
             onBack = { back() },
@@ -141,7 +163,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         TvDestination.Settings -> TvSettingsScreen(onBack = { back() })
 
         TvDestination.Watchlist -> TvWatchlistScreen(
-            onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
+            onOpenDetail = { item -> openMediaDetail(item) },
             onBack = { back() },
         )
 
@@ -151,7 +173,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             collectionType = dest.collectionType,
             parentItemType = dest.parentItemType,
             // Položka s tmdbId (film i seriál) → nativní TV immersive detail (fanart hero, sdílená s doporučovačem).
-            onOpenRich = { item -> navigate(TvDestination.Detail(item)) },
+            onOpenRich = { item -> openMediaDetail(item) },
             // Bez tmdbId → resolver z jellyfinId (imdb→immersive, jinak fallback telefonní JellyfinDetail).
             onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
             // Složka/BOX_SET → zanoření (nová mřížka, BACK popuje).
@@ -203,8 +225,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         is TvDestination.RowAll -> com.github.jankoran90.showlyfin.ui.tv.home.TvRowAllScreen(
             configId = dest.configId,
             title = dest.title,
-            onOpenDetail = { item -> navigate(TvDestination.Detail(item)) },
-            onOpenDetailPlay = { item -> navigate(TvDestination.Detail(item, autoplay = true)) },
+            onOpenDetail = { item -> openMediaDetail(item) },
+            onOpenDetailPlay = { item -> openMediaDetail(item, autoplay = true) },
             onOpenJellyfinDetail = { itemId -> navigate(TvDestination.JellyfinDetail(itemId)) },
             onBack = { back() },
             // Immersive pozadí žije v shellu (TvShell), drill si ho nekreslí → info nikam neposíláme.
