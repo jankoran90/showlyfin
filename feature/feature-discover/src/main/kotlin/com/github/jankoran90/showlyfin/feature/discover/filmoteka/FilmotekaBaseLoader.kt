@@ -288,10 +288,13 @@ class FilmotekaBaseLoader @Inject constructor(
                 tmdbId = ws.tmdb.takeIf { it > 0L },
                 imdbId = ws.imdb.takeIf { it.isNotBlank() },
                 title = ws.title,
-                year = null,
-                overview = null,
+                year = ws.year?.takeIf { isCtv && it > 0 },
+                // ČT popis/rok/žánry se nesou s uloženým zdrojem (enricher pro ně nemá co dohledat).
+                // Plníme i `overviewCz`, protože jsou česky — řádky Filmotéky pak nevolají providera popisu.
+                overview = ws.overview?.takeIf { isCtv && it.isNotBlank() },
+                overviewCz = ws.overview?.takeIf { isCtv && it.isNotBlank() },
                 rating = null,
-                genres = null,
+                genres = ws.genres?.takeIf { isCtv && it.isNotEmpty() },
                 type = if (isCtvShow) MediaType.SHOW else MediaType.MOVIE,
                 fallbackPosterUrl = ws.poster?.takeIf { isCtv && it.isNotBlank() },
                 // NEMĚNNÉ datum prvního uložení → working-only film v „Nedávno přidané" neskáče při re-cache.

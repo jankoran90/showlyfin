@@ -72,6 +72,7 @@ class CtvTitleViewModel @Inject constructor(
             val full = if (title.idec.isNullOrBlank() && title.episodesAnchor.isNullOrBlank()) {
                 uploaderDs.getCtvTitle(baseUrl, cookie, title.sidp)?.also { fresh ->
                     _state.update { it.copy(title = fresh) }
+                    healSavedRecord(fresh)
                 } ?: title
             } else {
                 title
@@ -135,12 +136,42 @@ class CtvTitleViewModel @Inject constructor(
             // Obálka do Filmotéky: nejdřív svislý plakát ČT (sedí do karet 2:3), jinak 16:9 náhled
             // (karta si ho pak vykreslí celý, viz `wideArtwork` v PosterCard) — user 2026-07-28.
             poster = t.poster ?: t.thumbnail,
+            // Popis/rok/žánry si titul nese s sebou — ČT je má, ale TMDB je pro něj nikdy nedohledá.
+            overview = t.description,
+            year = t.year,
+            genres = t.genres?.distinct(),
         )
         _state.update { it.copy(inFilmoteka = true) }
     }
 
     private fun isSaved(sidp: String): Boolean =
         workingSources.get(CTV_ID_SCHEME + sidp, null) != null
+
+    /**
+     * Titul uložený STARŠÍ verzí appky nemá v záznamu obrázek ani popis (přibyly až teď) → Filmotéka by
+     * u něj zůstala prázdná napořád. Při otevření karty záznam potichu doplníme z čerstvých dat ČT.
+     * `firstSavedAtMs` si `save()` drží, takže titul nepřeskočí v „Nedávno přidané".
+     */
+    private fun healSavedRecord(fresh: CtvTitle) {
+        val identity = CTV_ID_SCHEME + fresh.sidp
+        val saved = workingSources.get(identity, null) ?: return
+        val poster = fresh.poster ?: fresh.thumbnail
+        val needsArt = saved.poster.isNullOrBlank() && !poster.isNullOrBlank()
+        val needsText = saved.overview.isNullOrBlank() && !fresh.description.isNullOrBlank()
+        val needsFacts = (saved.year == null && fresh.year != null) ||
+            (saved.genres.isNullOrEmpty() && !fresh.genres.isNullOrEmpty())
+        if (!needsArt && !needsText && !needsFacts) return
+        workingSources.save(
+            imdb = identity,
+            tmdb = null,
+            title = saved.title.ifBlank { fresh.title },
+            stream = saved.stream,
+            poster = saved.poster ?: poster,
+            overview = saved.overview ?: fresh.description,
+            year = saved.year ?: fresh.year,
+            genres = saved.genres?.takeIf { it.isNotEmpty() } ?: fresh.genres?.distinct(),
+        )
+    }
 
     /** Přehraj film (idec titulu) nebo konkrétní díl — resolve běží TADY, na zařízení. */
     fun playIdec(idec: String, label: String, posterUrl: String?) {

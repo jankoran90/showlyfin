@@ -51,6 +51,14 @@ data class WorkingSource(
     // VLTAVA (SHW-110) F6b: hotová URL plakátu pro tituly BEZ TMDB identity (ČT iVysílání) — jinak by
     // karta ve Filmotéce zůstala prázdná (enricher nemá co dohledat). U běžných filmů zůstává null.
     val poster: String? = null,
+    // VLTAVA F6b (user 2026-07-28 „ve filmotéce i na kartě filmu chybí popisky"): popis pro tituly BEZ
+    // TMDB identity. Běžné filmy si popis dotáhne enricher/ČSFD podle tmdb/imdb — ČT titul nemá podle
+    // čeho, takže si ho nese s sebou. U ostatních zůstává null.
+    val overview: String? = null,
+    // Rok a žánry — opět jen pro tituly bez TMDB (ČT). Bez nich vypadá řádek Filmotéky poloprázdný proti
+    // ostatním filmům (user 2026-07-28 „nesourodnost"); žánry navíc krmí žánrovou pojistku věkového gate.
+    val year: Int? = null,
+    val genres: List<String>? = null,
 )
 
 /**
@@ -376,7 +384,16 @@ class WorkingSourceStore @Inject constructor(
         return null
     }
 
-    fun save(imdb: String?, tmdb: Long?, title: String, stream: UploaderStream, poster: String? = null) {
+    fun save(
+        imdb: String?,
+        tmdb: Long?,
+        title: String,
+        stream: UploaderStream,
+        poster: String? = null,
+        overview: String? = null,
+        year: Int? = null,
+        genres: List<String>? = null,
+    ) {
         if (imdb.isNullOrBlank() && (tmdb == null || tmdb <= 0L)) return
         val now = System.currentTimeMillis()
         // neměnné datum prvního uložení — při re-save (změna zdroje) ho zachovej z existujícího záznamu,
@@ -387,6 +404,9 @@ class WorkingSourceStore @Inject constructor(
             savedAtMs = now,
             firstSavedAtMs = existingFirst ?: now,
             poster = poster,
+            overview = overview,
+            year = year,
+            genres = genres,
         )
         val json = gson.toJson(record)
         // commit() (synchronně) — kritická akce, ať se zaručeně zapíše dřív, než appku zabije/aktualizuje.

@@ -91,7 +91,9 @@ fun MediaRow(
                 AsyncImage(
                     model = posterUrl,
                     contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
+                    // VLTAVA F6b — ČT titul bez svislého plakátu má jen 16:9 grafiku; Crop by z ní v úzké
+                    // obálce řádku nechal svislý výsek uprostřed (user 2026-07-28, „Sen o Dakaru").
+                    contentScale = if (item.hasWideArtworkOnly) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {

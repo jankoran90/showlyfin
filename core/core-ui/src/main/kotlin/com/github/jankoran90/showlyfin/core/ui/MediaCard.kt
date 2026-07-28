@@ -31,9 +31,8 @@ fun MediaCard(
         inLibrary = inLibrary,
         watched = watched,
         progress = progress,
-        // VLTAVA F6b — ČT titul (syntetická identita `ctvid:<sidp>`) nemá plakát z TMDB; když ČT nedala
-        // ani svůj svislý plakát, nese karta 16:9 grafiku → vykresli ji celou, ne oříznutou napůl.
-        wideArtwork = item.imdbId?.startsWith("ctvid:") == true && item.posterPath == null,
+        // VLTAVA F6b — ČT titul bez svislého plakátu nese 16:9 grafiku → vykresli ji celou, ne napůl.
+        wideArtwork = item.hasWideArtworkOnly,
         ratingTarget = RatingTarget(
             tmdbId = item.tmdbId,
             imdbId = item.imdbId,

@@ -50,7 +50,14 @@ import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.feature.detail.DetailUiState
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
+import kotlinx.coroutines.delay
 import java.util.Calendar
+
+/** Kolikrát po sobě zkusit zaostřit primární CTA, než to vzdáme (uzel se do layoutu dostane pár snímků). */
+private const val FOCUS_ATTEMPTS = 12
+
+/** Rozestup pokusů o zaostření (ms) — 12 × 50 ms ≈ 0,6 s, pak už fokus patří uživateli. */
+private const val FOCUS_RETRY_MS = 50L
 
 /**
  * TENFOOT (SHW-87) Fáze 2 — TV akční řada karty (10-foot). Telefonní hustý top-bar (moc tlačítek)
@@ -86,8 +93,22 @@ internal fun TvDetailActions(
     val primaryFocus = remember { FocusRequester() }
     // CONVERGE V1 — sleduj fokus primárního CTA, ať D-pad doleva JEN z něj (nejlevější akce) skočí do Nastavení.
     var primaryFocused by remember { mutableStateOf(false) }
-    // Po otevření karty rovnou zaostři primární CTA (paritně s přehrávačem).
-    LaunchedEffect(hasSource) { runCatching { primaryFocus.requestFocus() } }
+    // Po otevření karty rovnou zaostři primární CTA („Přehrát" / „Hledat zdroje") — user 2026-07-28
+    // („ať se vždy po otevření karty filmu automaticky označí tlačítko přehrát").
+    //
+    // 🔴 Proč smyčka a ne jediný `requestFocus()`: fokus jde nastavit až na uzel, který je REÁLNĚ v layoutu.
+    // Jediný pokus v téže snímkové smyčce, ve které se karta teprve skládá (a `hasSource` se navíc chvíli
+    // dolaďuje, jak dobíhá zapamatovaný zdroj), spolehlivě spadne do `runCatching` a tiše zmizí → tlačítko
+    // zůstalo neoznačené, dokud user nešťouchl D-padem. Zkoušíme to pár snímků po sobě a končíme, jakmile
+    // CTA fokus opravdu MÁ (`primaryFocused`), takže uživateli fokus nepřetahujeme, když si sám odejde jinam.
+    // Klíč = identita titulu → nová karta = nový pokus, tatáž karta se nepřeostřuje.
+    LaunchedEffect(uiState.item?.tmdbId, uiState.item?.imdbId, hasSource) {
+        repeat(FOCUS_ATTEMPTS) {
+            if (primaryFocused) return@LaunchedEffect
+            runCatching { primaryFocus.requestFocus() }
+            delay(FOCUS_RETRY_MS)
+        }
+    }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // KOLO2 (L): akční řada = fokusová skupina; vstup z JAKÉHOKOLI směru (D-pad dolů z chipů Recenze/

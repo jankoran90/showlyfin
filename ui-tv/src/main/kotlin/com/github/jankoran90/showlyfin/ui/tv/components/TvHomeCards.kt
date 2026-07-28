@@ -90,6 +90,8 @@ fun TvHomeCard(
                 posterUrl = item.posterUrl,
                 title = item.title,
                 year = item.year,
+                // VLTAVA F6b — ČT titul v řadě domova (Filmotéka — nedávno přidané) nemá svislý plakát.
+                wideArtwork = item.mediaItem?.hasWideArtworkOnly == true,
                 onClick = onClick,
                 modifier = Modifier.width(cardScale * TV_POSTER_WIDTH),
                 focusRequester = focusRequester,

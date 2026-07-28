@@ -62,7 +62,7 @@ fun TvMediaCard(
         year = item.year,
         // VLTAVA F6b — ČT titul bez svislého plakátu nese 16:9 grafiku → vykresli ji celou (parita
         // s telefonem, viz PosterCard.wideArtwork). Název je na TV pod kartou, takže zůstane čitelný.
-        wideArtwork = item.imdbId?.startsWith("ctvid:") == true && item.posterPath == null,
+        wideArtwork = item.hasWideArtworkOnly,
         onClick = onClick,
         modifier = modifier,
         focusRequester = focusRequester,

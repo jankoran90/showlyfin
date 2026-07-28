@@ -49,6 +49,18 @@ data class MediaItem(
 ) {
     fun posterUrl(size: String = "w342") =
         posterPath?.let { "https://image.tmdb.org/t/p/$size$it" } ?: fallbackPosterUrl
+
+    /**
+     * VLTAVA (SHW-110) F6b — titul z ČT iVysílání: nemá TMDB ani IMDb identitu, nese SYNTETICKOU
+     * (`ctvid:<sidp>`, viz `CTV_ID_SCHEME` v data-uploader). Jedno místo, kde se to pozná.
+     */
+    val isCtvTitle: Boolean get() = imdbId?.startsWith("ctvid:") == true
+
+    /**
+     * Má karta místo plakátu 2:3 jen ŠIROKOU grafiku 16:9? (ČT bez vlastního svislého plakátu.)
+     * Crop by z ní uřízl většinu obrazu i s názvem → karty ji kreslí celou (user 2026-07-28).
+     */
+    val hasWideArtworkOnly: Boolean get() = isCtvTitle && posterPath == null
     fun backdropUrl(size: String = "w780") = backdropPath?.let { "https://image.tmdb.org/t/p/$size$it" }
 
     /**
