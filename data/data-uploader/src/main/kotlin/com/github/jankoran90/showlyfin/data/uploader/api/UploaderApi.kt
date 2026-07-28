@@ -792,10 +792,16 @@ internal class UploaderApi(
     }
 
     // KAVKA (SHW-76) — ČT iVysílání podcast (DASH stream přes byte-proxy)
-    override suspend fun getCtvFeed(baseUrl: String, sessionCookie: String, show: String, limit: Int): CtvShowFeed {
+    override suspend fun getCtvFeed(
+        baseUrl: String,
+        sessionCookie: String,
+        show: String,
+        limit: Int,
+        order: String,
+    ): CtvShowFeed {
         val base = baseUrl.trimEnd('/')
         val s = URLEncoder.encode(show, "UTF-8")
-        return service.getCtvFeed("$base/api/ctv/feed?show=$s&limit=$limit", cookieOf(sessionCookie))
+        return service.getCtvFeed("$base/api/ctv/feed?show=$s&limit=$limit&order=$order", cookieOf(sessionCookie))
     }
 
     override fun ctvAudioUrl(baseUrl: String, sessionCookie: String, idec: String): String {

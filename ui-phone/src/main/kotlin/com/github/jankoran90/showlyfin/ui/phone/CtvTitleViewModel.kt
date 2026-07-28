@@ -80,7 +80,8 @@ class CtvTitleViewModel @Inject constructor(
             // Film žádné díly nemá — kotva epizod je jen u pořadů (ČT sama říká `type`).
             if (full.isMovie || full.episodesAnchor.isNullOrBlank()) return@launch
             _state.update { it.copy(loadingEpisodes = true) }
-            runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, full.sidp, limit = 100) }
+            // Od NEJSTARŠÍHO dílu — pořad se ve Filmech chová jako seriál (user 2026-07-28).
+            runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, full.sidp, limit = 100, order = "oldest") }
                 .onSuccess { feed ->
                     _state.update { it.copy(loadingEpisodes = false, episodes = feed.episodes) }
                 }

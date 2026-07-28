@@ -35,6 +35,9 @@ class WatchedReporter @Inject constructor(
     private val jellyfin: JellyfinLibraryService,
     private val trakt: AuthorizedTraktRemoteDataSource,
     private val videoResumeStore: VideoResumeStore,
+    // VLTAVA F6c — dokoukaný ČT díl nemá kam nahlásit (není v Jellyfinu ani na Traktu), ale řada
+    // „Další díly" ho musí umět přeskočit → vlastní lehká paměť.
+    private val ctvWatchedStore: com.github.jankoran90.showlyfin.core.domain.resume.CtvWatchedStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
 
@@ -90,7 +93,15 @@ class WatchedReporter @Inject constructor(
 
         // Lokální resume pryč VŽDY — dokoukané se nemá nabízet k pokračování ani offline.
         target.videoResumeKey?.takeIf { it.isNotBlank() }?.let { videoResumeStore.clear(it) }
-        target.externalResumeKey?.takeIf { it.isNotBlank() }?.let { prefs.edit().remove("resume_$it").apply() }
+        target.externalResumeKey?.takeIf { it.isNotBlank() }?.let { key ->
+            prefs.edit().remove("resume_$key").apply()
+            // ČT díl (`ctv:<idec>`) → zapiš „dokoukáno", jinak by ho „Další díly" nabízely donekonečna
+            // (smazaná pozice sama o sobě nerozliší dokoukaný díl od nespuštěného).
+            if (key.startsWith("ctv:")) {
+                ctvWatchedStore.markWatched(key)
+                Timber.i("[VLTAVA] ČT díl dokoukán: %s", key)
+            }
+        }
 
         var ok = false
         target.jellyfinItemId?.takeIf { it.isNotBlank() }?.let { jfId ->

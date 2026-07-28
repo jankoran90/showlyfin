@@ -168,7 +168,17 @@ interface UploaderRemoteDataSource {
     suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720")
 
     // KAVKA (SHW-76) — ČT iVysílání podcast (DASH stream přes byte-proxy; o2tv CDN je IP-locked na server)
-    suspend fun getCtvFeed(baseUrl: String, sessionCookie: String, show: String, limit: Int = 100): CtvShowFeed
+    /**
+     * Díly ČT pořadu. `order` = `newest` (poslech) nebo `oldest` — Filmy jedou od nejstaršího dílu,
+     * jako seriál od S01E01 (user 2026-07-28).
+     */
+    suspend fun getCtvFeed(
+        baseUrl: String,
+        sessionCookie: String,
+        show: String,
+        limit: Int = 100,
+        order: String = "newest",
+    ): CtvShowFeed
     /** Poslechová (audio-only) varianta DASH manifestu dílu — `?audio=1`, ExoPlayer hraje jen aac stopu. */
     fun ctvAudioUrl(baseUrl: String, sessionCookie: String, idec: String): String
     /** Plný DASH manifest dílu (video) — ExoPlayer ABR (default nejvyšší dostupná, až 1080p). I pro cast na TV. */

@@ -23,9 +23,11 @@ import javax.inject.Singleton
  *
  * Pro každý uložený ČT pořad (zdroj `ctvshow:<sidp>`) nabídne JEDEN díl, v tomhle pořadí:
  * 1. **rozkoukaný** (má uloženou pozici, viz [VideoResumeStore] pod klíčem `ctv:<idec>`) — pokračuj,
- * 2. jinak **nejnovější** díl (ČT vrací `orderBy: newest`) — „co je nového".
+ * 2. jinak **první nedokoukaný** od nejstaršího (user 2026-07-28 „u ČT chci jít vždy od nejstarších,
+ *    stejně jako u seriálu od S01E01") — díly proto tahá backend s `order=oldest`.
  *
- * Dokoukaný díl pozici NEMÁ ([VideoResumeStore] ji u konce maže), takže sám odpadne a řada posune dál.
+ * Dokoukané drží `CtvWatchedStore` — smazaná pozice sama nestačí, u dokoukaného i nespuštěného dílu
+ * vypadá stejně (a řada by pak napořád nabízela ten první).
  * Jellyfin „Další díly" tím zůstává netknuté — ČT položky se jen připojí za ně.
  */
 @Singleton
@@ -33,6 +35,7 @@ class CtvNextUpLoader @Inject constructor(
     private val workingSources: WorkingSourceStore,
     private val uploaderDs: UploaderRemoteDataSource,
     private val resumeStore: VideoResumeStore,
+    private val watchedStore: com.github.jankoran90.showlyfin.core.domain.resume.CtvWatchedStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
 
@@ -76,7 +79,7 @@ class CtvNextUpLoader @Inject constructor(
     private data class ShowRef(val sidp: String, val title: String, val poster: String?)
 
     private suspend fun nextEpisodeOf(show: ShowRef): HomeRowItem? {
-        val feed = runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, show.sidp, limit = FEED_LIMIT) }
+        val feed = runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, show.sidp, limit = FEED_LIMIT, order = "oldest") }
             .getOrElse {
                 Timber.w(it, "[VLTAVA] díly pořadu %s se nenačetly", show.sidp)
                 return null
@@ -84,9 +87,11 @@ class CtvNextUpLoader @Inject constructor(
         val episodes = feed.episodes.filter { it.id.isNotBlank() }
         if (episodes.isEmpty()) return null
         val marks = resumeStore.marks.value
-        // Rozkoukaný má přednost před nejnovějším — přesně to, co od řady „Další díly" člověk čeká.
+        val watched = watchedStore.watched.value
+        // Díly chodí od NEJSTARŠÍHO (jako seriál od S01E01) → „další díl" = rozkoukaný, jinak první
+        // nedokoukaný. Když je dokoukaný celý pořad, do řady nepatří vůbec.
         val started = episodes.firstOrNull { marks[CTV_SCHEME + it.id] != null }
-        val episode = started ?: episodes.first()
+        val episode = started ?: episodes.firstOrNull { CTV_SCHEME + it.id !in watched } ?: return null
         val mark = marks[CTV_SCHEME + episode.id]
         val progress = mark?.takeIf { it.durMs > 0 }?.let { ((it.posMs * 100) / it.durMs).toInt().coerceIn(0, 100) }
         val showTitle = feed.title?.takeIf { it.isNotBlank() } ?: show.title
@@ -97,7 +102,7 @@ class CtvNextUpLoader @Inject constructor(
             landscapeUrl = episode.image ?: show.poster,
             posterUrl = show.poster ?: episode.image,
             progressPct = progress,
-            // Klik → karta pořadu (seznam dílů, nejnovější nahoře). Identita je ta samá, pod jakou
+            // Klik → karta pořadu (seznam dílů od nejstaršího). Identita je ta samá, pod jakou
             // pořad žije ve Filmotéce, takže se otevře jeho ČT karta (viz směrování v shellech).
             mediaItem = MediaItem(
                 traktId = 0L,
@@ -118,7 +123,7 @@ class CtvNextUpLoader @Inject constructor(
         /** Kolik ČT pořadů z Filmotéky vůbec zohlednit (každý = jeden dotaz na díly). */
         const val MAX_SHOWS = 8
 
-        /** Kolik dílů si vyžádat — stačí rozumný vršek, hledáme rozkoukaný/nejnovější. */
+        /** Kolik nejstarších dílů si vyžádat — v nich hledáme rozkoukaný / první nedokoukaný. */
         const val FEED_LIMIT = 30
 
         /** Jak dlouho platí sestavená řada (10 min, stejně jako „Filmotéka — nedávno přidané"). */
