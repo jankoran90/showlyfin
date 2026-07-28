@@ -611,7 +611,7 @@ class DetailViewModel @Inject constructor(
                 if (watched) w.addAll(done) else w.removeAll(done)
                 st.copy(episodeWatched = w)
             }
-            Timber.i("[CURTAIN] sezóna %d: %d epizod → zhlédnuto=%b", season, done.size, watched)
+            timber.log.Timber.i("[CURTAIN] sezóna %d: %d epizod → zhlédnuto=%b", season, done.size, watched)
         }
     }
 
