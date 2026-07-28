@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -185,16 +186,37 @@ fun FilmyCtvScreen(
                 }
             }
         }
-        if (state.episodes.isNotEmpty()) {
+        // VLTAVA F5 — lišta sezón (rok vysílání), stejný princip jako u seriálů z Jellyfinu.
+        // Kreslí se jen když pořad reálně víc sezón má (jinak by to byl zbytečný chrom).
+        if (state.seasons.size > 1) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    state.seasons.forEach { season ->
+                        androidx.compose.material3.FilterChip(
+                            selected = season.label == state.selectedSeason,
+                            onClick = { vm.selectSeason(season.label) },
+                            label = { Text("${season.label} (${season.episodes.size})") },
+                        )
+                    }
+                }
+            }
+        }
+        val shownEpisodes = vm.visibleEpisodes(state)
+        if (shownEpisodes.isNotEmpty()) {
             item {
                 Text(
-                    "Díly (${state.episodes.size})",
+                    "Díly (${shownEpisodes.size})",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 6.dp),
                 )
             }
-            items(state.episodes, key = { it.id }) { ep ->
+            items(shownEpisodes, key = { it.id }) { ep ->
                 CtvEpisodeRow(
                     episode = ep,
                     resolving = state.resolvingIdec == ep.id,

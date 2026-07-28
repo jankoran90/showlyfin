@@ -90,8 +90,11 @@ class CtvNextUpLoader @Inject constructor(
         val watched = watchedStore.watched.value
         // Díly chodí od NEJSTARŠÍHO (jako seriál od S01E01) → „další díl" = rozkoukaný, jinak první
         // nedokoukaný. Když je dokoukaný celý pořad, do řady nepatří vůbec.
-        val started = episodes.firstOrNull { marks[CTV_SCHEME + it.id] != null }
-        val episode = started ?: episodes.firstOrNull { CTV_SCHEME + it.id !in watched } ?: return null
+        // 🔴 user 2026-07-28 („vybrala se Jezera a bažiny, a ta určitě není první díl"): dřív měl přednost
+        // JAKÝKOLI rozkoukaný díl — když si člověk ze zvědavosti pustí díl z prostředka, řada přeskočila
+        // všechno před ním. Pořadí je seriálové (od nejstaršího), takže „další díl" = PRVNÍ NEDOKOUKANÝ.
+        // Rozkoukanost už jen dokresluje progres na kartě.
+        val episode = episodes.firstOrNull { CTV_SCHEME + it.id !in watched } ?: return null
         val mark = marks[CTV_SCHEME + episode.id]
         val progress = mark?.takeIf { it.durMs > 0 }?.let { ((it.posMs * 100) / it.durMs).toInt().coerceIn(0, 100) }
         val showTitle = feed.title?.takeIf { it.isNotBlank() } ?: show.title

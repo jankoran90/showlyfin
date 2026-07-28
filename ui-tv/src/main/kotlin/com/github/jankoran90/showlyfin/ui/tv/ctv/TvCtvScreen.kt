@@ -150,16 +150,33 @@ fun TvCtvScreen(
             }
         }
 
+        // VLTAVA F5 — lišta sezón (rok vysílání), parita se seriály z Jellyfinu. D-pad ji projede.
+        if (state.seasons.size > 1) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                state.seasons.forEach { season ->
+                    androidx.compose.material3.FilterChip(
+                        selected = season.label == state.selectedSeason,
+                        onClick = { vm.selectSeason(season.label) },
+                        label = { Text("${season.label} (${season.episodes.size})") },
+                        modifier = Modifier.tvFocusBorder(),
+                    )
+                }
+            }
+        }
+        val shownEpisodes = vm.visibleEpisodes(state)
         when {
             state.loadingEpisodes -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-            state.episodes.isNotEmpty() -> LazyColumn(
+            shownEpisodes.isNotEmpty() -> LazyColumn(
                 contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                items(state.episodes, key = { it.id }) { ep ->
+                items(shownEpisodes, key = { it.id }) { ep ->
                     TvCtvEpisodeRow(
                         episode = ep,
                         resolving = state.resolvingIdec == ep.id,

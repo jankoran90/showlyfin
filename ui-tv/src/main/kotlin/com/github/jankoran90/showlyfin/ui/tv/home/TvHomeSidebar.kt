@@ -98,8 +98,11 @@ fun TvHomeSidebar(
             .fillMaxHeight()
             .width(width)
             .onFocusChanged { expanded = it.hasFocus; if (!it.hasFocus) reordering = null }
-            .focusGroup()
+            // 🔴 POŘADÍ: `focusProperties` MUSÍ být PŘED `focusGroup()` — jinak se `enter` navěsí na jiný
+            // uzel řetězce a fokus si dál bere geometricky nejbližší prvek (user 2026-07-28: „návrat do
+            // sidebaru stále nevrací aktivní sekci, ale tu nejbližší"). První pokus měl obrácené pořadí.
             .focusProperties { enter = { entryFocus } }
+            .focusGroup()
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
             .padding(vertical = 28.dp, horizontal = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
