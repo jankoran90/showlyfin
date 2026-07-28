@@ -64,6 +64,7 @@ import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
  * kompaktní ikonky (68 dp) → na fokus rozbalí na ikonu + název (~220 dp). Aktivní sekce (Domů) = akcent.
  * Konfigurovatelný obsah (default minimal: Domů/Hledat/Nastavení) přes [SidebarItem].
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)   // focusProperties (vstupní bod sidebaru)
 @Composable
 fun TvHomeSidebar(
     items: List<SidebarItem>,
