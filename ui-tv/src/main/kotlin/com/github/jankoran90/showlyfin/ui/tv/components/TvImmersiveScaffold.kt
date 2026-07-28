@@ -73,7 +73,16 @@ fun TvImmersiveBackground(info: ImmersiveInfo?, modifier: Modifier = Modifier) {
     var shown by remember { mutableStateOf<String?>(null) }
     var incoming by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(info?.backdropUrl) {
-        info?.backdropUrl?.let { if (it != shown) incoming = it }
+        val url = info?.backdropUrl
+        if (url != null) {
+            if (url != shown) incoming = url
+        } else if (info != null) {
+            // 🔴 user 2026-07-28 („nesedí fanart"): fokus na titulu BEZ fanartu (ČT) dřív nechal viset
+            // fanart PŘEDCHOZÍHO titulu — na screenshotu Zootropolis pod textem „Sen o Dakaru".
+            // Cizí obrázek u cizího názvu je horší než čisté pozadí → uklidit.
+            shown = null
+            incoming = null
+        }
     }
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         shown?.let { url ->
@@ -195,7 +204,11 @@ fun HomeRowItem.toImmersiveInfo(): ImmersiveInfo {
         // 4K TV: plné rozlišení TMDB fanartu má přednost (landscapeUrl je jen 640–780 px pro karty →
         // fullscreen backdrop pixeloval). Fallback na landscapeUrl (Jellyfin řady bez TMDB backdropu).
         // NIKDY poster fallback — 2:3 plakát roztažený Crop do 16:9 = ošklivý zoom.
-        backdropUrl = mi?.backdropUrl("original") ?: landscapeUrl,
+        // VLTAVA F6b — titul BEZ TMDB (ČT) fanart nemá, ale jeho vlastní grafika JE 16:9 → použij ji
+        // (jinak by hero drželo obrázek předchozího titulu, viz `TvImmersiveBackground`).
+        backdropUrl = mi?.backdropUrl("original")
+            ?: landscapeUrl
+            ?: mi?.takeIf { it.hasWideArtworkOnly }?.fallbackPosterUrl,
         title = mi?.displayTitle ?: title,
         overview = mi?.let { it.overviewCz?.takeIf { o -> o.isNotBlank() } ?: it.overview },
         year = mi?.year ?: year,
