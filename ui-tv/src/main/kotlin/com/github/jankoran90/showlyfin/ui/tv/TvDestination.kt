@@ -40,6 +40,8 @@ sealed interface TvDestination {
         val externalPosterUrl: String? = null,
         // CROSS-DEVICE RESUME (cast telefon→TV): start-pozice z telefonu (ms); 0 = od začátku / vlastní resume TV.
         val externalStartMs: Long = 0L,
+        // VLTAVA F6b — vlastní klíč pozice (ČT díl `ctv:<idec>`), jinak si ho přehrávač odvodí z titulků.
+        val resumeKey: String? = null,
     ) : TvDestination
 
     /**

@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -71,10 +72,17 @@ fun TvHomeSidebar(
     onMove: (SidebarItem, up: Boolean) -> Unit = { _, _ -> },
     onOpenProfiles: () -> Unit = {},
     modifier: Modifier = Modifier,
-    // CONVERGE (SHW-97): externí fokus na PRVNÍ položku — když z detailu přijde D-pad doleva, sidebar se
-    // vysune a zaostří (uživatel odsud může do libovolné sekce; doprava fokus vrátí do obsahu).
+    // CONVERGE (SHW-97): externí fokus na VSTUPNÍ položku — když z detailu přijde D-pad doleva, sidebar
+    // se vysune a zaostří. Vstupní položka = AKTIVNÍ sekce (viz níž), ne slepě první.
     firstItemFocus: FocusRequester? = null,
+    /** Jméno aktivního profilu — v menu má být vidět KDO je přihlášený (user 2026-07-28). */
+    profileName: String? = null,
 ) {
+    // user 2026-07-28 („když na TV sjedu do sidebaru, chci ať je vybraná ta sekce, ve které jsem — teď se
+    // vždycky vybere Profil"): vstup do sidebaru MUSÍ přistát na aktivní sekci. Bez explicitního `enter`
+    // si fokus vybral geometricky nejbližší prvek — a to bývalo tlačítko Profil úplně dole.
+    val entryFocus = firstItemFocus ?: remember { FocusRequester() }
+    val entryIndex = items.indexOf(active).takeIf { it >= 0 } ?: 0
     var expanded by remember { mutableStateOf(false) }
     // COUCH T6: podržení položky → režim přesunu (D-pad nahoru/dolů posouvá, OK/Zpět potvrdí).
     var reordering by remember { mutableStateOf<SidebarItem?>(null) }
@@ -90,6 +98,7 @@ fun TvHomeSidebar(
             .width(width)
             .onFocusChanged { expanded = it.hasFocus; if (!it.hasFocus) reordering = null }
             .focusGroup()
+            .focusProperties { enter = { entryFocus } }
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
             .padding(vertical = 28.dp, horizontal = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -103,7 +112,7 @@ fun TvHomeSidebar(
                     reordering = reordering == item,
                     focusRequester = when {
                         reordering == item -> reorderFocus
-                        index == 0 -> firstItemFocus
+                        index == entryIndex -> entryFocus
                         else -> null
                     },
                     onClick = { if (reordering != null) reordering = null else onSelect(item) },
@@ -115,12 +124,12 @@ fun TvHomeSidebar(
         }
         // COUCH T5: přepínač JF profilu dole ve sidebaru.
         Spacer(Modifier.weight(1f))
-        ProfileButton(expanded = expanded, onClick = onOpenProfiles)
+        ProfileButton(expanded = expanded, name = profileName, onClick = onOpenProfiles)
     }
 }
 
 @Composable
-private fun ProfileButton(expanded: Boolean, onClick: () -> Unit) {
+private fun ProfileButton(expanded: Boolean, name: String?, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     Row(
         modifier = Modifier
@@ -141,7 +150,7 @@ private fun ProfileButton(expanded: Boolean, onClick: () -> Unit) {
         if (expanded) {
             Spacer(Modifier.width(14.dp))
             Text(
-                text = "Profil",
+                text = name?.takeIf { it.isNotBlank() } ?: "Profil",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,

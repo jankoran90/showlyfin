@@ -56,7 +56,7 @@ import com.github.jankoran90.showlyfin.ui.phone.CtvTitleViewModel
 fun FilmyCtvScreen(
     title: CtvTitle,
     onBack: () -> Unit,
-    onPlay: (url: String, label: String, posterUrl: String?) -> Unit,
+    onPlay: (url: String, label: String, posterUrl: String?, resumeKey: String) -> Unit,
     modifier: Modifier = Modifier,
     vm: CtvTitleViewModel = hiltViewModel(),
 ) {
@@ -67,7 +67,7 @@ fun FilmyCtvScreen(
     LaunchedEffect(play) {
         play?.let {
             vm.consumePlay()
-            onPlay(it.url, it.title, it.posterUrl)
+            onPlay(it.url, it.title, it.posterUrl, it.resumeKey)
         }
     }
 

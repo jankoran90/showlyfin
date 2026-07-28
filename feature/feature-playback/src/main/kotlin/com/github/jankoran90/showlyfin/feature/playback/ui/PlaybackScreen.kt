@@ -242,7 +242,9 @@ fun PlaybackScreen(
 ) {
     LaunchedEffect(itemId, externalUrl, localVideoPath) {
         if (localVideoPath != null) viewModel.loadLocal(localVideoPath, localSubtitlePath, externalTitle, offlineKey, localPosterPath)
-        else if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl, externalStartMs)
+        // `resumeKey` platí i pro EXTERNÍ stream (ČT díl `ctv:<idec>`) — bez něj by se pozice klíčovala
+        // z titulků (název pořadu) a všechny díly by si přepisovaly jednu pozici.
+        else if (externalUrl != null) viewModel.loadExternal(externalUrl, externalTitle, subtitleQuery, externalPosterUrl, externalStartMs, resumeKey)
         else viewModel.load(itemId, positionMs, resumeKey, externalTitle)
     }
 

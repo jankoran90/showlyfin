@@ -6,6 +6,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -39,6 +40,21 @@ fun ShowlyfinTvApp() {
     // ČSFD % + český popis na celé TV (parita s telefonem): stejný provider (CardCsfdViewModel) přes stejné
     // CompositionLocaly jako ShowlyfinPhoneApp → TV karty i immersive hero líně dotahují ČSFD/CZ z jednoho zdroje.
     val cardCsfd: CardCsfdViewModel = hiltViewModel()
+
+    // PROFIL (user 2026-07-28) — parita s telefonem: přepnutí profilu = re-create Activity, ať se VŠECHNO
+    // (VM i lokální stavy obrazovek) postaví znovu nad daty nového profilu. Guard přežije re-create.
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val profileSwitch by com.github.jankoran90.showlyfin.core.domain.profile.ProfileSwitchSignal.switches
+        .collectAsStateWithLifecycle()
+    var lastProfileSwitch by androidx.compose.runtime.saveable.rememberSaveable {
+        androidx.compose.runtime.mutableStateOf(0L)
+    }
+    androidx.compose.runtime.LaunchedEffect(profileSwitch) {
+        if (profileSwitch > 0 && profileSwitch != lastProfileSwitch) {
+            lastProfileSwitch = profileSwitch
+            (ctx as? android.app.Activity)?.recreate()
+        }
+    }
     // BESPOKE F3: sdílený mozek vlastního hvězdičkového hodnocení → LocalUserRatingProvider + dialog (MENU na kartě).
     val ratingVm: com.github.jankoran90.showlyfin.feature.detail.rating.RatingViewModel = hiltViewModel()
 

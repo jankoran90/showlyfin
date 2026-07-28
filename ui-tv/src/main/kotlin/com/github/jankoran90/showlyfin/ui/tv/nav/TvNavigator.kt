@@ -149,12 +149,13 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
 
         is TvDestination.CtvTitleDest -> com.github.jankoran90.showlyfin.ui.tv.ctv.TvCtvScreen(
             title = dest.title,
-            onPlay = { url, label, poster ->
+            onPlay = { url, label, poster, resumeKey ->
                 navigate(
                     TvDestination.Player(
                         externalUrl = url,
                         externalTitle = label,
                         externalPosterUrl = poster,
+                        resumeKey = resumeKey,
                     ),
                 )
             },
@@ -282,6 +283,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             subtitleQuery = dest.subtitleQuery,
             externalPosterUrl = dest.externalPosterUrl,
             externalStartMs = dest.externalStartMs,
+            resumeKey = dest.resumeKey,
             onBack = { back() },
         )
     }

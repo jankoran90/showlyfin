@@ -42,6 +42,7 @@ fun TvSidebarOverlay(
     homeVm: TvHomeViewModel = hiltViewModel(),
 ) {
     val sidebarEntries by homeVm.sidebar.collectAsStateWithLifecycle()
+    val profileName by homeVm.activeProfileName.collectAsStateWithLifecycle()
     val traktAllowed by homeVm.traktAllowed.collectAsStateWithLifecycle()
     // Stejná filtrace jako v TvShell (dětský/zamčený profil nevidí Trakt ani „Chci vidět").
     val sidebarItems = sidebarEntries.filter { it.enabled }.mapNotNull { SidebarItem.fromName(it.item) }
@@ -81,6 +82,7 @@ fun TvSidebarOverlay(
             TvHomeSidebar(
                 items = sidebarItems,
                 active = activeSection.toOverlaySidebarItem(),
+                profileName = profileName,
                 onMove = { item, up -> homeVm.moveSidebar(item.name, up) },
                 firstItemFocus = focus,
                 onSelect = { item ->

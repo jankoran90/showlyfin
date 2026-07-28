@@ -65,6 +65,7 @@ fun TvShell(
     val immersiveHeader by homeVm.immersiveHeader.collectAsStateWithLifecycle()
     val immersiveHeaderLines by homeVm.immersiveHeaderLines.collectAsStateWithLifecycle()
     val sidebarEntries by homeVm.sidebar.collectAsStateWithLifecycle()
+    val profileName by homeVm.activeProfileName.collectAsStateWithLifecycle()
     // COUCH R2: zamčený/dětský profil nevidí sekci Trakt (ani obsah mimo dětský).
     val traktAllowed by homeVm.traktAllowed.collectAsStateWithLifecycle()
     val sidebarItems = sidebarEntries.filter { it.enabled }.mapNotNull { SidebarItem.fromName(it.item) }
@@ -128,6 +129,7 @@ fun TvShell(
             TvHomeSidebar(
                 items = sidebarItems,
                 active = section.toSidebarItem(),
+                profileName = profileName,
                 onMove = { item, up -> homeVm.moveSidebar(item.name, up) },
                 onOpenProfiles = { showProfiles = true },
                 onSelect = { item ->

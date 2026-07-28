@@ -91,6 +91,8 @@ private data class FilmyPlayer(
     val title: String = "",
     val subtitleQuery: SubtitleQuery? = null,
     val posterUrl: String? = null,
+    // VLTAVA F6b — vlastní klíč pozice (ČT díl `ctv:<idec>`); jinak si ho přehrávač odvodí z titulků.
+    val resumeKey: String? = null,
 )
 
 @Composable
@@ -164,6 +166,21 @@ private fun FilmyShellContent() {
     }
     val popDetail: () -> Unit = { detailStack = detailStack.dropLast(1) }
 
+    // PROFIL (user 2026-07-28 „při přepnutí chci, aby se appka opravdu znovunačetla"): přepnutí profilu
+    // mění úplně všechno (Jellyfin creds, Trakt, Oblíbené, uložené zdroje, věkový strop). Reaktivní cesty
+    // to většinou stihnou, ale obrazovka s vlastním `remember`/už načteným VM by zůstala na starém obsahu.
+    // Re-create Activity = všechno vzniká znovu nad daty NOVÉHO profilu. `rememberSaveable` guard přežije
+    // re-create → nezacyklí se.
+    val profileSwitch by com.github.jankoran90.showlyfin.core.domain.profile.ProfileSwitchSignal.switches
+        .collectAsStateWithLifecycle()
+    var lastProfileSwitch by rememberSaveable { mutableStateOf(0L) }
+    LaunchedEffect(profileSwitch) {
+        if (profileSwitch > 0 && profileSwitch != lastProfileSwitch) {
+            lastProfileSwitch = profileSwitch
+            (context as? android.app.Activity)?.recreate()
+        }
+    }
+
     // Parity: notifikace kurátora „nová doporučení" (FilmyMainActivity → EXTRA_OPEN_FORYOU) → přepni na
     // sekci „Pro tebe" a zavři případný otevřený detail/přehrávač, ať je sekce reálně vidět.
     val openForYou by ListenNavSignal.openForYou.collectAsStateWithLifecycle()
@@ -197,6 +214,7 @@ private fun FilmyShellContent() {
                 externalTitle = activePlayer.title,
                 subtitleQuery = activePlayer.subtitleQuery,
                 externalPosterUrl = activePlayer.posterUrl,
+                resumeKey = activePlayer.resumeKey,
                 onBack = { player = null },
                 onPlaybackFailed = { code ->
                     player = null            // zpět na detail, kde žije candidate list
@@ -229,7 +247,11 @@ private fun FilmyShellContent() {
             FilmyCtvScreen(
                 title = detailEntry.title,
                 onBack = popDetail,
-                onPlay = { url, label, poster -> playStream(url, label, null, poster) },
+                onPlay = { url, label, poster, resumeKey ->
+                    player = FilmyPlayer(
+                        externalUrl = url, title = label, posterUrl = poster, resumeKey = resumeKey,
+                    )
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (detailEntry is FilmyDetailEntry.Jellyfin) {

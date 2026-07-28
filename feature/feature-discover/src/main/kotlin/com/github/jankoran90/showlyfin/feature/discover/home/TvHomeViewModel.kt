@@ -87,6 +87,8 @@ class TvHomeViewModel @Inject constructor(
     private val workingSources: WorkingSourceStore,
     // FOYER (SHW-107) — řada „Filmotéka — nedávno přidané" čte TUTÉŽ bázi jako sekce Filmotéka.
     private val filmotekaBase: com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaBaseLoader,
+    // VLTAVA F6c — ČT pořady z Filmotéky do řady „Další díly" (Jellyfin část zůstává, ČT se připojí za ni).
+    private val ctvNextUp: CtvNextUpLoader,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val profileRepository: ProfileRepository,
     private val apiClient: ApiClient,
@@ -160,6 +162,11 @@ class TvHomeViewModel @Inject constructor(
     val activeProfileId: StateFlow<Long?> = profileRepository.activeProfile
         .map { it?.id }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), profileRepository.activeProfile.value?.id)
+
+    /** Jméno aktivního profilu — sidebar místo obecného „Profil" ukazuje, kdo je přihlášený (user 07-28). */
+    val activeProfileName: StateFlow<String?> = profileRepository.activeProfile
+        .map { it?.name }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), profileRepository.activeProfile.value?.name)
 
     /** Netflix immersive pozadí (fokusovaná karta řídí fanart). */
     val immersiveBackground: StateFlow<Boolean> = store.immersiveBackground
@@ -239,6 +246,7 @@ class TvHomeViewModel @Inject constructor(
     private fun invalidateFilmotekaRow() {
         val cfg = rowConfigs.value.firstOrNull { it.source == HomeRowSourceType.FILMOTEKA_RECENT } ?: return
         filmotekaBase.invalidateRecent()
+        ctvNextUp.invalidate()
         loadedHash.remove(cfg.id)
         ensureRowLoaded(cfg)
     }
@@ -326,7 +334,7 @@ class TvHomeViewModel @Inject constructor(
         }
         HomeRowSourceType.NEXT_UP -> loadJellyfin(config) { userUuid ->
             nextUpItems(userUuid, config.limit, jellyfinLibraryUuids())
-        }
+        } + ctvNextUp.load(config.limit)
         // Sloučené Pokračovat + Další díly — resume má přednost, dedup dle seriálu/položky.
         HomeRowSourceType.CONTINUE_WATCHING_COMBINED -> loadJellyfin(config) { userUuid ->
             val libs = jellyfinLibraryUuids()
@@ -334,7 +342,7 @@ class TvHomeViewModel @Inject constructor(
             (resumeItems(userUuid, config.limit, libs) + nextUpItems(userUuid, config.limit, libs))
                 .filter { dto -> seen.add((dto.seriesId ?: dto.id).toString()) }
                 .take(config.limit)
-        }
+        } + ctvNextUp.load(config.limit)
         // „Nejnovější v <knihovna>" — getLatestMedia pro konkrétní knihovnu. Gate na whitelist (nezobrazuj
         // nezvolené knihovny — user 07-19).
         HomeRowSourceType.RECENTLY_ADDED -> {

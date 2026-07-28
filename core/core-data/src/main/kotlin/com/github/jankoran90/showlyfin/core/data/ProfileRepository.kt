@@ -8,6 +8,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.TemplateEntity
 import com.github.jankoran90.showlyfin.core.domain.MirrorRefreshResult
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
+import com.github.jankoran90.showlyfin.core.domain.profile.ProfileSwitchSignal
 import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
 import com.github.jankoran90.showlyfin.core.domain.TraktCreds
 import timber.log.Timber
@@ -448,6 +449,10 @@ class ProfileRepository @Inject constructor(
         // Best-effort + timeout, ať přepnutí profilu nevisí offline. Uploader creds aplikované výše
         // → gateway má URL+cookie. Re-aplikuje jen pokud je profil pořád aktivní a balík přišel.
         syncConfigFromBackend(profile)
+        // user 2026-07-28: skořápka si na tenhle signál vynutí re-create Activity → veškerý obsah
+        // (i ten držený v `remember`/už načtených ViewModelech) se postaví znovu nad NOVÝM profilem.
+        // Až ÚPLNĚ NAKONEC: prefs, config i backendový balík už sedí, takže reload čte správná data.
+        ProfileSwitchSignal.notifySwitched()
     }
 
     /**

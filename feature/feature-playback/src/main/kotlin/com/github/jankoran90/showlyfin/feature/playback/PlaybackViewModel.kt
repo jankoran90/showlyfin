@@ -139,7 +139,17 @@ class PlaybackViewModel @Inject constructor(
     private var translateObserveJob: Job? = null
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
-    fun loadExternal(url: String, title: String, subtitleQuery: SubtitleQuery? = null, posterUrl: String? = null, externalResumeMs: Long = 0L) {
+    fun loadExternal(
+        url: String,
+        title: String,
+        subtitleQuery: SubtitleQuery? = null,
+        posterUrl: String? = null,
+        externalResumeMs: Long = 0L,
+        // VLTAVA F6b — VLASTNÍ klíč resume, když ho volající zná líp. ČT díl nemá imdb ani rok, takže by mu
+        // `resumeKeyOf` dal klíč z názvu POŘADU → všechny díly by sdílely jednu pozici. Posíláme `ctv:<idec>`
+        // → každý díl si drží svou pozici a řada „Další díly" pozná rozkoukaný.
+        explicitResumeKey: String? = null,
+    ) {
         // PICKUP: u externích streamů (Stremio/RD) si pozici pamatujeme lokálně (Jellyfin ji řeší přes
         // server). Titulky vyžadují imdb (gate beze změny), ALE resume klíčujeme přes resumeKeyOf, který
         // má fallback na název+rok — obsah z Objevit/doporučení má imdb zatím prázdné (TMDB ho dohledá
@@ -155,7 +165,7 @@ class PlaybackViewModel @Inject constructor(
         query = subtitleQuery?.takeIf {
             it.autoSearch && (it.imdb.isNotBlank() || it.title.isNotBlank() || it.origTitle.isNotBlank())
         }
-        resumeKey = subtitleQuery?.let { resumeKeyOf(it) }
+        resumeKey = explicitResumeKey?.takeIf { it.isNotBlank() } ?: subtitleQuery?.let { resumeKeyOf(it) }
         // CURTAIN: stream mimo knihovnu — Jellyfin id nemáme, zůstává imdb (Trakt, opt-in) a úklid resume.
         setWatchTarget(
             WatchedReporter.Target(

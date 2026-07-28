@@ -39,7 +39,7 @@ class CtvTitleViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** Hotová adresa k přehrání + název do přehrávače (jednorázový signál, viz [consumePlay]). */
-    data class PlayRequest(val url: String, val title: String, val posterUrl: String?)
+    data class PlayRequest(val url: String, val title: String, val posterUrl: String?, val resumeKey: String)
 
     data class UiState(
         val title: CtvTitle? = null,
@@ -182,7 +182,8 @@ class CtvTitleViewModel @Inject constructor(
                 is CtvStreamResolver.Result.Ok -> {
                     Timber.i("[VLTAVA] ČT hledání → play idec=%s", idec)
                     _state.update { it.copy(resolvingIdec = null) }
-                    _play.value = PlayRequest(r.url, label, posterUrl)
+                    // Klíč pozice = konkrétní díl (`ctv:<idec>`), ne pořad → každý díl si pamatuje svoje.
+                    _play.value = PlayRequest(r.url, label, posterUrl, CTV_SCHEME + idec)
                 }
                 else -> _state.update { it.copy(resolvingIdec = null, error = errorText(r)) }
             }
