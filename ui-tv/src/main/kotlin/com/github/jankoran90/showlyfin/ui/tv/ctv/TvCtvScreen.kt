@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.tv.ctv
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,7 @@ fun TvCtvScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val play by vm.play.collectAsStateWithLifecycle()
+    val watched by vm.watchedKeys.collectAsStateWithLifecycle()
 
     LaunchedEffect(title.sidp) { vm.load(title) }
     LaunchedEffect(play) {
@@ -161,7 +163,10 @@ fun TvCtvScreen(
                     TvCtvEpisodeRow(
                         episode = ep,
                         resolving = state.resolvingIdec == ep.id,
-                        onClick = { vm.playIdec(ep.id, ep.title.ifBlank { title.title }, ep.image ?: title.thumbnail) },
+                        watched = "ctv:${ep.id}" in watched,
+                        onClick = { vm.playIdec(ep.id, ep.title.ifBlank { head.title }, ep.image ?: head.thumbnail) },
+                        // Podržení OK na dálkáku = přepnout „zhlédnuto" (parita s telefonem).
+                        onLongClick = { vm.toggleEpisodeWatched(ep.id) },
                     )
                 }
             }
@@ -170,11 +175,20 @@ fun TvCtvScreen(
     // BACK řeší TvNavigator (stack) — vlastní BackHandler by mu bral přednost.
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun TvCtvEpisodeRow(episode: CtvEpisode, resolving: Boolean, onClick: () -> Unit) {
+private fun TvCtvEpisodeRow(
+    episode: CtvEpisode,
+    resolving: Boolean,
+    watched: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().tvFocusBorder(shape = RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(8.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -191,10 +205,21 @@ private fun TvCtvEpisodeRow(episode: CtvEpisode, resolving: Boolean, onClick: ()
             if (resolving) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(
-                episode.title.ifBlank { "Díl" }, style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (watched) {
+                    Icon(
+                        Icons.Rounded.Check, contentDescription = "Zhlédnuto",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp).padding(end = 6.dp),
+                    )
+                }
+                Text(
+                    episode.title.ifBlank { "Díl" }, style = MaterialTheme.typography.titleMedium,
+                    color = if (watched) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+            }
             val sub = listOfNotNull(episode.date?.take(10), episode.label).joinToString(" · ")
             if (sub.isNotBlank()) {
                 Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -35,6 +35,7 @@ class CtvTitleViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val ctvResolver: CtvStreamResolver,
     private val workingSources: WorkingSourceStore,
+    private val watchedStore: com.github.jankoran90.showlyfin.core.domain.resume.CtvWatchedStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -54,6 +55,9 @@ class CtvTitleViewModel @Inject constructor(
     private val _state = MutableStateFlow(UiState())
     val state = _state.asStateFlow()
 
+    /** Reaktivní množina klíčů `ctv:<idec>` zhlédnutých dílů — fajfka u dílu se překreslí sama. */
+    val watchedKeys = watchedStore.watched
+
     private val _play = MutableStateFlow<PlayRequest?>(null)
     val play = _play.asStateFlow()
 
@@ -70,10 +74,19 @@ class CtvTitleViewModel @Inject constructor(
             // F6b: titul otevřený z Filmotéky nese jen identitu (`ctvid:<sidp>`) + název → dotáhni zbytek
             // (popis, obrázek, `idec` k přehrání). `idec` schválně NEUKLÁDÁME — je krátkodobé.
             val full = if (title.idec.isNullOrBlank() && title.episodesAnchor.isNullOrBlank()) {
-                uploaderDs.getCtvTitle(baseUrl, cookie, title.sidp)?.also { fresh ->
-                    _state.update { it.copy(title = fresh) }
-                    healSavedRecord(fresh)
-                } ?: title
+                val fresh = uploaderDs.getCtvTitle(baseUrl, cookie, title.sidp)
+                if (fresh == null) {
+                    // 🔴 Dřív se to spolklo (`?: title`) a karta zůstala TIŠE prázdná — nešlo poznat,
+                    // jestli titul nic nemá, nebo jen selhalo spojení (user 2026-07-28 „karta pořadu
+                    // nejde otevřít"). Řekni to nahlas a nabídni zkusit znovu ([retry]).
+                    Timber.w("[VLTAVA] ČT titul %s se nepodařilo načíst", title.sidp)
+                    loadedFor = null
+                    _state.update { it.copy(error = "Načtení z ČT se nepovedlo. Zkus to prosím znovu.") }
+                    return@launch
+                }
+                _state.update { it.copy(title = fresh) }
+                healSavedRecord(fresh)
+                fresh
             } else {
                 title
             }
@@ -191,9 +204,37 @@ class CtvTitleViewModel @Inject constructor(
         }
     }
 
+    /**
+     * VLTAVA F6c (user 2026-07-28 „budu potřebovat něco jako označit řady a díly jako zhlédnuté") —
+     * přepínač „zhlédnuto" u jednoho dílu ČT. Zhlédnutý díl přeskočí řada „Další díly".
+     */
+    fun toggleEpisodeWatched(idec: String) {
+        val key = CTV_SCHEME + idec
+        if (watchedStore.isWatched(key)) watchedStore.clear(key) else watchedStore.markWatched(key)
+    }
+
+    /**
+     * „Vše až po tento díl" — u pořadu s desítkami dílů je proklikávání jednoho po druhém k ničemu.
+     * Díly chodí od nejstaršího, takže označíme všechno od začátku po vybraný (včetně).
+     */
+    fun markWatchedUpTo(idec: String) {
+        val eps = _state.value.episodes
+        val idx = eps.indexOfFirst { it.id == idec }
+        if (idx < 0) return
+        eps.take(idx + 1).forEach { watchedStore.markWatched(CTV_SCHEME + it.id) }
+    }
+
     fun consumePlay() { _play.value = null }
 
     fun dismissError() { _state.update { it.copy(error = null) } }
+
+    /** Zkus načtení karty znovu (po chybě spojení) — `loadedFor` je po chybě už vynulované. */
+    fun retry() {
+        val t = _state.value.title ?: return
+        _state.update { it.copy(error = null) }
+        loadedFor = null
+        load(t)
+    }
 
     /** Pravdivá hláška místo černé obrazovky (zrcadlí `DetailViewModel.ctvError`). */
     private fun errorText(r: CtvStreamResolver.Result): String = when (r) {

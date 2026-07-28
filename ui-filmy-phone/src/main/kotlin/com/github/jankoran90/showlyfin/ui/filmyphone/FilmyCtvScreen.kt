@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +63,7 @@ fun FilmyCtvScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val play by vm.play.collectAsStateWithLifecycle()
+    val watched by vm.watchedKeys.collectAsStateWithLifecycle()
 
     LaunchedEffect(title.sidp) { vm.load(title) }
     LaunchedEffect(play) {
@@ -125,12 +127,13 @@ fun FilmyCtvScreen(
                     )
                 }
                 state.error?.let { err ->
-                    Text(
-                        err,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 10.dp).clickable { vm.dismissError() },
-                    )
+                    Column(Modifier.padding(top = 10.dp)) {
+                        Text(err, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        // Karta nesmí zůstat tiše prázdná — když se načtení nepovede, dej cestu ven.
+                        OutlinedButton(onClick = { vm.retry() }, modifier = Modifier.padding(top = 6.dp)) {
+                            Text("Zkusit znovu")
+                        }
+                    }
                 }
                 // Zobrazuj VŽDY živý stav z VM (po dohydrataci z Filmotéky zná `idec` až on, ne parametr).
                 val shown = head
@@ -194,17 +197,33 @@ fun FilmyCtvScreen(
                 CtvEpisodeRow(
                     episode = ep,
                     resolving = state.resolvingIdec == ep.id,
-                    onClick = { vm.playIdec(ep.id, ep.title.ifBlank { title.title }, ep.image ?: title.thumbnail) },
+                    watched = "ctv:${ep.id}" in watched,
+                    onClick = { vm.playIdec(ep.id, ep.title.ifBlank { head.title }, ep.image ?: head.thumbnail) },
+                    // Dlouhý stisk = zhlédnuto/nezhlédnuto; u pořadu s desítkami dílů navíc označí
+                    // VŠECHNO až sem (díly jdou od nejstaršího) — jinak by to bylo klikání donekonečna.
+                    onToggleWatched = { vm.toggleEpisodeWatched(ep.id) },
+                    onMarkUpTo = { vm.markWatchedUpTo(ep.id) },
                 )
             }
         }
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun CtvEpisodeRow(episode: CtvEpisode, resolving: Boolean, onClick: () -> Unit) {
+private fun CtvEpisodeRow(
+    episode: CtvEpisode,
+    resolving: Boolean,
+    watched: Boolean,
+    onClick: () -> Unit,
+    onToggleWatched: () -> Unit,
+    onMarkUpTo: () -> Unit,
+) {
+    var menu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = { menu = true })
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -223,13 +242,34 @@ private fun CtvEpisodeRow(episode: CtvEpisode, resolving: Boolean, onClick: () -
             if (resolving) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(
-                episode.title.ifBlank { "Díl" },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (watched) {
+                    Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = "Zhlédnuto",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                    )
+                }
+                Text(
+                    episode.title.ifBlank { "Díl" },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (watched) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(if (watched) "Označit jako nezhlédnuté" else "Označit jako zhlédnuté") },
+                    onClick = { menu = false; onToggleWatched() },
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Označit vše až sem jako zhlédnuté") },
+                    onClick = { menu = false; onMarkUpTo() },
+                )
+            }
             val sub = listOfNotNull(episode.date?.take(10)?.czDate(), episode.label).joinToString(" · ")
             if (sub.isNotBlank()) {
                 Text(sub, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
