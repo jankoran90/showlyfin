@@ -44,25 +44,36 @@ object CtvNumbering {
     fun number(episodes: List<CtvEpisode>): List<Numbered> {
         if (episodes.isEmpty()) return emptyList()
         val sorted = episodes.sortedWith(compareBy({ seasonKeyOf(it.id) }, { ordinalOf(it.id) }, { it.id }))
-        // Čísluje ČT sama? (většina dílů nese „N/M") → jedna řada, čísla bereme od ní.
+        val seasonKeys = sorted.map { seasonKeyOf(it.id) }.distinct()
+        // Čísluje ČT sama? (většina dílů nese „N/M") → čísla dílů bereme od ní, ta jsou autoritativní.
         val labelled = sorted.count { NUMBER_PREFIX.matches(it.title) }
         if (labelled * 2 > sorted.size) {
-            val numbered = sorted.mapIndexed { idx, ep ->
+            val fromTitle = sorted.mapIndexed { idx, ep ->
+                // Díl bez „N/M" (ČT občas přidá bonus) dostane pořadí v seřazeném seznamu.
                 val m = NUMBER_PREFIX.find(ep.title)
-                Numbered(
-                    episode = ep,
-                    seasonKey = "",
-                    seasonNumber = 1,
-                    // Díl bez „N/M" (ČT občas přidá bonus) dostane pořadí v seřazeném seznamu.
-                    episodeNumber = m?.groupValues?.get(1)?.toIntOrNull() ?: (idx + 1),
-                    cleanTitle = m?.groupValues?.get(3)?.trim()?.takeIf { it.isNotBlank() } ?: ep.title,
+                Triple(
+                    ep,
+                    m?.groupValues?.get(1)?.toIntOrNull() ?: (idx + 1),
+                    m?.groupValues?.get(3)?.trim()?.takeIf { it.isNotBlank() } ?: ep.title,
                 )
             }
-            // Číslo z názvu je autoritativní → seřaď podle něj (idec u přečíslovaných řad nesedí).
-            return numbered.sortedBy { it.episodeNumber }
+            // Opakují se čísla dílů? Pak jde o VÍC řad, každou číslovanou od jedničky — rozdělíme je
+            // podle prefixu idec (ověřeno: `Vyprávěj` = pět řad, každá má vlastní „1/26" resp. „1/16").
+            // Neopakují-li se, je to jedna průběžně číslovaná řada napříč výrobními sadami (ověřeno:
+            // `Nemocnice na kraji města` = díly 1/20…20/20 přes DVA idec prefixy) → nedělíme.
+            val split = fromTitle.map { it.second }.distinct().size < fromTitle.size
+            return fromTitle.map { (ep, number, title) ->
+                val key = if (split) seasonKeyOf(ep.id) else ""
+                Numbered(
+                    episode = ep,
+                    seasonKey = key,
+                    seasonNumber = if (split) seasonKeys.indexOf(key) + 1 else 1,
+                    episodeNumber = number,
+                    cleanTitle = title,
+                )
+            }.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
         }
         // Jinak série = prefix idec, díl = pořadí v ní.
-        val seasonKeys = sorted.map { seasonKeyOf(it.id) }.distinct()
         val counters = HashMap<String, Int>()
         return sorted.map { ep ->
             val key = seasonKeyOf(ep.id)
