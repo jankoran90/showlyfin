@@ -246,7 +246,9 @@ class CtvTitleViewModel @Inject constructor(
         val eps = _state.value.episodes
         val idx = eps.indexOfFirst { it.episode.id == idec }
         if (idx < 0) return
-        eps.take(idx + 1).forEach { watchedStore.markWatched(CTV_SCHEME + it.episode.id) }
+        // Dávkou, ne po dílech: každé samostatné označení = vlastní zápis + sync + přestavba řad domova
+        // (u pořadu s desítkami dílů to appku na minuty zavalilo).
+        watchedStore.markWatched(eps.take(idx + 1).map { CTV_SCHEME + it.episode.id })
     }
 
     /**
@@ -256,11 +258,8 @@ class CtvTitleViewModel @Inject constructor(
     fun toggleSeasonWatched(label: String) {
         val eps = _state.value.seasons.firstOrNull { it.label == label }?.episodes
             ?: _state.value.episodes
-        val allWatched = eps.all { watchedStore.isWatched(CTV_SCHEME + it.episode.id) }
-        eps.forEach { n ->
-            val key = CTV_SCHEME + n.episode.id
-            if (allWatched) watchedStore.clear(key) else watchedStore.markWatched(key)
-        }
+        val keys = eps.map { CTV_SCHEME + it.episode.id }
+        if (keys.all { watchedStore.isWatched(it) }) watchedStore.clear(keys) else watchedStore.markWatched(keys)
     }
 
     fun selectSeason(label: String) { _state.update { it.copy(selectedSeason = label) } }

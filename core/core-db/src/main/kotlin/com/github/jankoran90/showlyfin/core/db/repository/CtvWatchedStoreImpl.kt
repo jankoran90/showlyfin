@@ -59,6 +59,9 @@ class CtvWatchedStoreImpl @Inject constructor(
     private val _watched = MutableStateFlow<Set<String>>(emptySet())
     override val watched: StateFlow<Set<String>> = _watched.asStateFlow()
 
+    private val _hydrated = MutableStateFlow(false)
+    override val hydrated: StateFlow<Boolean> = _hydrated.asStateFlow()
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private val activeUuidFlow = profileRepository.activeProfile
         .map { it?.profileUuid?.takeIf { uuid -> uuid.isNotBlank() } }
@@ -69,7 +72,10 @@ class CtvWatchedStoreImpl @Inject constructor(
         scope.launch {
             activeUuidFlow.flatMapLatest { key ->
                 if (key == null) flowOf(emptyList()) else dao.observe(key)
-            }.collect { rows -> _watched.value = rows.map { it.mediaKey }.toSet() }
+            }.collect { rows ->
+                _watched.value = rows.map { it.mediaKey }.toSet()
+                _hydrated.value = true
+            }
         }
         // Po přiřazení profilu: jednorázová migrace lokálních prefs → Room + pull ze serveru.
         scope.launch {
@@ -84,28 +90,38 @@ class CtvWatchedStoreImpl @Inject constructor(
 
     override fun isWatched(key: String): Boolean = key.isNotBlank() && key in _watched.value
 
-    override fun markWatched(key: String) {
-        if (key.isBlank() || key in _watched.value) return
-        _watched.update { it + key }
+    override fun markWatched(key: String) = markWatched(listOf(key))
+
+    override fun markWatched(keys: Collection<String>) {
+        val fresh = keys.filter { it.isNotBlank() && it !in _watched.value }
+        if (fresh.isEmpty()) return
+        _watched.update { it + fresh }
         val profileKey = activeKey() ?: return
         val now = System.currentTimeMillis()
         scope.launch {
-            dao.upsert(
-                CtvWatchedEntity(
-                    profileKey = profileKey, mediaKey = key, watchedAt = now,
-                    updatedAt = now, dirty = 1, deleted = 0,
-                ),
+            // JEDEN dávkový zápis → Room vydá JEDNU emisi → řada „Další díly" se přestaví jednou.
+            dao.upsertAll(
+                fresh.map { key ->
+                    CtvWatchedEntity(
+                        profileKey = profileKey, mediaKey = key, watchedAt = now,
+                        updatedAt = now, dirty = 1, deleted = 0,
+                    )
+                },
             )
             syncNow(profileKey)
         }
     }
 
-    override fun clear(key: String) {
-        if (key !in _watched.value) return
-        _watched.update { it - key }
+    override fun clear(key: String) = clear(listOf(key))
+
+    override fun clear(keys: Collection<String>) {
+        val known = keys.filter { it in _watched.value }
+        if (known.isEmpty()) return
+        _watched.update { it - known.toSet() }
         val profileKey = activeKey() ?: return
+        val now = System.currentTimeMillis()
         scope.launch {
-            dao.markDeleted(profileKey, key, System.currentTimeMillis())
+            known.forEach { dao.markDeleted(profileKey, it, now) }
             syncNow(profileKey)
         }
     }

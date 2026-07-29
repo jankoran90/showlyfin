@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -247,10 +248,14 @@ class TvHomeViewModel @Inject constructor(
         // v Další díly je pořád Jezera a bažiny — nereaguje to na to, co sleduju"): řada se skládala
         // jednou a držela se 10 min v cache, takže označení dílu za zhlédnutý s ní nehnulo. Teď na
         // změnu zhlédnutých ČT dílů cache zahodíme a řadu přenačteme.
-        ctvWatched.watched
-            .drop(1)
-            .onEach { invalidateCtvNextUpRow() }
-            .launchIn(viewModelScope)
+        // 🔴 Ale AŽ po hydrataci: `watched` startuje prázdné a teprve se plní z databáze (a pak ze
+        // serveru), takže `drop(1)` bral první načtení jako změnu → domov si při KAŽDÉM startu řadu
+        // zahodil a stavěl znovu, včetně dotazů do ČT (user 2026-07-29: „3 minuty nic").
+        viewModelScope.launch {
+            ctvWatched.hydrated.first { it }
+            // StateFlow vydá při odběru aktuální hodnotu — tu zahodíme, dál jdou jen skutečné změny.
+            ctvWatched.watched.drop(1).collect { invalidateCtvNextUpRow() }
+        }
     }
 
     /** Přenačti řady, kam patří ČT „další díly" (zahodí i cache loaderu). */

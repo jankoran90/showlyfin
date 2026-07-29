@@ -13,6 +13,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.CtvNumbering
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -72,8 +73,12 @@ class CtvNextUpLoader @Inject constructor(
             return emptyList()
         }
 
+        // Řada domova nesmí viset na ČT: každý pořad = jeden dotaz do iVysílání a když jeden zatuhne,
+        // čekal by na něj celý domov. Strop [SHOW_TIMEOUT_MS] na pořad, co se nestihne, prostě chybí.
         val items = coroutineScope {
-            shows.map { show -> async { nextEpisodeOf(show) } }.awaitAll()
+            shows.map { show ->
+                async { withTimeoutOrNull(SHOW_TIMEOUT_MS) { nextEpisodeOf(show) } }
+            }.awaitAll()
         }.filterNotNull()
         cache = Cached(profileKey, watchedStamp, now, items)
         Timber.i("[VLTAVA] Další díly ČT: %d pořadů → %d položek", shows.size, items.size)
@@ -143,5 +148,8 @@ class CtvNextUpLoader @Inject constructor(
 
         /** Jak dlouho platí sestavená řada (10 min, stejně jako „Filmotéka — nedávno přidané"). */
         const val CACHE_TTL_MS = 10L * 60 * 1000
+
+        /** Strop na jeden pořad — pomalá/zatuhlá odpověď ČT nesmí držet domov. */
+        const val SHOW_TIMEOUT_MS = 4_000L
     }
 }

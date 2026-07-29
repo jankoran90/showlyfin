@@ -21,12 +21,28 @@ interface CtvWatchedStore {
     /** Množina `ctv:<idec>` dokoukaných dílů AKTIVNÍHO profilu; reaktivní (řada „Další díly" se posune sama). */
     val watched: StateFlow<Set<String>>
 
+    /**
+     * Je už načteno z úložiště? Dokud ne, je [watched] prázdné jen proto, že se teprve hydratuje —
+     * konzumenti (řada „Další díly") na to nesmí reagovat přestavbou, jinak se každý start dělá 2×.
+     */
+    val hydrated: StateFlow<Boolean>
+
     fun isWatched(key: String): Boolean
 
     fun markWatched(key: String)
 
+    /**
+     * Hromadné označení („vše až sem", „označit sérii") — JEDEN zápis, JEDEN sync, JEDNA emise.
+     * Po dílech to dělat nelze: každý díl by jinak spustil vlastní kolo zápis→server→přestavba řad
+     * (u série o 26 dílech 26 lavin) a domov by se minuty přepočítával.
+     */
+    fun markWatched(keys: Collection<String>)
+
     /** Ruční „nezhlédnuto" (kdyby si to user chtěl přehrát znovu od začátku seriálu). */
     fun clear(key: String)
+
+    /** Hromadné odznačení — viz [markWatched] se seznamem. */
+    fun clear(keys: Collection<String>)
 
     /** Push neodeslaných změn + pull ze serveru. Volá se sám při změně profilu; jinak na lifecycle. */
     fun syncNow()
