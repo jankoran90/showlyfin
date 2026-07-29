@@ -90,6 +90,8 @@ class TvHomeViewModel @Inject constructor(
     private val filmotekaBase: com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaBaseLoader,
     // VLTAVA F6c — ČT pořady z Filmotéky do řady „Další díly" (Jellyfin část zůstává, ČT se připojí za ni).
     private val ctvNextUp: CtvNextUpLoader,
+    // Poslední obsah řad z disku → domov ukáže něco HNED a síť ho jen přepíše (user 2026-07-29).
+    private val rowCache: HomeRowCache,
     // VLTAVA F6c — zhlédnuté ČT díly řídí, co ukáže řada „Další díly" → musí ji přenačíst.
     private val ctvWatched: com.github.jankoran90.showlyfin.core.domain.resume.CtvWatchedStore,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
@@ -304,8 +306,12 @@ class TvHomeViewModel @Inject constructor(
         if (loadedHash[config.id] == config.hashCode()) return
         loadedHash[config.id] = config.hashCode()
         jobs.remove(config.id)?.cancel()
-        _states.update { it + (config.id to (it[config.id]?.copy(config = config, loading = true)
-            ?: HomeRowState(config, loading = true))) }
+        // Než dorazí síť, ukaž poslední známý obsah téhle řady (stejný profil). Bez toho je po startu
+        // appky prázdno tak dlouho, jak dlouho trvá Jellyfin/Trakt/TMDB — user 2026-07-29: „3 minuty nic".
+        val cached = _states.value[config.id]?.items?.takeIf { it.isNotEmpty() }
+            ?: rowCache.read(profileCacheKey(), config.id).orEmpty()
+        _states.update { it + (config.id to (it[config.id]?.copy(config = config, items = cached, loading = true)
+            ?: HomeRowState(config, items = cached, loading = true))) }
         jobs[config.id] = viewModelScope.launch {
             when (config.source) {
                 // FAVORITES = reaktivní (per-profil sync běží asynchronně) → sleduj tok.
@@ -345,7 +351,14 @@ class TvHomeViewModel @Inject constructor(
 
     private fun emit(config: HomeRowConfig, items: List<HomeRowItem>) {
         _states.update { it + (config.id to HomeRowState(config, items = items, loading = false)) }
+        // Prázdno neukládáme — bývá to chyba/timeout a přepsalo by to použitelný obsah.
+        if (items.isNotEmpty()) rowCache.write(profileCacheKey(), config.id, items)
     }
+
+    /** Klíč profilu pro diskovou cache řad — jinak by dětský profil bliknul obsahem dospělého. */
+    private fun profileCacheKey(): String =
+        profileRepository.activeProfile.value?.profileUuid?.takeIf { it.isNotBlank() }
+            ?: prefs.getString("jellyfin_user_id", "").orEmpty()
 
     private suspend fun loadOnce(config: HomeRowConfig): List<HomeRowItem> {
         // COUCH R2: zamčený/dětský profil nevidí žádné Trakt řady (watchlist/historie/seznam/couchmonkey).

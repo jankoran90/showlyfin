@@ -27,6 +27,7 @@ dependencies {
     implementation(project(":data:data-uploader"))
     implementation(libs.hilt.android)
     implementation(libs.timber)
+    implementation(libs.gson)          // HomeRowCache: poslední obsah řad na disk
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.core.ktx)
