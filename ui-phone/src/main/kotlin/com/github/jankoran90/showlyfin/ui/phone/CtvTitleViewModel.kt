@@ -168,8 +168,12 @@ class CtvTitleViewModel @Inject constructor(
                 description = "${t.title}$yr · iVysílání · CZ",
                 url = url,
                 addon = "Česká televize",
+                // Rozlišení NEHÁDÁME: ověřeno na produkčním API ČT (2026-07-29, „Magické hlubiny"), že
+                // `availableQualities` u pořadu končí na **720p** — natvrdo psané „1080p" byla lež v UI
+                // (user: „obraz asi není 1080hd"). Skutečnou kvalitu zná až playlist konkrétního dílu,
+                // takže ji tady radši neuvádíme vůbec, než abychom slibovali víc, než ČT dá.
                 quality = UploaderStreamQuality(
-                    resolution = "1080p", audioLanguage = "CZ", source = "WEB", videoCodec = "H.264",
+                    resolution = null, audioLanguage = "CZ", source = "WEB", videoCodec = "H.264",
                 ),
             ),
             // Obálka do Filmotéky: nejdřív svislý plakát ČT (sedí do karet 2:3), jinak 16:9 náhled
