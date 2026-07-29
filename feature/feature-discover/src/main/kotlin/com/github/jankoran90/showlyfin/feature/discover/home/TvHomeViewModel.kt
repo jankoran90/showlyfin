@@ -214,7 +214,13 @@ class TvHomeViewModel @Inject constructor(
     init {
         // COUCH per-profil: každý profil má vlastní layout domova. Nejdřív přepni store na layout profilu
         // (i iniciálně), pak (na ZMĚNU) přenačti obsah — jeden collector = pořadí switchProfile → reload.
-        var firstProfileEmit = true
+        // 🔴 Dřív hlídala jen „první emise" — jenže `activeProfile` při startu emituje NEJDŘÍV null
+        // a teprve pak profil, takže druhá (= startovní) emise prošla jako ZMĚNA a domov si při každém
+        // startu zahodil a znovu postavil VŠECHNY řady (změřeno na boxu 2026-07-29: „profil změněn →
+        // Dospělý → reloadAllRows: 8 řad" půl vteřiny po vykreslení). Reloadujeme až na REÁLNOU změnu
+        // profilu, tedy když se změní jeho id a předtím už nějaké bylo.
+        var lastProfileId: Long? = null
+        var sawProfile = false
         profileRepository.activeProfile
             .onEach { p ->
                 store.switchProfile(p?.id)
@@ -223,9 +229,11 @@ class TvHomeViewModel @Inject constructor(
                 // (prázdný, zdroje uložil telefon/backend) → odznaky/„Přehrát" na TV chyběly. Táhni ze serveru
                 // per profil (i iniciálně) — savedKeys i lokální get() se naplní pro odznaky i detail (user 2026-07-18).
                 workingSources.refresh()
-                if (firstProfileEmit) firstProfileEmit = false
-                else {
-                    android.util.Log.i("COUCH_Home", "profil změněn → ${p?.name} (id=${p?.id}, trakt=${traktAllowed.value}) → reload")
+                val id = p?.id
+                val changed = sawProfile && id != null && id != lastProfileId
+                if (id != null) { sawProfile = true; lastProfileId = id }
+                if (changed) {
+                    android.util.Log.i("COUCH_Home", "profil změněn → ${p?.name} (id=$id, trakt=${traktAllowed.value}) → reload")
                     reloadAllRows()
                 }
             }
@@ -297,7 +305,10 @@ class TvHomeViewModel @Inject constructor(
         filmotekaBase.invalidateRecent()
         jobs.values.forEach { it.cancel() }
         jobs.clear()
-        _states.value = emptyMap()
+        // Obsah SCHVÁLNĚ nemažeme: `_states.value = emptyMap()` udělalo z obrazovky prázdno a čekalo se,
+        // až všechny řady doběhnou ze sítě. Nechme viditelné, co je, a přepišme to, jakmile data dorazí
+        // (řady bez uložené cache si `ensureRowLoaded` stejně natáhne z disku).
+        _states.update { states -> states.mapValues { (_, st) -> st.copy(loading = true) } }
         rowConfigs.value.forEach { ensureRowLoaded(it) }
     }
 

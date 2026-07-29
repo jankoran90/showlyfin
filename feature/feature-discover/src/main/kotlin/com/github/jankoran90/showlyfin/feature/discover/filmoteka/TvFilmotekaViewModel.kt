@@ -86,6 +86,8 @@ class TvFilmotekaViewModel @Inject constructor(
     // FOYER (SHW-107): sběr báze (JF/working/Trakt/Oblíbené + enrich + věkový gate) žije ve sdíleném
     // [FilmotekaBaseLoader] — VM drží už jen stav sekce (osa, filtry, řady).
     private val filmotekaBase: FilmotekaBaseLoader,
+    // Poslední známá báze z disku → sekce ukáže obsah hned po otevření (user 2026-07-29).
+    private val diskCache: FilmotekaDiskCache,
     private val favorites: FavoritesRepository,
     private val workingSources: WorkingSourceStore,
     private val profileRepository: ProfileRepository,
@@ -269,8 +271,20 @@ class TvFilmotekaViewModel @Inject constructor(
         loadJob?.cancel()
         _state.value = _state.value.copy(loading = true)
         loadJob = viewModelScope.launch {
+            // Nejdřív poslední známá báze z disku — ať je co ukázat, než doběhne sběr (Jellyfin knihovna
+            // + uložené zdroje + watchlist + TMDB enrich trvá vteřiny). Jen když ještě nic nemáme.
+            if (baseItems.isEmpty()) {
+                diskCache.read(profileRepository.activeProfile.value?.id)?.let { cached ->
+                    baseItems = cached
+                    rebuild(settings.defaultAxis.value)
+                }
+            }
             baseItems = filmotekaBase.loadBase()
             collections = filmotekaBase.loadCollections()
+            // Neúplný sběr (JF zapnutý, ale knihovna mlčela) na disk NEPATŘÍ — zafixoval by se.
+            if (filmotekaBase.lastLoadComplete()) {
+                diskCache.write(profileRepository.activeProfile.value?.id, baseItems)
+            }
             rebuild(settings.defaultAxis.value)
         }
     }
