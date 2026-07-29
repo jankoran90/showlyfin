@@ -9,7 +9,7 @@ import com.github.jankoran90.showlyfin.data.uploader.CTV_SHOW_SCHEME
 import com.github.jankoran90.showlyfin.data.uploader.CtvStreamResolver
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
-import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
+import com.github.jankoran90.showlyfin.data.uploader.model.CtvNumbering
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStreamQuality
@@ -43,20 +43,22 @@ class CtvTitleViewModel @Inject constructor(
     data class PlayRequest(val url: String, val title: String, val posterUrl: String?, val resumeKey: String)
 
     /**
-     * VLTAVA F5 (user 2026-07-28 „udělej obrazovku se sériemi a epizodami stejně jako máme u JF seriálů")
-     * — jedna SEZÓNA ČT pořadu. ČT sezóny sama zná jen u některých pořadů a pojmenovává je ROKEM
-     * (ověřeno: Rallye Dakar = „2023", „2022"…, Dakar Sistaz nemá žádné), takže je stavíme jednotně
-     * z roku vysílání dílu. Pořad s díly z jednoho roku = jediná sezóna → lišta se nekreslí.
+     * VLTAVA F5 (user 2026-07-28 „udělej obrazovku se sériemi a epizodami stejně jako máme u JF seriálů",
+     * 2026-07-29 „píšeme hlavně opravdu číslo dílu a série, vezmi to 1:1") — jedna SÉRIE ČT pořadu.
+     *
+     * Čísla série a dílu ČT neposílá, dopočítává je [CtvNumbering] (z `idec`, případně z „N/M" v názvu).
+     * Pořad s jedinou sérií → lišta sérií se nekreslí, ale „S01E04" u dílu zůstává.
      */
-    data class CtvSeason(val label: String, val episodes: List<CtvEpisode>)
+    data class CtvSeason(val label: String, val number: Int, val episodes: List<CtvNumbering.Numbered>)
 
     data class UiState(
         val title: CtvTitle? = null,
         val loadingEpisodes: Boolean = false,
-        val episodes: List<CtvEpisode> = emptyList(),
-        /** Sezóny (od nejstarší) — prázdné, dokud se díly nenačtou. */
+        /** Díly SEŘAZENÉ od prvního, s dopočítanými čísly série/dílu. */
+        val episodes: List<CtvNumbering.Numbered> = emptyList(),
+        /** Série (od první) — prázdné, dokud se díly nenačtou. */
         val seasons: List<CtvSeason> = emptyList(),
-        /** Vybraná sezóna; default = ta, ve které je první nedokoukaný díl (kde člověk skončil). */
+        /** Vybraná série; default = ta, ve které je první nedokoukaný díl (kde člověk skončil). */
         val selectedSeason: String? = null,
         val resolvingIdec: String? = null,
         val error: String? = null,
@@ -108,11 +110,14 @@ class CtvTitleViewModel @Inject constructor(
             // Od NEJSTARŠÍHO dílu — pořad se ve Filmech chová jako seriál (user 2026-07-28).
             runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, full.sidp, limit = 100, order = "oldest") }
                 .onSuccess { feed ->
-                    val seasons = groupSeasons(feed.episodes)
+                    // 🔴 Pořadí dílů NEBEREME z feedu: `date` je poslední repríza, ne premiéra (viz
+                    // [CtvNumbering]) — proto appka nabízela jako „další díl" 2. díl Magických hlubin.
+                    val numbered = CtvNumbering.number(feed.episodes)
+                    val seasons = groupSeasons(numbered)
                     _state.update {
                         it.copy(
                             loadingEpisodes = false,
-                            episodes = feed.episodes,
+                            episodes = numbered,
                             seasons = seasons,
                             selectedSeason = defaultSeason(seasons),
                         )
@@ -239,33 +244,47 @@ class CtvTitleViewModel @Inject constructor(
      */
     fun markWatchedUpTo(idec: String) {
         val eps = _state.value.episodes
-        val idx = eps.indexOfFirst { it.id == idec }
+        val idx = eps.indexOfFirst { it.episode.id == idec }
         if (idx < 0) return
-        eps.take(idx + 1).forEach { watchedStore.markWatched(CTV_SCHEME + it.id) }
+        eps.take(idx + 1).forEach { watchedStore.markWatched(CTV_SCHEME + it.episode.id) }
+    }
+
+    /**
+     * Označ/odznač CELOU sérii (parita s „Označit sezónu" u seriálů z Jellyfinu, user 2026-07-28
+     * „budu potřebovat něco jako označit řady a díly jako zhlédnuté").
+     */
+    fun toggleSeasonWatched(label: String) {
+        val eps = _state.value.seasons.firstOrNull { it.label == label }?.episodes
+            ?: _state.value.episodes
+        val allWatched = eps.all { watchedStore.isWatched(CTV_SCHEME + it.episode.id) }
+        eps.forEach { n ->
+            val key = CTV_SCHEME + n.episode.id
+            if (allWatched) watchedStore.clear(key) else watchedStore.markWatched(key)
+        }
     }
 
     fun selectSeason(label: String) { _state.update { it.copy(selectedSeason = label) } }
 
-    /** Díly vybrané sezóny (nebo všechny, když sezóny nemáme) — to, co kreslí obrazovka. */
-    fun visibleEpisodes(state: UiState = _state.value): List<CtvEpisode> {
+    /** Díly vybrané série (nebo všechny, když série nemáme) — to, co kreslí obrazovka. */
+    fun visibleEpisodes(state: UiState = _state.value): List<CtvNumbering.Numbered> {
         val sel = state.selectedSeason ?: return state.episodes
         return state.seasons.firstOrNull { it.label == sel }?.episodes ?: state.episodes
     }
 
-    /** Rok vysílání = sezóna (ISO datum „2026-06-17T…" → „2026"). Bez data → „Ostatní". */
-    private fun groupSeasons(episodes: List<CtvEpisode>): List<CtvSeason> {
+    /** Série = skupiny z [CtvNumbering] (prefix `idec`); jediná série = lištu nekreslíme. */
+    private fun groupSeasons(episodes: List<CtvNumbering.Numbered>): List<CtvSeason> {
         if (episodes.isEmpty()) return emptyList()
-        val groups = episodes.groupBy { ep -> ep.date?.take(4)?.takeIf { it.length == 4 } ?: OTHER_SEASON }
-        if (groups.size <= 1) return emptyList()   // jediná sezóna = lištu nekreslíme
-        return groups.map { (label, eps) -> CtvSeason(label, eps) }
-            .sortedWith(compareBy({ it.label == OTHER_SEASON }, { it.label }))
+        val groups = episodes.groupBy { it.seasonNumber }
+        if (groups.size <= 1) return emptyList()
+        return groups.entries.sortedBy { it.key }
+            .map { (number, eps) -> CtvSeason("Série $number", number, eps) }
     }
 
-    /** Výchozí sezóna = ta s prvním nedokoukaným dílem (kde člověk skončil); jinak nejstarší. */
+    /** Výchozí série = ta s prvním nedokoukaným dílem (kde člověk skončil); jinak první. */
     private fun defaultSeason(seasons: List<CtvSeason>): String? {
         if (seasons.isEmpty()) return null
         val watched = watchedStore.watched.value
-        return seasons.firstOrNull { s -> s.episodes.any { CTV_SCHEME + it.id !in watched } }?.label
+        return seasons.firstOrNull { s -> s.episodes.any { CTV_SCHEME + it.episode.id !in watched } }?.label
             ?: seasons.first().label
     }
 
@@ -289,10 +308,5 @@ class CtvTitleViewModel @Inject constructor(
             "Česká televize pouští video jen z české sítě — zkus to doma, bez VPN."
         is CtvStreamResolver.Result.Failed -> "Přehrání z ČT selhalo: ${r.reason}"
         is CtvStreamResolver.Result.Ok -> ""
-    }
-
-    private companion object {
-        /** Štítek pro díly bez data vysílání (ČT je občas nemá). */
-        const val OTHER_SEASON = "Ostatní"
     }
 }

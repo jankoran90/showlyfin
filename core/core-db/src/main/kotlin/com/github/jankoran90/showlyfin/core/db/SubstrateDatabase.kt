@@ -2,10 +2,12 @@ package com.github.jankoran90.showlyfin.core.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import com.github.jankoran90.showlyfin.core.db.dao.CtvWatchedDao
 import com.github.jankoran90.showlyfin.core.db.dao.FavoriteDao
 import com.github.jankoran90.showlyfin.core.db.dao.PlaybackStateDao
 import com.github.jankoran90.showlyfin.core.db.dao.SavedShowDao
 import com.github.jankoran90.showlyfin.core.db.dao.SyncMetaDao
+import com.github.jankoran90.showlyfin.core.db.entity.CtvWatchedEntity
 import com.github.jankoran90.showlyfin.core.db.entity.FavoriteEntity
 import com.github.jankoran90.showlyfin.core.db.entity.PlaybackStateEntity
 import com.github.jankoran90.showlyfin.core.db.entity.SavedShowEntity
@@ -18,7 +20,9 @@ import com.github.jankoran90.showlyfin.core.db.entity.SyncMetaEntity
  *
  * F1 = jen doména `favorite`. F2b přidal `sync_meta` (delta kurzor per profil+doména, aditivní migrace
  * v1→v2). F3 (EXCISE Fáze B) přidal poslechové domény `playback_state` (pozice ČT/YouTube/RSS) +
- * `saved_show` (oblíbené pořady) — aditivní migrace v2→v3. Další domény (user_rating, trakt_*, jf_*…) později.
+ * `saved_show` (oblíbené pořady) — aditivní migrace v2→v3. VLTAVA (SHW-110) přidal `ctv_watched`
+ * (dokoukané díly ČT per profil, dřív globální prefs) — aditivní migrace v3→v4.
+ * Další domény (user_rating, trakt_*, jf_*…) později.
  */
 @Database(
     entities = [
@@ -26,8 +30,9 @@ import com.github.jankoran90.showlyfin.core.db.entity.SyncMetaEntity
         SyncMetaEntity::class,
         PlaybackStateEntity::class,
         SavedShowEntity::class,
+        CtvWatchedEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class SubstrateDatabase : RoomDatabase() {
@@ -35,4 +40,5 @@ abstract class SubstrateDatabase : RoomDatabase() {
     abstract fun syncMetaDao(): SyncMetaDao
     abstract fun playbackStateDao(): PlaybackStateDao
     abstract fun savedShowDao(): SavedShowDao
+    abstract fun ctvWatchedDao(): CtvWatchedDao
 }

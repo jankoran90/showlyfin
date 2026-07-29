@@ -63,6 +63,24 @@ object CoreDbModule {
         }
     }
 
+    /**
+     * VLTAVA (SHW-110) — aditivní migrace v3→v4: `ctv_watched` (dokoukané díly ČT per profil,
+     * cross-device). NEdestruktivní, stávající tabulky beze změny.
+     */
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `ctv_watched` (" +
+                    "`profileKey` TEXT NOT NULL, `mediaKey` TEXT NOT NULL, " +
+                    "`watchedAt` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, `syncVersion` INTEGER NOT NULL, " +
+                    "`dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`profileKey`, `mediaKey`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_ctv_watched_profileKey` ON `ctv_watched` (`profileKey`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun providesSubstrateDatabase(
@@ -71,7 +89,7 @@ object CoreDbModule {
         context,
         SubstrateDatabase::class.java,
         "substrate.db",
-    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
 
     @Provides
     fun providesFavoriteDao(db: SubstrateDatabase) = db.favoriteDao()
@@ -84,4 +102,7 @@ object CoreDbModule {
 
     @Provides
     fun providesSavedShowDao(db: SubstrateDatabase) = db.savedShowDao()
+
+    @Provides
+    fun providesCtvWatchedDao(db: SubstrateDatabase) = db.ctvWatchedDao()
 }

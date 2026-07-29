@@ -9,6 +9,7 @@ import com.github.jankoran90.showlyfin.data.uploader.CTV_SCHEME
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.data.uploader.ctvShowSidpOrNull
+import com.github.jankoran90.showlyfin.data.uploader.model.CtvNumbering
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -87,7 +88,10 @@ class CtvNextUpLoader @Inject constructor(
                 Timber.w(it, "[VLTAVA] díly pořadu %s se nenačetly", show.sidp)
                 return null
             }
-        val episodes = feed.episodes.filter { it.id.isNotBlank() }
+        // 🔴 Pořadí NEBEREME z feedu. `date` u ČT = poslední REPRÍZA, ne premiéra, takže „nejstarší"
+        // podle data hodilo nahoru 2. díl (user 2026-07-28: „vybrala se Jezera a bažiny, a ta určitě
+        // není první díl"). Seřadí [CtvNumbering] podle `idec` — tam pořadí dílu reálně je.
+        val episodes = CtvNumbering.number(feed.episodes.filter { it.id.isNotBlank() })
         if (episodes.isEmpty()) return null
         val marks = resumeStore.marks.value
         val watched = watchedStore.watched.value
@@ -97,14 +101,19 @@ class CtvNextUpLoader @Inject constructor(
         // JAKÝKOLI rozkoukaný díl — když si člověk ze zvědavosti pustí díl z prostředka, řada přeskočila
         // všechno před ním. Pořadí je seriálové (od nejstaršího), takže „další díl" = PRVNÍ NEDOKOUKANÝ.
         // Rozkoukanost už jen dokresluje progres na kartě.
-        val episode = episodes.firstOrNull { CTV_SCHEME + it.id !in watched } ?: return null
+        val next = episodes.firstOrNull { CTV_SCHEME + it.episode.id !in watched } ?: return null
+        val episode = next.episode
         val mark = marks[CTV_SCHEME + episode.id]
         val progress = mark?.takeIf { it.durMs > 0 }?.let { ((it.posMs * 100) / it.durMs).toInt().coerceIn(0, 100) }
         val showTitle = feed.title?.takeIf { it.isNotBlank() } ?: show.title
         return HomeRowItem(
             key = "ctvnext_${show.sidp}",
             title = showTitle,
-            subtitle = episode.title.takeIf { it.isNotBlank() },
+            // Číslo série a dílu i tady — na kartě řady je hned vidět, kde člověk je (user 2026-07-29).
+            subtitle = listOfNotNull(
+                CtvNumbering.label(next.seasonNumber, next.episodeNumber),
+                next.cleanTitle.takeIf { it.isNotBlank() },
+            ).joinToString(" · "),
             landscapeUrl = episode.image ?: show.poster,
             posterUrl = show.poster ?: episode.image,
             progressPct = progress,

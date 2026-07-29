@@ -1,50 +1,27 @@
 package com.github.jankoran90.showlyfin.feature.detail.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.ui.EpisodeUi
+import com.github.jankoran90.showlyfin.core.ui.PhoneEpisodeRow
+import com.github.jankoran90.showlyfin.core.ui.TvEpisodeStrip
 import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbEpisode
@@ -119,25 +96,30 @@ fun SeasonEpisodeSection(
             }
         } else {
             val season = selectedSeason ?: seasons.first().season_number
+            // Jedna kostra pro seriály z Jellyfinu i pořady ČT (user 2026-07-29 „vezmi to 1:1"):
+            // TV = vodorovná lišta karet, telefon = svislý seznam. Viz `core-ui/EpisodeStrip`.
+            val ui = episodes.map { ep -> ep.toEpisodeUi(season, watched, progress) }
+            val byKey = episodes.associateBy { episodeKey(it, season) }
+            val play: (EpisodeUi) -> Unit = { e ->
+                byKey[e.key]?.let { ep -> onPlayEpisode(ep.season_number ?: season, ep.episode_number, ep.name) }
+            }
+            val toggle: ((EpisodeUi) -> Unit)? = onToggleWatched?.let { cb ->
+                { e -> byKey[e.key]?.let { ep -> cb(ep.season_number ?: season, ep.episode_number) } }
+            }
             if (isTv) {
                 TvEpisodeStrip(
-                    episodes = episodes,
-                    season = season,
-                    watched = watched,
-                    progress = progress,
-                    nextUp = nextUp,
-                    onPlayEpisode = onPlayEpisode,
-                    onToggleWatched = onToggleWatched,
+                    episodes = ui,
+                    onPlay = play,
+                    nextUpKey = nextUp?.let { "s${it.first}e${it.second}" },
+                    onLongPress = toggle,
                 )
             } else {
-                episodes.forEach { ep ->
-                    val key = (ep.season_number ?: season) to ep.episode_number
-                    EpisodeRow(
-                        episode = ep,
-                        watched = key in watched,
-                        onClick = { onPlayEpisode(ep.season_number ?: season, ep.episode_number, ep.name) },
+                ui.forEach { e ->
+                    PhoneEpisodeRow(
+                        episode = e,
+                        onClick = { play(e) },
                         // Parita s TV (tam long-press funguje od KOLO2) — telefon fajfku ani přepínač neměl.
-                        onLongClick = onToggleWatched?.let { cb -> { cb(key.first, key.second) } },
+                        onLongClick = toggle?.let { cb -> { cb(e) } },
                     )
                 }
             }
@@ -155,266 +137,30 @@ private fun seasonLabel(s: TmdbSeasonSummary): String {
     }
 }
 
-/** TV: horizontální řada epizod (landscape still) + auto-scroll na první nezhlédnutou (nextUp / dle watched). */
-@Composable
-private fun TvEpisodeStrip(
-    episodes: List<TmdbEpisode>,
+private fun episodeKey(ep: TmdbEpisode, season: Int): String =
+    "s${ep.season_number ?: season}e${ep.episode_number}"
+
+/** TMDB epizoda → neutrální model sdílené kostry (`core-ui/EpisodeStrip`). */
+private fun TmdbEpisode.toEpisodeUi(
     season: Int,
     watched: Set<Pair<Int, Int>>,
     progress: Map<Pair<Int, Int>, Int>,
-    nextUp: Pair<Int, Int>?,
-    onPlayEpisode: (season: Int, episode: Int, title: String?) -> Unit,
-    onToggleWatched: ((season: Int, episode: Int) -> Unit)? = null,
-) {
-    if (episodes.isEmpty()) return
-    val listState = rememberLazyListState()
-    // Index první nezhlédnuté: přednostně přesná nextUp epizoda (Jellyfin), jinak první mimo `watched`.
-    val focusIdx = remember(episodes, watched, nextUp, season) {
-        val byNextUp = if (nextUp != null) {
-            episodes.indexOfFirst { (it.season_number ?: season) == nextUp.first && it.episode_number == nextUp.second }
-        } else -1
-        if (byNextUp >= 0) byNextUp
-        else episodes.indexOfFirst { ((it.season_number ?: season) to it.episode_number) !in watched }
-    }
-    // COUCH T4 (user 2026-07-13): AUTOFOKUS na první nezhlédnutou epizodu (nejen scroll — user „asi nefunguje").
-    // Scroll doprostřed + po umístění zaostři tu kartu (D-pad rovnou pokračuje odtud). Jednorázově per sezóna.
-    val nextUpFocus = remember { FocusRequester() }
-    LaunchedEffect(focusIdx, episodes) {
-        if (focusIdx < 0) return@LaunchedEffect
-        if (focusIdx > 0) runCatching { listState.scrollToItem(focusIdx) }
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.index == focusIdx } }.first { it }
-        runCatching { nextUpFocus.requestFocus() }
-    }
-    LazyRow(
-        state = listState,
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        itemsIndexed(episodes) { idx, ep ->
-            val key = (ep.season_number ?: season) to ep.episode_number
-            TvEpisodeCard(
-                episode = ep,
-                seasonNumber = ep.season_number ?: season,
-                watched = key in watched,
-                progressPct = progress[key],
-                isNextUp = idx == focusIdx,
-                onClick = { onPlayEpisode(ep.season_number ?: season, ep.episode_number, ep.name) },
-                onLongClick = onToggleWatched?.let { cb -> { cb(ep.season_number ?: season, ep.episode_number) } },
-                focusRequester = if (idx == focusIdx) nextUpFocus else null,
-            )
-        }
-    }
-}
-
-/** TV landscape karta epizody: still 16:9 + fajfka (zhlédnuto) / „Pokračovat" + progress proužek + S×E·název. */
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun TvEpisodeCard(
-    episode: TmdbEpisode,
-    seasonNumber: Int,
-    watched: Boolean,
-    progressPct: Int?,
-    isNextUp: Boolean,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
-    focusRequester: FocusRequester? = null,
-) {
-    Column(
-        modifier = Modifier
-            .width(236.dp)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .tvFocusable(shape = RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            // KOLO2 (J): dlouhý stisk = přepni „zhlédnuto" (zápis do Jellyfinu), krátký = přehrát.
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(6.dp),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            // Zhlédnutá epizoda = fajfka přes náhled (parita s TV stripem).
-            val still = episode.stillUrl()
-            if (still != null) {
-                AsyncImage(
-                    model = still,
-                    contentDescription = episode.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            // Ztmavení + fajfka u zhlédnuté.
-            if (watched) {
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
-                Icon(
-                    Icons.Filled.Check,
-                    contentDescription = "Zhlédnuto",
-                    tint = Color.White,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
-                )
-            }
-            // „Pokračovat" štítek na první nezhlédnuté.
-            if (isNextUp && !watched) {
-                Text(
-                    text = "▶ Pokračovat",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(MaterialTheme.colorScheme.primary)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
-            // Progress proužek u rozkoukané epizody (dole).
-            if (progressPct != null && progressPct in 1..99) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .background(Color.Black.copy(alpha = 0.4f)),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(progressPct / 100f)
-                            .height(4.dp)
-                            .background(MaterialTheme.colorScheme.primary),
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "S${seasonNumber}E${episode.episode_number} · " +
-                (episode.name?.takeIf { it.isNotBlank() } ?: "Epizoda ${episode.episode_number}"),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val meta = listOfNotNull(
-            episode.runtime?.takeIf { it > 0 }?.let { "$it min" },
-            episode.vote_average?.takeIf { it > 0f }?.let { "★ %.1f".format(it) },
-        ).joinToString(" · ")
-        if (meta.isNotBlank()) {
-            Text(
-                text = meta,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-/** Telefon: vertikální řádek epizody — fajfka „zhlédnuto" + dlouhý stisk = přepnutí (user 2026-07-28). */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun EpisodeRow(
-    episode: TmdbEpisode,
-    onClick: () -> Unit,
-    watched: Boolean = false,
-    onLongClick: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .tvFocusable(shape = RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            Modifier
-                .width(132.dp)
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            val still = episode.stillUrl()
-            if (still != null) {
-                AsyncImage(
-                    model = still,
-                    contentDescription = episode.name,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Icon(
-                    Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // Zhlédnuto = fajfka přes náhled (parita s TV stripem, kde to bylo od KOLO2).
-            if (watched) {
-                Box(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Filled.Check,
-                        contentDescription = "Zhlédnuto",
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = buildString {
-                    append(episode.episode_number)
-                    append(". ")
-                    append(episode.name?.takeIf { it.isNotBlank() } ?: "Epizoda ${episode.episode_number}")
-                },
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (watched) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val meta = listOfNotNull(
-                episode.runtime?.takeIf { it > 0 }?.let { "$it min" },
-                episode.vote_average?.takeIf { it > 0f }?.let { "★ %.1f".format(it) },
-                episode.air_date?.take(4)?.takeIf { it.isNotBlank() },
-            ).joinToString(" · ")
-            if (meta.isNotBlank()) {
-                Text(
-                    text = meta,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            val overview = episode.overview
-            if (!overview.isNullOrBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = overview,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Icon(
-            imageVector = Icons.Filled.PlayArrow,
-            contentDescription = "Přehrát epizodu",
-            tint = MaterialTheme.colorScheme.primary,
-        )
-    }
+): EpisodeUi {
+    val s = season_number ?: season
+    val key = s to episode_number
+    return EpisodeUi(
+        key = episodeKey(this, season),
+        seasonNumber = s,
+        episodeNumber = episode_number,
+        title = name?.takeIf { it.isNotBlank() } ?: "Epizoda $episode_number",
+        imageUrl = stillUrl(),
+        meta = listOfNotNull(
+            runtime?.takeIf { it > 0 }?.let { "$it min" },
+            vote_average?.takeIf { it > 0f }?.let { "★ %.1f".format(it) },
+            air_date?.take(4)?.takeIf { it.isNotBlank() },
+        ).joinToString(" · "),
+        overview = overview,
+        watched = key in watched,
+        progressPct = progress[key],
+    )
 }

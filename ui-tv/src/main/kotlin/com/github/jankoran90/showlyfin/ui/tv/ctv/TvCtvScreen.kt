@@ -1,11 +1,8 @@
 package com.github.jankoran90.showlyfin.ui.tv.ctv
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,8 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -40,7 +35,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
-import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
+import com.github.jankoran90.showlyfin.core.ui.EpisodeUi
+import com.github.jankoran90.showlyfin.core.ui.TvEpisodeStrip
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
 import com.github.jankoran90.showlyfin.ui.phone.CtvTitleViewModel
 
@@ -150,8 +146,10 @@ fun TvCtvScreen(
             }
         }
 
-        // VLTAVA F5 — lišta sezón (rok vysílání), parita se seriály z Jellyfinu. D-pad ji projede.
-        if (state.seasons.size > 1) {
+        // VLTAVA F5 — lišta sérií + „Označit sérii", 1:1 s epizodami seriálu z Jellyfinu. D-pad ji projede.
+        val seasonLabel = state.selectedSeason ?: state.seasons.firstOrNull()?.label
+        val shownEpisodes = vm.visibleEpisodes(state)
+        if (state.seasons.size > 1 || (seasonLabel != null && shownEpisodes.isNotEmpty())) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -164,83 +162,47 @@ fun TvCtvScreen(
                         modifier = Modifier.tvFocusBorder(),
                     )
                 }
+                if (seasonLabel != null) {
+                    val allWatched = shownEpisodes.isNotEmpty() &&
+                        shownEpisodes.all { "ctv:${it.episode.id}" in watched }
+                    androidx.compose.material3.FilterChip(
+                        selected = false,
+                        onClick = { vm.toggleSeasonWatched(seasonLabel) },
+                        label = { Text(if (allWatched) "Odznačit sérii" else "Označit sérii") },
+                        modifier = Modifier.tvFocusBorder(),
+                    )
+                }
             }
         }
-        val shownEpisodes = vm.visibleEpisodes(state)
         when {
             state.loadingEpisodes -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-            shownEpisodes.isNotEmpty() -> LazyColumn(
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            ) {
-                items(shownEpisodes, key = { it.id }) { ep ->
-                    TvCtvEpisodeRow(
-                        episode = ep,
-                        resolving = state.resolvingIdec == ep.id,
-                        watched = "ctv:${ep.id}" in watched,
-                        onClick = { vm.playIdec(ep.id, ep.title.ifBlank { head.title }, ep.image ?: head.thumbnail) },
-                        // Podržení OK na dálkáku = přepnout „zhlédnuto" (parita s telefonem).
-                        onLongClick = { vm.toggleEpisodeWatched(ep.id) },
-                    )
-                }
+            // VODOROVNÁ lišta dílů — přesně jako u seriálů z Jellyfinu (user 2026-07-29: „na TV máme
+            // horizontální lištu s díly … vezmi to 1:1"). Fokus padne na první nedokoukaný díl.
+            shownEpisodes.isNotEmpty() -> Box(Modifier.fillMaxWidth().weight(1f)) {
+                TvEpisodeStrip(
+                    episodes = shownEpisodes.map { n ->
+                        EpisodeUi(
+                            key = n.episode.id,
+                            seasonNumber = n.seasonNumber,
+                            episodeNumber = n.episodeNumber,
+                            title = n.cleanTitle,
+                            imageUrl = n.episode.image,
+                            meta = listOfNotNull(n.episode.date?.take(10), n.episode.label).joinToString(" · "),
+                            watched = "ctv:${n.episode.id}" in watched,
+                            loading = state.resolvingIdec == n.episode.id,
+                        )
+                    },
+                    onPlay = { e ->
+                        vm.playIdec(e.key, e.title.ifBlank { head.title }, e.imageUrl ?: head.thumbnail)
+                    },
+                    // Podržení OK na dálkáku = přepnout „zhlédnuto" (parita s telefonem).
+                    onLongPress = { e -> vm.toggleEpisodeWatched(e.key) },
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
         }
     }
     // BACK řeší TvNavigator (stack) — vlastní BackHandler by mu bral přednost.
-}
-
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-private fun TvCtvEpisodeRow(
-    episode: CtvEpisode,
-    resolving: Boolean,
-    watched: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().tvFocusBorder(shape = RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.width(160.dp).height(90.dp).clip(RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (episode.image != null) {
-                AsyncImage(
-                    model = episode.image, contentDescription = episode.title,
-                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
-                )
-            }
-            if (resolving) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (watched) {
-                    Icon(
-                        Icons.Rounded.Check, contentDescription = "Zhlédnuto",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp).padding(end = 6.dp),
-                    )
-                }
-                Text(
-                    episode.title.ifBlank { "Díl" }, style = MaterialTheme.typography.titleMedium,
-                    color = if (watched) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                )
-            }
-            val sub = listOfNotNull(episode.date?.take(10), episode.label).joinToString(" · ")
-            if (sub.isNotBlank()) {
-                Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
 }
