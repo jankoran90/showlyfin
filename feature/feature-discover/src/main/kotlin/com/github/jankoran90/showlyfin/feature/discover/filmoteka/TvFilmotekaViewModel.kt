@@ -128,9 +128,17 @@ class TvFilmotekaViewModel @Inject constructor(
 
     init {
         // Per-profil: přepni nastavení Filmotéky na profil, pak přenačti obsah (jeden collector = pořadí).
+        var lastProfileId: Long? = null
         profileRepository.activeProfile
             .onEach { p ->
                 settings.switchProfile(p?.id)
+                // Báze PŘEDCHOZÍHO profilu musí pryč, jinak by se do doby doběhnutí sběru míchal obsah
+                // dvou profilů (user 2026-07-29). Disková cache je per profil, takže se hned nahradí tou správnou.
+                if (p?.id != lastProfileId) {
+                    baseItems = emptyList()
+                    favoriteItems = emptyList()
+                    lastProfileId = p?.id
+                }
                 reload()
             }
             .launchIn(viewModelScope)

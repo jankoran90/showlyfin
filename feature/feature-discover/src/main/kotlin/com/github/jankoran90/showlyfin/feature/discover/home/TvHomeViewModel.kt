@@ -234,7 +234,10 @@ class TvHomeViewModel @Inject constructor(
                 if (id != null) { sawProfile = true; lastProfileId = id }
                 if (changed) {
                     android.util.Log.i("COUCH_Home", "profil změněn → ${p?.name} (id=$id, trakt=${traktAllowed.value}) → reload")
-                    reloadAllRows()
+                    // Obsah PŘEDCHOZÍHO profilu musí z obrazovky pryč hned (user 2026-07-29: „nejde, aby
+                    // se obsah křížil skrz paměť dvou profilů"). Cache je per profil, takže `ensureRowLoaded`
+                    // vzápětí natáhne to, co patří novému profilu — prázdno je jen na okamžik.
+                    reloadAllRows(clearContent = true)
                 }
             }
             .launchIn(viewModelScope)
@@ -296,8 +299,13 @@ class TvHomeViewModel @Inject constructor(
     }
 
     /** Zahoď cache řad a přenačti všechny aktuálně zapnuté (po přepnutí profilu / vynuceně). */
-    fun reloadAllRows() {
-        android.util.Log.i("COUCH_Home", "reloadAllRows: ${rowConfigs.value.size} řad")
+    /**
+     * @param clearContent smaž viditelný obsah (POUZE při přepnutí profilu — cizí obsah nesmí zůstat
+     *   na obrazovce). Běžný refresh obsah nechává, aby nebylo prázdno, než doběhne síť.
+     */
+    @JvmOverloads
+    fun reloadAllRows(clearContent: Boolean = false) {
+        android.util.Log.i("COUCH_Home", "reloadAllRows: ${rowConfigs.value.size} řad (clear=$clearContent)")
         loadedHash.clear()
         ownedIdsCache = null
         // FOYER (SHW-107): i cache Filmotéky pro řadu „nedávno přidané" — jinak by po přepnutí profilu /
@@ -305,10 +313,11 @@ class TvHomeViewModel @Inject constructor(
         filmotekaBase.invalidateRecent()
         jobs.values.forEach { it.cancel() }
         jobs.clear()
-        // Obsah SCHVÁLNĚ nemažeme: `_states.value = emptyMap()` udělalo z obrazovky prázdno a čekalo se,
-        // až všechny řady doběhnou ze sítě. Nechme viditelné, co je, a přepišme to, jakmile data dorazí
-        // (řady bez uložené cache si `ensureRowLoaded` stejně natáhne z disku).
-        _states.update { states -> states.mapValues { (_, st) -> st.copy(loading = true) } }
+        // Obsah při běžném refreshi SCHVÁLNĚ nemažeme: `_states.value = emptyMap()` udělalo z obrazovky
+        // prázdno a čekalo se, až všechny řady doběhnou ze sítě. Nechme viditelné, co je, a přepišme to,
+        // jakmile data dorazí. Při PŘEPNUTÍ PROFILU je to ale naopak — cizí obsah musí zmizet.
+        if (clearContent) _states.value = emptyMap()
+        else _states.update { states -> states.mapValues { (_, st) -> st.copy(loading = true) } }
         rowConfigs.value.forEach { ensureRowLoaded(it) }
     }
 
