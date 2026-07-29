@@ -279,8 +279,14 @@ class TvFilmotekaViewModel @Inject constructor(
         loadJob?.cancel()
         _state.value = _state.value.copy(loading = true)
         loadJob = viewModelScope.launch {
-            // Nejdřív poslední známá báze z disku — ať je co ukázat, než doběhne sběr (Jellyfin knihovna
+            // Nejdřív poslední známý obsah z disku — ať je co ukázat, než doběhne sběr (Jellyfin knihovna
             // + uložené zdroje + watchlist + TMDB enrich trvá vteřiny). Jen když ještě nic nemáme.
+            //
+            // 🔴 Ukládá se SLOUČENÝ seznam včetně dopočteného `addedAtMs`, ne surová báze: datum „přidáno"
+            // vzniká u části titulů až v [FilmotekaBaseLoader.mergeWithFavorites] (z Oblíbených a z data
+            // prvního uložení zdroje). Kdyby se cachovala jen báze, po startu — než dorazí Oblíbené —
+            // by těmhle titulům datum chybělo a spadly by na konec: „řazení ve Filmotéce je rozházené
+            // ve smyslu nedávno přidaných" (user 2026-07-29).
             if (baseItems.isEmpty()) {
                 diskCache.read(profileRepository.activeProfile.value?.id)?.let { cached ->
                     baseItems = cached
@@ -289,11 +295,15 @@ class TvFilmotekaViewModel @Inject constructor(
             }
             baseItems = filmotekaBase.loadBase()
             collections = filmotekaBase.loadCollections()
-            // Neúplný sběr (JF zapnutý, ale knihovna mlčela) na disk NEPATŘÍ — zafixoval by se.
-            if (filmotekaBase.lastLoadComplete()) {
-                diskCache.write(profileRepository.activeProfile.value?.id, baseItems)
-            }
             rebuild(settings.defaultAxis.value)
+            // Na disk až hotový obsah (báze ∪ Oblíbené, s dopočtenými daty) a jen z ÚPLNÉHO sběru —
+            // neúplný (JF zapnutý, ale knihovna mlčela) by se zafixoval.
+            if (filmotekaBase.lastLoadComplete()) {
+                diskCache.write(
+                    profileRepository.activeProfile.value?.id,
+                    filmotekaBase.mergeWithFavorites(baseItems, favoriteItems),
+                )
+            }
         }
     }
 
@@ -301,6 +311,14 @@ class TvFilmotekaViewModel @Inject constructor(
     private suspend fun refreshFavorites(list: List<FavoriteItem>) {
         favoriteItems = filmotekaBase.loadFavorites(list)
         rebuild(_state.value.axis)
+        // Oblíbené dorazí často AŽ po sběru báze a nesou data „přidáno" → přepiš jimi diskovou cache,
+        // jinak by si příští start pamatoval seznam bez nich (a řadil je na konec).
+        if (baseItems.isNotEmpty() && filmotekaBase.lastLoadComplete()) {
+            diskCache.write(
+                profileRepository.activeProfile.value?.id,
+                filmotekaBase.mergeWithFavorites(baseItems, favoriteItems),
+            )
+        }
     }
 
     // ── Grupování (osa) ───────────────────────────────────────────────────────────
