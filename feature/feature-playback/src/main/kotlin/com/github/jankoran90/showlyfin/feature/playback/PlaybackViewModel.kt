@@ -671,6 +671,13 @@ class PlaybackViewModel @Inject constructor(
         }.getOrNull().orEmpty()
         return episodes.firstOrNull { it.userData?.played != true } ?: episodes.firstOrNull()
     }
+
+    /** Odchod z přehrávače = jediný moment, kdy má smysl tlačit pozici na server (během hraní se
+     *  ukládá po sekundách). Bez toho by se cross-device pozice objevila až při dalším startu appky. */
+    override fun onCleared() {
+        videoResumeStore.syncNow()
+        super.onCleared()
+    }
 }
 
 // ── Mapování vzhledu okraje titulku runtime ↔ persistovaný (SUBWEAVE) ──────────
