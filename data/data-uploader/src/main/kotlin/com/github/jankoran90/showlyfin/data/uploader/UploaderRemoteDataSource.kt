@@ -46,6 +46,9 @@ interface UploaderRemoteDataSource {
     suspend fun postProfileDelta(baseUrl: String, sessionCookie: String, key: String, domain: String, rows: List<DeltaRow>): DeltaPushResponse?
     // SUBSTRATE F2c KROK 2 — kopne server mirror po Trakt loginu (server hned natáhne Trakt vkus). null = chyba/offline.
     suspend fun mirrorRefresh(baseUrl: String, sessionCookie: String, key: String): MirrorRefreshResponse?
+
+    // Čtení serverového zrcadla „Chci vidět" — záloha, když appce vyprší vlastní Trakt token (401).
+    suspend fun mirrorWatchlist(baseUrl: String, sessionCookie: String, key: String): MirrorReadResponse?
     // AUTEUR (SHW-91) — kurátorský mozek: taste payload (raw JSON) → doporučení (raw JSON), nebo null při chybě.
     suspend fun curatorRecommend(baseUrl: String, sessionCookie: String, json: String): String?
     // FILMYCAST — cast telefon→TV do Filmy appky. castCommand = zařaď příkaz (bodyJson) pro profil (jellyfinUserId);

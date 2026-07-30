@@ -69,6 +69,8 @@ class FilmotekaBaseLoader @Inject constructor(
     private val enricher: MediaEnricher,
     private val favorites: FavoritesRepository,
     private val workingSources: WorkingSourceStore,
+    // Záloha „Chci vidět" ze serverového zrcadla, když appce vyprší Trakt token (user 2026-07-30).
+    private val uploaderDs: com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource,
     private val parentalControls: ParentalControlsRepository,
     private val profileRepository: ProfileRepository,
     private val settings: FilmotekaSettingsStore,
@@ -77,6 +79,15 @@ class FilmotekaBaseLoader @Inject constructor(
     @Suppress("unused") private val prefsSync: FilmotekaPrefsSync,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
+
+    private val _traktStale = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    /**
+     * Trakt je sice nastavený, ale jeho API odmítá (vypršelý token) → „Chci vidět" bereme ze
+     * serverového zrcadla. UI to má říct NAHLAS: dokud se user nepřihlásí, jsou data z Traktu zmrazená
+     * (user 2026-07-30: „Filmotéka nebere datum z Chci vidět" — příčinou byl tiše spolknutý 401).
+     */
+    val traktStale: kotlinx.coroutines.flow.StateFlow<Boolean> = _traktStale
 
     private fun ageCap(): Int? = parentalControls.profile.value.effectiveAgeCap
     private fun hideUnrated(): Boolean = parentalControls.profile.value.hideUnratedForAge
@@ -209,7 +220,20 @@ class FilmotekaBaseLoader @Inject constructor(
             if (traktAllowed()) runCatching { traktLoader.watchlist("all") }.getOrElse { emptyList() }
             else emptyList()
         }
-        val jf = jfD.await(); val ws = wsD.await(); val tkAll = tkD.await()
+        val jf = jfD.await(); val ws = wsD.await()
+        // 🔴 Trakt je nastavený, ale nic nevrátil = jeho API odmítlo (vypršelý token vrací 401 a
+        // `getOrElse{emptyList()}` ho spolkne). Bez zálohy by NIKDO nedostal datum „přidáno do Chci
+        // vidět" a Filmotéka by se tiše přerovnala podle data uložení zdroje (user 2026-07-30).
+        // Serverové zrcadlo drží poslední známý watchlist → pořadí přežije i vypršené přihlášení.
+        val tkDirect = tkD.await()
+        val tkAll = if (tkDirect.isNotEmpty() || !traktAllowed()) {
+            _traktStale.value = false
+            tkDirect
+        } else {
+            val fromMirror = loadWatchlistMirror()
+            _traktStale.value = fromMirror.isNotEmpty()
+            fromMirror
+        }
         // Tituly z watchlistu vstupují do Filmotéky jen se zapnutým zdrojem; DATA z nich bereme vždy.
         val tk = if (FilmotekaSource.TRAKT_WATCHLIST in enabled) tkAll else emptyList()
         lastJellyfinCount = jf.size
@@ -241,6 +265,38 @@ class FilmotekaBaseLoader @Inject constructor(
             // Členské datum (Chci vidět → Jellyfin) VYHRÁVÁ; když titul v žádném seznamu není, nech mu
             // jeho vlastní (u zapamatovaného zdroje = NEMĚNNÉ datum prvního uložení) místo zahození na null.
             .map { item -> item.copy(addedAtMs = dedupKey(item)?.let { recency[it] } ?: item.addedAtMs) }
+    }
+
+    /**
+     * Poslední známý „Chci vidět" ze serverového zrcadla (`GET …/mirror/watchlist`). Používá se JEN
+     * jako záloha — data jsou tak čerstvá, jak naposledy doběhl serverový sync Traktu.
+     */
+    private suspend fun loadWatchlistMirror(): List<MediaItem> {
+        val base = prefs.getString("uploader_base_url", "").orEmpty()
+        val key = profileRepository.activeProfile.value?.profileUuid.orEmpty()
+        if (base.isBlank() || key.isBlank()) return emptyList()
+        val resp = uploaderDs.mirrorWatchlist(base, prefs.getString("uploader_session_cookie", "").orEmpty(), key)
+            ?: return emptyList()
+        val items = resp.items.mapNotNull { it.toMediaItem() }
+        Timber.i("[Filmoteka] Trakt mlčí → zrcadlo watchlistu: %d položek", items.size)
+        return items
+    }
+
+    private fun com.github.jankoran90.showlyfin.data.uploader.model.MirrorWatchlistItem.toMediaItem(): MediaItem? {
+        val name = title?.takeIf { it.isNotBlank() } ?: return null
+        val listedMs = listedAt?.let { iso -> runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrNull() }
+        return MediaItem(
+            traktId = traktId ?: 0L,
+            tmdbId = tmdbId?.takeIf { it > 0L },
+            imdbId = imdb,
+            title = name,
+            year = year,
+            overview = null,
+            rating = null,
+            genres = null,
+            type = if (type == "show") MediaType.SHOW else MediaType.MOVIE,
+            addedAtMs = listedMs,
+        )
     }
 
     private suspend fun loadJellyfinLibrary(): List<MediaItem> = coroutineScope {

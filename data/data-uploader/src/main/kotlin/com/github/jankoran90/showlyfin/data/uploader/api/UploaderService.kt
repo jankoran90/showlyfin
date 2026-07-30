@@ -45,6 +45,8 @@ interface UploaderService {
     @POST suspend fun postProfileDelta(@Url url: String, @Header("Cookie") cookie: String, @Body body: DeltaPushBody): DeltaPushResponse
     // SUBSTRATE F2c KROK 2 — po Trakt loginu appka kopne server mirror (server hned natáhne Trakt vkus do mirroru)
     @POST suspend fun profileMirrorRefresh(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): MirrorRefreshResponse
+    // Čtení serverového ZRCADLA Trakt vkusu — záloha, když appce vyprší vlastní Trakt token.
+    @GET suspend fun profileMirrorRead(@Url url: String, @Header("Cookie") cookie: String): MirrorReadResponse
     @PUT suspend fun putProfile(@Url url: String, @Header("Cookie") cookie: String, @Body request: ProfileMetaRequest): Response<ResponseBody>
     // LAPIDARY (SHW-96) — vzácné klenoty: watchlist/favorite trigger (cache-one) + katalog sekce
     @POST suspend fun gemsCacheOne(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>

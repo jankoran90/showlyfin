@@ -56,3 +56,29 @@ data class MirrorCounts(
     val watchlist: Int = 0,
     val ratings: Int = 0,
 )
+
+/**
+ * Odpověď `GET /api/profiles/{key}/mirror/{what}` — serverové ZRCADLO Trakt vkusu.
+ *
+ * Appka si watchlist normálně tahá přímo z Traktu; když jí vyprší token, dostane 401 a zůstala by
+ * BEZ dat „kdy jsem si film přidal do Chci vidět" → Filmotéka se tiše přerovná podle data uložení
+ * zdroje (user 2026-07-30). Tohle je záloha pro ten případ. [lastSuccessAt] říká, jak stará data jsou.
+ */
+data class MirrorReadResponse(
+    val items: List<MirrorWatchlistItem> = emptyList(),
+    val count: Int = 0,
+    val lastSuccessAt: Long? = null,
+    val lastError: String? = null,
+)
+
+/** Jedna položka zrcadla „Chci vidět" (payload, jak ho ukládá serverový mirror). */
+data class MirrorWatchlistItem(
+    val tmdbId: Long? = null,
+    val traktId: Long? = null,
+    val imdb: String? = null,
+    val title: String? = null,
+    val year: Int? = null,
+    val type: String? = null,
+    /** ISO 8601 čas přidání do watchlistu (`listed_at`). */
+    val listedAt: String? = null,
+)

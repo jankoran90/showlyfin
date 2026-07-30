@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -163,6 +164,22 @@ fun FilmyBrowseSection(
         )
         if (searchOpen) {
             FilmotekaSearchField(query = query, onQuery = { query = it }, onClose = { searchOpen = false; query = "" })
+        }
+        // Vypršelé přihlášení k Traktu se dřív projevilo JEN tím, že se tiše rozhodilo pořadí „Nedávno
+        // přidané" (data „kdy jsem si film přidal do Chci vidět" prostě nedorazila). Řekni to nahlas.
+        if (state.traktStale) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Přihlášení k Traktu vypršelo — „Chci vidět\" je ze zálohy. Přihlas se znovu v Nastavení.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {

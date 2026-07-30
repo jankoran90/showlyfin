@@ -42,6 +42,11 @@ data class FilmotekaUiState(
     val axis: FilmotekaAxis = FilmotekaAxis.ALL,
     val rails: List<FilmotekaRail> = emptyList(),
     val loading: Boolean = true,
+    /**
+     * Přihlášení k Traktu vypršelo → „Chci vidět" jede ze serverového zrcadla (zmrazená data).
+     * UI to musí říct nahlas, jinak se jen tiše rozhodí pořadí „Nedávno přidané" (user 2026-07-30).
+     */
+    val traktStale: Boolean = false,
     /** Aktuální řazení osy „Vše" — pro telefonní chip (Nedávno / Abecedně). TV ho ignoruje. */
     val allSort: FilmotekaAllSort = FilmotekaAllSort.RECENT,
     /** Počet unikátních titulů v bázi (po dedup+gate, napříč osami stejný) — pro telefonní ukazatel „N filmů". */
@@ -329,6 +334,7 @@ class TvFilmotekaViewModel @Inject constructor(
      * předej živé filtry + nastavení a výsledek promítni do stavu.
      */
     private fun rebuild(axis: FilmotekaAxis) {
+        val staleNow = filmotekaBase.traktStale.value
         // FOYER (SHW-107): merge base>Oblíbené + dopočet data „přidáno" dělá SDÍLENÝ [FilmotekaBaseLoader]
         // (tentýž kód pohání i řadu domova „Filmotéka — nedávno přidané" → nemůžou se rozejít).
         val all = filmotekaBase.mergeWithFavorites(baseItems, favoriteItems)
@@ -347,6 +353,7 @@ class TvFilmotekaViewModel @Inject constructor(
             genreFilter = genreFilter, availableGenres = result.availableGenres,
             countryFilter = countryFilter, availableCountries = result.availableCountries,
             collections = collections,
+            traktStale = staleNow,
         )
     }
 

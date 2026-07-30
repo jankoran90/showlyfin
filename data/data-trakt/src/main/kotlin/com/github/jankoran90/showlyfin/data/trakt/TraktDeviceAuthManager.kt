@@ -36,7 +36,12 @@ sealed interface TraktDevicePollResult {
 class TraktDeviceAuthManager @Inject constructor(
     private val tokenProvider: TokenProvider,
 ) {
-    private val client = OkHttpClient()
+    // Bez explicitních limitů zůstal dialog viset na „Získávám kód…", když se spojení zadrhlo
+    // (user 2026-07-30, screenshot) — ViewModel má pro selhání hlášku, ale nikdy se k ní nedostal.
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     private val jsonMedia = "application/json".toMediaType()
     private val base = Config.TRAKT_BASE_URL.trimEnd('/')
 

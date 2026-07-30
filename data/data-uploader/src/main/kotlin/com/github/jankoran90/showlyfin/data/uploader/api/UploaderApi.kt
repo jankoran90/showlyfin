@@ -8,6 +8,7 @@ import com.google.gson.JsonParser
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
+import timber.log.Timber
 import java.net.URLEncoder
 
 internal class UploaderApi(
@@ -353,6 +354,14 @@ internal class UploaderApi(
     }
 
     // SUBSTRATE F2c KROK 2 — po Trakt loginu kopni server mirror (server hned natáhne Trakt vkus).
+    override suspend fun mirrorWatchlist(baseUrl: String, sessionCookie: String, key: String): MirrorReadResponse? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching {
+            service.profileMirrorRead("$base/api/profiles/${enc(key)}/mirror/watchlist", cookie)
+        }.onFailure { Timber.w(it, "[MIRROR] čtení zrcadla watchlistu selhalo") }.getOrNull()
+    }
+
     override suspend fun mirrorRefresh(baseUrl: String, sessionCookie: String, key: String): MirrorRefreshResponse? {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
