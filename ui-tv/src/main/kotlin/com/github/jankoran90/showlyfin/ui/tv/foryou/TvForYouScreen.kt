@@ -17,7 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -37,6 +39,7 @@ import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import com.github.jankoran90.showlyfin.feature.discover.tv.TvSectionViewModel
 import com.github.jankoran90.showlyfin.feature.discover.tv.sortedBy
+import com.github.jankoran90.showlyfin.ui.tv.components.TvGenreFilterDialog
 import com.github.jankoran90.showlyfin.ui.tv.components.TvSortChip
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvMediaCard
@@ -66,7 +69,16 @@ fun TvForYouScreen(
     // FOYER (SHW-107, user 2026-07-26): TV vstup do sekce = mřížka (už výchozí) + ABECEDNĚ. Volba se pamatuje.
     val modes by sectionVm.modes.collectAsStateWithLifecycle()
     val sort = sectionVm.sortOf(modes, ViewModeStore.SECTION_FOR_YOU)
-    val state = remember(state0, sort) { state0.copy(items = state0.items.sortedBy(sort)) }
+    // user 2026-07-31 („lišta žánrů do sekce Pro tebe, jako máme jinde"): filtr žánrů měl dosud jen telefon
+    // (sdílený `FilmyBrowseSection`), TV byla plochá mřížka. Bereme TÝŽ stav i tytéž akce z `filmotekaState`,
+    // co používá telefon → filtr se nemůže rozejít.
+    val browse by viewModel.filmotekaState.collectAsStateWithLifecycle()
+    var showGenreFilter by remember { mutableStateOf(false) }
+    val state = remember(state0, sort, browse.genreFilter) {
+        val filtered = if (browse.genreFilter.isEmpty()) state0.items
+        else state0.items.filter { mi -> mi.genres.orEmpty().any { it in browse.genreFilter } }
+        state0.copy(items = filtered.sortedBy(sort))
+    }
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val cardScale = LocalTvCardScale.current
     val gridState = rememberLazyGridState()
@@ -83,6 +95,17 @@ fun TvForYouScreen(
     val chips: @Composable () -> Unit = {
         ForYouChips(viewMode, viewModel::setViewMode)
         TvSortChip(sort = sort, onSort = { sectionVm.setSort(ViewModeStore.SECTION_FOR_YOU, it) })
+        FilterChip(
+            selected = browse.genreFilter.isNotEmpty(),
+            onClick = { showGenreFilter = true },
+            label = {
+                Text(
+                    if (browse.genreFilter.isEmpty()) "Žánr"
+                    else "Žánr (" + browse.genreFilter.size + ")",
+                )
+            },
+            modifier = Modifier.tvFocusable(),
+        )
     }
 
     // LIST + obsah: celou sekci (název „Pro tebe" + chipy + immersive hero + řadu) vykreslí TvRailList sám,
@@ -109,10 +132,8 @@ fun TvForYouScreen(
             modifier = modifier.fillMaxSize(),
             sectionActions = { chips() },
         )
-        return
-    }
-
-    Column(modifier = modifier.fillMaxSize().tvOverscan()) {
+    } else {
+        Column(modifier = modifier.fillMaxSize().tvOverscan()) {
         TvSectionHeader(title = "Pro tebe", actions = { chips() })
         when {
             state.loading && state.items.isEmpty() ->
@@ -145,6 +166,19 @@ fun TvForYouScreen(
                 }
             }
         }
+    }
+    }
+
+    // Sdílený overlay filtru žánrů (tentýž, co má Filmotéka) — data i akce z `filmotekaState`, aby se
+    // filtr na TV a na telefonu nerozešel.
+    if (showGenreFilter) {
+        TvGenreFilterDialog(
+            available = browse.availableGenres,
+            selected = browse.genreFilter,
+            onToggle = viewModel::toggleGenreFilter,
+            onClear = viewModel::clearGenreFilter,
+            onDismiss = { showGenreFilter = false },
+        )
     }
 }
 

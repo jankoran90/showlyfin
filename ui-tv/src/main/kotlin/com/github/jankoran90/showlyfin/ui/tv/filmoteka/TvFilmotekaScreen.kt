@@ -60,6 +60,7 @@ import com.github.jankoran90.showlyfin.ui.tv.components.toImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRail
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
+import com.github.jankoran90.showlyfin.ui.tv.components.TvGenreFilterDialog
 import com.github.jankoran90.showlyfin.ui.tv.components.TvSectionHeader
 
 /**
@@ -245,77 +246,6 @@ private fun AxisChips(
                 label = { Text(if (genreFilterCount > 0) "Filtr žánrů ($genreFilterCount)" else "Filtrovat žánry") },
                 modifier = Modifier.tvFocusable(),
             )
-        }
-    }
-}
-
-/**
- * GENRE-FILTER — TV overlay pro multi-select filtr žánrů (parita s telefonním [GenreFilterSheet]). D-pad
- * fokusovatelné chipy; Back zavře. Filtruje dle hlavního žánru (sdílený VM). Barvy/tvary z motivu.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun TvGenreFilterDialog(
-    available: List<String>,
-    selected: Set<String>,
-    onToggle: (String) -> Unit,
-    onClear: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    BackHandler(onBack = onDismiss)
-    val firstChipFocus = remember { FocusRequester() }
-    LaunchedEffect(available) { if (available.isNotEmpty()) runCatching { firstChipFocus.requestFocus() } }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.7f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
-            modifier = Modifier
-                .widthIn(max = 760.dp)
-                .padding(32.dp),
-        ) {
-            Column(
-                Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(28.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = "Filtr žánrů",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                if (available.isEmpty()) {
-                    Text(
-                        text = "Žádné žánry k dispozici.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        available.forEachIndexed { idx, g ->
-                            FilterChip(
-                                selected = g in selected,
-                                onClick = { onToggle(g) },
-                                label = { Text(g) },
-                                modifier = (if (idx == 0) Modifier.focusRequester(firstChipFocus) else Modifier)
-                                    .tvFocusable(),
-                            )
-                        }
-                    }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (selected.isNotEmpty()) {
-                        TextButton(onClick = onClear, modifier = Modifier.tvFocusable()) { Text("Zrušit filtr") }
-                    }
-                    TextButton(onClick = onDismiss, modifier = Modifier.tvFocusable()) { Text("Zavřít") }
-                }
-            }
         }
     }
 }
