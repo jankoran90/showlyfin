@@ -78,21 +78,27 @@ fun MediaRow(
     // hodnocení ani vidět, ani zadat. Stejná mechanika jako [PosterCard]: odznak + dlouhý stisk → dialog.
     val ratingProvider = LocalUserRatingProvider.current
     val userStars = rememberCardRating(item.tmdbId, item.imdbId)
-    val rateTarget = if (ratingProvider == null) null else RatingTarget(
-        tmdbId = item.tmdbId,
-        imdbId = item.imdbId,
-        traktId = item.traktId,
-        title = item.displayTitle,
-        year = item.year,
-        isShow = item.type != MediaType.MOVIE,
-    )
+    val onRateLongPress: (() -> Unit)? = ratingProvider?.let { provider ->
+        {
+            provider.requestRate(
+                RatingTarget(
+                    tmdbId = item.tmdbId,
+                    imdbId = item.imdbId,
+                    traktId = item.traktId,
+                    title = item.displayTitle,
+                    year = item.year,
+                    isShow = item.type != MediaType.MOVIE,
+                ),
+            )
+        }
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RowCoverShape)
             .let { m ->
-                if (rateTarget != null) {
-                    m.combinedClickable(onClick = onClick, onLongClick = { ratingProvider.requestRate(rateTarget) })
+                if (onRateLongPress != null) {
+                    m.combinedClickable(onClick = onClick, onLongClick = onRateLongPress)
                 } else {
                     m.clickable(onClick = onClick)
                 }
