@@ -115,6 +115,25 @@ class RecommendationsStore @Inject constructor(
     }
 
     /**
+     * Vyhoď z akumulace tituly, které už uživatel ZNÁ (zhlédnuté / ohodnocené / v „Chci vidět").
+     *
+     * User 2026-07-31: „měly by mizet filmy zhlédnuté a zhodnocené z Pro tebe. Chuť čaje tam pořád je."
+     * Měl pravdu a příčina je v povaze akumulace: filtr „co už znám" běžel jen na ČERSTVÉM snímku
+     * kurátora ([CuratorLoader.postProcess]), kdežto tip uložený dřív tu zůstal navždy — i když ho
+     * mezitím viděl a dal mu 10/10 (The Taste of Tea, tmdb 15318: zhlédnuto i hodnoceno 2026-02-15).
+     * Úklid patří sem, k úložišti — jinak ho každá další cesta čtení obejde.
+     */
+    fun pruneKnown(knownTmdbIds: Set<Long>): List<MediaItem> {
+        val existing = _items.value
+        if (knownTmdbIds.isEmpty() || existing.isEmpty()) return existing
+        val kept = existing.filterNot { it.tmdbId != null && it.tmdbId in knownTmdbIds }
+        if (kept.size == existing.size) return existing
+        persist(kept)
+        pushToServer()
+        return kept
+    }
+
+    /**
      * BEZPEČNÝ sync (vzor FavoritesStore, „oprava ztráty dat"):
      *  - **Stejný profil / první běh:** UNION(lokál, server) → nikdy neztratíme lokál kvůli (dočasně) prázdnému
      *    serveru; lokál první = přednost pořadí při shodě klíče. Když jsme lokálně napřed → dorovnej server.

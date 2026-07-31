@@ -51,6 +51,9 @@ interface UploaderRemoteDataSource {
     suspend fun mirrorWatchlist(baseUrl: String, sessionCookie: String, key: String): MirrorReadResponse?
     // AUTEUR (SHW-91) — kurátorský mozek: taste payload (raw JSON) → doporučení (raw JSON), nebo null při chybě.
     suspend fun curatorRecommend(baseUrl: String, sessionCookie: String, json: String): String?
+
+    /** „Protože jsi viděl X" — podobné jednomu titulu (`/curator/similar`). */
+    suspend fun curatorSimilar(baseUrl: String, sessionCookie: String, json: String): String?
     // FILMYCAST — cast telefon→TV do Filmy appky. castCommand = zařaď příkaz (bodyJson) pro profil (jellyfinUserId);
     // true = HTTP OK. castCommandGet = POP (vrátí+smaže) čekající příkaz pro profil → raw JSON (`{pending:…}`) nebo null.
     suspend fun castCommand(baseUrl: String, sessionCookie: String, profile: String, bodyJson: String): Boolean

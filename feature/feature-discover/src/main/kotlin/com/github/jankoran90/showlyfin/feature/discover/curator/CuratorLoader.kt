@@ -109,6 +109,111 @@ class CuratorLoader @Inject constructor(
         }
     }
 
+    /**
+     * TMDB id všeho, co uživatel UŽ ZNÁ (zhlédnuté ∪ „Chci vidět" ∪ ohodnocené na Traktu ∪ vlastní hvězdy).
+     * Používá se k úklidu akumulovaných doporučení — tip uložený dřív se nesmí ukazovat potom, co ho
+     * uživatel viděl nebo ohodnotil (user 2026-07-31: „Chuť čaje tam pořád je").
+     */
+    suspend fun knownTmdbIds(): Set<Long> {
+        val fromTaste = runCatching { buildTaste().knownIds }.getOrDefault(emptySet())
+        // Vlastní hvězdy fungují i bez Traktu → přidej je taky.
+        val fromLocal = userRatingStore.items.value.mapNotNull { it.tmdbId }.toSet()
+        return fromTaste + fromLocal
+    }
+
+    /**
+     * Doporučení JEDNÉ kategorie ([CuratorBucket]) — do mozku jde jen ta výseč vkusu, která kategorii
+     * definuje, takže řada umí říct PROČ. `bucket` posíláme i na server (je součástí cache klíče).
+     */
+    suspend fun forYouBucket(bucket: CuratorBucket, limit: Int, pollUntilReady: Boolean = false): List<MediaItem> {
+        val prefs = prefs()
+        if (!prefs.enabled) return emptyList()
+        val base = serverBase(); val cookie = serverCookie(); val key = profileKey()
+        if (base.isBlank() || key.isBlank()) return emptyList()
+        val full = buildTaste()
+        // Ořež vkus na kategorii. `watchlist`/`avoid`/`knownIds` zůstávají — to nejsou signály kategorie,
+        // ale filtr („co už znám" a „čemu se vyhni") a musí platit ve všech řadách stejně.
+        val taste = when (bucket) {
+            CuratorBucket.TOP -> full.copy(loved = emptyList(), recent = emptyList())
+            CuratorBucket.LOVED -> full.copy(top = emptyList(), recent = emptyList())
+            CuratorBucket.RECENT -> full.copy(top = emptyList(), loved = emptyList())
+        }
+        // Kategorie bez vlastního signálu nemá co nabídnout — nezatěžuj mozek prázdným dotazem.
+        val hasSignal = when (bucket) {
+            CuratorBucket.TOP -> taste.top.isNotEmpty()
+            CuratorBucket.LOVED -> taste.loved.isNotEmpty()
+            CuratorBucket.RECENT -> taste.recent.isNotEmpty()
+        }
+        if (!hasSignal) { Log.i(TAG, "forYouBucket(${bucket.wire}): žádný signál → přeskočeno"); return emptyList() }
+        val json = JSONObject(buildRequestJson(key, limit.coerceIn(1, 60), taste, prefs))
+            .put("bucket", bucket.wire).toString()
+        return fetchRecommendations(json, taste, pollUntilReady, "forYouBucket(${bucket.wire})") { body ->
+            uploaderDs.curatorRecommend(base, cookie, body)
+        }
+    }
+
+    /**
+     * „Protože jsi viděl X" — balíček svázaný JEDNÍM titulem (user 2026-07-31). Backend `/curator/similar`
+     * existoval od AUTEURa, ale appka ho do dneška nikdy nevolala.
+     */
+    suspend fun similarTo(
+        seedTitle: String,
+        seedYear: Int?,
+        limit: Int,
+        isShow: Boolean = false,
+        pollUntilReady: Boolean = false,
+    ): List<MediaItem> {
+        val prefs = prefs()
+        if (!prefs.enabled || seedTitle.isBlank()) return emptyList()
+        val base = serverBase(); val cookie = serverCookie(); val key = profileKey()
+        if (base.isBlank() || key.isBlank()) return emptyList()
+        val json = JSONObject()
+            .put("profileKey", key)
+            .put("title", seedTitle)
+            .put("kind", if (isShow) "show" else "movie")
+            .put("count", limit.coerceIn(1, 40))
+            .put("wait", false)
+            .also { o -> seedYear?.takeIf { it > 0 }?.let { o.put("year", it) } }
+            .also { o -> prefs.model?.trim()?.takeIf { it.isNotEmpty() }?.let { o.put("model", it) } }
+            .also { o -> capAge()?.let { o.put("ageCap", it) } }
+            .toString()
+        val taste = buildTaste()   // jen kvůli filtru „co už znám" v postProcess
+        return fetchRecommendations(json, taste, pollUntilReady, "similarTo($seedTitle)") { body ->
+            uploaderDs.curatorSimilar(base, cookie, body)
+        }
+    }
+
+    /**
+     * Sdílená smyčka dotazu na mozek: `wait=false` → cache miss vrátí `pending` a mozek se zahřeje na
+     * pozadí; volající, který chce plný obsah, si počká a zopakuje (stale-while-revalidate).
+     */
+    private suspend fun fetchRecommendations(
+        requestJson: String,
+        taste: TastePayload,
+        pollUntilReady: Boolean,
+        logTag: String,
+        call: suspend (String) -> String?,
+    ): List<MediaItem> {
+        var attempt = 0
+        while (true) {
+            val raw = runCatching { call(requestJson) }
+                .onFailure { Log.w(TAG, "$logTag: volání backendu selhalo", it) }
+                .getOrNull() ?: return emptyList()
+            val source = runCatching { JSONObject(raw).optString("source") }.getOrNull().orEmpty()
+            val parsed = runCatching { parseItems(raw) }
+                .onFailure { Log.w(TAG, "$logTag: parse odpovědi selhal", it) }
+                .getOrNull() ?: return emptyList()
+            if (parsed.isNotEmpty()) return postProcess(parsed, taste)
+            if (source == "pending" && pollUntilReady && attempt < PENDING_MAX_RETRIES) {
+                attempt++
+                delay(PENDING_RETRY_MS)
+                continue
+            }
+            Log.i(TAG, "$logTag: 0 položek (source=$source)")
+            return emptyList()
+        }
+    }
+
     /** Enrich + věkový gate + skrytí nízko hodnocených/už známých. Sdílené pro první i re-poll odpověď. */
     private suspend fun postProcess(parsed: List<MediaItem>, taste: TastePayload): List<MediaItem> {
         val enriched = enricher.enrich(parsed, withCertification = capAge() != null)

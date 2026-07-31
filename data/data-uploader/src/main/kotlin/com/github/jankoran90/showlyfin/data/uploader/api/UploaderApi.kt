@@ -258,6 +258,15 @@ internal class UploaderApi(
         return if (resp.isSuccessful) resp.body()?.string() else null
     }
 
+    /** „Protože jsi viděl X" — endpoint existuje od AUTEURa, appka ho začala volat až 2026-07-31. */
+    override suspend fun curatorSimilar(baseUrl: String, sessionCookie: String, json: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val resp = service.curatorSimilar("$base/curator/similar", cookie, body)
+        return if (resp.isSuccessful) resp.body()?.string() else null
+    }
+
     // FILMYCAST — cast telefon→TV do Filmy appky (fronta příkazů). Profil = jellyfinUserId (query `?profile=`).
     override suspend fun castCommand(baseUrl: String, sessionCookie: String, profile: String, bodyJson: String): Boolean {
         val base = baseUrl.trimEnd('/')

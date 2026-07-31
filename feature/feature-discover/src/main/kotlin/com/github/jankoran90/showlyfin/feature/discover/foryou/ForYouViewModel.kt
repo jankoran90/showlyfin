@@ -166,6 +166,10 @@ class ForYouViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             // 1) Dorovnej store se serverem pro AKTUÁLNÍ profil (adopce při přepnutí / union při shodě).
             recommendationsStore.syncNow()
+            // 1b) Vyhoď z akumulace, co uživatel mezitím viděl nebo ohodnotil (user 2026-07-31 „Chuť čaje
+            //     tam pořád je"). Filtr v CuratorLoaderu čistí jen ČERSTVÝ snímek — dřív uložený tip by tu
+            //     zůstal napořád. Běží před merge, ať se čerstvá dávka rovnou skládá na uklizený seznam.
+            runCatching { recommendationsStore.pruneKnown(curatorLoader.knownTmdbIds()) }
             // 2) Čerstvý snímek kurátora → merge (dedup + strop + push na server). Prázdný snímek nemaže.
             //    pollUntilReady=true: sekce „Pro tebe" na `pending` (mozek počítá) počká a re-polluje →
             //    tipy naskočí na této obrazovce bez zavření (SUBSTRATE F2c stale-while-revalidate).
