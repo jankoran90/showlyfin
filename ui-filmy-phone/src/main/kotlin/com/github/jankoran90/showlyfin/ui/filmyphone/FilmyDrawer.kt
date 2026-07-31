@@ -37,13 +37,15 @@ fun FilmyDrawer(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 20.dp, top = 28.dp, bottom = 16.dp),
             )
-            DrawerSectionLabel("Objevování")
-            // Pořadí dle prefu „Filmotéka jako výchozí" — když je zapnuto, Filmotéka je nahoře (user 2026-07-18).
+            // PŮDORYS (SHW-112, user 2026-07-31): pořadí i viditelnost sekcí si skládá uživatel
+            // (Nastavení → Domov a menu). Bez vlastní volby platí kanonické pořadí, kde „Filmotéka
+            // jako výchozí" vynese Filmotéku nahoru (user 2026-07-18). Kategorické nadpisy zmizely —
+            // seznam je teď jeden uživatelský, ne dvě pevné skupiny.
             val filmotekaFirst = FilmyShellPrefs.defaultFilmoteka(LocalContext.current)
-            FilmyShellPrefs.discoverOrder(filmotekaFirst).forEach { DrawerRow(it, current, onSelect) }
-
-            DrawerSectionLabel("Knihovna")
-            DrawerRow(FilmySection.LIBRARY, current, onSelect)
+            val layoutVm: FilmyHomeLayoutViewModel = hiltViewModel()
+            val storedMenu by layoutVm.menu.collectAsStateWithLifecycle()
+            FilmyMenuConfig.visibleSections(storedMenu, filmotekaFirst)
+                .forEach { DrawerRow(it, current, onSelect) }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))
             DrawerRow(FilmySection.SETTINGS, current, onSelect)
@@ -55,17 +57,6 @@ fun FilmyDrawer(
             DrawerRow(FilmySection.PROFILE, current, onSelect, label = activeName?.takeIf { it.isNotBlank() })
         }
     }
-}
-
-/** Kategorický nadpis v menu (oranžový, drobný) — seskupuje položky. */
-@Composable
-private fun DrawerSectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
-    )
 }
 
 @Composable

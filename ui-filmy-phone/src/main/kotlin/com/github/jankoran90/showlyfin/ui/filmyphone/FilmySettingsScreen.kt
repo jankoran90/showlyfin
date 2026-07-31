@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Movie
@@ -233,6 +234,16 @@ fun FilmySettingsScreen(
                 )
                 FilmyCuratorSection()
                 FilmyGemsSection()
+            }
+
+            // ── DOMOV A MENU (PŮDORYS SHW-112, user 2026-07-31: „v telefonu ani nemam moznost
+            // zobrazovat co ma byt v sidebaru a nebo co ma byt na home") — parita s TV editorem řad;
+            // rozvržení se navíc synchronizuje s televizí. ─────────────────────────────────────────
+            FilmyCollapsibleSection("Domov a menu", Icons.Rounded.Dashboard) {
+                SettingSectionTitle("Řady na domovské obrazovce")
+                FilmyHomeRowsSection()
+                SettingSectionTitle("Postranní menu")
+                FilmyMenuSection()
             }
 
             // ── FILMOTÉKA (user 2026-07-27: na telefonu se ztrácela uvnitř „Objevování" — parita s TV,

@@ -126,6 +126,14 @@ data class ProfileConfig(
      */
     val filmotekaPrefs: FilmotekaPrefs? = null,
     /**
+     * PŮDORYS (SHW-112, user 2026-07-31 „v telefonu ani nemam moznost zobrazovat co ma byt v sidebaru
+     * a nebo co ma byt na home") — per-profil ROZVRŽENÍ domova (řady, sidebar TV, menu telefonu),
+     * SYNCED napříč zařízeními (dřív jen lokální prefs `tv_home_layout`, takže TV a telefon jely každé
+     * po svém). null = zařízení si drží svoje lokální hodnoty a při první změně je samo vystrčí sem
+     * (migrace, vzor [filmotekaPrefs]).
+     */
+    val homeLayout: HomeLayoutPrefs? = null,
+    /**
      * CONVERGE (SHW-97) V1 — pořadí řad v sekci **Trakt** (klíče `watchlist`/`history`/`recommended` a
      * dynamické `list_<traktId>`). Prázdné = kanonické (Watchlist, Zhlédnuto, Doporučeno, pak userovy
      * seznamy z API). Neznámé/nové klíče se doplní na konec (robustní vůči novým seznamům). Vzor [libraryOrder].
@@ -589,4 +597,32 @@ data class FilmotekaPrefs(
     val showCollections: Boolean = false,
     /** Jen tituly s dohledaným zdrojem / z JF knihovny. */
     val onlyWithSource: Boolean = false,
+)
+
+/**
+ * PŮDORYS (SHW-112) — per-profil ROZVRŽENÍ domova SYNCED přes [ProfileConfig.homeLayout] (vzor FOYER
+ * [FilmotekaPrefs]). Nese celý uživatelský layout: řady domova (pořadí/zapnutí/styl), TV sidebar
+ * a menu telefonu.
+ *
+ * Zdrojem pravdy pro BĚH je pořád lokální `HomeLayoutStore` (rychlé čtení bez sítě i offline); most
+ * `HomeLayoutSync` obě strany drží v souladu: příchozí config → store, změna ve store → config.
+ *
+ * Forward-compat: [HomeRowConfig] má volný `params` map a `ignoreUnknownKeys`, takže starší build
+ * neznámé pole přeskočí a nový parametr nerozbije uložený layout. Prázdné seznamy = „zařízení ještě
+ * nic nevystrčilo" → NEpřepisuj jimi lokální stav (viz `applySynced`).
+ */
+@Serializable
+data class HomeLayoutPrefs(
+    /** Řady domova v uživatelově pořadí (i vypnuté — `enabled=false` je „skryto", ne smazáno). */
+    val rows: List<com.github.jankoran90.showlyfin.core.domain.home.HomeRowConfig> = emptyList(),
+    /** TV sidebar: položky `SidebarItem.name` + pořadí/zapnutí. */
+    val sidebar: List<com.github.jankoran90.showlyfin.core.domain.home.SidebarEntry> = emptyList(),
+    /** Menu telefonu: položky `FilmySection.name` + pořadí/zapnutí (Nastavení a Profil jsou připnuté). */
+    val phoneMenu: List<com.github.jankoran90.showlyfin.core.domain.home.PhoneMenuEntry> = emptyList(),
+    /** Netflix-like immersive pozadí na TV (fokusovaná karta řídí fanart). */
+    val immersiveBackground: Boolean = true,
+    /** Immersive hlavička nahoře (název + rok + popis fokusované karty). */
+    val immersiveHeader: Boolean = true,
+    /** Počet řádků popisu v immersive hlavičce; 0 = AUTO (dopočítá se z výšky). */
+    val immersiveHeaderLines: Int = 0,
 )

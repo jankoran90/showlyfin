@@ -14,6 +14,22 @@ data class SidebarEntry(
     val enabled: Boolean,
 )
 
+/**
+ * PŮDORYS (SHW-112, user 2026-07-31) — jedna položka MENU TELEFONU (drawer). Obdoba [SidebarEntry] pro
+ * telefonní shell: [item] = `FilmySection.name` (stringově kvůli forward-compat — core-domain nevidí do
+ * `ui-filmy-phone`, a přejmenování/přidání sekce nesmí zahodit uložené pořadí).
+ *
+ * Výchozí sadu drží telefonní shell (zná svoje sekce); [HomeLayoutStore] ji jen ukládá + merguje.
+ * Nastavení a Profil se sem ZÁMĚRNĚ neukládají — jsou připnuté dole, aby si uživatel nemohl schovat
+ * jedinou cestu zpátky do nastavení.
+ */
+@Serializable
+data class PhoneMenuEntry(
+    /** `FilmySection` name (stringově kvůli forward-compat). */
+    val item: String,
+    val enabled: Boolean,
+)
+
 /** Položky, které sidebar může zobrazit. Každá = přepnutí sekce shellu (kromě Hledat = push destinace). */
 enum class SidebarItem(val label: String) {
     DOMU("Domů"),

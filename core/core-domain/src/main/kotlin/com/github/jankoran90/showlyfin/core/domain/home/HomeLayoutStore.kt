@@ -52,6 +52,7 @@ class HomeLayoutStore @Inject constructor(
         switched = true
         _rows.value = loadRows()
         _sidebar.value = loadSidebar()
+        _phoneMenu.value = loadPhoneMenu()
         _immersiveBackground.value = prefs.getBoolean(keyFor(KEY_IMMERSIVE), prefs.getBoolean(KEY_IMMERSIVE, true))
         _immersiveHeader.value = prefs.getBoolean(keyFor(KEY_IMMERSIVE_HEADER), prefs.getBoolean(KEY_IMMERSIVE_HEADER, true))
         _immersiveHeaderLines.value = prefs.getInt(keyFor(KEY_IMMERSIVE_HEADER_LINES), prefs.getInt(KEY_IMMERSIVE_HEADER_LINES, 0))
@@ -64,6 +65,14 @@ class HomeLayoutStore @Inject constructor(
 
     private val _sidebar = MutableStateFlow(loadSidebar())
     val sidebar: StateFlow<List<SidebarEntry>> = _sidebar.asStateFlow()
+
+    private val _phoneMenu = MutableStateFlow(loadPhoneMenu())
+    /**
+     * PŮDORYS (SHW-112) — menu telefonu (pořadí + zapnutí sekcí). **Prázdné = uživatel si ho ještě
+     * nenastavil** → telefonní shell použije svoje kanonické pořadí. Výchozí sadu tu ZÁMĚRNĚ nedržíme:
+     * core-domain nezná `FilmySection` (to je `ui-filmy-phone`), merge s novými sekcemi dělá shell.
+     */
+    val phoneMenu: StateFlow<List<PhoneMenuEntry>> = _phoneMenu.asStateFlow()
 
     private val _immersiveBackground = MutableStateFlow(prefs.getBoolean(KEY_IMMERSIVE, true))
     /** Netflix-like immersive pozadí (fokusovaná karta řídí fanart) na Domů/Objevovat/Knihovna. */
@@ -208,6 +217,70 @@ class HomeLayoutStore @Inject constructor(
         persistSidebar()
     }
 
+    // ── Menu telefonu (PŮDORYS SHW-112) ───────────────────────────────────────
+
+    /**
+     * Ulož CELÉ menu telefonu. Přesun i skrytí posílá shell vždycky jako kompletní seznam — zná svoje
+     * sekce a umí do něj rovnou zamergovat ty, které přibyly novou OTA (core-domain `FilmySection` nevidí).
+     * Prázdný seznam ignoruj — nemá čím přepsat existující volbu.
+     */
+    fun setPhoneMenu(entries: List<PhoneMenuEntry>) {
+        if (entries.isEmpty()) return
+        if (entries == _phoneMenu.value) return
+        _phoneMenu.value = entries
+        persistPhoneMenu()
+    }
+
+    /** Zpět na kanonické pořadí telefonu — smaž volbu, shell si příště naseeduje default. */
+    fun resetPhoneMenu() {
+        _phoneMenu.value = emptyList()
+        prefs.edit().remove(keyFor(KEY_PHONE_MENU)).apply()
+    }
+
+    // ── SYNC most (PŮDORYS SHW-112) ───────────────────────────────────────────
+    //
+    // Běh čte pořád LOKÁLNÍ prefs (rychle, i offline), ale hodnoty se drží v souladu se synchronizovaným
+    // profilem: [applySynced] nalije to, co přišlo ze serveru, [snapshot] vrátí stav k odeslání. Most
+    // (feature vrstva, `HomeLayoutSync`) obojí propojí — core-domain nesmí vidět ProfileRepository.
+
+    /**
+     * Nalij rozvržení ze synchronizovaného profilu do lokálních prefs. **Prázdný seznam = „druhá strana
+     * nic nemá"** → NEpřepisuj jím lokální stav (jinak by první zařízení bez layoutu vygumovalo domov
+     * tomu druhému). Řady se berou tak, jak přišly (jsou už po merge z druhého zařízení); chybějící
+     * default řady doplní [loadRows] merge při příštím startu.
+     */
+    fun applySynced(remote: com.github.jankoran90.showlyfin.core.domain.HomeLayoutPrefs?) {
+        if (remote == null) return
+        if (remote.rows.isNotEmpty()) {
+            _rows.value = remote.rows
+            persistRowsList(remote.rows)
+            // Přišlé pořadí je uživatelovo (už po FOYER migraci na druhém zařízení) → nemigruj ho znovu.
+            prefs.edit().putInt(keyFor(KEY_LAYOUT_VERSION), LAYOUT_VERSION_FOYER).apply()
+        }
+        if (remote.sidebar.isNotEmpty()) {
+            _sidebar.value = remote.sidebar
+            persistSidebar()
+        }
+        if (remote.phoneMenu.isNotEmpty()) {
+            _phoneMenu.value = remote.phoneMenu
+            persistPhoneMenu()
+        }
+        setImmersiveBackground(remote.immersiveBackground)
+        setImmersiveHeader(remote.immersiveHeader)
+        setImmersiveHeaderLines(remote.immersiveHeaderLines)
+    }
+
+    /** Aktuální rozvržení k odeslání do synchronizovaného profilu. */
+    fun snapshot(): com.github.jankoran90.showlyfin.core.domain.HomeLayoutPrefs =
+        com.github.jankoran90.showlyfin.core.domain.HomeLayoutPrefs(
+            rows = _rows.value,
+            sidebar = _sidebar.value,
+            phoneMenu = _phoneMenu.value,
+            immersiveBackground = _immersiveBackground.value,
+            immersiveHeader = _immersiveHeader.value,
+            immersiveHeaderLines = _immersiveHeaderLines.value,
+        )
+
     // ── Perzistence ─────────────────────────────────────────────────────────────
 
     private fun persistRows() = persistRowsList(_rows.value)
@@ -219,6 +292,16 @@ class HomeLayoutStore @Inject constructor(
 
     private fun persistSidebar() {
         prefs.edit().putString(keyFor(KEY_SIDEBAR), json.encodeToString(_sidebar.value)).apply()
+    }
+
+    private fun persistPhoneMenu() {
+        prefs.edit().putString(keyFor(KEY_PHONE_MENU), json.encodeToString(_phoneMenu.value)).apply()
+    }
+
+    /** Menu telefonu — bez uložené volby vrací PRÁZDNO (default zná až shell, viz [phoneMenu]). */
+    private fun loadPhoneMenu(): List<PhoneMenuEntry> {
+        val raw = prefs.getString(keyFor(KEY_PHONE_MENU), null) ?: prefs.getString(KEY_PHONE_MENU, null)
+        return decodeList(raw) { el -> json.decodeFromJsonElement<PhoneMenuEntry>(el) }
     }
 
     private fun loadRows(): List<HomeRowConfig> {
@@ -279,6 +362,8 @@ class HomeLayoutStore @Inject constructor(
     companion object {
         private const val KEY_ROWS = "rows_json"
         private const val KEY_SIDEBAR = "sidebar_json"
+        /** PŮDORYS (SHW-112) — menu telefonu (pořadí + zapnutí sekcí drawer). */
+        private const val KEY_PHONE_MENU = "phone_menu_json"
         private const val KEY_IMMERSIVE = "immersive_bg"
         private const val KEY_IMMERSIVE_HEADER = "immersive_header"
         private const val KEY_IMMERSIVE_HEADER_LINES = "immersive_header_lines"
