@@ -1,6 +1,8 @@
 package com.github.jankoran90.showlyfin.core.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,6 +46,7 @@ private val RowCoverShape = RoundedCornerShape(10.dp)
  * sekcí Objevit / Chci vidět / Historie. ČSFD se líně dotáhne přes [LocalCsfdRatingProvider]
  * (jako [PosterCard]), pokud není předané [csfdRating].
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaRow(
     item: MediaItem,
@@ -71,11 +74,29 @@ fun MediaRow(
     val rating = csfdRating ?: (if (enableCsfd) lazyRating else null)
     val director = if (showDirector)
         rememberDirector(item.imdbId, item.tmdbId, item.type, item.title, item.year) else null
+    // Vlastní hvězdy (user 2026-07-31): mřížka je uměla od BESPOKE F3, seznam ne — v list-mode tak nešlo
+    // hodnocení ani vidět, ani zadat. Stejná mechanika jako [PosterCard]: odznak + dlouhý stisk → dialog.
+    val ratingProvider = LocalUserRatingProvider.current
+    val userStars = rememberCardRating(item.tmdbId, item.imdbId)
+    val rateTarget = if (ratingProvider == null) null else RatingTarget(
+        tmdbId = item.tmdbId,
+        imdbId = item.imdbId,
+        traktId = item.traktId,
+        title = item.displayTitle,
+        year = item.year,
+        isShow = item.type != MediaType.MOVIE,
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RowCoverShape)
-            .clickable(onClick = onClick)
+            .let { m ->
+                if (rateTarget != null) {
+                    m.combinedClickable(onClick = onClick, onLongClick = { ratingProvider.requestRate(rateTarget) })
+                } else {
+                    m.clickable(onClick = onClick)
+                }
+            }
             .tvFocusable()
             .padding(vertical = 2.dp),
     ) {
@@ -126,6 +147,10 @@ fun MediaRow(
                         modifier = Modifier.padding(top = 3.dp).size(16.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
+                }
+                userStars?.let {
+                    Spacer(Modifier.width(6.dp))
+                    UserRatingBadge(stars = it, modifier = Modifier.padding(top = 2.dp))
                 }
             }
             // 2. řádek: režisér (líně z TMDB přes rememberDirector). Zobrazí se jen když je znám.

@@ -325,6 +325,8 @@ private fun FilmyShellContent() {
                             )
                             // CINEMATHEQUE: Chci vidět = celý Trakt watchlist (parita s TV, reuse TvWantToSeeViewModel).
                             FilmySection.WANT_TO_SEE -> FilmyWantToSeeScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            // user 2026-07-31: historie sledování na telefonu, ať jde hned ohodnotit (dlouhý stisk).
+                            FilmySection.HISTORY -> FilmyHistoryScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.5: Pro tebe = kurátor (reuse ForYouViewModel).
                             FilmySection.FOR_YOU -> FilmyForYouScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.4: Filmotéka = mřížka plakátů se sekcemi (reuse TvFilmotekaViewModel).

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Diamond
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Recommend
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 enum class FilmySection(val label: String, val icon: ImageVector) {
     HOME("Domů", Icons.Rounded.Home),
     WANT_TO_SEE("Chci vidět", Icons.Rounded.Bookmark),
+    HISTORY("Zhlédnuto", Icons.Rounded.History),
     FOR_YOU("Pro tebe", Icons.Rounded.Recommend),
     FILMOTEKA("Filmotéka", Icons.Rounded.Movie),
     GEMS("Vzácné klenoty", Icons.Rounded.Diamond),
@@ -59,7 +61,13 @@ object FilmyShellPrefs {
     /** Pořadí sekcí skupiny „Objevování" v draweru — Filmotéka nahoře, když je výchozí. */
     fun discoverOrder(filmotekaFirst: Boolean): List<FilmySection> =
         if (filmotekaFirst)
-            listOf(FilmySection.FILMOTEKA, FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.FOR_YOU, FilmySection.GEMS, FilmySection.SEARCH)
+            listOf(
+                FilmySection.FILMOTEKA, FilmySection.HOME, FilmySection.WANT_TO_SEE,
+                FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.GEMS, FilmySection.SEARCH,
+            )
         else
-            listOf(FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.FOR_YOU, FilmySection.FILMOTEKA, FilmySection.GEMS, FilmySection.SEARCH)
+            listOf(
+                FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.HISTORY,
+                FilmySection.FOR_YOU, FilmySection.FILMOTEKA, FilmySection.GEMS, FilmySection.SEARCH,
+            )
 }
