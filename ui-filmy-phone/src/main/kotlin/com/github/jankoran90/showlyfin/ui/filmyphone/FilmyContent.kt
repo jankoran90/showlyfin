@@ -295,5 +295,5 @@ fun FilmyEmpty(icon: ImageVector, title: String, text: String, modifier: Modifie
 }
 
 /** Stabilní klíč pro `MediaItem` v LazyList (tmdb/trakt/imdb, fallback titul+rok). */
-private fun MediaItem.stableKey(): String =
+internal fun MediaItem.stableKey(): String =
     tmdbId?.let { "t$it" } ?: traktId.takeIf { it != 0L }?.let { "k$it" } ?: imdbId ?: "$title:$year"

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.rounded.Diamond
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.MovieFilter
 import androidx.compose.material.icons.rounded.Recommend
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -24,6 +25,7 @@ enum class FilmySection(val label: String, val icon: ImageVector) {
     HOME("Domů", Icons.Rounded.Home),
     WANT_TO_SEE("Chci vidět", Icons.Rounded.Bookmark),
     HISTORY("Zhlédnuto", Icons.Rounded.History),
+    REFERENCE("Podle filmu", Icons.Rounded.MovieFilter),
     FOR_YOU("Pro tebe", Icons.Rounded.Recommend),
     FILMOTEKA("Filmotéka", Icons.Rounded.Movie),
     GEMS("Vzácné klenoty", Icons.Rounded.Diamond),
@@ -63,11 +65,13 @@ object FilmyShellPrefs {
         if (filmotekaFirst)
             listOf(
                 FilmySection.FILMOTEKA, FilmySection.HOME, FilmySection.WANT_TO_SEE,
-                FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.GEMS, FilmySection.SEARCH,
+                FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.REFERENCE,
+                FilmySection.GEMS, FilmySection.SEARCH,
             )
         else
             listOf(
                 FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.HISTORY,
-                FilmySection.FOR_YOU, FilmySection.FILMOTEKA, FilmySection.GEMS, FilmySection.SEARCH,
+                FilmySection.FOR_YOU, FilmySection.REFERENCE, FilmySection.FILMOTEKA,
+                FilmySection.GEMS, FilmySection.SEARCH,
             )
 }

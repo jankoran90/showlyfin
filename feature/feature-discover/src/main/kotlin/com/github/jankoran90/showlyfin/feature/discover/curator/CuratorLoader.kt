@@ -184,6 +184,49 @@ class CuratorLoader @Inject constructor(
     }
 
     /**
+     * Doporučení vázaná na RUČNĚ VYBRANÉ filmy (user 2026-07-31: „důležité je možnost volit referenci,
+     * na jaký film nebo filmy se doporučení váže").
+     *
+     * Jedna reference jde na `/curator/similar` (má vlastní prompt „co je podobné X"), víc referencí na
+     * `/curator/recommend` s vkusem oříznutým na PRÁVĚ TYHLE tituly — mozek pak hledá průnik toho, co je
+     * spojuje. Cache je rozlišená automaticky: serverový `_loved_key` hashuje `loved`, takže jiná sada
+     * referencí = jiný klíč.
+     */
+    suspend fun recommendFromReferences(
+        references: List<MediaItem>,
+        limit: Int,
+        pollUntilReady: Boolean = false,
+    ): List<MediaItem> {
+        val seeds = references.filter { it.displayTitle.isNotBlank() }
+        if (seeds.isEmpty()) return emptyList()
+        if (seeds.size == 1) {
+            val one = seeds.first()
+            return similarTo(
+                seedTitle = one.title.ifBlank { one.displayTitle },
+                seedYear = one.year,
+                limit = limit,
+                isShow = one.type != MediaType.MOVIE,
+                pollUntilReady = pollUntilReady,
+            )
+        }
+        val prefs = prefs()
+        if (!prefs.enabled) return emptyList()
+        val base = serverBase(); val cookie = serverCookie(); val key = profileKey()
+        if (base.isBlank() || key.isBlank()) return emptyList()
+        val full = buildTaste()
+        val taste = full.copy(
+            loved = seeds.map { TasteEntry(title = it.title.ifBlank { it.displayTitle }, year = it.year) },
+            top = emptyList(),
+            recent = emptyList(),
+        )
+        val json = JSONObject(buildRequestJson(key, limit.coerceIn(1, 60), taste, prefs))
+            .put("bucket", "picked").toString()
+        return fetchRecommendations(json, taste, pollUntilReady, "recommendFromReferences(${seeds.size})") { body ->
+            uploaderDs.curatorRecommend(base, cookie, body)
+        }
+    }
+
+    /**
      * Sdílená smyčka dotazu na mozek: `wait=false` → cache miss vrátí `pending` a mozek se zahřeje na
      * pozadí; volající, který chce plný obsah, si počká a zopakuje (stale-while-revalidate).
      */
