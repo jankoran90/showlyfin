@@ -52,6 +52,10 @@ class WatchedReporter @Inject constructor(
         val isEpisode: Boolean = false,
         val videoResumeKey: String? = null,
         val externalResumeKey: String? = null,
+        // Číslo sezóny/dílu u epizody ze streamu — bez nich nemá Trakt jak díl identifikovat
+        // (`imdbId` je u epizody id SERIÁLU). Doplněno 2026-07-31.
+        val season: Int? = null,
+        val episode: Int? = null,
     ) {
         /** Klíč pro [reported] — stačí to, čím se položka liší; prázdný cíl nehlásíme vůbec. */
         val identity: String?
@@ -109,8 +113,36 @@ class WatchedReporter @Inject constructor(
             Timber.i("[CURTAIN] Jellyfin markPlayed(%s) → %s", jfId, ok)
         }
 
-        if (target.jellyfinItemId.isNullOrBlank() && !target.isEpisode) reportToTrakt(target.imdbId)
+        if (target.jellyfinItemId.isNullOrBlank()) {
+            if (target.isEpisode) reportEpisodeToTrakt(target) else reportToTrakt(target.imdbId)
+        }
         return ok || target.jellyfinItemId.isNullOrBlank()
+    }
+
+    /**
+     * Epizoda ze streamu → Trakt historie. Trakt chce díl jako `shows[{ids, seasons[{number, episodes[…]}]}]`
+     * — `imdbId` je tu id SERIÁLU, číslo dílu nese [Target.season]/[Target.episode]. Bez nich hlásit nejde
+     * (jinak bychom označili celý seriál). Do 2026-07-31 se epizody nehlásily vůbec.
+     */
+    private suspend fun reportEpisodeToTrakt(target: Target) {
+        if (!prefs.getBoolean(PlayerPrefs.TRAKT_MARK_WATCHED_KEY, PlayerPrefs.DEFAULT_TRAKT_MARK_WATCHED)) return
+        val imdb = target.imdbId?.takeIf { it.isNotBlank() } ?: return
+        val s = target.season ?: return
+        val e = target.episode ?: return
+        val item = SyncExportItem(
+            ids = SyncExportItem.Ids(imdb = imdb),
+            watched_at = null,
+            hidden_at = null,
+            seasons = listOf(
+                SyncExportItem.Season(
+                    number = s,
+                    episodes = listOf(SyncExportItem.Episode(number = e, watched_at = "released")),
+                ),
+            ),
+        )
+        runCatching { trakt.postSyncWatched(SyncExportRequest(shows = listOf(item))) }
+            .onSuccess { Timber.i("[CURTAIN] Trakt historie: %s S%02dE%02d", imdb, s, e) }
+            .onFailure { Timber.w(it, "[CURTAIN] Trakt historie epizody selhala pro %s S%02dE%02d", imdb, s, e) }
     }
 
     /** Film ze streamu → Trakt historie. Jen na přání usera; chyba je neškodná (jen log). */

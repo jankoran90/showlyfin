@@ -172,6 +172,9 @@ class PlaybackViewModel @Inject constructor(
                 imdbId = subtitleQuery?.imdb,
                 isEpisode = subtitleQuery?.season != null,
                 externalResumeKey = resumeKey,
+                // Bez čísla sezóny/dílu nemá Trakt jak epizodu identifikovat (imdb je id seriálu).
+                season = subtitleQuery?.season,
+                episode = subtitleQuery?.episode,
             ),
         )
         val localResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
