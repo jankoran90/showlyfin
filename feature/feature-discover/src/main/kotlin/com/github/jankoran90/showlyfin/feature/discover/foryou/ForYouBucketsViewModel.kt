@@ -123,6 +123,8 @@ class ForYouBucketsViewModel @Inject constructor(
 
     private companion object {
         const val ROW_LIMIT = 20
-        const val SEED_COUNT = 2
+        // Jeden konkrétní seed („Protože jsi viděl X") stačí — ruční výběr referencí má vlastní sekci
+        // „Podle filmu" a každá řada navíc = další výpočet mozku (user 07-31: „kategorie asi méně").
+        const val SEED_COUNT = 1
     }
 }

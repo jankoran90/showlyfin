@@ -91,6 +91,8 @@ fun FilmyBrowseSection(
     onToggleView: () -> Unit,
     emptyContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    /** Volitelné akce navíc vlevo v liště (Pro tebe = přepínač kategorií). Default nic → Filmotéka beze změny. */
+    extraActions: (@Composable () -> Unit)? = null,
 ) {
     // GENRE/COUNTRY-FILTER — spodní sheety výběru. Otevřou se klikem na tab „Žánr"/„Země" (user 07-20).
     var showGenreFilter by remember { mutableStateOf(false) }
@@ -241,6 +243,7 @@ private fun FilmotekaChips(
         FilmySectionBar(
             onMenu = onMenu,
             trailing = {
+                extraActions?.invoke()
                 if (total > 0) {
                     Text(
                         text = "$total filmů",

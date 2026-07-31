@@ -1,14 +1,40 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Recommend
+import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.ViewModule
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
+import com.github.jankoran90.showlyfin.feature.discover.foryou.ForYouBucketsViewModel
 import com.github.jankoran90.showlyfin.feature.discover.foryou.ForYouViewModel
 
 /**
@@ -18,6 +44,11 @@ import com.github.jankoran90.showlyfin.feature.discover.foryou.ForYouViewModel
  * žánru+země, řazení osy „Vše", hledání vč. režie, mřížka/seznam, počítadlo) nad [ForYouViewModel.filmotekaState]
  * (kurátorská doporučení + per-profil akumulace přes backend). Filtry živé; akumulace beze změny. Klik → sdílený
  * DetailScreen (shell stack).
+ *
+ * **Kategorie (user 2026-07-31: „třídění podle filmů nedávno viděných a líbených filmů a nebo celkově vysoce
+ * kladně hodnocených"):** ikona v liště přepne na rozdělení doporučení do řad, z nichž každá říká PROČ. Každá
+ * řada dostane od mozku jen tu výseč vkusu, která ji definuje ([ForYouBucketsViewModel]) — „nedávno viděné"
+ * tedy opravdu vychází z posledních filmů, ne z celého profilu. Volba přežije otočení displeje.
  */
 @Composable
 fun FilmyForYouScreen(
@@ -25,9 +56,32 @@ fun FilmyForYouScreen(
     onOpenDetail: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
     vm: ForYouViewModel = hiltViewModel(),
+    bucketsVm: ForYouBucketsViewModel = hiltViewModel(),
 ) {
     val state by vm.filmotekaState.collectAsStateWithLifecycle()
     val viewMode by vm.browseViewMode.collectAsStateWithLifecycle()
+    var byCategory by rememberSaveable { mutableStateOf(false) }
+
+    val categoryToggle: @Composable () -> Unit = {
+        IconButton(onClick = { byCategory = !byCategory }) {
+            Icon(
+                if (byCategory) Icons.Rounded.ViewModule else Icons.Rounded.ViewAgenda,
+                contentDescription = if (byCategory) "Zobrazit vše dohromady" else "Rozdělit podle kategorií",
+                tint = if (byCategory) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (byCategory) {
+        FilmyForYouCategories(
+            onMenu = onMenu,
+            onOpenDetail = onOpenDetail,
+            categoryToggle = categoryToggle,
+            modifier = modifier,
+            vm = bucketsVm,
+        )
+        return
+    }
 
     FilmyBrowseSection(
         state = state,
@@ -49,5 +103,88 @@ fun FilmyForYouScreen(
             )
         },
         modifier = modifier,
+        extraActions = categoryToggle,
     )
+}
+
+/** Doporučení rozdělená do řad podle DŮVODU. Řady doskakují postupně — mozek je LLM, počítá desítky sekund. */
+@Composable
+private fun FilmyForYouCategories(
+    onMenu: () -> Unit,
+    onOpenDetail: (MediaItem) -> Unit,
+    categoryToggle: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    vm: ForYouBucketsViewModel = hiltViewModel(),
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+
+    Column(modifier.fillMaxSize()) {
+        FilmySectionBar(onMenu = onMenu, trailing = { categoryToggle() }) {
+            Column {
+                Text(
+                    text = "Pro tebe — po kategoriích",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                val sub = when {
+                    state.loading && state.total > 0 -> "Počítám… ${state.done}/${state.total} kategorií"
+                    state.rails.isNotEmpty() -> "${state.rails.size} kategorií"
+                    else -> null
+                }
+                if (sub != null) {
+                    Text(
+                        text = sub,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            when {
+                state.rails.isEmpty() && state.loading -> CircularProgressIndicator()
+                state.rails.isEmpty() -> FilmyEmpty(
+                    icon = Icons.Rounded.Recommend,
+                    title = "Kategorie zatím nemají z čeho vyjít",
+                    text = "Každá řada potřebuje svůj signál — něco zhlédnutého, ohodnoceného nebo často přehrávaného. " +
+                        "Ohodnoť pár filmů v sekci Zhlédnuto a zkus to znovu.",
+                )
+                else -> LazyColumn(
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(state.rails, key = { it.id }) { rail ->
+                        Text(
+                            text = rail.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
+                        )
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            items(rail.items, key = { it.stableKey() }) { mi ->
+                                Box(
+                                    Modifier
+                                        .padding(horizontal = 4.dp)
+                                        .width(118.dp)
+                                        .height(215.dp),
+                                ) {
+                                    MediaCard(item = mi, onClick = { onOpenDetail(mi) })
+                                }
+                            }
+                        }
+                    }
+                    if (state.loading) {
+                        item(key = "progress") {
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
