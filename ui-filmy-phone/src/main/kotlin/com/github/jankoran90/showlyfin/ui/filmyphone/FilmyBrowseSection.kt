@@ -163,6 +163,7 @@ fun FilmyBrowseSection(
             onRemoveCountry = onToggleCountry,
             searchOpen = searchOpen,
             onToggleSearch = { searchOpen = !searchOpen; if (!searchOpen) query = "" },
+            extraActions = extraActions,
         )
         if (searchOpen) {
             FilmotekaSearchField(query = query, onQuery = { query = it }, onClose = { searchOpen = false; query = "" })
@@ -234,6 +235,7 @@ private fun FilmotekaChips(
     onRemoveCountry: (CinematographyRegion) -> Unit,
     searchOpen: Boolean,
     onToggleSearch: () -> Unit,
+    extraActions: (@Composable () -> Unit)? = null,
 ) {
     Column(
         Modifier.fillMaxWidth(),
