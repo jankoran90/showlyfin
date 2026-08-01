@@ -1118,7 +1118,10 @@ class DetailViewModel @Inject constructor(
             return
         }
         if (hasSeason) {
-            _uiState.update { it.copy(isLoadingStreams = true) }
+            // SEZONA f3d: dohledání trvá i deset vteřin (dotaz na addony) a dosud se přitom NIC neukázalo
+            // — user 2026-08-01: „asi 10 vteřin se nic neděje, nic nikde neběží". `isLoadingStreams` svítí
+            // jen uvnitř pickeru, který je tu zavřený, takže sáhneme po toastu.
+            _uiState.update { it.copy(isLoadingStreams = true, autoAdvanceInfo = "Hledám zdroj sezóny…") }
             viewModelScope.launch {
                 if (tryPlaySeasonSource(sel)) return@launch
                 // Receptura na tenhle díl nesedla (jiná kvalita/necachováno) → normální cesta,
@@ -1375,7 +1378,16 @@ class DetailViewModel @Inject constructor(
             "[SEZONA] zdroj sezóny S%d → E%d: shoda %s (%s)",
             sel.season, sel.episode, match.confidence, match.stream.name ?: "?",
         )
-        _uiState.update { it.copy(showStreamPathChooser = false, showStreamPicker = false) }
+        // 🔴 SEZONA f3d (device test 2026-08-01, user u Bleach E6: „spustí se fullscreen s nulovou
+        // stopáží, nic se nepřehrává a nakonec se objeví okno"): seznam zdrojů si MUSÍME nechat.
+        // `advancePastSource` (CASCADE) hledá další kandidáty právě v `streams` — a při přehrání přes
+        // zdroj sezóny se picker vůbec neotevřel, takže tam bylo PRÁZDNO. Selhání zdroje proto neskočilo
+        // na další release, ale rovnou na dialog „soubor nejde přehrát". Zdroje přitom máme načtené tady.
+        // Vybraný kandidát jde NAHORU, aby auto-postup pokračoval až za ním (CASCADE hledá podle indexu).
+        val ordered = listOf(match.stream) + list.filter { it !== match.stream }
+        _uiState.update {
+            it.copy(showStreamPathChooser = false, showStreamPicker = false, streams = ordered)
+        }
         playStream(match.stream)
         return true
     }
@@ -2121,6 +2133,18 @@ class DetailViewModel @Inject constructor(
                 )
             }
             playStream(next, target)
+        } else if (list.isEmpty() && _uiState.value.item?.imdbId?.isNotBlank() == true) {
+            // 🔴 SEZONA f3d: zdroj se pouštěl MIMO picker (zapamatovaný zdroj dílu/filmu, zdroj sezóny),
+            // takže seznam alternativ vůbec neexistuje — CASCADE tak neměla kam postoupit a rovnou padala
+            // na dialog / Stremio. Dotáhni zdroje a nech uživatele vybrat, místo slepé uličky.
+            timber.log.Timber.i("[CASCADE] zdroj hrál mimo picker (prázdný seznam) → dotahuji alternativy ($message)")
+            _uiState.update {
+                it.copy(isResolvingStream = false, rdDownload = null, streamError = null,
+                    // strict=false rovnou tady (ne přes `setStreamStrict`, ten by načetl zdroje podruhé).
+                    streamStrict = false,
+                    autoAdvanceInfo = "$message — hledám jiný zdroj…")
+            }
+            openStreamPicker()
         } else if (formatErrorCode != null && isFormatError(formatErrorCode)) {
             // REPRISE (SHW-54): Media3 selhal na KONTEJNERU/KODEKU (ne mrtvý zdroj) a žádný další
             // cached zdroj není → soubor je nehratelný (např. Criterion MKV se zlib stopou). Tichý skok
