@@ -20,6 +20,9 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+// SEZONA (SHW-113) f2 — přepínač zvukové stopy pod „Více" (parita s telefonním ⋮).
+import androidx.compose.material.icons.filled.Translate
+import com.github.jankoran90.showlyfin.data.uploader.AudioPathStore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -188,33 +191,54 @@ internal fun TvDetailActions(
                 active = uiState.isInWatchlist,
                 onClick = { viewModel.toggleWatchlist() },
             )
-            if (hasRemembered) {
-                TvActionButton(
-                    icon = Icons.Filled.MoreHoriz,
-                    label = "Více",
-                    primary = false,
-                    onClick = { showMore = !showMore },
-                )
-            }
+            // „Více" je nově VŽDY — pod ním je i přepínač zvukové stopy, na který chce divák sáhnout
+            // dřív, než vůbec nějaký zdroj má (SEZONA f2, parita s telefonním ⋮).
+            TvActionButton(
+                icon = Icons.Filled.MoreHoriz,
+                label = "Více",
+                primary = false,
+                onClick = { showMore = !showMore },
+            )
         }
 
-        // Overflow „Více" — vzácné akce (jen se zapamatovaným zdrojem), ať hlavní řada není přeplácaná.
-        if (showMore && hasRemembered) {
+        // Overflow „Více" — vzácné akce, ať hlavní řada není přeplácaná.
+        if (showMore) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Parita s telefonem (⋮ „Vybrat jiný zdroj") — TÝŽ sdílený picker (⭐ pin + chipy, D-pad).
+                // SEZONA (SHW-113) f2 — PARITA S TELEFONEM (user 2026-08-01 17:27: „mysli i na TV, ať je to
+                // tam taky v nějakém dalším tlačítku… ať je to vše hotové a funkční TV a phone").
+                // Přepíná stopu za CELÝ PROFIL, takže změna na TV platí i na telefonu a naopak. Tlačítko je
+                // MIMO gate `hasRemembered` — na stopu chce divák sáhnout PŘED tím, než zdroj vůbec má.
                 TvActionButton(
-                    icon = Icons.Filled.SwapHoriz,
-                    label = "Vybrat jiný zdroj",
+                    icon = Icons.Filled.Translate,
+                    label = if (uiState.audioChoice == AudioPathStore.Choice.CZ) "Zvuk: český dabing" else "Zvuk: originál",
                     primary = false,
-                    onClick = { viewModel.openStreamPicker() },
+                    active = uiState.audioChoice == AudioPathStore.Choice.CZ,
+                    onClick = {
+                        viewModel.setAudioChoice(
+                            if (uiState.audioChoice == AudioPathStore.Choice.CZ) {
+                                AudioPathStore.Choice.ORIGINAL
+                            } else {
+                                AudioPathStore.Choice.CZ
+                            },
+                        )
+                    },
                 )
-                TvActionButton(
-                    icon = Icons.Filled.Delete,
-                    label = "Odebrat zdroj",
-                    primary = false,
-                    danger = true,
-                    onClick = { viewModel.removeRememberedSource() },
-                )
+                if (hasRemembered) {
+                    // Parita s telefonem (⋮ „Vybrat jiný zdroj") — TÝŽ sdílený picker (⭐ pin + chipy, D-pad).
+                    TvActionButton(
+                        icon = Icons.Filled.SwapHoriz,
+                        label = "Vybrat jiný zdroj",
+                        primary = false,
+                        onClick = { viewModel.openStreamPicker() },
+                    )
+                    TvActionButton(
+                        icon = Icons.Filled.Delete,
+                        label = "Odebrat zdroj",
+                        primary = false,
+                        danger = true,
+                        onClick = { viewModel.removeRememberedSource() },
+                    )
+                }
             }
         }
     }
