@@ -302,6 +302,11 @@ fun DetailScreen(
             defaultYear = uiState.sdilejDefaultYear,
             allowSdilejEdit = path == com.github.jankoran90.showlyfin.feature.detail.StreamAudioPath.CZ_DUB,
             onResearchSdilej = { t, y -> viewModel.researchSdilejStreams(t, y) },
+            // SEZONA (SHW-113) f2 — u seriálu navíc „použij pro celou sezónu"; u filmu se nezobrazí.
+            seasonNumber = if (displayItem.type == MediaType.SHOW) uiState.selectedSeason else null,
+            hasSeasonSource = uiState.hasSeasonSource,
+            onPinSeason = { viewModel.pinSeasonSource(it) },
+            onForgetSeason = { viewModel.forgetSeasonSource() },
         )
     }
     // SIEVE S2: po lokálním přehrání Stremio zdroje se zeptej, jestli sedl → zapamatuj fungující zdroj.
@@ -708,6 +713,16 @@ fun DetailScreen(
                 }
             }
             if (!plot.isNullOrBlank()) Spacer(Modifier.height(4.dp))
+
+            // SEZONA (SHW-113) f2 — jazykový chip. Přepíná stopu PLOŠNĚ ZA PROFIL (user 2026-08-01 16:45:
+            // „plošně na celý profil — karty filmu, seriálu, pořadu"); karta je jen místo, odkud se to dá
+            // přehodit. Výchozí plyne z věku profilu, takže dokud na chip nikdo nesáhne, dětský profil
+            // dostane češtinu a dospělý originál sám od sebe.
+            AudioChoiceChips(
+                choice = uiState.audioChoice,
+                onChoose = { viewModel.setAudioChoice(it) },
+            )
+            Spacer(Modifier.height(8.dp))
 
             // CANVAS A: akce (Galerie přes cover, ČSFD recenze přes badge, Přehrát/Na TV/Stremio/
             // Stáhnout/Oblíbené/Chci vidět) jsou v kompaktní kulaté liště v hero (viz DetailActionBar výše).

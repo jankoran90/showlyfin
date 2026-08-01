@@ -60,6 +60,10 @@ class PlaybackViewModel @Inject constructor(
             subtitleStyle = loadStyle(),
             controlsHideSec = prefs.getInt(PlayerPrefs.CONTROLS_HIDE_SEC_KEY, PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC),
             seekStepSec = prefs.getInt(PlayerPrefs.SEEK_STEP_SEC_KEY, PlayerPrefs.DEFAULT_SEEK_STEP_SEC),
+            // SEZONA (SHW-113) f2 — žádané jazyky zvuku, které detail uložil při spuštění přehrávání.
+            preferredAudioLanguages = prefs.getString(
+                com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.PREF_PREFERRED_AUDIO_LANGS, "",
+            ).orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() },
         ),
     )
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()

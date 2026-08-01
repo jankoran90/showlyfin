@@ -72,6 +72,8 @@ class DetailViewModel @Inject constructor(
     private val offlineManager: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
     // MAESTRO / D-c: probuzení domácí AV sestavy před „Přehrát na Filmy TV".
     private val homeTheaterScene: com.github.jankoran90.showlyfin.data.maestro.HomeTheaterScene,
+    // SEZONA (SHW-113) f2: volba zvukové stopy per titul (chip na kartě); výchozí dává profil.
+    private val audioPathStore: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -261,6 +263,9 @@ class DetailViewModel @Inject constructor(
                 streams = emptyList(),
                 // SIEVE S3: připomeň zdroj, který pro tenhle film posledně fungoval (pin v pickeru).
                 rememberedSource = workingSourceStore.get(item.imdbId, item.tmdbId)?.stream,
+                // SEZONA f2: stav jazykového chipu (profilová volba, jinak výchozí podle věku profilu).
+                audioChoice = audioChoice(),
+                hasSeasonSource = false,
                 // COMPASS C2: je tento film v Oblíbených?
                 isFavorite = item.tmdbId?.let {
                     favoritesStore.isFavorite(com.github.jankoran90.showlyfin.data.uploader.FavoriteKind.MOVIE, it)
@@ -922,6 +927,41 @@ class DetailViewModel @Inject constructor(
             else -> "original"
         }
 
+    /** SEZONA f2: je aktivní profil dětský? Určuje VÝCHOZÍ zvukovou stopu (dětský CZ, dospělý originál). */
+    private fun isChildProfile(): Boolean = cachePolicy() == "child"
+
+    /** SEZONA f2: platná volba stopy = chip profilu, jinak výchozí podle věku. */
+    private fun audioChoice(): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice =
+        audioPathStore.effective(isChildProfile())
+
+    /**
+     * SEZONA f2 — jazykový chip. Přepíná NASTAVENÍ CELÉHO PROFILU (user 2026-08-01 16:45: „plošně na celý
+     * profil — karty filmu, seriálu, pořadu"); karta je jen místo, odkud se to dá přehodit.
+     */
+    fun setAudioChoice(choice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice) {
+        audioPathStore.set(choice)
+        _uiState.update { it.copy(audioChoice = choice) }
+    }
+
+    /**
+     * SEZONA f2 — řekni přehrávači, JAKÝ JAZYK chce divák slyšet.
+     * 🔴 Bez tohohle bral přehrávač prostě první stopu v pořadí — u Breaking Bad německou, protože
+     * „originál" v souboru označený není a zařízení má české locale, které se netrefí (user 16:44:
+     * „breaking bad není německy seriál"). Originál se pozná až podle TMDB `original_language`.
+     * Předává se přes sdílené `traktPreferences`, které přehrávač už čte — bez zásahu do navigace.
+     */
+    private fun publishPreferredAudioLanguages() {
+        val st = _uiState.value
+        val orig = st.movieDetails?.original_language ?: st.showDetails?.original_language
+        val langs = com.github.jankoran90.showlyfin.data.uploader.AudioPathStore
+            .languagesFor(audioChoice(), orig)
+        prefs.edit().putString(
+            com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.PREF_PREFERRED_AUDIO_LANGS,
+            langs.joinToString(","),
+        ).apply()
+        timber.log.Timber.i("[SEZONA] preferovaný zvuk: %s (originál titulu=%s)", langs.take(3), orig ?: "?")
+    }
+
     // ── Stream / Stáhnout (Stremio + Sdílej.cz + Smart Remux hub) ──────────────
 
     private fun mediaTypeStr(item: MediaItem) = if (item.type == MediaType.MOVIE) "movie" else "series"
@@ -953,12 +993,32 @@ class DetailViewModel @Inject constructor(
             append(base); append(" S"); append(season); append("E"); append(episode)
             episodeTitle?.takeIf { it.isNotBlank() }?.let { append(" · "); append(it) }
         }
-        episodeSelector = EpisodeSelector(season, episode, label)
+        val sel = EpisodeSelector(season, episode, label)
+        episodeSelector = sel
         // SEZONA (SHW-113): zapamatovaný zdroj patří DÍLU, ne seriálu. Bez tohohle přepnutí by picker
         // připnul zdroj z posledního otevřeného dílu (dřív dokonce z celého titulu → S1E1 svítilo u S3E7).
         val item = _uiState.value.item
         val remembered = workingSourceStore.get(item?.imdbId, item?.tmdbId, season, episode)?.stream
-        _uiState.update { it.copy(rememberedSource = remembered) }
+        val hasSeason = workingSourceStore.getSeason(item?.imdbId, item?.tmdbId, season) != null
+        _uiState.update { it.copy(rememberedSource = remembered, hasSeasonSource = hasSeason) }
+        // SEZONA f2: zdroj dílu > zdroj sezóny > picker. Vlastní volba u konkrétního dílu má přednost
+        // (divák ji udělal vědomě a později), receptura sezóny je záchrana pro díly, kde nic není.
+        if (remembered != null && com.github.jankoran90.showlyfin.data.uploader.SeasonSourceMatcher.playsNow(remembered)) {
+            playStream(remembered)
+            return
+        }
+        if (hasSeason) {
+            _uiState.update { it.copy(isLoadingStreams = true) }
+            viewModelScope.launch {
+                if (tryPlaySeasonSource(sel)) return@launch
+                // Receptura na tenhle díl nesedla (jiná kvalita/necachováno) → normální cesta,
+                // ať divák vidí, co je k dispozici, místo tichého selhání.
+                timber.log.Timber.i("[SEZONA] zdroj sezóny na S%dE%d nesedl → otevírám výběr", season, episode)
+                _uiState.update { it.copy(isLoadingStreams = false) }
+                openStreamPathChooser()
+            }
+            return
+        }
         openStreamPathChooser()
     }
 
@@ -971,7 +1031,13 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(showStreamPicker = true, streamAudioPath = null, streamError = "Uploader není nastaven nebo film nemá IMDB ID.") }
             return
         }
-        _uiState.update { it.copy(showStreamPathChooser = true, streamAudioPath = null) }
+        // SEZONA f2: rozcestník zůstává, ale je PŘEDVYBRANÝ podle jazykového chipu profilu — divák tak
+        // nemusí u každého dílu klikat totéž, a přitom si může cestu pořád přehodit.
+        val preselect = when (audioChoice()) {
+            com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ -> StreamAudioPath.CZ_DUB
+            com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL -> StreamAudioPath.ORIGINAL
+        }
+        _uiState.update { it.copy(showStreamPathChooser = true, streamAudioPath = preselect) }
         loadStreams()
     }
 
@@ -1148,6 +1214,59 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * SEZONA (SHW-113) f2 — „použij tenhle zdroj pro CELOU SEZÓNU" (user 2026-08-01 16:37: *„aby se rovnou
+     * dokázal najít ten season pack a ověřením, že je funkční se zapamatuje a promítne do všech epizod
+     * sezóny, aby při přehrát tlačítku se rovnou streamoval"*).
+     *
+     * Neukládá se URL, ale RECEPTURA — u pravého season packu (SK/CZ Torrents) sedne otisk torrentu a
+     * addon si soubor dílu dohledá sám; u AIOStreams, kde otisk chybí, se pozná stejná release grupa
+     * a rozlišení. Detail v [SeasonSourceMatcher].
+     */
+    fun pinSeasonSource(stream: UploaderStream) {
+        val st = _uiState.value
+        val season = episodeSelector?.season ?: st.selectedSeason ?: return
+        val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
+        workingSourceStore.saveSeason(st.item?.imdbId, st.item?.tmdbId, title, stream, season)
+        _uiState.update { it.copy(hasSeasonSource = true, captureMessage = "Zdroj platí pro celou $season. sezónu.") }
+    }
+
+    /** SEZONA f2 — zruš recepturu sezóny (zdroje jednotlivých dílů zůstanou). */
+    fun forgetSeasonSource() {
+        val st = _uiState.value
+        val season = episodeSelector?.season ?: st.selectedSeason ?: return
+        workingSourceStore.clearSeason(st.item?.imdbId, st.item?.tmdbId, season)
+        _uiState.update { it.copy(hasSeasonSource = false, captureMessage = "Zdroj sezóny zrušen.") }
+    }
+
+    /**
+     * SEZONA f2 — zkus pro právě vybraný díl použít zdroj sezóny a přehrát HNED (bez pickeru).
+     * Vrací true, když se to povedlo. Bere jen zdroje, které hrají okamžitě (cached na RD / sdilej) —
+     * necachovaný torrent by znamenal čekání na stažení, a to není „Přehrát a jede".
+     */
+    private suspend fun tryPlaySeasonSource(sel: EpisodeSelector): Boolean {
+        val st = _uiState.value
+        val item = st.item ?: return false
+        val recipe = workingSourceStore.getSeason(item.imdbId, item.tmdbId, sel.season)?.stream ?: return false
+        val imdb = item.imdbId ?: return false
+        val list = runCatching {
+            uploaderDs.getStreams(
+                uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb,
+                season = sel.season, episode = sel.episode, strict = false,
+            )
+        }.getOrNull().orEmpty()
+        if (list.isEmpty()) return false
+        val match = com.github.jankoran90.showlyfin.data.uploader.SeasonSourceMatcher
+            .pick(recipe, list) ?: return false
+        timber.log.Timber.i(
+            "[SEZONA] zdroj sezóny S%d → E%d: shoda %s (%s)",
+            sel.season, sel.episode, match.confidence, match.stream.name ?: "?",
+        )
+        _uiState.update { it.copy(showStreamPathChooser = false, showStreamPicker = false) }
+        playStream(match.stream)
+        return true
+    }
+
     /** Skryj nabídku „tohle sedí?" (uživatel ji odmítl nebo to byl špatný zdroj). */
     fun dismissWorkingConfirm() = _uiState.update { it.copy(pendingWorkingConfirm = null) }
 
@@ -1254,6 +1373,7 @@ class DetailViewModel @Inject constructor(
     fun playStream(stream: UploaderStream, target: CastTarget = CastTarget.LOCAL) {
         if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
         lastPlayedStream = stream   // CASCADE Fáze 4: zapamatuj pro případný auto-advance po chybě přehrávání
+        publishPreferredAudioLanguages()   // SEZONA f2: přehrávač musí vědět, jakou stopu pustit
         // TENFOOT WS-C: u epizody použij popisek „Seriál S1E4 · název" jako titul přehrávače.
         val title = episodeSelector?.label
             ?: _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }

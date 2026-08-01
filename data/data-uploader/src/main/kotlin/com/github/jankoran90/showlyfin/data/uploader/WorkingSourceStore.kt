@@ -74,6 +74,13 @@ fun epKeyOf(season: Int?, episode: Int?): String? =
     if (season != null && episode != null) "s${season}e$episode" else null
 
 /**
+ * SEZONA fáze 2: identita CELÉ SEZÓNY („s1"). Nese „zdroj sezóny" = receptura, podle které se pro
+ * každý další díl vybere odpovídající zdroj (season pack přes stejný infoHash, jinak stejná release
+ * grupa + rozlišení). Nekoliduje s dílem — ten má vždy tvar „s1e4".
+ */
+fun seasonKeyOf(season: Int?): String? = season?.let { "s$it" }
+
+/**
  * SENTINEL (bod 3 část B) — počítá se tenhle uložený zdroj jako „hraje hned / uložený" (odznak na kartě +
  * členství ve Filmotéce + řada „Uloženo k přehrání")? JEN když je reálně přehratelný CACHED — mirror
  * `streamHealth`: `sdilej://` hraje přes proxy; RD torrent musí být `rdReady`/`rdSaved`. Auto zdroj, který
@@ -483,6 +490,58 @@ class WorkingSourceStore @Inject constructor(
      * „Uloženo k přehrání" a správu v Nastavení, kam díl jako samostatná „karta filmu" nepatří.
      * [imdb]/[tmdb] = seriál; null = všechny díly napříč seriály.
      */
+    /**
+     * SEZONA fáze 2 — „zdroj sezóny" (receptura pro všechny díly). Ukládá se pod klíčem `s<N>`, takže
+     * nesahá na zdroje jednotlivých dílů (`s<N>e<M>`) ani na film. `episode = null` je záměrné.
+     */
+    fun saveSeason(
+        imdb: String?, tmdb: Long?, title: String, stream: UploaderStream, season: Int,
+    ) {
+        if (imdb.isNullOrBlank() && (tmdb == null || tmdb <= 0L)) return
+        val ep = seasonKeyOf(season) ?: return
+        val now = System.currentTimeMillis()
+        val existingFirst = getSeason(imdb, tmdb, season)
+            ?.let { it.firstSavedAtMs.takeIf { f -> f > 0L } ?: it.savedAtMs.takeIf { s -> s > 0L } }
+        val record = WorkingSource(
+            imdb = imdb.orEmpty(), tmdb = tmdb ?: 0L, title = title, stream = stream,
+            savedAtMs = now, firstSavedAtMs = existingFirst ?: now,
+            season = season, episode = null, epKey = ep,
+        )
+        val json = gson.toJson(record)
+        val ok = prefs.edit().apply {
+            if (tmdb != null && tmdb > 0L) putString(tmdbKey(tmdb, ep), json)
+            if (!imdb.isNullOrBlank()) putString(imdbKey(imdb, ep), json)
+        }.commit()
+        Timber.i("[SEZONA] zdroj sezóny %s uložen (%s) commit=%b", ep, stream.name ?: stream.description ?: "?", ok)
+        clearTombstones(imdb, tmdb, ep)
+        refreshSavedKeys()
+        pushToServer()
+    }
+
+    /** SEZONA fáze 2 — receptura zdroje pro danou sezónu (null = pro sezónu nic uloženo). */
+    fun getSeason(imdb: String?, tmdb: Long?, season: Int): WorkingSource? {
+        val ep = seasonKeyOf(season) ?: return null
+        if (tmdb != null && tmdb > 0L) {
+            parse(prefs.getString(tmdbKey(tmdb, ep), null), "tmdb=$tmdb $ep")?.let { return it }
+        }
+        if (!imdb.isNullOrBlank()) {
+            parse(prefs.getString(imdbKey(imdb, ep), null), "imdb=$imdb $ep")?.let { return it }
+        }
+        return null
+    }
+
+    /** SEZONA fáze 2 — zapomeň recepturu sezóny (zdroje jednotlivých dílů zůstanou). */
+    fun clearSeason(imdb: String?, tmdb: Long?, season: Int) {
+        val ep = seasonKeyOf(season) ?: return
+        addTombstones(imdb, tmdb, ep)
+        prefs.edit().apply {
+            if (tmdb != null && tmdb > 0L) remove(tmdbKey(tmdb, ep))
+            if (!imdb.isNullOrBlank()) remove(imdbKey(imdb, ep))
+        }.apply()
+        refreshSavedKeys()
+        pushToServer()
+    }
+
     fun getEpisodes(imdb: String? = null, tmdb: Long? = null): List<WorkingSource> =
         allRecords().filter { r ->
             r.epKey != null &&

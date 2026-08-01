@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+// SEZONA (SHW-113) f2 — ikona „platí pro celou sezónu" (odlišená od hvězdy = zdroj jednoho dílu).
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -287,6 +289,8 @@ internal fun StreamRow(
     // D-b (user 07-19): přímé nastavení zdroje jako výchozího (⭐). null = pin akce se nezobrazí.
     onPin: (() -> Unit)? = null,
     isPinned: Boolean = false,
+    // SEZONA (SHW-113) f2: „použij pro celou sezónu". null = film nebo neznámá sezóna → ikona se nezobrazí.
+    onPinSeason: (() -> Unit)? = null,
     // FUSE/TENFOOT (SHW-87): TV D-pad — volající připne fokus prstenec (`tvFocusable`, na telefonu no-op)
     // a případně `focusRequester` na první řádek, ať picker jde ovládat dálkovým ovladačem.
     modifier: Modifier = Modifier,
@@ -358,6 +362,18 @@ internal fun StreamRow(
                     .height(24.dp)
                     .tvFocusable()
                     .clickable(onClick = onPin),
+            )
+        }
+        // SEZONA f2: „pro celou sezónu" — vedle hvězdy dílu, ať je rozdíl vidět na první pohled.
+        if (onPinSeason != null) {
+            Icon(
+                imageVector = Icons.Default.Videocam,
+                contentDescription = "Použít pro celou sezónu",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .height(24.dp)
+                    .tvFocusable()
+                    .clickable(onClick = onPinSeason),
             )
         }
         trailingIcon()
@@ -433,6 +449,11 @@ internal fun StreamPickerSheet(
     defaultYear: Int? = null,
     allowSdilejEdit: Boolean = false,
     onResearchSdilej: (String, Int?) -> Unit = { _, _ -> },
+    // SEZONA (SHW-113) f2: u epizody navíc „platí pro celou sezónu" — null = film / sezóna neznámá.
+    seasonNumber: Int? = null,
+    hasSeasonSource: Boolean = false,
+    onPinSeason: (UploaderStream) -> Unit = {},
+    onForgetSeason: () -> Unit = {},
 ) {
     // Plan FERRY (SHW-37): cíl přehrání — telefon (lokální MPV) nebo TV (yellyfin). Per-otevření.
     var toTv by remember { mutableStateOf(false) }
@@ -455,6 +476,23 @@ internal fun StreamPickerSheet(
         ) {
             FilterChip(selected = strict, onClick = { onStrictChange(true) }, label = { Text("Přesné") })
             FilterChip(selected = !strict, onClick = { onStrictChange(false) }, label = { Text("Vše") })
+        }
+        // SEZONA (SHW-113) f2 — když už je zdroj pro sezónu zvolený, dej vědět a nabídni zrušení.
+        // Ostatní díly ho pak berou samy a Přehrát u nich jede rovnou, bez tohohle výběru.
+        if (seasonNumber != null && hasSeasonSource) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Zdroj platí pro celou $seasonNumber. sezónu",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onForgetSeason) { Text("Zrušit") }
+            }
         }
         // Cíl přehrání: Tady (telefon) / Na TV (yellyfin přes FERRY).
         Row(
@@ -540,6 +578,14 @@ internal fun StreamPickerSheet(
                             onClick = { if (!busy) { if (toTv) onCastToTv(s) else onPlay(s) } },
                             onPin = { if (!busy) onPin(s) },
                             isPinned = streamKey(s) == rememberedKey,
+                            // SEZONA (SHW-113) f2 — druhá hvězdička „pro celou sezónu". U season packu se
+                            // tentýž torrent použije i pro ostatní díly (addon si soubor dohledá sám),
+                            // u zdrojů bez otisku se dohledá stejná release grupa. Jen u epizod.
+                            onPinSeason = if (seasonNumber != null) {
+                                { if (!busy) onPinSeason(s) }
+                            } else {
+                                null
+                            },
                             showSourceBadge = true,
                             health = h,
                             modifier = if (streamKey(s) == firstKey) {

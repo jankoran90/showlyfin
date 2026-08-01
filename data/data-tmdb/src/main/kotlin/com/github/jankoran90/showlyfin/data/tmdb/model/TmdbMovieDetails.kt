@@ -5,6 +5,9 @@ data class TmdbMovieDetails(
     val title: String?,
     // PASSPORT (SHW-93) A1 — originální název (u ne-latinkových filmů asijské písmo); zdroj čitelného fallbacku.
     val original_title: String? = null,
+    // SEZONA (SHW-113) f2 — PŮVODNÍ JAZYK („en", „ja"…). Bez něj přehrávač nevěděl, která stopa je
+    // „originál", a spouštěl prostě první v pořadí (u Breaking Bad německou). Viz TmdbShowDetails.
+    val original_language: String? = null,
     val poster_path: String?,
     val backdrop_path: String?,
     val overview: String?,

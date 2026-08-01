@@ -5,6 +5,11 @@ data class TmdbShowDetails(
     val name: String?,
     // PASSPORT (SHW-93) A1 — originální název seriálu (u ne-latinkových asijské písmo); zdroj čitelného fallbacku.
     val original_name: String? = null,
+    // SEZONA (SHW-113) f2 — PŮVODNÍ JAZYK („en", „ja", „cs"). User 2026-08-01 16:44: u dospělého profilu
+    // se má hrát ORIGINÁLNÍ stopa, jenže „originál" v souboru označený nebývá — u Breaking Bad byla první
+    // v pořadí německá a přehrávač ji spustil, protože žádnou preferenci jazyka nedostal. Tohle je ta
+    // chybějící informace: anglický seriál → „eng", japonské anime → „jpn".
+    val original_language: String? = null,
     val poster_path: String?,
     val backdrop_path: String?,
     val overview: String?,

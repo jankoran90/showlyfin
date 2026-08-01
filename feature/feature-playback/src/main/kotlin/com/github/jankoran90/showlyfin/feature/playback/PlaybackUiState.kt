@@ -29,6 +29,11 @@ data class PlaybackUiState(
     // ── TENFOOT F2c: TV transport lišta (konfigurovatelné, načteno z prefs při vzniku VM) ─────
     val controlsHideSec: Int = PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC, // 0 = nikdy neskrývat
     val seekStepSec: Int = PlayerPrefs.DEFAULT_SEEK_STEP_SEC,
+    // SEZONA (SHW-113) f2 — jazyky zvukové stopy od nejžádanějšího (ISO 639-2/B i dvoupísmenné).
+    // Detail je sem uloží podle jazykového chipu profilu a původního jazyka titulu. Prázdné = nechat
+    // na přehrávači (staré chování). 🔴 Právě to staré chování pouštělo u Breaking Bad německou stopu:
+    // bez preference bere Media3 první stopu v pořadí, protože česká tam není a locale se netrefí.
+    val preferredAudioLanguages: List<String> = emptyList(),
 )
 
 /** Jeden titulkový blok (.srt) — renderujeme vlastním overlayem, takže posun/přepnutí stopy

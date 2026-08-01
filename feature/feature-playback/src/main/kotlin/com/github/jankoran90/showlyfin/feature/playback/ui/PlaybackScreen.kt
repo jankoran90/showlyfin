@@ -524,6 +524,18 @@ fun PlaybackScreen(
                 .build()
         }
     }
+    // SEZONA (SHW-113) f2 — řekni přehrávači, JAKÝ JAZYK má hrát. Bez toho bere Media3 první stopu
+    // v pořadí (u Breaking Bad německou — česká tam není a locale zařízení se netrefí). Detail spočítal
+    // pořadí podle jazykového chipu profilu a původního jazyka titulu. Nechává se to jako PREFERENCE,
+    // ne override: když žádný z jazyků ve zdroji není, přehrávač si vybere sám a nic se nerozbije.
+    LaunchedEffect(controller, state.preferredAudioLanguages) {
+        val c = controller ?: return@LaunchedEffect
+        val langs = state.preferredAudioLanguages
+        if (langs.isEmpty()) return@LaunchedEffect
+        c.trackSelectionParameters = c.trackSelectionParameters.buildUpon()
+            .setPreferredAudioLanguages(*langs.toTypedArray())
+            .build()
+    }
     // TEMPO: sleduj stopy přehrávače → seznam audio stop (+ co telefon umí) + auto-fallback na podporovanou.
     DisposableEffect(controller) {
         val c = controller ?: return@DisposableEffect onDispose { }

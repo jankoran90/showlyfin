@@ -175,6 +175,12 @@ data class DetailUiState(
     val nextUpEpisode: Pair<Int, Int>? = null,
     // KOLO2 (G): (season,episode) → jellyfin episode id → přímé přehrání epizody vlastněného seriálu.
     val episodeJellyfinIds: Map<Pair<Int, Int>, String> = emptyMap(),
+    // SEZONA (SHW-113) f2 — jazykový chip na kartě. Platí PLOŠNĚ za profil (user 2026-08-01 16:45),
+    // karta je jen místo, odkud se přepíná. Výchozí plyne z věku profilu: dětský CZ, dospělý originál.
+    val audioChoice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice =
+        com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL,
+    // SEZONA f2 — je pro TUTO sezónu uložený zdroj (receptura pro všechny díly)? Řídí popisek akce.
+    val hasSeasonSource: Boolean = false,
     // Počet řádků popisu ve sbaleném stavu (Nastavení). 0 = bez omezení.
     val plotCollapsedLines: Int = 5,
     // TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu + auto-kompakt popisu + umístění tlačítek.
