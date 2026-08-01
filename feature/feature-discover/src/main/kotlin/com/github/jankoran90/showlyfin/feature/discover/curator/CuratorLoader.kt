@@ -384,8 +384,9 @@ class CuratorLoader @Inject constructor(
         // tmdb id mozku nic neřekne. Strop drží velikost požadavku.
         val knownTitles = (watched.mapNotNull { it.toEntry()?.title } +
             watchlistItems.mapNotNull { it.toEntry()?.title } +
-            movieRatings.mapNotNull { it.movie.title } +
-            showRatings.mapNotNull { it.show.title } +
+            // Trakt hodnocení nese jen ids (ne názvy) → dohledej název přes tutéž mapu jako `lovedFromRatings`.
+            movieRatings.mapNotNull { r -> r.movie.ids.tmdb?.let { labelByTmdb[it]?.title } } +
+            showRatings.mapNotNull { r -> r.show.ids.tmdb?.let { labelByTmdb[it]?.title } } +
             localRatings.map { it.title })
             .map { it.trim() }
             .filter { it.isNotEmpty() }
