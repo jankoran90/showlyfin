@@ -47,6 +47,8 @@ interface UploaderService {
     @POST suspend fun profileMirrorRefresh(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): MirrorRefreshResponse
     // Čtení serverového ZRCADLA Trakt vkusu — záloha, když appce vyprší vlastní Trakt token.
     @GET suspend fun profileMirrorRead(@Url url: String, @Header("Cookie") cookie: String): MirrorReadResponse
+    // SEZONA (SHW-113) — sledovanost seriálu po dílech z Traktu (fajfky + „další díl" i mimo Jellyfin).
+    @GET suspend fun profileShowProgress(@Url url: String, @Header("Cookie") cookie: String): ShowProgressResponse
     @PUT suspend fun putProfile(@Url url: String, @Header("Cookie") cookie: String, @Body request: ProfileMetaRequest): Response<ResponseBody>
     // LAPIDARY (SHW-96) — vzácné klenoty: watchlist/favorite trigger (cache-one) + katalog sekce
     @POST suspend fun gemsCacheOne(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>

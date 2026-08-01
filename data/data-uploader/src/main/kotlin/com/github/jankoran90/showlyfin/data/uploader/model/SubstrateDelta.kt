@@ -71,6 +71,45 @@ data class MirrorReadResponse(
     val lastError: String? = null,
 )
 
+/**
+ * SEZONA (SHW-113) — odpověď `GET /api/profiles/{key}/trakt/show-progress?imdb=…|tmdb=…`:
+ * sledovanost seriálu PO DÍLECH z Traktu.
+ *
+ * Proč zvlášť a ne z mirroru: mirror drží u seriálu jen souhrn (plays + poslední shlédnutí), rozpad na
+ * díly umí jedině Traktí `shows/{id}/progress/watched`, což je dotaz per seriál → tahá se při otevření
+ * detailu. Fajfky u dílů uměl dosud jen Jellyfin, takže seriál z RD/torrentu je neměl odkud vzít.
+ * [ok] = false → appka si NECHÁ, co má (fajfky nikdy nemažeme kvůli výpadku sítě).
+ */
+data class ShowProgressResponse(
+    val ok: Boolean = false,
+    /** Kolik dílů Trakt u seriálu zná. 0 = seriál nedohledán (Trakt vrací 200 s prázdnem) → nepřepisovat stav. */
+    val aired: Int = 0,
+    val completed: Int = 0,
+    val seasons: List<ShowProgressSeason> = emptyList(),
+    val nextEpisode: ShowProgressNext? = null,
+    val lastWatchedAt: String? = null,
+    val error: String? = null,
+    val tokenStale: Boolean = false,
+)
+
+data class ShowProgressSeason(
+    val number: Int = 0,
+    val episodes: List<ShowProgressEpisode> = emptyList(),
+)
+
+data class ShowProgressEpisode(
+    val number: Int = 0,
+    val completed: Boolean = false,
+    val lastWatchedAt: String? = null,
+)
+
+/** „Další díl" podle Traktu — první nezhlédnutý (null = seriál dokoukaný / nezačatý bez dat). */
+data class ShowProgressNext(
+    val season: Int? = null,
+    val number: Int? = null,
+    val title: String? = null,
+)
+
 /** Jedna položka zrcadla „Chci vidět" (payload, jak ho ukládá serverový mirror). */
 data class MirrorWatchlistItem(
     val tmdbId: Long? = null,

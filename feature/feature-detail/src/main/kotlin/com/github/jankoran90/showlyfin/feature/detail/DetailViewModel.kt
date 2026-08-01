@@ -108,6 +108,10 @@ class DetailViewModel @Inject constructor(
         return "movie_tmdb_${item.tmdbId ?: 0}"
     }
 
+    /** SEZONA (SHW-113): offline klíč DÍLU — sufix „_s1e1", ať se díly ve frontě stahování nepřepisují. */
+    private fun episodeOfflineKey(item: MediaItem, season: Int, episode: Int): String =
+        movieOfflineKey(item) + "_s${season}e$episode"
+
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
@@ -624,7 +628,13 @@ class DetailViewModel @Inject constructor(
     fun refreshEpisodeStatus() {
         val item = _uiState.value.item ?: return
         if (item.type != MediaType.SHOW) return
-        val jfId = _uiState.value.ownedJellyfinId ?: return
+        val jfId = _uiState.value.ownedJellyfinId
+        if (jfId == null) {
+            // SEZONA (SHW-113): seriál mimo knihovnu → přenačti fajfky z Traktu (dokoukaný díl se tam
+            // zapsal ze streamu, vc126). Bez tohohle by se návrat z přehrávače u RD seriálu neprojevil.
+            viewModelScope.launch { loadTraktEpisodeProgress(item, fresh = true) }
+            return
+        }
         viewModelScope.launch {
             val status = runCatching { jellyfinLibraryService.getSeriesEpisodeStatus(jfId) }.getOrNull() ?: return@launch
             if (_uiState.value.item?.isSameAs(item) != true) return@launch
@@ -934,6 +944,11 @@ class DetailViewModel @Inject constructor(
             episodeTitle?.takeIf { it.isNotBlank() }?.let { append(" · "); append(it) }
         }
         episodeSelector = EpisodeSelector(season, episode, label)
+        // SEZONA (SHW-113): zapamatovaný zdroj patří DÍLU, ne seriálu. Bez tohohle přepnutí by picker
+        // připnul zdroj z posledního otevřeného dílu (dřív dokonce z celého titulu → S1E1 svítilo u S3E7).
+        val item = _uiState.value.item
+        val remembered = workingSourceStore.get(item?.imdbId, item?.tmdbId, season, episode)?.stream
+        _uiState.update { it.copy(rememberedSource = remembered) }
         openStreamPathChooser()
     }
 
@@ -1072,7 +1087,11 @@ class DetailViewModel @Inject constructor(
         val stream = st.pendingWorkingConfirm ?: return
         val imdb = st.item?.imdbId
         val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
-        workingSourceStore.save(imdb, st.item?.tmdbId, title, stream)
+        // SEZONA: u epizody ukládej pod identitu DÍLU (jinak by zdroj přebil ostatní díly seriálu).
+        workingSourceStore.save(
+            imdb, st.item?.tmdbId, title, stream,
+            season = episodeSelector?.season, episode = episodeSelector?.episode,
+        )
         _uiState.update { it.copy(rememberedSource = stream, pendingWorkingConfirm = null) }
         cleanupRdKeepingSource(stream)
     }
@@ -1087,7 +1106,10 @@ class DetailViewModel @Inject constructor(
         val st = _uiState.value
         val imdb = st.item?.imdbId
         val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
-        workingSourceStore.save(imdb, st.item?.tmdbId, title, stream)
+        workingSourceStore.save(
+            imdb, st.item?.tmdbId, title, stream,
+            season = episodeSelector?.season, episode = episodeSelector?.episode,
+        )
         _uiState.update { it.copy(rememberedSource = stream) }
     }
 
@@ -1121,7 +1143,10 @@ class DetailViewModel @Inject constructor(
 
     /** Zapomenout připnutý fungující zdroj (zdroj přestal fungovat / chce vybrat jiný). */
     fun forgetWorkingSource() {
-        workingSourceStore.clear(_uiState.value.item?.imdbId, _uiState.value.item?.tmdbId)
+        workingSourceStore.clear(
+            _uiState.value.item?.imdbId, _uiState.value.item?.tmdbId,
+            season = episodeSelector?.season, episode = episodeSelector?.episode,
+        )
         _uiState.update { it.copy(rememberedSource = null) }
     }
 
@@ -1915,7 +1940,14 @@ class DetailViewModel @Inject constructor(
         val item = s.item ?: return
         val jfId = s.ownedJellyfinId
         if (item.type != MediaType.MOVIE) {
-            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahování do telefonu zatím jen pro filmy.") }
+            // SEZONA (SHW-113): seriál se stahuje PO DÍLECH — díl musí být vybraný (a mít zapamatovaný
+            // zdroj, stejná podmínka jako u filmu mimo knihovnu). Dřív tu byla natvrdo hláška „jen filmy".
+            val sel = episodeSelector
+            if (sel == null) {
+                _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "U seriálu nejdřív otevři díl (Přehrát), pak ho půjde stáhnout.") }
+                return
+            }
+            downloadEpisodeToDevice(item, sel)
             return
         }
         if (jfId == null) {
@@ -1943,6 +1975,48 @@ class DetailViewModel @Inject constructor(
             ),
         )
         _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahuji do telefonu — sleduj v sekci Stažené.") }
+    }
+
+    /**
+     * SEZONA (SHW-113): stáhni JEDEN DÍL seriálu do telefonu. Zdroj bere z paměti dílu
+     * ([WorkingSourceStore.get] se season/episode) — tedy přesně ten, co dílu hraje přes Přehrát.
+     * Jellyfin větev tu záměrně není: díl z knihovny má vlastní jellyfin id, které detail seriálu nedrží
+     * (`ownedJellyfinId` je id SERIÁLU, ne dílu) — stahování dílů z knihovny je samostatný krok.
+     */
+    private fun downloadEpisodeToDevice(item: MediaItem, sel: EpisodeSelector) {
+        val source = workingSourceStore.get(item.imdbId, item.tmdbId, sel.season, sel.episode)?.stream
+            ?: _uiState.value.rememberedSource
+        if (source == null) {
+            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Nejdřív díl přehraj a zapamatuj zdroj (⭐), pak půjde stáhnout do telefonu.") }
+            return
+        }
+        _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Připravuji stahování dílu…") }
+        viewModelScope.launch {
+            val url = resolveDownloadUrl(item, source)
+            if (url.isNullOrBlank()) {
+                _uiState.update { it.copy(captureMessage = "Zdroj dílu se nepodařilo připravit ke stažení — zkus ho přehrát a zapamatovat znovu.") }
+                return@launch
+            }
+            val poster = (item.posterPath ?: _uiState.value.movieDetails?.poster_path)?.let {
+                if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w342$it"
+            }
+            offlineManager.enqueue(
+                com.github.jankoran90.showlyfin.data.offline.OfflineRequest(
+                    key = episodeOfflineKey(item, sel.season, sel.episode),
+                    title = item.title,
+                    subtitle = "S${sel.season}E${sel.episode}",
+                    type = com.github.jankoran90.showlyfin.data.offline.OfflineRequest.TYPE_EPISODE,
+                    sourceLabel = "Zapamatovaný zdroj",
+                    videoUrl = url,
+                    posterUrl = poster,
+                    imdb = item.imdbId,
+                    tmdb = item.tmdbId?.toInt(),
+                    season = sel.season,
+                    episode = sel.episode,
+                ),
+            )
+            _uiState.update { it.copy(captureMessage = "Stahuji díl do telefonu — sleduj v sekci Stažené.") }
+        }
     }
 
     /** HOARD (SHW-84): stáhni zapamatovaný zdroj filmu (týž, co hraje přes Přehrát) do telefonu. */
@@ -2211,6 +2285,54 @@ class DetailViewModel @Inject constructor(
                     selectSeason(nextSeason)
                 }
             }
+        }
+        // SEZONA (SHW-113): seriál MIMO Jellyfin knihovnu (RD/torrent) neměl fajfky odkud vzít — Jellyfin
+        // je jediný, kdo je uměl. Sledovanost po dílech dotáhneme z Traktu přes server.
+        if (item.type == MediaType.SHOW && matchedJellyfinId == null) {
+            loadTraktEpisodeProgress(item)
+        }
+    }
+
+    /**
+     * SEZONA (SHW-113): fajfky u dílů + „další díl" z Trakt historie (server endpoint `trakt/show-progress`).
+     * Používá se, když seriál NENÍ v Jellyfin knihovně — jinak má přednost Jellyfin (drží i rozkoukanost).
+     * `episodeJellyfinIds` ZÁMĚRNĚ nechává prázdné: bez id nemá `toggleEpisodeWatched` kam zapsat, takže
+     * fajfka zůstane jen ke čtení (zápis do Traktu jede při dokoukání ze streamu, vydáno ve vc126).
+     * Chyba/offline → NEsaháme na stav (mazat fajfky kvůli výpadku sítě je horší než je mít staré).
+     */
+    private suspend fun loadTraktEpisodeProgress(item: MediaItem, fresh: Boolean = false) {
+        val profile = prefs.getString("jellyfin_user_id", "").orEmpty()
+        if (profile.isBlank() || uploaderBaseUrl.isBlank()) return
+        if (item.imdbId.isNullOrBlank() && (item.tmdbId ?: 0L) <= 0L) return
+        val res = runCatching {
+            uploaderDs.showProgress(uploaderBaseUrl, uploaderCookie, profile, item.imdbId, item.tmdbId, fresh)
+        }.getOrNull()
+        if (res == null || !res.ok) {
+            timber.log.Timber.i("[SEZONA] Trakt progress nedostupný (%s) — fajfky nechávám být", res?.error ?: "chyba")
+            return
+        }
+        // Trakt vrací 200 s prázdným výsledkem i pro seriál, který NEZNÁ (ověřeno). `aired == 0` = nedohledáno
+        // → prázdnem bychom přepsali platné fajfky (přesně ta „tichá ztráta dat" jako `getOrElse { emptyList() }`).
+        if (res.aired <= 0) {
+            timber.log.Timber.i("[SEZONA] Trakt seriál nezná (aired=0) — stav nechávám beze změny")
+            return
+        }
+        if (_uiState.value.item?.isSameAs(item) != true) return
+        val watched = HashSet<Pair<Int, Int>>()
+        for (s in res.seasons) for (e in s.episodes) if (e.completed) watched.add(s.number to e.number)
+        val next = res.nextEpisode?.let { n ->
+            val s = n.season; val e = n.number
+            if (s != null && e != null) s to e else null
+        }
+        timber.log.Timber.i("[SEZONA] Trakt progress: %d zhlédnutých dílů, další=%s", watched.size, next?.toString() ?: "-")
+        _uiState.update { it.copy(episodeWatched = watched, nextUpEpisode = next) }
+        // Otevři rovnou sezónu s dalším nezhlédnutým dílem (parita s Jellyfin větví výš).
+        val nextSeason = next?.first
+        if (nextSeason != null &&
+            _uiState.value.seasons.any { s -> s.season_number == nextSeason } &&
+            _uiState.value.selectedSeason != nextSeason
+        ) {
+            selectSeason(nextSeason)
         }
     }
 

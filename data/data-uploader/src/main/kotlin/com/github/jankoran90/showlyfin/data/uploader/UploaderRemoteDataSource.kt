@@ -49,6 +49,8 @@ interface UploaderRemoteDataSource {
 
     // Čtení serverového zrcadla „Chci vidět" — záloha, když appce vyprší vlastní Trakt token (401).
     suspend fun mirrorWatchlist(baseUrl: String, sessionCookie: String, key: String): MirrorReadResponse?
+    // SEZONA (SHW-113) — sledovanost seriálu PO DÍLECH z Traktu. null = chyba/offline (fajfky nechat být).
+    suspend fun showProgress(baseUrl: String, sessionCookie: String, key: String, imdb: String?, tmdb: Long?, fresh: Boolean = false): ShowProgressResponse?
     // AUTEUR (SHW-91) — kurátorský mozek: taste payload (raw JSON) → doporučení (raw JSON), nebo null při chybě.
     suspend fun curatorRecommend(baseUrl: String, sessionCookie: String, json: String): String?
 

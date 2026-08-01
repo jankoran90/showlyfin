@@ -59,7 +59,19 @@ data class WorkingSource(
     // ostatním filmům (user 2026-07-28 „nesourodnost"); žánry navíc krmí žánrovou pojistku věkového gate.
     val year: Int? = null,
     val genres: List<String>? = null,
+    // SEZONA (SHW-113): zdroj patří konkrétnímu DÍLU seriálu, ne celému titulu. Bez těchhle polí se
+    // zapamatovaný zdroj z S1E1 nabízel i u S3E7 (klíč byl jen tmdb/imdb seriálu). `epKey` je odvozený
+    // řetězec („s1e1") — nese identitu na SERVER, kde `derive_row_id` bere 0 jako CHYBĚJÍCÍ id, takže
+    // dvojice season/episode by u speciálů (season 0) spadla zpět na tmdb a všechny díly by se slily
+    // do jednoho řádku. Film má všechna tři pole null → identita i řádek na serveru beze změny.
+    val season: Int? = null,
+    val episode: Int? = null,
+    val epKey: String? = null,
 )
+
+/** SEZONA: identita dílu pro klíče, náhrobky i serverový `row_id`. Film (bez S/E) → null. */
+fun epKeyOf(season: Int?, episode: Int?): String? =
+    if (season != null && episode != null) "s${season}e$episode" else null
 
 /**
  * SENTINEL (bod 3 část B) — počítá se tenhle uložený zdroj jako „hraje hned / uložený" (odznak na kartě +
@@ -107,10 +119,13 @@ class WorkingSourceStore @Inject constructor(
 
     private fun refreshSavedKeys() {
         val keys = HashSet<String>()
-        for (r in getAll()) {
+        for (r in allRecords()) {
             if (!r.isSavedPlayable()) continue      // SENTINEL bod 3 B — odznak/Filmotéka jen pro reálně cached
-            if (r.tmdb > 0L) keys.add("tmdb:${r.tmdb}")
-            if (r.imdb.isNotBlank()) keys.add("imdb:${r.imdb}")
+            // SEZONA: díl přispívá JEN klíčem se sufixem („tmdb:123:s1e1"). Holý klíč seriálu by rozsvítil
+            // odznak „hraje hned" na kartě celého seriálu kvůli jedinému staženému dílu = lež.
+            val suffix = r.epKey?.let { ":$it" }.orEmpty()
+            if (r.tmdb > 0L) keys.add("tmdb:${r.tmdb}$suffix")
+            if (r.imdb.isNotBlank()) keys.add("imdb:${r.imdb}$suffix")
         }
         _savedKeys.value = keys
     }
@@ -125,10 +140,14 @@ class WorkingSourceStore @Inject constructor(
         get() = appPrefs.getString("sieve_last_profile", null)
         set(v) { appPrefs.edit().putString("sieve_last_profile", v).apply() }
 
-    private fun identity(r: WorkingSource): String = when {
-        r.tmdb > 0L -> "tmdb:${r.tmdb}"
-        r.imdb.isNotBlank() -> "imdb:${r.imdb}"
-        else -> "hash:${r.stream.cometPath ?: r.stream.infoHash ?: r.stream.url ?: ""}"
+    /** Identita záznamu pro merge/dedup/náhrobky. SEZONA: díl nese sufix, jinak by se díly slily do jednoho. */
+    private fun identity(r: WorkingSource): String {
+        val suffix = r.epKey?.let { ":$it" }.orEmpty()
+        return when {
+            r.tmdb > 0L -> "tmdb:${r.tmdb}$suffix"
+            r.imdb.isNotBlank() -> "imdb:${r.imdb}$suffix"
+            else -> "hash:${r.stream.cometPath ?: r.stream.infoHash ?: r.stream.url ?: ""}"
+        }
     }
 
     // ── NÁHROBKY smazaných zdrojů (FOYER SHW-107, user 2026-07-26) ────────────────
@@ -158,18 +177,20 @@ class WorkingSourceStore @Inject constructor(
         return out
     }
 
-    private fun addTombstones(imdb: String?, tmdb: Long?) {
+    private fun addTombstones(imdb: String?, tmdb: Long?, epKey: String? = null) {
         val now = System.currentTimeMillis()
+        val suffix = epKey?.let { ":$it" }.orEmpty()
         prefs.edit().apply {
-            if (tmdb != null && tmdb > 0L) putLong(tombKey("tmdb:$tmdb"), now)
-            if (!imdb.isNullOrBlank()) putLong(tombKey("imdb:$imdb"), now)
+            if (tmdb != null && tmdb > 0L) putLong(tombKey("tmdb:$tmdb$suffix"), now)
+            if (!imdb.isNullOrBlank()) putLong(tombKey("imdb:$imdb$suffix"), now)
         }.apply()
     }
 
-    private fun clearTombstones(imdb: String?, tmdb: Long?) {
+    private fun clearTombstones(imdb: String?, tmdb: Long?, epKey: String? = null) {
+        val suffix = epKey?.let { ":$it" }.orEmpty()
         prefs.edit().apply {
-            if (tmdb != null && tmdb > 0L) remove(tombKey("tmdb:$tmdb"))
-            if (!imdb.isNullOrBlank()) remove(tombKey("imdb:$imdb"))
+            if (tmdb != null && tmdb > 0L) remove(tombKey("tmdb:$tmdb$suffix"))
+            if (!imdb.isNullOrBlank()) remove(tombKey("imdb:$imdb$suffix"))
         }.apply()
     }
 
@@ -178,8 +199,9 @@ class WorkingSourceStore @Inject constructor(
         val tombs = tombstones()
         if (tombs.isEmpty()) return list
         return list.filterNot { r ->
-            val byTmdb = if (r.tmdb > 0L) tombs["tmdb:${r.tmdb}"] else null
-            val byImdb = if (r.imdb.isNotBlank()) tombs["imdb:${r.imdb}"] else null
+            val suffix = r.epKey?.let { ":$it" }.orEmpty()
+            val byTmdb = if (r.tmdb > 0L) tombs["tmdb:${r.tmdb}$suffix"] else null
+            val byImdb = if (r.imdb.isNotBlank()) tombs["imdb:${r.imdb}$suffix"] else null
             val deletedAt = maxOf(byTmdb ?: 0L, byImdb ?: 0L)
             if (deletedAt <= 0L) return@filterNot false
             // Smazané uživatelem: AUTO záznam (backend cache-one/backfill ho po čase klidně vyrobí znovu)
@@ -196,8 +218,8 @@ class WorkingSourceStore @Inject constructor(
         for (k in prefs.all.keys) if (k.startsWith("sieve_working_")) ed.remove(k)
         for (r in list) {
             val json = gson.toJson(r)
-            if (r.tmdb > 0L) ed.putString(tmdbKey(r.tmdb), json)
-            if (r.imdb.isNotBlank()) ed.putString(imdbKey(r.imdb), json)
+            if (r.tmdb > 0L) ed.putString(tmdbKey(r.tmdb, r.epKey), json)
+            if (r.imdb.isNotBlank()) ed.putString(imdbKey(r.imdb, r.epKey), json)
         }
         ed.apply()
         refreshSavedKeys()
@@ -227,7 +249,9 @@ class WorkingSourceStore @Inject constructor(
      * backend (cache-one na watchlist/favorite add). Zpevňuje i souběh dvou zařízení (TV↔telefon).
      */
     private suspend fun pushMerged(key: String, base: String, cookie: String) {
-        val local = getAll()
+        // SEZONA: merge i push MUSÍ jít přes [allRecords] (filmy + díly). Přes getAll() (filmy) by se
+        // díly z lokálu ztratily a PUT by je smazal i na serveru.
+        val local = allRecords()
         val server = parseServer(uploaderDs.getProfileWorkingSources(base, cookie, key)) ?: local
         val byId = LinkedHashMap<String, WorkingSource>()
         for (r in local + server) {
@@ -332,9 +356,10 @@ class WorkingSourceStore @Inject constructor(
         if (key.isBlank() || base.isBlank()) return
         runCatching {
             val server = parseServer(uploaderDs.getProfileWorkingSources(base, cookie, key)) ?: return
-            // Profil už izolován výše (po switchi je getAll() prázdný → merge = server 1:1). Stejný profil = merge.
+            // Profil už izolován výše (po switchi je lokál prázdný → merge = server 1:1). Stejný profil = merge.
+            // SEZONA: [allRecords] (ne getAll) — jinak by merge zahodila lokální zdroje dílů.
             val byId = LinkedHashMap<String, WorkingSource>()
-            for (r in getAll() + server) {
+            for (r in allRecords() + server) {
                 val id = identity(r)
                 val cur = byId[id]
                 if (cur == null || r.savedAtMs >= cur.savedAtMs) byId[id] = r
@@ -359,8 +384,9 @@ class WorkingSourceStore @Inject constructor(
      */
     suspend fun syncNow() = syncFromServer()
 
-    private fun imdbKey(imdb: String) = "sieve_working_$imdb"
-    private fun tmdbKey(tmdb: Long) = "sieve_working_tmdb_$tmdb"
+    // SEZONA: díl dostane sufix „_s1e1"; film klíč beze změny (žádná migrace uložených dat).
+    private fun imdbKey(imdb: String, epKey: String? = null) = "sieve_working_$imdb" + epKey?.let { "_$it" }.orEmpty()
+    private fun tmdbKey(tmdb: Long, epKey: String? = null) = "sieve_working_tmdb_$tmdb" + epKey?.let { "_$it" }.orEmpty()
 
     private fun parse(raw: String?, where: String): WorkingSource? {
         if (raw == null) return null
@@ -373,13 +399,17 @@ class WorkingSourceStore @Inject constructor(
         return if (hasId) rec else null
     }
 
-    /** Načte uložený zdroj — zkusí tmdb klíč (spolehlivý při studeném startu), pak imdb. */
-    fun get(imdb: String?, tmdb: Long?): WorkingSource? {
+    /**
+     * Načte uložený zdroj — zkusí tmdb klíč (spolehlivý při studeném startu), pak imdb.
+     * SEZONA: se [season]+[episode] vrací zdroj TOHO DÍLU (nikdy ne zdroj jiného dílu téhož seriálu).
+     */
+    fun get(imdb: String?, tmdb: Long?, season: Int? = null, episode: Int? = null): WorkingSource? {
+        val ep = epKeyOf(season, episode)
         if (tmdb != null && tmdb > 0L) {
-            parse(prefs.getString(tmdbKey(tmdb), null), "tmdb=$tmdb")?.let { return it }
+            parse(prefs.getString(tmdbKey(tmdb, ep), null), "tmdb=$tmdb ep=$ep")?.let { return it }
         }
         if (!imdb.isNullOrBlank()) {
-            parse(prefs.getString(imdbKey(imdb), null), "imdb=$imdb")?.let { return it }
+            parse(prefs.getString(imdbKey(imdb, ep), null), "imdb=$imdb ep=$ep")?.let { return it }
         }
         return null
     }
@@ -393,12 +423,16 @@ class WorkingSourceStore @Inject constructor(
         overview: String? = null,
         year: Int? = null,
         genres: List<String>? = null,
+        season: Int? = null,
+        episode: Int? = null,
     ) {
         if (imdb.isNullOrBlank() && (tmdb == null || tmdb <= 0L)) return
         val now = System.currentTimeMillis()
+        val ep = epKeyOf(season, episode)
         // neměnné datum prvního uložení — při re-save (změna zdroje) ho zachovej z existujícího záznamu,
         // ať working-only film neskáče v „Nedávno přidané" Filmotéky (savedAtMs se mění, firstSavedAtMs ne).
-        val existingFirst = get(imdb, tmdb)?.let { it.firstSavedAtMs.takeIf { f -> f > 0L } ?: it.savedAtMs.takeIf { s -> s > 0L } }
+        val existingFirst = get(imdb, tmdb, season, episode)
+            ?.let { it.firstSavedAtMs.takeIf { f -> f > 0L } ?: it.savedAtMs.takeIf { s -> s > 0L } }
         val record = WorkingSource(
             imdb = imdb.orEmpty(), tmdb = tmdb ?: 0L, title = title, stream = stream,
             savedAtMs = now,
@@ -407,26 +441,30 @@ class WorkingSourceStore @Inject constructor(
             overview = overview,
             year = year,
             genres = genres,
+            season = season,
+            episode = episode,
+            epKey = ep,
         )
         val json = gson.toJson(record)
         // commit() (synchronně) — kritická akce, ať se zaručeně zapíše dřív, než appku zabije/aktualizuje.
         val ok = prefs.edit().apply {
-            if (tmdb != null && tmdb > 0L) putString(tmdbKey(tmdb), json)
-            if (!imdb.isNullOrBlank()) putString(imdbKey(imdb), json)
+            if (tmdb != null && tmdb > 0L) putString(tmdbKey(tmdb, ep), json)
+            if (!imdb.isNullOrBlank()) putString(imdbKey(imdb, ep), json)
         }.commit()
-        Timber.i("[SIEVE] uložen zdroj imdb=%s tmdb=%s (%s) commit=%b", imdb, tmdb, stream.name ?: stream.description ?: "?", ok)
+        Timber.i("[SIEVE] uložen zdroj imdb=%s tmdb=%s ep=%s (%s) commit=%b", imdb, tmdb, ep ?: "-", stream.name ?: stream.description ?: "?", ok)
         // Vědomé uložení ruší dřívější smazání (jinak by ho náhrobek hned zase odklidil).
-        clearTombstones(imdb, tmdb)
+        clearTombstones(imdb, tmdb, ep)
         refreshSavedKeys()
         pushToServer()  // SIEVE follow-up — propíše na profil (sync napříč zařízeními)
     }
 
-    fun clear(imdb: String?, tmdb: Long?) {
+    fun clear(imdb: String?, tmdb: Long?, season: Int? = null, episode: Int? = null) {
+        val ep = epKeyOf(season, episode)
         // Náhrobek MUSÍ vzniknout dřív, než se rozjede push/sync — jinak by se záznam vrátil ze serveru.
-        addTombstones(imdb, tmdb)
+        addTombstones(imdb, tmdb, ep)
         prefs.edit().apply {
-            if (tmdb != null && tmdb > 0L) remove(tmdbKey(tmdb))
-            if (!imdb.isNullOrBlank()) remove(imdbKey(imdb))
+            if (tmdb != null && tmdb > 0L) remove(tmdbKey(tmdb, ep))
+            if (!imdb.isNullOrBlank()) remove(imdbKey(imdb, ep))
         }.apply()
         refreshSavedKeys()
         pushToServer()
@@ -438,19 +476,29 @@ class WorkingSourceStore @Inject constructor(
      * dedupujeme podle identity filmu (tmdb→imdb→hash streamu), ať se jeden film neukáže 2×.
      * Řazeno od nejnovějšího uložení.
      */
-    fun getAll(): List<WorkingSource> {
+    fun getAll(): List<WorkingSource> = allRecords().filter { it.epKey == null }
+
+    /**
+     * SEZONA (SHW-113): zdroje jednotlivých DÍLŮ. Vědomě mimo [getAll] — ten krmí Filmotéku, řadu
+     * „Uloženo k přehrání" a správu v Nastavení, kam díl jako samostatná „karta filmu" nepatří.
+     * [imdb]/[tmdb] = seriál; null = všechny díly napříč seriály.
+     */
+    fun getEpisodes(imdb: String? = null, tmdb: Long? = null): List<WorkingSource> =
+        allRecords().filter { r ->
+            r.epKey != null &&
+                (tmdb == null || tmdb <= 0L || r.tmdb == tmdb) &&
+                (imdb.isNullOrBlank() || r.imdb == imdb)
+        }
+
+    /** Syrový obsah paměti (filmy i díly), dedup podle identity — záznam je uložen pod tmdb i imdb klíčem. */
+    private fun allRecords(): List<WorkingSource> {
         val seen = HashSet<String>()
         val out = ArrayList<WorkingSource>()
         for ((key, value) in prefs.all) {
             if (!key.startsWith("sieve_working_")) continue
             val rec = parse(value as? String, key) ?: continue
-            val s = rec.stream
-            val identity = when {
-                rec.tmdb > 0L -> "tmdb:${rec.tmdb}"
-                rec.imdb.isNotBlank() -> "imdb:${rec.imdb}"
-                else -> "hash:${s.cometPath ?: s.infoHash ?: s.url ?: key}"
-            }
-            if (seen.add(identity)) out.add(rec)
+            val id = identity(rec).takeIf { it != "hash:" } ?: "hash:$key"
+            if (seen.add(id)) out.add(rec)
         }
         return out.sortedByDescending { it.savedAtMs }
     }

@@ -371,6 +371,23 @@ internal class UploaderApi(
         }.onFailure { Timber.w(it, "[MIRROR] čtení zrcadla watchlistu selhalo") }.getOrNull()
     }
 
+    override suspend fun showProgress(
+        baseUrl: String, sessionCookie: String, key: String, imdb: String?, tmdb: Long?, fresh: Boolean,
+    ): ShowProgressResponse? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        // Server bere imdb NEBO tmdb; imdb je přímá cesta (Trakt ho žere rovnou), tmdb se překládá searchem.
+        val q = when {
+            !imdb.isNullOrBlank() -> "imdb=${enc(imdb)}"
+            tmdb != null && tmdb > 0L -> "tmdb=$tmdb"
+            else -> return null
+        }
+        val freshQ = if (fresh) "&fresh=1" else ""
+        return runCatching {
+            service.profileShowProgress("$base/api/profiles/${enc(key)}/trakt/show-progress?$q$freshQ", cookie)
+        }.onFailure { Timber.w(it, "[SEZONA] sledovanost dílů ze serveru selhala") }.getOrNull()
+    }
+
     override suspend fun mirrorRefresh(baseUrl: String, sessionCookie: String, key: String): MirrorRefreshResponse? {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
