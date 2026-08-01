@@ -107,27 +107,35 @@ fun TvHomeSidebar(
             .padding(vertical = 28.dp, horizontal = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        items.forEachIndexed { index, item ->
-            key(item) {
-                SidebarRow(
-                    item = item,
-                    expanded = expanded,
-                    active = item == active,
-                    reordering = reordering == item,
-                    focusRequester = when {
-                        reordering == item -> reorderFocus
-                        index == entryIndex -> entryFocus
-                        else -> null
-                    },
-                    onClick = { if (reordering != null) reordering = null else onSelect(item) },
-                    onLongClick = { reordering = item },
-                    onMove = { up -> onMove(item, up) },
-                    onExitReorder = { reordering = null },
-                )
+        // 🔴 user 2026-08-01: „plný sidebar znemožňuje přepnutí profilu, tlačítko Profily není vidět."
+        // Dřív byl celý sidebar jeden neposouvatelný sloupec — se všemi zapnutými položkami vytlačil
+        // profilové tlačítko pod spodní hranu. Teď se posouvá JEN seznam sekcí (D-pad ho odroluje sám,
+        // jak putuje fokus) a profil zůstává připnutý dole.
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            items.forEachIndexed { index, item ->
+                key(item) {
+                    SidebarRow(
+                        item = item,
+                        expanded = expanded,
+                        active = item == active,
+                        reordering = reordering == item,
+                        focusRequester = when {
+                            reordering == item -> reorderFocus
+                            index == entryIndex -> entryFocus
+                            else -> null
+                        },
+                        onClick = { if (reordering != null) reordering = null else onSelect(item) },
+                        onLongClick = { reordering = item },
+                        onMove = { up -> onMove(item, up) },
+                        onExitReorder = { reordering = null },
+                    )
+                }
             }
         }
         // COUCH T5: přepínač JF profilu dole ve sidebaru.
-        Spacer(Modifier.weight(1f))
         ProfileButton(expanded = expanded, name = profileName, onClick = onOpenProfiles)
     }
 }

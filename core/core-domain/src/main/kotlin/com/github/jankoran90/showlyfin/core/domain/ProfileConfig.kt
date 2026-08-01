@@ -126,13 +126,21 @@ data class ProfileConfig(
      */
     val filmotekaPrefs: FilmotekaPrefs? = null,
     /**
-     * PŮDORYS (SHW-112, user 2026-07-31 „v telefonu ani nemam moznost zobrazovat co ma byt v sidebaru
-     * a nebo co ma byt na home") — per-profil ROZVRŽENÍ domova (řady, sidebar TV, menu telefonu),
-     * SYNCED napříč zařízeními (dřív jen lokální prefs `tv_home_layout`, takže TV a telefon jely každé
-     * po svém). null = zařízení si drží svoje lokální hodnoty a při první změně je samo vystrčí sem
-     * (migrace, vzor [filmotekaPrefs]).
+     * ⛔ **LEGACY z vc127 — společné rozvržení pro TV i telefon. NEPOUŽÍVAT.** Přesně tohle byl ten
+     * problém: telefon TV sidebar needituje, takže měl pořád výchozí (všechno zapnuté) a přebil jím
+     * sidebar, který si uživatel na TV skoro celý vypnul. Nahrazeno dvojicí [homeLayoutTv] /
+     * [homeLayoutPhone]. Pole zůstává, aby šly přečíst konfigurace uložené z vc127.
      */
     val homeLayout: HomeLayoutPrefs? = null,
+    /**
+     * PŮDORYS (SHW-112, upřesnění usera 2026-08-01: „zůstane to v db jen podle typu zařízení, takže
+     * v novém telefonu po přihlášení zůstává nastavení sidebaru sekcí home atd stejné, to samé pro TV")
+     * — rozvržení domova **televizí** daného profilu. Nové TV si ho po přihlášení převezme; telefon do
+     * něj nikdy nesahá. null = ještě nikdo nic neuložil.
+     */
+    val homeLayoutTv: HomeLayoutPrefs? = null,
+    /** Totéž pro **telefony** — sdílí se mezi telefony téhož profilu, TV do něj nesahá. */
+    val homeLayoutPhone: HomeLayoutPrefs? = null,
     /**
      * CONVERGE (SHW-97) V1 — pořadí řad v sekci **Trakt** (klíče `watchlist`/`history`/`recommended` a
      * dynamické `list_<traktId>`). Prázdné = kanonické (Watchlist, Zhlédnuto, Doporučeno, pak userovy

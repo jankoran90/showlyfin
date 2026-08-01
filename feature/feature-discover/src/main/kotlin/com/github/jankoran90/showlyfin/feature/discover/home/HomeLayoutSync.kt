@@ -1,8 +1,11 @@
 package com.github.jankoran90.showlyfin.feature.discover.home
 
+import android.content.Context
+import android.content.pm.PackageManager
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.HomeLayoutPrefs
 import com.github.jankoran90.showlyfin.core.domain.home.HomeLayoutStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
@@ -17,37 +20,40 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * PŮDORYS (SHW-112, user 2026-07-31) — MOST mezi lokálním rozvržením domova a SYNCED profilem.
- * Vzor: `FilmotekaPrefsSync` (FOYER SHW-107).
+ * PŮDORYS (SHW-112) — MOST mezi lokálním rozvržením domova a profilem, **oddělený podle TYPU ZAŘÍZENÍ**.
  *
- * Proč vůbec: [HomeLayoutStore] žil v lokálních prefs (`tv_home_layout`, per profil), takže si TV
- * a telefon vedly rozvržení každé po svém — přeskládané řady na TV se na telefonu neprojevily
- * a naopak. Nový `ProfileConfig.homeLayout` jde přes stejný sync jako Oblíbené, `sourcePrefs`
- * (PROSPECT) nebo nastavení Filmotéky (FOYER). Běh dál čte LOKÁLNÍ store (rychle, i offline).
+ * Zadání usera 2026-08-01: *„zůstane to v db jen podle typu zařízení, takže v novém telefonu po
+ * přihlášení zůstává nastavení sidebaru sekcí home atd stejné, to samé pro TV. ale bude to fungovat
+ * jen podle typu zařízení zda tv nebo phone."*
  *
- * Pravidla mostu:
- * - **příchozí** (server → zařízení): profil nese `homeLayout` → nalij ho do store (`applySynced`);
- * - **odchozí** (zařízení → server): jakákoli změna ve store → ulož snapshot do profilu;
- * - **migrace**: profil bez `homeLayout` (null) dostane snapshot ze zařízení, takže dosavadní
- *   rozvržení se nikam neztratí a druhé zařízení ho převezme;
- * - **anti-smyčka**: během aplikace příchozích hodnot se odchozí zápis nespouští ([applying]).
+ * 🔴 **Proč zvlášť, a ne jedno společné rozvržení (to byla vc127 a hned se vymstila):** telefon TV
+ * sidebar vůbec needituje, takže má pořád VÝCHOZÍ (všechno zapnuté) — a při synchronizaci ho vystrčil
+ * na server a přebil tím sidebar, který si uživatel na TV skoro celý vypnul („zase je tam sidebar
+ * plný"). Televize a telefon mají jiný shell, jiné sekce i jinou ergonomii; jejich rozvržení nejsou
+ * táž věc a nemají si do sebe mluvit.
  *
- * 🔴 Musí být naživu DŘÍV, než uživatel začne rozvržení editovat — jinak by první příchozí config
- * přebil neposlanou lokální změnu. Proto ho injektují VM, přes které se edituje ([TvHomeViewModel]
- * a telefonní editor), a oba domovy.
+ * Takže: TV čte a zapisuje `homeLayoutTv`, telefon `homeLayoutPhone`. Nová TV / nový telefon si po
+ * přihlášení převezme rozvržení zařízení SVÉHO typu. Běh dál čte lokální store (rychle, i offline).
+ *
+ * Druhá pojistka: **doménu vystrčím, jen když na ni tohle zařízení SAMO sáhlo** ([HomeLayoutStore]
+ * `*Touched`) — jinak by čerstvě nainstalované zařízení přepsalo uložené rozvržení svými výchozími
+ * hodnotami dřív, než uživatel cokoli nastaví.
  */
 @Singleton
 class HomeLayoutSync @Inject constructor(
+    @ApplicationContext context: Context,
     private val store: HomeLayoutStore,
     private val profileRepository: ProfileRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob())
 
+    /** Televize se pozná podle leanback featury — stejně jako v `MainActivity`/`PlaybackScreen`. */
+    private val isTv: Boolean = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+
     @Volatile private var applying = false
     @Volatile private var activeProfileId: Long? = null
 
     init {
-        // Přepnutí profilu: nejdřív lokální layout profilu, pak přebij tím, co nese synchronizovaný profil.
         profileRepository.activeProfile
             .onEach { p ->
                 activeProfileId = p?.id
@@ -56,23 +62,23 @@ class HomeLayoutSync @Inject constructor(
             .launchIn(scope)
 
         profileRepository.activeConfig
-            .map { it.homeLayout }
+            .map { if (isTv) it.homeLayoutTv else it.homeLayoutPhone }
             .distinctUntilChanged()
             .onEach { remote ->
                 if (remote == null) {
-                    // Migrace: profil ještě rozvržení nemá → vystrč to, co má tohle zařízení.
+                    // Profil pro tenhle typ zařízení ještě nic nemá → vystrč, co má tohle zařízení.
                     push(store.snapshot())
                     return@onEach
                 }
                 if (remote == store.snapshot()) return@onEach
                 applying = true
                 runCatching { store.applySynced(remote) }
-                    .onFailure { Timber.w(it, "[PUDORYS] apply synced rozvržení selhal") }
+                    .onFailure { Timber.w(it, "[PUDORYS] apply rozvržení selhal (tv=$isTv)") }
                 applying = false
             }
             .launchIn(scope)
 
-        // Odchozí: cokoli se ve store změní (editor řad na TV i telefonu, sidebar, menu telefonu…).
+        // Odchozí: cokoli se ve store změní (editor řad, sidebar na TV, menu telefonu).
         combine(
             store.rows,
             store.sidebar,
@@ -85,7 +91,7 @@ class HomeLayoutSync @Inject constructor(
             .onEach { if (!applying) push(it) }
             .launchIn(scope)
 
-        // combine() bere max 5 toků → druhá skupina pro zbylé.
+        // combine() bere max 5 toků → zbytek zvlášť.
         store.immersiveHeaderLines
             .drop(1)
             .distinctUntilChanged()
@@ -96,8 +102,21 @@ class HomeLayoutSync @Inject constructor(
     private fun push(snapshot: HomeLayoutPrefs) {
         val id = activeProfileId ?: return
         scope.launch {
-            runCatching { profileRepository.updateConfig(id) { it.copy(homeLayout = snapshot) } }
-                .onFailure { Timber.w(it, "[PUDORYS] zápis rozvržení do profilu selhal") }
+            runCatching {
+                profileRepository.updateConfig(id) { cfg ->
+                    val remote = if (isTv) cfg.homeLayoutTv else cfg.homeLayoutPhone
+                    // Nedotčenou doménu neposílej — nech tu, co už v profilu je (viz třída výše).
+                    val merged = snapshot.copy(
+                        rows = if (store.rowsTouched()) snapshot.rows
+                        else remote?.rows?.takeIf { it.isNotEmpty() } ?: snapshot.rows,
+                        sidebar = if (store.sidebarTouched()) snapshot.sidebar
+                        else remote?.sidebar?.takeIf { it.isNotEmpty() } ?: snapshot.sidebar,
+                        phoneMenu = if (store.phoneMenuTouched()) snapshot.phoneMenu
+                        else remote?.phoneMenu?.takeIf { it.isNotEmpty() } ?: snapshot.phoneMenu,
+                    )
+                    if (isTv) cfg.copy(homeLayoutTv = merged) else cfg.copy(homeLayoutPhone = merged)
+                }
+            }.onFailure { Timber.w(it, "[PUDORYS] zápis rozvržení do profilu selhal (tv=$isTv)") }
         }
     }
 }

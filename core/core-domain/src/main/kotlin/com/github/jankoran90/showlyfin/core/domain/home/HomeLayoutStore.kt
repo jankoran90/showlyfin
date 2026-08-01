@@ -196,7 +196,9 @@ class HomeLayoutStore @Inject constructor(
         prefs.edit().putStringSet(keyFor(KEY_SEEN_LIBS), seen + libraries.map { it.id }).apply()
         if (toAdd.isEmpty()) return
         _rows.update { list -> list + toAdd }
-        persistRows()
+        // Seed knihoven je AUTOMATICKÝ (ne volba uživatele) → NEznačí řady jako „sáhl na ně",
+        // jinak by čerstvě nainstalované zařízení vystrčilo své výchozí řady přes cizí přeskládané.
+        persistRowsList(_rows.value)
     }
 
     // ── Sidebar ───────────────────────────────────────────────────────────────
@@ -283,7 +285,21 @@ class HomeLayoutStore @Inject constructor(
 
     // ── Perzistence ─────────────────────────────────────────────────────────────
 
-    private fun persistRows() = persistRowsList(_rows.value)
+    // ── „Sáhl na to uživatel?" (PŮDORYS fix, user 2026-08-01) ─────────────────
+    //
+    // 🔴 Bez tohoto sync PŘEPISOVAL cizí nastavení VÝCHOZÍMI hodnotami: telefon TV sidebar needituje,
+    // takže má pořád výchozí (všechno zapnuté) — a při první synchronizaci ho vystrčil na server a
+    // přebil tím sidebar, který si uživatel na TV skoro celý vypnul („zase je tam sidebar plný").
+    // Pravidlo: zařízení vystrčí doménu, jen když na ni SAMO sáhlo (nebo když na serveru ještě žádná není).
+
+    fun rowsTouched(): Boolean = touched(KEY_TOUCHED_ROWS)
+    fun sidebarTouched(): Boolean = touched(KEY_TOUCHED_SIDEBAR)
+    fun phoneMenuTouched(): Boolean = touched(KEY_TOUCHED_PHONE_MENU)
+
+    private fun touched(key: String): Boolean = prefs.getBoolean(keyFor(key), false)
+    private fun markTouched(key: String) = prefs.edit().putBoolean(keyFor(key), true).apply()
+
+    private fun persistRows() = persistRowsList(_rows.value).also { markTouched(KEY_TOUCHED_ROWS) }
 
     /** Zápis konkrétního seznamu (migrace persistuje výsledek dřív, než ho dostane [_rows]). */
     private fun persistRowsList(rows: List<HomeRowConfig>) {
@@ -291,10 +307,12 @@ class HomeLayoutStore @Inject constructor(
     }
 
     private fun persistSidebar() {
+        markTouched(KEY_TOUCHED_SIDEBAR)
         prefs.edit().putString(keyFor(KEY_SIDEBAR), json.encodeToString(_sidebar.value)).apply()
     }
 
     private fun persistPhoneMenu() {
+        markTouched(KEY_TOUCHED_PHONE_MENU)
         prefs.edit().putString(keyFor(KEY_PHONE_MENU), json.encodeToString(_phoneMenu.value)).apply()
     }
 
@@ -364,6 +382,11 @@ class HomeLayoutStore @Inject constructor(
         private const val KEY_SIDEBAR = "sidebar_json"
         /** PŮDORYS (SHW-112) — menu telefonu (pořadí + zapnutí sekcí drawer). */
         private const val KEY_PHONE_MENU = "phone_menu_json"
+        // „Sáhl na tuhle doménu uživatel NA TOMTO zařízení?" — brání tomu, aby výchozí hodnoty přepsaly
+        // cizí nastavení (user 2026-08-01: telefon vystrčil svůj výchozí sidebar a přebil vypnutý TV sidebar).
+        private const val KEY_TOUCHED_ROWS = "touched_rows"
+        private const val KEY_TOUCHED_SIDEBAR = "touched_sidebar"
+        private const val KEY_TOUCHED_PHONE_MENU = "touched_phone_menu"
         private const val KEY_IMMERSIVE = "immersive_bg"
         private const val KEY_IMMERSIVE_HEADER = "immersive_header"
         private const val KEY_IMMERSIVE_HEADER_LINES = "immersive_header_lines"

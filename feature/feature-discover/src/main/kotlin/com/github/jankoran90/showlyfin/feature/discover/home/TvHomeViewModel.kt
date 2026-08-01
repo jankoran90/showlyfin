@@ -96,9 +96,8 @@ class TvHomeViewModel @Inject constructor(
     private val ctvWatched: com.github.jankoran90.showlyfin.core.domain.resume.CtvWatchedStore,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val profileRepository: ProfileRepository,
-    // PŮDORYS (SHW-112) — most rozvržení domova na synchronizovaný profil. Injektuje se kvůli VZNIKU
-    // (@Singleton, sám se navěsí na toky); domov je první obrazovka, takže most běží dřív, než uživatel
-    // otevře editor. Bez toho by příchozí config přebil neposlanou lokální změnu.
+    // PŮDORYS (SHW-112) — most rozvržení na profil (per typ zařízení). Injektuje se kvůli VZNIKU:
+    // @Singleton se sám navěsí na toky a musí běžet dřív, než uživatel otevře editor řad.
     @Suppress("unused") private val homeLayoutSync: HomeLayoutSync,
     private val apiClient: ApiClient,
     private val clientInfo: ClientInfo,
