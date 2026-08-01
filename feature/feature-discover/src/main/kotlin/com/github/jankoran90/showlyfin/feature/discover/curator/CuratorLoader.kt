@@ -176,17 +176,21 @@ class CuratorLoader @Inject constructor(
         if (!prefs.enabled || seedTitle.isBlank()) return CuratorRecs()
         val base = serverBase(); val cookie = serverCookie(); val key = profileKey()
         if (base.isBlank() || key.isBlank()) return CuratorRecs()
+        // Vkus stavíme PŘED požadavkem — mozek potřebuje vědět, co divák zná, aby na to nespotřeboval
+        // sloty odpovědi (user 2026-08-01). Dřív ho `similar` neznal a vracel dvanáct nejslavnějších
+        // podobných, které divák dávno viděl → klient je zahodil a sekce zůstala prázdná.
+        val taste = buildTaste()
         val json = JSONObject()
             .put("profileKey", key)
             .put("title", seedTitle)
             .put("kind", if (isShow) "show" else "movie")
             .put("count", limit.coerceIn(1, 40))
             .put("wait", false)
+            .put("known", JSONArray(taste.knownTitles))
             .also { o -> seedYear?.takeIf { it > 0 }?.let { o.put("year", it) } }
             .also { o -> prefs.model?.trim()?.takeIf { it.isNotEmpty() }?.let { o.put("model", it) } }
             .also { o -> capAge()?.let { o.put("ageCap", it) } }
             .toString()
-        val taste = buildTaste()   // jen kvůli filtru „co už znám" v postProcess
         return fetchRecommendationsSplit(json, taste, pollUntilReady, "similarTo($seedTitle)") { body ->
             uploaderDs.curatorSimilar(base, cookie, body)
         }
@@ -375,6 +379,19 @@ class CuratorLoader @Inject constructor(
         movieRatings.forEach { r -> r.movie.ids.tmdb?.let(knownIds::add) }
         showRatings.forEach { r -> r.show.ids.tmdb?.let(knownIds::add) }
 
+        // Názvy toho, co divák zná — jdou do promptu mozku, ať na ně nespotřebuje sloty odpovědi
+        // (user 2026-08-01: „ty co znám se nemají vůbec nabízet, ale co ty co neznám?"). Jen NÁZVY:
+        // tmdb id mozku nic neřekne. Strop drží velikost požadavku.
+        val knownTitles = (watched.mapNotNull { it.toEntry()?.title } +
+            watchlistItems.mapNotNull { it.toEntry()?.title } +
+            movieRatings.mapNotNull { it.movie.title } +
+            showRatings.mapNotNull { it.show.title } +
+            localRatings.map { it.title })
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase() }
+            .take(KNOWN_TITLES_CAP)
+
         TastePayload(
             loved = (lovedFromFavorites + lovedFromRatings + lovedFromLocalRatings).dedupByTitle().take(LOVED_CAP),
             top = top,
@@ -382,6 +399,7 @@ class CuratorLoader @Inject constructor(
             watchlist = watchlist,
             avoid = avoid.distinct().take(AVOID_CAP),
             knownIds = knownIds,
+            knownTitles = knownTitles,
         )
     }
 
@@ -470,6 +488,8 @@ class CuratorLoader @Inject constructor(
         val avoid: List<String>,
         // Vše, co už uživatel zná (zhlédnuté ∪ watchlist ∪ hodnocené) → vyloučit z doporučení (user 2026-07-17).
         val knownIds: Set<Long> = emptySet(),
+        /** NÁZVY známých titulů pro prompt mozku (id mu nic neřeknou). Viz `_known_line` na serveru. */
+        val knownTitles: List<String> = emptyList(),
     ) {
         // Watchlist se POČÍTÁ do vkusu (user 2026-07-17): když historie/zhlédnuté z Traktu zlobí (pomalý/
         // padající endpoint), watchlist („Chci vidět") stačí jako signál → Pro tebe není prázdné.
@@ -483,6 +503,8 @@ class CuratorLoader @Inject constructor(
         const val LOVED_CAP = 20
         const val WATCHLIST_CAP = 20
         const val AVOID_CAP = 30
+        /** Kolik názvů „co už znám" posílat mozku — víc by nafouklo prompt bez užitku. */
+        const val KNOWN_TITLES_CAP = 120
         const val LOVE_MIN = 8      // Trakt rating (1-10) ≥ 8 = „miluje"
         const val AVOID_MAX = 4     // ≤ 4 = palec dolů → veto
         const val PENDING_MAX_RETRIES = 8   // re-poll na `pending` (mozek ~30 s) → strop ~48 s
