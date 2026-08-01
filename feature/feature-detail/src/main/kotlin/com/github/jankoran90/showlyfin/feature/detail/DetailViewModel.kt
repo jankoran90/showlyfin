@@ -2092,12 +2092,12 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             val started = uploaderDs.repackStart(uploaderBaseUrl, uploaderCookie, srcUrl)
             val jobId = started?.jobId?.takeIf { it.isNotBlank() }
-            if (jobId == null || started.isFailed) {
+            if (started == null || jobId == null || started.isFailed) {
                 timber.log.Timber.w("[REPACK] start selhal (%s)", started?.error ?: "bez odpovědi")
                 advancePastSource("Přebal se nepovedl, zkouším další zdroj", CastTarget.LOCAL)
                 return@launch
             }
-            var job = started
+            var job: com.github.jankoran90.showlyfin.data.uploader.model.RepackJob = started
             var waited = 0L
             while (!job.isDone && !job.isFailed && waited < REPACK_TIMEOUT_MS) {
                 delay(REPACK_POLL_MS)
