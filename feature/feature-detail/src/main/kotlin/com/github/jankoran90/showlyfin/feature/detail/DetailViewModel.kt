@@ -1284,6 +1284,7 @@ class DetailViewModel @Inject constructor(
             imdb, st.item?.tmdbId, title, stream,
             season = episodeSelector?.season, episode = episodeSelector?.episode,
         )
+        rememberSeasonRecipeFrom(stream)
         _uiState.update { it.copy(rememberedSource = stream, pendingWorkingConfirm = null) }
         cleanupRdKeepingSource(stream)
     }
@@ -1302,7 +1303,30 @@ class DetailViewModel @Inject constructor(
             imdb, st.item?.tmdbId, title, stream,
             season = episodeSelector?.season, episode = episodeSelector?.episode,
         )
+        rememberSeasonRecipeFrom(stream)
         _uiState.update { it.copy(rememberedSource = stream) }
+    }
+
+    /**
+     * SEZONA f3d (user 2026-08-01: *„nerad bych každý díl řešil fallbacky"*) — zdroj, který se u DÍLU
+     * osvědčil, se stává novou RECEPTUROU SEZÓNY.
+     *
+     * Proč: původní receptura mohla být nehratelná (userův Bleach: anime rip, na kterém přehrávač padl)
+     * nebo ji addon u dalších dílů vůbec nenabízí. Bez tohohle by se u KAŽDÉHO dílu opakoval týž fallback,
+     * protože receptura by dál ukazovala na to, co nefunguje. Ukládá se jen to, co reálně HRAJE
+     * (`playsNow`) — a jen když už seriál nějakou recepturu má, tedy k automatice sezóny patří.
+     */
+    private fun rememberSeasonRecipeFrom(stream: UploaderStream) {
+        val season = episodeSelector?.season ?: return
+        val st = _uiState.value
+        val imdb = st.item?.imdbId
+        val tmdb = st.item?.tmdbId
+        if (workingSourceStore.getSeason(imdb, tmdb, season) == null) return
+        if (!com.github.jankoran90.showlyfin.data.uploader.SeasonSourceMatcher.playsNow(stream)) return
+        val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
+        workingSourceStore.saveSeason(imdb, tmdb, title, stream, season)
+        timber.log.Timber.i("[SEZONA] receptura sezóny S%d přepsána zdrojem, který reálně hrál (%s)",
+            season, stream.name ?: stream.description ?: "?")
     }
 
     /**
