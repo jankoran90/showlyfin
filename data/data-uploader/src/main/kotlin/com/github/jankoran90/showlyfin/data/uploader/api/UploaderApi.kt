@@ -346,6 +346,38 @@ internal class UploaderApi(
         }.getOrNull()
     }
 
+    // ── REPACK (SEZONA f3e) — přebal nehratelného releasu na serveru ──────────────
+    private fun parseRepack(raw: String?): RepackJob? = raw?.let {
+        runCatching {
+            val o = org.json.JSONObject(it)
+            RepackJob(
+                jobId = o.optString("job_id"),
+                status = o.optString("status", "unknown"),
+                pct = o.optInt("pct", 0),
+                file = o.optString("file").takeIf { f -> f.isNotBlank() && f != "null" },
+                error = o.optString("error").takeIf { e -> e.isNotBlank() && e != "null" },
+            )
+        }.getOrNull()
+    }
+
+    override suspend fun repackStart(baseUrl: String, sessionCookie: String, srcUrl: String): RepackJob? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching {
+            val resp = service.repackStart("$base/api/repack/start?src=${enc(srcUrl)}", cookie)
+            parseRepack(resp.body()?.string())
+        }.getOrNull()
+    }
+
+    override suspend fun repackStatus(baseUrl: String, sessionCookie: String, jobId: String): RepackJob? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching {
+            val resp = service.repackStatus("$base/api/repack/status/${enc(jobId)}", cookie)
+            parseRepack(resp.body()?.string())
+        }.getOrNull()
+    }
+
     override suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, status: String, sort: String?): String? {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

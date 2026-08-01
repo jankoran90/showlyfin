@@ -69,6 +69,13 @@ interface UploaderRemoteDataSource {
     // vrací počet NOVĚ zařazených. status = kolik ještě ve frontě čeká pro profil (null při chybě/nedostupnosti).
     suspend fun gemsCacheBatch(baseUrl: String, sessionCookie: String, bodyJson: String): Int
     suspend fun gemsCacheStatus(baseUrl: String, sessionCookie: String, profile: String): Int?
+    /**
+     * REPACK (SEZONA f3e) — nech server PŘEBALIT nehratelný release (ffmpeg `-c copy`: video i zvuk 1:1,
+     * pryč jdou obrazové titulky, fonty a metadata, na kterých Android přehrávač padá).
+     * [repackStart] je idempotentní (týž zdroj = týž job), [repackStatus] vrací průběh.
+     */
+    suspend fun repackStart(baseUrl: String, sessionCookie: String, srcUrl: String): RepackJob?
+    suspend fun repackStatus(baseUrl: String, sessionCookie: String, jobId: String): RepackJob?
     suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, status: String = "all", sort: String? = null): String?
     suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String? = null, loginPinHash: String? = null)
     // Plan WARDEN W3c — raw JSON: pole šablon (/api/templates) + pole profilových meta (/api/profiles).

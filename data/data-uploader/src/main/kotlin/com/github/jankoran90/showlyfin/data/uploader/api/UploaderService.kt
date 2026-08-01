@@ -55,6 +55,9 @@ interface UploaderService {
     // CATALOGUE (SHW-98) — dávkový backfill watchlistu (fronta + server worker s auto-retry) + jeho stav
     @POST suspend fun gemsCacheBatch(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
     @GET suspend fun gemsCacheStatus(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    // REPACK (SEZONA f3e): přebal nehratelného releasu — start (idempotentní) + poll stavu.
+    @POST suspend fun repackStart(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    @GET suspend fun repackStatus(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @GET suspend fun gemsCatalog(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     // Plan WARDEN W3c — šablony + profilová meta (raw JSON pole přes ResponseBody)
     @GET suspend fun getTemplates(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>

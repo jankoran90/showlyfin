@@ -145,6 +145,12 @@ class DetailViewModel @Inject constructor(
     // Gate = jen 1× re-resolve téhož zdroje, ať se necyklí, když je zdroj fakt mrtvý. Reset při `load`.
     private val ioRetriedKeys = LinkedHashSet<String>()
 
+    // REPACK (SEZONA f3e): URL, které už jednou prošly přebalem — ať se to necyklí, když ani přebalený
+    // soubor nehraje. Reset při `load` (jiný titul = čistý štít). A poslední URL doručená přehrávači:
+    // přebal potřebuje PŘESNĚ ji (resolvnutou adresu), ne `UploaderStream` před resolve.
+    private val repackTriedUrls = LinkedHashSet<String>()
+    private var lastDeliveredUrl: String? = null
+
     // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook. Latch (VM je Activity-scoped → přežije mezi filmy,
     // resetuje se v load()), preferovaný cíl (tv=null → automatika, zenbook=deviceId docku) a příznak,
     // že běžící cast je hlasový (na odmítnutí ukázat hlášku místo pickeru).
@@ -221,6 +227,8 @@ class DetailViewModel @Inject constructor(
         // nepřepíšou stav nově otevřeného (konec race „visí na původním").
         loadJob?.cancel()
         lastPlayedStream = null
+        repackTriedUrls.clear()
+        lastDeliveredUrl = null
         episodeSelector = null   // TENFOOT WS-C: nový titul → zapomeň vybranou epizodu
         attemptedRdHashes.clear()
         ioRetriedKeys.clear()
@@ -1917,6 +1925,9 @@ class DetailViewModel @Inject constructor(
 
     /** Resolvnutá URL → cíl: lokální přehrávač (telefon) nebo odeslání na TV (FERRY). */
     private fun deliverNow(url: String, title: String, target: CastTarget) {
+        // REPACK (f3e): přebal potřebuje PŘESNĚ tuhle (už resolvnutou) adresu — z `UploaderStream`
+        // by se musela resolvovat znovu a u efemérních odkazů by to nemuselo vyjít stejně.
+        lastDeliveredUrl = url
         when (target) {
             CastTarget.LOCAL -> {
                 // SIEVE S2: až teď (přehrávač se reálně spouští) nabídneme „tohle sedí? 👍" — po návratu
@@ -2051,7 +2062,66 @@ class DetailViewModel @Inject constructor(
             replayFreshResolve(cur, CastTarget.LOCAL)
             return
         }
+        // REPACK (SEZONA f3e, user 2026-08-01: „nedají se tyhle zdroje přesto použít a jen je nějak
+        // obejít? Určitě jsou kvalitní"): vadný KONTEJNER/KODEK neznamená vadný film. 🔬 Změřeno na jeho
+        // Bleach E6 — HEVC + AAC jsou v pořádku, padá to na 2× PGS titulcích a vloženém fontu. Server to
+        // umí přebalit BEZ překódování (`-c copy`, 235 MB za 10 s), takže než utečeme na jiný release,
+        // zkusíme zachránit ten, který si divák vybral. Jen JEDNOU na zdroj (guard) a jen u formátové chyby.
+        val playedUrl = lastDeliveredUrl
+        if (isFormatError(errorCode) && !playedUrl.isNullOrBlank() &&
+            uploaderBaseUrl.isNotBlank() && repackTriedUrls.add(playedUrl)
+        ) {
+            timber.log.Timber.i("[REPACK] $errorCode → zkouším přebalit tentýž zdroj místo skoku na jiný")
+            repackAndPlay(playedUrl)
+            return
+        }
         advancePastSource("Zdroj nešel přehrát, zkouším další", CastTarget.LOCAL, formatErrorCode = errorCode)
+    }
+
+    /**
+     * REPACK (SEZONA f3e) — nech server přebalit zdroj a přehraj výsledek. Video i zvuk zůstávají 1:1
+     * (`-c copy`), zahazují se jen obrazové titulky, fonty a metadata, na kterých přehrávač padá.
+     * Průběh jde do UI (`autoAdvanceInfo`), takže divák nekouká na němou obrazovku. Selhání → původní
+     * cesta (skok na další zdroj), aby nevznikla nová slepá ulička.
+     */
+    private fun repackAndPlay(srcUrl: String) {
+        _uiState.update {
+            it.copy(isResolvingStream = true, streamError = null,
+                autoAdvanceInfo = "Tenhle soubor přehrávač neumí — přebaluji ho…")
+        }
+        viewModelScope.launch {
+            val started = uploaderDs.repackStart(uploaderBaseUrl, uploaderCookie, srcUrl)
+            val jobId = started?.jobId?.takeIf { it.isNotBlank() }
+            if (jobId == null || started.isFailed) {
+                timber.log.Timber.w("[REPACK] start selhal (%s)", started?.error ?: "bez odpovědi")
+                advancePastSource("Přebal se nepovedl, zkouším další zdroj", CastTarget.LOCAL)
+                return@launch
+            }
+            var job = started
+            var waited = 0L
+            while (!job.isDone && !job.isFailed && waited < REPACK_TIMEOUT_MS) {
+                delay(REPACK_POLL_MS)
+                waited += REPACK_POLL_MS
+                job = uploaderDs.repackStatus(uploaderBaseUrl, uploaderCookie, jobId) ?: job
+                if (job.pct in 1..99) {
+                    _uiState.update { it.copy(autoAdvanceInfo = "Přebaluji soubor… ${job.pct} %") }
+                }
+            }
+            if (!job.isDone) {
+                timber.log.Timber.w("[REPACK] neúspěch (status=%s, %s)", job.status, job.error ?: "-")
+                _uiState.update { it.copy(isResolvingStream = false) }
+                advancePastSource("Přebal se nepovedl, zkouším další zdroj", CastTarget.LOCAL)
+                return@launch
+            }
+            // `?key=` schválně — TV shell nemá cookie (týž vzor jako titulky / sdilej proxy).
+            val base = uploaderBaseUrl.trimEnd('/')
+            val key = java.net.URLEncoder.encode(uploaderCookie, "UTF-8")
+            val url = "$base/api/repack/file/$jobId?key=$key"
+            timber.log.Timber.i("[REPACK] hotovo → přehrávám přebalený soubor")
+            _uiState.update { it.copy(autoAdvanceInfo = "Přebaleno — spouštím přehrávání") }
+            deliverNow(url, _uiState.value.pendingPlaybackTitle.orEmpty()
+                .ifBlank { _uiState.value.item?.title.orEmpty() }, CastTarget.LOCAL)
+        }
     }
 
     /** RELAY: IO/HTTP chyba přehrávače = mrtvý/zchladlý odkaz nebo síť (NE vadný kontejner/kodek → to `isFormatError`). */
@@ -2793,6 +2863,10 @@ class DetailViewModel @Inject constructor(
         const val KEY_AUTO_REFRESH_SOURCES = "auto_refresh_sources_enabled"
         // D-c: applicationId Filmy TV appky (release) na boxu — kterou probouzí wake scéna do popředí.
         const val FILMY_TV_PACKAGE = "com.github.jankoran90.filmy"
+        // REPACK (SEZONA f3e): jak často se ptát na průběh přebalu a kdy to vzdát. Anime díl (~240 MB)
+        // je otázka desítek vteřin, u velkého souboru se čeká déle — proto štědrý strop.
+        const val REPACK_POLL_MS = 2_000L
+        const val REPACK_TIMEOUT_MS = 8L * 60 * 1000
     }
 }
 

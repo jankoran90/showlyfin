@@ -554,3 +554,18 @@ data class SubtitleQuery(
     // (film je dabovaný), ALE zachovat zbytek pro resume klíč (`resumeKeyOf`). Ruční výběr titulků dál jde.
     val autoSearch: Boolean = true,
 )
+
+/**
+ * REPACK (SEZONA SHW-113 f3e) — stav serverového přebalu nehratelného releasu.
+ * `status`: queued | running | done | error | unknown. `pct` = kolik bajtů už prošlo (odhad z velikosti).
+ */
+data class RepackJob(
+    val jobId: String = "",
+    val status: String = "unknown",
+    val pct: Int = 0,
+    val file: String? = null,
+    val error: String? = null,
+) {
+    val isDone: Boolean get() = status == "done"
+    val isFailed: Boolean get() = status == "error" || status == "unknown"
+}
