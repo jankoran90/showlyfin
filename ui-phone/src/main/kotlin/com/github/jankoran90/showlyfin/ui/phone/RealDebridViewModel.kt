@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSource
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
+import com.github.jankoran90.showlyfin.data.uploader.isSeasonRecipe
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderRdSavedItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,9 +52,16 @@ class RealDebridViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(RealDebridUiState())
     val uiState: StateFlow<RealDebridUiState> = _uiState.asStateFlow()
 
+    /**
+     * SEZONA f3b — do správy patří VŠECHNO, co si appka pamatuje: filmy, receptury sezón i jednotlivé
+     * díly. Jinak by u seriálu nešel zapamatovaný zdroj zapomenout (a špatně vybraný balík by se držel).
+     */
+    private fun rememberedAll(): List<WorkingSource> =
+        (workingSourceStore.getAll() + workingSourceStore.getEpisodes()).sortedByDescending { it.savedAtMs }
+
     /** Načti oba seznamy. [force] obejde 60s cache backendu (po smazání). */
     fun load(force: Boolean = false) {
-        val remembered = workingSourceStore.getAll()
+        val remembered = rememberedAll()
         if (baseUrl.isBlank()) {
             _uiState.update { it.copy(configured = false, loading = false, remembered = remembered, rdItems = emptyList()) }
             return
@@ -117,7 +125,12 @@ class RealDebridViewModel @Inject constructor(
     fun forgetRemembered(ws: WorkingSource, alsoDeleteFromRd: Boolean = true) {
         val imdb = ws.imdb.takeIf { it.isNotBlank() }
         val tmdb = ws.tmdb.takeIf { it > 0L }
-        workingSourceStore.clear(imdb, tmdb)
+        // SEZONA f3b: mazat se MUSÍ pod týmž klíčem, pod kterým je záznam uložen — jinak vznikne náhrobek
+        // na neexistující identitu a zdroj se nejbližším syncem vrátí ze serveru zpátky.
+        when {
+            ws.isSeasonRecipe() -> workingSourceStore.clearSeason(imdb, tmdb, ws.season!!)
+            else -> workingSourceStore.clear(imdb, tmdb, ws.season, ws.episode)
+        }
         val hash = workingSourceStore.rdHashOf(ws.stream)
         viewModelScope.launch {
             if (alsoDeleteFromRd && hash != null && baseUrl.isNotBlank()) {
@@ -126,7 +139,7 @@ class RealDebridViewModel @Inject constructor(
             }
             _uiState.update {
                 it.copy(
-                    remembered = workingSourceStore.getAll(),
+                    remembered = rememberedAll(),
                     rdItems = if (hash != null) it.rdItems.filterNot { item -> item.hash.equals(hash, ignoreCase = true) } else it.rdItems,
                     message = "Zapomenuto",
                 )

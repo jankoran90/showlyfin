@@ -142,7 +142,8 @@ fun RealDebridSection(
             Column(Modifier.padding(16.dp)) {
                 Text("Zapamatované zdroje ⭐", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    "Filmy, u kterých si appka pamatuje fungující zdroj. Zapomenutí ho smaže i z RealDebridu.",
+                    "Filmy a seriály, u kterých si appka pamatuje fungující zdroj — u seriálů i zdroj celé " +
+                        "sezóny a jednotlivých dílů. Zapomenutí ho smaže i z RealDebridu.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

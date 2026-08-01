@@ -15,6 +15,7 @@ import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.data.uploader.ctvShowSidpOrNull
 import com.github.jankoran90.showlyfin.data.uploader.ctvSidpOrNull
 import com.github.jankoran90.showlyfin.data.uploader.isSavedPlayable
+import com.github.jankoran90.showlyfin.data.uploader.isSeasonRecipe
 import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
 import kotlinx.coroutines.async
@@ -331,7 +332,10 @@ class FilmotekaBaseLoader @Inject constructor(
 
     private suspend fun loadWorkingSources(): List<MediaItem> {
         workingSources.refresh()
-        return workingSources.getAll().mapNotNull { ws ->
+        // SEZONA f3b: [getLibraryEntries] = filmy + SERIÁL JAKO CELEK (má-li recepturu sezóny). Jednotlivé
+        // DÍLY sem nepatří (jinak by z jednoho seriálu bylo N karet), ale seriál se zdrojem sezóny ano —
+        // user: „na home / ve filmotéce se zobrazí až po uložení zdrojů".
+        return workingSources.getLibraryEntries().mapNotNull { ws ->
             if (ws.tmdb <= 0L && ws.imdb.isBlank()) return@mapNotNull null
             if (!ws.isSavedPlayable()) return@mapNotNull null   // SENTINEL bod 3 B — jen reálně cached
             // VLTAVA (SHW-110) F6b — titul z ČT iVysílání: nemá TMDB ani IMDb identitu, drží ji syntetickou
@@ -339,6 +343,10 @@ class FilmotekaBaseLoader @Inject constructor(
             // aby ho karta uměla otevřít seznamem dílů, ne jako film.
             val isCtv = ctvSidpOrNull(ws.imdb) != null
             val isCtvShow = ctvShowSidpOrNull(ws.stream.url) != null
+            // SEZONA f3b: receptura sezóny = SERIÁL. Typ musí být SHOW nejen kvůli kliku (otevře seznam
+            // dílů, ne přehrání), ale hlavně kvůli enricheru — s MOVIE by dohledával tmdb id seriálu mezi
+            // FILMY (jiný jmenný prostor) a karta by zůstala bez plakátu.
+            val isSeries = ws.isSeasonRecipe()
             MediaItem(
                 traktId = 0L,
                 tmdbId = ws.tmdb.takeIf { it > 0L },
@@ -351,7 +359,7 @@ class FilmotekaBaseLoader @Inject constructor(
                 overviewCz = ws.overview?.takeIf { isCtv && it.isNotBlank() },
                 rating = null,
                 genres = ws.genres?.takeIf { isCtv && it.isNotEmpty() },
-                type = if (isCtvShow) MediaType.SHOW else MediaType.MOVIE,
+                type = if (isCtvShow || isSeries) MediaType.SHOW else MediaType.MOVIE,
                 fallbackPosterUrl = ws.poster?.takeIf { isCtv && it.isNotBlank() },
                 // NEMĚNNÉ datum prvního uložení → working-only film v „Nedávno přidané" neskáče při re-cache.
                 addedAtMs = ws.firstSavedAtMs.takeIf { it > 0L } ?: ws.savedAtMs.takeIf { it > 0L },

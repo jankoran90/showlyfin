@@ -81,6 +81,13 @@ fun epKeyOf(season: Int?, episode: Int?): String? =
 fun seasonKeyOf(season: Int?): String? = season?.let { "s$it" }
 
 /**
+ * SEZONA fáze 3b — je tenhle záznam RECEPTURA CELÉ SEZÓNY („s1"), ne díl („s1e4") ani film (epKey null)?
+ * Rozhoduje o tom, co patří do knihovny jako KARTA SERIÁLU: sezóna ano (má z čeho hrát celý seriál),
+ * jednotlivý díl ne (ten o seriálu nic nevypovídá a jako „film" by do Filmotéky naskákal N×).
+ */
+fun WorkingSource.isSeasonRecipe(): Boolean = season != null && episode == null && epKey != null
+
+/**
  * SENTINEL (bod 3 část B) — počítá se tenhle uložený zdroj jako „hraje hned / uložený" (odznak na kartě +
  * členství ve Filmotéce + řada „Uloženo k přehrání")? JEN když je reálně přehratelný CACHED — mirror
  * `streamHealth`: `sdilej://` hraje přes proxy; RD torrent musí být `rdReady`/`rdSaved`. Auto zdroj, který
@@ -94,8 +101,18 @@ fun WorkingSource.isSavedPlayable(): Boolean =
         stream.quality.rdReady ||
         stream.quality.rdSaved
 
-/** CATALOGUE (SHW-98) — položka dávkového backfillu zdrojů (jeden film do serverové fronty). */
-data class BackfillItem(val imdb: String, val tmdb: Long, val title: String, val year: Int?)
+/**
+ * CATALOGUE (SHW-98) — položka dávkového backfillu zdrojů (jeden titul do serverové fronty).
+ * SEZONA f3b: [kind] = "show" → server si titul rozloží na JEDNOTLIVÉ SEZÓNY a každou zařadí zvlášť
+ * (dřív se u seriálů hledala jen první sezóna, a to mimo frontu, tedy bez retry).
+ */
+data class BackfillItem(
+    val imdb: String,
+    val tmdb: Long,
+    val title: String,
+    val year: Int?,
+    val kind: String = "movie",
+)
 
 /** Obálka serverového JSONu `{"sources":[…]}` (endpoint /api/profiles/{key}/working-sources). */
 private data class WorkingSourcesEnvelope(val sources: List<WorkingSource> = emptyList())
@@ -133,6 +150,12 @@ class WorkingSourceStore @Inject constructor(
             val suffix = r.epKey?.let { ":$it" }.orEmpty()
             if (r.tmdb > 0L) keys.add("tmdb:${r.tmdb}$suffix")
             if (r.imdb.isNotBlank()) keys.add("imdb:${r.imdb}$suffix")
+            // SEZONA f3b: RECEPTURA SEZÓNY svítí i na HOLÉM klíči seriálu — z ní se dá pustit každý díl,
+            // takže odznak „hraje hned" na kartě seriálu nelže (jediný stažený DÍL by lhal, ten sufix drží).
+            if (r.isSeasonRecipe()) {
+                if (r.tmdb > 0L) keys.add("tmdb:${r.tmdb}")
+                if (r.imdb.isNotBlank()) keys.add("imdb:${r.imdb}")
+            }
         }
         _savedKeys.value = keys
     }
@@ -312,6 +335,7 @@ class WorkingSourceStore @Inject constructor(
                 if (it.tmdb > 0L) put("tmdb", it.tmdb)
                 if (it.title.isNotBlank()) put("title", it.title)
                 it.year?.let { y -> put("year", y) }
+                if (it.kind != "movie") put("kind", it.kind)   // SEZONA f3b: seriál → server rozloží na sezóny
             })
         }
         val body = org.json.JSONObject().apply {
@@ -496,6 +520,37 @@ class WorkingSourceStore @Inject constructor(
      * Řazeno od nejnovějšího uložení.
      */
     fun getAll(): List<WorkingSource> = allRecords().filter { it.epKey == null }
+
+    /**
+     * SEZONA fáze 3b (user 2026-08-01: „na home - filmotéce se zobrazí až po uložení zdrojů") — co patří
+     * do KNIHOVNY: filmy ([getAll]) **plus SERIÁL JAKO CELEK**, má-li uloženou recepturu sezóny.
+     *
+     * 🔴 Díra z fáze 1, kterou tohle zavírá: [getAll] pouštělo dál jen `epKey == null`, aby do Filmotéky
+     * nenaskákaly karty jednotlivých DÍLŮ — jenže tím vypadl i seriál se zdrojem sezóny, takže seriál,
+     * kterému auto-hledání našlo balík, se ve Filmotéce vůbec neobjevil.
+     *
+     * Na seriál připadá **JEDNA položka** (ne karta na sezónu): [allRecords] je řazené od nejnovějšího
+     * uložení, takže první nalezená receptura = nejčerstvější sezóna.
+     */
+    fun getLibraryEntries(): List<WorkingSource> {
+        val out = ArrayList<WorkingSource>()
+        val seenShows = HashSet<String>()
+        for (r in allRecords()) {
+            when {
+                r.epKey == null -> out += r
+                r.isSeasonRecipe() -> showIdentity(r)?.let { if (seenShows.add(it)) out += r }
+                else -> Unit                       // díl („s1e4") do knihovny nepatří
+            }
+        }
+        return out
+    }
+
+    /** Identita SERIÁLU (bez sezóny/dílu) — pro „jedna karta na seriál". */
+    private fun showIdentity(r: WorkingSource): String? = when {
+        r.tmdb > 0L -> "tmdb:${r.tmdb}"
+        r.imdb.isNotBlank() -> "imdb:${r.imdb}"
+        else -> null
+    }
 
     /**
      * SEZONA (SHW-113): zdroje jednotlivých DÍLŮ. Vědomě mimo [getAll] — ten krmí Filmotéku, řadu

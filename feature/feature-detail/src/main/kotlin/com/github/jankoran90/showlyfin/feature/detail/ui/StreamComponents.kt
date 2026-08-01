@@ -162,7 +162,11 @@ private fun parseSize(t: String): String? = RE_SIZE.find(t)?.let { m ->
 internal fun streamQualityChips(stream: UploaderStream): List<String> {
     val q = stream.quality
     val t = listOfNotNull(stream.name, stream.description).joinToString(" ")
-    val out = ArrayList<String>(6)
+    val out = ArrayList<String>(7)
+    // SEZONA (SHW-113): balík celé sezóny = jeden torrent pro všechny díly → jeden release, jedny titulky
+    // se stejným časováním. Server ho pozná (`quality.seasonPack`) a v auto-hledání preferuje; ve výběru
+    // to divák musí VIDĚT, jinak si ručně sáhne po jednorázovém dílu a rozejde si časování napříč sezónou.
+    if (q.seasonPack) out.add("📦 Balík sezóny")
     (q.resolution?.takeIf { it.isNotBlank() } ?: parseRes(t))?.let { out.add(it) }
     val vc = q.videoCodec?.takeIf { it.isNotBlank() } ?: parseVideo(t)
     val hdr = q.hdr || RE_HDR.containsMatchIn(t)

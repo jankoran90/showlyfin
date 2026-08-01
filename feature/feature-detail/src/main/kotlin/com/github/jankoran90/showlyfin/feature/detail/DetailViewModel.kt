@@ -597,10 +597,15 @@ class DetailViewModel @Inject constructor(
      */
     fun toggleEpisodeWatched(season: Int, episode: Int) {
         val key = season to episode
-        val jfId = _uiState.value.episodeJellyfinIds[key] ?: return
+        val jfId = _uiState.value.episodeJellyfinIds[key]
         val nowWatched = key !in _uiState.value.episodeWatched
         viewModelScope.launch {
-            if (jellyfinLibraryService.markPlayed(jfId, nowWatched)) {
+            // SEZONA f3b: díl MIMO Jellyfin knihovnu (stream) jde do TRAKT historie. Dosud tu byl
+            // `?: return` = fajfka jen ke čtení, takže u seriálu bez knihovny nešlo označit vůbec nic
+            // (jediná cesta byla dokoukat ho v přehrávači).
+            val ok = if (jfId != null) jellyfinLibraryService.markPlayed(jfId, nowWatched)
+            else setEpisodeWatchedOnTrakt(season, episode, nowWatched)
+            if (ok) {
                 _uiState.update { st ->
                     val w = st.episodeWatched.toMutableSet()
                     if (nowWatched) w.add(key) else w.remove(key)
@@ -611,6 +616,77 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
+     * SEZONA f3b — celá sezóna na Trakt najednou (seriál mimo Jellyfin knihovnu). Seznam dílů bereme
+     * z TMDB ([DetailUiState.seasonEpisodes]) — u seriálu bez knihovny je to jediný zdroj pravdy o tom,
+     * kolik dílů sezóna vlastně má.
+     */
+    private fun markSeasonWatchedOnTrakt(season: Int, watched: Boolean) {
+        val imdb = _uiState.value.item?.imdbId?.takeIf { it.isNotBlank() } ?: return
+        val episodes = _uiState.value.seasonEpisodes
+            .map { it.episode_number }
+            .filter { it > 0 }
+        if (episodes.isEmpty()) return
+        val item = SyncExportItem(
+            ids = SyncExportItem.Ids(imdb = imdb),
+            watched_at = null,
+            hidden_at = null,
+            seasons = listOf(
+                SyncExportItem.Season(
+                    number = season,
+                    episodes = episodes.map { SyncExportItem.Episode(number = it, watched_at = "released") },
+                ),
+            ),
+        )
+        val req = SyncExportRequest(shows = listOf(item))
+        viewModelScope.launch {
+            val ok = runCatching {
+                if (watched) authorizedTrakt.postSyncWatched(req) else authorizedTrakt.postDeleteProgress(req)
+            }.onFailure { timber.log.Timber.w(it, "[SEZONA] Trakt sezóna %d selhala", season) }.isSuccess
+            if (!ok) return@launch
+            val keys = episodes.map { season to it }
+            _uiState.update { st ->
+                val w = st.episodeWatched.toMutableSet()
+                if (watched) w.addAll(keys) else w.removeAll(keys.toSet())
+                st.copy(episodeWatched = w)
+            }
+            timber.log.Timber.i("[SEZONA] Trakt sezóna %d: %d dílů → zhlédnuto=%b", season, episodes.size, watched)
+        }
+    }
+
+    /**
+     * SEZONA f3b — zapiš/zruš „zhlédnuto" u DÍLU na Traktu (`sync/history`, resp. `history/remove`).
+     * Trakt chce díl jako `shows[{ids:{imdb:<SERIÁL>}, seasons[{number, episodes[…]}]}]` — `imdbId`
+     * detailu je id seriálu, číslo dílu nese sezóna+epizoda. Tatáž konstrukce jako [WatchedReporter],
+     * jen odsud ručně. Vrací true = Trakt volání prošlo.
+     */
+    private suspend fun setEpisodeWatchedOnTrakt(season: Int, episode: Int, watched: Boolean): Boolean {
+        val imdb = _uiState.value.item?.imdbId?.takeIf { it.isNotBlank() } ?: run {
+            timber.log.Timber.w("[SEZONA] fajfka dílu: seriál nemá imdb → nemám kam zapsat")
+            return false
+        }
+        val item = SyncExportItem(
+            ids = SyncExportItem.Ids(imdb = imdb),
+            watched_at = null,
+            hidden_at = null,
+            seasons = listOf(
+                SyncExportItem.Season(
+                    number = season,
+                    episodes = listOf(SyncExportItem.Episode(number = episode, watched_at = "released")),
+                ),
+            ),
+        )
+        val req = SyncExportRequest(shows = listOf(item))
+        return runCatching {
+            if (watched) authorizedTrakt.postSyncWatched(req) else authorizedTrakt.postDeleteProgress(req)
+        }.onSuccess {
+            timber.log.Timber.i("[SEZONA] Trakt %s %s S%02dE%02d",
+                if (watched) "zhlédnuto" else "odznačeno", imdb, season, episode)
+        }.onFailure {
+            timber.log.Timber.w(it, "[SEZONA] Trakt fajfka dílu selhala (%s S%02dE%02d)", imdb, season, episode)
+        }.isSuccess
+    }
+
+    /**
      * user 2026-07-28 („budu potřebovat něco jako označit řady a díly jako zhlédnuté") — označ/odznač
      * CELOU SEZÓNU. Bez toho je dohánění rozkoukaného seriálu klikání po jednom dílu.
      * Zapisuje se do Jellyfinu ([JellyfinLibraryService.markPlayed]) po epizodách, protože přesně ty
@@ -618,7 +694,12 @@ class DetailViewModel @Inject constructor(
      */
     fun markSeasonWatched(season: Int, watched: Boolean) {
         val ids = _uiState.value.episodeJellyfinIds.filterKeys { it.first == season }
-        if (ids.isEmpty()) return
+        if (ids.isEmpty()) {
+            // SEZONA f3b: seriál MIMO knihovnu — celou sezónu zapíšeme na Trakt jedním voláním
+            // (dřív se tu jen tiše vyskočilo a tlačítko „označit sezónu" nedělalo nic).
+            markSeasonWatchedOnTrakt(season, watched)
+            return
+        }
         viewModelScope.launch {
             val done = mutableSetOf<Pair<Int, Int>>()
             for ((key, jfId) in ids) {
@@ -924,6 +1005,23 @@ class DetailViewModel @Inject constructor(
                     item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title,
                     item.year, cachePolicy(), season,
                 )
+                // SEZONA f3b: právě otevřená sezóna se hledá HNED (výše, ať má divák zdroj co nejdřív),
+                // ZBYTEK seriálu jde do persistentní fronty s retry — jinak by druhá a další sezóna
+                // zůstaly bez zdroje, dokud si je někdo ručně neotevře (user: „nemám rád mezery").
+                runCatching {
+                    workingSourceStore.cacheBatch(
+                        listOf(
+                            com.github.jankoran90.showlyfin.data.uploader.BackfillItem(
+                                imdb = item.imdbId.orEmpty(),
+                                tmdb = item.tmdbId ?: 0L,
+                                title = _uiState.value.tmdbCzTitle ?: item.title,
+                                year = item.year,
+                                kind = "show",
+                            ),
+                        ),
+                        cachePolicy(),
+                    )
+                }.onFailure { timber.log.Timber.w(it, "[SEZONA] fronta pro zbylé sezóny selhala") }
             }
             // COUCH: watchlist se změnil → domov přenačte Trakt řady (jinak čerstvý titul naskočí jen v sekci Trakt).
             if (ok) traktSyncSignal.bump()
@@ -1432,7 +1530,13 @@ class DetailViewModel @Inject constructor(
                     year = st.item?.year,
                     season = episodeSelector?.season,
                     episode = episodeSelector?.episode,
-                    release = stream.name ?: stream.description,
+                    // 🔴 SEZONA f3b: OBA texty, ne jen `name`. U AIOStreams je `name` jen odznak („🚀 FHD",
+                    // „🔥4K UHD") a skutečný název releasu (`Breaking.Bad.S01E01…2160p.WEB…`) je až
+                    // v `description` — server tedy dostával k porovnání s titulky prázdnou informaci
+                    // a `_release_affinity` neměla podle čeho vybírat. Tohle je jedna z příčin
+                    // userova „titulky nesedí na release".
+                    release = listOfNotNull(stream.name, stream.description)
+                        .joinToString(" ").trim().take(300).takeIf { it.isNotBlank() },
                     fps = stream.quality.fps,
                     runtime = st.movieDetails?.runtime,
                     autoSearch = !czDub,
@@ -2123,12 +2227,35 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * SEZONA (SHW-113): stáhni JEDEN DÍL seriálu do telefonu. Zdroj bere z paměti dílu
-     * ([WorkingSourceStore.get] se season/episode) — tedy přesně ten, co dílu hraje přes Přehrát.
-     * Jellyfin větev tu záměrně není: díl z knihovny má vlastní jellyfin id, které detail seriálu nedrží
-     * (`ownedJellyfinId` je id SERIÁLU, ne dílu) — stahování dílů z knihovny je samostatný krok.
+     * SEZONA (SHW-113): stáhni JEDEN DÍL seriálu do telefonu.
+     *
+     * Pořadí: **díl z Jellyfin knihovny** (hraje ze serveru, tedy nejjistější zdroj) → jinak zapamatovaný
+     * zdroj dílu ([WorkingSourceStore.get] se season/episode). Jellyfin id DÍLU drží `episodeJellyfinIds`
+     * (`ownedJellyfinId` je id SERIÁLU — tím to dřív padalo na „stahování dílů z knihovny je samostatný krok").
      */
     private fun downloadEpisodeToDevice(item: MediaItem, sel: EpisodeSelector) {
+        val epJfId = _uiState.value.episodeJellyfinIds[sel.season to sel.episode]
+        val serverUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
+        val token = prefs.getString("jellyfin_token", "").orEmpty()
+        if (epJfId != null && serverUrl.isNotBlank() && token.isNotBlank()) {
+            offlineManager.enqueue(
+                com.github.jankoran90.showlyfin.data.offline.OfflineRequest(
+                    key = "jf_$epJfId",
+                    title = item.title,
+                    subtitle = "S${sel.season}E${sel.episode}",
+                    type = com.github.jankoran90.showlyfin.data.offline.OfflineRequest.TYPE_EPISODE,
+                    sourceLabel = "Knihovna",
+                    videoUrl = "$serverUrl/Videos/$epJfId/stream?static=true&api_key=$token",
+                    posterUrl = "$serverUrl/Items/$epJfId/Images/Primary?api_key=$token",
+                    imdb = item.imdbId,
+                    tmdb = item.tmdbId?.toInt(),
+                    season = sel.season,
+                    episode = sel.episode,
+                ),
+            )
+            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahuji díl z knihovny — sleduj v sekci Stažené.") }
+            return
+        }
         val source = workingSourceStore.get(item.imdbId, item.tmdbId, sel.season, sel.episode)?.stream
             ?: _uiState.value.rememberedSource
         if (source == null) {

@@ -55,26 +55,20 @@ class WatchlistSourceCacheViewModel @Inject constructor(
     }
 
     /**
-     * SEZONA (SHW-113) f3 — dohledej zdroj PRVNÍ SEZÓNY pro seriály z „Chci vidět", které ho ještě nemají.
-     * Zdroj se hledá jako balík celé sezóny, takže celá sezóna běží na JEDNOM releasu (a tím i na jedněch
-     * titulcích se stejným časováním — to byl userův hlavní důvod, 2026-08-01).
-     * Nebere víc než [SHOWS_CAP] seriálů najednou: každý dotaz jde na RD a fronta pro ně (zatím) není.
+     * SEZONA f3b — seriály z „Chci vidět" do TÉŽE serverové fronty jako filmy (persistentní, s retry).
+     *
+     * 🔴 Předchozí verze (f3) posílala max 5 seriálů, jen SEZÓNU 1 a mimo frontu (fire-and-forget) —
+     * takže šestý seriál a druhá sezóna tiše chyběly a nic je nikdy nedohnalo (user 2026-08-01:
+     * „nemám rád mezery a zametání pod koberec"). Teď jde seriál do fronty jako `kind="show"` a SERVER
+     * si ho rozloží na jednotlivé sezóny (`services/gems/seasons.py`), každou s vlastním retry.
+     * Které sezóny už zdroj mají, si server ověří sám (`profile_has_working_source` s `epKey`).
      */
-    private suspend fun backfillShows(policy: String) {
-        val shows = runCatching { traktRowLoader.watchlist("shows") }.getOrElse { return }
-        val missing = shows.filter {
-            it.imdbId != null && workingSourceStore.getSeason(it.imdbId, it.tmdbId, 1) == null
-        }
-        if (missing.isEmpty()) return
-        Timber.i("[SEZONA] backfill seriálů: %d bez zdroje sezóny (beru max %d)", missing.size, SHOWS_CAP)
-        for (s in missing.take(SHOWS_CAP)) {
-            runCatching {
-                workingSourceStore.triggerSeasonCache(s.imdbId, s.tmdbId, s.title, s.year, policy, season = 1)
-            }.onFailure { Timber.w(it, "[SEZONA] zdroj sezóny pro '%s' selhal", s.title) }
-        }
-        if (missing.size > SHOWS_CAP) {
-            Timber.i("[SEZONA] backfill seriálů: %d zbývá na příště (strop)", missing.size - SHOWS_CAP)
-        }
+    private suspend fun showBackfillItems(): List<BackfillItem> {
+        val shows = runCatching { traktRowLoader.watchlist("shows") }.getOrElse { return emptyList() }
+        val items = shows.filter { it.imdbId != null }
+            .map { BackfillItem(it.imdbId!!, it.tmdbId ?: 0L, it.title, it.year, kind = "show") }
+        Timber.i("[SEZONA] backfill seriálů: %d titulů do fronty (server je rozloží na sezóny)", items.size)
+        return items
     }
 
     fun runBackfill() {
@@ -88,20 +82,20 @@ class WatchlistSourceCacheViewModel @Inject constructor(
             // Jen filmy s imdb, které ještě NEMAJÍ uložený zdroj.
             val missing = watchlist.filter { it.imdbId != null && workingSourceStore.get(it.imdbId, it.tmdbId) == null }
             val already = watchlist.size - missing.size
-            if (missing.isEmpty()) {
+            val policy = cachePolicy()
+            // SEZONA f3b: seriály jdou do TÉŽE fronty (server je rozloží na sezóny), takže jeden batch,
+            // jeden ukazatel průběhu a retry i pro ně.
+            val items = missing.map { BackfillItem(it.imdbId!!, it.tmdbId ?: 0L, it.title, it.year) } +
+                showBackfillItems()
+            if (items.isEmpty()) {
                 _state.value = State.Done(requested = 0, already = already)
                 return@launch
             }
-            val policy = cachePolicy()
-            val items = missing.map { BackfillItem(it.imdbId!!, it.tmdbId ?: 0L, it.title, it.year) }
             // Jeden batch → server frontu převezme a maká sám (auto-retry). Pak sleduj kolik ubývá.
             workingSourceStore.cacheBatch(items, policy)
-            startPolling(total = missing.size)
-            // SEZONA (SHW-113) f3 — SERIÁLY z „Chci vidět" (user 2026-08-01: Bleach). Dosud sem vůbec
-            // nedorazily: tahá se watchlist „movies" a serverová fronta je filmová. Seriál potřebuje jiný
-            // dotaz (zdroj pro celou sezónu), takže jde mimo frontu — a hlavně mimo `total` výše, aby
-            // ukazatel průběhu nelhal o něčem, co se počítá jinde.
-            launch { backfillShows(policy) }
+            // Celkový počet ber ze SERVERU (rozklad seriálů na sezóny se stane až tam, takže lokální
+            // počet položek by ukazatel podhodnotil a „X z Y" by lhalo).
+            startPolling(total = workingSourceStore.cacheStatus() ?: items.size)
         }
     }
 
@@ -130,9 +124,5 @@ class WatchlistSourceCacheViewModel @Inject constructor(
 
     private companion object {
         const val POLL_MS = 8000L
-
-        /** SEZONA f3: kolik seriálů dohledat v jednom kole. Každý dotaz jde na RD a fronta
-         *  pro seriály zatím není — radši míň a spolehlivě než zahltit backend. */
-        const val SHOWS_CAP = 5
     }
 }

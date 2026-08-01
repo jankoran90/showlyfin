@@ -27,6 +27,7 @@ import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.data.uploader.isSavedPlayable
+import com.github.jankoran90.showlyfin.data.uploader.isSeasonRecipe
 import com.github.jankoran90.showlyfin.feature.discover.mapper.toMediaItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -549,7 +550,9 @@ class TvHomeViewModel @Inject constructor(
         workingSources.refresh()
         // SENTINEL bod 3 B — „Uloženo k přehrání" je one-click přehrání (playDirectly) → jen reálně cached,
         // jinak by klik na evikovaný/stahující se zdroj skončil zásekem.
-        val saved = workingSources.getAll().filter { it.isSavedPlayable() }.take(config.limit.coerceIn(1, 60))
+        // SEZONA f3b: [getLibraryEntries] přidá k filmům i SERIÁL s uloženou recepturou sezóny (jedna
+        // položka na seriál). Jednotlivé díly sem dál nepatří.
+        val saved = workingSources.getLibraryEntries().filter { it.isSavedPlayable() }.take(config.limit.coerceIn(1, 60))
         // CELLULOID (SHW-98) FIX: working source nenese poster/backdrop. Dřív si loadSavedForPlayback dělal
         // VLASTNÍ neškrcený TMDB burst bez jazyka (`fetchMovieDetails(id)` → cache klíč „id|") → při cold-startu
         // se stovkou souběžných dotazů rozstřelil o transient/rate-limit a CachedTmdbRemoteDataSource ten null
@@ -566,7 +569,9 @@ class TvHomeViewModel @Inject constructor(
                 overview = null,
                 rating = null,
                 genres = null,
-                type = MediaType.MOVIE,
+                // SEZONA f3b: seriál MUSÍ jít jako SHOW — enricher hledá tmdb id v jiném jmenném prostoru
+                // než filmy, takže s MOVIE by karta seriálu zůstala bez plakátu (a klik by mířil na film).
+                type = if (ws.isSeasonRecipe()) MediaType.SHOW else MediaType.MOVIE,
             )
         }
         val enriched = enricher.enrich(base, withCertification = ageCap.value != null)
@@ -578,13 +583,16 @@ class TvHomeViewModel @Inject constructor(
                 // klíč MUSÍ nést identitu i pro titul BEZ TMDB (ČT = `ctvid:<sidp>` v `imdb`, `tmdb`=0).
                 // Dřív dostaly všechny ČT položky týž klíč `saved_0` → Compose seznam neunese dva stejné
                 // klíče (IllegalArgumentException) → padal celý domov včetně řady Filmotéky.
-                key = "saved_${ws.tmdb.takeIf { it > 0L } ?: ws.imdb}",
+                // SEZONA f3b: klíč nese i epKey — tmdb id seriálu a filmu si mohou být rovna (TMDB má pro
+                // filmy a seriály oddělené jmenné prostory), a dva stejné klíče shodí Compose seznam.
+                key = "saved_${ws.tmdb.takeIf { it > 0L } ?: ws.imdb}${ws.epKey?.let { "_$it" }.orEmpty()}",
                 title = item.displayTitle,
                 posterUrl = item.posterUrl("w342"),
                 landscapeUrl = item.backdropUrl("w780"),
                 mediaItem = item,
                 // S4b: každý titul tady MÁ zapamatovaný zdroj → klik přehraje rovnou (one-click).
-                playDirectly = true,
+                // SEZONA f3b: SERIÁL ale ne — „přehraj seriál" nedává smysl, klik otevře seznam dílů.
+                playDirectly = !ws.isSeasonRecipe(),
             )
         }
     }
