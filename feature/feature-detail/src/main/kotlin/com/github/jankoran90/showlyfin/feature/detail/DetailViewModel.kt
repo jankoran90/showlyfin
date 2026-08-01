@@ -1031,13 +1031,16 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(showStreamPicker = true, streamAudioPath = null, streamError = "Uploader není nastaven nebo film nemá IMDB ID.") }
             return
         }
-        // SEZONA f2: rozcestník zůstává, ale je PŘEDVYBRANÝ podle jazykového chipu profilu — divák tak
-        // nemusí u každého dílu klikat totéž, a přitom si může cestu pořád přehodit.
-        val preselect = when (audioChoice()) {
+        // SEZONA f2 — 🔴 OPRAVA po zpětné vazbě (user 2026-08-01 17:24 se screenshotem: „co ten originál
+        // a český dabing chip dělá? Stejně vyskakuje výběr na hledání zdroje česky/originál"). Chip cestu
+        // původně jen PŘEDVYBÍRAL, ale rozcestník se pořád ptal — tedy na otázku, kterou divák už zodpověděl.
+        // Teď se rozcestník PŘESKOČÍ a jde se rovnou na zdroje ve zvolené stopě; jednorázová výjimka
+        // zůstává dostupná tlačítkem „← Změnit dabing / originál" přímo v seznamu.
+        val path = when (audioChoice()) {
             com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ -> StreamAudioPath.CZ_DUB
             com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL -> StreamAudioPath.ORIGINAL
         }
-        _uiState.update { it.copy(showStreamPathChooser = true, streamAudioPath = preselect) }
+        _uiState.update { it.copy(showStreamPathChooser = false, showStreamPicker = true, streamAudioPath = path) }
         loadStreams()
     }
 

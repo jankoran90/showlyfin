@@ -25,6 +25,10 @@ import androidx.compose.foundation.verticalScroll
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
+// SEZONA (SHW-113) f2 — přepínač zvukové stopy v ⋮ menu.
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.Switch
+import com.github.jankoran90.showlyfin.data.uploader.AudioPathStore
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -476,6 +480,9 @@ fun DetailScreen(
                         onWatchlist = { viewModel.toggleWatchlist() },
                         onShare = onShareCard,
                         onSimilar = onSimilar?.let { cb -> { cb(displayItem) } },
+                        // SEZONA f2: switch zvukové stopy v ⋮ (user 17:24 — chip pryč z těla karty).
+                        audioChoice = uiState.audioChoice,
+                        onAudioChoice = { viewModel.setAudioChoice(it) },
                         castInOverflow = castInOverflow,
                     )
                 },
@@ -714,16 +721,6 @@ fun DetailScreen(
             }
             if (!plot.isNullOrBlank()) Spacer(Modifier.height(4.dp))
 
-            // SEZONA (SHW-113) f2 — jazykový chip. Přepíná stopu PLOŠNĚ ZA PROFIL (user 2026-08-01 16:45:
-            // „plošně na celý profil — karty filmu, seriálu, pořadu"); karta je jen místo, odkud se to dá
-            // přehodit. Výchozí plyne z věku profilu, takže dokud na chip nikdo nesáhne, dětský profil
-            // dostane češtinu a dospělý originál sám od sebe.
-            AudioChoiceChips(
-                choice = uiState.audioChoice,
-                onChoose = { viewModel.setAudioChoice(it) },
-            )
-            Spacer(Modifier.height(8.dp))
-
             // CANVAS A: akce (Galerie přes cover, ČSFD recenze přes badge, Přehrát/Na TV/Stremio/
             // Stáhnout/Oblíbené/Chci vidět) jsou v kompaktní kulaté liště v hero (viz DetailActionBar výše).
 
@@ -840,6 +837,9 @@ private fun DetailActionBar(
     onShare: (() -> Unit)? = null,
     /** „Doporuč podobné" — tenhle titul jako reference pro kurátora (user 2026-08-01). null = skryto. */
     onSimilar: (() -> Unit)? = null,
+    // SEZONA (SHW-113) f2: přepínač zvukové stopy v ⋮ menu (platí za PROFIL). null = přepínač skrytý.
+    audioChoice: AudioPathStore.Choice = AudioPathStore.Choice.ORIGINAL,
+    onAudioChoice: ((AudioPathStore.Choice) -> Unit)? = null,
     castInOverflow: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -925,6 +925,29 @@ private fun DetailActionBar(
                     leadingIcon = { Icon(Icons.Default.Download, null) },
                     onClick = { menuOpen = false; onDownload() },
                 )
+                // SEZONA (SHW-113) f2 — přepínač zvukové stopy. User 2026-08-01 17:24: „dej ho spíš do
+                // pravého horního rohu do menu jako switch button" (dřív to byly chipy v těle karty).
+                // Přepíná PROFIL, ne titul — menu zůstává otevřené, ať je změna hned vidět na switchi.
+                if (onAudioChoice != null) {
+                    val czSelected = audioChoice == AudioPathStore.Choice.CZ
+                    DropdownMenuItem(
+                        text = { Text(if (czSelected) "Zvuk: český dabing" else "Zvuk: originál") },
+                        leadingIcon = { Icon(Icons.Default.Translate, null) },
+                        trailingIcon = {
+                            Switch(
+                                checked = czSelected,
+                                onCheckedChange = {
+                                    onAudioChoice(if (it) AudioPathStore.Choice.CZ else AudioPathStore.Choice.ORIGINAL)
+                                },
+                            )
+                        },
+                        onClick = {
+                            onAudioChoice(
+                                if (czSelected) AudioPathStore.Choice.ORIGINAL else AudioPathStore.Choice.CZ,
+                            )
+                        },
+                    )
+                }
                 // user 2026-08-01: doporučení má být po ruce přímo u filmu, ne jen v samostatné sekci.
                 if (onSimilar != null) {
                     DropdownMenuItem(
