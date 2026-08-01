@@ -1,6 +1,9 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -30,7 +33,11 @@ fun FilmyDrawer(
     onSelect: (FilmySection) -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.verticalScroll(rememberScrollState())) {
+        // 🔴 PŮDORYS fix (user 2026-08-01: „když je sidebar plný, tak to zneviditelní profily tlačítko"):
+        // dřív bylo CELÉ menu v jednom scrollu, takže při plném seznamu sekcí spadly Nastavení a Profil
+        // pod okraj a vypadaly, že tam nejsou. Teď scrolluje JEN seznam sekcí (weight(1f)) a spodní blok
+        // je PŘIPNUTÝ — vždycky vidět, ať je sekcí kolik chce.
+        Column(Modifier.fillMaxSize()) {
             Text(
                 text = "Filmy",
                 style = MaterialTheme.typography.titleLarge,
@@ -44,8 +51,14 @@ fun FilmyDrawer(
             val filmotekaFirst = FilmyShellPrefs.defaultFilmoteka(LocalContext.current)
             val layoutVm: FilmyHomeLayoutViewModel = hiltViewModel()
             val storedMenu by layoutVm.menu.collectAsStateWithLifecycle()
-            FilmyMenuConfig.visibleSections(storedMenu, filmotekaFirst)
-                .forEach { DrawerRow(it, current, onSelect) }
+            Column(
+                Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                FilmyMenuConfig.visibleSections(storedMenu, filmotekaFirst)
+                    .forEach { DrawerRow(it, current, onSelect) }
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))
             DrawerRow(FilmySection.SETTINGS, current, onSelect)
@@ -55,6 +68,7 @@ fun FilmyDrawer(
             val profileUi by profileVm.uiState.collectAsStateWithLifecycle()
             val activeName = profileUi.profiles.firstOrNull { it.id == profileUi.activeProfileId }?.name
             DrawerRow(FilmySection.PROFILE, current, onSelect, label = activeName?.takeIf { it.isNotBlank() })
+            Spacer(Modifier.height(12.dp))
         }
     }
 }

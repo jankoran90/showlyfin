@@ -104,8 +104,13 @@ private fun FilmyShellContent() {
     // přepni na první viditelnou — jinak by koukal na obrazovku, kterou už v menu nemá. Nastavení
     // a Profil jsou připnuté, ty tomuhle nikdy nepodléhají.
     val layoutVm: FilmyHomeLayoutViewModel = hiltViewModel()
+    // Sdílená instance se sekcí „Podle filmu" (obojí bere hiltViewModel() z téhož ViewModelStore aktivity)
+    // → akce „Doporuč podobné" z karty filmu do ní nastaví referenci a sekce ji rovnou ukáže.
+    val referenceVm: com.github.jankoran90.showlyfin.feature.discover.foryou.ReferenceRecsViewModel = hiltViewModel()
     val storedMenu by layoutVm.menu.collectAsStateWithLifecycle()
-    LaunchedEffect(storedMenu, current) {
+    // Klíč je JEN storedMenu: hlídáme ZMĚNU nastavení menu, ne každý přechod mezi sekcemi. Jinak by
+    // to zablokovalo cílené otevření skryté sekce zevnitř appky (např. „Doporuč podobné" → Podle filmu).
+    LaunchedEffect(storedMenu) {
         if (current == FilmySection.SETTINGS || current == FilmySection.PROFILE) return@LaunchedEffect
         val visible = FilmyMenuConfig.visibleSections(storedMenu, FilmyShellPrefs.defaultFilmoteka(startCtx))
         if (current !in visible) visible.firstOrNull()?.let { current = it }
@@ -249,6 +254,13 @@ private fun FilmyShellContent() {
                 autoplayRemembered = detailEntry.autoplay,
                 // ORCHARD (user 07-19) — Filmy: cast bez tlačítka, „Přehrát na TV" v ⋮ menu.
                 castInOverflow = true,
+                // user 2026-08-01 („doporučení by mohlo být v menu karty filmu"): vezmi tenhle titul
+                // jako referenci, zavři detail a otevři sekci „Podle filmu" s běžícím výpočtem.
+                onSimilar = { picked ->
+                    referenceVm.setReference(picked)
+                    detailStack = emptyList()
+                    current = FilmySection.REFERENCE
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (detailEntry is FilmyDetailEntry.Ctv) {

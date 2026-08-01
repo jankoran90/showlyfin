@@ -162,11 +162,20 @@ class CuratorLoader @Inject constructor(
         limit: Int,
         isShow: Boolean = false,
         pollUntilReady: Boolean = false,
-    ): List<MediaItem> {
+    ): List<MediaItem> = similarToSplit(seedTitle, seedYear, limit, isShow, pollUntilReady).fresh
+
+    /** [similarTo] s výsledkem rozděleným na nové a už známé — viz [fetchRecommendationsSplit]. */
+    suspend fun similarToSplit(
+        seedTitle: String,
+        seedYear: Int?,
+        limit: Int,
+        isShow: Boolean = false,
+        pollUntilReady: Boolean = false,
+    ): CuratorRecs {
         val prefs = prefs()
-        if (!prefs.enabled || seedTitle.isBlank()) return emptyList()
+        if (!prefs.enabled || seedTitle.isBlank()) return CuratorRecs()
         val base = serverBase(); val cookie = serverCookie(); val key = profileKey()
-        if (base.isBlank() || key.isBlank()) return emptyList()
+        if (base.isBlank() || key.isBlank()) return CuratorRecs()
         val json = JSONObject()
             .put("profileKey", key)
             .put("title", seedTitle)
@@ -178,7 +187,7 @@ class CuratorLoader @Inject constructor(
             .also { o -> capAge()?.let { o.put("ageCap", it) } }
             .toString()
         val taste = buildTaste()   // jen kvůli filtru „co už znám" v postProcess
-        return fetchRecommendations(json, taste, pollUntilReady, "similarTo($seedTitle)") { body ->
+        return fetchRecommendationsSplit(json, taste, pollUntilReady, "similarTo($seedTitle)") { body ->
             uploaderDs.curatorSimilar(base, cookie, body)
         }
     }
@@ -196,12 +205,12 @@ class CuratorLoader @Inject constructor(
         references: List<MediaItem>,
         limit: Int,
         pollUntilReady: Boolean = false,
-    ): List<MediaItem> {
+    ): CuratorRecs {
         val seeds = references.filter { it.displayTitle.isNotBlank() }
-        if (seeds.isEmpty()) return emptyList()
+        if (seeds.isEmpty()) return CuratorRecs()
         if (seeds.size == 1) {
             val one = seeds.first()
-            return similarTo(
+            return similarToSplit(
                 seedTitle = one.title.ifBlank { one.displayTitle },
                 seedYear = one.year,
                 limit = limit,
@@ -210,9 +219,9 @@ class CuratorLoader @Inject constructor(
             )
         }
         val prefs = prefs()
-        if (!prefs.enabled) return emptyList()
+        if (!prefs.enabled) return CuratorRecs()
         val base = serverBase(); val cookie = serverCookie(); val key = profileKey()
-        if (base.isBlank() || key.isBlank()) return emptyList()
+        if (base.isBlank() || key.isBlank()) return CuratorRecs()
         val full = buildTaste()
         val taste = full.copy(
             loved = seeds.map { TasteEntry(title = it.title.ifBlank { it.displayTitle }, year = it.year) },
@@ -221,7 +230,7 @@ class CuratorLoader @Inject constructor(
         )
         val json = JSONObject(buildRequestJson(key, limit.coerceIn(1, 60), taste, prefs))
             .put("bucket", "picked").toString()
-        return fetchRecommendations(json, taste, pollUntilReady, "recommendFromReferences(${seeds.size})") { body ->
+        return fetchRecommendationsSplit(json, taste, pollUntilReady, "recommendFromReferences(${seeds.size})") { body ->
             uploaderDs.curatorRecommend(base, cookie, body)
         }
     }
@@ -236,39 +245,70 @@ class CuratorLoader @Inject constructor(
         pollUntilReady: Boolean,
         logTag: String,
         call: suspend (String) -> String?,
-    ): List<MediaItem> {
+    ): List<MediaItem> = fetchRecommendationsSplit(requestJson, taste, pollUntilReady, logTag, call).fresh
+
+    /**
+     * Táž smyčka, ale výsledek ROZDĚLENÝ na „nové" a „už znáš" — jedním dotazem (druhé volání by znovu
+     * stavělo vkus z Traktu i obohacovalo z TMDB). Sekce „Podle filmu" díky tomu umí místo prázdna
+     * ukázat aspoň tituly, které divák zná, a říct to nahlas.
+     */
+    private suspend fun fetchRecommendationsSplit(
+        requestJson: String,
+        taste: TastePayload,
+        pollUntilReady: Boolean,
+        logTag: String,
+        call: suspend (String) -> String?,
+    ): CuratorRecs {
         var attempt = 0
         while (true) {
             val raw = runCatching { call(requestJson) }
                 .onFailure { Log.w(TAG, "$logTag: volání backendu selhalo", it) }
-                .getOrNull() ?: return emptyList()
+                .getOrNull() ?: return CuratorRecs()
             val source = runCatching { JSONObject(raw).optString("source") }.getOrNull().orEmpty()
             val parsed = runCatching { parseItems(raw) }
                 .onFailure { Log.w(TAG, "$logTag: parse odpovědi selhal", it) }
-                .getOrNull() ?: return emptyList()
-            if (parsed.isNotEmpty()) return postProcess(parsed, taste)
+                .getOrNull() ?: return CuratorRecs()
+            if (parsed.isNotEmpty()) {
+                val all = postProcessKeepKnown(parsed)
+                val fresh = dropKnown(all, taste)
+                val freshKeys = fresh.mapNotNull { it.tmdbId }.toSet()
+                val known = all.filter { it.tmdbId != null && it.tmdbId !in freshKeys }
+                Log.i(TAG, "$logTag: ${fresh.size} nových, ${known.size} už známých")
+                return CuratorRecs(fresh = fresh, known = known)
+            }
             if (source == "pending" && pollUntilReady && attempt < PENDING_MAX_RETRIES) {
                 attempt++
                 delay(PENDING_RETRY_MS)
                 continue
             }
             Log.i(TAG, "$logTag: 0 položek (source=$source)")
-            return emptyList()
+            return CuratorRecs()
         }
     }
 
     /** Enrich + věkový gate + skrytí nízko hodnocených/už známých. Sdílené pro první i re-poll odpověď. */
-    private suspend fun postProcess(parsed: List<MediaItem>, taste: TastePayload): List<MediaItem> {
+    private suspend fun postProcess(parsed: List<MediaItem>, taste: TastePayload): List<MediaItem> =
+        dropKnown(postProcessKeepKnown(parsed), taste)
+            .also { Log.i(TAG, "forYou: ${it.size} položek") }
+
+    /**
+     * Obohacení + věkový gate + skryt nízko hodnocených — ale BEZ filtru „co už znám". Odděleno kvůli
+     * sekci „Podle filmu": tam se filtr známých musí dát vypnout, jinak divákovi s velkou historií
+     * vypadne celý výsledek (user 2026-08-01: pro Splitsville vrátil server 12 titulů a appka ukázala
+     * „Nic nového nevypadlo" — všech 12 měl viděných/hodnocených).
+     */
+    private suspend fun postProcessKeepKnown(parsed: List<MediaItem>): List<MediaItem> {
         val enriched = enricher.enrich(parsed, withCertification = capAge() != null)
         // BESPOKE F3 — tvrdý skryt nízko hodnocených (≤4 hvězdy) titulů ze sekce „Pro tebe".
         val disliked = userRatingStore.items.value.filter { it.stars <= AVOID_MAX }
             .mapNotNull { it.tmdbId }.toSet()
         return ContentAgeGate.filter(capAge(), enriched, hideUnrated())
             .filterNot { it.tmdbId != null && it.tmdbId in disliked }
-            // User 2026-07-17: nedoporučuj, co už uživatel zná (zhlédnuté ∪ watchlist ∪ hodnocené).
-            .filterNot { it.tmdbId != null && it.tmdbId in taste.knownIds }
-            .also { Log.i(TAG, "forYou: ${it.size} položek") }
     }
+
+    /** User 2026-07-17: nedoporučuj, co už uživatel zná (zhlédnuté ∪ watchlist ∪ hodnocené). */
+    private fun dropKnown(items: List<MediaItem>, taste: TastePayload): List<MediaItem> =
+        items.filterNot { it.tmdbId != null && it.tmdbId in taste.knownIds }
 
     /** Sestaví taste payload z Traktu (watched+plays, ratings, watchlist) + Favorites. */
     private suspend fun buildTaste(): TastePayload = coroutineScope {
@@ -449,3 +489,16 @@ class CuratorLoader @Inject constructor(
         const val PENDING_RETRY_MS = 6_000L
     }
 }
+
+/**
+ * Výsledek kurátora rozdělený podle toho, jestli titul divák UŽ ZNÁ (viděl / hodnotil / má ve
+ * watchlistu). Vzniklo 2026-08-01: sekce „Podle filmu" hlásila „Nic nového nevypadlo", i když server
+ * poslal dvanáct trefných titulů — jen je divák všechny znal. Prázdná obrazovka je horší odpověď než
+ * „tohle sedí, ale už jsi to viděl", takže o rozdělení rozhoduje až UI, ne loader.
+ */
+data class CuratorRecs(
+    /** Tituly, které divák nezná — přednostní obsah sekce. */
+    val fresh: List<MediaItem> = emptyList(),
+    /** Trefy, které už zná (viděné/hodnocené/watchlist). Ukazují se označené, ne místo [fresh]. */
+    val known: List<MediaItem> = emptyList(),
+)

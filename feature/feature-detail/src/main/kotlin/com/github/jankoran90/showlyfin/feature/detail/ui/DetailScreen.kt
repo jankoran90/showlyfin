@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MovieFilter
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -128,6 +129,9 @@ fun DetailScreen(
     // ORCHARD (user 07-19, Filmy) — cast NEMÁ samostatné tlačítko, akce „Přehrát na TV" jde do ⋮ menu. Jen Filmy
     // (showlyfin default false = ikona Cast vedle Přehrát beze změny).
     castInOverflow: Boolean = false,
+    // user 2026-08-01 („doporučení by mohlo být v menu karty filmu") — akce „Doporuč podobné" v ⋮:
+    // vezme TENHLE titul jako referenci a otevře sekci „Podle filmu". null = shell ji nenapojil (TV).
+    onSimilar: ((MediaItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -466,6 +470,7 @@ fun DetailScreen(
                         isTogglingWatchlist = uiState.isTogglingWatchlist,
                         onWatchlist = { viewModel.toggleWatchlist() },
                         onShare = onShareCard,
+                        onSimilar = onSimilar?.let { cb -> { cb(displayItem) } },
                         castInOverflow = castInOverflow,
                     )
                 },
@@ -818,6 +823,8 @@ private fun DetailActionBar(
     isTogglingWatchlist: Boolean,
     onWatchlist: () -> Unit,
     onShare: (() -> Unit)? = null,
+    /** „Doporuč podobné" — tenhle titul jako reference pro kurátora (user 2026-08-01). null = skryto. */
+    onSimilar: (() -> Unit)? = null,
     castInOverflow: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -903,6 +910,14 @@ private fun DetailActionBar(
                     leadingIcon = { Icon(Icons.Default.Download, null) },
                     onClick = { menuOpen = false; onDownload() },
                 )
+                // user 2026-08-01: doporučení má být po ruce přímo u filmu, ne jen v samostatné sekci.
+                if (onSimilar != null) {
+                    DropdownMenuItem(
+                        text = { Text("Doporuč podobné") },
+                        leadingIcon = { Icon(Icons.Default.MovieFilter, null) },
+                        onClick = { menuOpen = false; onSimilar() },
+                    )
+                }
                 // FILMYCAST — přesunuto z ⋮ menu pod Cast tlačítko (viz `onTv` výše). User: akci chci pod cast button.
                 if (onShare != null) {
                     DropdownMenuItem(
