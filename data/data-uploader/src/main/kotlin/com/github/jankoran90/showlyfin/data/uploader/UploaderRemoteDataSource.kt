@@ -63,6 +63,8 @@ interface UploaderRemoteDataSource {
     // LAPIDARY (SHW-96) — vzácné klenoty. cacheOne = watchlist/favorite trigger (fire-and-forget, backend běží na pozadí,
     // po nacachování zapíše auto-WorkingSource do profilu). gemsCatalog = obsah sekce (raw JSON {"items":[…]}), null při chybě.
     suspend fun gemsCacheOne(baseUrl: String, sessionCookie: String, imdb: String, tmdb: Long, profile: String, policy: String, title: String, year: Int?)
+    // SEZONA (SHW-113) f3 — najdi zdroj pro CELOU sezónu seriálu (přednostně cached balík) a zapiš do profilu.
+    suspend fun gemsCacheSeason(baseUrl: String, sessionCookie: String, imdb: String, tmdb: Long, profile: String, policy: String, title: String, year: Int?, season: Int)
     // CATALOGUE (SHW-98) — batch = zařaď celý chybějící watchlist do serverové fronty (auto-retry na pozadí),
     // vrací počet NOVĚ zařazených. status = kolik ještě ve frontě čeká pro profil (null při chybě/nedostupnosti).
     suspend fun gemsCacheBatch(baseUrl: String, sessionCookie: String, bodyJson: String): Int

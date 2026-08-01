@@ -907,10 +907,22 @@ class DetailViewModel @Inject constructor(
                 )
             }
             // LAPIDARY (SHW-96): úspěšné PŘIDÁNÍ filmu do „chci vidět" = vědomý signál → nacachuj zdroj
-            // na pozadí (backend zapíše auto-WorkingSource → instant-play). Jen film (backend jede „movie").
+            // na pozadí (backend zapíše auto-WorkingSource → instant-play).
             if (ok && !currentlyIn && item.type == MediaType.MOVIE) {
                 workingSourceStore.triggerAutoCache(
                     item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+                )
+            }
+            // SEZONA (SHW-113) f3 — totéž pro SERIÁL, jen se hledá zdroj pro CELOU SEZÓNU (přednostně
+            // nacachovaný balík). Dřív se seriál do auto-hledání vůbec nedostal (backend jel jen „movie"),
+            // takže po přidání do „Chci vidět" se nestalo nic. Sezóna = ta právě vybraná, jinak první.
+            if (ok && !currentlyIn && item.type == MediaType.SHOW) {
+                val season = _uiState.value.selectedSeason
+                    ?: _uiState.value.seasons.firstOrNull { s -> s.season_number >= 1 }?.season_number
+                    ?: 1
+                workingSourceStore.triggerSeasonCache(
+                    item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title,
+                    item.year, cachePolicy(), season,
                 )
             }
             // COUCH: watchlist se změnil → domov přenačte Trakt řady (jinak čerstvý titul naskočí jen v sekci Trakt).

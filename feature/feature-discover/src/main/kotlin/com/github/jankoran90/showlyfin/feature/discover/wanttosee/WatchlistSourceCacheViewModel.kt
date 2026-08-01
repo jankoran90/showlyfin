@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -53,6 +54,29 @@ class WatchlistSourceCacheViewModel @Inject constructor(
         }
     }
 
+    /**
+     * SEZONA (SHW-113) f3 — dohledej zdroj PRVNÍ SEZÓNY pro seriály z „Chci vidět", které ho ještě nemají.
+     * Zdroj se hledá jako balík celé sezóny, takže celá sezóna běží na JEDNOM releasu (a tím i na jedněch
+     * titulcích se stejným časováním — to byl userův hlavní důvod, 2026-08-01).
+     * Nebere víc než [SHOWS_CAP] seriálů najednou: každý dotaz jde na RD a fronta pro ně (zatím) není.
+     */
+    private suspend fun backfillShows(policy: String) {
+        val shows = runCatching { traktRowLoader.watchlist("shows") }.getOrElse { return }
+        val missing = shows.filter {
+            it.imdbId != null && workingSourceStore.getSeason(it.imdbId, it.tmdbId, 1) == null
+        }
+        if (missing.isEmpty()) return
+        Timber.i("[SEZONA] backfill seriálů: %d bez zdroje sezóny (beru max %d)", missing.size, SHOWS_CAP)
+        for (s in missing.take(SHOWS_CAP)) {
+            runCatching {
+                workingSourceStore.triggerSeasonCache(s.imdbId, s.tmdbId, s.title, s.year, policy, season = 1)
+            }.onFailure { Timber.w(it, "[SEZONA] zdroj sezóny pro '%s' selhal", s.title) }
+        }
+        if (missing.size > SHOWS_CAP) {
+            Timber.i("[SEZONA] backfill seriálů: %d zbývá na příště (strop)", missing.size - SHOWS_CAP)
+        }
+    }
+
     fun runBackfill() {
         if (_state.value is State.Running) return
         viewModelScope.launch {
@@ -73,6 +97,11 @@ class WatchlistSourceCacheViewModel @Inject constructor(
             // Jeden batch → server frontu převezme a maká sám (auto-retry). Pak sleduj kolik ubývá.
             workingSourceStore.cacheBatch(items, policy)
             startPolling(total = missing.size)
+            // SEZONA (SHW-113) f3 — SERIÁLY z „Chci vidět" (user 2026-08-01: Bleach). Dosud sem vůbec
+            // nedorazily: tahá se watchlist „movies" a serverová fronta je filmová. Seriál potřebuje jiný
+            // dotaz (zdroj pro celou sezónu), takže jde mimo frontu — a hlavně mimo `total` výše, aby
+            // ukazatel průběhu nelhal o něčem, co se počítá jinde.
+            launch { backfillShows(policy) }
         }
     }
 
@@ -101,5 +130,9 @@ class WatchlistSourceCacheViewModel @Inject constructor(
 
     private companion object {
         const val POLL_MS = 8000L
+
+        /** SEZONA f3: kolik seriálů dohledat v jednom kole. Každý dotaz jde na RD a fronta
+         *  pro seriály zatím není — radši míň a spolehlivě než zahltit backend. */
+        const val SHOWS_CAP = 5
     }
 }

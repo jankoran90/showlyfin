@@ -20,6 +20,12 @@ data class UploaderStreamQuality(
     val seeders: Int? = null,
     val fps: Double? = null,
     @SerializedName("durationS") val durationS: Double? = null,
+    // SEZONA (SHW-113) — zdroj je soubor uvnitř BALÍKU CELÉ SEZÓNY (jeden torrent = všechny díly).
+    @SerializedName("seasonPack") val seasonPack: Boolean = false,
+    // Velikost CELÉHO balíku v GB. 🔬 Ověřeno na Bleach 2026-08-01: u addonů bez `infoHash` (AIOStreams
+    // vrací proxy URL) je tohle číslo nejpřesnější otisk TÉHOŽ torrentu — „1.34 GB / 39.7 GB" u E1
+    // a „1.4 GB / 39.7 GB" u E2 je jeden a týž balík. Trefa byla přesně jedna, žádný falešný poplach.
+    @SerializedName("packSizeGB") val packSizeGB: Double? = null,
 )
 
 data class UploaderStream(

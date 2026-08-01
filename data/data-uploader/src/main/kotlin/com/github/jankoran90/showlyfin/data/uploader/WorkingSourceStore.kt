@@ -285,6 +285,18 @@ class WorkingSourceStore @Inject constructor(
     }
 
     /**
+     * SEZONA (SHW-113) f3 — najdi na serveru zdroj pro CELOU SEZÓNU seriálu (přednostně nacachovaný balík)
+     * a ulož ho do profilu jako zdroj sezóny. Klíč zápisu je `s<N>`, takže se sem vrátí běžným syncem
+     * a `getSeason` ho pak najde. Smysl: JEDEN release na celou sezónu = stabilní časování titulků.
+     */
+    suspend fun triggerSeasonCache(imdb: String?, tmdb: Long?, title: String, year: Int?, policy: String, season: Int) {
+        val im = imdb?.takeIf { it.startsWith("tt") } ?: return
+        val key = profileKey(); val base = serverBase()
+        if (key.isBlank() || base.isBlank()) return
+        uploaderDs.gemsCacheSeason(base, serverCookie(), im, tmdb ?: 0L, key, policy, title, year, season)
+    }
+
+    /**
      * CATALOGUE (SHW-98) — zařaď CELÝ chybějící watchlist do serverové fronty backfillu NAJEDNOU. Server pak
      * dohledává na pozadí s auto-retry (přes hodiny, i po zavření appky) — nahrazuje spamování N× cache-one, co
      * se po pár filmech zaseklo a muselo se ručně restartovat. Vrací počet nově zařazených.

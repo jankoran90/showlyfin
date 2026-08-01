@@ -20,7 +20,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 object SeasonSourceMatcher {
 
     /** Jak jistá je shoda kandidáta s recepturou sezóny. Pořadí = priorita výběru. */
-    enum class Confidence { PACK, RECIPE, QUALITY }
+    enum class Confidence { PACK, PACK_SIZE, RECIPE }
 
     data class Match(val stream: UploaderStream, val confidence: Confidence)
 
@@ -46,27 +46,42 @@ object SeasonSourceMatcher {
                 ?.let { return Match(it, Confidence.PACK) }
         }
 
-        // 2) Táž receptura — stejný addon, release grupa i rozlišení. Pokrývá jak balíky bez otisku
-        //    (AIOStreams), tak sezóny vydané po dílech od jedné grupy (což je pro diváka totéž:
-        //    stejná kvalita, stejný zvuk, stejné časování titulků).
+        // 2) Táž CELKOVÁ VELIKOST BALÍKU = fakticky tentýž torrent, i když otisk chybí (AIOStreams vrací
+        //    proxy URL bez `infoHash`). 🔬 Ověřeno na Bleach: „1.34 GB / 39.7 GB" u E1 a „1.4 GB / 39.7 GB"
+        //    u E2 je jeden balík; hledání podle 39.7 GB vrátilo přesně JEDEN zdroj, žádný falešný poplach.
+        val packSize = seasonSource.quality.packSizeGB
+        if (packSize != null && packSize > 0) {
+            usable.firstOrNull {
+                val p = it.quality.packSizeGB
+                p != null && kotlin.math.abs(p - packSize) < 0.3
+            }?.let { return Match(it, Confidence.PACK_SIZE) }
+        }
+
+        // 3) Táž receptura — stejný addon, release grupa i rozlišení. Pokrývá sezóny vydané po dílech
+        //    od jedné grupy (pro diváka totéž: stejná kvalita, zvuk i časování titulků).
         val group = releaseGroup(seasonSource)
         val res = seasonSource.quality.resolution?.lowercase()
         if (group != null) {
             usable.firstOrNull {
                 sameAddon(it, seasonSource) &&
                     releaseGroup(it) == group &&
-                    (res == null || it.quality.resolution?.lowercase() == res)
+                    (res == null || it.quality.resolution?.lowercase() == res) &&
+                    sameAudio(it, seasonSource)
             }?.let { return Match(it, Confidence.RECIPE) }
         }
 
-        // 3) Poslední úroveň — týž addon a totéž rozlišení. Bez grupy je to volnější, ale pořád je to
-        //    vědomá volba diváka („4K z AIOStreams"), ne náhodný zdroj z vrchu seznamu.
-        if (res != null) {
-            usable.firstOrNull {
-                sameAddon(it, seasonSource) && it.quality.resolution?.lowercase() == res
-            }?.let { return Match(it, Confidence.QUALITY) }
-        }
+        // 🔴 ŽÁDNÁ VOLNĚJŠÍ ÚROVEŇ. Dřív tu bylo „týž addon + totéž rozlišení" a na Bleach to selhalo
+        // přesně tak, jak nemá: u dílů, kde původní balík nabízený není, to sáhlo po JINÉM 1080p balíku
+        // s FRANCOUZSKÝM zvukem. Divák chtěl jeden release kvůli titulkům — podstrčit mu cizí jazyk je
+        // horší než se zeptat. Když nic nesedí, vrátíme null a otevře se normální výběr zdrojů.
         return null
+    }
+
+    /** Shodná zvuková stopa? Neznámý jazyk na obou stranách bereme jako shodu (fail-open u strohých popisů). */
+    private fun sameAudio(a: UploaderStream, b: UploaderStream): Boolean {
+        val la = a.quality.audioLanguage?.uppercase()
+        val lb = b.quality.audioLanguage?.uppercase()
+        return la == null || lb == null || la == lb
     }
 
     /** Hraje hned? Cached na RD nebo sdilej (jede přes náš proxy). Necachovaný torrent = ne. */

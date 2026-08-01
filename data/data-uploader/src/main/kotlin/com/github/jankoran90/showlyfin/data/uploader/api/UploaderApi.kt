@@ -303,6 +303,27 @@ internal class UploaderApi(
         runCatching { service.gemsCacheOne("$base/gems/cache-one?$q", cookie, body) }
     }
 
+    override suspend fun gemsCacheSeason(
+        baseUrl: String, sessionCookie: String, imdb: String, tmdb: Long,
+        profile: String, policy: String, title: String, year: Int?, season: Int,
+    ) {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val q = buildList {
+            add("imdb=${enc(imdb)}")
+            if (tmdb > 0) add("tmdb=$tmdb")
+            if (profile.isNotBlank()) add("profile=${enc(profile)}")
+            add("policy=${enc(policy)}")
+            if (title.isNotBlank()) add("title=${enc(title)}")
+            if (year != null) add("year=$year")
+            add("season=$season")
+        }.joinToString("&")
+        val body = "".toRequestBody("application/json; charset=utf-8".toMediaType())
+        // SEZONA (SHW-113) f3: server najde zdroj pro CELOU sezónu (přednostně cached balík) a zapíše ho
+        // do profilu pod `epKey = s<N>`; appka si ho stáhne běžným syncem. Fire-and-forget jako cache-one.
+        runCatching { service.gemsCacheOne("$base/gems/cache-season?$q", cookie, body) }
+    }
+
     // CATALOGUE (SHW-98) — dávkové zařazení watchlistu do serverové fronty backfillu; vrací počet nově zařazených.
     override suspend fun gemsCacheBatch(baseUrl: String, sessionCookie: String, bodyJson: String): Int {
         val base = baseUrl.trimEnd('/')
