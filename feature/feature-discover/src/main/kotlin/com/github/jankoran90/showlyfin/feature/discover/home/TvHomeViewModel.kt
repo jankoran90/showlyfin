@@ -91,6 +91,8 @@ class TvHomeViewModel @Inject constructor(
     private val filmotekaBase: com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaBaseLoader,
     // VLTAVA F6c — ČT pořady z Filmotéky do řady „Další díly" (Jellyfin část zůstává, ČT se připojí za ni).
     private val ctvNextUp: CtvNextUpLoader,
+    // SEZONA f3c — seriály ze STREAMU do téže řady (jejich rozkoukanost je v Traktu, ne v knihovně).
+    private val streamNextUp: StreamNextUpLoader,
     // Poslední obsah řad z disku → domov ukáže něco HNED a síť ho jen přepíše (user 2026-07-29).
     private val rowCache: HomeRowCache,
     // VLTAVA F6c — zhlédnuté ČT díly řídí, co ukáže řada „Další díly" → musí ji přenačíst.
@@ -278,6 +280,7 @@ class TvHomeViewModel @Inject constructor(
     /** Přenačti řady, kam patří ČT „další díly" (zahodí i cache loaderu). */
     private fun invalidateCtvNextUpRow() {
         ctvNextUp.invalidate()
+        streamNextUp.invalidate()      // SEZONA f3c: v téže řadě jsou i seriály ze streamu
         val configs = rowConfigs.value.filter {
             it.source == HomeRowSourceType.NEXT_UP || it.source == HomeRowSourceType.CONTINUE_WATCHING_COMBINED
         }
@@ -290,6 +293,7 @@ class TvHomeViewModel @Inject constructor(
         val cfg = rowConfigs.value.firstOrNull { it.source == HomeRowSourceType.FILMOTEKA_RECENT } ?: return
         filmotekaBase.invalidateRecent()
         ctvNextUp.invalidate()
+        streamNextUp.invalidate()
         loadedHash.remove(cfg.id)
         ensureRowLoaded(cfg)
     }
@@ -397,7 +401,7 @@ class TvHomeViewModel @Inject constructor(
         }
         HomeRowSourceType.NEXT_UP -> loadJellyfin(config) { userUuid ->
             nextUpItems(userUuid, config.limit, jellyfinLibraryUuids())
-        } + ctvNextUp.load(config.limit)
+        } + ctvNextUp.load(config.limit) + streamNextUp.load(config.limit)
         // Sloučené Pokračovat + Další díly — resume má přednost, dedup dle seriálu/položky.
         HomeRowSourceType.CONTINUE_WATCHING_COMBINED -> loadJellyfin(config) { userUuid ->
             val libs = jellyfinLibraryUuids()
@@ -405,7 +409,7 @@ class TvHomeViewModel @Inject constructor(
             (resumeItems(userUuid, config.limit, libs) + nextUpItems(userUuid, config.limit, libs))
                 .filter { dto -> seen.add((dto.seriesId ?: dto.id).toString()) }
                 .take(config.limit)
-        } + ctvNextUp.load(config.limit)
+        } + ctvNextUp.load(config.limit) + streamNextUp.load(config.limit)
         // „Nejnovější v <knihovna>" — getLatestMedia pro konkrétní knihovnu. Gate na whitelist (nezobrazuj
         // nezvolené knihovny — user 07-19).
         HomeRowSourceType.RECENTLY_ADDED -> {
