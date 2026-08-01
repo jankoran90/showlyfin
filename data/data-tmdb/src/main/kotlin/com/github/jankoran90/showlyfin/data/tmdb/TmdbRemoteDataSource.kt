@@ -5,6 +5,8 @@ import com.github.jankoran90.showlyfin.data.tmdb.model.*
 interface TmdbRemoteDataSource {
     suspend fun fetchMovieDetails(tmdbId: Long, language: String? = null): TmdbMovieDetails?
     suspend fun fetchShowDetails(tmdbId: Long, language: String? = null): TmdbShowDetails?
+    /** SEZONA (SHW-113): imdb id seriálu (`tv/{id}` ho nenese, jen `external_ids`). null = nemá/chyba. */
+    suspend fun fetchShowImdbId(tmdbId: Long): String?
     /** COUCH (SHW-88) — číselná věková hranice z TMDB certifikace (CZ→SK→DE→GB→US). null = neznámá. */
     suspend fun fetchMovieCertificationAge(tmdbId: Long): Int?
     suspend fun fetchShowCertificationAge(tmdbId: Long): Int?

@@ -14,6 +14,12 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
         try { if (tmdbId <= 0) null else service.fetchShowDetails(tmdbId, language) }
         catch (e: Throwable) { null }
 
+    override suspend fun fetchShowImdbId(tmdbId: Long): String? =
+        try {
+            if (tmdbId <= 0) null
+            else service.fetchShowExternalIds(tmdbId).imdb_id?.takeIf { it.startsWith("tt") }
+        } catch (e: Throwable) { null }
+
     override suspend fun fetchMovieCertificationAge(tmdbId: Long): Int? =
         try {
             if (tmdbId <= 0) null

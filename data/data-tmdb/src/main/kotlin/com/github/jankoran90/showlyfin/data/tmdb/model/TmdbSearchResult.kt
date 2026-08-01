@@ -32,6 +32,17 @@ data class TmdbFindResponse(
     val tv_results: List<TmdbSearchShowItem> = emptyList(),
 )
 
+/**
+ * SEZONA (SHW-113) — TMDB `tv/{id}/external_ids`. **Detail seriálu (`tv/{id}`) `imdb_id` NEVRACÍ**, na
+ * rozdíl od detailu filmu. Bez tohohle dotazu zůstal seriál otevřený z Hledat bez `imdbId` a celý
+ * stream flow ho odmítl hláškou „Uploader není nastaven nebo film nemá IMDB ID" (user, screenshot
+ * 2026-08-01 11:11) — přestože zdroje k dispozici byly.
+ */
+data class TmdbExternalIds(
+    val imdb_id: String? = null,
+    val tvdb_id: Long? = null,
+)
+
 data class TmdbSearchShowItem(
     val id: Long,
     val name: String? = null,

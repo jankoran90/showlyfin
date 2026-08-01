@@ -364,8 +364,16 @@ class DetailViewModel @Inject constructor(
                         coroutineScope {
                             val detailsDeferred = async { tmdbApi.fetchShowDetails(tmdbId, "cs-CZ") }
                             val translationDeferred = async { tmdbApi.fetchShowTranslation(tmdbId, "cs") }
+                            // SEZONA (SHW-113): imdb id seriálu. `tv/{id}` ho NENESE (film ano) → seriál
+                            // otevřený z Hledat zůstal bez `imdbId` a stream flow ho odmítl hláškou
+                            // „Uploader není nastaven nebo film nemá IMDB ID" (user, screenshot 11:11),
+                            // i když zdroje existují. Tahá se paralelně, ať detail nečeká.
+                            val imdbDeferred = async {
+                                if (item.imdbId.isNullOrBlank()) tmdbApi.fetchShowImdbId(tmdbId) else null
+                            }
                             val details = detailsDeferred.await()
                             val translation = translationDeferred.await()
+                            val showImdb = imdbDeferred.await()
                             val tmdbCzTitle = translation?.name?.takeIf { it.isNotBlank() }
                             if (tmdbCzTitle != null) resolvedCzTitle = tmdbCzTitle
                             _uiState.update { st ->
@@ -382,6 +390,8 @@ class DetailViewModel @Inject constructor(
                                     // přes trakt/tmdb id (ne title), takže je to bezpečné.
                                     item = item.copy(
                                         title = details?.name?.takeIf { n -> n.isNotBlank() } ?: item.title,
+                                        // SEZONA: backfill imdb z `external_ids` → zdroje i titulky dílů mají podle čeho hledat.
+                                        imdbId = item.imdbId?.takeIf { id -> id.isNotBlank() } ?: showImdb,
                                         // FIX: viz movie větev — null z transient failu nepřepíše dodaný poster/backdrop.
                                         posterPath = details?.poster_path ?: item.posterPath,
                                         backdropPath = details?.backdrop_path ?: item.backdropPath,

@@ -26,6 +26,10 @@ interface TmdbService {
     @GET("movie/{tmdbId}/release_dates")
     suspend fun fetchMovieReleaseDates(@Path("tmdbId") tmdbId: Long): TmdbReleaseDatesResponse
 
+    // SEZONA (SHW-113): imdb id seriálu. `tv/{id}` ho NENESE (na rozdíl od `movie/{id}`), je jen tady.
+    @GET("tv/{tmdbId}/external_ids")
+    suspend fun fetchShowExternalIds(@Path("tmdbId") tmdbId: Long): TmdbExternalIds
+
     @GET("tv/{tmdbId}/content_ratings")
     suspend fun fetchShowContentRatings(@Path("tmdbId") tmdbId: Long): TmdbContentRatingsResponse
 
