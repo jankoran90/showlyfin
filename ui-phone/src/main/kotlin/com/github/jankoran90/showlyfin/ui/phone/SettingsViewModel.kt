@@ -449,6 +449,10 @@ class SettingsViewModel @Inject constructor(
     fun setSourceSkCzFallback(v: Boolean) = updateSourcePrefs { it.copy(allowSkCzFallback = v) }
     fun setSourceSdilejFallback(v: Boolean) = updateSourcePrefs { it.copy(allowSdilejFallback = v) }
 
+    // SEZONA f3b — chování auto-hledání U SERIÁLŮ (na filmy nemá vliv).
+    fun setPreferSubtitledRelease(v: Boolean) = updateSourcePrefs { it.copy(preferSubtitledRelease = v) }
+    fun setPreferSeasonPacks(v: Boolean) = updateSourcePrefs { it.copy(preferSeasonPacks = v) }
+
     fun setSkipSeconds(v: Int) = updateListen { skipSeconds = v }
     fun setRememberSpeed(v: Boolean) = updateListen { rememberSpeed = v }
     fun setDefaultSpeed(v: Float) = updateListen { defaultSpeed = v }

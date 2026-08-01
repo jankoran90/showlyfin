@@ -353,6 +353,27 @@ internal fun SourceSelectionSection(prefs: SourcePrefs, viewModel: SettingsViewM
             FilterSwitchRow("Krajní fallback: Sdílej.cz (CZ dabing)", prefs.allowSdilejFallback) {
                 viewModel.setSourceSdilejFallback(it)
             }
+            Spacer(Modifier.height(12.dp))
+            // SEZONA f3b — chování jen pro SERIÁLY. Odděleno textem, ať je jasné, že se filmů netýká.
+            Text(
+                "Seriály",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "Časování titulků se váže na TYP releasu (BluRay / WEB / HDTV), ne na rozlišení. " +
+                    "Se zapnutou volbou vybere appka u seriálu radši release, ke kterému české titulky " +
+                    "existují — 4K bez titulků prohraje s 1080p, ke kterému titulky sedí.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            FilterSwitchRow("Preferovat release, ke kterému jsou CZ titulky", prefs.preferSubtitledRelease) {
+                viewModel.setPreferSubtitledRelease(it)
+            }
+            FilterSwitchRow("Preferovat balík celé sezóny (jeden release na díly)", prefs.preferSeasonPacks) {
+                viewModel.setPreferSeasonPacks(it)
+            }
         }
     }
 }

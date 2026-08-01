@@ -547,6 +547,15 @@ data class SourcePrefs(
     val allowSkCzFallback: Boolean = true,
     /** Povolit sdilej.cz (CZ dabing) jako KRAJNÍ fallback. */
     val allowSdilejFallback: Boolean = true,
+    /**
+     * SEZONA f3b — u SERIÁLŮ preferovat při auto-hledání ten release, ke kterému reálně existují české
+     * titulky (typ zdroje: BluRay / WEB / HDTV). Důvod (user 2026-08-01): časování titulků se váže na typ
+     * releasu, takže 2160p WEB bez titulků je horší volba než 1080p BluRay s nimi. Rozlišení tím netrpí —
+     * do kritéria vstupuje jen typ zdroje, ne počet pixelů. Vypni, když chceš vždycky nejvyšší kvalitu obrazu.
+     */
+    val preferSubtitledRelease: Boolean = true,
+    /** SEZONA f3b — u seriálů preferovat BALÍK celé sezóny (jeden torrent = jeden release na všechny díly). */
+    val preferSeasonPacks: Boolean = true,
 ) {
     companion object {
         val DEFAULT = SourcePrefs()
