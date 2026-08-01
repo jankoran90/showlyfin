@@ -508,7 +508,13 @@ class CuratorLoader @Inject constructor(
         const val KNOWN_TITLES_CAP = 120
         const val LOVE_MIN = 8      // Trakt rating (1-10) ≥ 8 = „miluje"
         const val AVOID_MAX = 4     // ≤ 4 = palec dolů → veto
-        const val PENDING_MAX_RETRIES = 8   // re-poll na `pending` (mozek ~30 s) → strop ~48 s
+        // 🔴 ZMĚŘENO 2026-08-01: „Podle filmu" vracelo prázdno, protože appka to VZDALA dřív, než mozek
+        // dopočítal. Server volaný týmž požadavkem jako z appky (count=30 + 120 názvů „co znám")
+        // potřeboval **83 s**, ale strop byl 8×6 s = 48 s → appka devětkrát dostala `pending` a skončila
+        // (potvrzeno v access logu: 9 volání po 6 s). Se seznamem známých je prompt delší, takže starý
+        // odhad „mozek ~30 s" už neplatí. Strop 25×6 s = **150 s**; výsledek se pak drží v cache, takže
+        // druhý dotaz na tutéž kombinaci je okamžitý.
+        const val PENDING_MAX_RETRIES = 25
         const val PENDING_RETRY_MS = 6_000L
     }
 }

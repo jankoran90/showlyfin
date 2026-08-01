@@ -175,7 +175,10 @@ fun FilmyReferenceScreen(
                 state.loadingResults && state.results.isEmpty() -> FilmyEmpty(
                     icon = Icons.Rounded.MovieFilter,
                     title = "Kurátor přemýšlí",
-                    text = "První výpočet pro nový výběr trvá i půl minuty — výsledek se pak drží v paměti a příště naskočí hned.",
+                    // Změřeno 2026-08-01: nová kombinace = 80–90 s (mozek dostává i seznam toho, co znáš).
+                    // Neslibuj půl minuty, ať to nevypadá, že se to zaseklo.
+                    text = "První výpočet pro novou kombinaci trvá minutu až dvě — mozek prochází i to, co už " +
+                        "znáš, aby ti to nenabízel. Výsledek se pak drží v paměti a příště naskočí hned.",
                 )
                 state.results.isNotEmpty() ->
                     if (viewMode == ViewMode.LIST) FilmyMediaList(state.results, onOpenDetail)
