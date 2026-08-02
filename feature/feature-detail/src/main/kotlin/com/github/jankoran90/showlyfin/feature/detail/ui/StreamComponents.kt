@@ -164,6 +164,7 @@ private val RE_PLATFORM = Regex(
     """(?i)\b(nf|netflix|amzn|amazon|dsnp|disney\+?|hmax|atvp|appletv|hulu|pcok|peacock|pmtp|paramount\+?|stan|crav|crunchyroll|cr)\b""")
 // Grupa stojí na konci názvu za pomlčkou (`…x264-ZoroSenpai.mkv`) — tenhle tvar drží celá scéna.
 private val RE_GROUP = Regex("""(?i)-([a-z0-9]{2,20})(?:\.(?:mkv|mp4|avi))?\s*$""")
+private val RE_TAGGED_GROUP = Regex("""🏷️?\s*([^\n🎬🍂🎞🎥🎧📦📊📡❌⚡🔍]{2,24})""")
 
 // `quality.source` ze serveru nese někdy TYP releasu („BluRay", „WEB-DL"), jindy jméno addonu
 // („AIOStreams", „ElfCache") — jako typ releasu se smí zobrazit jen to první.
@@ -199,7 +200,10 @@ private fun parsePlatform(t: String): String? = RE_PLATFORM.find(t)?.value?.lowe
 
 /** Release grupa (ZoroSenpai, RARBG, YTS…) — podle ní divák pozná, co je zavedené jméno. */
 private fun parseGroup(t: String): String? {
-    // Vezmi POSLEDNÍ řádek/token, který vypadá jako název souboru — popis od addonu je víceřádkový.
+    // AIOStreams uvádí grupu vlastní značkou („🏷️ ZoroSenpai"), ne scénovou pomlčkou — a přesně tenhle
+    // tvar má uživatel v seznamu nejčastěji, takže se ptáme na něj první.
+    RE_TAGGED_GROUP.find(t)?.groupValues?.get(1)?.trim()?.let { if (it.length >= 2) return it }
+    // Jinak scénový tvar: grupa na konci názvu souboru za pomlčkou.
     val line = t.split('\n', ' ').lastOrNull { it.contains('-') && RE_GROUP.containsMatchIn(it) } ?: return null
     val g = RE_GROUP.find(line)?.groupValues?.get(1) ?: return null
     // Ochrana proti chycení kodeku/rozlišení místo grupy (`…-1080p`, `…-x264`).

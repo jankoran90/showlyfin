@@ -556,6 +556,21 @@ data class SourcePrefs(
     val preferSubtitledRelease: Boolean = true,
     /** SEZONA f3b — u seriálů preferovat BALÍK celé sezóny (jeden torrent = jeden release na všechny díly). */
     val preferSeasonPacks: Boolean = true,
+    /**
+     * Smí release se sedícími titulky předběhnout ten, co hraje HNED? (user 2026-08-02, volba „kompromis")
+     *
+     * Když CZ titulky existují jen na release, který na RealDebridu ještě neleží, je to volba mezi
+     * „spustí se hned, ale titulky drhnou" a „chvíli počkáš a sedí". Zapnuto = počká se, ale jen když
+     * je zdroj ověřeně stažitelný a vejde se do stropu níž — jinak vyhraje ten, co hraje hned.
+     */
+    val subtitleFirstDownload: Boolean = true,
+    /** Strop pro čekání na stažení kvůli titulkům — samostatný film/díl (GB). */
+    val subtitleFirstMaxGB: Double = 8.0,
+    /**
+     * Strop pro BALÍK sezóny (GB) — vyšší schválně: balík se stáhne jednou a všechny další díly pak
+     * naskakují okamžitě a se stejným časováním titulků, takže se to čekání rozpustí přes celou sezónu.
+     */
+    val subtitleFirstMaxPackGB: Double = 25.0,
 ) {
     companion object {
         val DEFAULT = SourcePrefs()

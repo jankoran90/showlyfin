@@ -452,6 +452,9 @@ class SettingsViewModel @Inject constructor(
     // SEZONA f3b — chování auto-hledání U SERIÁLŮ (na filmy nemá vliv).
     fun setPreferSubtitledRelease(v: Boolean) = updateSourcePrefs { it.copy(preferSubtitledRelease = v) }
     fun setPreferSeasonPacks(v: Boolean) = updateSourcePrefs { it.copy(preferSeasonPacks = v) }
+    fun setSubtitleFirstDownload(v: Boolean) = updateSourcePrefs { it.copy(subtitleFirstDownload = v) }
+    fun setSubtitleFirstMaxGB(v: Double) = updateSourcePrefs { it.copy(subtitleFirstMaxGB = v) }
+    fun setSubtitleFirstMaxPackGB(v: Double) = updateSourcePrefs { it.copy(subtitleFirstMaxPackGB = v) }
 
     fun setSkipSeconds(v: Int) = updateListen { skipSeconds = v }
     fun setRememberSpeed(v: Boolean) = updateListen { rememberSpeed = v }

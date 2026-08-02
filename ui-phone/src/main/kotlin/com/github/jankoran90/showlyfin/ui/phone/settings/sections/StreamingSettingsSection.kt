@@ -40,6 +40,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -374,7 +375,61 @@ internal fun SourceSelectionSection(prefs: SourcePrefs, viewModel: SettingsViewM
             FilterSwitchRow("Preferovat balík celé sezóny (jeden release na díly)", prefs.preferSeasonPacks) {
                 viewModel.setPreferSeasonPacks(it)
             }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Titulky vs. okamžitý start (platí i pro filmy)",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "Když české titulky sedí jen na release, který ještě není stažený, dá mu appka přednost " +
+                    "před tím, co hraje hned — ale jen když se stáhne rychle. U balíku sezóny se čeká jednou " +
+                    "a další díly pak naskakují okamžitě, proto má vyšší strop.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            FilterSwitchRow("Počkat na stažení kvůli sedícím titulkům", prefs.subtitleFirstDownload) {
+                viewModel.setSubtitleFirstDownload(it)
+            }
+            if (prefs.subtitleFirstDownload) {
+                GbSliderRow(
+                    label = "Strop u filmu / jednoho dílu",
+                    value = prefs.subtitleFirstMaxGB,
+                    range = 1f..30f,
+                    onChange = { viewModel.setSubtitleFirstMaxGB(it) },
+                )
+                GbSliderRow(
+                    label = "Strop u balíku sezóny",
+                    value = prefs.subtitleFirstMaxPackGB,
+                    range = 5f..80f,
+                    onChange = { viewModel.setSubtitleFirstMaxPackGB(it) },
+                )
+            }
         }
+    }
+}
+
+/** Posuvník pro strop velikosti v GB — stejný tvar pro díl i balík, ať se to čte jako jedna volba. */
+@Composable
+private fun GbSliderRow(
+    label: String,
+    value: Double,
+    range: ClosedFloatingPointRange<Float>,
+    onChange: (Double) -> Unit,
+) {
+    Column(Modifier.padding(top = 4.dp)) {
+        Text(
+            "$label: ${"%.0f".format(value)} GB",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Slider(
+            value = value.toFloat().coerceIn(range),
+            onValueChange = { onChange(it.toDouble()) },
+            valueRange = range,
+            steps = 0,
+        )
     }
 }
 
