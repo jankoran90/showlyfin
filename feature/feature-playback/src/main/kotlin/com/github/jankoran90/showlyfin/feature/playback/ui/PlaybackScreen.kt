@@ -1109,7 +1109,12 @@ private fun SubtitleSettingsPanel(
             focusRequester = firstItemFocusRequester,
         )
         state.subtitleCandidates.forEachIndexed { i, c ->
-            val rel = c.release.ifBlank { c.title }
+            // 🔴 SEZONA (user 2026-08-02: *„názvy epizod a sezóny nejsou vidět, tak ani nelze mít jistotu,
+            // že jsou správné"*): u seriálu nese číslo dílu NÁZEV titulku („Bleach - 06"), zatímco `release`
+            // je jen holé jméno seriálu („Bleach") — dřív se zobrazoval release, takže se všechny řádky
+            // jmenovaly stejně a lišily se pouze počtem stažení. Název má proto přednost; release se
+            // neztrácí, jen se přesouvá do popisku pod ním (u filmů nese verzi jako `…1080p.BluRay`).
+            val rel = c.title.ifBlank { c.release }
             // Zdroj titulku z prefixu id (CAPTION/LINGUA): titulky.com → počet stažení; OS/AI → název zdroje.
             val src = when {
                 // SUBWEAVE B: oficiální OS API má prefix `osf_` (addon = `os_`) — obojí je OpenSubtitles.
@@ -1119,6 +1124,8 @@ private fun SubtitleSettingsPanel(
             }
             val meta = buildString {
                 if (c.imdbMatch) append("✓ ")
+                val relDetail = c.release.trim().takeIf { it.isNotBlank() && !rel.equals(it, ignoreCase = true) }
+                if (relDetail != null) append("${relDetail.take(40)} · ")
                 if (c.fps > 0) append("${c.fps} fps · ")
                 if (src.isNotBlank()) append(src) else append("${c.downloads}×")
             }

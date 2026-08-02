@@ -1338,6 +1338,30 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
+     * SEZONA (user 2026-08-02: *„zapamatování zdroje je u epizod asi zbytečné, hlavně má fungovat auto
+     * zdroj"*) — u DÍLU se zdroj ukládá POTICHU, bez dialogu „Fungoval tenhle zdroj?".
+     *
+     * Nesmí to ale zahodit mechaniku f3d: přes potvrzovací dialog dosud vedla JEDINÁ cesta, jak se
+     * osvědčený zdroj stal novou recepturou sezóny. Proto ji volá i tahle tichá varianta —
+     * `rememberSeasonRecipeFrom` si sám ohlídá, že jde o zdroj, který reálně hraje (`playsNow`),
+     * a že seriál nějakou recepturu už má.
+     */
+    private fun rememberEpisodeSourceSilently() {
+        val stream = lastPlayedStream ?: return
+        val selector = episodeSelector ?: return
+        if (sameSource(stream, _uiState.value.rememberedSource)) return
+        val st = _uiState.value
+        val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
+        workingSourceStore.save(
+            st.item?.imdbId, st.item?.tmdbId, title, stream,
+            season = selector.season, episode = selector.episode,
+        )
+        rememberSeasonRecipeFrom(stream)
+        _uiState.update { it.copy(rememberedSource = stream) }
+        timber.log.Timber.i("[SEZONA] zdroj dílu S%dE%d uložen potichu (bez dotazu)", selector.season, selector.episode)
+    }
+
+    /**
      * SEZONA f3d (user 2026-08-01: *„nerad bych každý díl řešil fallbacky"*) — zdroj, který se u DÍLU
      * osvědčil, se stává novou RECEPTUROU SEZÓNY.
      *
@@ -1969,7 +1993,14 @@ class DetailViewModel @Inject constructor(
             CastTarget.LOCAL -> {
                 // SIEVE S2: až teď (přehrávač se reálně spouští) nabídneme „tohle sedí? 👍" — po návratu
                 // na Detail. Nenabízíme u zdroje, který je už uložený jako fungující (žádné opakování).
-                val confirm = lastPlayedStream?.takeIf { !sameSource(it, _uiState.value.rememberedSource) }
+                // 🔴 SEZONA (user 2026-08-02): *„Objevuje se zapamatování zdroje, což je u epizod asi
+                // zbytečné, hlavně má fungovat auto zdroj."* U DÍLU se tedy neptáme — u seriálu je paměť
+                // věcí RECEPTURY SEZÓNY, kterou si automatika drží sama (f3d), a ptát se u každého dílu
+                // je jen otrava. Uložení proto proběhne potichu (viz níže), ne dialogem.
+                val isEpisode = episodeSelector != null
+                val confirm = lastPlayedStream
+                    ?.takeIf { !isEpisode && !sameSource(it, _uiState.value.rememberedSource) }
+                if (isEpisode) rememberEpisodeSourceSilently()
                 _uiState.update {
                     it.copy(
                         isResolvingStream = false, showStreamPicker = false,
