@@ -571,6 +571,17 @@ data class SourcePrefs(
      * naskakují okamžitě a se stejným časováním titulků, takže se to čekání rozpustí přes celou sezónu.
      */
     val subtitleFirstMaxPackGB: Double = 25.0,
+    /**
+     * SEZONA f3k — u DĚTSKÉHO profilu hledat přednostně na sdilej.cz (user 2026-08-02: *„může hledat
+     * přes aiotorrents, ale primárně přes sdilej.cz — tam jsou hlavně české zdroje a téměř vždy funkční
+     * přímý stream, žádné cachování přes RD"*).
+     *
+     * Věcný důvod navíc: **u sdilej se jazyk zvuku čte ffprobem skutečných stop souboru**, kdežto
+     * u torrentu se jen HÁDÁ z názvu releasu. Bez tohohle klíče vyhrával falešně-český 2160p torrent
+     * nad pravým českým 1080p, protože další kritérium po „CZ" je rozlišení. *Ověřený jazyk musí
+     * porazit hádaný.* Vypni, když chceš u dětí rozhodovat podle kvality obrazu.
+     */
+    val preferSdilejChild: Boolean = true,
 ) {
     companion object {
         val DEFAULT = SourcePrefs()

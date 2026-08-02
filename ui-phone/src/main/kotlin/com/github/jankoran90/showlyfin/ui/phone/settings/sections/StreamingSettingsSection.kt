@@ -196,6 +196,7 @@ internal fun StreamingSettingsSection(
                 var maxRes by remember { mutableStateOf(pp.getString(StreamPresetStore.KEY_MAXRES, StreamPresetStore.RES_ANY) ?: StreamPresetStore.RES_ANY) }
                 var cachedFirst by remember { mutableStateOf(pp.getBoolean(StreamPresetStore.KEY_CACHED_FIRST, true)) }
                 var preferBitstream by remember { mutableStateOf(pp.getBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.TV_PREFER_BITSTREAM_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_TV_PREFER_BITSTREAM)) }
+                var preferMostChannels by remember { mutableStateOf(pp.getBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.PREFER_MOST_CHANNELS_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS)) }
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.padding(16.dp)) {
                         ListenInfoText("Nastav jednou pro tohle zařízení a nesahej. V autě (slabý head unit, který seká na HEVC) zvol H.264 — appka pak při výběru zdroje preferuje H.264 verzi filmu, když existuje. Doma na TV/AVR nech Auto. Volba je jen na tomhle zařízení, ostatní se nezmění.")
@@ -234,6 +235,13 @@ internal fun StreamingSettingsSection(
                             pp.edit().putBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.TV_PREFER_BITSTREAM_KEY, v).apply()
                         }
                         ListenInfoText("Když má film víc zvukových stop a jedna je Dolby Digital/DD+/DTS/TrueHD, na TV ji vyber přednostně → AVR dostane bitstream (rozsvítí Dolby/DTS) místo dekódované PCM. Filmy jen s AAC beze změny (AAC nejde poslat jako bitstream). Projeví se při příštím přehrání.")
+                        Spacer(Modifier.height(8.dp))
+                        // SEZONA f3l — 5.1 před stereo v rámci TÉHOŽ jazyka (jen TV).
+                        FilterSwitchRow("TV: preferovat 5.1 před stereo", preferMostChannels) { v ->
+                            preferMostChannels = v
+                            pp.edit().putBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.PREFER_MOST_CHANNELS_KEY, v).apply()
+                        }
+                        ListenInfoText("Má-li film víc stop v tomtéž jazyce (třeba českou stereo i českou 5.1), na TV vyber tu s víc kanály. Jazyk se tím nemění, jen kvalita. Na telefonu se to nepoužije — tam je stereo správně. Projeví se při příštím přehrání.")
                     }
                 }
             }
@@ -374,6 +382,25 @@ internal fun SourceSelectionSection(prefs: SourcePrefs, viewModel: SettingsViewM
             }
             FilterSwitchRow("Preferovat balík celé sezóny (jeden release na díly)", prefs.preferSeasonPacks) {
                 viewModel.setPreferSeasonPacks(it)
+            }
+            Spacer(Modifier.height(12.dp))
+            // SEZONA f3k — dětský profil: sdilej.cz napřed. Blok patří k featuře (parita Nastavení).
+            Text(
+                "Dětský profil",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "U sdilej.cz appka zná zvukové stopy souboru přesně (přečte je ze souboru), " +
+                    "kdežto u torrentu je jen odhaduje z názvu. Proto se dětem hledá nejdřív tam — " +
+                    "ať dostanou opravdu český dabing, ne release, který má češtinu jen v názvu. " +
+                    "Torrenty zůstávají jako záloha.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            FilterSwitchRow("Dětem hledat přednostně na sdilej.cz", prefs.preferSdilejChild) {
+                viewModel.setPreferSdilejChild(it)
             }
             Spacer(Modifier.height(12.dp))
             Text(

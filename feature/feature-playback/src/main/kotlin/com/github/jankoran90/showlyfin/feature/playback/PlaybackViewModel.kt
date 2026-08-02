@@ -64,6 +64,10 @@ class PlaybackViewModel @Inject constructor(
             preferredAudioLanguages = prefs.getString(
                 com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.PREF_PREFERRED_AUDIO_LANGS, "",
             ).orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() },
+            // SEZONA f3l — 5.1 před stereo v rámci téhož jazyka (uplatní se jen na TV, viz PlaybackScreen).
+            preferMostChannels = prefs.getBoolean(
+                PlayerPrefs.PREFER_MOST_CHANNELS_KEY, PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS,
+            ),
         ),
     )
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()

@@ -551,11 +551,32 @@ fun PlaybackScreen(
                                 label = audioTrackLabel(g.getTrackFormat(i), i),
                                 supported = g.isTrackSupported(i),
                                 selected = g.isTrackSelected(i),
+                                language = g.getTrackFormat(i).language.orEmpty(),
+                                channelCount = g.getTrackFormat(i).channelCount.coerceAtLeast(0),
                             )
                         }
                     }
                 audioTracks = opts
                 val selected = opts.firstOrNull { it.selected }
+                // SEZONA f3l — mezi stopami TÉHOŽ jazyka vezmi tu s NEJVÍC KANÁLY (5.1 před stereo).
+                // 🔴 `setPreferredAudioLanguages` řeší jen JAZYK, takže mezi dvěma českými stopami
+                // rozhodlo pořadí v souboru — a stereo bývá první (user 19:18: *„jako první je v pořadí
+                // stopa česká stereo"*). Jen na TV: tam visí AVR/5.1 sestava, kdežto na telefonu je
+                // stereo správně (5.1 smíchané do dvou reproduktorů zhoršuje srozumitelnost dialogů).
+                // Jazyk vybraný přehrávačem se NEMĚNÍ — vylepšuje se jen kvalita v rámci téhož jazyka.
+                // 🔒 Jen když vybraná stopa jazyk SKUTEČNĚ hlásí: u netagovaných stop (`language` prázdný)
+                // by se „stejný jazyk" srovnal i s cizí stopou a divák by dostal jiný dabing.
+                if (isTv && state.preferMostChannels && selected != null && selected.supported &&
+                    selected.language.isNotBlank()
+                ) {
+                    val better = opts.filter {
+                        it.supported && it.language.equals(selected.language, ignoreCase = true)
+                    }.maxByOrNull { it.channelCount }
+                    if (better != null && !better.selected && better.channelCount > selected.channelCount) {
+                        applyAudio(better)
+                        audioNotice = "Zvuk: ${better.label}"
+                    }
+                }
                 if (opts.isNotEmpty() && (selected == null || !selected.supported)) {
                     val better = opts.firstOrNull { it.supported }
                     if (better != null && !better.selected) {
@@ -1348,6 +1369,11 @@ private data class AudioTrackOption(
     val label: String,
     val supported: Boolean,
     val selected: Boolean,
+    // SEZONA f3l (user 2026-08-02 19:18: *„doufám, že se automaticky vybere 5.1 čeština při přehrávání
+    // na TV; v mobilu to není třeba, ale jako první je v pořadí stopa česká stereo"*). Výběr stopy
+    // dosud řešil JEN jazyk — mezi dvěma českými stopami tedy rozhodlo POŘADÍ v souboru, ne kvalita.
+    val language: String = "",
+    val channelCount: Int = 0,
 )
 
 /** TEMPO: panel výběru zvukové stopy. Nepodporované stopy (DTS-HD/TrueHD na telefonu) jsou označené. */

@@ -34,6 +34,9 @@ data class PlaybackUiState(
     // na přehrávači (staré chování). 🔴 Právě to staré chování pouštělo u Breaking Bad německou stopu:
     // bez preference bere Media3 první stopu v pořadí, protože česká tam není a locale se netrefí.
     val preferredAudioLanguages: List<String> = emptyList(),
+    // SEZONA f3l — mezi stopami TÉHOŽ jazyka vzít tu s nejvíc kanály (5.1 před stereo). Jen na TV;
+    // viz [PlayerPrefs.PREFER_MOST_CHANNELS_KEY].
+    val preferMostChannels: Boolean = PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS,
 )
 
 /** Jeden titulkový blok (.srt) — renderujeme vlastním overlayem, takže posun/přepnutí stopy

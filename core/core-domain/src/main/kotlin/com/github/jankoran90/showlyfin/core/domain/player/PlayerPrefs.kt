@@ -47,6 +47,18 @@ object PlayerPrefs {
     const val DEFAULT_TV_PREFER_BITSTREAM = true
 
     /**
+     * SEZONA (SHW-113) f3l — mezi stopami TÉHOŽ jazyka vybrat tu s NEJVÍC KANÁLY (5.1 před stereo).
+     * User 2026-08-02 19:18: *„doufám, že se automaticky vybere 5.1 čeština při přehrávání na TV;
+     * v mobilu to není třeba, ale jako první je v pořadí stopa česká stereo."* Výběr stopy dosud řešil
+     * JEN jazyk ([AudioPathStore] → `setPreferredAudioLanguages`), takže mezi dvěma českými stopami
+     * rozhodlo POŘADÍ v souboru, ne kvalita — a stereo bývá první.
+     * Platí **jen na TV** (tam visí AVR / 5.1 sestava); na telefonu je stereo v pořádku a míchání 5.1
+     * do dvou reproduktorů zhoršuje srozumitelnost dialogů. `false` = ponech výběr na přehrávači.
+     */
+    const val PREFER_MOST_CHANNELS_KEY = "player_prefer_most_channels"
+    const val DEFAULT_PREFER_MOST_CHANNELS = true
+
+    /**
      * CURTAIN (SHW-109) — od kolika procent délky je titul „dokoukaný". Filmy i epizody končí titulky/upoutávkou,
      * kterou nikdo nedokouká, takže čekat na úplný konec = díl navždy visí jako rozkoukaný. Při dosažení prahu
      * se epizoda/film označí v Jellyfinu jako zhlédnutá ([WatchedReporter]) a zahodí se resume pozice.

@@ -453,6 +453,7 @@ class SettingsViewModel @Inject constructor(
     fun setPreferSubtitledRelease(v: Boolean) = updateSourcePrefs { it.copy(preferSubtitledRelease = v) }
     fun setPreferSeasonPacks(v: Boolean) = updateSourcePrefs { it.copy(preferSeasonPacks = v) }
     fun setSubtitleFirstDownload(v: Boolean) = updateSourcePrefs { it.copy(subtitleFirstDownload = v) }
+    fun setPreferSdilejChild(v: Boolean) = updateSourcePrefs { it.copy(preferSdilejChild = v) }
     fun setSubtitleFirstMaxGB(v: Double) = updateSourcePrefs { it.copy(subtitleFirstMaxGB = v) }
     fun setSubtitleFirstMaxPackGB(v: Double) = updateSourcePrefs { it.copy(subtitleFirstMaxPackGB = v) }
 
