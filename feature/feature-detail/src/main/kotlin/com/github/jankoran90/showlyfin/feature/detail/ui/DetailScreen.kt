@@ -483,6 +483,8 @@ fun DetailScreen(
                         // SEZONA f2: switch zvukové stopy v ⋮ (user 17:24 — chip pryč z těla karty).
                         audioChoice = uiState.audioChoice,
                         onAudioChoice = { viewModel.setAudioChoice(it) },
+                        hasShowSources = uiState.hasAnyShowSource,
+                        onForgetShowSources = { viewModel.forgetShowSources() },
                         castInOverflow = castInOverflow,
                     )
                 },
@@ -840,6 +842,9 @@ private fun DetailActionBar(
     // SEZONA (SHW-113) f2: přepínač zvukové stopy v ⋮ menu (platí za PROFIL). null = přepínač skrytý.
     audioChoice: AudioPathStore.Choice = AudioPathStore.Choice.ORIGINAL,
     onAudioChoice: ((AudioPathStore.Choice) -> Unit)? = null,
+    /** SEZONA: seriál má uložený zdroj u některé sezóny/dílu → nabídni zapomenutí i bez otevření dílu. */
+    hasShowSources: Boolean = false,
+    onForgetShowSources: (() -> Unit)? = null,
     castInOverflow: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -978,6 +983,16 @@ private fun DetailActionBar(
                         text = { Text("Odebrat zapamatovaný zdroj") },
                         leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                         onClick = { menuOpen = false; onRemoveRemembered() },
+                    )
+                }
+                // SEZONA (user 2026-08-02, Arcane: „Nikde nemám možnost"): u seriálu je zdroj uložený
+                // per sezóna/díl, takže `hasRemembered` je na kartě prázdné a volba výš se neukázala —
+                // a k té v seznamu zdrojů se divák nedostane, protože zapamatovaný díl hraje rovnou.
+                if (!inLibrary && !isMovie && hasShowSources && onForgetShowSources != null) {
+                    DropdownMenuItem(
+                        text = { Text("Zapomenout zdroje seriálu") },
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; onForgetShowSources() },
                     )
                 }
             }

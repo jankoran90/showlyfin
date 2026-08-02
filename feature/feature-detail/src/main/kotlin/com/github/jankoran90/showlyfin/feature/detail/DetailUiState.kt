@@ -181,6 +181,10 @@ data class DetailUiState(
         com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL,
     // SEZONA f2 — je pro TUTO sezónu uložený zdroj (receptura pro všechny díly)? Řídí popisek akce.
     val hasSeasonSource: Boolean = false,
+    // SEZONA — má seriál uložený JAKÝKOLI zdroj (kterákoli sezóna nebo díl)? Na rozdíl od
+    // `rememberedSource`, který se u seriálu naplní až po otevření konkrétního dílu, tohle platí
+    // hned po otevření karty — a proto podle toho smí menu karty nabídnout „zapomenout zdroje".
+    val hasAnyShowSource: Boolean = false,
     // Počet řádků popisu ve sbaleném stavu (Nastavení). 0 = bez omezení.
     val plotCollapsedLines: Int = 5,
     // TV DETAIL REDESIGN (OTA 299): rozvržení TV detailu + auto-kompakt popisu + umístění tlačítek.

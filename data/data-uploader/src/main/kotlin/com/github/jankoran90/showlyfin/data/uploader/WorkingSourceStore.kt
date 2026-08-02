@@ -632,6 +632,34 @@ class WorkingSourceStore @Inject constructor(
         pushToServer()
     }
 
+    /**
+     * SEZONA — zapomeň VŠECHNY uložené zdroje seriálu naráz (recepturu každé sezóny i jednotlivé díly).
+     *
+     * 🔴 Proč to musí jít jednou akcí (user 2026-08-02, Arcane): u seriálu je zdroj uložený zvlášť pro
+     * sezónu a zvlášť pro díl. Když se ukáže, že byl vybraný špatně, mazat je po jednom není únosné —
+     * a k tomu jedinému místu, kde to dosud šlo (křížek v seznamu zdrojů), se divák u dílu se
+     * zapamatovaným zdrojem vůbec nedostane, protože ten se přehraje rovnou a seznam se neotevře.
+     *
+     * Vrací počet zapomenutých záznamů.
+     */
+    fun clearShow(imdb: String?, tmdb: Long?): Int {
+        val records = getEpisodes(imdb, tmdb)
+        if (records.isEmpty()) return 0
+        val editor = prefs.edit()
+        for (r in records) {
+            val ep = r.epKey ?: continue
+            // Náhrobek dřív než push — jinak by se záznam vrátil ze serveru (týž pořádek jako v `clear`).
+            addTombstones(imdb, tmdb, ep)
+            if (tmdb != null && tmdb > 0L) editor.remove(tmdbKey(tmdb, ep))
+            if (!imdb.isNullOrBlank()) editor.remove(imdbKey(imdb, ep))
+        }
+        editor.apply()
+        refreshSavedKeys()
+        pushToServer()
+        Timber.i("[SEZONA] zapomenuty zdroje serialu (%d zaznamu)", records.size)
+        return records.size
+    }
+
     fun getEpisodes(imdb: String? = null, tmdb: Long? = null): List<WorkingSource> =
         allRecords().filter { r ->
             r.epKey != null &&

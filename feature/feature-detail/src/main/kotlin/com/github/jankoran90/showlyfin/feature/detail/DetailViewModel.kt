@@ -298,6 +298,9 @@ class DetailViewModel @Inject constructor(
                 // SEZONA f2: stav jazykového chipu (profilová volba, jinak výchozí podle věku profilu).
                 audioChoice = audioChoice(),
                 hasSeasonSource = false,
+                // U seriálu se `rememberedSource` naplní až po otevření dílu — tohle ví hned, takže
+                // menu karty může nabídnout „zapomenout zdroje" bez proklikávání se k epizodě.
+                hasAnyShowSource = workingSourceStore.getEpisodes(item.imdbId, item.tmdbId).isNotEmpty(),
                 // COMPASS C2: je tento film v Oblíbených?
                 isFavorite = item.tmdbId?.let {
                     favoritesStore.isFavorite(com.github.jankoran90.showlyfin.data.uploader.FavoriteKind.MOVIE, it)
@@ -1485,6 +1488,23 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
+     * SEZONA — zapomeň zdroje CELÉHO seriálu (všechny sezóny i díly), ne jen otevřeného dílu.
+     *
+     * User 2026-08-02 (Arcane): appce se ráno uložil zdroj, který se teprve stahoval na RD, a od té
+     * doby po něm sahala znovu. Odebrat ho ale nešlo — v menu karty volba nebyla (u seriálu je
+     * `rememberedSource` prázdný, dokud neotevřeš díl) a k seznamu zdrojů se u dílu se zapamatovaným
+     * zdrojem nedostaneš, protože ten hraje rovnou.
+     */
+    fun forgetShowSources() {
+        val item = _uiState.value.item ?: return
+        val n = workingSourceStore.clearShow(item.imdbId, item.tmdbId)
+        _uiState.update {
+            it.copy(rememberedSource = null, hasSeasonSource = false, hasAnyShowSource = false,
+                autoAdvanceInfo = if (n > 0) "Uložené zdroje seriálu zapomenuty" else null)
+        }
+    }
+
+    /**
      * Plan LEDGER (SHW-43): u zapamatovaného filmu „odstranit" = zruš pin A smaž jeho torrent
      * z RD účtu (na rozdíl od [forgetWorkingSource], které jen zapomene pin). Best-effort, tiché.
      */
@@ -2159,9 +2179,10 @@ class DetailViewModel @Inject constructor(
             uploaderBaseUrl.isNotBlank() && repackTriedUrls.add(playedUrl)
         ) {
             timber.log.Timber.i("[REPACK] $errorCode → zkouším přebalit tentýž zdroj místo skoku na jiný")
-            // Poznač si, že TENHLE zdroj se bez přebalu nepřehraje → příště jdeme rovnou na přebal
-            // a divák nečeká, až přehrávač znovu spadne (user: „to mi vadí, že to není plynulé").
-            lastPlayedStream?.let { repackNeededStore.remember(streamIdentity(it)) }
+            // Že se zdroj bez přebalu nepřehraje si poznamenáme AŽ podle verdiktu serveru (viz
+            // [repackAndPlay]) — ne tady. Formátová chyba totiž nemusí znamenat vadný soubor:
+            // 🔴 u Arcane S2E1 (2026-08-02) padl přehrávač na zdroji, který se teprve stahoval na RD,
+            // a appka si z toho odnesla trvalé „tenhle se musí přebalovat" na souboru, který je zdravý.
             repackAndPlay(playedUrl)
             return
         }
@@ -2205,6 +2226,20 @@ class DetailViewModel @Inject constructor(
                 _uiState.update { it.copy(isResolvingStream = false) }
                 advancePastSource("Přebal se nepovedl, zkouším další zdroj", CastTarget.LOCAL)
                 return@launch
+            }
+            // Teprve teď víme, jestli byl na vstupu opravdu vadný soubor. Když ano, příště jdeme rovnou
+            // na přebal a divák nečeká na pád (user: „to mi vadí, že to není plynulé"). Když ne, paměť
+            // naopak PROMAŽEME — jinak bychom zdravý zdroj přebalovali navždy kvůli jedné cizí příčině.
+            lastPlayedStream?.let { s ->
+                val identity = streamIdentity(s)
+                when (job.inputClean) {
+                    false -> repackNeededStore.remember(identity)
+                    true -> {
+                        repackNeededStore.forget(identity)
+                        timber.log.Timber.i("[REPACK] vstupní soubor byl v pořádku → zdroj si NEpamatuji jako vadný")
+                    }
+                    null -> Unit   // server neví (starší přebal) → paměť nechme, jak je
+                }
             }
             // `?key=` schválně — TV shell nemá cookie (týž vzor jako titulky / sdilej proxy).
             val base = uploaderBaseUrl.trimEnd('/')

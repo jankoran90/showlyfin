@@ -239,6 +239,17 @@ internal fun TvDetailActions(
                         onClick = { viewModel.removeRememberedSource() },
                     )
                 }
+                // SEZONA — parita s telefonem: u seriálu je zdroj uložený per sezóna/díl, takže
+                // `hasRemembered` na kartě nesvítí a bez tohohle by nešel odebrat vůbec (user 2026-08-02).
+                if (!hasRemembered && uiState.hasAnyShowSource) {
+                    TvActionButton(
+                        icon = Icons.Filled.Delete,
+                        label = "Zapomenout zdroje seriálu",
+                        primary = false,
+                        danger = true,
+                        onClick = { viewModel.forgetShowSources() },
+                    )
+                }
             }
         }
     }

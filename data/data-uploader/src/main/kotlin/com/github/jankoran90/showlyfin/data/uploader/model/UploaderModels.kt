@@ -565,6 +565,15 @@ data class RepackJob(
     val pct: Int = 0,
     val file: String? = null,
     val error: String? = null,
+    /**
+     * Byl VSTUPNÍ soubor sám o sobě v pořádku? (`null` = server neví — starší přebal po restartu.)
+     *
+     * Server do souboru vidí (ffprobe) a pozná, jestli v něm vůbec bylo co spravit — přebal zahazuje
+     * jen obrazové/ASS titulky, fonty a metadata. Když nic z toho uvnitř nebylo, pád přehrávače měl
+     * jinou příčinu (u Arcane S2E1 to byl zdroj, který se teprve stahoval na RD) a zapamatovat si
+     * ten zdroj jako „vyžaduje přebal" by byl omyl, který nás bude přebalovat navěky.
+     */
+    val inputClean: Boolean? = null,
 ) {
     val isDone: Boolean get() = status == "done"
     val isFailed: Boolean get() = status == "error" || status == "unknown"
