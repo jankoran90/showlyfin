@@ -151,6 +151,14 @@ class DetailViewModel @Inject constructor(
     private val repackTriedUrls = LinkedHashSet<String>()
     private var lastDeliveredUrl: String? = null
 
+    // 🔴 REPACK (2026-08-02, userův Bleach E6) — přehrávací POPISKY drž mimo `pendingPlayback*`, protože
+    // ten stav je JEDNORÁZOVÝ: `consumePlayback()` ho po spuštění přehrávače vynuluje. Přebal je ale
+    // DRUHÝ pokus o přehrání téhož dílu — sáhl do už vyprázdněného stavu, takže lišta ukázala „Bleach"
+    // místo „Bleach S1E6" a titulky se nehledaly vůbec (dotaz se sezónou/dílem byl pryč → přehrávač
+    // dostal null). User: *„je vidět, že název je bleach a ne epizoda 6, titulky taky nejsou načteny."*
+    private var lastPlaybackTitle: String = ""
+    private var lastSubtitleQuery: com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery? = null
+
     // PROJECTOR (HUB-74): hlasový cast na TV/Zenbook. Latch (VM je Activity-scoped → přežije mezi filmy,
     // resetuje se v load()), preferovaný cíl (tv=null → automatika, zenbook=deviceId docku) a příznak,
     // že běžící cast je hlasový (na odmítnutí ukázat hlášku místo pickeru).
@@ -209,10 +217,22 @@ class DetailViewModel @Inject constructor(
             } else st
         }
         // RD re-add na pozadí (backend ensure_cached) → až dotáhne, zapíše čerstvý cached WorkingSource.
+        // 🔴 SEZONA (2026-08-02): u SERIÁLU se musí re-cache spustit pro SEZÓNU. Dřív tu byl natvrdo
+        // filmový `triggerAutoCache`, takže server zapsal náhradu BEZ `epKey` = řádek k nerozeznání od
+        // filmu → ve Filmotéce naskočila cizí karta (tmdb 30984 jako film = „Dissection…", ne Bleach).
+        val title = _uiState.value.tmdbCzTitle ?: item.title
+        val season = _uiState.value.selectedSeason
+            ?: _uiState.value.seasons.firstOrNull { s -> s.season_number >= 1 }?.season_number
         runCatching {
-            workingSourceStore.triggerAutoCache(
-                item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
-            )
+            if (item.type == MediaType.SHOW) {
+                workingSourceStore.triggerSeasonCache(
+                    item.imdbId, item.tmdbId, title, item.year, cachePolicy(), season ?: 1,
+                )
+            } else {
+                workingSourceStore.triggerAutoCache(
+                    item.imdbId, item.tmdbId, title, item.year, cachePolicy(),
+                )
+            }
         }
     }
 
@@ -229,6 +249,8 @@ class DetailViewModel @Inject constructor(
         lastPlayedStream = null
         repackTriedUrls.clear()
         lastDeliveredUrl = null
+        lastPlaybackTitle = ""   // REPACK: popisky patří k předchozímu titulu → nesmí přetéct do nového
+        lastSubtitleQuery = null
         episodeSelector = null   // TENFOOT WS-C: nový titul → zapomeň vybranou epizodu
         attemptedRdHashes.clear()
         ioRetriedKeys.clear()
@@ -1526,6 +1548,37 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Zadání pro dohledání CZ titulků k PRÁVĚ spouštěnému zdroji (název CZ i originál, rok, díl, release).
+     * Vytaženo zvlášť, aby ho měl kdo postavit i mimo [playStream] (REPACK doručuje URL podruhé).
+     */
+    private fun subtitleQueryOf(
+        subTitle: String,
+        subOrig: String,
+        stream: UploaderStream,
+        czDub: Boolean,
+    ): com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery {
+        val st = _uiState.value
+        return com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery(
+            imdb = st.item?.imdbId.orEmpty(),
+            title = subTitle,
+            origTitle = subOrig,
+            year = st.item?.year,
+            season = episodeSelector?.season,
+            episode = episodeSelector?.episode,
+            // 🔴 SEZONA f3b: OBA texty, ne jen `name`. U AIOStreams je `name` jen odznak („🚀 FHD",
+            // „🔥4K UHD") a skutečný název releasu (`Breaking.Bad.S01E01…2160p.WEB…`) je až
+            // v `description` — server tedy dostával k porovnání s titulky prázdnou informaci
+            // a `_release_affinity` neměla podle čeho vybírat. Tohle je jedna z příčin
+            // userova „titulky nesedí na release".
+            release = listOfNotNull(stream.name, stream.description)
+                .joinToString(" ").trim().take(300).takeIf { it.isNotBlank() },
+            fps = stream.quality.fps,
+            runtime = st.movieDetails?.runtime,
+            autoSearch = !czDub,
+        )
+    }
+
     /** Klik na konkrétní stream → přímé url / RD resolve → předá URL [target] (telefon / TV). */
     fun playStream(stream: UploaderStream, target: CastTarget = CastTarget.LOCAL) {
         if (_uiState.value.isResolvingStream || _uiState.value.rdDownload != null) return
@@ -1566,26 +1619,9 @@ class DetailViewModel @Inject constructor(
             !subtitled && (lang == "CZ" || lang == "SK")
         }
         if (subTitle.isNotBlank() || subOrig.isNotBlank()) {
-            _uiState.update {
-                it.copy(pendingSubtitleQuery = com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery(
-                    imdb = st.item?.imdbId.orEmpty(),
-                    title = subTitle,
-                    origTitle = subOrig,
-                    year = st.item?.year,
-                    season = episodeSelector?.season,
-                    episode = episodeSelector?.episode,
-                    // 🔴 SEZONA f3b: OBA texty, ne jen `name`. U AIOStreams je `name` jen odznak („🚀 FHD",
-                    // „🔥4K UHD") a skutečný název releasu (`Breaking.Bad.S01E01…2160p.WEB…`) je až
-                    // v `description` — server tedy dostával k porovnání s titulky prázdnou informaci
-                    // a `_release_affinity` neměla podle čeho vybírat. Tohle je jedna z příčin
-                    // userova „titulky nesedí na release".
-                    release = listOfNotNull(stream.name, stream.description)
-                        .joinToString(" ").trim().take(300).takeIf { it.isNotBlank() },
-                    fps = stream.quality.fps,
-                    runtime = st.movieDetails?.runtime,
-                    autoSearch = !czDub,
-                ))
-            }
+            val query = subtitleQueryOf(subTitle, subOrig, stream, czDub)
+            lastSubtitleQuery = query   // REPACK: přežije `consumePlayback()` → druhý pokus má titulky
+            _uiState.update { it.copy(pendingSubtitleQuery = query) }
         }
         val direct = stream.url
         val cometPath = stream.cometPath
@@ -1928,6 +1964,7 @@ class DetailViewModel @Inject constructor(
         // REPACK (f3e): přebal potřebuje PŘESNĚ tuhle (už resolvnutou) adresu — z `UploaderStream`
         // by se musela resolvovat znovu a u efemérních odkazů by to nemuselo vyjít stejně.
         lastDeliveredUrl = url
+        lastPlaybackTitle = title    // REPACK: `pendingPlaybackTitle` se spotřebuje, tohle zůstává
         when (target) {
             CastTarget.LOCAL -> {
                 // SIEVE S2: až teď (přehrávač se reálně spouští) nabídneme „tohle sedí? 👍" — po návratu
@@ -1937,6 +1974,9 @@ class DetailViewModel @Inject constructor(
                     it.copy(
                         isResolvingStream = false, showStreamPicker = false,
                         pendingPlaybackUrl = url, pendingPlaybackTitle = title,
+                        // REPACK: druhé doručení téhož dílu (po přebalu) staví na zapamatovaném zadání —
+                        // `playStream` se už podruhé nevolá, takže by titulky jinak zůstaly bez dotazu.
+                        pendingSubtitleQuery = it.pendingSubtitleQuery ?: lastSubtitleQuery,
                         pendingWorkingConfirm = confirm,
                     )
                 }
@@ -2119,8 +2159,9 @@ class DetailViewModel @Inject constructor(
             val url = "$base/api/repack/file/$jobId?key=$key"
             timber.log.Timber.i("[REPACK] hotovo → přehrávám přebalený soubor")
             _uiState.update { it.copy(autoAdvanceInfo = "Přebaleno — spouštím přehrávání") }
-            deliverNow(url, _uiState.value.pendingPlaybackTitle.orEmpty()
-                .ifBlank { _uiState.value.item?.title.orEmpty() }, CastTarget.LOCAL)
+            // Popisek ber ze zapamatovaného (`pendingPlaybackTitle` je po spuštění přehrávače prázdný) —
+            // jinak by lišta u dílu ukázala holý název seriálu místo „Bleach S1E6".
+            deliverNow(url, lastPlaybackTitle.ifBlank { _uiState.value.item?.title.orEmpty() }, CastTarget.LOCAL)
         }
     }
 

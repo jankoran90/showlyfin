@@ -519,7 +519,28 @@ class WorkingSourceStore @Inject constructor(
      * dedupujeme podle identity filmu (tmdb→imdb→hash streamu), ať se jeden film neukáže 2×.
      * Řazeno od nejnovějšího uložení.
      */
-    fun getAll(): List<WorkingSource> = allRecords().filter { it.epKey == null }
+    fun getAll(): List<WorkingSource> {
+        val all = allRecords()
+        val showIds = showIdentities(all)
+        return all.filter { it.epKey == null && !isPhantomMovieRow(it, showIds) }
+    }
+
+    /** Identity titulů, ke kterým je uložený zdroj SEZÓNY nebo DÍLU → jde o seriály. */
+    private fun showIdentities(all: List<WorkingSource>): Set<String> =
+        all.filter { it.epKey != null }.mapNotNullTo(HashSet()) { showIdentity(it) }
+
+    /**
+     * 🔒 SEZONA (2026-08-02, userův Bleach) — řádek BEZ `epKey` u identity, která je prokazatelně SERIÁL
+     * (má uložený zdroj sezóny/dílu), je FANTOM po chybném zápisu, ne film.
+     *
+     * Proč to škodí: takový řádek se ve Filmotéce chová jako film a identitu si dohledá ve FILMOVÉM
+     * jmenném prostoru — tmdb 30984 je seriál Bleach, jako film je to „Dissection – Rebirth Of Dissection"
+     * (2006). User (2026-08-02): *„Dissection jsem vůbec nepřidával já."* Zápis takového řádku už serverová
+     * pojistka nepustí, tohle kryje data, která na zařízeních zůstala z dřívějška.
+     * Titul bez identity (ČT, `showIdentity == null`) fantom nikdy není — projde beze změny.
+     */
+    private fun isPhantomMovieRow(r: WorkingSource, showIds: Set<String>): Boolean =
+        r.epKey == null && showIdentity(r)?.let { it in showIds } == true
 
     /**
      * SEZONA fáze 3b (user 2026-08-01: „na home - filmotéce se zobrazí až po uložení zdrojů") — co patří
@@ -533,11 +554,13 @@ class WorkingSourceStore @Inject constructor(
      * uložení, takže první nalezená receptura = nejčerstvější sezóna.
      */
     fun getLibraryEntries(): List<WorkingSource> {
+        val all = allRecords()
+        val showIds = showIdentities(all)   // fantomové „filmové" řádky seriálů sem nepatří (viz [isPhantomMovieRow])
         val out = ArrayList<WorkingSource>()
         val seenShows = HashSet<String>()
-        for (r in allRecords()) {
+        for (r in all) {
             when {
-                r.epKey == null -> out += r
+                r.epKey == null -> if (!isPhantomMovieRow(r, showIds)) out += r
                 r.isSeasonRecipe() -> showIdentity(r)?.let { if (seenShows.add(it)) out += r }
                 else -> Unit                       // díl („s1e4") do knihovny nepatří
             }
