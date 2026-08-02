@@ -36,7 +36,7 @@ class RepackNeededStore @Inject constructor(
         if (current.firstOrNull() == identity) return
         val next = (listOf(identity) + current.filter { it != identity }).take(MAX_ENTRIES)
         prefs.edit().putString(KEY_ORDER, next.joinToString(SEPARATOR)).apply()
-        Timber.i("[REPACK] zdroj označen jako „vyžaduje přebal" (%d v paměti)", next.size)
+        Timber.i("[REPACK] zdroj označen jako vyžadující přebal (%d v paměti)", next.size)
     }
 
     /** Přebal přestal být potřeba (zdroj hraje i bez něj) → zapomeň, ať se zbytečně nepřebaluje. */
