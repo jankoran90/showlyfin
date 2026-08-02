@@ -360,11 +360,15 @@ internal class UploaderApi(
         }.getOrNull()
     }
 
-    override suspend fun repackStart(baseUrl: String, sessionCookie: String, srcUrl: String): RepackJob? {
+    override suspend fun repackStart(baseUrl: String, sessionCookie: String, srcUrl: String,
+                                     stableId: String?): RepackJob? {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        // `id` = identita OBSAHU (imdb:epKey:otisk). Bez ní se job klíčoval podepsanou playback adresou,
+        // která se po re-resolve mění → týž díl se přebaloval pokaždé znovu, i když hotový soubor existoval.
+        val idParam = stableId?.takeIf { it.isNotBlank() }?.let { "&id=${enc(it)}" }.orEmpty()
         return runCatching {
-            val resp = service.repackStart("$base/api/repack/start?src=${enc(srcUrl)}", cookie)
+            val resp = service.repackStart("$base/api/repack/start?src=${enc(srcUrl)}$idParam", cookie)
             parseRepack(resp.body()?.string())
         }.getOrNull()
     }

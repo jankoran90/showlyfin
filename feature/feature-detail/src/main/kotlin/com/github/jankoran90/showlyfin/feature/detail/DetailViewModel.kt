@@ -63,6 +63,8 @@ class DetailViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val naTv: NaTvService,
     private val workingSourceStore: com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore,
+    // REPACK: paměť „tenhle zdroj se bez přebalu nepřehraje" → druhé spuštění nečeká na pád přehrávače.
+    private val repackNeededStore: com.github.jankoran90.showlyfin.data.uploader.RepackNeededStore,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val favoritesStore: com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository,
     // DINGO — per-zařízení preset přehrávání (preferuj H.264 pro slabé HEVC dekodéry v autě). Re-rank seznamu zdrojů.
@@ -1951,6 +1953,20 @@ class DetailViewModel @Inject constructor(
      * Range-dotaz na skutečnou velikost; pod prahem → přeskoč na další kandidáta (CASCADE).
      */
     private fun deliver(url: String, title: String, target: CastTarget) {
+        // 🔴 REPACK zkratka (user 2026-08-02: *„pořád hledám zdroje a po 20 s přebaluju… a když se vracím
+        // zpět, tak celý proces běží znovu"*): u zdroje, o kterém UŽ VÍME, že se bez přebalu nepřehraje,
+        // nemá smysl znovu čekat, až přehrávač spadne na formátové chybě. Jdeme rovnou na přebal — a ten
+        // je díky stabilnímu `job_id` typicky hotový, takže se jen stáhne hlavička a hraje se.
+        val known = lastPlayedStream?.let { streamIdentity(it) }
+        if (target == CastTarget.LOCAL && known != null && repackNeededStore.needsRepack(known) &&
+            uploaderBaseUrl.isNotBlank() && repackTriedUrls.add(url)
+        ) {
+            timber.log.Timber.i("[REPACK] zdroj je známý jako nehratelný → rovnou přebal, bez čekání na pád")
+            lastDeliveredUrl = url
+            lastPlaybackTitle = title
+            repackAndPlay(url)
+            return
+        }
         _uiState.update { it.copy(isResolvingStream = true) }
         viewModelScope.launch {
             val size = probePlayableSize(url)
@@ -2143,6 +2159,9 @@ class DetailViewModel @Inject constructor(
             uploaderBaseUrl.isNotBlank() && repackTriedUrls.add(playedUrl)
         ) {
             timber.log.Timber.i("[REPACK] $errorCode → zkouším přebalit tentýž zdroj místo skoku na jiný")
+            // Poznač si, že TENHLE zdroj se bez přebalu nepřehraje → příště jdeme rovnou na přebal
+            // a divák nečeká, až přehrávač znovu spadne (user: „to mi vadí, že to není plynulé").
+            lastPlayedStream?.let { repackNeededStore.remember(streamIdentity(it)) }
             repackAndPlay(playedUrl)
             return
         }
@@ -2161,7 +2180,10 @@ class DetailViewModel @Inject constructor(
                 autoAdvanceInfo = "Tenhle soubor přehrávač neumí — přebaluji ho…")
         }
         viewModelScope.launch {
-            val started = uploaderDs.repackStart(uploaderBaseUrl, uploaderCookie, srcUrl)
+            // Stabilní identita → server trefí UŽ HOTOVÝ přebal místo toho, aby ho dělal znovu (playback
+            // adresa se po re-resolve mění, takže sama o sobě je jako klíč k ničemu).
+            val stableId = lastPlayedStream?.let { streamIdentity(it) }
+            val started = uploaderDs.repackStart(uploaderBaseUrl, uploaderCookie, srcUrl, stableId)
             val jobId = started?.jobId?.takeIf { it.isNotBlank() }
             if (started == null || jobId == null || started.isFailed) {
                 timber.log.Timber.w("[REPACK] start selhal (%s)", started?.error ?: "bez odpovědi")
@@ -2194,6 +2216,25 @@ class DetailViewModel @Inject constructor(
             // jinak by lišta u dílu ukázala holý název seriálu místo „Bleach S1E6".
             deliverNow(url, lastPlaybackTitle.ifBlank { _uiState.value.item?.title.orEmpty() }, CastTarget.LOCAL)
         }
+    }
+
+    /**
+     * REPACK — STABILNÍ otisk zdroje pro paměť „vyžaduje přebal" i pro serverový `job_id` přebalu.
+     *
+     * 🔴 Nesmí stát na playback URL: ta je u AIOStreams/RD podepsaná a po re-resolve JINÁ, takže by
+     * paměť nikdy netrefila a server by týž díl přebaloval pořád dokola. Bere se proto identita obsahu:
+     * torrent (`infoHash` + index souboru) → comet cesta → u proxy zdrojů addon + velikost + popis
+     * (release string), doplněné o titul a díl.
+     */
+    private fun streamIdentity(s: UploaderStream): String {
+        val item = _uiState.value.item
+        val ep = episodeSelector?.let { "s${it.season}e${it.episode}" }.orEmpty()
+        val core = s.infoHash?.takeIf { it.isNotBlank() }?.let { "ih:$it/${s.fileIdx}" }
+            ?: s.cometPath?.takeIf { it.isNotBlank() }?.let { "cp:$it" }
+            ?: ("rel:" + s.addon.orEmpty() + "/" + (s.quality.sizeGB ?: 0.0) + "/" +
+                (s.description ?: s.name).orEmpty().replace("\n", " ").trim().take(120))
+        val id = item?.imdbId?.takeIf { it.isNotBlank() } ?: item?.tmdbId?.toString().orEmpty()
+        return "$id:$ep:$core"
     }
 
     /** RELAY: IO/HTTP chyba přehrávače = mrtvý/zchladlý odkaz nebo síť (NE vadný kontejner/kodek → to `isFormatError`). */

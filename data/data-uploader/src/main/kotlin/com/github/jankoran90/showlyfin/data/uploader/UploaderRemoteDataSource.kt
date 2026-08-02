@@ -74,7 +74,8 @@ interface UploaderRemoteDataSource {
      * pryč jdou obrazové titulky, fonty a metadata, na kterých Android přehrávač padá).
      * [repackStart] je idempotentní (týž zdroj = týž job), [repackStatus] vrací průběh.
      */
-    suspend fun repackStart(baseUrl: String, sessionCookie: String, srcUrl: String): RepackJob?
+    suspend fun repackStart(baseUrl: String, sessionCookie: String, srcUrl: String,
+                            stableId: String? = null): RepackJob?
     suspend fun repackStatus(baseUrl: String, sessionCookie: String, jobId: String): RepackJob?
     suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, status: String = "all", sort: String? = null): String?
     suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String? = null, loginPinHash: String? = null)
