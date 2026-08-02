@@ -1500,7 +1500,39 @@ class DetailViewModel @Inject constructor(
         val n = workingSourceStore.clearShow(item.imdbId, item.tmdbId)
         _uiState.update {
             it.copy(rememberedSource = null, hasSeasonSource = false, hasAnyShowSource = false,
-                autoAdvanceInfo = if (n > 0) "Uložené zdroje seriálu zapomenuty" else null)
+                autoAdvanceInfo = if (n > 0) "Zdroje zapomenuty, hledám nové…" else null)
+        }
+        if (n == 0) return
+        // 🔴 Zapomenutí MUSÍ rovnou nastartovat nové hledání (user 2026-08-02: *„Zapomenuto mám, ale
+        // dotáhne se automaticky?"* → *„to jsme chtěli automatizovat přeci, na pack season ideálně
+        // nebo celý seriál"*). Bez tohohle zůstal divák u ručního seznamu: zdroj zmizel, ale nic
+        // nespustilo auto-hledání, které jinak běží při přidání do „Chci vidět".
+        viewModelScope.launch {
+            val season = _uiState.value.selectedSeason
+                ?: _uiState.value.seasons.firstOrNull { s -> s.season_number >= 1 }?.season_number
+                ?: 1
+            runCatching {
+                workingSourceStore.triggerSeasonCache(
+                    item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title,
+                    item.year, cachePolicy(), season,
+                )
+            }.onFailure { timber.log.Timber.w(it, "[SEZONA] re-hledání po zapomenutí selhalo") }
+            // Zbytek seriálu do fronty s retry — jinak by se dohledala jen ta právě otevřená sezóna
+            // (týž vzor jako u přidání do „Chci vidět", viz `toggleWatchlist`).
+            runCatching {
+                workingSourceStore.cacheBatch(
+                    listOf(
+                        com.github.jankoran90.showlyfin.data.uploader.BackfillItem(
+                            imdb = item.imdbId.orEmpty(),
+                            tmdb = item.tmdbId ?: 0L,
+                            title = _uiState.value.tmdbCzTitle ?: item.title,
+                            year = item.year,
+                            kind = "show",
+                        ),
+                    ),
+                    cachePolicy(),
+                )
+            }.onFailure { timber.log.Timber.w(it, "[SEZONA] fronta pro zbylé sezóny po zapomenutí selhala") }
         }
     }
 

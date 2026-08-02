@@ -155,6 +155,58 @@ private fun parseSize(t: String): String? = RE_SIZE.find(t)?.let { m ->
     if (m.groupValues[2].lowercase() == "mb") "%.0f MB".format(num) else "%.1f GB".format(num)
 }
 
+// User 2026-08-02: *„nikde se nepíše, zda WEB-DL, NF (Netflix atd.) nebo BRip"* + *„i kdybych to vybíral
+// ručně, tak můžu odtušit, který release je třeba známější (u filmů třeba YTS, RARBG a desítky dalších)"*.
+// Typ releasu navíc rozhoduje o časování titulků, takže patří na první pohled, ne do drobného popisku.
+private val RE_SRC = Regex(
+    """(?i)\b(blu-?ray|bd-?rip|bd-?mux|brrip|remux|web-?dl|web-?rip|webrip|hd-?rip|dvd-?rip|hdtv|web)\b""")
+private val RE_PLATFORM = Regex(
+    """(?i)\b(nf|netflix|amzn|amazon|dsnp|disney\+?|hmax|atvp|appletv|hulu|pcok|peacock|pmtp|paramount\+?|stan|crav|crunchyroll|cr)\b""")
+// Grupa stojí na konci názvu za pomlčkou (`…x264-ZoroSenpai.mkv`) — tenhle tvar drží celá scéna.
+private val RE_GROUP = Regex("""(?i)-([a-z0-9]{2,20})(?:\.(?:mkv|mp4|avi))?\s*$""")
+
+// `quality.source` ze serveru nese někdy TYP releasu („BluRay", „WEB-DL"), jindy jméno addonu
+// („AIOStreams", „ElfCache") — jako typ releasu se smí zobrazit jen to první.
+private val KNOWN_SOURCES = setOf("BluRay", "Remux", "WEB-DL", "WEBRip", "HDTV", "DVDRip", "HDRip", "CAM")
+
+private fun parseSource(t: String): String? = RE_SRC.find(t)?.value?.lowercase()?.let { raw ->
+    val v = raw.replace("-", "").replace(" ", "")
+    when {
+        v.startsWith("blu") || v in setOf("bdrip", "bdmux", "brrip") -> "BluRay"
+        v == "remux" -> "Remux"
+        v == "webdl" -> "WEB-DL"
+        v.startsWith("web") -> "WEBRip"
+        v.startsWith("dvd") -> "DVDRip"
+        v == "hdtv" -> "HDTV"
+        v == "hdrip" -> "HDRip"
+        else -> raw.uppercase()
+    }
+}
+
+private fun parsePlatform(t: String): String? = RE_PLATFORM.find(t)?.value?.lowercase()?.let { raw ->
+    when (raw.trimEnd('+')) {
+        "nf", "netflix" -> "Netflix"
+        "amzn", "amazon" -> "Amazon"
+        "dsnp", "disney" -> "Disney+"
+        "hmax" -> "Max"
+        "atvp", "appletv" -> "Apple TV+"
+        "pcok", "peacock" -> "Peacock"
+        "pmtp", "paramount" -> "Paramount+"
+        "cr", "crunchyroll" -> "Crunchyroll"
+        else -> raw.replaceFirstChar { it.uppercase() }
+    }
+}
+
+/** Release grupa (ZoroSenpai, RARBG, YTS…) — podle ní divák pozná, co je zavedené jméno. */
+private fun parseGroup(t: String): String? {
+    // Vezmi POSLEDNÍ řádek/token, který vypadá jako název souboru — popis od addonu je víceřádkový.
+    val line = t.split('\n', ' ').lastOrNull { it.contains('-') && RE_GROUP.containsMatchIn(it) } ?: return null
+    val g = RE_GROUP.find(line)?.groupValues?.get(1) ?: return null
+    // Ochrana proti chycení kodeku/rozlišení místo grupy (`…-1080p`, `…-x264`).
+    if (g.length < 3 || RE_RES.matches(g) || RE_VCODEC.matches(g) || g.all { it.isDigit() }) return null
+    return g
+}
+
 /**
  * Parametry zdroje pro picker: rozlišení · video (+HDR) · zvuk (formát + 5.1/2.0) · [jazyk] · velikost.
  * Strukturovaná `quality` pole (z RD probe) mají přednost; když chybí, dohledá z názvu release.
@@ -168,6 +220,16 @@ internal fun streamQualityChips(stream: UploaderStream): List<String> {
     // to divák musí VIDĚT, jinak si ručně sáhne po jednorázovém dílu a rozejde si časování napříč sezónou.
     if (q.seasonPack) out.add("📦 Balík sezóny")
     (q.resolution?.takeIf { it.isNotBlank() } ?: parseRes(t))?.let { out.add(it) }
+    // Typ releasu (+ odkud u WEB): rozhoduje o časování titulků a je to první vodítko kvality.
+    // `quality.source` nese u addonů i jméno addonu („AIOStreams"), takže jako typ bereme jen to,
+    // co je opravdu typ releasu — jinak radši dohledáme z názvu.
+    val srcLabel = q.source?.takeIf { it in KNOWN_SOURCES } ?: parseSource(t)
+    val platform = parsePlatform(t)
+    when {
+        srcLabel != null && platform != null && srcLabel.startsWith("WEB") -> out.add("$srcLabel · $platform")
+        srcLabel != null -> out.add(srcLabel)
+        platform != null -> out.add(platform)
+    }
     val vc = q.videoCodec?.takeIf { it.isNotBlank() } ?: parseVideo(t)
     val hdr = q.hdr || RE_HDR.containsMatchIn(t)
     when {
@@ -179,6 +241,7 @@ internal fun streamQualityChips(stream: UploaderStream): List<String> {
     listOfNotNull(af, ch).takeIf { it.isNotEmpty() }?.let { out.add(it.joinToString(" ")) }
     q.audioLanguage?.takeIf { it.isNotBlank() }?.let { out.add(it.uppercase()) }
     (q.sizeGB?.let { "%.1f GB".format(it) } ?: parseSize(t))?.let { out.add(it) }
+    parseGroup(t)?.let { out.add("🏷️ $it") }
     q.csfdPct?.let { out.add("ČSFD $it%") }
     return out
 }
