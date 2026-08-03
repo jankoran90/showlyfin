@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.feature.discover.trakt.TraktRowLoader
@@ -42,6 +43,10 @@ data class WantToSeeUiState(
 class TvWantToSeeViewModel @Inject constructor(
     private val traktLoader: TraktRowLoader,
     private val profileRepository: ProfileRepository,
+    // SEZONA f3k — lokální „Chci vidět" (profily bez Traktu, tedy dětské). Sekce ho musí ukázat taky,
+    // jinak si dítě titul přidá a nikde ho nevidí (user 2026-08-03: *„sekce chci vidět stále vyžaduje
+    // přihlášení trakt"*).
+    private val wantToSee: com.github.jankoran90.showlyfin.core.db.repository.WantToSeeRepository,
     private val workingSources: WorkingSourceStore,
     private val traktSyncSignal: TraktSyncSignal,
     @Named("traktPreferences") private val prefs: SharedPreferences,
@@ -94,8 +99,20 @@ class TvWantToSeeViewModel @Inject constructor(
                 items = traktLoader.watchlist("all")
                 attempt++
             }
-            timber.log.Timber.i("[WANTSEE] reload DONE items=%d (after %d retry)", items.size, attempt)
-            _state.value = WantToSeeUiState(items = items, loading = false, savedCount = countSaved(items))
+            // Lokální seznam se přimerguje VŽDY (ne jen bez Traktu) — user 2026-08-03 chtěl, ať se
+            // „Chci vidět" ukládá do Traktu i k nám, takže tady je jeden seznam z obou zdrojů.
+            val local = wantToSee.snapshot().map { w ->
+                MediaItem(
+                    traktId = 0L, tmdbId = w.id, imdbId = null, title = w.name, year = w.year,
+                    overview = null, rating = null, genres = null,
+                    type = if (w.kind == com.github.jankoran90.showlyfin.data.uploader.FavoriteKind.WANT_SHOW)
+                        MediaType.SHOW else MediaType.MOVIE,
+                    posterPath = w.imageUrl, addedAtMs = w.addedAtMs.takeIf { it > 0L },
+                )
+            }
+            val merged = (items + local.filterNot { l -> items.any { it.tmdbId != null && it.tmdbId == l.tmdbId } })
+            timber.log.Timber.i("[WANTSEE] reload DONE trakt=%d lokalne=%d (after %d retry)", items.size, local.size, attempt)
+            _state.value = WantToSeeUiState(items = merged, loading = false, savedCount = countSaved(merged))
         }
     }
 

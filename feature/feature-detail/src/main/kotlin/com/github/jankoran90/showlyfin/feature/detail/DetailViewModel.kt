@@ -1543,13 +1543,29 @@ class DetailViewModel @Inject constructor(
     /** Skryj nabídku „tohle sedí?" (uživatel ji odmítl nebo to byl špatný zdroj). */
     fun dismissWorkingConfirm() = _uiState.update { it.copy(pendingWorkingConfirm = null) }
 
-    /** Zapomenout připnutý fungující zdroj (zdroj přestal fungovat / chce vybrat jiný). */
+    /**
+     * Zapomenout připnutý fungující zdroj (zdroj přestal fungovat / chce vybrat jiný).
+     *
+     * 🔴 A ROVNOU HLEDAT NOVÝ. User 2026-08-03: *„odebraný zdroj — teď nevidím kartu a když ji vyhledám,
+     * tak nevidím, že by se hledal zdroj, a nevím, zda mám čekat na autodohledání."* U seriálu se nové
+     * hledání spouštělo už dřív ([forgetShowSources]), u FILMU se jen smazal záznam a nestalo se nic —
+     * a protože dětský profil ukazuje ve Filmotéce jen tituly se zdrojem, karta zmizela a divák neměl
+     * podle čeho poznat, jestli čekat. *Odebrání zdroje je žádost o jiný, ne o žádný.*
+     */
     fun forgetWorkingSource() {
+        val item = _uiState.value.item
         workingSourceStore.clear(
-            _uiState.value.item?.imdbId, _uiState.value.item?.tmdbId,
+            item?.imdbId, item?.tmdbId,
             season = episodeSelector?.season, episode = episodeSelector?.episode,
         )
         _uiState.update { it.copy(rememberedSource = null) }
+        if (item == null || item.type != MediaType.MOVIE) return
+        _uiState.update { it.copy(autoAdvanceInfo = "Zdroj zapomenut, hledám nový…") }
+        viewModelScope.launch {
+            workingSourceStore.triggerAutoCache(
+                item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+            )
+        }
     }
 
     /**
