@@ -196,6 +196,10 @@ class PlaybackViewModel @Inject constructor(
         // jedné podívané není volba, je to překážka.*
         val movedAgoMs = resumeKey?.let { System.currentTimeMillis() - prefs.getLong("resume_at_$it", 0L) } ?: Long.MAX_VALUE
         val stillWatching = savedResume > 0L && movedAgoMs in 0..RESUME_SILENT_WINDOW_MS
+        // User 2026-08-03 12:02: *„Dej default aby se rovnou přehrávalo od začátku, dialog pro výběr
+        // bude otázkou nastavení."* Volba je v Nastavení → Přehrávání; výchozí je OD ZAČÁTKU.
+        val resumeMode = prefs.getString(PlayerPrefs.RESUME_MODE_KEY, PlayerPrefs.DEFAULT_RESUME_MODE)
+            ?: PlayerPrefs.DEFAULT_RESUME_MODE
         timber.log.Timber.i("[PICKUP] loadExternal resumeKey=%s saved=%d (ext=%d local=%d) autoSearch=%s url=%s", resumeKey, savedResume, externalResumeMs, localResume, subtitleQuery?.autoSearch, url.take(70))
         // Nový stream → VŽDY vyhoď titulky z předchozího filmu. Bez tohohle by film bez vlastních
         // titulků (0 kandidátů / prázdné imdb → loadSubtitles se brzy vrátí) dál promítal cues
@@ -205,8 +209,13 @@ class PlaybackViewModel @Inject constructor(
             it.copy(
                 isLoading = false, title = title, streamUrl = url, posterUrl = posterUrl,
                 positionMs = 0L,
-                resumePositionMs = if (stillWatching) 0L else savedResume,
-                silentResumeMs = if (stillWatching) savedResume else 0L,
+                // Ptáme se JEN v režimu ASK a jen když se právě nedokoukává (viz `stillWatching`).
+                resumePositionMs = if (stillWatching || resumeMode != PlayerPrefs.RESUME_MODE_ASK) 0L else savedResume,
+                silentResumeMs = when {
+                    stillWatching -> savedResume
+                    resumeMode == PlayerPrefs.RESUME_MODE_RESUME -> savedResume
+                    else -> 0L          // RESUME_MODE_START → od začátku, bez ptaní
+                },
                 subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                 subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
                 canTranslateAi = false, aiTranslating = false, aiTranslateError = null,

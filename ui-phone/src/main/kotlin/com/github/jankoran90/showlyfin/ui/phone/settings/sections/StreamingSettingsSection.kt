@@ -197,6 +197,8 @@ internal fun StreamingSettingsSection(
                 var cachedFirst by remember { mutableStateOf(pp.getBoolean(StreamPresetStore.KEY_CACHED_FIRST, true)) }
                 var preferBitstream by remember { mutableStateOf(pp.getBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.TV_PREFER_BITSTREAM_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_TV_PREFER_BITSTREAM)) }
                 var preferMostChannels by remember { mutableStateOf(pp.getBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.PREFER_MOST_CHANNELS_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS)) }
+                var allowRepack by remember { mutableStateOf(pp.getBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.ALLOW_REPACK_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_ALLOW_REPACK)) }
+                var resumeMode by remember { mutableStateOf(pp.getString(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.RESUME_MODE_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_RESUME_MODE) ?: com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_RESUME_MODE) }
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.padding(16.dp)) {
                         ListenInfoText("Nastav jednou pro tohle zařízení a nesahej. V autě (slabý head unit, který seká na HEVC) zvol H.264 — appka pak při výběru zdroje preferuje H.264 verzi filmu, když existuje. Doma na TV/AVR nech Auto. Volba je jen na tomhle zařízení, ostatní se nezmění.")
@@ -242,6 +244,29 @@ internal fun StreamingSettingsSection(
                             pp.edit().putBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.PREFER_MOST_CHANNELS_KEY, v).apply()
                         }
                         ListenInfoText("Má-li film víc stop v tomtéž jazyce (třeba českou stereo i českou 5.1), na TV vyber tu s víc kanály. Jazyk se tím nemění, jen kvalita. Na telefonu se to nepoužije — tam je stereo správně. Projeví se při příštím přehrání.")
+                        Spacer(Modifier.height(8.dp))
+                        // User 2026-08-03: přebaly nechce — čekání na ffmpeg místo obrazu. Výchozí VYPNUTO.
+                        FilterSwitchRow("Zachraňovat nehratelný zdroj přebalem", allowRepack) { v ->
+                            allowRepack = v
+                            pp.edit().putBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.ALLOW_REPACK_KEY, v).apply()
+                        }
+                        ListenInfoText("Když přehrávač zdroj neumí, server ho umí přebalit (obraz i zvuk zůstanou 1:1, zahodí se jen to, na čem přehrávač padá). Je to ale čekání — u velkého filmu i půl minuty černé obrazovky. Vypnuto (výchozí) = žádné čekání, rovnou se zkusí další zdroj.")
+                        Spacer(Modifier.height(8.dp))
+                        // User 2026-08-03: „dej default aby se rovnou přehrávalo od začátku, dialog bude volba".
+                        ListenInfoText("Když se vracíš k rozkoukanému filmu:")
+                        PresetChipRow(
+                            title = "Odkud přehrát",
+                            options = listOf(
+                                "Od začátku" to com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.RESUME_MODE_START,
+                                "Navázat" to com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.RESUME_MODE_RESUME,
+                                "Zeptat se" to com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.RESUME_MODE_ASK,
+                            ),
+                            selected = resumeMode,
+                        ) { v ->
+                            resumeMode = v
+                            pp.edit().putString(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.RESUME_MODE_KEY, v).apply()
+                        }
+                        ListenInfoText("Výchozí je „Od začátku\". „Navázat\" pokračuje tam, kde jsi skončil, „Zeptat se\" ukáže dialog s volbou. Když se týž film doručí znovu během chvíle (jiný zdroj), naváže se vždycky bez ptaní.")
                     }
                 }
             }

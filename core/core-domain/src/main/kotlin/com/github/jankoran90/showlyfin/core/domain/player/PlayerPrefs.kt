@@ -59,6 +59,27 @@ object PlayerPrefs {
     const val DEFAULT_PREFER_MOST_CHANNELS = true
 
     /**
+     * Smí se nehratelný zdroj PŘEBALIT na serveru (ffmpeg `-c copy`), nebo se má rovnou zkusit další zdroj?
+     * User 2026-08-03 12:09: *„Já žádný přebaly nechci!!!"* — přebal znamená čekat, než ho server udělá
+     * (naměřeno 31 s u „O myšce a medvědovi"), a divák u toho kouká na černou obrazovku.
+     * `false` (výchozí) = žádné čekání, jde se na další zdroj. `true` = staré chování (přebal a počkat).
+     */
+    const val ALLOW_REPACK_KEY = "player_allow_repack"
+    const val DEFAULT_ALLOW_REPACK = false
+
+    /**
+     * Ptát se „Pokračovat / Od začátku", nebo prostě hrát od začátku?
+     * User 2026-08-03 12:02: *„Dej default aby se rovnou přehrávalo od začátku, dialog pro výběr bude
+     * otázkou nastavení."* Volby: `ASK` = zeptat se (dřívější chování), `START` = vždy od začátku
+     * (výchozí), `RESUME` = vždy navázat tam, kde jsem skončil.
+     */
+    const val RESUME_MODE_KEY = "player_resume_mode"
+    const val RESUME_MODE_ASK = "ASK"
+    const val RESUME_MODE_START = "START"
+    const val RESUME_MODE_RESUME = "RESUME"
+    const val DEFAULT_RESUME_MODE = RESUME_MODE_START
+
+    /**
      * CURTAIN (SHW-109) — od kolika procent délky je titul „dokoukaný". Filmy i epizody končí titulky/upoutávkou,
      * kterou nikdo nedokouká, takže čekat na úplný konec = díl navždy visí jako rozkoukaný. Při dosažení prahu
      * se epizoda/film označí v Jellyfinu jako zhlédnutá ([WatchedReporter]) a zahodí se resume pozice.

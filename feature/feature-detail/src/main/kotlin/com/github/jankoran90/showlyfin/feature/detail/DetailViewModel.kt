@@ -2076,7 +2076,7 @@ class DetailViewModel @Inject constructor(
         // je díky stabilnímu `job_id` typicky hotový, takže se jen stáhne hlavička a hraje se.
         val known = lastPlayedStream?.let { streamIdentity(it) }
         if (target == CastTarget.LOCAL && known != null && repackNeededStore.needsRepack(known) &&
-            uploaderBaseUrl.isNotBlank() && repackTriedUrls.add(url)
+            repackAllowed() && uploaderBaseUrl.isNotBlank() && repackTriedUrls.add(url)
         ) {
             timber.log.Timber.i("[REPACK] zdroj je známý jako nehratelný → rovnou přebal, bez čekání na pád")
             lastDeliveredUrl = url
@@ -2272,7 +2272,7 @@ class DetailViewModel @Inject constructor(
         // umí přebalit BEZ překódování (`-c copy`, 235 MB za 10 s), takže než utečeme na jiný release,
         // zkusíme zachránit ten, který si divák vybral. Jen JEDNOU na zdroj (guard) a jen u formátové chyby.
         val playedUrl = lastDeliveredUrl
-        if (isFormatError(errorCode) && !playedUrl.isNullOrBlank() &&
+        if (isFormatError(errorCode) && repackAllowed() && !playedUrl.isNullOrBlank() &&
             uploaderBaseUrl.isNotBlank() && repackTriedUrls.add(playedUrl)
         ) {
             timber.log.Timber.i("[REPACK] $errorCode → zkouším přebalit tentýž zdroj místo skoku na jiný")
@@ -2285,6 +2285,16 @@ class DetailViewModel @Inject constructor(
         }
         advancePastSource("Zdroj nešel přehrát, zkouším další", CastTarget.LOCAL, formatErrorCode = errorCode)
     }
+
+    /**
+     * Smí se čekat na serverový přebal? User 2026-08-03: *„Já žádný přebaly nechci!!!"* — přebal je
+     * ticho a černá obrazovka na desítky vteřin (naměřeno 31 s), a divák většinou radši dostane jiný
+     * zdroj hned. Výchozí VYPNUTO; kdo chce zachraňovat konkrétní release, zapne si to v Nastavení.
+     */
+    private fun repackAllowed(): Boolean = prefs.getBoolean(
+        com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.ALLOW_REPACK_KEY,
+        com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_ALLOW_REPACK,
+    )
 
     /**
      * REPACK (SEZONA f3e) — nech server přebalit zdroj a přehraj výsledek. Video i zvuk zůstávají 1:1
