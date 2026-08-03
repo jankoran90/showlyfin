@@ -164,3 +164,57 @@ data class OpsSweepResponse(
     val missing: Int = 0,
     val queued: Int = 0,
 )
+
+// ── historie přehrávání (user 2026-08-03 14:50) ─────────────────────────────────
+
+data class OpsHistoryResponse(
+    val items: List<OpsHistoryItem> = emptyList(),
+    val summary: OpsHistorySummary = OpsHistorySummary(),
+)
+
+/** Jedna dokoukaná (nebo opuštěná) relace + jak se u ní dařilo zásobovat. */
+data class OpsHistoryItem(
+    val at: Long = 0,
+    val title: String = "",
+    val subtitle: String = "",
+    val device: String = "",
+    val profile: String = "",
+    val profileName: String = "",
+    val source: String = "",
+    val directPlay: Boolean = true,
+    val startedAtMs: Long = 0,
+    val endedAtMs: Long = 0,
+    val watchedMs: Long = 0,
+    val durationMs: Long = 0,
+    val positionMs: Long = 0,
+    val completedPct: Int = 0,
+    val avgSpeedBps: Long = 0,
+    val maxSpeedBps: Long = 0,
+    val fromCacheRatio: Double = 0.0,
+    val waits: Int = 0,
+    val directTails: Int = 0,
+    /** Bez jediného čekání na data — jediné, co divák z „výkonu" opravdu pozná. */
+    val smooth: Boolean = true,
+)
+
+/**
+ * Souhrn za období. `smoothPct` je `null`, když nebylo co měřit — Jellyfin a ČT tečou mimo náš
+ * server, takže tvrdit o nich cokoli o přenosu by bylo lhaní do zelena.
+ */
+data class OpsHistorySummary(
+    val days: Int = 30,
+    val sessions: Int = 0,
+    val watchedMs: Long = 0,
+    val finished: Int = 0,
+    val measuredSessions: Int = 0,
+    val smoothPct: Int? = null,
+    val avgSpeedBps: Long = 0,
+    val totalWaits: Int = 0,
+    val bySource: List<OpsSourceUsage> = emptyList(),
+)
+
+data class OpsSourceUsage(
+    val source: String = "",
+    val sessions: Int = 0,
+    val watchedMs: Long = 0,
+)

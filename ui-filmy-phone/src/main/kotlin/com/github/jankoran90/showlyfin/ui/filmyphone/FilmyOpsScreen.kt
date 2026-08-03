@@ -86,6 +86,7 @@ fun FilmyOpsScreen(
                         onPolicy = vm::setPolicy,
                     )
                 }
+                item { FilmyOpsHistoryCard(state.history) }
                 item { EventsCard(state.overview?.events.orEmpty()) }
                 state.message?.let { msg -> item { MessageBar(msg) { vm.clearMessage() } } }
             }

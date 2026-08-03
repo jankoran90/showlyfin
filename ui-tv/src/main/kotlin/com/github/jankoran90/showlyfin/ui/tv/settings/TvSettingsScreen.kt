@@ -527,6 +527,9 @@ fun TvSettingsScreen(
         }
 
         // ── Řady knihovny (CONVERGE V1: řazení + skrývání knihoven v sekci Knihovna) ──
+        // ── Provoz (SHW-114) — parita s telefonem: hlásit/nehlásit + jméno zařízení ──
+        item { TvOpsSettingsBlock() }
+
         item { TvLibraryRowsSettingsBlock(libraries = libraries) }
 
         // ── Řady Traktu (CONVERGE V1: řazení + skrývání řad sekce Trakt) ──

@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.data.uploader
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.data.uploader.api.OpsService
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsHeartbeatBody
+import com.github.jankoran90.showlyfin.data.uploader.model.OpsHistoryResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsOverviewResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsSourcesResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsSweepResponse
@@ -44,6 +45,15 @@ class OpsRepository @Inject constructor(
         val b = base().ifBlank { return null }
         return runCatching { service.sources("$b/api/ops/sources?profile=${enc(profile)}", cookie()) }
             .onFailure { Timber.w(it, "[PROVOZ] stav zdrojů se nepodařilo načíst") }
+            .getOrNull()
+    }
+
+    /** Historie přehrávání + souhrn („stíhalo se zásobovat?"). */
+    suspend fun history(profile: String, days: Int, limit: Int = 50): OpsHistoryResponse? {
+        val b = base().ifBlank { return null }
+        val url = "$b/api/ops/history?profile=${enc(profile)}&days=$days&limit=$limit"
+        return runCatching { service.history(url, cookie()) }
+            .onFailure { Timber.w(it, "[PROVOZ] historii se nepodařilo načíst") }
             .getOrNull()
     }
 

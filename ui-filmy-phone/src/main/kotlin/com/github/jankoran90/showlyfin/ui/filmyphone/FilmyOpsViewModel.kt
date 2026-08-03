@@ -3,7 +3,10 @@ package com.github.jankoran90.showlyfin.ui.filmyphone
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import android.content.SharedPreferences
+import com.github.jankoran90.showlyfin.data.uploader.OpsPrefs
 import com.github.jankoran90.showlyfin.data.uploader.OpsRepository
+import com.github.jankoran90.showlyfin.data.uploader.model.OpsHistoryResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsOverviewResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsSourcesResponse
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,12 +31,14 @@ import javax.inject.Inject
 class FilmyOpsViewModel @Inject constructor(
     private val ops: OpsRepository,
     private val profileRepository: ProfileRepository,
+    @javax.inject.Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     data class UiState(
         val loading: Boolean = true,
         val overview: OpsOverviewResponse? = null,
         val sources: OpsSourcesResponse? = null,
+        val history: OpsHistoryResponse? = null,
         val busy: String? = null,      // probíhající akce (blokuje tlačítka)
         val message: String? = null,   // výsledek akce pro uživatele
         val unavailable: Boolean = false,
@@ -59,11 +64,13 @@ class FilmyOpsViewModel @Inject constructor(
             }
             val overview = ops.overview(key)
             val sources = ops.sources(key)
+            val history = ops.history(key, OpsPrefs.historyDays(prefs))
             _state.update {
                 it.copy(
                     loading = false,
                     overview = overview ?: it.overview,
                     sources = sources ?: it.sources,
+                    history = history ?: it.history,
                     // „Nedostupné" jen když nemáme VŮBEC nic — jedno vynechané kolo obrazovku nevyprázdní.
                     unavailable = overview == null && it.overview == null,
                 )
@@ -71,12 +78,20 @@ class FilmyOpsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Obnovování, dokud je obrazovka vidět. Interval je v Nastavení ([OpsPrefs.KEY_REFRESH_SEC]);
+     * 0 = neobnovovat samo — pak se načte jen jednou při otevření (pro toho, kdo nechce, aby mu
+     * telefon každých pár vteřin ťukal na server).
+     */
     fun startAutoRefresh() {
         if (pollJob?.isActive == true) return
         pollJob = viewModelScope.launch {
+            val every = OpsPrefs.refreshSec(prefs)
+            refresh()
+            if (every <= 0) return@launch
             while (isActive) {
+                delay(every * 1000L)
                 refresh()
-                delay(5_000)
             }
         }
     }

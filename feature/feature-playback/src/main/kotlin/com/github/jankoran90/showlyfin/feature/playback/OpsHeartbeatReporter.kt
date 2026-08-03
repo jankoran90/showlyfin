@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.playback
 import android.content.SharedPreferences
 import android.os.Build
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.data.uploader.OpsPrefs
 import com.github.jankoran90.showlyfin.data.uploader.OpsRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsHeartbeatBody
 import java.util.UUID
@@ -36,7 +37,7 @@ class OpsHeartbeatReporter @Inject constructor(
         }
 
     private fun deviceName(): String =
-        prefs.getString(KEY_DEVICE_NAME, null)?.takeIf { it.isNotBlank() }
+        OpsPrefs.deviceName(prefs).takeIf { it.isNotBlank() }
             ?: listOfNotNull(Build.MANUFACTURER?.replaceFirstChar { it.uppercase() }, Build.MODEL)
                 .joinToString(" ").trim().ifBlank { "zařízení" }
 
@@ -55,6 +56,8 @@ class OpsHeartbeatReporter @Inject constructor(
         force: Boolean = false,
     ): Boolean {
         if (title.isBlank()) return false
+        // Vypínač z Nastavení — uživatel má právo říct „tohle zařízení ať se nehlásí".
+        if (!OpsPrefs.reportPlayback(prefs)) return false
         val now = System.currentTimeMillis()
         val titleChanged = title != lastTitle
         if (!force && !titleChanged && now - lastSentAt < MIN_INTERVAL_MS) return false
@@ -107,6 +110,5 @@ class OpsHeartbeatReporter @Inject constructor(
     private companion object {
         const val MIN_INTERVAL_MS = 20_000L
         const val KEY_DEVICE_ID = "ops_device_id"
-        const val KEY_DEVICE_NAME = "ops_device_name"
     }
 }

@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.data.uploader.api
 
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsHeartbeatBody
+import com.github.jankoran90.showlyfin.data.uploader.model.OpsHistoryResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsOverviewResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsSourcesResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsSweepResponse
@@ -21,6 +22,8 @@ interface OpsService {
     @GET suspend fun overview(@Url url: String, @Header("Cookie") cookie: String): OpsOverviewResponse
 
     @GET suspend fun sources(@Url url: String, @Header("Cookie") cookie: String): OpsSourcesResponse
+
+    @GET suspend fun history(@Url url: String, @Header("Cookie") cookie: String): OpsHistoryResponse
 
     @POST suspend fun sweep(@Url url: String, @Header("Cookie") cookie: String): OpsSweepResponse
 

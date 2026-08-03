@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.ChildCare
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Tv
@@ -250,6 +251,12 @@ fun FilmySettingsScreen(
             // kde má vlastní blok. Zdroje (vč. Jellyfin knihovny) se přepínají PER PROFIL.) ─────────
             FilmyCollapsibleSection("Filmotéka", Icons.Rounded.VideoLibrary) {
                 FilmyFilmotekaSection()
+            }
+
+            // ── PROVOZ (SHW-114) — co se týká TOHOHLE zařízení: hlásit/nehlásit, pod jakým jménem,
+            // jak často se sekce obnovuje. Volby profilu (jak automat hledá) zůstávají v sekci Provoz.
+            FilmyCollapsibleSection("Provoz", Icons.Rounded.MonitorHeart) {
+                FilmyOpsSettingsSection()
             }
 
             // ── VZHLED (téma/písmo + detail obsahu) ───────────────────────────────
