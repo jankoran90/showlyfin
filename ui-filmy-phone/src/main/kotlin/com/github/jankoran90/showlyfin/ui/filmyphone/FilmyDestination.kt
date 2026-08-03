@@ -7,6 +7,7 @@ import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Diamond
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MovieFilter
 import androidx.compose.material.icons.rounded.Recommend
@@ -31,6 +32,8 @@ enum class FilmySection(val label: String, val icon: ImageVector) {
     GEMS("Vzácné klenoty", Icons.Rounded.Diamond),
     LIBRARY("Knihovna", Icons.Rounded.VideoLibrary),
     SEARCH("Hledat", Icons.Rounded.Search),
+    // PROVOZ (SHW-114): co se právě hraje, jak to jede, stav zdrojů. Jen telefon (zadání usera).
+    OPS("Provoz", Icons.Rounded.MonitorHeart),
     SETTINGS("Nastavení", Icons.Rounded.Settings),
     PROFILE("Profil", Icons.Rounded.AccountCircle),
 }
@@ -66,12 +69,12 @@ object FilmyShellPrefs {
             listOf(
                 FilmySection.FILMOTEKA, FilmySection.HOME, FilmySection.WANT_TO_SEE,
                 FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.REFERENCE,
-                FilmySection.GEMS, FilmySection.SEARCH,
+                FilmySection.GEMS, FilmySection.SEARCH, FilmySection.OPS,
             )
         else
             listOf(
                 FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.HISTORY,
                 FilmySection.FOR_YOU, FilmySection.REFERENCE, FilmySection.FILMOTEKA,
-                FilmySection.GEMS, FilmySection.SEARCH,
+                FilmySection.GEMS, FilmySection.SEARCH, FilmySection.OPS,
             )
 }

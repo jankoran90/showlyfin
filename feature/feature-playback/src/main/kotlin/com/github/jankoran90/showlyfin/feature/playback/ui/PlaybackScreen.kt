@@ -397,6 +397,8 @@ fun PlaybackScreen(
                 else viewModel.saveVideoPosition(c.currentPosition, c.duration) // REWIND: JF-item video lokálně
                 c.removeListener(listener)
             }
+            // PROVOZ (SHW-114): ať v přehledu „co se hraje" nezůstane viset duch po zavřeném přehrávači.
+            viewModel.reportPlaybackStopped("zavřeno")
             view.keepScreenOn = false
             MediaController.releaseFuture(future)
             controller = null
@@ -498,6 +500,13 @@ fun PlaybackScreen(
             // CURTAIN: za prahem (default 85 % délky) je titul dokoukaný, i když se závěrečné titulky
             // nedokoukají. Hlášení je idempotentní (guard ve WatchedReporteru), takže tik nevadí.
             viewModel.notePlaybackProgress(c.currentPosition, c.duration)
+            // PROVOZ (SHW-114): tep do přehledu „co se právě hraje" (reportér si škrtí frekvenci sám).
+            viewModel.reportPlaybackHeartbeat(
+                positionMs = c.currentPosition,
+                durationMs = c.duration,
+                bufferedMs = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0L),
+                paused = !c.isPlaying,
+            )
         }
     }
     // auto-hide controls (ne když je otevřený panel titulků/zvuku). TENFOOT F2c: timeout konfigurovatelný

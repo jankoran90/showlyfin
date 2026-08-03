@@ -51,6 +51,8 @@ class PlaybackViewModel @Inject constructor(
     private val translateStore: SubtitleTranslationStore,
     private val videoResumeStore: VideoResumeStore,
     private val watchedReporter: WatchedReporter,
+    // PROVOZ (SHW-114): hlášení „co tady zrovna hraje" do sekce Provoz.
+    private val opsHeartbeat: OpsHeartbeatReporter,
     private val profileRepository: ProfileRepository,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -283,6 +285,34 @@ class PlaybackViewModel @Inject constructor(
         val target = watchTarget ?: return
         if (!watchedReporter.isFinished(positionMs, durationMs)) return
         viewModelScope.launch { watchedReporter.markWatched(target) }
+    }
+
+    /**
+     * PROVOZ (SHW-114) — tep do přehledu „co se právě hraje". Volá se z téže smyčky jako ukládání
+     * pozice; reportér si sám hlídá, aby neposílal častěji než jednou za 20 s. Tiché — výpadek
+     * hlášení nesmí sáhnout na přehrávání.
+     */
+    fun reportPlaybackHeartbeat(positionMs: Long, durationMs: Long, bufferedMs: Long, paused: Boolean) {
+        val s = _state.value
+        if (s.title.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                opsHeartbeat.tick(
+                    title = s.title,
+                    subtitle = "",
+                    streamUrl = s.streamUrl,
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    bufferedMs = bufferedMs,
+                    paused = paused,
+                )
+            }
+        }
+    }
+
+    /** Přehrávač se zavírá → ať v přehledu nevisí duch. */
+    fun reportPlaybackStopped(reason: String = "") {
+        viewModelScope.launch { runCatching { opsHeartbeat.stopped(reason) } }
     }
 
     /** Přehrávání doběhlo do konce (`STATE_ENDED`) → označ zhlédnuté bez ohledu na práh. */

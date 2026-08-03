@@ -369,6 +369,8 @@ private fun FilmyShellContent() {
                                 onOpenDetail = openDetail,
                                 onOpenCtv = { t -> detailStack = detailStack + FilmyDetailEntry.Ctv(t) },
                             )
+                            // PROVOZ (SHW-114): co hraje kde, výkon přenosu, stav zdrojů + akce nad nimi.
+                            FilmySection.OPS -> FilmyOpsScreen(onMenu = onMenu)
                             // M2.3b: Nastavení = uploader login (ČSFD) + vypínač živého logu.
                             FilmySection.SETTINGS -> FilmySettingsScreen(onMenu = onMenu)
                             // M2.5: Profil = 2 pevné profily + PIN (reuse SettingsViewModel/ProfileRepository).
