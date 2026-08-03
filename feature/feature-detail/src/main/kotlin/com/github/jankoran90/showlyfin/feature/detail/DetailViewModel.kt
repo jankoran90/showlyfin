@@ -1049,6 +1049,7 @@ class DetailViewModel @Inject constructor(
      * i lokální seznam — jinak by dětský profil sice titul přidal, ale nikdo by mu zdroj nehledal.
      */
     private suspend fun triggerWantSourceSearch(item: MediaItem) {
+        markAutoSearching()
         if (item.type == MediaType.MOVIE) {
             workingSourceStore.triggerAutoCache(
                 item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
@@ -1561,6 +1562,7 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(rememberedSource = null) }
         if (item == null || item.type != MediaType.MOVIE) return
         _uiState.update { it.copy(autoAdvanceInfo = "Zdroj zapomenut, hledám nový…") }
+        markAutoSearching()
         viewModelScope.launch {
             workingSourceStore.triggerAutoCache(
                 item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
@@ -1583,6 +1585,7 @@ class DetailViewModel @Inject constructor(
             it.copy(rememberedSource = null, hasSeasonSource = false, hasAnyShowSource = false,
                 autoAdvanceInfo = if (n > 0) "Zdroje zapomenuty, hledám nové…" else null)
         }
+        if (n > 0) markAutoSearching()
         if (n == 0) return
         // 🔴 Zapomenutí MUSÍ rovnou nastartovat nové hledání (user 2026-08-02: *„Zapomenuto mám, ale
         // dotáhne se automaticky?"* → *„to jsme chtěli automatizovat přeci, na pack season ideálně
@@ -2315,10 +2318,34 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
+     * Rozsviť „Hledám zdroj…" a nech ho svítit, dokud se zdroj reálně neobjeví (nebo do stropu času).
+     * User 2026-08-03: *„Promazáno. Asi hledá. Nevidím nikde progress."* — jednorázová hláška v liště
+     * nestačí, hledání běží na serveru desítky vteřin. *Když necháváme diváka čekat, musíme mu to říct
+     * po celou dobu čekání, ne jednou na začátku.*
+     */
+    private fun markAutoSearching() {
+        val item = _uiState.value.item ?: return
+        _uiState.update { it.copy(autoSearching = true) }
+        autoSearchJob?.cancel()
+        autoSearchJob = viewModelScope.launch {
+            val until = System.currentTimeMillis() + AUTO_SEARCH_MAX_MS
+            while (System.currentTimeMillis() < until) {
+                kotlinx.coroutines.delay(3_000)
+                val found = workingSourceStore.get(item.imdbId, item.tmdbId) != null ||
+                    workingSourceStore.savedKeys.value.any { k -> item.tmdbId?.let { k.startsWith("tmdb:$it") } == true }
+                if (found) break
+            }
+            _uiState.update { it.copy(autoSearching = false) }
+        }
+    }
+
+    /**
      * Smí se čekat na serverový přebal? User 2026-08-03: *„Já žádný přebaly nechci!!!"* — přebal je
      * ticho a černá obrazovka na desítky vteřin (naměřeno 31 s), a divák většinou radši dostane jiný
      * zdroj hned. Výchozí VYPNUTO; kdo chce zachraňovat konkrétní release, zapne si to v Nastavení.
      */
+    private var autoSearchJob: kotlinx.coroutines.Job? = null
+
     private fun repackAllowed(): Boolean = prefs.getBoolean(
         com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.ALLOW_REPACK_KEY,
         com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_ALLOW_REPACK,
@@ -3137,6 +3164,8 @@ class DetailViewModel @Inject constructor(
     }
 
     private companion object {
+        // Jak dlouho nechat svítit „Hledám zdroj…", než to vzdáme (auto-hledání běží na serveru).
+        const val AUTO_SEARCH_MAX_MS = 5 * 60 * 1000L
         // Kolik titulkových kandidátů poslat na TV (MPV je nasideloaduje, výběr na TV = F3).
         const val MAX_TV_SUBTITLES = 3
         // WINNOW item 1b: minimální reálná velikost přehrávatelného filmu/epizody (30 MB). Pod tím

@@ -531,6 +531,28 @@ fun DetailScreen(
                 .padding(paddingValues)
                 .verticalScroll(scrollState),
         ) {
+            // 🔴 „Hledám zdroj…" MUSÍ být vidět po celou dobu hledání, ne jen jako bliknutí v liště.
+            // User 2026-08-03 13:11: *„Promazáno. Asi hledá. Nevidím nikde progress."* Auto-hledání
+            // běží na serveru desítky vteřin a mezitím u dětského profilu zmizí i karta z Filmotéky
+            // (ta ukazuje jen tituly se zdrojem) → bez tohohle divák neví, jestli čekat.
+            if (uiState.autoSearching) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "Hledám zdroj… nech to běžet, dá se to i zavřít.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             // ── HERO: fanart s cover posterem + názvem + rokem + ČSFD% zarovnanými dolů do stínu ──
             // CANVAS A: klik na COVER (poster) → galerie; klik na ČSFD badge → recenze; kompaktní
             // kulatá akční lišta nahoře vpravo (u Oblíbených).

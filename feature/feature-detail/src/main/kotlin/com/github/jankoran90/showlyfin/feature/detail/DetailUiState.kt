@@ -130,6 +130,12 @@ data class DetailUiState(
     val incompatibleFormatMessage: String? = null,
     // CASCADE Fáze 4: krátká info hláška při auto-advance po chybě přehrávání ("zkouším další zdroj…")
     val autoAdvanceInfo: String? = null,
+    /**
+     * Běží na pozadí AUTO-HLEDÁNÍ zdroje pro tenhle titul? User 2026-08-03 13:11: *„Promazáno. Asi hledá.
+     * Nevidím nikde progress."* Hláška v liště zmizí za pár vteřin, ale hledání běží dál — divák pak neví,
+     * jestli čekat, nebo je něco rozbité. Drží se, dokud se zdroj neobjeví (nebo do stropu času).
+     */
+    val autoSearching: Boolean = false,
     // RD caching progress (Fáze F) — necachovaný torrent se nahrává na RealDebrid
     val rdDownload: RdDownloadState? = null,
     // Bottom sections (universal — in-library i mimo)
