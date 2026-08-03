@@ -12,6 +12,14 @@ data class PlaybackUiState(
     val posterUrl: String? = null,
     val positionMs: Long = 0L,
     val resumePositionMs: Long = 0L,
+    /**
+     * Pozice, ze které se má navázat BEZ PTANÍ (user 2026-08-03 08:31: *„při návratu do aplikace…
+     * se mi po chvíli zobrazil dialog, zda pokračovat od té pozice nebo od začátku — otravné a mimo,
+     * když už se přehrává"*). Nastane, když se TENTÝŽ titul doručí do přehrávače ZNOVU během chvíle —
+     * což se běžně děje po přebalu nebo po přeskočení na jiný zdroj. Divák tehdy nechce volbu,
+     * chce pokračovat tam, kde byl. Kdežto po delší pauze se pořád ptáme jako dřív.
+     */
+    val silentResumeMs: Long = 0L,
     val error: String? = null,
     // ── CZ titulky (Plan QUASAR Fáze E) ──────────────────────────────────────
     val subtitlesLoading: Boolean = false,

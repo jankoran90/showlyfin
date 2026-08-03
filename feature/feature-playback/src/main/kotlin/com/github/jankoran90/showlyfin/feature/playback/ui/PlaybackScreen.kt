@@ -48,6 +48,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -263,6 +264,9 @@ fun PlaybackScreen(
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var controlsVisible by remember { mutableStateOf(true) }
+    // Ukazatel načítání (user 2026-08-03): odkdy se buferuje (0 = neběží) a kolik vteřin už to trvá.
+    var bufferingSinceMs by remember { mutableLongStateOf(0L) }
+    var bufferingSec by remember { mutableIntStateOf(0) }
     var resumeDecided by remember { mutableStateOf(false) }
     // B fix: pozice, ke které se má přehrávání spustit (0 = od začátku). Nastaví ji dialog „Pokračovat/Od
     // začátku"; prepare efekt ji předá ATOMICKY do setMediaItem(startPositionMs), místo aby po prepare
@@ -435,7 +439,9 @@ fun PlaybackScreen(
         if (state.resumePositionMs > 0L) {
             snapshotFlow { resumeDecided }.first { it }
         }
-        val startMs = resumeStartMs // dialog nastavil; pro resume<=0 zůstává 0 = od začátku
+        // `silentResumeMs` = totéž doručení téhož titulu během chvíle (přebal / jiný zdroj) → navaž tam,
+        // kde divák byl, a NEPTEJ se; viz [PlaybackUiState.silentResumeMs].
+        val startMs = if (state.silentResumeMs > 0L) state.silentResumeMs else resumeStartMs
         timber.log.Timber.i("[Playback] setMediaItem external=${externalUrl != null} startMs=$startMs url=${url.take(90)}")
         // Start pozice ATOMICKY s media item (Media3 pending seek se aplikuje při prepare, nezávisí na
         // propagaci timeline z session zpět do controlleru).
@@ -452,6 +458,15 @@ fun PlaybackScreen(
         while (true) {
             position = c.currentPosition
             duration = c.duration.coerceAtLeast(0L)
+            // Ukazatel načítání: kolik vteřin už se buferuje (0 = neběží). Počítá se tady, ať to
+            // nevyžaduje vlastní smyčku — půlvteřinová přesnost divákovi bohatě stačí.
+            if (c.playbackState == Player.STATE_BUFFERING) {
+                if (bufferingSinceMs == 0L) bufferingSinceMs = System.currentTimeMillis()
+                bufferingSec = ((System.currentTimeMillis() - bufferingSinceMs) / 1000L).toInt()
+            } else {
+                bufferingSinceMs = 0L
+                bufferingSec = 0
+            }
             delay(500)
         }
     }
@@ -719,7 +734,9 @@ fun PlaybackScreen(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
                             useController = false
-                            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                            // Vlastní ukazatel (kolečko + vteřiny) kreslíme sami — vestavěný by se s ním
+                            // překrýval a mlčel by, což je přesně to, na co si user stěžoval.
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                         }.also { playerViewRef = it }
                     },
                     // controller se připojí asynchronně → přiřaď ho do PlayerView, až je hotový.
@@ -730,6 +747,38 @@ fun PlaybackScreen(
                 // Vlastní titulkový overlay (nad videem, pod ovládáním) — render řízen poll smyčkou výše.
                 currentSubtitle?.let { sub ->
                     SubtitleOverlay(text = sub, style = state.subtitleStyle)
+                }
+
+                // 🔴 UKAZATEL NAČÍTÁNÍ (user 2026-08-03 08:29: *„během čekání to chce nějaký jasný progress
+                // bar nebo circle, ať i dítě ví, že se načítá a má čekat"*). Start ze sdilej trvá i 10 s
+                // a přetočení doprostřed ~25 s — bez zpětné vazby to vypadá jako zaseknutá černá obrazovka.
+                // Ukazuje se až po krátké prodlevě, aby drobné dobufferování během hraní neproblikávalo.
+                if (bufferingSec >= 1 && playerError == null) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 28.dp, vertical = 22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            "Načítám… $bufferingSec s",
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        // Po delší době řekni NAHLAS, že se pořád něco děje — jinak divák (a hlavně dítě)
+                        // usoudí, že appka umřela, a zkusí to znovu, čímž si start ještě prodlouží.
+                        if (bufferingSec >= 12) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Zdroj se rozjíždí pomaleji, vydrž chvilku.",
+                                color = Color.White.copy(alpha = 0.75f),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                 }
 
                 playerError?.let { err ->

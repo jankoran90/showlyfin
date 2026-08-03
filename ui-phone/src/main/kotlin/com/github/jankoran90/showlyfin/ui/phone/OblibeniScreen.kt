@@ -267,7 +267,7 @@ private fun EmptyState(kind: FavoriteKind, modifier: Modifier = Modifier) {
         // „Chci vidět" (lokální, mimo Trakt) není kategorie Oblíbených — má vlastní sekci. Do téhle
         // obrazovky se nedostane, ale `when` je vyčerpávající, takže text raději dává smysl.
         FavoriteKind.WANT_MOVIE, FavoriteKind.WANT_SHOW ->
-            "Do „Chci vidět" přidáš titul na jeho detailu — appka pak sama hledá zdroj."
+            "Do „Chci vidět\" přidáš titul na jeho detailu — appka pak sama hledá zdroj."
     }
     Box(modifier.padding(32.dp), contentAlignment = Alignment.Center) {
         Text(

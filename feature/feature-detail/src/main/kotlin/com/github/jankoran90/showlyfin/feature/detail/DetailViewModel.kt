@@ -1034,6 +1034,10 @@ class DetailViewModel @Inject constructor(
                     },
                 )
             }
+            // SEZONA f3k (user 2026-08-03: *„2) b)"*) — i s Traktem se píše do MÍSTNÍHO seznamu.
+            // Trakt zůstává hlavní, tohle je jeho zrcadlo: „Chci vidět" pak funguje i když Trakt mlčí
+            // (vypršelý token, výpadek) a na všech profilech to je jedna a táž mechanika.
+            if (ok) mirrorWantToSeeLocally(item, add = !currentlyIn)
             if (ok && !currentlyIn) triggerWantSourceSearch(item)
             // COUCH: watchlist se změnil → domov přenačte Trakt řady (jinak čerstvý titul naskočí jen v sekci Trakt).
             if (ok) traktSyncSignal.bump()
@@ -1077,6 +1081,19 @@ class DetailViewModel @Inject constructor(
                 cachePolicy(),
             )
         }.onFailure { timber.log.Timber.w(it, "[SEZONA] fronta pro zbylé sezóny selhala") }
+    }
+
+    /** Zrcadlo Trakt „Chci vidět" do místního seznamu (aby fungoval i bez Traktu). Bez tmdb id nic. */
+    private fun mirrorWantToSeeLocally(item: MediaItem, add: Boolean) {
+        val tmdb = item.tmdbId?.takeIf { it > 0L } ?: return
+        val isShow = item.type == MediaType.SHOW
+        if (!add) {
+            wantToSee.remove(tmdb, isShow)
+            return
+        }
+        val raw = _uiState.value.movieDetails?.poster_path ?: item.posterPath
+        val poster = raw?.let { if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w185$it" }
+        wantToSee.add(tmdb, isShow, _uiState.value.tmdbCzTitle ?: item.title, poster, item.year)
     }
 
     /**

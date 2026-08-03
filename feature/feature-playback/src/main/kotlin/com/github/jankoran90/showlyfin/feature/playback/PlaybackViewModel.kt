@@ -189,6 +189,13 @@ class PlaybackViewModel @Inject constructor(
         // CROSS-DEVICE RESUME: pozice z telefonu (cast příkaz) přebije lokální resume TV, když je >0
         // (a je novější / dál — telefon právě odtud castoval). Bez ní = vlastní lokální resume TV.
         val savedResume = externalResumeMs.takeIf { it > 0L } ?: localResume
+        // 🔴 DRUHÉ DORUČENÍ TÉHOŽ TITULU BĚHEM CHVÍLE = pokračuj beze slova. Po přebalu / přeskoku na
+        // jiný zdroj se `loadExternal` volá ZNOVU, jenže to už má uloženou pozici — a divákovi tak
+        // uprostřed přehrávání vyskočil dialog „Pokračovat / Od začátku". Práh podle toho, kdy se
+        // pozice naposled hýbala: pod 90 s = přehrávalo se právě teď. *Stejná otázka podruhé během
+        // jedné podívané není volba, je to překážka.*
+        val movedAgoMs = resumeKey?.let { System.currentTimeMillis() - prefs.getLong("resume_at_$it", 0L) } ?: Long.MAX_VALUE
+        val stillWatching = savedResume > 0L && movedAgoMs in 0..RESUME_SILENT_WINDOW_MS
         timber.log.Timber.i("[PICKUP] loadExternal resumeKey=%s saved=%d (ext=%d local=%d) autoSearch=%s url=%s", resumeKey, savedResume, externalResumeMs, localResume, subtitleQuery?.autoSearch, url.take(70))
         // Nový stream → VŽDY vyhoď titulky z předchozího filmu. Bez tohohle by film bez vlastních
         // titulků (0 kandidátů / prázdné imdb → loadSubtitles se brzy vrátí) dál promítal cues
@@ -197,7 +204,9 @@ class PlaybackViewModel @Inject constructor(
         _state.update {
             it.copy(
                 isLoading = false, title = title, streamUrl = url, posterUrl = posterUrl,
-                positionMs = 0L, resumePositionMs = savedResume,
+                positionMs = 0L,
+                resumePositionMs = if (stillWatching) 0L else savedResume,
+                silentResumeMs = if (stillWatching) savedResume else 0L,
                 subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                 subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
                 canTranslateAi = false, aiTranslating = false, aiTranslateError = null,
@@ -282,9 +291,14 @@ class PlaybackViewModel @Inject constructor(
         val key = resumeKey ?: return
         when {
             durationMs > 0L && positionMs >= durationMs - 30_000L ->
-                prefs.edit().remove("resume_$key").apply()
+                prefs.edit().remove("resume_$key").apply().also { prefs.edit().remove("resume_at_$key").apply() }
             positionMs >= 5_000L ->
-                prefs.edit().putLong("resume_$key", positionMs).apply()
+                // `resume_at_` = KDY se ta pozice naposled hýbala. Podle toho se pozná „přehrávalo se
+                // před chvílí" (→ navaž beze slova) od „vrátil ses po čase" (→ zeptej se jako dřív).
+                prefs.edit()
+                    .putLong("resume_$key", positionMs)
+                    .putLong("resume_at_$key", System.currentTimeMillis())
+                    .apply()
         }
     }
 
@@ -688,6 +702,11 @@ class PlaybackViewModel @Inject constructor(
     override fun onCleared() {
         videoResumeStore.syncNow()
         super.onCleared()
+    }
+
+    private companion object {
+        /** Jak dlouho po posledním posunu pozice platí „pořád se dívá" → navázat bez dialogu. */
+        const val RESUME_SILENT_WINDOW_MS = 90_000L
     }
 }
 
