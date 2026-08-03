@@ -2100,6 +2100,18 @@ class DetailViewModel @Inject constructor(
             repackAndPlay(url)
             return
         }
+        // 🔴 A KDYŽ JSOU PŘEBALY VYPNUTÉ, takový zdroj vůbec NEPOUŠTĚJ — jdi na další.
+        // User 2026-08-03 12:52: *„přehrává se, co vteřina to skoky o desítky vteřin, jakoby seeking
+        // chování pro play"*. Přesně tohle dělá soubor, který přehrávač neumí: nespadne (takže se
+        // nespustí ani přeskok na další zdroj), jen hraje nesmysly. *Vypnout záchranu neznamená
+        // pouštět rozbité — znamená rovnou sáhnout po jiném.*
+        if (target == CastTarget.LOCAL && known != null && repackNeededStore.needsRepack(known) &&
+            !repackAllowed()
+        ) {
+            timber.log.Timber.i("[REPACK] zdroj je známý jako nehratelný a přebal je vypnutý → další zdroj")
+            advancePastSource("Tenhle zdroj přehrávač neumí, zkouším další", target)
+            return
+        }
         _uiState.update { it.copy(isResolvingStream = true) }
         viewModelScope.launch {
             val size = probePlayableSize(url)
