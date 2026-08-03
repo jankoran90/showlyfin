@@ -4,6 +4,8 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -16,12 +18,14 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.github.jankoran90.showlyfin.core.domain.InstallGuard
 import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
+import com.github.jankoran90.showlyfin.feature.playback.PlaybackTelemetry
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import javax.inject.Inject
@@ -48,6 +52,8 @@ class MoviePlayerService : MediaSessionService() {
     @Inject @Named("traktPreferences") lateinit var prefs: SharedPreferences
 
     private var session: MediaSession? = null
+    /** PROVOZ: rozjezd (první buffering) se nepočítá jako zádrhel. */
+    private var everPlayed = false
 
     /** Plan EVEN — DRC/normalizér FILMU. Default VYP; jen telefon (na TV hraje box = passthrough). */
     private var audioBoost: AudioBoost? = null
@@ -105,7 +111,15 @@ class MoviePlayerService : MediaSessionService() {
                 )
                 .setEnableDecoderFallback(true)
         }
+        // PROVOZ (SHW-114): vlastní měřič propustnosti, ať jde odhad rychlosti vytáhnout pro KAŽDÝ
+        // zdroj — u Jellyfinu a ČT server o přenosu neví nic, ale přehrávač ano.
+        val bandwidthMeter = DefaultBandwidthMeter.Builder(this).build().apply {
+            addEventListener(Handler(Looper.getMainLooper())) { _, _, bitrate ->
+                PlaybackTelemetry.onBandwidth(bitrate)
+            }
+        }
         val builder = ExoPlayer.Builder(this)
+            .setBandwidthMeter(bandwidthMeter)
             .setRenderersFactory(renderersFactory)
             // RELAY-CORE: robustní OkHttp zdroj (reconnect + pooling) + trpělivá/diferencovaná retry
             // politika (viz RobustStreamHttp) — místo DefaultHttpDataSource s výchozí impatient policy.
@@ -174,6 +188,30 @@ class MoviePlayerService : MediaSessionService() {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 InstallGuard.playbackActive = isPlaying
+            }
+
+            // PROVOZ (SHW-114): zádrhel = přehrávač se zastavil a čeká na data. První buffering po
+            // startu je normální rozjezd, ne zakolísání — proto `isFirstStart`, dokud se nehrálo.
+            override fun onPlaybackStateChanged(state: Int) {
+                PlaybackTelemetry.onBuffering(
+                    buffering = state == Player.STATE_BUFFERING,
+                    isFirstStart = !everPlayed,
+                )
+                if (state == Player.STATE_READY) everPlayed = true
+            }
+
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                val f = (session?.player as? ExoPlayer)?.videoFormat
+                PlaybackTelemetry.onVideoFormat(f?.bitrate ?: 0, videoSize.height, f?.codecs)
+            }
+        })
+        player.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onDroppedVideoFrames(
+                eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                droppedFrames: Int,
+                elapsedMs: Long,
+            ) {
+                PlaybackTelemetry.onDroppedFrames(droppedFrames)
             }
         })
         return player

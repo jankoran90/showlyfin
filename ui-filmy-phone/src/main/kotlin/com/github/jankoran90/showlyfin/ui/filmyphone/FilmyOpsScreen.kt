@@ -74,7 +74,7 @@ fun FilmyOpsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
             ) {
                 item { PlayingCard(state.overview?.playing.orEmpty()) }
-                item { PerformanceCard(state.overview?.cache) }
+                item { PerformanceCard(state.overview?.playing.orEmpty(), state.overview?.cache) }
                 item {
                     FilmyOpsSourcesCard(
                         sources = state.sources,
@@ -154,23 +154,68 @@ private fun PlayingRow(p: OpsPlaying) {
     }
 }
 
+/**
+ * Výkon. 🔴 Hlavní čísla měří PŘEHRÁVAČ (`PlaybackTelemetry`), takže platí pro **každý** zdroj —
+ * Jellyfin, Českou televizi i přímé odkazy (user 2026-08-03: *„chci vidět výkon u všeho a reálný"*).
+ * Serverová část (předstažená zásoba) je doplněk k tomu, co dodáváme sami.
+ */
 @Composable
-private fun PerformanceCard(cache: OpsCache?) {
+private fun PerformanceCard(playing: List<OpsPlaying>, cache: OpsCache?) {
     FilmyCollapsibleSection(title = "Výkon", icon = Icons.Rounded.Speed, initiallyExpanded = true) {
-        if (cache == null || (cache.files == 0 && cache.waits == 0)) {
-            OpsHint("Přes náš server teď nic neteče. Jellyfin a Česká televize jdou do zařízení přímo, " +
-                "takže se tu neukazují.")
+        if (playing.isEmpty() && (cache == null || cache.files == 0)) {
+            OpsHint("Teď se nikde nehraje, takže není co měřit.")
             return@FilmyCollapsibleSection
         }
-        OpsStat("Rychlost stahování", FilmyOpsFormat.speed(cache.speedBps))
-        OpsStat("Předstažená zásoba", FilmyOpsFormat.size(cache.bytesOnDisk))
-        OpsStat("Hraje se ze zásoby", FilmyOpsFormat.percent(cache.fromCacheRatio))
-        OpsStat("Rozehrané soubory", "${cache.activeFiles} z ${cache.files}")
-        if (cache.waits > 0 || cache.directTails > 0) {
-            OpsStat("Čekání na data", "${cache.waits}×")
-            OpsStat("Nouzové dotažení", "${cache.directTails}×")
+        playing.forEach { p -> DevicePerformance(p, showHeader = playing.size > 1) }
+        val serverSide = cache != null && cache.files > 0
+        if (serverSide) {
+            Text(
+                text = "Náš server dodává",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, bottom = 2.dp),
+            )
+            OpsStat("Rychlost stahování", FilmyOpsFormat.speed(cache!!.speedBps))
+            OpsStat("Předstažená zásoba", FilmyOpsFormat.size(cache.bytesOnDisk))
+            OpsStat("Hraje se ze zásoby", FilmyOpsFormat.percent(cache.fromCacheRatio))
+            OpsStat("Rozehrané soubory", "${cache.activeFiles} z ${cache.files}")
+            if (cache.waits > 0 || cache.directTails > 0) {
+                OpsStat("Čekání na data", "${cache.waits}×")
+                OpsStat("Nouzové dotažení", "${cache.directTails}×")
+            }
         }
     }
+}
+
+/** Co naměřil přehrávač na jednom zařízení — nezávisle na tom, odkud stream teče. */
+@Composable
+private fun DevicePerformance(p: OpsPlaying, showHeader: Boolean) {
+    if (showHeader) {
+        Text(
+            text = p.deviceName.ifBlank { "zařízení" },
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, bottom = 2.dp),
+        )
+    }
+    OpsStat("Rychlost linky", FilmyOpsFormat.speed(p.bandwidthBps))
+    if (p.videoBitrateBps > 0) {
+        OpsStat("Datový tok videa", FilmyOpsFormat.speed(p.videoBitrateBps))
+    }
+    if (p.videoHeight > 0) {
+        OpsStat("Obraz", buildString {
+            append(p.videoHeight).append("p")
+            if (p.videoCodec.isNotBlank()) append(" · ").append(p.videoCodec.substringBefore('.'))
+        })
+    }
+    OpsStat("Nabufferováno", FilmyOpsFormat.duration(p.bufferedMs))
+    // Zádrhel = přehrávač se zastavil a čekal. To divák vidí jako kolečko; průměrná rychlost ne.
+    OpsStat(
+        label = "Zastavení kvůli datům",
+        value = if (p.stalls == 0) "žádné"
+        else "${p.stalls}× · celkem ${FilmyOpsFormat.duration(p.stalledMs)}",
+    )
+    if (p.droppedFrames > 0) OpsStat("Zahozené snímky", "${p.droppedFrames}")
 }
 
 @Composable

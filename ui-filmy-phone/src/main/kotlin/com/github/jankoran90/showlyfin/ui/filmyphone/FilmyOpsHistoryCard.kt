@@ -20,9 +20,9 @@ import com.github.jankoran90.showlyfin.data.uploader.model.OpsHistoryResponse
  * Zadání usera (2026-08-03 14:50): *„Možná i historii a nějaký poměr, zda se stíhalo zásobovat, nebo
  * nějaký statistiky, který můžou být v historii výhodný vidět."*
  *
- * 🔴 **Plynulost se počítá jen z toho, co teklo přes náš server.** U Jellyfinu a České televize
- * o přenosu nevíme nic — započítat je do „bez zádrhelu" by statistiku nalakovalo do zelena.
- * Proto se u souhrnu píše, z kolika relací se vlastně měřilo.
+ * 🔴 **Výkon měří přehrávač, ne server** (user 2026-08-03: *„chci vidět výkon u všeho a reálný"*),
+ * takže čísla platí i pro Jellyfin, Českou televizi a přímé odkazy. Zádrhel = přehrávač se zastavil
+ * a čekal na data; průměrná rychlost to neprozradí.
  */
 @Composable
 internal fun FilmyOpsHistoryCard(history: OpsHistoryResponse?) {
@@ -41,12 +41,17 @@ internal fun FilmyOpsHistoryCard(history: OpsHistoryResponse?) {
         OpsStat("Nakoukáno", FilmyOpsFormat.duration(s.watchedMs))
         OpsStat("Dokoukáno do konce", "${s.finished}")
         if (s.smoothPct != null) {
-            OpsStat("Bez čekání na data", "${s.smoothPct} % (z ${s.measuredSessions} měřených)")
-            OpsStat("Průměrná rychlost", FilmyOpsFormat.speed(s.avgSpeedBps))
-            if (s.totalWaits > 0) OpsStat("Celkem se čekalo", "${s.totalWaits}×")
+            OpsStat("Bez zastavení", "${s.smoothPct} % (z ${s.measuredSessions} přehrání)")
+            if (s.avgBandwidthBps > 0) {
+                OpsStat("Průměrná rychlost linky", FilmyOpsFormat.speed(s.avgBandwidthBps))
+            }
+            if (s.totalStalls > 0) {
+                OpsStat("Celkem zastavení", "${s.totalStalls}× · ${FilmyOpsFormat.duration(s.stalledMs)}")
+            }
+            if (s.avgSpeedBps > 0) OpsStat("Rychlost z našeho serveru", FilmyOpsFormat.speed(s.avgSpeedBps))
+            if (s.totalWaits > 0) OpsStat("Čekání na náš server", "${s.totalWaits}×")
         } else {
-            OpsHint("Rychlost a plynulost se měří jen u streamů, které tečou přes náš server " +
-                "(sdilej.cz). Jellyfin a Česká televize jdou do zařízení přímo.")
+            OpsHint("U starších přehrání appka výkon ještě neměřila, takže se do poměru nepočítají.")
         }
         s.bySource.take(5).forEach { u ->
             OpsStat(
@@ -88,17 +93,20 @@ private fun HistoryRow(h: OpsHistoryItem) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        // Řádek o zásobování dává smysl jen u streamů, které jsme sami dodávali.
-        if (h.source == "sdilej") {
+        // Výkon měřil přehrávač → řádek dává smysl u KAŽDÉHO zdroje, ne jen u našeho.
+        val measured = h.bandwidthBps > 0 || h.stalls > 0 || h.source == "sdilej"
+        if (measured) {
             Text(
-                text = if (h.smooth) {
-                    "Zásobování stíhalo" +
-                        (if (h.avgSpeedBps > 0) " · ${FilmyOpsFormat.speed(h.avgSpeedBps)}" else "") +
-                        (if (h.fromCacheRatio > 0) " · ${FilmyOpsFormat.percent(h.fromCacheRatio)} ze zásoby" else "")
-                } else {
-                    "Čekalo se na data ${h.waits}×" +
-                        (if (h.directTails > 0) " · nouzové dotažení ${h.directTails}×" else "") +
-                        (if (h.avgSpeedBps > 0) " · ${FilmyOpsFormat.speed(h.avgSpeedBps)}" else "")
+                text = buildString {
+                    if (h.smooth) append("Hrálo plynule") else {
+                        append("Zastavilo se ").append(maxOf(h.stalls, h.waits)).append("×")
+                        if (h.stalledMs > 0) append(" · ").append(FilmyOpsFormat.duration(h.stalledMs))
+                    }
+                    if (h.bandwidthBps > 0) append(" · linka ").append(FilmyOpsFormat.speed(h.bandwidthBps))
+                    if (h.videoHeight > 0) append(" · ").append(h.videoHeight).append("p")
+                    if (h.fromCacheRatio > 0) {
+                        append(" · ").append(FilmyOpsFormat.percent(h.fromCacheRatio)).append(" ze zásoby")
+                    }
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = if (h.smooth) MaterialTheme.colorScheme.primary

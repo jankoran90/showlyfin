@@ -63,6 +63,7 @@ class OpsHeartbeatReporter @Inject constructor(
         if (!force && !titleChanged && now - lastSentAt < MIN_INTERVAL_MS) return false
         lastSentAt = now
         lastTitle = title
+        val t = PlaybackTelemetry.snapshot()
         val profile = profileRepository.activeProfile.value
         ops.heartbeat(
             deviceId(),
@@ -81,6 +82,15 @@ class OpsHeartbeatReporter @Inject constructor(
                 durationMs = durationMs,
                 bufferedMs = bufferedMs,
                 paused = paused,
+                // Výkon měřený PŘEHRÁVAČEM — jediné číslo, které platí i pro Jellyfin, ČT a přímé
+                // odkazy. Server o jejich přenosu neví nic (user: „chci vidět výkon u všeho a reálný").
+                bandwidthBps = t.bandwidthBps,
+                stalls = t.stalls,
+                stalledMs = t.stalledMs,
+                droppedFrames = t.droppedFrames,
+                videoBitrateBps = t.videoBitrateBps,
+                videoHeight = t.videoHeight,
+                videoCodec = t.videoCodec,
             ),
         )
         return true
@@ -90,6 +100,7 @@ class OpsHeartbeatReporter @Inject constructor(
     suspend fun stopped(reason: String = "") {
         lastTitle = ""
         lastSentAt = 0L
+        PlaybackTelemetry.reset()
         ops.playbackStopped(deviceId(), reason)
     }
 

@@ -37,6 +37,13 @@ data class OpsPlaying(
     val paused: Boolean = false,
     val videoTrack: String = "",
     val audioTrack: String = "",
+    val bandwidthBps: Long = 0,
+    val stalls: Int = 0,
+    val stalledMs: Long = 0,
+    val droppedFrames: Int = 0,
+    val videoBitrateBps: Long = 0,
+    val videoHeight: Int = 0,
+    val videoCodec: String = "",
 )
 
 /** Souhrn naší vyrovnávací paměti (sdilej proxy) — rychlost, zásoba, kolikrát se čekalo. */
@@ -155,6 +162,15 @@ data class OpsHeartbeatBody(
     val paused: Boolean = false,
     val videoTrack: String = "",
     val audioTrack: String = "",
+    // Výkon MĚŘENÝ ZAŘÍZENÍM (user 2026-08-03: „chci vidět výkon u všeho a reálný"). Serverová čísla
+    // platí jen pro streamy, které tečou přes nás — tohle platí i pro Jellyfin, ČT a přímé odkazy.
+    val bandwidthBps: Long = 0,
+    val stalls: Int = 0,
+    val stalledMs: Long = 0,
+    val droppedFrames: Int = 0,
+    val videoBitrateBps: Long = 0,
+    val videoHeight: Int = 0,
+    val videoCodec: String = "",
 )
 
 data class OpsSweepResponse(
@@ -193,8 +209,16 @@ data class OpsHistoryItem(
     val fromCacheRatio: Double = 0.0,
     val waits: Int = 0,
     val directTails: Int = 0,
-    /** Bez jediného čekání na data — jediné, co divák z „výkonu" opravdu pozná. */
+    /** Bez jediného zastavení přehrávače — jediné, co divák z „výkonu" opravdu pozná. */
     val smooth: Boolean = true,
+    // Měřeno zařízením → platí pro VŠECHNY zdroje, ne jen pro ty, které dodáváme sami.
+    val bandwidthBps: Long = 0,
+    val stalls: Int = 0,
+    val stalledMs: Long = 0,
+    val droppedFrames: Int = 0,
+    val videoBitrateBps: Long = 0,
+    val videoHeight: Int = 0,
+    val videoCodec: String = "",
 )
 
 /**
@@ -210,6 +234,9 @@ data class OpsHistorySummary(
     val smoothPct: Int? = null,
     val avgSpeedBps: Long = 0,
     val totalWaits: Int = 0,
+    val totalStalls: Int = 0,
+    val stalledMs: Long = 0,
+    val avgBandwidthBps: Long = 0,
     val bySource: List<OpsSourceUsage> = emptyList(),
 )
 
