@@ -2,12 +2,14 @@ package com.github.jankoran90.showlyfin.feature.discover.filmoteka
 
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.domain.AgeRating
 import com.github.jankoran90.showlyfin.core.domain.ContentAgeGate
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSettingsStore
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSource
 import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
+import com.github.jankoran90.showlyfin.core.db.repository.isWant
 import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
@@ -107,7 +109,16 @@ class FilmotekaBaseLoader @Inject constructor(
      * per-profil, ale `switchProfile` volaly JEN obrazovky Filmotéky. Když se domov zeptal DŘÍV (nebo user
      * sekci vůbec neotevřel), četl se cizí/globální stav zdrojů. Loader si proto profil srovná sám.
      */
-    private fun ensureProfile() = settings.switchProfile(profileRepository.activeProfile.value?.id)
+    private fun ensureProfile() =
+        settings.switchProfile(profileRepository.activeProfile.value?.id, childDefaults = isChildProfile())
+
+    /**
+     * Dětský profil (CHILDREN/FAMILY) — mění VÝCHOZÍ hodnoty Filmotéky, viz
+     * [FilmotekaSettingsStore.switchProfile]. Tentýž test, jaký používá výběr zdroje (`cachePolicy`).
+     */
+    private fun isChildProfile(): Boolean =
+        parentalControls.profile.value.effectiveAgeRating == AgeRating.CHILDREN ||
+            parentalControls.profile.value.effectiveAgeRating == AgeRating.FAMILY
 
     /**
      * Kolik položek přinesla POSLEDNÍ Jellyfin část sběru. 0 při zapnutém JF zdroji = knihovna se nenačetla
@@ -138,6 +149,43 @@ class FilmotekaBaseLoader @Inject constructor(
             .map { fav -> stub(fav.id, null, fav.name, fav.year, isShow = false, addedAtMs = fav.addedAtMs.takeIf { it > 0L }) }
         val enriched = enricher.enrich(base, withCertification = cap != null)
         return ContentAgeGate.filter(cap, enriched, hideUnrated())
+    }
+
+    /**
+     * SEZONA f3k — **lokální „Chci vidět"** (mimo Trakt, per profil; dětské profily Trakt nemají).
+     * Jde pod tímtéž vypínačem jako Trakt watchlist ([FilmotekaSource.TRAKT_WATCHLIST]) — pro diváka
+     * je to jeden a týž seznam „Chci vidět", jen jednou vedený u Traktu a jednou u nás.
+     *
+     * 🔴 Filtr „jen s dohledaným zdrojem" se u SERIÁLU nedá ptát na `tmdb:<id>` — zdroj se pamatuje
+     * per sezónu/díl (`tmdb:<id>:s1`, `tmdb:<id>:s1e6`), takže se hledá jakýkoli klíč s tou předponou.
+     * Bez toho by seriál s dohledanou sezónou vypadal jako bez zdroje a do Filmotéky by se nedostal.
+     */
+    suspend fun loadWants(
+        list: List<FavoriteItem>,
+        enabled: Set<FilmotekaSource> = settings.sources.value,
+    ): List<MediaItem> {
+        if (FilmotekaSource.TRAKT_WATCHLIST !in enabled) return emptyList()
+        val wants = list.filter { it.kind.isWant() && it.id > 0L }
+        if (wants.isEmpty()) return emptyList()
+        val cap = ageCap()
+        val savedKeys = if (settings.onlyWithSource.value) workingSources.savedKeys.value else null
+        val visible = if (savedKeys == null) wants else wants.filter { hasWorkingSource(it, savedKeys) }
+        val base = visible.map { w ->
+            stub(
+                w.id, null, w.name, w.year,
+                isShow = w.kind == FavoriteKind.WANT_SHOW,
+                addedAtMs = w.addedAtMs.takeIf { it > 0L },
+            )
+        }
+        val enriched = enricher.enrich(base, withCertification = cap != null)
+        return ContentAgeGate.filter(cap, enriched, hideUnrated())
+    }
+
+    /** Má tenhle titul uložený přehratelný zdroj? U seriálu stačí KTERÁKOLI sezóna/díl. */
+    private fun hasWorkingSource(item: FavoriteItem, savedKeys: Set<String>): Boolean {
+        val movieKey = "tmdb:${item.id}"
+        if (item.kind == FavoriteKind.WANT_SHOW) return savedKeys.any { it.startsWith("$movieKey:") }
+        return movieKey in savedKeys
     }
 
     /**
@@ -183,7 +231,8 @@ class FilmotekaBaseLoader @Inject constructor(
 
         val enabled = settings.sources.value
         val base = loadBase(enabled)
-        val favs = loadFavorites(favorites.items.value, enabled)
+        val snapshot = favorites.items.value
+        val favs = loadFavorites(snapshot, enabled) + loadWants(snapshot, enabled)
         val all = mergeWithFavorites(base, favs).sortedByDescending { it.addedAtMs ?: 0L }
         // Neúplný sběr (JF zapnutý, ale knihovna nic nevrátila) se NEUKLÁDÁ — jinak by se do řady na deset
         // minut zafixoval seznam bez knihovny (přesně to, co user viděl na dětském profilu).

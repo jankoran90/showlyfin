@@ -34,6 +34,8 @@ class FilmotekaSettingsStore @Inject constructor(
 
     private var activeId: Long? = null
     private var switched = false
+    /** Je aktivní profil dětský? Rozhoduje jen o VÝCHOZÍCH hodnotách (viz [switchProfile]). */
+    private var childProfile = false
     private fun keyFor(base: String): String = activeId?.let { "p${it}_$base" } ?: base
 
     private val _sources = MutableStateFlow(loadSources())
@@ -72,10 +74,23 @@ class FilmotekaSettingsStore @Inject constructor(
      */
     val onlyWithSource: StateFlow<Boolean> = _onlyWithSource.asStateFlow()
 
-    /** Přepni na nastavení daného profilu — přenačte všechny toky. Idempotentní (stejný profil = no-op). */
-    fun switchProfile(id: Long?) {
-        if (id == activeId && switched) return
+    /**
+     * Přepni na nastavení daného profilu — přenačte všechny toky. Idempotentní (stejný profil = no-op).
+     *
+     * [childDefaults] = jde o DĚTSKÝ profil → jiné VÝCHOZÍ hodnoty (dnes „jen s dohledaným zdrojem"
+     * zapnuto). User 2026-08-02 13:20: *„chci, ať mají ve Filmotéce film až po přehratelném zdroji"* —
+     * dítě nemá jak poznat, že se zdroj teprve shání, a karta, co nejde pustit, je pro něj rozbitá věc.
+     * 🔴 Mění to jen DEFAULT, ne uloženou volbu: kdo si přepínač už nastavil, o svoje nastavení nepřijde.
+     * Příznak dodává feature vrstva (core-domain nesmí vidět ParentalControls).
+     * 🔴🔴 `null` = **NEMĚNIT** (ne „dospělý"). Tuhle metodu volají i místa, která o věku profilu nic
+     * nevědí (nastavení, sync most) — kdyby jim `false` příznak přebilo, dětský profil by o svůj výchozí
+     * stav přišel podle toho, KDO se ozval poslední. *Sdílený stav nesmí resetovat ten, kdo ho nezná.*
+     */
+    fun switchProfile(id: Long?, childDefaults: Boolean? = null) {
+        val child = childDefaults ?: childProfile
+        if (id == activeId && switched && child == childProfile) return
         activeId = id
+        childProfile = child
         switched = true
         _sources.value = loadSources()
         _defaultAxis.value = loadAxis()
@@ -177,7 +192,7 @@ class FilmotekaSettingsStore @Inject constructor(
     }
 
     private fun loadOnlyWithSource(): Boolean =
-        prefs.getBoolean(keyFor(KEY_ONLY_WITH_SOURCE), prefs.getBoolean(KEY_ONLY_WITH_SOURCE, false))
+        prefs.getBoolean(keyFor(KEY_ONLY_WITH_SOURCE), prefs.getBoolean(KEY_ONLY_WITH_SOURCE, childProfile))
 
     private fun loadSources(): Set<FilmotekaSource> {
         val raw = prefs.getString(keyFor(KEY_SOURCES), null) ?: prefs.getString(KEY_SOURCES, null)

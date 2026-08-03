@@ -103,11 +103,11 @@ class FavoritesRepository @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { key ->
                 if (key == null) flowOf(emptyList())
-                else dao.observe(key).map { rows -> rows.map { it.toItem() } }
+                else dao.observe(key).map { rows -> rows.mapNotNull { it.toItemOrNull() } }
             }
 
     fun observe(profileKey: String): Flow<List<FavoriteItem>> =
-        dao.observe(profileKey).map { rows -> rows.map { it.toItem() } }
+        dao.observe(profileKey).map { rows -> rows.mapNotNull { it.toItemOrNull() } }
 
     /** Synchronní dotaz (API-parita se Store) — čte zrcadlený [items] snapshot aktivního profilu. */
     fun isFavorite(kind: FavoriteKind, id: Long): Boolean =
@@ -203,14 +203,23 @@ class FavoritesRepository @Inject constructor(
     private fun cookie(): String = appPrefs.getString("uploader_session_cookie", "").orEmpty()
 
     // ── mapování entity ↔ wire model ─────────────────────────────────────────
-    private fun FavoriteEntity.toItem(): FavoriteItem = FavoriteItem(
-        kind = runCatching { FavoriteKind.valueOf(kind) }.getOrDefault(FavoriteKind.MOVIE),
-        id = refId,
-        name = name,
-        imageUrl = imageUrl,
-        year = year,
-        addedAtMs = addedAt,
-    )
+    /**
+     * 🔴 NEZNÁMÝ DRUH SE ZAHAZUJE, NEDĚLÁ SE Z NĚJ FILM. Dřív tu byl `getOrDefault(MOVIE)`, což je
+     * tichá ZÁMĚNA IDENTITY: řádek `WANT_SHOW` (seriál) by se starším čtenářem tvářil jako oblíbený
+     * FILM téhož tmdb id — a přesně tahle záměna už jednou vyrobila cizí kartu ve Filmotéce
+     * (Bleach tmdb 30984 = film „Dissection"). Neznámé raději nevidět než vidět špatně.
+     */
+    private fun FavoriteEntity.toItemOrNull(): FavoriteItem? {
+        val k = runCatching { FavoriteKind.valueOf(kind) }.getOrNull() ?: return null
+        return FavoriteItem(
+            kind = k,
+            id = refId,
+            name = name,
+            imageUrl = imageUrl,
+            year = year,
+            addedAtMs = addedAt,
+        )
+    }
 
     private fun FavoriteItem.toEntity(key: String, dirty: Int, deleted: Int): FavoriteEntity = FavoriteEntity(
         profileKey = key,

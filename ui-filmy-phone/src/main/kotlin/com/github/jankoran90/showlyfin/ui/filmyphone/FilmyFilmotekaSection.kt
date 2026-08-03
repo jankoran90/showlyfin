@@ -44,8 +44,9 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
             onCheckedChange = { vm.setSource(FilmotekaSource.WORKING, it) },
         )
         SettingSwitchRow(
-            title = "Trakt watchlist",
-            subtitle = "Filmy a seriály z tvého Trakt watchlistu",
+            title = "Chci vidět",
+            subtitle = "Tituly z Trakt watchlistu, a u profilů bez Traktu (dětských) z místního " +
+                "seznamu „Chci vidět\" — filmy i seriály",
             checked = FilmotekaSource.TRAKT_WATCHLIST in sources,
             onCheckedChange = { vm.setSource(FilmotekaSource.TRAKT_WATCHLIST, it) },
         )
@@ -75,7 +76,8 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
             title = "Jen s dohledaným zdrojem",
             subtitle = "Ukázat jen tituly, které jdou hned pustit — mají uložený zdroj nebo jsou v Jellyfin " +
                 "knihovně. Vypnuto = uvidíš i filmy z „Chci vidět\" a Oblíbených, kterým se zdroj teprve shání. " +
-                "Platí i pro řadu Filmotéka na domovské obrazovce.",
+                "Platí i pro řadu Filmotéka na domovské obrazovce. U dětských profilů je to VÝCHOZÍ " +
+                "zapnuté — dítě nepozná, že se zdroj teprve shání, a karta bez zdroje je pro něj rozbitá.",
             checked = onlyWithSource,
             onCheckedChange = { vm.setOnlyWithSource(it) },
         )

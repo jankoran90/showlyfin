@@ -67,6 +67,8 @@ class DetailViewModel @Inject constructor(
     private val repackNeededStore: com.github.jankoran90.showlyfin.data.uploader.RepackNeededStore,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val favoritesStore: com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository,
+    // SEZONA f3k: lokální „Chci vidět" pro profily bez Traktu (dětské) — filmy i seriály.
+    private val wantToSee: com.github.jankoran90.showlyfin.core.db.repository.WantToSeeRepository,
     // DINGO — per-zařízení preset přehrávání (preferuj H.264 pro slabé HEVC dekodéry v autě). Re-rank seznamu zdrojů.
     private val streamPresetStore: com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore,
     // VLTAVA (SHW-110): ČT iVysílání — odkaz na video si tahá ZAŘÍZENÍ (playlist API je na server geoblokované).
@@ -947,7 +949,14 @@ class DetailViewModel @Inject constructor(
             ?: DetailActionsPlacement.BELOW_PLOT
 
     private suspend fun loadWatchlistMembership(item: MediaItem) {
-        if (tokenProvider.getToken() == null) return
+        if (tokenProvider.getToken() == null) {
+            // SEZONA f3k — profil bez Traktu (dětský) má „Chci vidět" LOKÁLNĚ. Bez tohohle by fajfka
+            // po návratu na detail zmizela, i když je titul v seznamu.
+            val tmdb = item.tmdbId ?: return
+            val inLocal = wantToSee.isWanted(tmdb, isShow = item.type == MediaType.SHOW)
+            _uiState.update { it.copy(isInWatchlist = inLocal) }
+            return
+        }
         // WINNOW: tituly z pásu režisér/studio nemají traktId → členství poznáme i podle tmdbId.
         if (item.traktId == 0L && item.tmdbId == null) return
         runCatching {
@@ -970,8 +979,11 @@ class DetailViewModel @Inject constructor(
         // BUG „Chci vidět bez fajfky" (2026-07-14): dřív tiché `return` bez zpětné vazby → user nevěděl,
         // proč fajfka nenaskočí. Teď: viditelná hláška (Toast) při každém blokujícím stavu + OPTIMISTICKÝ
         // překlop (fajfka hned) s revertem při selhání Trakt POSTu.
+        // SEZONA f3k (user 2026-08-02 13:27): profil BEZ Traktu (dětský) si „Chci vidět" vede lokálně —
+        // dřív tu jen vyskočila hláška „přihlas se k Traktu", což dítě nemá jak udělat, takže si o film
+        // říkalo přes Oblíbené a ty se staly náhradním watchlistem. Lokální seznam umí i SERIÁLY.
         if (tokenProvider.getToken() == null) {
-            _uiState.update { it.copy(autoCastMessage = "Pro seznam „Chci vidět\" se přihlas k Trakt (Nastavení → Účty).") }
+            toggleLocalWantToSee(item)
             return
         }
         if (_uiState.value.isTogglingWatchlist) return
@@ -1022,45 +1034,81 @@ class DetailViewModel @Inject constructor(
                     },
                 )
             }
-            // LAPIDARY (SHW-96): úspěšné PŘIDÁNÍ filmu do „chci vidět" = vědomý signál → nacachuj zdroj
-            // na pozadí (backend zapíše auto-WorkingSource → instant-play).
-            if (ok && !currentlyIn && item.type == MediaType.MOVIE) {
-                workingSourceStore.triggerAutoCache(
-                    item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
-                )
-            }
-            // SEZONA (SHW-113) f3 — totéž pro SERIÁL, jen se hledá zdroj pro CELOU SEZÓNU (přednostně
-            // nacachovaný balík). Dřív se seriál do auto-hledání vůbec nedostal (backend jel jen „movie"),
-            // takže po přidání do „Chci vidět" se nestalo nic. Sezóna = ta právě vybraná, jinak první.
-            if (ok && !currentlyIn && item.type == MediaType.SHOW) {
-                val season = _uiState.value.selectedSeason
-                    ?: _uiState.value.seasons.firstOrNull { s -> s.season_number >= 1 }?.season_number
-                    ?: 1
-                workingSourceStore.triggerSeasonCache(
-                    item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title,
-                    item.year, cachePolicy(), season,
-                )
-                // SEZONA f3b: právě otevřená sezóna se hledá HNED (výše, ať má divák zdroj co nejdřív),
-                // ZBYTEK seriálu jde do persistentní fronty s retry — jinak by druhá a další sezóna
-                // zůstaly bez zdroje, dokud si je někdo ručně neotevře (user: „nemám rád mezery").
-                runCatching {
-                    workingSourceStore.cacheBatch(
-                        listOf(
-                            com.github.jankoran90.showlyfin.data.uploader.BackfillItem(
-                                imdb = item.imdbId.orEmpty(),
-                                tmdb = item.tmdbId ?: 0L,
-                                title = _uiState.value.tmdbCzTitle ?: item.title,
-                                year = item.year,
-                                kind = "show",
-                            ),
-                        ),
-                        cachePolicy(),
-                    )
-                }.onFailure { timber.log.Timber.w(it, "[SEZONA] fronta pro zbylé sezóny selhala") }
-            }
+            if (ok && !currentlyIn) triggerWantSourceSearch(item)
             // COUCH: watchlist se změnil → domov přenačte Trakt řady (jinak čerstvý titul naskočí jen v sekci Trakt).
             if (ok) traktSyncSignal.bump()
         }
+    }
+
+    /**
+     * „Chci vidět" = PŘÍKAZ NAJÍT ZDROJ (LAPIDARY SHW-96, u seriálů SEZONA f3). Sdílené pro Trakt
+     * i lokální seznam — jinak by dětský profil sice titul přidal, ale nikdo by mu zdroj nehledal.
+     */
+    private suspend fun triggerWantSourceSearch(item: MediaItem) {
+        if (item.type == MediaType.MOVIE) {
+            workingSourceStore.triggerAutoCache(
+                item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+            )
+            return
+        }
+        // SERIÁL: hledá se zdroj pro CELOU SEZÓNU (přednostně nacachovaný balík) — jeden release na
+        // sezónu, protože jiný release u každého dílu = pokaždé jiné titulky a znovu ladit timing.
+        // Sezóna = ta právě vybraná, jinak první.
+        val season = _uiState.value.selectedSeason
+            ?: _uiState.value.seasons.firstOrNull { s -> s.season_number >= 1 }?.season_number
+            ?: 1
+        workingSourceStore.triggerSeasonCache(
+            item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title,
+            item.year, cachePolicy(), season,
+        )
+        // SEZONA f3b: otevřená sezóna se hledá HNED (výše), ZBYTEK seriálu jde do persistentní fronty
+        // s retry — jinak by druhá a další sezóna zůstaly bez zdroje, dokud si je někdo ručně neotevře.
+        runCatching {
+            workingSourceStore.cacheBatch(
+                listOf(
+                    com.github.jankoran90.showlyfin.data.uploader.BackfillItem(
+                        imdb = item.imdbId.orEmpty(),
+                        tmdb = item.tmdbId ?: 0L,
+                        title = _uiState.value.tmdbCzTitle ?: item.title,
+                        year = item.year,
+                        kind = "show",
+                    ),
+                ),
+                cachePolicy(),
+            )
+        }.onFailure { timber.log.Timber.w(it, "[SEZONA] fronta pro zbylé sezóny selhala") }
+    }
+
+    /**
+     * SEZONA f3k — „Chci vidět" pro profil BEZ Traktu (dětský). Lokální, per profil, synchronizovaný
+     * přes tabulku oblíbených; přidání je zároveň PŘÍKAZ najít zdroj. Do Filmotéky se titul dostane
+     * až se zdrojem (volba „Jen s dohledaným zdrojem", u dětí zapnutá).
+     * 🔴 Bez `tmdbId` to nemá identitu — a hádat ji podle názvu je přesně ta cesta, kterou už jednou
+     * vznikla cizí karta ve Filmotéce. Radši nic než špatně.
+     */
+    private fun toggleLocalWantToSee(item: MediaItem) {
+        val tmdb = item.tmdbId
+        if (tmdb == null || tmdb <= 0L) {
+            _uiState.update { it.copy(autoCastMessage = "Titul zatím nemá ID — zkus to za chvíli.") }
+            return
+        }
+        val isShow = item.type == MediaType.SHOW
+        val raw = _uiState.value.movieDetails?.poster_path ?: item.posterPath
+        val poster = raw?.let { if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w185$it" }
+        val now = wantToSee.toggle(
+            tmdbId = tmdb,
+            isShow = isShow,
+            name = _uiState.value.tmdbCzTitle ?: item.title,
+            posterUrl = poster,
+            year = item.year,
+        )
+        _uiState.update {
+            it.copy(
+                isInWatchlist = now,
+                autoCastMessage = if (now) "Přidáno do „Chci vidět\" — hledám zdroj." else it.autoCastMessage,
+            )
+        }
+        if (now) viewModelScope.launch { triggerWantSourceSearch(item) }
     }
 
     /** LAPIDARY (SHW-96): politika výběru zdroje dle aktivního profilu — dětský (CHILDREN/FAMILY) chce

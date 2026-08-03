@@ -77,8 +77,8 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
             onCheckedChange = { vm.setSource(FilmotekaSource.WORKING, it) },
         )
         TvToggleRow(
-            label = "Trakt watchlist",
-            subtitle = "Filmy a seriály z tvého Trakt watchlistu",
+            label = "Chci vidět",
+            subtitle = "Z Trakt watchlistu; u profilů bez Traktu (dětských) z místního seznamu „Chci vidět\"",
             checked = FilmotekaSource.TRAKT_WATCHLIST in sources,
             onCheckedChange = { vm.setSource(FilmotekaSource.TRAKT_WATCHLIST, it) },
         )
@@ -113,7 +113,8 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
         // FOYER (SHW-107, user 2026-07-27): ukázat jen to, co jde hned pustit (uložený zdroj / JF knihovna).
         TvToggleRow(
             label = "Jen s dohledaným zdrojem",
-            subtitle = "Skryje tituly z „Chci vidět\" a Oblíbených, kterým se zdroj teprve shání. Platí i pro řadu Filmotéka na domově.",
+            subtitle = "Skryje tituly z „Chci vidět\" a Oblíbených, kterým se zdroj teprve shání. Platí i pro řadu " +
+                "Filmotéka na domově. U dětských profilů výchozí ZAPNUTO.",
             checked = onlyWithSource,
             onCheckedChange = { vm.setOnlyWithSource(it) },
         )

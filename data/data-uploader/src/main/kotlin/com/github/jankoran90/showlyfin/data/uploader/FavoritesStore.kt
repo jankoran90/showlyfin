@@ -17,8 +17,19 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
-/** COMPASS C2 (SHW-44) — kategorie Oblíbených (dle zadání usera; WRITER = scénáristé doplněn C3). */
-enum class FavoriteKind { MOVIE, ACTOR, DIRECTOR, WRITER, PRODUCER, COMPOSER, COMPANY }
+/**
+ * COMPASS C2 (SHW-44) — kategorie Oblíbených (dle zadání usera; WRITER = scénáristé doplněn C3).
+ *
+ * SEZONA f3k (2026-08-03) — [WANT_MOVIE] a [WANT_SHOW] = **lokální „Chci vidět"** pro profily, které
+ * nemají (a mít nebudou) Trakt, tedy dětské. User 2026-08-02 13:27: *„Jestli zvládneš udělat spíš CHCI
+ * VIDĚT pro dětský profil, aby fungoval MIMO TRAKT, ale jako PŘÍKAZ pro to najít zdroj… a oblíbené budou
+ * fungovat jako doposud — opravdu jako pro milované věci."*
+ * 🔴 **Dva druhy, ne jeden s příznakem:** PK tabulky je `(profileKey, kind, refId)` a tmdb id filmu
+ * a seriálu se PŘEKRÝVAJÍ — tmdb 30984 je seriál Bleach i film „Dissection" (přesně tahle záměna už
+ * jednou usera stála cizí kartu ve Filmotéce). Oddělený `kind` je to, co identity drží od sebe.
+ * Skladují se ve stejné tabulce jako Oblíbené, takže dědí hotový per-profil sync i tombstony.
+ */
+enum class FavoriteKind { MOVIE, ACTOR, DIRECTOR, WRITER, PRODUCER, COMPOSER, COMPANY, WANT_MOVIE, WANT_SHOW }
 
 /**
  * COMPASS C2 (SHW-44) — jedna položka v Oblíbených. [id] = tmdbId (film / osoba / vydavatelství),

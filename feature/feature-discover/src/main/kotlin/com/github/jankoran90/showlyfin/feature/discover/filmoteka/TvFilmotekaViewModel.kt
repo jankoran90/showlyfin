@@ -312,9 +312,12 @@ class TvFilmotekaViewModel @Inject constructor(
         }
     }
 
-    /** Obohaď + gatuj Oblíbené (jen filmy) a přeskup. Vypnutý zdroj → prázdný bucket (řeší loader). */
+    /**
+     * Obohaď + gatuj Oblíbené (jen filmy) **a lokální „Chci vidět"** (filmy i seriály) a přeskup.
+     * Vypnutý zdroj → prázdný bucket (řeší loader). Obojí sedí v téže tabulce, takže dorazí jedním tokem.
+     */
     private suspend fun refreshFavorites(list: List<FavoriteItem>) {
-        favoriteItems = filmotekaBase.loadFavorites(list)
+        favoriteItems = filmotekaBase.loadFavorites(list) + filmotekaBase.loadWants(list)
         rebuild(_state.value.axis)
         // Oblíbené dorazí často AŽ po sběru báze a nesou data „přidáno" → přepiš jimi diskovou cache,
         // jinak by si příští start pamatoval seznam bez nich (a řadil je na konec).
