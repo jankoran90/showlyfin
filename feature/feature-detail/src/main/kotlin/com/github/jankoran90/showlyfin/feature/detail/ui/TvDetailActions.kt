@@ -148,7 +148,7 @@ internal fun TvDetailActions(
                         onClick = {
                             when {
                                 inLibrary -> uiState.ownedJellyfinId?.let { onPlayJellyfin?.invoke(it) }
-                                hasRemembered -> uiState.rememberedSource?.let { viewModel.playStream(it) }
+                                hasRemembered -> uiState.rememberedSource?.let { viewModel.playRemembered() }
                             }
                         },
                     )

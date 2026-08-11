@@ -22,6 +22,11 @@ import javax.inject.Singleton
  * `registerNetworkCallback(NetworkRequest)` funguje od API 23 (minSdk projektu), na rozdíl od
  * `registerDefaultNetworkCallback` (API 24). Stav počítáme z množiny aktuálně dostupných sítí —
  * při ztrátě poslední validované sítě přepneme na offline.
+ *
+ * [linkKind] (BACKLOG — autodetekce rychlosti linky): druh AKTIVNÍ sítě. Rozhoduje „doma"
+ * (WiFi/ethernet → nejvyšší kvalita) vs „venku" (mobilní data → nižší bitrate). Čteno z
+ * `activeNetwork` + `hasTransport(...)`, ne z callbacku konkrétní sítě — vždy odpovídá síti,
+ * kterou systém právě používá. TV je vždy doma (nemá cellular), telefon se pohybuje.
  */
 @Singleton
 class ConnectivityObserver @Inject constructor(
@@ -35,8 +40,15 @@ class ConnectivityObserver @Inject constructor(
     private val _isOnline = MutableStateFlow(initialOnline())
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
 
+    /** Druh aktivní sítě — „doma" vs „venku" pro volbu bitrate zdroje (BACKLOG autodetekce linky). */
+    private val _linkKind = MutableStateFlow(detectLinkKind())
+    val linkKind: StateFlow<LinkKind> = _linkKind.asStateFlow()
+
     /** Aktuální stav bez čekání na flow (pro jednorázové větvení v repository/VM). */
     fun isCurrentlyOnline(): Boolean = _isOnline.value
+
+    /** Druh linky bez čekání na flow — pro play-gate před přehráním (rychlé rozhodnutí doma/venku). */
+    fun currentLinkKind(): LinkKind = _linkKind.value
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
@@ -59,6 +71,7 @@ class ConnectivityObserver @Inject constructor(
 
     private fun recompute() {
         _isOnline.value = online.isNotEmpty()
+        _linkKind.value = detectLinkKind()
     }
 
     private fun initialOnline(): Boolean {
@@ -68,7 +81,31 @@ class ConnectivityObserver @Inject constructor(
         return caps.hasInternet()
     }
 
+    /**
+     * Druh AKTIVNÍ sítě (`activeNetwork`). Voláno z [recompute] při každé změně sítí i jednorázově
+     * přes [currentLinkKind]. `activeNetwork`/`getNetworkCapabilities` i `hasTransport` jsou dostupné
+     * od API 21+ — bezpečné pro minSdk 23.
+     */
+    private fun detectLinkKind(): LinkKind {
+        val mgr = cm ?: return LinkKind.NONE
+        val active = mgr.activeNetwork ?: return LinkKind.NONE
+        val caps = mgr.getNetworkCapabilities(active) ?: return LinkKind.NONE
+        return when {
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> LinkKind.WIFI
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> LinkKind.CELLULAR
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> LinkKind.ETHERNET
+            else -> LinkKind.OTHER
+        }
+    }
+
     private fun NetworkCapabilities.hasInternet(): Boolean =
         hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
             hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 }
+
+/**
+ * Druh aktuální síťové linky. Určuje „doma" (WiFi/ethernet → nejvyšší kvalita přehrávání) vs
+ * „venku" (mobilní data → nižší bitrate, aby přehrávání nestagovalo). BACKLOG — autodetekce
+ * rychlosti linky. [LinkKind.NONE] = offline / žádná aktivní síť.
+ */
+enum class LinkKind { WIFI, CELLULAR, ETHERNET, OTHER, NONE }

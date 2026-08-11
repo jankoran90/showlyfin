@@ -78,6 +78,8 @@ class DetailViewModel @Inject constructor(
     private val homeTheaterScene: com.github.jankoran90.showlyfin.data.maestro.HomeTheaterScene,
     // SEZONA (SHW-113) f2: volba zvukové stopy per titul (chip na kartě); výchozí dává profil.
     private val audioPathStore: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore,
+    // BACKLOG link mode: play-gate — na mobilních datech nahraď uložený velký zdroj menší alternativou.
+    private val connectivity: com.github.jankoran90.showlyfin.core.network.ConnectivityObserver,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -2005,9 +2007,81 @@ class DetailViewModel @Inject constructor(
             // Počkej na hydrataci detailu — rememberedSource se plní v load() (workingSourceStore.get).
             val ready = withTimeoutOrNull(20_000) { uiState.first { !it.isLoading && it.item != null } }
             if (ready == null) return@launch
-            _uiState.value.rememberedSource?.let { playStream(it) }
+            _uiState.value.rememberedSource?.let { playRemembered() }
         }
     }
+
+    // ── BACKLOG (autodetekce rychlosti linky, user 2026-08-03) ─────────────────────────────────
+    // Zdroje jsou per-PROFIL (sdílené TV↔telefon), takže link mode je per-ZAŘÍZENÍ a ovlivňuje jen
+    // PŘEHRÁVÁNÍ: na mobilních datech („venku") se uložený velký zdroj nahradí menší alternativou,
+    // aby přehrávání nestagovalo. Doma (WiFi/ethernet; TV vždy) = uložený zdroj rovnou (dnešní chování).
+    /** Play-gate: na mobilních datech nahraď uložený velký zdroj menší alternativou, jinak hraj rovnou. */
+    fun playRemembered() {
+        val src = _uiState.value.rememberedSource ?: return
+        val mode = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.effectiveMode(
+            prefs, connectivity.currentLinkKind(),
+        )
+        if (mode == com.github.jankoran90.showlyfin.core.network.LinkMode.AWAY && isTooBigForAway(src)) {
+            seekSmallerAlternative(src)
+        } else {
+            playStream(src)
+        }
+    }
+
+    /** Je uložený zdroj nad prahem „venkovského" režimu? (bitrate, fallback velikost; neznámé = fail-open). */
+    private fun isTooBigForAway(stream: UploaderStream): Boolean {
+        val maxBps = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.awayMaxBitrateMbps(prefs)
+        val maxGb = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.awayMaxSizeGB(prefs)
+        val bps = stream.quality.bitrateMbps
+        val gb = stream.quality.sizeGB
+        return when {
+            bps != null && bps > 0 -> bps > maxBps
+            gb != null && gb > 0 -> gb > maxGb
+            else -> false  // neznámá velikost → nerušit, hraj uložený
+        }
+    }
+
+    /** Na mobilních datech dohledat menší alternativu; při selhání nebo ničem menším padni na uložený zdroj. */
+    private fun seekSmallerAlternative(fallback: UploaderStream) {
+        val item = _uiState.value.item
+        val imdb = item?.imdbId
+        if (item == null || imdb.isNullOrBlank() || uploaderBaseUrl.isBlank()) { playStream(fallback); return }
+        viewModelScope.launch {
+            val epSeason = episodeSelector?.season
+            val epEpisode = episodeSelector?.episode
+            val list = runCatching {
+                uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = false)
+            }.getOrDefault(emptyList())
+            val best = pickSmallerAlternative(fallback, list)
+            timber.log.Timber.i(
+                "[linkmode] AWAY: remembered %.1f Mbps/%.1f GB → alternative %.1f/%.1f (%d kandidátů)".format(
+                    fallback.quality.bitrateMbps ?: -1.0, fallback.quality.sizeGB ?: -1.0,
+                    best.quality.bitrateMbps ?: -1.0, best.quality.sizeGB ?: -1.0, list.size,
+                )
+            )
+            playStream(best)
+        }
+    }
+
+    /** Nejmenší přijatelná alternativa (pod prahem); fail-open na [fallback]. Preferuj bitrate, pak velikost. */
+    private fun pickSmallerAlternative(fallback: UploaderStream, list: List<UploaderStream>): UploaderStream {
+        if (list.isEmpty()) return fallback
+        val maxBps = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.awayMaxBitrateMbps(prefs).toDouble()
+        val maxGb = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.awayMaxSizeGB(prefs)
+        fun UploaderStream.score(): Double =
+            quality.bitrateMbps?.takeIf { it > 0 } ?: quality.sizeGB?.takeIf { it > 0 } ?: Double.MAX_VALUE
+        fun UploaderStream.acceptable(): Boolean {
+            val b = quality.bitrateMbps
+            val g = quality.sizeGB
+            return when {
+                b != null && b > 0 -> b <= maxBps
+                g != null && g > 0 -> g <= maxGb
+                else -> false
+            }
+        }
+        return (list + fallback).filter { it.acceptable() }.minByOrNull { it.score() } ?: fallback
+    }
+    // ── konec BACKLOG link mode ────────────────────────────────────────────────────────────────
 
     /** Cíl hlasového castu → preferredDeviceId: tv = null (automatika → TV/Yellyfin), zenbook = deviceId docku. */
     private suspend fun resolveVoiceCastDeviceId(castTarget: String): String? {

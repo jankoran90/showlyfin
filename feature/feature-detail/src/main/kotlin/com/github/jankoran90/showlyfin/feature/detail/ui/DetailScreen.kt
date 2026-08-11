@@ -466,7 +466,7 @@ fun DetailScreen(
                         hasRemembered = uiState.rememberedSource != null,
                         onPlayHere = onPlayJellyfin?.let { cb -> { uiState.ownedJellyfinId?.let(cb) } },
                         onNaTv = onNaTv?.let { cb -> { cb(displayItem, uiState.ownedJellyfinId) } },
-                        onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playStream(it) } },
+                        onPlayRemembered = { uiState.rememberedSource?.let { viewModel.playRemembered() } },
                         onCastRemembered = { uiState.rememberedSource?.let { viewModel.castStreamToTv(it) } },
                         onRemoveRemembered = { viewModel.removeRememberedSource() },
                         onStremio = { viewModel.openStreamPathChooser() },

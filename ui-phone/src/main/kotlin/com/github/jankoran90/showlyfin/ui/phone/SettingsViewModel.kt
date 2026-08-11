@@ -177,6 +177,14 @@ data class AudiobookBulkState(
     val pending: Int get() = (total - done - downloading - failed).coerceAtLeast(0)
 }
 
+/** BACKLOG link mode — snapshot per-zařízení nastavení „doma/venku" pro UI (vzor sourcePrefs). */
+data class LinkModeState(
+    val autoDetect: Boolean = true,
+    val override: String = "auto",      // "auto" | "home" | "away"
+    val awayMaxBitrate: Int = 8,
+    val awayMaxSizeGB: Double = 8.0,
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val traktAuthManager: TraktAuthManager,
@@ -193,6 +201,8 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val traktSyncSignal: TraktSyncSignal,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    // BACKLOG link mode — detekce WiFi/mobilní data pro play-gate (zustává v poolu SharedPreferences).
+    private val connectivity: com.github.jankoran90.showlyfin.core.network.ConnectivityObserver,
 ) : ViewModel() {
 
     companion object {
@@ -216,6 +226,38 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    // ── BACKLOG link mode (autodetekce rychlosti linky) ───────────────────────────────────────
+    /** Detekce WiFi/mobilní data živě (pro zobrazení v Nastavení). */
+    val linkKind: StateFlow<com.github.jankoran90.showlyfin.core.network.LinkKind> get() = connectivity.linkKind
+
+    private val _linkMode = MutableStateFlow(loadLinkModeState())
+    val linkMode: StateFlow<LinkModeState> = _linkMode.asStateFlow()
+
+    private fun loadLinkModeState() = LinkModeState(
+        autoDetect = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.autoDetect(prefs),
+        override = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.modeOverride(prefs),
+        awayMaxBitrate = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.awayMaxBitrateMbps(prefs),
+        awayMaxSizeGB = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.awayMaxSizeGB(prefs),
+    )
+
+    fun setLinkModeAutoDetect(v: Boolean) {
+        com.github.jankoran90.showlyfin.core.network.LinkModePrefs.setAutoDetect(prefs, v)
+        _linkMode.update { it.copy(autoDetect = v) }
+    }
+    fun setLinkModeOverride(v: String) {
+        com.github.jankoran90.showlyfin.core.network.LinkModePrefs.setModeOverride(prefs, v)
+        _linkMode.update { it.copy(override = v) }
+    }
+    fun setLinkAwayMaxBitrate(v: Int) {
+        com.github.jankoran90.showlyfin.core.network.LinkModePrefs.setAwayMaxBitrateMbps(prefs, v)
+        _linkMode.update { it.copy(awayMaxBitrate = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.awayMaxBitrateMbps(prefs)) }
+    }
+    fun setLinkAwayMaxSizeGB(v: Double) {
+        com.github.jankoran90.showlyfin.core.network.LinkModePrefs.setAwayMaxSizeGB(prefs, v)
+        _linkMode.update { it.copy(awayMaxSizeGB = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.awayMaxSizeGB(prefs)) }
+    }
+    // ── konec BACKLOG link mode ──────────────────────────────────────────────────────────────
 
     // ─── Plan STRATA B2 — hromadné stažení audioknih (scoped na profil) ───
     private val _bulkResolving = MutableStateFlow(false)

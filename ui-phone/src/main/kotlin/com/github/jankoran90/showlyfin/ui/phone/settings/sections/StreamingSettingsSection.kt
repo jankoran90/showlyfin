@@ -146,6 +146,10 @@ internal fun StreamingSettingsSection(
             CollapsibleSettingsSection("Výběr zdroje (auto)", expandedMap) {
                 SourceSelectionSection(prefs = uiState.sourcePrefs, viewModel = viewModel)
             }
+            // BACKLOG link mode — „Kvalita podle linky" (per-zařízení: telefon; TV je vždy doma).
+            CollapsibleSettingsSection("Kvalita podle linky", expandedMap) {
+                LinkModeSection(viewModel = viewModel)
+            }
             // QUARRY (SHW-79): chování hledání zdroje na Sdílej.cz.
             CollapsibleSettingsSection("Sdílej.cz", expandedMap) {
                 val ctx = LocalContext.current

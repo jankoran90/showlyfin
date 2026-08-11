@@ -21,6 +21,7 @@ dependencies {
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-data"))   // BESPOKE F3: ProfileRepository (per-profil Trakt hodnocení)
     implementation(project(":core:core-db"))      // SUBSTRATE (SHW-99): FavoritesRepository (Room = zdroj pravdy)
+    implementation(project(":core:core-network")) // BACKLOG link mode: ConnectivityObserver (play-gate doma/venku)
     implementation(project(":data:data-trakt"))
     implementation(project(":data:data-tmdb"))
     implementation(project(":data:data-csfd"))
