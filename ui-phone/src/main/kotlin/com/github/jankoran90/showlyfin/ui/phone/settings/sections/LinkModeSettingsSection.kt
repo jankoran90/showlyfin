@@ -70,7 +70,7 @@ internal fun LinkModeSection(viewModel: SettingsViewModel) {
             )
             Spacer(Modifier.height(12.dp))
 
-            Text("Práh pro „venek" (kdy nahradit větší zdroj)", style = MaterialTheme.typography.bodyMedium)
+            Text("Práh pro 'venek' (kdy nahradit větší zdroj)", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(4.dp))
             FilterStepRow(
                 label = "Max. bitrate: ${mode.awayMaxBitrate} Mbps",
