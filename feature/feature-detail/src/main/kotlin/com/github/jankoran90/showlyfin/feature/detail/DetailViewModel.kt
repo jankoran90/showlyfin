@@ -1314,6 +1314,8 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             // RD-first režim (DebridSearch) z prefs: off | hash (server-side v /streams) | search | both.
             val rdMode = runCatching { uploaderDs.getStreamFilter(uploaderBaseUrl, uploaderCookie).rdFirstMode }.getOrDefault("both")
+            // BACKLOG link mode: na mobilních datech (away) řekni serveru, ať preferuje nejmenší zdroje.
+            val linkHint = if (com.github.jankoran90.showlyfin.core.network.LinkModePrefs.effectiveMode(prefs, connectivity.currentLinkKind()) == com.github.jankoran90.showlyfin.core.network.LinkMode.AWAY) "away" else null
             // DebridSearch dle názvu (search/both) — prohledá RD účet i mimo addon výsledky, paralelně.
             val savedDeferred: kotlinx.coroutines.Deferred<List<UploaderStream>>? =
                 if (rdMode == "search" || rdMode == "both") {
@@ -1327,7 +1329,7 @@ class DetailViewModel @Inject constructor(
                 sdilejStreamsWithRetry(mediaTypeStr(item), imdb, item.title, _uiState.value.tmdbCzTitle ?: item.title, item.year, epSeason, epEpisode, origTitle = item.originalTitle.orEmpty())
             }
             // Backend vrací už seřazené (rdSaved → cached → CZ/SK → fallbackOrder) a ořezané dle prefs.
-            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = strict) }
+            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = strict, link = linkHint) }
                 .onSuccess { list ->
                     val saved = savedDeferred?.await().orEmpty()
                     val sdilej = sdilejDeferred.await()
@@ -2050,7 +2052,7 @@ class DetailViewModel @Inject constructor(
             val epSeason = episodeSelector?.season
             val epEpisode = episodeSelector?.episode
             val list = runCatching {
-                uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = false)
+                uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = false, link = "away")
             }.getOrDefault(emptyList())
             val best = pickSmallerAlternative(fallback, list)
             timber.log.Timber.i(

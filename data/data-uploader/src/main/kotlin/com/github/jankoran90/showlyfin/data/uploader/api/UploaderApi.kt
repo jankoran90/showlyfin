@@ -15,12 +15,13 @@ internal class UploaderApi(
     private val service: UploaderService,
 ) : UploaderRemoteDataSource {
 
-    override suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int?, episode: Int?, strict: Boolean?): List<UploaderStream> {
+    override suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int?, episode: Int?, strict: Boolean?, link: String? = null): List<UploaderStream> {
         val base = baseUrl.trimEnd('/')
         var url = "$base/api/stremio/streams/$mediaType/$imdbId"
         val params = buildList {
             if (season != null && episode != null) { add("season=$season"); add("episode=$episode") }
             if (strict != null) add("strict=$strict")
+            if (!link.isNullOrBlank()) add("link=$link")
         }
         if (params.isNotEmpty()) url += "?" + params.joinToString("&")
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

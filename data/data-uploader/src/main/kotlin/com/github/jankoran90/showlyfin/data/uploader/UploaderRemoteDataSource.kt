@@ -3,7 +3,7 @@ package com.github.jankoran90.showlyfin.data.uploader
 import com.github.jankoran90.showlyfin.data.uploader.model.*
 
 interface UploaderRemoteDataSource {
-    suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int? = null, episode: Int? = null, strict: Boolean? = null): List<UploaderStream>
+    suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int? = null, episode: Int? = null, strict: Boolean? = null, link: String? = null): List<UploaderStream>
     // Plan CASCADE Fáze 3: probnuté zdroje (reálný addMagnet test) — jen smysluplné (instant/downloadable), mrtvé+infringing pryč.
     suspend fun getProbedStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int? = null, episode: Int? = null): List<UploaderStream>
     suspend fun resolveStream(baseUrl: String, sessionCookie: String, infoHash: String, fileIdx: Int = 0, ctx: UploaderResolveContext? = null): String
