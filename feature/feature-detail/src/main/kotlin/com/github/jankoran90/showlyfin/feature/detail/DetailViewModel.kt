@@ -1741,7 +1741,7 @@ class DetailViewModel @Inject constructor(
                 .joinToString(" ").trim().take(300).takeIf { it.isNotBlank() },
             fps = stream.quality.fps,
             runtime = st.movieDetails?.runtime,
-            autoSearch = !czDub,
+            autoSearch = !czDub && !isChildProfile(),   // dětský profil = CZ dabing → titulky NIKDY nehledat (user 2026-08-12: Bluey mělo dohledané špatné titulky, protože lang audia u zdroje nebyl detekovaný CZ)
         )
     }
 
