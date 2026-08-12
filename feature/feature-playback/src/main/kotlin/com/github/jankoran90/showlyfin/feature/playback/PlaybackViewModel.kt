@@ -707,6 +707,10 @@ class PlaybackViewModel @Inject constructor(
 
                 val streamUrl = "$serverUrl/Videos/$playItemId/stream?static=true&api_key=$token"
 
+                // 🔴 LEAK FIX (user 2026-08-12): Jellyfin přehrávání taky musí vyhodit titulky
+                // z předchozího filmu. loadExternal/loadLocal to dělají, `load()` until teď ne → na TV
+                // zůstávaly cue z včerejšího dospělého filmu (Stremio/RD) i přes dětský Bluey z Jellyfinu.
+                translateObserveJob?.cancel(); translateObserveJob = null; translateKey = null
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -716,6 +720,9 @@ class PlaybackViewModel @Inject constructor(
                         posterUrl = "$serverUrl/Items/$itemId/Images/Primary?api_key=$token",
                         positionMs = positionMs,
                         resumePositionMs = resumeMs,
+                        subtitleCues = emptyList(), selectedSubtitleIndex = -1,
+                        subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
+                        canTranslateAi = false, aiTranslating = false, aiTranslateError = null,
                     )
                 }
             } catch (e: Exception) {
