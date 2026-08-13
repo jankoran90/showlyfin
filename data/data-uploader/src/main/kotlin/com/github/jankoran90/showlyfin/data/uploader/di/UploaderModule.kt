@@ -47,6 +47,13 @@ object UploaderModule {
         @Named("retrofitUploader") retrofit: Retrofit,
     ): UploaderRemoteDataSource = UploaderApi(retrofit.create(UploaderService::class.java))
 
+    /** DROPSHIP F2 — Retrofit interface pro přímé injektování (AudiobookUploadRepository). */
+    @Provides
+    @Singleton
+    fun providesUploaderService(
+        @Named("retrofitUploader") retrofit: Retrofit,
+    ): UploaderService = retrofit.create(UploaderService::class.java)
+
     // PROVOZ (SHW-114) — endpointy sekce „Provoz" (co hraje / výkon / stav zdrojů).
     @Provides
     @Singleton

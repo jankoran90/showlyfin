@@ -12,6 +12,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.CtvProgramScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MergedPodcastScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDetailScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.RssPodcastScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.UploadAudiobookScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.YoutubeChannelScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 
@@ -42,6 +43,8 @@ sealed interface SlovoDetailEntry {
         val posterUrl: String? = null,
         val resumeKey: String? = null,
     ) : SlovoDetailEntry
+    /** DROPSHIP F2 — Nahrát audioknihu z telefonu do ABS knihovny. */
+    data object UploadAudiobook : SlovoDetailEntry
 }
 
 /** True = tento cíl je fullscreen přehrávač (skryj MiniPlayer overlay nad ním). */
@@ -176,6 +179,10 @@ internal fun SlovoDetail(
             resumeKey = entry.resumeKey,
             onBack = onPop,
             onPlaybackFailed = { onPop() },
+        )
+        SlovoDetailEntry.UploadAudiobook -> UploadAudiobookScreen(
+            onBack = onPop,
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }

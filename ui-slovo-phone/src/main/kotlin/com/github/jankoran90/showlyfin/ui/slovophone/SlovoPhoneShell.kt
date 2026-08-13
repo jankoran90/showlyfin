@@ -146,7 +146,10 @@ private fun SlovoShellContent() {
                             PodcastDiscoveryScreen(modifier = Modifier.fillMaxSize())
                         }
                         SlovoSection.ZDROJE -> SlovoSectionScaffold(current.label, onMenu) {
-                            SourceManagerScreen(modifier = Modifier.fillMaxSize())
+                            SourceManagerScreen(
+                                modifier = Modifier.fillMaxSize(),
+                                onUploadAudiobook = { onPush(SlovoDetailEntry.UploadAudiobook) },
+                            )
                         }
                         SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu)
                     }

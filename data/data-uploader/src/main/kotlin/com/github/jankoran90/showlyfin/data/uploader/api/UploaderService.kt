@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.data.uploader.api
 
 import com.github.jankoran90.showlyfin.data.uploader.model.*
+import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
@@ -170,4 +171,17 @@ interface UploaderService {
     // FILMYCAST — cast telefon→TV do Filmy appky (fronta příkazů na backendu, POP jednorázově).
     @POST suspend fun castCommand(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
     @GET suspend fun castCommandGet(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+
+    // DROPSHIP F2 — nahrát audioknihu (multipart) do ABS knihovny přes uploader backend.
+    @Multipart
+    @POST
+    suspend fun uploadAudiobook(
+        @Url url: String,
+        @Header("Cookie") cookie: String,
+        @Part files: List<MultipartBody.Part>,
+        @Part("library_id") libraryId: RequestBody,
+        @Part("title") title: RequestBody?,
+        @Part("author") author: RequestBody?,
+        @Part("auto_match") autoMatch: RequestBody,
+    ): Response<AudiobookUploadResponse>
 }
