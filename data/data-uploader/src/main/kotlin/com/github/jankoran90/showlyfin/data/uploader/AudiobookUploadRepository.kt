@@ -47,6 +47,7 @@ class AudiobookUploadRepository @Inject constructor(
         title: String?,
         author: String?,
         autoMatch: Boolean,
+        coverPart: MultipartBody.Part? = null,
     ): AudiobookUploadResponse {
         val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
         val url = "$b/api/audiobook/upload"
@@ -55,7 +56,7 @@ class AudiobookUploadRepository @Inject constructor(
         val authorPart = author?.takeIf { it.isNotBlank() }?.toRequestBodyForm()
         val autoMatchPart = autoMatch.toString().toRequestBodyForm()
 
-        val resp = service.uploadAudiobook(url, cookie(), parts, libraryPart, titlePart, authorPart, autoMatchPart)
+        val resp = service.uploadAudiobook(url, cookie(), parts, libraryPart, titlePart, authorPart, autoMatchPart, coverPart)
         if (!resp.isSuccessful) {
             val msg = runCatching { resp.errorBody()?.string() }.getOrNull()?.take(200).orEmpty()
             throw HttpException(resp).also { Timber.w(it, "[DROPSHIP] upload HTTP ${resp.code()}: $msg") }

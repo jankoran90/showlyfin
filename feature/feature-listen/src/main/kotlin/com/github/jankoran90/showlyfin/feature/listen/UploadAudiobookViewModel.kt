@@ -75,7 +75,7 @@ class UploadAudiobookViewModel @Inject constructor(
      * Nahraje vybrané soubory. [uris] = audio soubory NEBO archiv (ZIP/RAR/TAR/7Z) z SAF pickeru.
      * [title]/[author] předvyplněné z detekce, uživatelem editovatelné. [autoMatch] = Audible enrich.
      */
-    fun upload(uris: List<Uri>, title: String?, author: String?, autoMatch: Boolean) {
+    fun upload(uris: List<Uri>, title: String?, author: String?, autoMatch: Boolean, coverUri: Uri? = null) {
         val libraryId = _state.value.selectedLibraryId ?: run {
             _state.update { it.copy(error = "Vyber cílovou knihovnu.") }
             return
@@ -108,7 +108,8 @@ class UploadAudiobookViewModel @Inject constructor(
                         }
                     }
                 }
-                uploaderRepo.upload(parts, libraryId, title, author, autoMatch)
+                val coverPart = coverUri?.let { buildCoverPart(it) }
+                uploaderRepo.upload(parts, libraryId, title, author, autoMatch, coverPart)
             }.onSuccess { res ->
                 _state.update { it.copy(isUploading = false, progress = 1f, result = res) }
             }.onFailure { e ->
@@ -138,6 +139,15 @@ class UploadAudiobookViewModel @Inject constructor(
         val base = StreamRequestBody(resolver, uri, mime.toMediaTypeOrNull(), declaredSize)
         val counting = CountingRequestBody(base) { written, _ -> onProgress(written) }
         return MultipartBody.Part.createFormData("files", name, counting)
+    }
+
+    /** Cover obrázek z SAF — pole „cover", bez progress (malý soubor). */
+    private fun buildCoverPart(uri: Uri): MultipartBody.Part {
+        val resolver = context.contentResolver
+        val mime = resolver.getType(uri) ?: "image/jpeg"
+        val name = queryDisplayName(uri) ?: "cover.jpg"
+        val body = StreamRequestBody(resolver, uri, mime.toMediaTypeOrNull(), sizeOfUri(uri))
+        return MultipartBody.Part.createFormData("cover", name, body)
     }
 
     private fun sizeOfUri(uri: Uri): Long = queryLong(uri, OpenableColumns.SIZE)

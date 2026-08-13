@@ -183,5 +183,6 @@ interface UploaderService {
         @Part("title") title: RequestBody?,
         @Part("author") author: RequestBody?,
         @Part("auto_match") autoMatch: RequestBody,
+        @Part cover: MultipartBody.Part?,
     ): Response<AudiobookUploadResponse>
 }

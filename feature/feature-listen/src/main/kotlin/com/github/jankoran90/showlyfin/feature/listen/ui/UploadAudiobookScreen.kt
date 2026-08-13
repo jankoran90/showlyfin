@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.Button
@@ -83,6 +84,8 @@ fun UploadAudiobookScreen(
     var author by remember { mutableStateOf("") }
     var autoMatch by remember { mutableStateOf(true) }
     var titleAuthorPrefilled by remember { mutableStateOf(false) }
+    var coverUri by remember { mutableStateOf<Uri?>(null) }
+    var coverName by remember { mutableStateOf<String?>(null) }
 
     // SAF: výběr jednoho či více souborů (audio + archivy).
     val filesLauncher = rememberLauncherForActivityResult(
@@ -130,6 +133,16 @@ fun UploadAudiobookScreen(
                 author = a ?: ""
                 titleAuthorPrefilled = true
             }
+        }
+    }
+
+    // SAF: výběr cover obrázku (image/*) — volitelný, přepíše auto-dohledaný cover.
+    val coverLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            coverUri = uri
+            coverName = queryDisplayName(context, uri)
         }
     }
 
@@ -213,6 +226,8 @@ fun UploadAudiobookScreen(
                             title = ""
                             author = ""
                             titleAuthorPrefilled = false
+                            coverUri = null
+                            coverName = null
                         },
                     )
                 }
@@ -255,6 +270,15 @@ fun UploadAudiobookScreen(
                 )
             }
 
+            item {
+                CoverRow(
+                    coverUri = coverUri,
+                    coverName = coverName,
+                    onPick = { coverLauncher.launch(arrayOf("image/*")) },
+                    onClear = { coverUri = null; coverName = null },
+                )
+            }
+
             if (state.isUploading) {
                 item {
                     Column {
@@ -273,7 +297,7 @@ fun UploadAudiobookScreen(
                 item {
                     Button(
                         onClick = {
-                            viewModel.upload(selectedUris.toList(), title.ifBlank { null }, author.ifBlank { null }, autoMatch)
+                            viewModel.upload(selectedUris.toList(), title.ifBlank { null }, author.ifBlank { null }, autoMatch, coverUri)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = selectedUris.isNotEmpty() && state.selectedLibraryId != null,
@@ -310,6 +334,8 @@ fun UploadAudiobookScreen(
                         title = ""
                         author = ""
                         titleAuthorPrefilled = false
+                        coverUri = null
+                        coverName = null
                     })
                 }
             }
@@ -433,6 +459,33 @@ private fun ResultCard(
                 TextButton(onClick = onAgain) { Text("Nahrát další") }
                 Button(onClick = onBack) { Text("Zpět") }
             }
+        }
+    }
+}
+
+/** Volitelný cover: SAF image picker. User cover přepíše auto-dohledaný (Audiolibrix/Audible). */
+@Composable
+private fun CoverRow(coverUri: Uri?, coverName: String?, onPick: () -> Unit, onClear: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Obálka", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    coverName ?: "Volitelná — jinak dohledána z Audiolibrix",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            TextButton(onClick = onPick) { Text(if (coverUri == null) "Vybrat" else "Změnit") }
+            if (coverUri != null) TextButton(onClick = onClear) { Text("Odstranit") }
         }
     }
 }
