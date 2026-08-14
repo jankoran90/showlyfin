@@ -18,6 +18,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Named
 import javax.inject.Singleton
+import java.util.concurrent.TimeUnit
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -33,6 +34,11 @@ object UploaderModule {
     ): Retrofit {
         val client = okHttpBase.newBuilder()
             .addInterceptor(UploaderAuthInterceptor(prefs))
+            // DROPSHIP: nahrávání audioknih (archivy desítky-stovky MB) + backend processing
+            // (rozbal + ABS scan poll + enrich/Audiolibrix fetch) trvá i minuty → dlouhý timeout.
+            .writeTimeout(300, TimeUnit.SECONDS)
+            .readTimeout(300, TimeUnit.SECONDS)
+            .callTimeout(600, TimeUnit.SECONDS)
             .build()
         return Retrofit.Builder()
             .baseUrl("http://localhost/")

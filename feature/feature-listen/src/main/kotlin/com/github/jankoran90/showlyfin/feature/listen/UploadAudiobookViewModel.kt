@@ -209,9 +209,19 @@ private class StreamRequestBody(
  * `Autor - Název.ext` → (Autor, Název). Bez " - " → (celý název bez přípony, null).
  */
 internal fun detectTitleAuthor(filename: String): Pair<String, String?> {
-    val base = filename.substringBeforeLast('.').trim()
-    if (" - " !in base) return base to null
-    val (left, right) = base.split(" - ", limit = 2).map { it.trim() }
+    val raw = filename.substringBeforeLast('.').trim()
+    if (" - " !in raw) return prettyCase(cleanSep(raw)) to null
+    val (left, right) = raw.split(" - ", limit = 2).map { prettyCase(cleanSep(it.trim())) }
     // Kratší strana (méně slov) bývá autor (knihovní konvence „Autor - Název").
     return if (left.split(' ').size <= right.split(' ').size) left to right else right to left
 }
+
+/** Pomlčky/podtržítka (mimo „ - ") → mezery, sbalené mezery. */
+private fun cleanSep(s: String): String =
+    s.replace("[-_]+".toRegex(), " ").replace(Regex(" +"), " ").trim()
+
+/** „kral-valecnik" → „Kral Valecnik" (pomlčky už nahrazeny mezerami, title case). */
+private fun prettyCase(s: String): String =
+    s.lowercase().split(' ').filter { it.isNotEmpty() }.joinToString(" ") {
+        it.replaceFirstChar { c -> c.uppercase() }
+    }
