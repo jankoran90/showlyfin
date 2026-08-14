@@ -179,6 +179,9 @@ private fun BooksContent(
                     },
                 )
             } else {
+                // DROPSHIP série v knihovně: víc dílů stejné série → jedna karta, tap otevře díly.
+                val shelfItems = remember(state.books) { groupBooksBySeries(state.books) }
+                var openSeries by remember { mutableStateOf<BookShelfItem.SeriesGroup?>(null) }
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 150.dp),
                     modifier = Modifier.fillMaxSize(),
@@ -186,14 +189,29 @@ private fun BooksContent(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(state.books, key = { it.id }) { book ->
-                        AudiobookCard(
-                            book = book,
-                            onClick = { onOpenBook(book.id) },
-                            downloaded = book.id in state.downloadedBookIds,
-                            onLongClick = { onEditBook(book.id, book.title, book.author) },
-                        )
+                    items(shelfItems, key = { it.itemKey }) { item ->
+                        when (item) {
+                            is BookShelfItem.Standalone -> AudiobookCard(
+                                book = item.book,
+                                onClick = { onOpenBook(item.book.id) },
+                                downloaded = item.book.id in state.downloadedBookIds,
+                                onLongClick = { onEditBook(item.book.id, item.book.title, item.book.author) },
+                            )
+                            is BookShelfItem.SeriesGroup -> SeriesCard(
+                                group = item,
+                                onClick = { openSeries = item },
+                            )
+                        }
                     }
+                }
+                openSeries?.let { group ->
+                    SeriesVolumesSheet(
+                        group = group,
+                        downloadedBookIds = state.downloadedBookIds,
+                        onOpenBook = { id -> openSeries = null; onOpenBook(id) },
+                        onLongClickBook = { book -> openSeries = null; onEditBook(book.id, book.title, book.author) },
+                        onDismiss = { openSeries = null },
+                    )
                 }
             }
         }

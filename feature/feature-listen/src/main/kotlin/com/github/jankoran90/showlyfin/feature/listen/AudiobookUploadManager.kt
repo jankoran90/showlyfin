@@ -109,7 +109,7 @@ class AudiobookUploadManager @Inject constructor(
     ): MultipartBody.Part {
         val resolver = context.contentResolver
         val mime = resolver.getType(uri) ?: "application/octet-stream"
-        val name = queryDisplayName(uri) ?: defaultName(mime)
+        val name = asciiSafeName(queryDisplayName(uri) ?: defaultName(mime))
         val base = StreamRequestBody(resolver, uri, mime.toMediaTypeOrNull(), declaredSize)
         val counting = CountingRequestBody(base) { written, _ -> onProgress(written) }
         return MultipartBody.Part.createFormData("files", name, counting)
@@ -119,9 +119,22 @@ class AudiobookUploadManager @Inject constructor(
     private fun buildCoverPart(uri: Uri): MultipartBody.Part {
         val resolver = context.contentResolver
         val mime = resolver.getType(uri) ?: "image/jpeg"
-        val name = queryDisplayName(uri) ?: "cover.jpg"
+        val name = asciiSafeName(queryDisplayName(uri) ?: "cover.jpg")
         val body = StreamRequestBody(resolver, uri, mime.toMediaTypeOrNull(), sizeOfUri(uri))
         return MultipartBody.Part.createFormData("cover", name, body)
+    }
+
+    /**
+     * Název souboru jde do hlavičky Content-Disposition — HTTP hlavičky smí obsahovat jen ASCII
+     * (RFC 7230). OkHttp pošle české znaky raw UTF-8 a nginx request odmítne (400 → „Unexpected
+     * end of stream"). Transliterace diakritiky + náhrada zbylých ne-ASCII znaků podtržítkem.
+     * Server název používá jen jako fallback pro detekci (ta diakritiku stejně ignoruje).
+     */
+    private fun asciiSafeName(name: String): String {
+        val norm = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+        val cleaned = norm.replace(Regex("[^A-Za-z0-9._() -]"), "_")
+        return cleaned.ifBlank { "audiobook" }
     }
 
     private fun sizeOfUri(uri: Uri): Long = queryLong(uri, OpenableColumns.SIZE)
