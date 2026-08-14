@@ -97,6 +97,13 @@ data class AbsFeedPodcast(
     val episodes: List<com.google.gson.JsonObject> = emptyList(),
 )
 
+/** DROPSHIP série — položka series[] v expanded book metadata (název série + číslo dílu). */
+data class AbsSeriesRef(
+    val id: String? = null,
+    val name: String? = null,
+    val sequence: String? = null,
+)
+
 data class AbsMetadata(
     val title: String? = null,
     val subtitle: String? = null,
@@ -104,6 +111,8 @@ data class AbsMetadata(
     val author: String? = null,              // podcast metadata používá `author`
     val narratorName: String? = null,
     val seriesName: String? = null,
+    /** DROPSHIP série: expanded=1 vrací i plné series[] s číslem dílu. */
+    val series: List<AbsSeriesRef>? = null,
     val description: String? = null,
     val publishedYear: String? = null,
     val genres: List<String>? = null,

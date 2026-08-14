@@ -31,7 +31,8 @@ fun AudiobookCard(
 ) {
     CoverCard(
         title = book.title,
-        subtitle = book.author,
+        // DROPSHIP série: pod názvem autor + název série („Enid Blyton · Správná pětka").
+        subtitle = listOfNotNull(book.author, book.seriesName).joinToString(" · "),
         imageUrl = book.coverUrl,
         onClick = onClick,
         modifier = modifier,

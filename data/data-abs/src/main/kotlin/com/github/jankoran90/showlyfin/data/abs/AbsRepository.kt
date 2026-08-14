@@ -130,6 +130,7 @@ class AbsRepository @Inject constructor(
             author = md?.authorName?.takeIf { it.isNotBlank() },
             narrator = md?.narratorName?.takeIf { it.isNotBlank() },
             seriesName = md?.seriesName?.takeIf { it.isNotBlank() },
+            seriesSequence = md?.series?.firstOrNull()?.sequence?.takeIf { it.isNotBlank() },
             coverUrl = coverUrl(item.id),
             durationSec = m?.duration ?: 0.0,
             progress = progress?.progress ?: 0.0,

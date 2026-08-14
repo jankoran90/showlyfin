@@ -180,6 +180,16 @@ private fun DetailContent(
                         book.narrator?.let {
                             Text("Čte: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                         }
+                        // DROPSHIP série: „Série: Správná pětka · 1. díl" (sequence jen v detailu).
+                        book.seriesName?.let { s ->
+                            val seq = book.seriesSequence?.let { " · $it. díl" }.orEmpty()
+                            Text(
+                                "Série: $s$seq",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
                         val meta = buildList {
                             detail.publishedYear?.takeIf { it.isNotBlank() }?.let { add(it) }
                             if (book.durationSec > 0) add(formatDuration(book.durationSec))

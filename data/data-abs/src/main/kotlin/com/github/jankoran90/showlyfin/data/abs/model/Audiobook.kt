@@ -8,6 +8,8 @@ data class Audiobook(
     val author: String?,
     val narrator: String?,
     val seriesName: String?,
+    /** DROPSHIP série: číslo dílu v sérii (jen detail, expanded=1; seznam vrací jen seriesName). */
+    val seriesSequence: String? = null,
     val coverUrl: String?,
     val durationSec: Double,
     val progress: Double,        // 0.0 - 1.0

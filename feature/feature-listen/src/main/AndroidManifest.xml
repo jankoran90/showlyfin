@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- DROPSHIP F2d — upload audioknihy na pozadí (přežije přepnutí appky). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application>
         <!-- Android Auto: aplikace je media app (procházení + přehrávání ABS audioknih v autě). -->
@@ -21,5 +24,11 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- DROPSHIP F2d — drží proces přiživu během uploadu audioknihy (notifikace s průběhem). -->
+        <service
+            android:name=".service.UploadAudiobookService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>
