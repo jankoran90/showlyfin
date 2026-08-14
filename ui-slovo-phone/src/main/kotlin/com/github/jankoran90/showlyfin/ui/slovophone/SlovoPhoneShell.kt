@@ -122,6 +122,9 @@ private fun SlovoShellContent() {
                         SlovoSection.POSLECH -> SlovoSectionScaffold(current.label, onMenu) {
                             ListenScreen(
                                 onOpenBook = { onPush(SlovoDetailEntry.AudiobookDetail(it)) },
+                                onEditBook = { id, title, author ->
+                                    onPush(SlovoDetailEntry.AudiobookEdit(id, title, author))
+                                },
                                 onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
                                 onPlayEpisode = { itemId, episodeId ->
                                     onPush(SlovoDetailEntry.AudiobookPlayer(itemId, fromStart = false, episodeId = episodeId))

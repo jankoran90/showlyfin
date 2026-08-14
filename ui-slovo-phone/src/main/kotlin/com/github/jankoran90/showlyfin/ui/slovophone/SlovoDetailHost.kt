@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookDetailScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookEditScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookPlayerScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.CtvProgramScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MergedPodcastScreen
@@ -24,6 +25,8 @@ import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
  */
 sealed interface SlovoDetailEntry {
     data class AudiobookDetail(val itemId: String) : SlovoDetailEntry
+    /** DROPSHIP F2c — úprava metadata + cover u stávající audioknihy (long press v seznamu). */
+    data class AudiobookEdit(val itemId: String, val title: String, val author: String? = null) : SlovoDetailEntry
     data class PodcastDetail(val itemId: String) : SlovoDetailEntry
     data class AudiobookPlayer(
         val itemId: String?,
@@ -170,6 +173,13 @@ internal fun SlovoDetail(
                 onPush(SlovoDetailEntry.VideoPlayer(externalUrl = url, title = videoTitle, posterUrl = poster))
             },
             onUnlinked = onPop,
+        )
+        is SlovoDetailEntry.AudiobookEdit -> AudiobookEditScreen(
+            itemId = entry.itemId,
+            initialTitle = entry.title,
+            initialAuthor = entry.author,
+            onBack = onPop,
+            modifier = Modifier.fillMaxSize(),
         )
         is SlovoDetailEntry.VideoPlayer -> PlaybackScreen(
             itemId = entry.itemId ?: "",

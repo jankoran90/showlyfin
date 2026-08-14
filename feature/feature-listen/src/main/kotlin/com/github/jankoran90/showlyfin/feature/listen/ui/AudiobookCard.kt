@@ -26,6 +26,8 @@ fun AudiobookCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     downloaded: Boolean = false,
+    /** DROPSHIP F2c — long press v seznamu → úprava knihy. null = nic (zkratka). */
+    onLongClick: (() -> Unit)? = null,
 ) {
     CoverCard(
         title = book.title,
@@ -33,6 +35,7 @@ fun AudiobookCard(
         imageUrl = book.coverUrl,
         onClick = onClick,
         modifier = modifier,
+        onLongClick = onLongClick,
         placeholder = Icons.Default.Headphones,
         overlay = {
             if (book.progress > 0.001 && !book.isFinished) {

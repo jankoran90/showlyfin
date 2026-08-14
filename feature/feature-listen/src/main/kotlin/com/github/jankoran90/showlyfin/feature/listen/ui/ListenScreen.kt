@@ -54,6 +54,8 @@ import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 @Composable
 fun ListenScreen(
     onOpenBook: (itemId: String) -> Unit,
+    /** DROPSHIP F2c — long press na audioknihu → úprava metadata + cover (itemId, title, author). */
+    onEditBook: (itemId: String, title: String, author: String?) -> Unit = { _, _, _ -> },
     onOpenPodcast: (itemId: String) -> Unit,
     onPlayEpisode: (itemId: String, episodeId: String) -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
@@ -115,7 +117,7 @@ fun ListenScreen(
 
                         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
                             when (modes[page]) {
-                                ListenMode.BOOKS -> BooksContent(state, viewModel, onOpenBook)
+                                ListenMode.BOOKS -> BooksContent(state, viewModel, onOpenBook, onEditBook)
                                 ListenMode.PODCASTS -> PodcastsContent(
                                     state, viewModel, onOpenPodcast,
                                     downloadCount = downloads.size + podcastDownloads.size,
@@ -152,6 +154,7 @@ private fun BooksContent(
     state: ListenUiState,
     viewModel: ListenViewModel,
     onOpenBook: (String) -> Unit,
+    onEditBook: (String, String, String?) -> Unit,
 ) {
     when {
         state.isLoading && state.books.isEmpty() ->
@@ -188,6 +191,7 @@ private fun BooksContent(
                             book = book,
                             onClick = { onOpenBook(book.id) },
                             downloaded = book.id in state.downloadedBookIds,
+                            onLongClick = { onEditBook(book.id, book.title, book.author) },
                         )
                     }
                 }

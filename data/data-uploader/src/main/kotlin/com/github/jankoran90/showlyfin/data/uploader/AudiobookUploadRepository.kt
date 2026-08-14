@@ -66,4 +66,17 @@ class AudiobookUploadRepository @Inject constructor(
 
     private fun String.toRequestBodyForm(): RequestBody =
         this.toRequestBody(MultipartBody.FORM)
+
+    /** DROPSHIP F2c — dohledání CZ metadata+cover pro existující ABS item (z editace knihy). */
+    suspend fun match(itemId: String, title: String, author: String?): com.github.jankoran90.showlyfin.data.uploader.model.AudiobookMatchResponse {
+        val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
+        val url = "$b/api/audiobook/match"
+        val authorPart = author?.takeIf { it.isNotBlank() }?.toRequestBodyForm()
+        val resp = service.matchAudiobook(url, cookie(), itemId.toRequestBodyForm(), title.toRequestBodyForm(), authorPart)
+        if (!resp.isSuccessful) {
+            val msg = runCatching { resp.errorBody()?.string() }.getOrNull()?.take(200).orEmpty()
+            throw HttpException(resp).also { Timber.w(it, "[DROPSHIP] match HTTP ${resp.code()}: $msg") }
+        }
+        return resp.body() ?: error("Server nevrátil odpověď.")
+    }
 }

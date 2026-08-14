@@ -18,6 +18,15 @@ data class AudiobookUploadResponse(
     @SerializedName("detected") val detected: AudiobookUploadDetected? = null,
     @SerializedName("scan") val scan: AudiobookUploadScan? = null,
     @SerializedName("enrich") val enrich: AudiobookUploadEnrich? = null,
+    @SerializedName("cover_override") val coverOverride: Map<String, Any>? = null,
+)
+
+/** DROPSHIP F2c — odpověď POST /api/audiobook/match (dohledání CZ metadata+cover pro existující item). */
+data class AudiobookMatchResponse(
+    @SerializedName("matched") val matched: Boolean = false,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("authors") val authors: List<String>? = null,
+    @SerializedName("description") val description: String? = null,
 )
 
 data class AudiobookUploadDetected(

@@ -185,4 +185,15 @@ interface UploaderService {
         @Part("auto_match") autoMatch: RequestBody,
         @Part cover: MultipartBody.Part?,
     ): Response<AudiobookUploadResponse>
+
+    /** DROPSHIP F2c — dohledání CZ metadata+cover pro existující item: POST /api/audiobook/match. */
+    @Multipart
+    @POST
+    suspend fun matchAudiobook(
+        @Url url: String,
+        @Header("Cookie") cookie: String,
+        @Part("item_id") itemId: RequestBody,
+        @Part("title") title: RequestBody,
+        @Part("author") author: RequestBody?,
+    ): Response<com.github.jankoran90.showlyfin.data.uploader.model.AudiobookMatchResponse>
 }

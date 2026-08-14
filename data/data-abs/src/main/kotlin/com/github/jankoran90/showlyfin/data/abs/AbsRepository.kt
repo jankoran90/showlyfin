@@ -6,6 +6,9 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLoginRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsMediaProgress
 import com.github.jankoran90.showlyfin.data.abs.model.AbsMediaUpdate
+import com.github.jankoran90.showlyfin.data.abs.model.AbsMediaMetadata
+import com.github.jankoran90.showlyfin.data.abs.model.AbsMediaMetadataUpdate
+import com.github.jankoran90.showlyfin.data.abs.model.AbsAuthorInput
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsProgressUpdate
 import com.github.jankoran90.showlyfin.data.abs.model.AbsSyncRequest
@@ -22,6 +25,9 @@ import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastServerAutoDownload
 import com.google.gson.JsonObject
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -48,6 +54,19 @@ class AbsRepository @Inject constructor(
 
     fun coverUrl(itemId: String): String =
         "${prefs.baseUrl}/api/items/$itemId/cover?token=${prefs.token}"
+
+    /** DROPSHIP F2c — úprava metadata audioknihy (title/author). */
+    suspend fun updateItemMedia(itemId: String, title: String?, authors: List<String>?): Result<Unit> = runCatching {
+        val md = AbsMediaMetadata(title = title, authors = authors?.map { AbsAuthorInput(it) })
+        service.patchMediaMetadata(api("/api/items/$itemId/media"), bearer(), AbsMediaMetadataUpdate(md))
+    }
+
+    /** DROPSHIP F2c — upload cover z bytů (např. SAF InputStream → readBytes). */
+    suspend fun uploadCover(itemId: String, bytes: ByteArray, filename: String = "cover.jpg"): Result<Unit> = runCatching {
+        val body = bytes.toRequestBody("image/jpeg".toMediaTypeOrNull())
+        val part = MultipartBody.Part.createFormData("cover", filename, body)
+        service.uploadCover(api("/api/items/$itemId/cover"), bearer(), part)
+    }
 
     /** Přihlášení + uložení tokenu. Vrací Result se srozumitelnou chybou. */
     suspend fun login(url: String, username: String, password: String): Result<Unit> = runCatching {

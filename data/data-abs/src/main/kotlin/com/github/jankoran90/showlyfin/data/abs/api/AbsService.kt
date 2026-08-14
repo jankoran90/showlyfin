@@ -13,13 +13,16 @@ import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayRequest
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlaySession
 import com.github.jankoran90.showlyfin.data.abs.model.AbsProgressUpdate
 import com.github.jankoran90.showlyfin.data.abs.model.AbsSyncRequest
+import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Headers
+import retrofit2.http.Multipart
 import retrofit2.http.PATCH
+import retrofit2.http.Part
 import retrofit2.http.POST
 import retrofit2.http.Url
 
@@ -61,6 +64,15 @@ interface AbsService {
     /** Úprava media položky (ABS server auto-download): PATCH /api/items/{itemId}/media. */
     @PATCH
     suspend fun patchMedia(@Url url: String, @Header("Authorization") bearer: String, @Body body: AbsMediaUpdate): Response<ResponseBody>
+
+    /** DROPSHIP F2c — úprava metadata audioknihy (title/author/...): PATCH /api/items/{itemId}/media. */
+    @PATCH
+    suspend fun patchMediaMetadata(@Url url: String, @Header("Authorization") bearer: String, @Body body: com.github.jankoran90.showlyfin.data.abs.model.AbsMediaMetadataUpdate): Response<ResponseBody>
+
+    /** DROPSHIP F2c — upload cover obrázku: POST /api/items/{itemId}/cover (multipart "cover"). */
+    @Multipart
+    @POST
+    suspend fun uploadCover(@Url url: String, @Header("Authorization") bearer: String, @Part cover: MultipartBody.Part): Response<ResponseBody>
 
     /** Naparsovat RSS feed a vrátit všechny epizody: POST /api/podcasts/feed {rssFeed}. */
     @POST

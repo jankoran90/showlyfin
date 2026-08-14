@@ -68,6 +68,17 @@ data class AbsMedia(
 /** Tělo PATCH /api/items/{id}/media — zapnutí/vypnutí ABS server auto-downloadu epizod. */
 data class AbsMediaUpdate(val autoDownloadEpisodes: Boolean)
 
+/** DROPSHIP F2c — tělo PATCH /api/items/{id}/media pro úpravu metadata audioknihy. */
+data class AbsMediaMetadataUpdate(val metadata: AbsMediaMetadata)
+data class AbsMediaMetadata(
+    val title: String? = null,
+    val authors: List<AbsAuthorInput>? = null,
+    val narrators: List<String>? = null,
+    val publishedYear: String? = null,
+    val description: String? = null,
+)
+data class AbsAuthorInput(val name: String)
+
 // ---- RSS feed: dostupné epizody k stažení na server ----
 // ABS 2.x: POST /api/podcasts/feed {rssFeed} → {podcast:{episodes}};
 //          POST /api/podcasts/{id}/download-episodes  (tělo = HOLÉ pole feed epizod)
