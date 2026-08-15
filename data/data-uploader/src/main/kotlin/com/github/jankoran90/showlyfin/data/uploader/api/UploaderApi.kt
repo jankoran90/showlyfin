@@ -5,6 +5,8 @@ import com.github.jankoran90.showlyfin.data.uploader.model.*
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
@@ -831,7 +833,15 @@ internal class UploaderApi(
         val body = resp.body() ?: throw IllegalStateException("Stažení titulků nevrátilo data")
         val lastTs = resp.headers()["X-Sub-LastTs"]?.toIntOrNull() ?: 0
         val runtimeOk = resp.headers()["X-Sub-RuntimeOk"] ?: "-"
-        return SubtitleDownload(bytes = body.bytes(), lastTsSec = lastTs, runtimeOk = runtimeOk)
+        // 🔴🔴 `downloadSubtitle` je v `UploaderService` označená `@Streaming` → Retrofit tělo NEBUFFERUJE.
+        // `body.bytes()` je tedy BLOKUJÍCÍ čtení ze socketu, a protože se volá z `viewModelScope.launch`
+        // (Main dispatcher), spadne na `NetworkOnMainThreadException`. Ta má `message == null`, takže se
+        // uživateli ukazovala jen obecná hláška „Stažení titulků selhalo" — server přitom vracel 200 OK
+        // s plným tělem (ověřeno curlem přes veřejnou HTTPS cestu). Proto to selhávalo i na JEDINÉ
+        // kliknutí a u každého filmu. *Tělo @Streaming odpovědi se NIKDY nesmí číst na hlavním vlákně.*
+        // (Malé titulky mohly projít, když se vešly do už načteného bufferu — odtud „někdy to šlo".)
+        val bytes = withContext(Dispatchers.IO) { body.bytes() }
+        return SubtitleDownload(bytes = bytes, lastTsSec = lastTs, runtimeOk = runtimeOk)
     }
 
     override suspend fun startSubtitleTranslate(

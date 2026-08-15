@@ -77,6 +77,35 @@ class PlaybackViewModel @Inject constructor(
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
+    /**
+     * DIAGNOSTIKA titulků (2026-08-15) — pošli jednu řádku na server (`/api/debuglog`, token v hlavičce,
+     * BEZ session, ať to funguje i kdyby vázlo přihlášení). Fire-and-forget: nikdy nesmí shodit ani
+     * zpomalit přehrávání, proto vlastní krátký timeout a spolknuté chyby.
+     * Důvod: zařízení jsou na domácí LAN (server je nevidí) a Zenbook s adb bývá offline, takže tohle
+     * je jediná cesta, jak se dostat ke SKUTEČNÉ výjimce z telefonu místo hádání ze serverových logů.
+     */
+    private fun remoteDebug(msg: String) {
+        val base = uploaderBaseUrl.trimEnd('/')
+        if (base.isBlank()) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val conn = (java.net.URL("$base/api/debuglog").openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    setRequestProperty("X-Hub-Token", "hub-dbg-7f3a9c2e")
+                    setRequestProperty("Content-Type", "application/json")
+                    connectTimeout = 5_000; readTimeout = 5_000; doOutput = true
+                }
+                try {
+                    val dev = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} filmy"
+                    val body = org.json.JSONObject()
+                        .put("device", dev).put("level", "FILMY").put("msg", msg).toString()
+                    conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                    conn.responseCode
+                } finally { conn.disconnect() }
+            }
+        }
+    }
+
     // ── SUBWEAVE C: per-profil titulkové volby + sync přes ProfileConfig ──────────
     // Styl + offset se při tažení slideru / nudgeOffset generují mnohokrát; každý updateConfig pushuje
     // na backend → zápisy DEBOUNCUJEME (lokální _state se mění instantně, sync doběhne po ustálení).
@@ -375,6 +404,7 @@ class PlaybackViewModel @Inject constructor(
             }
 
             // Vyber uloženou stopu (offset už je aplikován výše).
+            remoteDebug("SUBTITLE-LIST n=${resp.subtitles.size} best=${resp.best} stored=${loadSourceSelectedId(key) ?: "(nic)"} key=$key")
             when (val storedId = loadSourceSelectedId(key)) {
                 "OFF" -> selectSubtitle(-1, persist = false)
                 null -> selectSubtitle(if (resp.best in resp.subtitles.indices) resp.best else 0, persist = false)
@@ -435,10 +465,23 @@ class PlaybackViewModel @Inject constructor(
                 // potichu doběhnout (žádná hláška), ne se tvářit jako skutečná chyba.
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 timber.log.Timber.w(e, "[Titulky] download selhal id=${cand.id}")
-                _state.update { it.copy(subtitlesLoading = false, subtitleError = e.message ?: "Stažení titulků selhalo") }
+                // DIAGNOSTIKA (2026-08-15): server je prokazatelně zdravý (200 OK, čisté ASCII hlavičky,
+                // plné tělo i přes veřejnou HTTPS cestu — ověřeno curlem), přesto klient hlásí selhání.
+                // Bez logcatu (Zenbook offline) je tohle jediný způsob, jak zjistit SKUTEČNOU výjimku:
+                // pošli ji na server, ať se nehádá naslepo. Typ výjimky je důležitější než hláška.
+                val detail = "${e::class.java.simpleName}: ${e.message ?: "(bez hlášky)"}"
+                remoteDebug("SUBTITLE-FAIL id=${cand.id} $detail")
+                _state.update { it.copy(subtitlesLoading = false, subtitleError = detail) }
                 return@launch
             }
             val cues = parseSrt(dl.bytes)
+            if (cues.isEmpty()) {
+                // Stažení prošlo, ale nemáme ani jednu repliku → stopa by se „vybrala", a přesto by se
+                // nic nezobrazilo. Řekni to nahlas místo tichého prázdna.
+                remoteDebug("SUBTITLE-EMPTY id=${cand.id} bytes=${dl.bytes.size} runtimeOk=${dl.runtimeOk}")
+            } else {
+                remoteDebug("SUBTITLE-OK id=${cand.id} cues=${cues.size}")
+            }
             _state.update {
                 it.copy(
                     subtitlesLoading = false, selectedSubtitleIndex = index,
