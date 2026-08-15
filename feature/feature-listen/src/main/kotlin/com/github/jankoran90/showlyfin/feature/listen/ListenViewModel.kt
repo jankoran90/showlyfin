@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import android.content.Context
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
@@ -11,6 +13,8 @@ import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import android.net.Uri
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.toAudiobook
+import com.github.jankoran90.showlyfin.feature.listen.service.AudiobookBatchDownloadService
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
@@ -49,6 +53,7 @@ class ListenViewModel @Inject constructor(
     private val sourcesRepo: PodcastSourcesRepository,
     private val linkStore: com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore,
     private val absPrefs: AbsPreferences,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     // TWINE (SHW-74 / plán F7): propojení zdrojů „týž pořad jako audio+video". Lokální, reaktivní.
@@ -70,6 +75,31 @@ class ListenViewModel @Inject constructor(
 
     /** Profily (2026-08-15) — aktivní profil (`isAdmin` rozhoduje dospělý/dětský vzhled sekce Poslech). */
     val activeProfile = profileRepository.activeProfile
+
+    /**
+     * User (2026-08-15) „na kartě podcastu při long pressu možnost ukázat u dětí" — reaktivně
+     * skrytí podcastů PRO DĚTSKÝ profil (první ne-admin profil; generické napříč appkami s 2
+     * profily, ne natvrdo Slovo UUID — ty žijí výš v `ui-slovo-phone`, sem by šel cyklus).
+     */
+    val kidsHiddenPodcastIds: StateFlow<Set<String>> = profileRepository.observeAll()
+        .map { profiles ->
+            profiles.firstOrNull { !it.isAdmin }
+                ?.let { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).hiddenPodcastIds }
+                .orEmpty()
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /** Admin (Dospělý) — přepne, jestli podcast [podcastId] vidí dětský profil. No-op bez dětského profilu. */
+    fun setPodcastVisibleForKids(podcastId: String, visible: Boolean) {
+        viewModelScope.launch {
+            val kids = profileRepository.getAll().firstOrNull { !it.isAdmin } ?: return@launch
+            profileRepository.updateConfig(kids.id) { cfg ->
+                cfg.copy(
+                    hiddenPodcastIds = if (visible) cfg.hiddenPodcastIds - podcastId else cfg.hiddenPodcastIds + podcastId,
+                )
+            }
+        }
+    }
 
     /** Klíče skrytí karty knihovny: sloučená = všichni členové, samostatný zdroj = `type:ref`. */
     fun followingKeysForGroup(memberKeys: Collection<String>): Set<String> = memberKeys.toSet()
@@ -412,11 +442,18 @@ class ListenViewModel @Inject constructor(
         audiobookDownloads.download(book.id, book.title, book.author, book.coverUrl)
     }
 
-    /** "Stáhnout vše" — všechny knihy aktuálně viditelné police, co ještě nejsou stažené. */
+    /**
+     * "Stáhnout vše" — všechny knihy aktuálně viditelné police, co ještě nejsou stažené. User
+     * (2026-08-15) „stahuje se i na pozadí?" — dávka může trvat déle než appka zůstane v popředí,
+     * proto foreground služba (vzor upload F2d), ať Android proces nezabije.
+     */
     fun downloadAllBooks() {
-        val downloaded = _uiState.value.downloadedBookIds
-        _uiState.value.books.filter { it.id !in downloaded }.forEach { downloadBook(it) }
+        audiobookDownloads.downloadAll(_uiState.value.books)
+        ContextCompat.startForegroundService(context, AudiobookBatchDownloadService.intent(context))
     }
+
+    /** Souhrnný postup "Stáhnout vše" (null = žádná dávka neběží) — pro UI "staženo X/Y". */
+    val batchDownloadProgress = audiobookDownloads.batchProgress
 
     fun selectLibrary(libraryId: String) {
         if (libraryId == _uiState.value.selectedLibraryId) return

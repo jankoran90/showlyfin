@@ -30,5 +30,11 @@
             android:name=".service.UploadAudiobookService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- User (2026-08-15) — drží proces přiživu během dávkového stahování ("Stáhnout vše"). -->
+        <service
+            android:name=".service.AudiobookBatchDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

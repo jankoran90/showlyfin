@@ -14,7 +14,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -195,9 +197,10 @@ private fun BooksContent(
                 var openSeries by remember { mutableStateOf<BookShelfItem.SeriesGroup?>(null) }
                 var actionBook by remember { mutableStateOf<Audiobook?>(null) }
                 val notDownloaded = state.books.any { it.id !in state.downloadedBookIds }
+                val batchProgress by viewModel.batchDownloadProgress.collectAsStateWithLifecycle()
                 Column(Modifier.fillMaxSize()) {
-                    if (!state.isOffline && notDownloaded) {
-                        DownloadAllRow(onClick = viewModel::downloadAllBooks)
+                    if (!state.isOffline && (notDownloaded || batchProgress != null)) {
+                        DownloadAllRow(progress = batchProgress, onClick = viewModel::downloadAllBooks)
                     }
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 150.dp),
@@ -356,6 +359,9 @@ private fun FollowingContent(
     val cfg by viewModel.profileConfig.collectAsStateWithLifecycle()
     val hiddenFollowing = cfg.hiddenFollowingSourceKeys
     var actionCard by remember { mutableStateOf<LibraryCard?>(null) }
+    // User (2026-08-15) — dlouhý stisk na ABS podcast (jen Dospělý) → "Zobrazit/Skrýt dětem".
+    val activeProfile by viewModel.activeProfile.collectAsStateWithLifecycle()
+    val kidsHidden by viewModel.kidsHiddenPodcastIds.collectAsStateWithLifecycle()
     val byKey = remember(state.customSources) { state.customSources.associateBy { viewModel.sourceKey(it) } }
     val linkedKeys = remember(links) { links.flatMap { it.members }.toSet() }
     // Samostatné karty = filtrované zdroje, které nejsou v žádné skupině.
@@ -431,7 +437,11 @@ private fun FollowingContent(
                                         onLongClick = { actionCard = card },
                                     )
                                 is LibraryCard.Abs ->
-                                    PodcastCard(podcast = card.podcast, onClick = { onOpenPodcast(card.podcast.id) })
+                                    PodcastCard(
+                                        podcast = card.podcast,
+                                        onClick = { onOpenPodcast(card.podcast.id) },
+                                        onLongClick = { actionCard = card },
+                                    )
                             }
                         }
                     }
@@ -441,7 +451,10 @@ private fun FollowingContent(
     }
 
     // WEFT (SHW-75/W5): dlouhý stisk karty → akce (Propojit / Skrýt ve Sledovaných / Skrýt na časové ose).
+    // User (2026-08-15): u ABS podcastu navíc (jen Dospělý) "Zobrazit/Skrýt dětem" — zkratka k témuž
+    // hiddenPodcastIds, co jinak nastavuje sekce Profil → Podcasty pro Děti (rychlejší z gridu).
     actionCard?.let { card ->
+        val absPodcastId = (card as? LibraryCard.Abs)?.podcast?.id
         ListenEpisodeActionSheet(
             title = card.sortTitle,
             actions = listOfNotNull(
@@ -450,6 +463,13 @@ private fun FollowingContent(
                         linkFor = c.source
                     }
                 },
+                if (absPodcastId != null && activeProfile?.isAdmin == true) {
+                    val visibleToKids = absPodcastId !in kidsHidden
+                    ListenEpisodeAction(
+                        if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
+                        if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
+                    ) { viewModel.setPodcastVisibleForKids(absPodcastId, !visibleToKids) }
+                } else null,
                 ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt ve Sledovaných") {
                     viewModel.setHidden(card.hideKeys, timeline = false, hidden = true)
                 },

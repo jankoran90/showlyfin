@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
+import com.github.jankoran90.showlyfin.data.abs.model.BatchDownloadProgress
 
 /**
  * User (2026-08-15) — long press na audioknihu dřív rovnou otevřel editaci; teď nabídne menu:
@@ -37,12 +38,25 @@ fun AudiobookActionSheet(
     )
 }
 
-/** User (2026-08-15) — „stáhnout vše": řádek nad gridem, viditelný jen když je co stahovat a je se čím připojit. */
+/**
+ * User (2026-08-15) — „stáhnout vše": řádek nad gridem, viditelný jen když je co stahovat a je se
+ * čím připojit. Během dávky (user: „kde vidím místo stáhnout vše staženo 20/50") se tlačítko
+ * nahradí textem s průběhem, dokud [progress] neskončí (null).
+ */
 @Composable
-fun DownloadAllRow(onClick: () -> Unit) {
+fun DownloadAllRow(progress: BatchDownloadProgress?, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-        TextButton(onClick = onClick) {
-            Text("Stáhnout vše", color = MaterialTheme.colorScheme.primary)
+        if (progress != null) {
+            Text(
+                "Stahuji ${progress.completed}/${progress.total}…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp),
+            )
+        } else {
+            TextButton(onClick = onClick) {
+                Text("Stáhnout vše", color = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }

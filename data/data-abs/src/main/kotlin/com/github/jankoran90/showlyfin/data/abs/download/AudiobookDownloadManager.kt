@@ -10,7 +10,9 @@ import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
 import com.github.jankoran90.showlyfin.data.abs.model.AbsTrack
+import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDownload
+import com.github.jankoran90.showlyfin.data.abs.model.BatchDownloadProgress
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadState
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus
 import com.github.jankoran90.showlyfin.data.abs.model.LocalAudiobookTrack
@@ -24,6 +26,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -85,6 +88,35 @@ class AudiobookDownloadManager @Inject constructor(
     private val _downloads = MutableStateFlow(sortedDownloads())
     /** Seznam všech stažených audioknih (offline police v Poslechu, Plan CASTAWAY CA-2). */
     val downloads = _downloads.asStateFlow()
+
+    private val _batchProgress = MutableStateFlow<BatchDownloadProgress?>(null)
+    /** User (2026-08-15) „Stáhnout vše" — souhrnný postup dávky (null = žádná dávka neběží). */
+    val batchProgress = _batchProgress.asStateFlow()
+
+    /**
+     * „Stáhnout vše" — spustí [download] pro všechny zatím nestažené knihy a sleduje souhrnný
+     * postup přes [states] (per-knihu joby v [scope] běží nezávisle, tohle jen počítá dokončené).
+     */
+    fun downloadAll(books: List<Audiobook>) {
+        val targets = books.filter { !isDownloaded(it.id) }
+        if (targets.isEmpty()) return
+        val pending = targets.map { it.id }.toMutableSet()
+        _batchProgress.value = BatchDownloadProgress(0, targets.size)
+        scope.launch {
+            // takeWhile ukončí sběr sám, jakmile poslední kniha dojde (bez ruční Job.cancel() —
+            // ta uvnitř collect lambdy narazí na přetíženou členskou fun cancel(itemId), ne na Job).
+            states.takeWhile { current ->
+                val justDone = pending.filter { current[it]?.status in TERMINAL_STATUSES }
+                if (justDone.isNotEmpty()) {
+                    pending.removeAll(justDone.toSet())
+                    _batchProgress.value =
+                        if (pending.isEmpty()) null else BatchDownloadProgress(targets.size - pending.size, targets.size)
+                }
+                pending.isNotEmpty()
+            }.collect {}
+        }
+        targets.forEach { download(it.id, it.title, it.author, it.coverUrl) }
+    }
 
     fun stateFor(itemId: String): DownloadState = _states.value[itemId] ?: DownloadState()
 
@@ -290,5 +322,6 @@ class AudiobookDownloadManager @Inject constructor(
 
     companion object {
         private const val KEY_INDEX = "abs_audiobook_downloads"
+        private val TERMINAL_STATUSES = setOf(DownloadStatus.DOWNLOADED, DownloadStatus.FAILED)
     }
 }
