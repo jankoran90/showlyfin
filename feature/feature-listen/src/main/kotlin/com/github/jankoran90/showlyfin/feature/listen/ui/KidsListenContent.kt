@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.Podcast
 import com.github.jankoran90.showlyfin.feature.listen.ListenUiState
@@ -84,10 +85,11 @@ fun KidsListenContent(
             }
 
             val notDownloaded = state.books.any { it.id !in state.downloadedBookIds }
+            val batchProgress by viewModel.batchDownloadProgress.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize()) {
                 Column(Modifier.fillMaxSize()) {
-                    if (!state.isOffline && notDownloaded) {
-                        DownloadAllRow(onClick = viewModel::downloadAllBooks)
+                    if (!state.isOffline && (notDownloaded || batchProgress != null)) {
+                        DownloadAllRow(progress = batchProgress, onClick = viewModel::downloadAllBooks)
                     }
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 150.dp),
