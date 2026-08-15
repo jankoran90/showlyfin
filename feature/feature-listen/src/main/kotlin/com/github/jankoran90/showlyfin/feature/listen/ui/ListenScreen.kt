@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.feature.listen.ListenMode
 import com.github.jankoran90.showlyfin.feature.listen.ListenUiState
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
@@ -192,25 +193,32 @@ private fun BooksContent(
                 // DROPSHIP série v knihovně: víc dílů stejné série → jedna karta, tap otevře díly.
                 val shelfItems = remember(state.books) { groupBooksBySeries(state.books) }
                 var openSeries by remember { mutableStateOf<BookShelfItem.SeriesGroup?>(null) }
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 150.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(shelfItems, key = { it.itemKey }) { item ->
-                        when (item) {
-                            is BookShelfItem.Standalone -> AudiobookCard(
-                                book = item.book,
-                                onClick = { onOpenBook(item.book.id) },
-                                downloaded = item.book.id in state.downloadedBookIds,
-                                onLongClick = { onEditBook(item.book.id, item.book.title, item.book.author) },
-                            )
-                            is BookShelfItem.SeriesGroup -> SeriesCard(
-                                group = item,
-                                onClick = { openSeries = item },
-                            )
+                var actionBook by remember { mutableStateOf<Audiobook?>(null) }
+                val notDownloaded = state.books.any { it.id !in state.downloadedBookIds }
+                Column(Modifier.fillMaxSize()) {
+                    if (!state.isOffline && notDownloaded) {
+                        DownloadAllRow(onClick = viewModel::downloadAllBooks)
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 150.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(shelfItems, key = { it.itemKey }) { item ->
+                            when (item) {
+                                is BookShelfItem.Standalone -> AudiobookCard(
+                                    book = item.book,
+                                    onClick = { onOpenBook(item.book.id) },
+                                    downloaded = item.book.id in state.downloadedBookIds,
+                                    onLongClick = { actionBook = item.book },
+                                )
+                                is BookShelfItem.SeriesGroup -> SeriesCard(
+                                    group = item,
+                                    onClick = { openSeries = item },
+                                )
+                            }
                         }
                     }
                 }
@@ -219,8 +227,17 @@ private fun BooksContent(
                         group = group,
                         downloadedBookIds = state.downloadedBookIds,
                         onOpenBook = { id -> openSeries = null; onOpenBook(id) },
-                        onLongClickBook = { book -> openSeries = null; onEditBook(book.id, book.title, book.author) },
+                        onLongClickBook = { book -> openSeries = null; actionBook = book },
                         onDismiss = { openSeries = null },
+                    )
+                }
+                actionBook?.let { book ->
+                    AudiobookActionSheet(
+                        book = book,
+                        canDownload = !state.isOffline && book.id !in state.downloadedBookIds,
+                        onDownload = { viewModel.downloadBook(book) },
+                        onEdit = { onEditBook(book.id, book.title, book.author) },
+                        onDismiss = { actionBook = null },
                     )
                 }
             }

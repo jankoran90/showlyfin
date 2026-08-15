@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -17,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.Podcast
 import com.github.jankoran90.showlyfin.feature.listen.ListenUiState
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
@@ -74,38 +76,45 @@ fun KidsListenContent(
                     .sortedBy { it.sortKey }
             }
             var openSeries by remember { mutableStateOf<BookShelfItem.SeriesGroup?>(null) }
+            var actionBook by remember { mutableStateOf<Audiobook?>(null) }
 
             if (items.isEmpty() && !state.isLoading) {
                 CenteredMessage("V dětské knihovně zatím nic není.")
                 return
             }
 
+            val notDownloaded = state.books.any { it.id !in state.downloadedBookIds }
             Box(Modifier.fillMaxSize()) {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 150.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(items, key = { it.itemKey }) { item ->
-                        when (item) {
-                            is KidsShelfItem.BookItem -> when (val b = item.item) {
-                                is BookShelfItem.Standalone -> AudiobookCard(
-                                    book = b.book,
-                                    onClick = { onOpenBook(b.book.id) },
-                                    downloaded = b.book.id in state.downloadedBookIds,
-                                    onLongClick = { onEditBook(b.book.id, b.book.title, b.book.author) },
-                                )
-                                is BookShelfItem.SeriesGroup -> SeriesCard(
-                                    group = b,
-                                    onClick = { openSeries = b },
+                Column(Modifier.fillMaxSize()) {
+                    if (!state.isOffline && notDownloaded) {
+                        DownloadAllRow(onClick = viewModel::downloadAllBooks)
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 150.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(items, key = { it.itemKey }) { item ->
+                            when (item) {
+                                is KidsShelfItem.BookItem -> when (val b = item.item) {
+                                    is BookShelfItem.Standalone -> AudiobookCard(
+                                        book = b.book,
+                                        onClick = { onOpenBook(b.book.id) },
+                                        downloaded = b.book.id in state.downloadedBookIds,
+                                        onLongClick = { actionBook = b.book },
+                                    )
+                                    is BookShelfItem.SeriesGroup -> SeriesCard(
+                                        group = b,
+                                        onClick = { openSeries = b },
+                                    )
+                                }
+                                is KidsShelfItem.PodcastItem -> PodcastCard(
+                                    podcast = item.podcast,
+                                    onClick = { onOpenPodcast(item.podcast.id) },
                                 )
                             }
-                            is KidsShelfItem.PodcastItem -> PodcastCard(
-                                podcast = item.podcast,
-                                onClick = { onOpenPodcast(item.podcast.id) },
-                            )
                         }
                     }
                 }
@@ -115,8 +124,18 @@ fun KidsListenContent(
                         group = group,
                         downloadedBookIds = state.downloadedBookIds,
                         onOpenBook = { id -> openSeries = null; onOpenBook(id) },
-                        onLongClickBook = { book -> openSeries = null; onEditBook(book.id, book.title, book.author) },
+                        onLongClickBook = { book -> openSeries = null; actionBook = book },
                         onDismiss = { openSeries = null },
+                    )
+                }
+
+                actionBook?.let { book ->
+                    AudiobookActionSheet(
+                        book = book,
+                        canDownload = !state.isOffline && book.id !in state.downloadedBookIds,
+                        onDownload = { viewModel.downloadBook(book) },
+                        onEdit = { onEditBook(book.id, book.title, book.author) },
+                        onDismiss = { actionBook = null },
                     )
                 }
             }

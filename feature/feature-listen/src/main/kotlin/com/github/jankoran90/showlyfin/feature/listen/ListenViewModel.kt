@@ -407,6 +407,17 @@ class ListenViewModel @Inject constructor(
         if (!_uiState.value.podcastsLoaded) loadPodcastLibraries()
     }
 
+    /** Stáhne jednu audioknihu (long-press menu v gridu — "Stáhnout"). */
+    fun downloadBook(book: Audiobook) {
+        audiobookDownloads.download(book.id, book.title, book.author, book.coverUrl)
+    }
+
+    /** "Stáhnout vše" — všechny knihy aktuálně viditelné police, co ještě nejsou stažené. */
+    fun downloadAllBooks() {
+        val downloaded = _uiState.value.downloadedBookIds
+        _uiState.value.books.filter { it.id !in downloaded }.forEach { downloadBook(it) }
+    }
+
     fun selectLibrary(libraryId: String) {
         if (libraryId == _uiState.value.selectedLibraryId) return
         _uiState.update { it.copy(selectedLibraryId = libraryId) }
