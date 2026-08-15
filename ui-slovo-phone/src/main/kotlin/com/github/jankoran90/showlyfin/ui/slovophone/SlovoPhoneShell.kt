@@ -28,6 +28,7 @@ import com.github.jankoran90.showlyfin.core.theme.ShowlyfinPhoneTheme
 import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
+import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
@@ -75,9 +76,10 @@ private fun SlovoShellContent() {
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
     val isKidsProfile = activeProfile?.isAdmin == false
     val poslechLabel = if (isKidsProfile) "Poslech - děti" else SlovoSection.POSLECH.label
-    // Pojistka: přepnutí NA Děti, když je otevřená Objevit/Zdroje (odjinud, dřív dospělý) → vrať na Poslech.
+    // Pojistka: přepnutí NA Děti, když je otevřená Domů/Objevit/Zdroje (odjinud, dřív dospělý) → vrať na Poslech.
+    // Domů sjednocuje rozposlouchané napříč VŠEMI zdroji dospěláckého profilu — dítě ho nemá vidět.
     LaunchedEffect(isKidsProfile) {
-        if (isKidsProfile && current in setOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE)) {
+        if (isKidsProfile && current in setOf(SlovoSection.DOMU, SlovoSection.OBJEVIT, SlovoSection.ZDROJE)) {
             current = SlovoSection.POSLECH
         }
     }
@@ -129,11 +131,23 @@ private fun SlovoShellContent() {
                     .fillMaxSize()
                     .padding(padding),
             ) {
+                // Sdíleno mezi Domů a Poslech — tap na knihu/epizodu vede na stejné detaily odkudkoli.
+                val onOpenBook: (String) -> Unit = { onPush(SlovoDetailEntry.AudiobookDetail(it)) }
+                val onOpenSourceEpisode: (String, String, String, String) -> Unit = { type, ref, srcTitle, epKey ->
+                    onPush(linkedOrPlain(podcastLinkLookup, type, ref, srcTitle, epKey))
+                }
                 sectionStateHolder.SaveableStateProvider(current) {
                     when (current) {
+                        SlovoSection.DOMU -> SlovoSectionScaffold(current.label, onMenu) {
+                            HomeScreen(
+                                onOpenBook = onOpenBook,
+                                onOpenSourceEpisode = onOpenSourceEpisode,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                         SlovoSection.POSLECH -> SlovoSectionScaffold(poslechLabel, onMenu) {
                             ListenScreen(
-                                onOpenBook = { onPush(SlovoDetailEntry.AudiobookDetail(it)) },
+                                onOpenBook = onOpenBook,
                                 onEditBook = { id, title, author ->
                                     onPush(SlovoDetailEntry.AudiobookEdit(id, title, author))
                                 },
@@ -151,9 +165,7 @@ private fun SlovoShellContent() {
                                     )
                                 },
                                 onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
-                                onOpenSourceEpisode = { type, ref, srcTitle, epKey ->
-                                    onPush(linkedOrPlain(podcastLinkLookup, type, ref, srcTitle, epKey))
-                                },
+                                onOpenSourceEpisode = onOpenSourceEpisode,
                                 // SLOVO-KIDS-EPISODE / WATCHDOG — dítě otevře jen schválenou sérii, routing podle typu.
                                 onOpenSourceSeries = { src, slug, seriesTitle ->
                                     onPush(
@@ -184,7 +196,7 @@ private fun SlovoShellContent() {
                 MiniPlayer(
                     onExpand = expandMiniPlayer,
                     modifier = Modifier.align(Alignment.BottomCenter),
-                    isListenSection = current == SlovoSection.POSLECH,
+                    isListenSection = current == SlovoSection.POSLECH || current == SlovoSection.DOMU,
                 )
             }
         }

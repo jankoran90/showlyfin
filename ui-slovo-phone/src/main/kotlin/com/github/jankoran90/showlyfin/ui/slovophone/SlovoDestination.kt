@@ -5,19 +5,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
  * Slovo (EXCISE/SHW-103 Fáze 4) — hlavní sekce telefonní poslechové appky. Zrcadlí strukturu
- * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmySection], ale jen mluvené slovo: Poslech
- * (audioknihy + podcasty), Objevit (katalog podcastů), Zdroje (správce zdrojů), Nastavení a Profil.
+ * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmySection], ale jen mluvené slovo: Domů
+ * (naposledy přehráno/pokračovat, viz [com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen]),
+ * Poslech (audioknihy + podcasty), Objevit (katalog podcastů), Zdroje (správce zdrojů), Nastavení a Profil.
  * Profily (2026-08-15, user „profily jak jsme je používali v showlyfin") — 2 pevné profily
  * (Dospělý/Děti, vzor [com.github.jankoran90.showlyfin.ui.filmyphone.FilmyProfileScreen]).
  * Detailové cíle drží back-stack [SlovoDetailEntry].
  */
 enum class SlovoSection(val label: String, val icon: ImageVector) {
+    DOMU("Domů", Icons.Rounded.Home),
     POSLECH("Poslech", Icons.Rounded.Headphones),
     OBJEVIT("Objevit", Icons.Rounded.Explore),
     ZDROJE("Zdroje", Icons.Rounded.RssFeed),
@@ -34,9 +37,10 @@ object SlovoShellPrefs {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** Výchozí sekce při otevření appky (zatím vždy Poslech). */
-    fun startSection(@Suppress("UNUSED_PARAMETER") ctx: Context): SlovoSection = SlovoSection.POSLECH
+    /** Výchozí sekce při otevření appky — Domů (user 2026-08-15: „home obrazovka, co se vždy otevře"). */
+    fun startSection(@Suppress("UNUSED_PARAMETER") ctx: Context): SlovoSection = SlovoSection.DOMU
 
     /** Pořadí sekcí v draweru skupiny „Poslech". */
-    val drawerOrder: List<SlovoSection> = listOf(SlovoSection.POSLECH, SlovoSection.OBJEVIT, SlovoSection.ZDROJE)
+    val drawerOrder: List<SlovoSection> =
+        listOf(SlovoSection.DOMU, SlovoSection.POSLECH, SlovoSection.OBJEVIT, SlovoSection.ZDROJE)
 }
