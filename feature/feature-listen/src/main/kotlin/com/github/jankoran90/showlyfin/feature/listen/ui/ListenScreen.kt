@@ -69,6 +69,8 @@ fun ListenScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val downloads by viewModel.downloads.collectAsStateWithLifecycle()
     val podcastDownloads by viewModel.offlinePodcasts.collectAsStateWithLifecycle()
+    val activeProfile by viewModel.activeProfile.collectAsStateWithLifecycle()
+    val profileConfig by viewModel.profileConfig.collectAsStateWithLifecycle()
     var showDownloads by remember { mutableStateOf(false) }
 
     // PRESET (SHW-65) — po návratu z Nastavení převezmi případně změněné pořadí v Poslechu.
@@ -83,6 +85,16 @@ fun ListenScreen(
             if (!state.isConfigured) {
                 CenteredMessage(
                     "Poslech zatím není nastaven.\nPřihlas se k Audiobookshelf serveru v Nastavení → Poslech (Audiobookshelf).",
+                )
+            } else if (activeProfile?.isAdmin == false) {
+                // Profily (2026-08-15): dětský profil = JEDNA sloučená sekce, žádný přepínač Audioknihy/Podcasty.
+                KidsListenContent(
+                    state = state,
+                    viewModel = viewModel,
+                    podcastDownloads = podcastDownloads,
+                    hiddenPodcastIds = profileConfig.hiddenPodcastIds,
+                    onOpenBook = onOpenBook,
+                    onEditBook = onEditBook,
                 )
             } else {
                 // PRESET (SHW-65) — pořadí záložek dle nastavení (Audioknihy / Podcasty první).

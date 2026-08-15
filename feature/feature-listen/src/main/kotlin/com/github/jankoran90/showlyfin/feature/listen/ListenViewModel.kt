@@ -68,6 +68,9 @@ class ListenViewModel @Inject constructor(
     /** Config aktivního profilu (reaktivně) → Sledované/Timeline se přefiltrují při změně skrytí. */
     val profileConfig = profileRepository.activeConfig
 
+    /** Profily (2026-08-15) — aktivní profil (`isAdmin` rozhoduje dospělý/dětský vzhled sekce Poslech). */
+    val activeProfile = profileRepository.activeProfile
+
     /** Klíče skrytí karty knihovny: sloučená = všichni členové, samostatný zdroj = `type:ref`. */
     fun followingKeysForGroup(memberKeys: Collection<String>): Set<String> = memberKeys.toSet()
 

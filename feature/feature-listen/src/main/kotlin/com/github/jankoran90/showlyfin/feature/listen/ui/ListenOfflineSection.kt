@@ -203,18 +203,36 @@ private fun formatSize(bytes: Long): String {
 }
 
 /** WEFT (SHW-75/W6): offline pořad = stažené epizody seskupené pod jednu kartu (parita s Audioknihy grid). */
-private data class OfflinePodcastShow(
+internal data class OfflinePodcastShow(
     val title: String,
     val poster: String?,
     val sourceLabel: String,
     val episodes: List<OfflineDownload>,
 )
 
-private fun episodesWord(n: Int): String = when {
+internal fun episodesWord(n: Int): String = when {
     n == 1 -> "epizoda"
     n in 2..4 -> "epizody"
     else -> "epizod"
 }
+
+/**
+ * Seskupí stažené epizody dle pořadu (subtitle = název pořadu; fallback zdroj) → jedna karta na pořad,
+ * nejnovější epizoda nahoře. Sdíleno mezi [OfflineDownloadedPodcasts] (offline sekce) a dětským
+ * sloučeným Poslechem (KidsListenContent).
+ */
+internal fun buildOfflineShows(downloads: List<OfflineDownload>): List<OfflinePodcastShow> =
+    downloads
+        .groupBy { it.subtitle?.takeIf { s -> s.isNotBlank() } ?: it.sourceLabel }
+        .map { (title, eps) ->
+            OfflinePodcastShow(
+                title = title,
+                poster = eps.firstNotNullOfOrNull { it.posterPath ?: it.posterUrl },
+                sourceLabel = eps.first().sourceLabel,
+                episodes = eps.sortedByDescending { it.publishedAt ?: it.addedAt },
+            )
+        }
+        .sortedBy { it.title.lowercase(Locale("cs")) }
 
 /**
  * Offline sekce Podcasty — stažené epizody jako GRID KARET POŘADŮ (parita s Audioknihy/Sledované grid),
@@ -234,21 +252,8 @@ internal fun OfflineDownloadedPodcasts(
         )
         return
     }
-    // Seskup stažené epizody dle pořadu (subtitle = název pořadu; fallback zdroj) → jedna karta na pořad.
     // RESONANCE (SHW-81): epizody NEJNOVĚJŠÍ NAHOŘE dle data vydání (fallback datum stažení u starých).
-    val shows = remember(podcastDownloads) {
-        podcastDownloads
-            .groupBy { it.subtitle?.takeIf { s -> s.isNotBlank() } ?: it.sourceLabel }
-            .map { (title, eps) ->
-                OfflinePodcastShow(
-                    title = title,
-                    poster = eps.firstNotNullOfOrNull { it.posterPath ?: it.posterUrl },
-                    sourceLabel = eps.first().sourceLabel,
-                    episodes = eps.sortedByDescending { it.publishedAt ?: it.addedAt },
-                )
-            }
-            .sortedBy { it.title.lowercase(Locale("cs")) }
-    }
+    val shows = remember(podcastDownloads) { buildOfflineShows(podcastDownloads) }
     var openShow by remember { mutableStateOf<OfflinePodcastShow?>(null) }
     var highlightKey by remember { mutableStateOf<String?>(null) }
 
@@ -294,7 +299,7 @@ internal fun OfflineDownloadedPodcasts(
 
 /** WEFT (SHW-75/W6): karta staženého pořadu — CHORUS Osa 2 delegát nad [CoverCard] (badge počtu). */
 @Composable
-private fun OfflinePodcastCard(
+internal fun OfflinePodcastCard(
     show: OfflinePodcastShow,
     onClick: () -> Unit,
 ) {
@@ -324,7 +329,7 @@ private fun OfflinePodcastCard(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OfflinePodcastDetailScreen(
+internal fun OfflinePodcastDetailScreen(
     show: OfflinePodcastShow,
     viewModel: ListenViewModel,
     highlightEpisodeKey: String? = null,

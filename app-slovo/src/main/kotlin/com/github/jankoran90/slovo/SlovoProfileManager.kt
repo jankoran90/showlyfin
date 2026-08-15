@@ -2,44 +2,83 @@ package com.github.jankoran90.slovo
 
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
+import com.github.jankoran90.showlyfin.ui.slovophone.SlovoProfiles
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * EXCISE (SHW-103) — Slovo je SINGLE-USER (na rozdíl od Filmy 2 profilů). Naseeduje přesně JEDEN pevný
- * lokální profil při prvním spuštění (idempotentně, jen když DB prázdná). `jellyfinUserId` je neprázdný
- * profilový klíč (bucket per-profil vrstvy na serveru — jinak by se poslechová vrstva zkratovala na null).
- * Žádný roster/PIN/věkový strop. Zdroje poslechu se přihlašují přes backend uploader login (SlovoMainActivity).
+ * Profily (2026-08-15, user „zaveď profily jak jsme je používali v showlyfin") — 2 PEVNÉ profily
+ * appky „Slovo": **Dospělý** (plný přístup) a **Děti** (jen dětská ABS knihovna audioknih + admin-
+ * schválené stažené podcasty — viz [com.github.jankoran90.showlyfin.feature.listen.ui.KidsListenContent]).
+ * Vzor [com.github.jankoran90.filmy.FilmyProfileManager] (nelze přidávat/mazat). Na rozdíl
+ * od Filmy Slovo NESDÍLÍ profilový klíč se zbytkem showlyfinu (Poslech = vlastní ABS účet přes
+ * uploader login, ne Jellyfin/Trakt) → klíče jsou lokální syntetické `slovo-adult`/`slovo-kids`
+ * ([SlovoProfiles], žije v `:ui-slovo-phone` — sdílí je i [com.github.jankoran90.showlyfin.ui.slovophone.SlovoProfileViewModel]).
+ *
+ * MIGRACE z jednoho profilu (appka byla 1.0.0–1.0.8 single-user, profil `slovo-main`): stávající
+ * instalace mají 1 profil s přihlášeným ABS účtem — ten se PONECHÁ (přejmenuje na „Dospělý", ať
+ * uživatel nepřijde o uložené ABS přihlášení) a jen se doplní chybějící profil „Děti".
  */
 @Singleton
 class SlovoProfileManager @Inject constructor(
     private val profileRepository: ProfileRepository,
 ) {
-    companion object {
-        const val UUID_MAIN = "slovo-main"
-        /** Profilový klíč per-profil vrstvy (opaque, neprázdný). */
-        const val KEY_MAIN = "slovo-main"
+    /** Naseeduje 2 pevné profily (Dospělý + Děti), nebo migruje starší single-user instalaci. */
+    suspend fun ensureSeeded() {
+        val existing = profileRepository.getAll()
+
+        if (existing.isEmpty()) {
+            Timber.i("[SLOVO] seeduji 2 pevné profily (Dospělý + Děti)")
+            val adultId = profileRepository.upsert(
+                ProfileEntity(
+                    profileUuid = SlovoProfiles.UUID_ADULT,
+                    name = "Dospělý",
+                    serverUrl = "",
+                    jellyfinUserId = SlovoProfiles.KEY_ADULT,
+                    jellyfinToken = "",
+                    isAdmin = true,
+                    isDefault = true,
+                    tvDefault = false,
+                    maxAgeRating = null,
+                    loginPinHash = null,
+                )
+            )
+            profileRepository.setActive(adultId)
+            ensureKidsProfile()
+            return
+        }
+
+        // MIGRACE: starší instalace má jen legacy `slovo-main` (nebo obecně 1 profil bez Děti) —
+        // ponech ABS přihlášení, jen přejmenuj na „Dospělý" a doplň chybějící Děti profil.
+        val legacy = existing.singleOrNull { it.profileUuid == SlovoProfiles.UUID_LEGACY_MAIN }
+        if (legacy != null && legacy.name != "Dospělý") {
+            Timber.i("[SLOVO] migrace: legacy single-user profil → Dospělý (ABS přihlášení zachováno)")
+            profileRepository.upsert(legacy.copy(name = "Dospělý", isAdmin = true, isDefault = true))
+        }
+        ensureKidsProfile()
     }
 
-    /** Naseeduje jediný profil „Slovo" při prvním spuštění (idempotentně). */
-    suspend fun ensureSeeded() {
-        if (profileRepository.count() > 0) return
-        Timber.i("[SLOVO] seeduji 1 pevný profil (single-user)")
-        val id = profileRepository.upsert(
+    /** Idempotentně doplní profil „Děti" (whitelist ABS knihovny „děti"), pokud ještě neexistuje. */
+    private suspend fun ensureKidsProfile() {
+        if (profileRepository.getAll().any { it.profileUuid == SlovoProfiles.UUID_KIDS }) return
+        Timber.i("[SLOVO] doplňuji profil Děti (whitelist ABS knihovny ${SlovoProfiles.KIDS_ABS_LIBRARY_ID})")
+        val kidsId = profileRepository.upsert(
             ProfileEntity(
-                profileUuid = UUID_MAIN,
-                name = "Slovo",
+                profileUuid = SlovoProfiles.UUID_KIDS,
+                name = "Děti",
                 serverUrl = "",
-                jellyfinUserId = KEY_MAIN,
+                jellyfinUserId = SlovoProfiles.KEY_KIDS,
                 jellyfinToken = "",
-                isAdmin = true,
-                isDefault = true,
+                isAdmin = false,
+                isDefault = false,
                 tvDefault = false,
                 maxAgeRating = null,
                 loginPinHash = null,
             )
         )
-        profileRepository.setActive(id)
+        profileRepository.updateConfig(kidsId) {
+            it.copy(absLibraryWhitelist = listOf(SlovoProfiles.KIDS_ABS_LIBRARY_ID))
+        }
     }
 }

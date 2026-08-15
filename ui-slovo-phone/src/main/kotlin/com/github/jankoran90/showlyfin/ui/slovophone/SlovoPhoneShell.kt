@@ -69,6 +69,9 @@ private fun SlovoShellContent() {
     // Activity-scoped → tytéž instance jako uvnitř ListenScreen/přehrávače (jednotný stav poslechu).
     val listenVm: ListenViewModel = hiltViewModel()
     val podcastLinkLookup: PodcastLinkLookupViewModel = hiltViewModel()
+    // Profily (2026-08-15): dětský profil → titulek sekce Poslech se změní na "Poslech - děti".
+    val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
+    val poslechLabel = if (activeProfile?.isAdmin == false) "Poslech - děti" else SlovoSection.POSLECH.label
 
     val onPush: (SlovoDetailEntry) -> Unit = { detailStack = detailStack + it }
     val onPop: () -> Unit = { detailStack = detailStack.dropLast(1) }
@@ -119,7 +122,7 @@ private fun SlovoShellContent() {
             ) {
                 sectionStateHolder.SaveableStateProvider(current) {
                     when (current) {
-                        SlovoSection.POSLECH -> SlovoSectionScaffold(current.label, onMenu) {
+                        SlovoSection.POSLECH -> SlovoSectionScaffold(poslechLabel, onMenu) {
                             ListenScreen(
                                 onOpenBook = { onPush(SlovoDetailEntry.AudiobookDetail(it)) },
                                 onEditBook = { id, title, author ->
@@ -155,6 +158,7 @@ private fun SlovoShellContent() {
                             )
                         }
                         SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu)
+                        SlovoSection.PROFIL -> SlovoProfileScreen(onMenu = onMenu)
                     }
                 }
                 // MiniPlayer ukotvený dole (schová se sám, když se nic nepřehrává).

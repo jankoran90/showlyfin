@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.ui.slovophone
 
 import android.content.Context
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.RssFeed
@@ -11,14 +12,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 /**
  * Slovo (EXCISE/SHW-103 Fáze 4) — hlavní sekce telefonní poslechové appky. Zrcadlí strukturu
  * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmySection], ale jen mluvené slovo: Poslech
- * (audioknihy + podcasty), Objevit (katalog podcastů), Zdroje (správce zdrojů) a Nastavení.
- * Žádný film, žádný profil/PIN (Slovo = single-user). Detailové cíle drží back-stack [SlovoDetailEntry].
+ * (audioknihy + podcasty), Objevit (katalog podcastů), Zdroje (správce zdrojů), Nastavení a Profil.
+ * Profily (2026-08-15, user „profily jak jsme je používali v showlyfin") — 2 pevné profily
+ * (Dospělý/Děti, vzor [com.github.jankoran90.showlyfin.ui.filmyphone.FilmyProfileScreen]).
+ * Detailové cíle drží back-stack [SlovoDetailEntry].
  */
 enum class SlovoSection(val label: String, val icon: ImageVector) {
     POSLECH("Poslech", Icons.Rounded.Headphones),
     OBJEVIT("Objevit", Icons.Rounded.Explore),
     ZDROJE("Zdroje", Icons.Rounded.RssFeed),
     NASTAVENI("Nastavení", Icons.Rounded.Settings),
+    PROFIL("Profil", Icons.Rounded.AccountCircle),
 }
 
 /**

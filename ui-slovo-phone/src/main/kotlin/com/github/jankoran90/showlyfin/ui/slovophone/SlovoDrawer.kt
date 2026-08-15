@@ -38,6 +38,7 @@ fun SlovoDrawer(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))
             DrawerRow(SlovoSection.NASTAVENI, current, onSelect)
+            DrawerRow(SlovoSection.PROFIL, current, onSelect)
         }
     }
 }
