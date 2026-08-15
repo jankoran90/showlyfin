@@ -114,8 +114,12 @@ class MergedPodcastViewModel @Inject constructor(
             // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvých feedů (parita
             // s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes sloučený pohled.
             // Ne-stažené epizody backfillMeta ignoruje (levný no-op).
-            merged.forEach { ep ->
-                offline.backfillMeta(ep.key, ep.description, parseEpisodeDateMs(ep.date), members.firstOrNull { it.type == "rss" }?.let { "rss:${it.ref}" })
+            // PERF (2026-08-15, WATCHDOG incident): backfillMeta serializuje CELÝ stažený index na hlavním
+            // vlákně při každé změně → přesunuto na IO (viz RssPodcastViewModel — stejný fix).
+            withContext(Dispatchers.IO) {
+                merged.forEach { ep ->
+                    offline.backfillMeta(ep.key, ep.description, parseEpisodeDateMs(ep.date), members.firstOrNull { it.type == "rss" }?.let { "rss:${it.ref}" })
+                }
             }
         }
     }

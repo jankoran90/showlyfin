@@ -185,13 +185,6 @@ class PodcastTimelineViewModel @Inject constructor(
             // správnější datum + jde rovnou přehrát). Nespárované audio i video zůstanou.
             val deduped = dedupeLinked(collected)
 
-            // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvé agregace (parita
-            // s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes Timeline. Ne-stažené
-            // epizody backfillMeta ignoruje (levný no-op). Sentinel „bez data" (< 0) se nepředává.
-            deduped.forEach { item ->
-                offline.backfillMeta(item.key, item.episode.description, item.timestampMs.takeIf { it > 0L }, "${item.sourceType}:${item.sourceRef}")
-            }
-
             // WEFT (SHW-75/W5): odfiltruj pořady skryté na časové ose pro tento profil (klíč `type:ref`).
             val hidden = profileRepository.activeConfig.value.hiddenTimelineSourceKeys
             val visible = if (hidden.isEmpty()) deduped
@@ -208,6 +201,19 @@ class PodcastTimelineViewModel @Inject constructor(
                     noSources = false,
                     display = display,
                 )
+            }
+
+            // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvé agregace (parita
+            // s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes Timeline. Ne-stažené
+            // epizody backfillMeta ignoruje (levný no-op). Sentinel „bez data" (< 0) se nepředává.
+            // PERF (2026-08-15, WATCHDOG incident): backfillMeta serializuje CELÝ stažený index (gson.toJson)
+            // na hlavním vlákně při každé změně — Timeline agreguje VŠECHNY zdroje, takže tahle smyčka appku
+            // na dlouho zablokovala (i vykreslení bucketů čekalo, až doběhne). Teď běží AŽ PO zobrazení
+            // bucketů, na pozadí (fire-and-forget, jen dovyplní metadata u již stažených epizod).
+            launch(Dispatchers.IO) {
+                deduped.forEach { item ->
+                    offline.backfillMeta(item.key, item.episode.description, item.timestampMs.takeIf { it > 0L }, "${item.sourceType}:${item.sourceRef}")
+                }
             }
         }
     }
