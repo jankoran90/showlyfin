@@ -166,6 +166,14 @@ class AudiobookDownloadManager @Inject constructor(
         coverUrl: String?,
     ): AudiobookDownload = withContext(Dispatchers.IO) {
         val pb = repo.startPlayback(itemId)
+        // FIX (2026-08-15, incident „audioknihy nedrží pozici při stahování více kusů") — startPlayback
+        // otevře na serveru ABS ostrou play session (jen kvůli URL stop na stažení), ale nikdy se
+        // nezavírala → při dalším SKUTEČNÉM přehrání ABS log „Closing open session" tuhle zapomenutou
+        // session zavíral MÍSTO uložené pozice z předchozího poslechu, takže appka „zapomněla", kde
+        // uživatel skončil. Zavři ji hned zpátky se STEJNOU pozicí, jakou server vrátil (no-op posun),
+        // ať nezůstává viset a nic nepřepíše.
+        runCatching { repo.closeSession(pb.sessionId, pb.startPositionSec, 0.0, pb.durationSec) }
+            .onFailure { Timber.w(it, "[ABS] uzavření download session selhalo") }
         require(pb.tracks.isNotEmpty()) { "Audiokniha nemá audio stopu." }
         val target = itemDir(itemId).apply { mkdirs() }
         // Progres vážíme délkou stop, aby ukazatel rostl plynule přes celou knihu.

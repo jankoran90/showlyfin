@@ -144,6 +144,12 @@ class EpisodeDownloadManager @Inject constructor(
         coverUrl: String?,
     ): EpisodeDownload = withContext(Dispatchers.IO) {
         val pb = repo.startEpisodePlayback(episode.itemId, episode.id)
+        // FIX (2026-08-15, incident „audioknihy/epizody nedrží pozici při stahování více kusů") —
+        // startEpisodePlayback otevře na serveru ABS ostrou play session jen kvůli URL stopy na
+        // stažení, ale nikdy se nezavírala → při dalším SKUTEČNÉM přehrání ji ABS zavíral MÍSTO
+        // uložené pozice z předchozího poslechu (viz AudiobookDownloadManager — stejný fix).
+        runCatching { repo.closeSession(pb.sessionId, pb.startPositionSec, 0.0, pb.durationSec) }
+            .onFailure { Timber.w(it, "[ABS] uzavření download session selhalo") }
         val track = pb.tracks.firstOrNull() ?: error("Epizoda nemá audio stopu.")
         val tmp = tempFile(episode.id)
         val out = outFile(episode.id)
