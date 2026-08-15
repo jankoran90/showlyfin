@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.data.uploader
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.data.uploader.api.UploaderService
 import com.github.jankoran90.showlyfin.data.uploader.model.AudiobookUploadResponse
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -66,6 +67,82 @@ class AudiobookUploadRepository @Inject constructor(
 
     private fun String.toRequestBodyForm(): RequestBody =
         this.toRequestBody(MultipartBody.FORM)
+
+    /** SLOVO-UPLOAD-NET krok 1/4 — založí chunkovanou upload session, vrátí session_id. */
+    suspend fun startUploadSession(libraryId: String, title: String?, author: String?, autoMatch: Boolean): String {
+        val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
+        val url = "$b/api/audiobook/upload/start"
+        val resp = service.startUploadSession(
+            url, cookie(),
+            libraryId.toRequestBodyForm(),
+            title?.takeIf { it.isNotBlank() }?.toRequestBodyForm(),
+            author?.takeIf { it.isNotBlank() }?.toRequestBodyForm(),
+            autoMatch.toString().toRequestBodyForm(),
+        )
+        if (!resp.isSuccessful) {
+            throw HttpException(resp).also { Timber.w(it, "[DROPSHIP] upload/start HTTP ${resp.code()}") }
+        }
+        return resp.body()?.sessionId ?: error("Server nevrátil session_id.")
+    }
+
+    /** SLOVO-UPLOAD-NET krok 2/4 — pošle jeden kousek souboru (bezpečné opakovat při chybě). */
+    suspend fun uploadChunk(
+        sessionId: String,
+        fileIndex: Int,
+        chunkIndex: Int,
+        totalChunks: Int,
+        filename: String,
+        bytes: ByteArray,
+    ) {
+        val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
+        val url = "$b/api/audiobook/upload/chunk"
+        val chunkPart = MultipartBody.Part.createFormData(
+            "chunk", "chunk", bytes.toRequestBody("application/octet-stream".toMediaTypeOrNull()),
+        )
+        val resp = service.uploadChunk(
+            url, cookie(),
+            sessionId.toRequestBodyForm(),
+            fileIndex.toString().toRequestBodyForm(),
+            chunkIndex.toString().toRequestBodyForm(),
+            totalChunks.toString().toRequestBodyForm(),
+            filename.toRequestBodyForm(),
+            chunkPart,
+        )
+        if (!resp.isSuccessful) {
+            throw HttpException(resp).also { Timber.w(it, "[DROPSHIP] upload/chunk $fileIndex/$chunkIndex HTTP ${resp.code()}") }
+        }
+    }
+
+    /** SLOVO-UPLOAD-NET krok 3/4 — po odeslání všech kousků souboru je nechá server slepit. */
+    suspend fun finishUploadFile(sessionId: String, fileIndex: Int) {
+        val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
+        val url = "$b/api/audiobook/upload/finish_file"
+        val resp = service.finishUploadFile(url, cookie(), sessionId.toRequestBodyForm(), fileIndex.toString().toRequestBodyForm())
+        if (!resp.isSuccessful) {
+            throw HttpException(resp).also { Timber.w(it, "[DROPSHIP] upload/finish_file $fileIndex HTTP ${resp.code()}") }
+        }
+    }
+
+    /** SLOVO-UPLOAD-NET krok 4/4 — spustí ingest pipeline (stejná odpověď jako jednorázový upload). */
+    suspend fun finalizeUpload(sessionId: String, coverPart: MultipartBody.Part?): AudiobookUploadResponse {
+        val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
+        val url = "$b/api/audiobook/upload/finalize"
+        val resp = service.finalizeUpload(url, cookie(), sessionId.toRequestBodyForm(), coverPart)
+        if (!resp.isSuccessful) {
+            val msg = runCatching { resp.errorBody()?.string() }.getOrNull()?.take(200).orEmpty()
+            throw HttpException(resp).also { Timber.w(it, "[DROPSHIP] upload/finalize HTTP ${resp.code()}: $msg") }
+        }
+        return resp.body() ?: error("Server nevrátil odpověď.")
+    }
+
+    /** Zruší rozdělanou session (chyba/zrušení uživatelem) — uklidí dočasné soubory na serveru. */
+    suspend fun cancelUploadSession(sessionId: String) {
+        runCatching {
+            val b = base()
+            if (b.isBlank()) return
+            service.cancelUploadSession("$b/api/audiobook/upload/cancel", cookie(), sessionId.toRequestBodyForm())
+        }.onFailure { Timber.w(it, "[DROPSHIP] upload/cancel selhal (neškodné, TTL úklid to dořeší)") }
+    }
 
     /** DROPSHIP F2c — dohledání CZ metadata+cover pro existující ABS item (z editace knihy). */
     suspend fun match(itemId: String, title: String, author: String?): com.github.jankoran90.showlyfin.data.uploader.model.AudiobookMatchResponse {
