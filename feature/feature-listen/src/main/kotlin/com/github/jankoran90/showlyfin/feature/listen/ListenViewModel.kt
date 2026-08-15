@@ -101,6 +101,36 @@ class ListenViewModel @Inject constructor(
         }
     }
 
+    /**
+     * SLOVO-KIDS-EPISODE — reaktivně schválené vlastní zdroje (RSS/YouTube/ČT) PRO DĚTSKÝ profil
+     * (whitelist [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.visibleForKidsSourceKeys]).
+     * Vzor [kidsHiddenPodcastIds], ale opačná sémantika (whitelist, ne blacklist).
+     */
+    val kidsVisibleSourceKeys: StateFlow<Set<String>> = profileRepository.observeAll()
+        .map { profiles ->
+            profiles.firstOrNull { !it.isAdmin }
+                ?.let { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).visibleForKidsSourceKeys }
+                .orEmpty()
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /**
+     * Admin (Dospělý) — přepne, jestli vlastní zdroj (klíče `type:ref`, u sloučeného páru všichni
+     * členové) vidí dětský profil. Whitelist → visible=true PŘIDÁ klíče, false je odebere. No-op bez
+     * dětského profilu.
+     */
+    fun setSourceVisibleForKids(keys: Set<String>, visible: Boolean) {
+        if (keys.isEmpty()) return
+        viewModelScope.launch {
+            val kids = profileRepository.getAll().firstOrNull { !it.isAdmin } ?: return@launch
+            profileRepository.updateConfig(kids.id) { cfg ->
+                val s = cfg.visibleForKidsSourceKeys.toMutableSet()
+                    .also { if (visible) it.addAll(keys) else it.removeAll(keys) }
+                cfg.copy(visibleForKidsSourceKeys = s)
+            }
+        }
+    }
+
     /** Klíče skrytí karty knihovny: sloučená = všichni členové, samostatný zdroj = `type:ref`. */
     fun followingKeysForGroup(memberKeys: Collection<String>): Set<String> = memberKeys.toSet()
 

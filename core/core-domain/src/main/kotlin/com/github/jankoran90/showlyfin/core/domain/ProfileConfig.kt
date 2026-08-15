@@ -72,6 +72,14 @@ data class ProfileConfig(
     val hiddenTimelineSourceKeys: Set<String> = emptySet(),
     /** WEFT (SHW-75/W5): per-profil skrytí POŘADŮ ve **Sledovaných** (knihovna). Klíč jako výše. */
     val hiddenFollowingSourceKeys: Set<String> = emptySet(),
+    /**
+     * SLOVO-KIDS-EPISODE (2026-08-15) — WHITELIST vlastních zdrojů (RSS/YouTube/ČT, `PodcastSource`)
+     * schválených pro DĚTSKÝ profil. Klíč `type:ref` (u sloučeného TWINE páru = kterýkoli člen páru).
+     * Na rozdíl od [hiddenPodcastIds] (ABS, blacklist/default-viditelné) je tohle WHITELIST/default-
+     * NEviditelné — vlastní zdroje jsou uživatelovy osobní RSS/YouTube odběry, ne kurátorovaná ABS
+     * knihovna, takže admin musí explicitně zvolit, co dítě smí vidět. Prázdné = nic schváleno.
+     */
+    val visibleForKidsSourceKeys: Set<String> = emptySet(),
     /** Povolené žánry (lowercase). Prázdné = bez allow-listu (vše kromě blacklistu). */
     val allowedGenres: Set<String> = emptySet(),
     /** Zakázané žánry (lowercase) — blacklist. */
@@ -198,6 +206,9 @@ data class ProfileConfig(
 
     /** WEFT (SHW-75/W5): true = pořad se má profilu ukázat ve Sledovaných. */
     fun isFollowingSourceVisible(sourceKey: String): Boolean = sourceKey !in hiddenFollowingSourceKeys
+
+    /** SLOVO-KIDS-EPISODE: true = vlastní zdroj (klíč `type:ref`) je na TOMTO (dětském) profilu schválený. */
+    fun isSourceVisibleForKids(sourceKey: String): Boolean = sourceKey in visibleForKidsSourceKeys
 
     /**
      * CONVERGE V1 — Trakt řady v efektivním pořadí (dynamická sada [available] = co dnes existuje). Neznámé

@@ -66,6 +66,12 @@ fun ListenScreen(
     onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
     /** TWINE: otevři sloučený pohled propojeného pořadu (audio+video) podle [groupId]. */
     onOpenMerged: (groupId: String, title: String) -> Unit,
+    /** SLOVO-KIDS-EPISODE: dětský profil otevře JEN admin-schválenou sérii uvnitř zdroje. */
+    onOpenSourceSeries: (
+        source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource,
+        seriesSlug: String,
+        seriesTitle: String,
+    ) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: ListenViewModel = hiltViewModel(),
 ) {
@@ -96,6 +102,9 @@ fun ListenScreen(
                     onOpenBook = onOpenBook,
                     onEditBook = onEditBook,
                     onOpenPodcast = onOpenPodcast,
+                    onOpenSource = onOpenSource,
+                    onOpenMerged = onOpenMerged,
+                    onOpenSourceSeries = onOpenSourceSeries,
                 )
             } else {
                 // PRESET (SHW-65) — pořadí záložek dle nastavení (Audioknihy / Podcasty první).
@@ -362,6 +371,8 @@ private fun FollowingContent(
     // User (2026-08-15) — dlouhý stisk na ABS podcast (jen Dospělý) → "Zobrazit/Skrýt dětem".
     val activeProfile by viewModel.activeProfile.collectAsStateWithLifecycle()
     val kidsHidden by viewModel.kidsHiddenPodcastIds.collectAsStateWithLifecycle()
+    // SLOVO-KIDS-EPISODE — dlouhý stisk i na vlastních zdrojích (Plain/Merged) → "Zobrazit/Skrýt dětem".
+    val kidsVisibleSources by viewModel.kidsVisibleSourceKeys.collectAsStateWithLifecycle()
     val byKey = remember(state.customSources) { state.customSources.associateBy { viewModel.sourceKey(it) } }
     val linkedKeys = remember(links) { links.flatMap { it.members }.toSet() }
     // Samostatné karty = filtrované zdroje, které nejsou v žádné skupině.
@@ -469,6 +480,14 @@ private fun FollowingContent(
                         if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
                         if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
                     ) { viewModel.setPodcastVisibleForKids(absPodcastId, !visibleToKids) }
+                } else null,
+                // SLOVO-KIDS-EPISODE — totéž pro vlastní zdroje (Plain/Merged), whitelist místo blacklistu.
+                if ((card is LibraryCard.Plain || card is LibraryCard.Merged) && activeProfile?.isAdmin == true) {
+                    val visibleToKids = card.hideKeys.any { it in kidsVisibleSources }
+                    ListenEpisodeAction(
+                        if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
+                        if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
+                    ) { viewModel.setSourceVisibleForKids(card.hideKeys, !visibleToKids) }
                 } else null,
                 ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt ve Sledovaných") {
                     viewModel.setHidden(card.hideKeys, timeline = false, hidden = true)

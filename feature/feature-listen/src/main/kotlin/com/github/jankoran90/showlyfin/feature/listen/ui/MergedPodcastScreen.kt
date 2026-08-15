@@ -77,6 +77,9 @@ fun MergedPodcastScreen(
     onOpenAudioPlayer: () -> Unit,
     onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit,
     onUnlinked: () -> Unit,
+    // SLOVO-KIDS-EPISODE (2026-08-15) — dětský profil: vždy jen audio, video volby úplně skryté
+    // (i když je pořad TWINE-propojený s YouTube členem).
+    audioOnly: Boolean = false,
     modifier: Modifier = Modifier,
     // WEFT (SHW-75/W2-FIX): klíč epizody (`rss:`/`yt:`) k zvýraznění + odscrollování — proklik z časové
     // osy / z coveru přehrávače na SLOUČENÝ pořad. Match na audio NEBO video verzi spárované epizody.
@@ -191,6 +194,7 @@ fun MergedPodcastScreen(
                             if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(item)
                             onOpenAudioPlayer()
                         },
+                        showVideo = !audioOnly,
                         onPlayVideo = {
                             viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
                         },
@@ -205,20 +209,25 @@ fun MergedPodcastScreen(
         ListenEpisodeActionSheet(
             title = item.title.ifBlank { state.title },
             // WEFT (SHW-75/W1): jednotné menu jako NaVýbornou/RSS — Přehrát · Video · Na TV · fronta×2 · stáhnout.
+            // SLOVO-KIDS-EPISODE: dětský profil (audioOnly) = video volby se ani nenabídnou.
             actions = listOfNotNull(
                 ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
                     viewModel.playAudio(item); onOpenAudioPlayer()
                 },
-                item.video?.let {
-                    ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
-                        viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
+                if (!audioOnly) {
+                    item.video?.let {
+                        ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                            viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
+                        }
                     }
-                },
-                item.video?.let {
-                    ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
-                        viewModel.castVideoToTv(item)
+                } else null,
+                if (!audioOnly) {
+                    item.video?.let {
+                        ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                            viewModel.castVideoToTv(item)
+                        }
                     }
-                },
+                } else null,
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(item, atFront = true)
                 },
@@ -247,6 +256,7 @@ private fun MergedEpisodeRow(
     progress: Float?,
     canResume: Boolean,
     remainingLabel: String?,
+    showVideo: Boolean = true,
     onPlayAudio: () -> Unit,
     onPlayVideo: () -> Unit,
     onMore: () -> Unit,
@@ -281,7 +291,7 @@ private fun MergedEpisodeRow(
                     formatMergedDate(item.date),
                     if (item.durationSec > 0) formatMergedDuration(item.durationSec) else null,
                     remainingLabel,
-                    if (item.video != null) "video" else null,
+                    if (item.video != null && showVideo) "video" else null,
                 ).joinToString(" · ")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (downloaded) {
@@ -336,7 +346,7 @@ private fun MergedEpisodeRow(
                 Icon(playIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(playLabel, Modifier.padding(start = 6.dp))
             }
-            if (item.video != null) {
+            if (item.video != null && showVideo) {
                 OutlinedButton(onClick = onPlayVideo, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))

@@ -22,14 +22,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -85,6 +88,15 @@ fun RssPodcastScreen(
     onPlayYoutubeVideo: (url: String, title: String, posterUrl: String?) -> Unit,
     // NAVIGATE (SHW-73): klíč epizody (`rss:…`) k zvýraznění + scrollu (přišlo z Timeline řádku / cover prokliku).
     highlightEpisodeKey: String? = null,
+    // SLOVO-KIDS-EPISODE (2026-08-15) — dětský profil: vždy jen audio, video volby úplně skryté.
+    audioOnly: Boolean = false,
+    // SLOVO-KIDS-EPISODE — non-null = otevřeno JEN na jednu AUTO-detekovanou sérii (dětská cesta,
+    // nikdy neuvidí zbytek podcastu). Hodnota = [PodcastEpisodeSeriesGrouping.seriesSlug].
+    seriesFilter: String? = null,
+    // SLOVO-KIDS-EPISODE — admin (Dospělý) může dlouhým stiskem na kartě série „Zobrazit/Skrýt dětem".
+    isAdmin: Boolean = false,
+    kidsVisibleSeriesKeys: Set<String> = emptySet(),
+    onSetSeriesVisibleForKids: (key: String, visible: Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: RssPodcastViewModel = hiltViewModel(),
 ) {
@@ -111,17 +123,104 @@ fun RssPodcastScreen(
     // AGORA (F5): epizoda, pro kterou je otevřený picker video verze (drží kontext pro play/cast).
     var videoForEpisode by remember { mutableStateOf<RssEpisode?>(null) }
     val fallbackTitle = state.title ?: title
+
+    // SLOVO-KIDS-EPISODE — [seriesFilter] != null: dětská cesta, jen epizody DANÉ série, plochý seznam
+    // (žádné další seskupování). Jinak (admin): AUTO seskupení do sérií + samostatné epizody.
+    val sourceKey = "rss:$feedUrl"
+    val filteredEpisodes = remember(state.episodes, seriesFilter) {
+        if (seriesFilter == null) state.episodes
+        else state.episodes.filter {
+            PodcastEpisodeSeriesGrouping.detectSeriesTitle(it.title)
+                ?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
+        }
+    }
+    val shelfItems = remember(filteredEpisodes, seriesFilter) {
+        if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
+    }
+    var expandedSeries by remember { mutableStateOf(setOf<String>()) }
+    var seriesForAction by remember {
+        mutableStateOf<PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup<RssEpisode>?>(null)
+    }
+    // WATCHDOG (2026-08-15, user „tlačítko série vpravo nahoře, aktivní se zabarví, jen série, sbalené,
+    // řazené sestupně dle data posledního dílu") — přepínač „Jen série" v TopAppBar (jen admin pohled).
+    var seriesOnly by remember { mutableStateOf(false) }
+    val seriesOnlyGroups = remember(shelfItems) {
+        shelfItems?.filterIsInstance<PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup<RssEpisode>>()
+            ?.sortedByDescending { g -> PodcastEpisodeSeriesGrouping.latestDateMs(g.members) { it.date } ?: 0L }
+    }
     // NAVIGATE (SHW-73): jakmile se epizody načtou, jednorázově odscrolluj na zvýrazněnou epizodu.
     val listState = rememberLazyListState()
     var scrolledToHighlight by remember { mutableStateOf(false) }
-    LaunchedEffect(highlightEpisodeKey, state.episodes) {
-        if (!scrolledToHighlight && highlightEpisodeKey != null && state.episodes.isNotEmpty()) {
-            val idx = state.episodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
+    LaunchedEffect(highlightEpisodeKey, filteredEpisodes) {
+        if (!scrolledToHighlight && highlightEpisodeKey != null && filteredEpisodes.isNotEmpty()) {
+            val idx = filteredEpisodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
             if (idx >= 0) {
                 listState.scrollToItem(idx)
                 scrolledToHighlight = true
             }
         }
+    }
+
+    // Vytaženo z původního items()-lambda, aby ho šlo sdílet mezi plochým (seriesFilter) i
+    // seskupeným (admin) režimem beze zdvojení kódu.
+    @Composable
+    fun EpisodeRowFor(ep: RssEpisode) {
+        val key = viewModel.episodeKey(ep)
+        val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
+        // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
+        val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
+        // REWIND (SHW-68): video resume má přednost (sdílený klíč = „poslední vyhrává"),
+        // jinak audio resume → progres + „Pokračovat" funguje i u VIDEO epizody.
+        val markPos = videoResumeMarks[key]?.posMs ?: resumeMarks[key]?.posMs
+        val markDur = videoResumeMarks[key]?.durMs ?: resumeMarks[key]?.durMs
+        val progress: Float? = when {
+            isCurrent && playerState.durationMs > 0 ->
+                (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
+            markPos != null && markDur != null && markDur > 0 ->
+                (markPos.toFloat() / markDur).coerceIn(0f, 1f)
+            else -> null
+        }
+        val canResume = !isCurrent && markPos != null
+        val remainingLabel = if (!isCurrent && markPos != null && markDur != null && markDur > 0)
+            "zbývá ${formatClock((markDur - markPos).coerceAtLeast(0L))}" else null
+        PodcastEpisodeRow(
+            title = ep.title,
+            image = ep.image ?: state.image,
+            date = ep.date,
+            duration = ep.duration,
+            description = ep.description,
+            downloaded = offlineStates[key]?.status == OfflineStatus.DOWNLOADED,
+            isCurrent = isCurrent,
+            isPlaying = isCurrent && playerState.isPlaying,
+            progress = progress,
+            canResume = canResume,
+            remainingLabel = remainingLabel,
+            hasVideo = ep.jfItemId != null && !audioOnly,
+            highlighted = isHighlighted,
+            onPlay = {
+                // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
+                if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep, fallbackTitle)
+                onOpenAudioPlayer()
+            },
+            onVideo = { ep.jfItemId?.let { onPlayVideo(it, ep.title.ifBlank { fallbackTitle }, key) } },
+            onMore = { actionEpisode = ep },
+        )
+    }
+
+    @Composable
+    fun SeriesRowFor(group: PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup<RssEpisode>) {
+        val latestMs = PodcastEpisodeSeriesGrouping.latestDateMs(group.members) { it.date }
+        PodcastSeriesRow(
+            title = group.title,
+            memberCount = group.members.size,
+            latestDateLabel = latestMs?.let { PodcastEpisodeSeriesGrouping.formatSeriesDate(it) },
+            thumbnail = group.members.firstOrNull()?.image ?: state.image,
+            expanded = group.slug in expandedSeries,
+            onClick = {
+                expandedSeries = if (group.slug in expandedSeries) expandedSeries - group.slug else expandedSeries + group.slug
+            },
+            onLongClick = if (isAdmin) ({ seriesForAction = group }) else null,
+        )
     }
 
     Scaffold(
@@ -134,16 +233,28 @@ fun RssPodcastScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
                     }
                 },
+                actions = {
+                    // Přepínač jen v admin (neserials-filtrovaném) pohledu — dětská cesta ho nepotřebuje.
+                    if (seriesFilter == null && !seriesOnlyGroups.isNullOrEmpty()) {
+                        IconButton(onClick = { seriesOnly = !seriesOnly }) {
+                            Icon(
+                                Icons.Default.Layers,
+                                contentDescription = if (seriesOnly) "Zobrazit vše" else "Jen série",
+                                tint = if (seriesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
             )
         },
     ) { padding ->
         when {
-            state.isLoading && state.episodes.isEmpty() ->
+            state.isLoading && filteredEpisodes.isEmpty() ->
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
 
-            state.error != null && state.episodes.isEmpty() ->
+            state.error != null && filteredEpisodes.isEmpty() ->
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 }
@@ -158,47 +269,32 @@ fun RssPodcastScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(state.episodes, key = { it.id }) { ep ->
-                    val key = viewModel.episodeKey(ep)
-                    val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
-                    // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
-                    val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
-                    // REWIND (SHW-68): video resume má přednost (sdílený klíč = „poslední vyhrává"),
-                    // jinak audio resume → progres + „Pokračovat" funguje i u VIDEO epizody.
-                    val markPos = videoResumeMarks[key]?.posMs ?: resumeMarks[key]?.posMs
-                    val markDur = videoResumeMarks[key]?.durMs ?: resumeMarks[key]?.durMs
-                    val progress: Float? = when {
-                        isCurrent && playerState.durationMs > 0 ->
-                            (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
-                        markPos != null && markDur != null && markDur > 0 ->
-                            (markPos.toFloat() / markDur).coerceIn(0f, 1f)
-                        else -> null
+                if (shelfItems == null) {
+                    // Dětská cesta (seriesFilter) NEBO fallback — plochý seznam, žádné seskupení.
+                    items(filteredEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
+                } else if (seriesOnly) {
+                    // WATCHDOG — „Jen série": jen sbalené série, řazené sestupně dle data posledního dílu.
+                    seriesOnlyGroups.orEmpty().forEach { group ->
+                        item(key = "series_${group.slug}") { SeriesRowFor(group) }
+                        if (group.slug in expandedSeries) {
+                            items(group.members, key = { it.id }) { ep -> EpisodeRowFor(ep) }
+                        }
                     }
-                    val canResume = !isCurrent && markPos != null
-                    val remainingLabel = if (!isCurrent && markPos != null && markDur != null && markDur > 0)
-                        "zbývá ${formatClock((markDur - markPos).coerceAtLeast(0L))}" else null
-                    PodcastEpisodeRow(
-                        title = ep.title,
-                        image = ep.image ?: state.image,
-                        date = ep.date,
-                        duration = ep.duration,
-                        description = ep.description,
-                        downloaded = offlineStates[key]?.status == OfflineStatus.DOWNLOADED,
-                        isCurrent = isCurrent,
-                        isPlaying = isCurrent && playerState.isPlaying,
-                        progress = progress,
-                        canResume = canResume,
-                        remainingLabel = remainingLabel,
-                        hasVideo = ep.jfItemId != null,
-                        highlighted = isHighlighted,
-                        onPlay = {
-                            // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
-                            if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep, fallbackTitle)
-                            onOpenAudioPlayer()
-                        },
-                        onVideo = { ep.jfItemId?.let { onPlayVideo(it, ep.title.ifBlank { fallbackTitle }, key) } },
-                        onMore = { actionEpisode = ep },
-                    )
+                } else {
+                    // Admin — AUTO seskupené série (SLOVO-KIDS-EPISODE) + samostatné epizody, feed pořadí.
+                    shelfItems.forEach { shelfItem ->
+                        when (shelfItem) {
+                            is PodcastEpisodeSeriesGrouping.EpisodeShelfItem.Standalone ->
+                                item(key = shelfItem.item.id) { EpisodeRowFor(shelfItem.item) }
+
+                            is PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup -> {
+                                item(key = "series_${shelfItem.slug}") { SeriesRowFor(shelfItem) }
+                                if (shelfItem.slug in expandedSeries) {
+                                    items(shelfItem.members, key = { it.id }) { ep -> EpisodeRowFor(ep) }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -213,19 +309,24 @@ fun RssPodcastScreen(
                     viewModel.playAudio(ep, fallbackTitle); onOpenAudioPlayer()
                 },
                 // EXODUS E2: video epizoda (v JF knihovně) → přehrát video / poslat na TV.
-                ep.jfItemId?.let {
-                    ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
-                        onPlayVideo(it, ep.title.ifBlank { fallbackTitle }, viewModel.episodeKey(ep))
+                // SLOVO-KIDS-EPISODE: dětský profil = vždy jen audio, video volby se ani nenabídnou.
+                if (!audioOnly) {
+                    ep.jfItemId?.let {
+                        ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                            onPlayVideo(it, ep.title.ifBlank { fallbackTitle }, viewModel.episodeKey(ep))
+                        }
                     }
-                },
-                ep.jfItemId?.let {
-                    ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
-                        viewModel.castVideoToTv(ep)
+                } else null,
+                if (!audioOnly) {
+                    ep.jfItemId?.let {
+                        ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                            viewModel.castVideoToTv(ep)
+                        }
                     }
-                },
+                } else null,
                 // AGORA (F5): u epizod BEZ vlastního JF videa dohledej video verze na YouTube
                 // → otevři picker s kandidáty, uživatel si sám vybere (+ Přehrát / Na TV per kandidát).
-                if (ep.jfItemId == null) {
+                if (ep.jfItemId == null && !audioOnly) {
                     ListenEpisodeAction(Icons.Default.OndemandVideo, "Video verze (YouTube)") {
                         videoForEpisode = ep
                         viewModel.requestVideoVersions(ep, fallbackTitle)
@@ -245,6 +346,22 @@ fun RssPodcastScreen(
                 ),
             ),
             onDismiss = { actionEpisode = null },
+        )
+    }
+
+    // SLOVO-KIDS-EPISODE — admin dlouhý stisk na kartě AUTO-detekované série → Zobrazit/Skrýt dětem.
+    seriesForAction?.let { group ->
+        val seriesKey = PodcastEpisodeSeriesGrouping.buildSeriesKey(sourceKey, group.title)
+        val visibleToKids = seriesKey in kidsVisibleSeriesKeys
+        ListenEpisodeActionSheet(
+            title = group.title,
+            actions = listOf(
+                ListenEpisodeAction(
+                    if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
+                    if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
+                ) { onSetSeriesVisibleForKids(seriesKey, !visibleToKids) },
+            ),
+            onDismiss = { seriesForAction = null },
         )
     }
 

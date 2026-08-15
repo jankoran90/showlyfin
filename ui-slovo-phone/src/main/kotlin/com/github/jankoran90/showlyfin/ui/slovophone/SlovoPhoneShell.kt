@@ -154,6 +154,16 @@ private fun SlovoShellContent() {
                                 onOpenSourceEpisode = { type, ref, srcTitle, epKey ->
                                     onPush(linkedOrPlain(podcastLinkLookup, type, ref, srcTitle, epKey))
                                 },
+                                // SLOVO-KIDS-EPISODE / WATCHDOG — dítě otevře jen schválenou sérii, routing podle typu.
+                                onOpenSourceSeries = { src, slug, seriesTitle ->
+                                    onPush(
+                                        when (src.type) {
+                                            "youtube" -> SlovoDetailEntry.YoutubeChannel(src.ref, seriesTitle, seriesFilter = slug)
+                                            "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, seriesTitle, seriesFilter = slug)
+                                            else -> SlovoDetailEntry.RssPodcast(src.ref, seriesTitle, seriesFilter = slug)
+                                        },
+                                    )
+                                },
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }

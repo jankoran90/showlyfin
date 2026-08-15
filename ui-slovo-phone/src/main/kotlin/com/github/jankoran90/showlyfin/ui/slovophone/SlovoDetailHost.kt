@@ -2,7 +2,9 @@ package com.github.jankoran90.showlyfin.ui.slovophone
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
@@ -34,9 +36,27 @@ sealed interface SlovoDetailEntry {
         val startSec: Double? = null,
         val episodeId: String? = null,
     ) : SlovoDetailEntry
-    data class YoutubeChannel(val handle: String, val title: String, val highlightEpisodeKey: String? = null) : SlovoDetailEntry
-    data class RssPodcast(val feedUrl: String, val title: String, val highlightEpisodeKey: String? = null) : SlovoDetailEntry
-    data class CtvProgram(val ctvId: String, val title: String, val highlightEpisodeKey: String? = null) : SlovoDetailEntry
+    data class YoutubeChannel(
+        val handle: String,
+        val title: String,
+        val highlightEpisodeKey: String? = null,
+        /** SLOVO-KIDS-EPISODE — non-null = dětská cesta, jen tahle AUTO-detekovaná série (celý zdroj skrytý). */
+        val seriesFilter: String? = null,
+    ) : SlovoDetailEntry
+    data class RssPodcast(
+        val feedUrl: String,
+        val title: String,
+        val highlightEpisodeKey: String? = null,
+        /** SLOVO-KIDS-EPISODE — non-null = dětská cesta, jen tahle AUTO-detekovaná série (celý zdroj skrytý). */
+        val seriesFilter: String? = null,
+    ) : SlovoDetailEntry
+    data class CtvProgram(
+        val ctvId: String,
+        val title: String,
+        val highlightEpisodeKey: String? = null,
+        /** SLOVO-KIDS-EPISODE — non-null = dětská cesta, jen tahle AUTO-detekovaná série (celý zdroj skrytý). */
+        val seriesFilter: String? = null,
+    ) : SlovoDetailEntry
     data class MergedPodcast(val groupId: String, val title: String, val highlightEpisodeKey: String? = null) : SlovoDetailEntry
     /** Video verze epizody (RSS/YouTube/ČT „na výbornou") → sdílený přehrávač z :feature:feature-playback. */
     data class VideoPlayer(
@@ -87,6 +107,14 @@ internal fun SlovoDetail(
     listenVm: ListenViewModel,
     podcastLinkLookup: PodcastLinkLookupViewModel,
 ) {
+    // SLOVO-KIDS-EPISODE (2026-08-15) — dětský profil: vždy jen audio, video volby v RSS/YouTube/ČT/
+    // sloučeném pořadu se úplně skryjí (i u TWINE-propojeného páru, nikdy YouTube odkaz dětem).
+    val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
+    val audioOnly = activeProfile?.isAdmin == false
+    // SLOVO-KIDS-EPISODE — admin dlouhý stisk na AUTO-detekované sérii (RssPodcastScreen) potřebuje
+    // vědět, které série jsou dětskému profilu už schválené (toggle stav v action sheetu).
+    val kidsVisibleSourceKeys by listenVm.kidsVisibleSourceKeys.collectAsStateWithLifecycle()
+
     // Přehrávač → klik na cover → seznam dílů rodiče (napříč zdroji); offline → přepni na Poslech.
     val onOpenSource: (ListenSourceTarget) -> Unit = { target ->
         when (target) {
@@ -131,6 +159,11 @@ internal fun SlovoDetail(
             channel = entry.handle,
             channelTitle = entry.title,
             highlightEpisodeKey = entry.highlightEpisodeKey,
+            audioOnly = audioOnly,
+            seriesFilter = entry.seriesFilter,
+            isAdmin = activeProfile?.isAdmin == true,
+            kidsVisibleSeriesKeys = kidsVisibleSourceKeys,
+            onSetSeriesVisibleForKids = { key, visible -> listenVm.setSourceVisibleForKids(setOf(key), visible) },
             onBack = onPop,
             onPlayVideo = { url, title, poster ->
                 onPush(SlovoDetailEntry.VideoPlayer(externalUrl = url, title = title, posterUrl = poster))
@@ -142,6 +175,11 @@ internal fun SlovoDetail(
             feedUrl = entry.feedUrl,
             title = entry.title,
             highlightEpisodeKey = entry.highlightEpisodeKey,
+            audioOnly = audioOnly,
+            seriesFilter = entry.seriesFilter,
+            isAdmin = activeProfile?.isAdmin == true,
+            kidsVisibleSeriesKeys = kidsVisibleSourceKeys,
+            onSetSeriesVisibleForKids = { key, visible -> listenVm.setSourceVisibleForKids(setOf(key), visible) },
             onBack = onPop,
             onOpenAudioPlayer = { onPush(SlovoDetailEntry.AudiobookPlayer(itemId = null, fromStart = false)) },
             onPlayVideo = { jfItemId, videoTitle, resumeKey ->
@@ -156,6 +194,11 @@ internal fun SlovoDetail(
             ctvId = entry.ctvId,
             title = entry.title,
             highlightEpisodeKey = entry.highlightEpisodeKey,
+            audioOnly = audioOnly,
+            seriesFilter = entry.seriesFilter,
+            isAdmin = activeProfile?.isAdmin == true,
+            kidsVisibleSeriesKeys = kidsVisibleSourceKeys,
+            onSetSeriesVisibleForKids = { key, visible -> listenVm.setSourceVisibleForKids(setOf(key), visible) },
             onBack = onPop,
             onPlayVideo = { url, title, poster ->
                 onPush(SlovoDetailEntry.VideoPlayer(externalUrl = url, title = title, posterUrl = poster))
@@ -167,6 +210,7 @@ internal fun SlovoDetail(
             groupId = entry.groupId,
             title = entry.title,
             highlightEpisodeKey = entry.highlightEpisodeKey,
+            audioOnly = audioOnly,
             onBack = onPop,
             onOpenAudioPlayer = { onPush(SlovoDetailEntry.AudiobookPlayer(itemId = null, fromStart = false)) },
             onPlayVideo = { url, videoTitle, poster ->
