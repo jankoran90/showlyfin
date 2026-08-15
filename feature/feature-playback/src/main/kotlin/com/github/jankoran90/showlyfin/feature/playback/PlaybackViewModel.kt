@@ -427,6 +427,13 @@ class PlaybackViewModel @Inject constructor(
                     season = q?.season, episode = q?.episode, runtime = q?.runtime,
                 )
             }.getOrElse { e ->
+                // 🔴🔴 REGRESE VLASTNÍHO FIXU (2026-08-15): `runCatching` chytá i `CancellationException`
+                // (Kotlin coroutines past) — když rychlejší druhý klik zruší TENHLE běžící job (viz
+                // `subtitleSelectJob?.cancel()` výš), zrušení samo skončí tady jako "chyba stažení",
+                // i když se nic nepokazilo. User: "stažení titulků selhalo" i po vyčištění cache —
+                // appka totiž hlásila zrušení KAŽDÉHO staršího kliknutí jako selhání. Zrušení musí
+                // potichu doběhnout (žádná hláška), ne se tvářit jako skutečná chyba.
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 timber.log.Timber.w(e, "[Titulky] download selhal id=${cand.id}")
                 _state.update { it.copy(subtitlesLoading = false, subtitleError = e.message ?: "Stažení titulků selhalo") }
                 return@launch
