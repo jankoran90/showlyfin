@@ -1222,6 +1222,16 @@ private fun SubtitleSettingsPanel(
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+        // User 2026-08-15: „klikání na titulky je nezvolí" — když stažení selhalo, appka to
+        // dosud hlásila jen do `subtitleError` stavu, nikde v UI se to ale nezobrazovalo.
+        // Klik pak vypadal, že "nic neudělal", bez jakéhokoli vysvětlení proč.
+        state.subtitleError?.let { err ->
+            Text(
+                "⚠ $err",
+                color = Color(0xFFEF5350), style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
 
         // LINGUA/SUBWEAVE — AI překlad EN→CS. Nabízí se VŽDY (i když jsou titulky nalezené), aby si
         // uživatel mohl vynutit vlastní kvalitní překlad, když jsou stažené špatné (např. strojový OpenSubtitles).

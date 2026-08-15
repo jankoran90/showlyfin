@@ -147,6 +147,7 @@ class PlaybackViewModel @Inject constructor(
     // LINGUA Fáze 3: klíč běžícího/dřívějšího AI překladu + observer sdíleného store (worker na pozadí).
     private var translateKey: String? = null
     private var translateObserveJob: Job? = null
+    private var subtitleSelectJob: Job? = null
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
     fun loadExternal(
@@ -402,19 +403,24 @@ class PlaybackViewModel @Inject constructor(
 
     /** Vybere titulkovou stopu (index do subtitleCandidates), -1 = vypnout. persist=false při auto-výběru z paměti. */
     fun selectSubtitle(index: Int, persist: Boolean = true) {
+        // User 2026-08-15: „klikání na dvoje dostupné titulky je nezvolí" — dřív nic nerušilo
+        // předchozí volání. Klikneš na A (spustí se stahování), hned na B (další stahování) nebo
+        // na Vypnuto → odpovědi se mohly vrátit v opačném pořadí a POZDĚJŠÍ síťová odpověď z DŘÍVĚJŠÍHO
+        // kliknutí přepsala novější volbu. Zruš rozjeté stahování při KAŽDÉM novém volání (i Vypnuto).
+        subtitleSelectJob?.cancel()
         if (persist) query?.let { q ->
             val key = sourceKey(q)
             if (index < 0) saveSourceSelectedId(key, "OFF")
             else _state.value.subtitleCandidates.getOrNull(index)?.let { saveSourceSelectedId(key, it.id) }
         }
         if (index < 0) {
-            _state.update { it.copy(selectedSubtitleIndex = -1, subtitleCues = emptyList(), subtitleRuntimeOk = "-") }
+            _state.update { it.copy(selectedSubtitleIndex = -1, subtitleCues = emptyList(), subtitleRuntimeOk = "-", subtitlesLoading = false) }
             return
         }
         val cand = _state.value.subtitleCandidates.getOrNull(index) ?: return
         val q = query
         _state.update { it.copy(subtitlesLoading = true, subtitleError = null) }
-        viewModelScope.launch {
+        subtitleSelectJob = viewModelScope.launch {
             val dl = runCatching {
                 uploaderDs.downloadSubtitle(
                     uploaderBaseUrl, uploaderCookie, cand.id,
