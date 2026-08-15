@@ -47,6 +47,7 @@ class SlovoProfileManager @Inject constructor(
             )
             profileRepository.setActive(adultId)
             ensureKidsProfile()
+            repairKidsPodcastWhitelist()
             return
         }
 
@@ -58,6 +59,22 @@ class SlovoProfileManager @Inject constructor(
             profileRepository.upsert(legacy.copy(name = "Dospělý", isAdmin = true, isDefault = true))
         }
         ensureKidsProfile()
+        repairKidsPodcastWhitelist()
+    }
+
+    /**
+     * OPRAVA (2026-08-15, instalace 1.0.9–1.0.11): Děti profil seedovaný staršími verzemi měl
+     * v `absLibraryWhitelist` jen audioknižní knihovnu, bez knihovny Podcasty → appka nikdy
+     * nenačetla žádný podcast pro Děti. Idempotentně doplní chybějící id (jednou, pak no-op).
+     */
+    private suspend fun repairKidsPodcastWhitelist() {
+        val kids = profileRepository.getAll().firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS } ?: return
+        val cfg = ProfileConfig.fromJson(kids.configJson)
+        if (SlovoProfiles.PODCAST_LIBRARY_ID in cfg.absLibraryWhitelist.orEmpty()) return
+        Timber.i("[SLOVO] oprava: doplňuji knihovnu Podcasty do whitelistu profilu Děti")
+        profileRepository.updateConfig(kids.id) {
+            it.copy(absLibraryWhitelist = (it.absLibraryWhitelist.orEmpty() + SlovoProfiles.PODCAST_LIBRARY_ID).distinct())
+        }
     }
 
     /**
@@ -88,7 +105,10 @@ class SlovoProfileManager @Inject constructor(
         )
         profileRepository.updateConfig(kidsId) {
             it.copy(
-                absLibraryWhitelist = listOf(SlovoProfiles.KIDS_ABS_LIBRARY_ID),
+                // Whitelist musí nést OBĚ knihovny — audioknihy (děti) i Podcasty (obecná knihovna,
+                // jednotlivé pořady filtruje hiddenPodcastIds) — jinak getPodcastLibraries() vrátí
+                // pro Děti prázdno a appka nenačte žádný podcast (bug nalezený 2026-08-15, 1.0.11).
+                absLibraryWhitelist = listOf(SlovoProfiles.KIDS_ABS_LIBRARY_ID, SlovoProfiles.PODCAST_LIBRARY_ID),
                 credentials = it.credentials.copy(abs = inheritedAbs),
             )
         }

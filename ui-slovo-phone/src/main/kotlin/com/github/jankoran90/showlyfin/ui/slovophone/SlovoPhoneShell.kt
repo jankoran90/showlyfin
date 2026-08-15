@@ -11,6 +11,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,9 +70,17 @@ private fun SlovoShellContent() {
     // Activity-scoped → tytéž instance jako uvnitř ListenScreen/přehrávače (jednotný stav poslechu).
     val listenVm: ListenViewModel = hiltViewModel()
     val podcastLinkLookup: PodcastLinkLookupViewModel = hiltViewModel()
-    // Profily (2026-08-15): dětský profil → titulek sekce Poslech se změní na "Poslech - děti".
+    // Profily (2026-08-15): dětský profil → titulek sekce Poslech se změní na "Poslech - děti",
+    // v draweru zmizí Objevit/Zdroje (dospělácká vrstva správy zdrojů — user „děti je mít nebudou").
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
-    val poslechLabel = if (activeProfile?.isAdmin == false) "Poslech - děti" else SlovoSection.POSLECH.label
+    val isKidsProfile = activeProfile?.isAdmin == false
+    val poslechLabel = if (isKidsProfile) "Poslech - děti" else SlovoSection.POSLECH.label
+    // Pojistka: přepnutí NA Děti, když je otevřená Objevit/Zdroje (odjinud, dřív dospělý) → vrať na Poslech.
+    LaunchedEffect(isKidsProfile) {
+        if (isKidsProfile && current in setOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE)) {
+            current = SlovoSection.POSLECH
+        }
+    }
 
     val onPush: (SlovoDetailEntry) -> Unit = { detailStack = detailStack + it }
     val onPop: () -> Unit = { detailStack = detailStack.dropLast(1) }
@@ -107,7 +116,7 @@ private fun SlovoShellContent() {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            SlovoDrawer(current = current) { section ->
+            SlovoDrawer(current = current, isAdmin = !isKidsProfile) { section ->
                 sectionStateHolder.removeState(section)
                 current = section
                 scope.launch { drawerState.close() }

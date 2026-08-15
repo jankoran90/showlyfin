@@ -19,10 +19,15 @@ import androidx.compose.ui.unit.dp
  * Slovo (EXCISE/SHW-103) — postranní menu poslechové appky (zrcadlo
  * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmyDrawer]). Poslech/Objevit/Zdroje + oddělené
  * Nastavení dole. Scrollovatelné (na škálovaných displejích se položky nesmí uříznout). Vzhled z motivu.
+ *
+ * Profily (2026-08-15, user „děti nebudou mít Zdroje a Objevit") — dětský profil dostane JEN
+ * Poslech (obsahuje sloučenou audioknihy+podcasty sekci) + Nastavení + Profil; [isAdmin] filtruje
+ * „Objevit"/„Zdroje" pryč (ty jsou dospělácká vrstva — správa vlastních RSS/YouTube zdrojů).
  */
 @Composable
 fun SlovoDrawer(
     current: SlovoSection,
+    isAdmin: Boolean,
     onSelect: (SlovoSection) -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
@@ -34,7 +39,8 @@ fun SlovoDrawer(
                 modifier = Modifier.padding(start = 20.dp, top = 28.dp, bottom = 16.dp),
             )
             DrawerSectionLabel("Poslech")
-            SlovoShellPrefs.drawerOrder.forEach { DrawerRow(it, current, onSelect) }
+            val poslechSections = if (isAdmin) SlovoShellPrefs.drawerOrder else listOf(SlovoSection.POSLECH)
+            poslechSections.forEach { DrawerRow(it, current, onSelect) }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))
             DrawerRow(SlovoSection.NASTAVENI, current, onSelect)
