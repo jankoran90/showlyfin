@@ -251,5 +251,5 @@ interface UploaderService {
 }
 
 data class UploadSessionStartResponse(
-    @get:com.google.gson.annotations.SerializedName("session_id") val sessionId: String,
+    @com.google.gson.annotations.SerializedName("session_id") val sessionId: String = "",
 )
