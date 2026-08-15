@@ -70,7 +70,6 @@ fun ListenScreen(
     val downloads by viewModel.downloads.collectAsStateWithLifecycle()
     val podcastDownloads by viewModel.offlinePodcasts.collectAsStateWithLifecycle()
     val activeProfile by viewModel.activeProfile.collectAsStateWithLifecycle()
-    val profileConfig by viewModel.profileConfig.collectAsStateWithLifecycle()
     var showDownloads by remember { mutableStateOf(false) }
 
     // PRESET (SHW-65) — po návratu z Nastavení převezmi případně změněné pořadí v Poslechu.
@@ -91,10 +90,9 @@ fun ListenScreen(
                 KidsListenContent(
                     state = state,
                     viewModel = viewModel,
-                    podcastDownloads = podcastDownloads,
-                    hiddenPodcastIds = profileConfig.hiddenPodcastIds,
                     onOpenBook = onOpenBook,
                     onEditBook = onEditBook,
+                    onOpenPodcast = onOpenPodcast,
                 )
             } else {
                 // PRESET (SHW-65) — pořadí záložek dle nastavení (Audioknihy / Podcasty první).

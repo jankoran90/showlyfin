@@ -203,14 +203,14 @@ private fun formatSize(bytes: Long): String {
 }
 
 /** WEFT (SHW-75/W6): offline pořad = stažené epizody seskupené pod jednu kartu (parita s Audioknihy grid). */
-internal data class OfflinePodcastShow(
+private data class OfflinePodcastShow(
     val title: String,
     val poster: String?,
     val sourceLabel: String,
     val episodes: List<OfflineDownload>,
 )
 
-internal fun episodesWord(n: Int): String = when {
+private fun episodesWord(n: Int): String = when {
     n == 1 -> "epizoda"
     n in 2..4 -> "epizody"
     else -> "epizod"
@@ -218,10 +218,9 @@ internal fun episodesWord(n: Int): String = when {
 
 /**
  * Seskupí stažené epizody dle pořadu (subtitle = název pořadu; fallback zdroj) → jedna karta na pořad,
- * nejnovější epizoda nahoře. Sdíleno mezi [OfflineDownloadedPodcasts] (offline sekce) a dětským
- * sloučeným Poslechem (KidsListenContent).
+ * nejnovější epizoda nahoře. Vyňato z [OfflineDownloadedPodcasts] jen pro čitelnost (anti-monolit).
  */
-internal fun buildOfflineShows(downloads: List<OfflineDownload>): List<OfflinePodcastShow> =
+private fun buildOfflineShows(downloads: List<OfflineDownload>): List<OfflinePodcastShow> =
     downloads
         .groupBy { it.subtitle?.takeIf { s -> s.isNotBlank() } ?: it.sourceLabel }
         .map { (title, eps) ->
@@ -299,7 +298,7 @@ internal fun OfflineDownloadedPodcasts(
 
 /** WEFT (SHW-75/W6): karta staženého pořadu — CHORUS Osa 2 delegát nad [CoverCard] (badge počtu). */
 @Composable
-internal fun OfflinePodcastCard(
+private fun OfflinePodcastCard(
     show: OfflinePodcastShow,
     onClick: () -> Unit,
 ) {
@@ -329,7 +328,7 @@ internal fun OfflinePodcastCard(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun OfflinePodcastDetailScreen(
+private fun OfflinePodcastDetailScreen(
     show: OfflinePodcastShow,
     viewModel: ListenViewModel,
     highlightEpisodeKey: String? = null,

@@ -398,6 +398,15 @@ class ListenViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Profily (2026-08-15) — dětský profil nemá záložku Podcasty ([setMode] se nikdy nezavolá s
+     * PODCASTS), ale [ListenUiState.podcasts] (admin-schválené) v mergnuté sekci Poslech potřebuje.
+     * Idempotentní no-op, když už jsou načtené.
+     */
+    fun ensurePodcastsLoaded() {
+        if (!_uiState.value.podcastsLoaded) loadPodcastLibraries()
+    }
+
     fun selectLibrary(libraryId: String) {
         if (libraryId == _uiState.value.selectedLibraryId) return
         _uiState.update { it.copy(selectedLibraryId = libraryId) }

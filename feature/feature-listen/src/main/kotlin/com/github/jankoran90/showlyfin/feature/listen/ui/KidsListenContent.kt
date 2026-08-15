@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -16,20 +17,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
+import com.github.jankoran90.showlyfin.data.abs.model.Podcast
 import com.github.jankoran90.showlyfin.feature.listen.ListenUiState
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import java.util.Locale
 
 /**
- * Profily (2026-08-15, user „profily jak jsme je používali v showlyfin") — dětský profil dostane
- * JEDNU sloučenou sekci Poslech (bez přepínače Audioknihy/Podcasty, bez knihovních chips — děti
- * knihovna je jediná viditelná díky [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.absLibraryWhitelist]).
- * Obsah = audioknihy dětské ABS knihovny (série sloučené jako u dospělého, [groupBooksBySeries]) +
- * stažené epizody ABS podcastů, které admin (Dospělý profil) nezakázal ([ProfileConfig.hiddenPodcastIds]).
- * Vlastní RSS/YouTube zdroje (Sledované/Objevit) jsou „dospělácká" vrstva — dětskému profilu se nenabízí.
+ * Profily (2026-08-15, user zpřesnění — „plná sekce audioknihy i když nejsou stažené, plus sloučené
+ * podcasty které dětem schválím") — dětský profil dostane JEDNU sloučenou sekci Poslech (bez
+ * přepínače Audioknihy/Podcasty, bez knihovních chips — dětská knihovna je jediná viditelná díky
+ * [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.absLibraryWhitelist]).
+ *
+ * Obsah = PLNÁ dětská knihovna audioknih (série sloučené, [groupBooksBySeries], bez omezení na
+ * stažené) + živé podcasty, které admin (Dospělý profil) schválil ([ProfileConfig.hiddenPodcastIds]
+ * na profilu Děti — [state.podcasts] je touhle whitelistí filtrovaný už v [ListenViewModel]).
+ * Tap na podcast otevře STEJNÝ plný detail jako u dospělého (streamované epizody, ne jen stažené) —
+ * proto tenhle Composable NEstaví vlastní detail, jen deleguje na [onOpenPodcast] (shell naviguje).
  */
-internal sealed interface KidsShelfItem {
+sealed interface KidsShelfItem {
     val sortKey: String
     val itemKey: String
 
@@ -38,45 +43,37 @@ internal sealed interface KidsShelfItem {
         override val itemKey get() = "book_${item.itemKey}"
     }
 
-    data class ShowItem(val show: OfflinePodcastShow) : KidsShelfItem {
-        override val sortKey get() = show.title.lowercase(Locale("cs"))
-        override val itemKey get() = "show_${show.title}"
+    data class PodcastItem(val podcast: Podcast) : KidsShelfItem {
+        override val sortKey get() = podcast.title.lowercase(Locale("cs"))
+        override val itemKey get() = "podcast_${podcast.id}"
     }
 }
-
-/** Stažené epizody ABS podcastů (sourceKey `abs:<id>`), odfiltrované o [hiddenPodcastIds] admina. */
-private fun List<OfflineDownload>.absDownloadsAllowed(hiddenPodcastIds: Set<String>): List<OfflineDownload> =
-    filter { dl ->
-        val absId = dl.sourceKey?.takeIf { it.startsWith("abs:") }?.removePrefix("abs:") ?: return@filter false
-        absId !in hiddenPodcastIds
-    }
 
 @Composable
 fun KidsListenContent(
     state: ListenUiState,
     viewModel: ListenViewModel,
-    podcastDownloads: List<OfflineDownload>,
-    hiddenPodcastIds: Set<String>,
     onOpenBook: (String) -> Unit,
     onEditBook: (String, String, String?) -> Unit,
+    onOpenPodcast: (String) -> Unit,
 ) {
+    // Podcasty se jinak načtou líně jen při přepnutí na záložku Podcasty — dětský profil žádnou
+    // záložku nemá, takže si o načtení řekneme sami (idempotentní, no-op když už jsou načtené).
+    LaunchedEffect(Unit) { viewModel.ensurePodcastsLoaded() }
+
     when {
-        state.isLoading && state.books.isEmpty() ->
+        state.isLoading && state.books.isEmpty() && state.podcasts.isEmpty() ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 
-        state.error != null && state.books.isEmpty() -> CenteredMessage(state.error)
+        state.error != null && state.books.isEmpty() && state.podcasts.isEmpty() -> CenteredMessage(state.error)
 
         else -> {
             val shelfItems = remember(state.books) { groupBooksBySeries(state.books) }
-            val shows = remember(podcastDownloads, hiddenPodcastIds) {
-                buildOfflineShows(podcastDownloads.absDownloadsAllowed(hiddenPodcastIds))
-            }
-            val items = remember(shelfItems, shows) {
-                (shelfItems.map { KidsShelfItem.BookItem(it) } + shows.map { KidsShelfItem.ShowItem(it) })
+            val items = remember(shelfItems, state.podcasts) {
+                (shelfItems.map { KidsShelfItem.BookItem(it) } + state.podcasts.map { KidsShelfItem.PodcastItem(it) })
                     .sortedBy { it.sortKey }
             }
             var openSeries by remember { mutableStateOf<BookShelfItem.SeriesGroup?>(null) }
-            var openShow by remember { mutableStateOf<OfflinePodcastShow?>(null) }
 
             if (items.isEmpty() && !state.isLoading) {
                 CenteredMessage("V dětské knihovně zatím nic není.")
@@ -105,9 +102,9 @@ fun KidsListenContent(
                                     onClick = { openSeries = b },
                                 )
                             }
-                            is KidsShelfItem.ShowItem -> OfflinePodcastCard(
-                                show = item.show,
-                                onClick = { openShow = item.show },
+                            is KidsShelfItem.PodcastItem -> PodcastCard(
+                                podcast = item.podcast,
+                                onClick = { onOpenPodcast(item.podcast.id) },
                             )
                         }
                     }
@@ -121,19 +118,6 @@ fun KidsListenContent(
                         onLongClickBook = { book -> openSeries = null; onEditBook(book.id, book.title, book.author) },
                         onDismiss = { openSeries = null },
                     )
-                }
-
-                openShow?.let { opened ->
-                    val live = shows.firstOrNull { it.title == opened.title }
-                    if (live != null) {
-                        OfflinePodcastDetailScreen(
-                            show = live,
-                            viewModel = viewModel,
-                            onBack = { openShow = null },
-                        )
-                    } else {
-                        openShow = null
-                    }
                 }
             }
         }
