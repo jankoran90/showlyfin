@@ -243,7 +243,7 @@ fun MergedPodcastScreen(
                 ),
                 // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
                 if (resumeMarks[item.key] != null) {
-                    ListenEpisodeAction(Icons.Default.RestartAlt, „Reset poslechu") {
+                    ListenEpisodeAction(Icons.Default.RestartAlt, "Reset poslechu") {
                         viewModel.resetPosition(item)
                     }
                 } else null,

@@ -337,7 +337,7 @@ fun YoutubeChannelScreen(
                 ),
                 // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
                 if (resumeMarks[viewModel.episodeKey(ep)] != null) {
-                    ListenEpisodeAction(Icons.Default.RestartAlt, „Reset poslechu") {
+                    ListenEpisodeAction(Icons.Default.RestartAlt, "Reset poslechu") {
                         viewModel.resetPosition(ep)
                     }
                 } else null,
