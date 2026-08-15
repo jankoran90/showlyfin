@@ -48,6 +48,7 @@ class SlovoProfileManager @Inject constructor(
             profileRepository.setActive(adultId)
             ensureKidsProfile()
             repairKidsPodcastWhitelist()
+            repairKidsAbsCredentials()
             return
         }
 
@@ -60,6 +61,7 @@ class SlovoProfileManager @Inject constructor(
         }
         ensureKidsProfile()
         repairKidsPodcastWhitelist()
+        repairKidsAbsCredentials()
     }
 
     /**
@@ -75,6 +77,27 @@ class SlovoProfileManager @Inject constructor(
         profileRepository.updateConfig(kids.id) {
             it.copy(absLibraryWhitelist = (it.absLibraryWhitelist.orEmpty() + SlovoProfiles.PODCAST_LIBRARY_ID).distinct())
         }
+    }
+
+    /**
+     * KRITICKÁ OPRAVA (2026-08-15, ověřeno v `profiles.json` na backendu): profil Děti seedovaný
+     * PŘED touto opravou má `credentials.abs == null` (dřívější `ensureKidsProfile()` dědění creds
+     * bylo přidáno pozdějc — na profil, který UŽ existuje, se druhotně nespustí). Následek:
+     * [com.github.jankoran90.showlyfin.core.data.ProfileConfigApplier] při KAŽDÉM přepnutí na Děti
+     * smaže ABS přihlášení z prefs (creds.abs == null → interpretuje se jako odhlášení) — pro CELOU
+     * appku, i po zpětném přepnutí na Dospělého. Idempotentně dosadí creds Dospělého, pokud Děti
+     * žádné nemá.
+     */
+    private suspend fun repairKidsAbsCredentials() {
+        val all = profileRepository.getAll()
+        val kids = all.firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS } ?: return
+        val kidsCfg = ProfileConfig.fromJson(kids.configJson)
+        if (kidsCfg.credentials.abs != null) return
+        val inheritedAbs = all.filter { it.id != kids.id }
+            .firstNotNullOfOrNull { ProfileConfig.fromJson(it.configJson).credentials.abs }
+            ?: return
+        Timber.i("[SLOVO] oprava: doplňuji ABS přihlášení profilu Děti (dřív chybělo → mazalo přihlášení při přepnutí)")
+        profileRepository.updateConfig(kids.id) { it.copy(credentials = it.credentials.copy(abs = inheritedAbs)) }
     }
 
     /**
