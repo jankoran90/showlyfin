@@ -28,12 +28,14 @@ import androidx.compose.ui.unit.dp
 fun SlovoDrawer(
     current: SlovoSection,
     isAdmin: Boolean,
+    /** Jméno aktivního profilu (2026-08-15, user „profil v sidebaru není napsaný") — vidět na první pohled. */
+    activeProfileName: String?,
     onSelect: (SlovoSection) -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(
-                text = "Slovo",
+                text = if (activeProfileName != null) "Slovo · $activeProfileName" else "Slovo",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 20.dp, top = 28.dp, bottom = 16.dp),

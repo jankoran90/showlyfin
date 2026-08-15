@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 data class SlovoProfileUiState(
@@ -24,6 +25,8 @@ data class SlovoProfileUiState(
     val podcasts: List<Podcast> = emptyList(),
     val hiddenForKids: Set<String> = emptySet(),
     val podcastsLoading: Boolean = false,
+    /** null = žádná chyba (buď se ještě nenačítalo, nebo úspěch — i s prázdným seznamem). */
+    val podcastsError: String? = null,
 )
 
 /**
@@ -41,6 +44,7 @@ class SlovoProfileViewModel @Inject constructor(
 
     private val _podcasts = MutableStateFlow<List<Podcast>>(emptyList())
     private val _podcastsLoading = MutableStateFlow(false)
+    private val _podcastsError = MutableStateFlow<String?>(null)
     private val _kidsHidden = MutableStateFlow<Set<String>>(emptySet())
 
     val uiState: StateFlow<SlovoProfileUiState> =
@@ -52,7 +56,8 @@ class SlovoProfileViewModel @Inject constructor(
             _podcastsLoading,
         ) { profiles, active, podcasts, hidden, loading ->
             SlovoProfileUiState(profiles, active?.id, podcasts, hidden, loading)
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, SlovoProfileUiState())
+        }.combine(_podcastsError) { state, err -> state.copy(podcastsError = err) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, SlovoProfileUiState())
 
     fun switchProfile(profileId: Long) {
         viewModelScope.launch { profileRepository.setActive(profileId) }
@@ -74,10 +79,16 @@ class SlovoProfileViewModel @Inject constructor(
     fun loadPodcastCuration() {
         viewModelScope.launch {
             _podcastsLoading.value = true
+            _podcastsError.value = null
             runCatching {
                 val libs = absRepo.getPodcastLibraries()
                 libs.flatMap { absRepo.getPodcasts(it.id) }
-            }.onSuccess { _podcasts.value = it }
+            }
+                .onSuccess { _podcasts.value = it }
+                .onFailure { e ->
+                    Timber.w(e, "[SLOVO] loadPodcastCuration selhalo")
+                    _podcastsError.value = e.message ?: "Načtení podcastů selhalo"
+                }
             val kids = profileRepository.getAll().firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS }
             _kidsHidden.value = kids?.let { ProfileConfig.fromJson(it.configJson).hiddenPodcastIds }.orEmpty()
             _podcastsLoading.value = false

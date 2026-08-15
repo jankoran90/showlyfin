@@ -110,13 +110,23 @@ fun SlovoProfileScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
-                    text = "Které pořady se dětskému profilu zobrazí v sekci Poslech (jen jejich stažené epizody).",
+                    text = "Které pořady se dětskému profilu zobrazí v sekci Poslech (živě, celý pořad ke streamování).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (ui.podcastsLoading && ui.podcasts.isEmpty()) {
                     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
+                    }
+                } else if (ui.podcastsError != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Načtení podcastů selhalo: ${ui.podcastsError}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { vm.loadPodcastCuration() }) { Text("Zkusit znovu") }
                     }
                 } else if (ui.podcasts.isEmpty()) {
                     Text(

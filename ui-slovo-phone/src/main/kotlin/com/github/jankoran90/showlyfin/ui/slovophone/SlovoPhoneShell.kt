@@ -116,7 +116,7 @@ private fun SlovoShellContent() {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            SlovoDrawer(current = current, isAdmin = !isKidsProfile) { section ->
+            SlovoDrawer(current = current, isAdmin = !isKidsProfile, activeProfileName = activeProfile?.name) { section ->
                 sectionStateHolder.removeState(section)
                 current = section
                 scope.launch { drawerState.close() }
