@@ -514,6 +514,17 @@ class WorkingSourceStore @Inject constructor(
     }
 
     /**
+     * User 2026-08-15 (After the Storm): odebrání zdroje → náhrobek na 90 dní potlačuje KAŽDÝ
+     * auto-nalezený náhradník (SHW-107, aby se smazaný film nevracel sám). Jenže přidání filmu
+     * zpátky do Oblíbených/Chci vidět JE vědomý signál „chci ho zpátky" — bez zrušení náhrobku
+     * server auto-search sice zdroj najde a zapíše, ale nejbližší push zase smaže (viz `clear`
+     * na serveru: chybí-li ve snapshotu, tombstoneuje se). Volej PŘED `triggerAutoCache`.
+     */
+    fun clearTombstoneFor(imdb: String?, tmdb: Long?, season: Int? = null, episode: Int? = null) {
+        clearTombstones(imdb, tmdb, epKeyOf(season, episode))
+    }
+
+    /**
      * Plan LEDGER (SHW-43): všechny zapamatované zdroje pro správu v Nastavení.
      * Záznam je uložen pod DVĚMA klíči (`tmdb` i `imdb`) → projdeme všechny prefs klíče a
      * dedupujeme podle identity filmu (tmdb→imdb→hash streamu), ať se jeden film neukáže 2×.

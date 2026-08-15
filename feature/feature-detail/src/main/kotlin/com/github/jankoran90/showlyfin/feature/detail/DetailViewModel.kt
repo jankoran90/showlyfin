@@ -802,6 +802,9 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(isFavorite = now) }
         // LAPIDARY (SHW-96): přidání filmu do Oblíbených = vědomý signál → nacachuj zdroj na pozadí.
         if (now && item.type == MediaType.MOVIE) {
+            // Zruš případný náhrobek z dřívějšího odebrání (viz forgetWorkingSource) — jinak čerstvě
+            // dohledaný zdroj nepřežije nejbližší sync push.
+            workingSourceStore.clearTombstoneFor(item.imdbId, item.tmdbId)
             viewModelScope.launch {
                 workingSourceStore.triggerAutoCache(
                     item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
@@ -1052,6 +1055,9 @@ class DetailViewModel @Inject constructor(
      */
     private suspend fun triggerWantSourceSearch(item: MediaItem) {
         markAutoSearching()
+        // Přidání do „Chci vidět" je vědomý signál „chci ho zpátky" — zruš případný náhrobek
+        // z dřívějšího odebrání, ať čerstvě dohledaný zdroj přežije nejbližší sync (viz forgetWorkingSource).
+        workingSourceStore.clearTombstoneFor(item.imdbId, item.tmdbId)
         if (item.type == MediaType.MOVIE) {
             workingSourceStore.triggerAutoCache(
                 item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
@@ -1567,6 +1573,15 @@ class DetailViewModel @Inject constructor(
         if (item == null || item.type != MediaType.MOVIE) return
         _uiState.update { it.copy(autoAdvanceInfo = "Zdroj zapomenut, hledám nový…") }
         markAutoSearching()
+        // 🔴 User 2026-08-15 (After the Storm): `clear()` o řádek výš založí 90denní náhrobek (SHW-107,
+        // ať se smazaný film sám nevrací) — ale tahle funkce O VTEŘINU POZDĚJI sama spustí nové hledání.
+        // Bez zrušení náhrobku server auto-search zdroj sice najde a zapíše, jenže nejbližší sync push
+        // ho zase smaže (chybí ve snapshotu → tombstone). *Odebrání zdroje je žádost o jiný, ne o žádný*
+        // platí i pro náhrobek samotný — jinak ho vlastní re-search sabotuje.
+        workingSourceStore.clearTombstoneFor(
+            item.imdbId, item.tmdbId,
+            season = episodeSelector?.season, episode = episodeSelector?.episode,
+        )
         viewModelScope.launch {
             workingSourceStore.triggerAutoCache(
                 item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
@@ -2407,9 +2422,22 @@ class DetailViewModel @Inject constructor(
             val until = System.currentTimeMillis() + AUTO_SEARCH_MAX_MS
             while (System.currentTimeMillis() < until) {
                 kotlinx.coroutines.delay(3_000)
-                val found = workingSourceStore.get(item.imdbId, item.tmdbId) != null ||
+                // User 2026-08-15: „ta hláška tam pořád běží a nepřekreslí se sama bez odchodu a
+                // příchodu do appky" — `get()`/`savedKeys` čtou jen LOKÁLNÍ cache, tu nic samo
+                // neobčerstvuje. Server auto-search doběhne na pozadí, ale appka se to dozví až při
+                // příštím otevření karty (`syncNow` v `load()`). Zatímco běží banner, dotahuj aktivně.
+                runCatching { workingSourceStore.syncNow() }
+                val fresh = workingSourceStore.get(item.imdbId, item.tmdbId)
+                val found = fresh != null ||
                     workingSourceStore.savedKeys.value.any { k -> item.tmdbId?.let { k.startsWith("tmdb:$it") } == true }
-                if (found) break
+                if (found) {
+                    // Ne jen zhasnout banner — rovnou ukázat, co se našlo (jinak spinner zmizí a
+                    // karta dál tváří "Hledat zdroje" místo "Přehrát", dokud user neopustí a nevrátí se).
+                    if (fresh != null && _uiState.value.item?.tmdbId == item.tmdbId && _uiState.value.rememberedSource == null) {
+                        _uiState.update { it.copy(rememberedSource = fresh.stream) }
+                    }
+                    break
+                }
             }
             _uiState.update { it.copy(autoSearching = false) }
         }
