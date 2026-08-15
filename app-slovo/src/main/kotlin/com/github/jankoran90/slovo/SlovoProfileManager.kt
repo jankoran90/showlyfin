@@ -2,6 +2,7 @@ package com.github.jankoran90.slovo
 
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.ui.slovophone.SlovoProfiles
 import timber.log.Timber
 import javax.inject.Inject
@@ -59,10 +60,18 @@ class SlovoProfileManager @Inject constructor(
         ensureKidsProfile()
     }
 
-    /** Idempotentně doplní profil „Děti" (whitelist ABS knihovny „děti"), pokud ještě neexistuje. */
+    /**
+     * Idempotentně doplní profil „Děti" (whitelist ABS knihovny „děti"), pokud ještě neexistuje.
+     * **Zdědí ABS přihlášení** z libovolného existujícího profilu, který ho má — Slovo má JEDNO
+     * sdílené ABS pozadí pro oba profily (whitelist knihovny dělá restrikci obsahu, ne oddělený
+     * účet); bez toho by [com.github.jankoran90.showlyfin.core.data.ProfileConfigApplier] při
+     * přepnutí na Děti (creds.abs == null) ABS přihlášení rovnou smazal.
+     */
     private suspend fun ensureKidsProfile() {
-        if (profileRepository.getAll().any { it.profileUuid == SlovoProfiles.UUID_KIDS }) return
+        val existing = profileRepository.getAll()
+        if (existing.any { it.profileUuid == SlovoProfiles.UUID_KIDS }) return
         Timber.i("[SLOVO] doplňuji profil Děti (whitelist ABS knihovny ${SlovoProfiles.KIDS_ABS_LIBRARY_ID})")
+        val inheritedAbs = existing.firstNotNullOfOrNull { ProfileConfig.fromJson(it.configJson).credentials.abs }
         val kidsId = profileRepository.upsert(
             ProfileEntity(
                 profileUuid = SlovoProfiles.UUID_KIDS,
@@ -78,7 +87,10 @@ class SlovoProfileManager @Inject constructor(
             )
         )
         profileRepository.updateConfig(kidsId) {
-            it.copy(absLibraryWhitelist = listOf(SlovoProfiles.KIDS_ABS_LIBRARY_ID))
+            it.copy(
+                absLibraryWhitelist = listOf(SlovoProfiles.KIDS_ABS_LIBRARY_ID),
+                credentials = it.credentials.copy(abs = inheritedAbs),
+            )
         }
     }
 }

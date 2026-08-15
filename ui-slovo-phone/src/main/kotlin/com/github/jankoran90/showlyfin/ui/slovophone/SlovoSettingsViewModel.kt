@@ -58,37 +58,42 @@ class SlovoSettingsViewModel @Inject constructor(
         }
     }
 
-    /** Odhlášení ABS + smazání creds z balíku profilu (cross-device). */
+    /**
+     * Odhlášení ABS + smazání creds z balíku profilu (cross-device). Profily (2026-08-15): Slovo má
+     * JEDNO sdílené ABS pozadí pro Dospělý i Děti (whitelist filtruje obsah, ne přihlášení) — smaž
+     * creds na VŠECH profilech, ať se Děti odhlášením Dospělého taky neocitnou bez přihlášení.
+     */
     fun absLogout() {
         absRepo.logout()
         viewModelScope.launch {
-            profileRepository.activeProfile.value?.id?.let { pid ->
-                profileRepository.updateConfig(pid) { c ->
-                    c.copy(credentials = c.credentials.copy(abs = null))
-                }
+            profileRepository.getAll().forEach { p ->
+                profileRepository.updateConfig(p.id) { c -> c.copy(credentials = c.credentials.copy(abs = null)) }
             }
             _account.update { it.copy(absConfigured = false, absBaseUrl = "", absError = null) }
         }
     }
 
     /**
-     * Zrcadlí právě uložené ABS creds (z kanonických prefs po [AbsRepository.login]) do balíku profilu →
-     * backend push pod `slovo-main` → poslech je přihlášený na dalších zařízeních. Token přiložíme, ať se
-     * nová instance nemusí re-loginovat; heslo drží re-login na 401 po expiraci tokenu.
+     * Zrcadlí právě uložené ABS creds (z kanonických prefs po [AbsRepository.login]) do balíku VŠECH
+     * profilů (cross-device i cross-profil). Profily (2026-08-15): Dospělý i Děti sdílí JEDNO ABS
+     * přihlášení (whitelist knihovny dělá restrikci, ne oddělený účet) — jinak by [ProfileConfigApplier]
+     * při přepnutí na profil bez vlastních creds ABS přihlášení SMAZAL (creds.abs == null → odhlásit).
+     * Token přiložíme, ať se nová instance nemusí re-loginovat; heslo drží re-login na 401 po expiraci.
      */
     private suspend fun persistAbsCredsToProfile() {
-        val pid = profileRepository.activeProfile.value?.id ?: run {
-            Timber.w("[SLOVO] persistAbsCreds: žádný aktivní profil — creds jen v prefs (bez cross-device)")
-            return
-        }
         val creds = AbsCreds(
             url = absPrefs.baseUrl,
             username = absPrefs.username,
             password = absPrefs.password,
             token = absPrefs.token.ifBlank { null },
         )
-        profileRepository.updateConfig(pid) { c ->
-            c.copy(credentials = c.credentials.copy(abs = creds))
+        val profiles = profileRepository.getAll()
+        if (profiles.isEmpty()) {
+            Timber.w("[SLOVO] persistAbsCreds: žádné profily — creds jen v prefs (bez cross-device)")
+            return
+        }
+        profiles.forEach { p ->
+            profileRepository.updateConfig(p.id) { c -> c.copy(credentials = c.credentials.copy(abs = creds)) }
         }
     }
 }
