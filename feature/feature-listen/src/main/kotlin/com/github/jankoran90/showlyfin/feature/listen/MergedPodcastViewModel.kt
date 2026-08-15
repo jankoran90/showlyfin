@@ -44,7 +44,7 @@ class MergedPodcastViewModel @Inject constructor(
     private val offline: OfflineDownloadManager,
     private val linkStore: PodcastLinkStore,
     private val naTv: NaTvService,
-    resumeStore: DirectResumeStore,
+    private val resumeStore: DirectResumeStore,
     @javax.inject.Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -165,6 +165,9 @@ class MergedPodcastViewModel @Inject constructor(
         val a = item.audio ?: return
         connection.enqueue(toQueued(a), atFront = atFront)
     }
+
+    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
+    fun resetPosition(item: PodcastPairing.MergedEpisode) = resumeStore.clear(item.key)
 
     /** VIDEO URL pro přehrání i cast na TV — jen u epizody s video verzí. CLARITY: 360 progresiv / 720·max HLS. */
     fun videoUrl(item: PodcastPairing.MergedEpisode): String? {

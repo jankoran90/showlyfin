@@ -17,6 +17,7 @@ import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Headers
@@ -60,6 +61,10 @@ interface AbsService {
     /** Označení epizody/položky přehráno/nepřehráno: PATCH /api/me/progress/{itemId}[/{episodeId}]. */
     @PATCH
     suspend fun patchProgress(@Url url: String, @Header("Authorization") bearer: String, @Body body: AbsProgressUpdate): Response<ResponseBody>
+
+    /** User (2026-08-15 16:49) — „Reset poslechu": úplně smaže progress na ABS serveru: DELETE /api/me/progress/{itemId}. */
+    @DELETE
+    suspend fun deleteProgress(@Url url: String, @Header("Authorization") bearer: String): Response<ResponseBody>
 
     /** Úprava media položky (ABS server auto-download): PATCH /api/items/{itemId}/media. */
     @PATCH

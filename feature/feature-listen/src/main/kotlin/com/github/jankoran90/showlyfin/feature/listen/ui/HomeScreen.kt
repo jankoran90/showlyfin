@@ -35,6 +35,7 @@ fun HomeScreen(
     val vm: HomeViewModel = hiltViewModel()
     val items by vm.items.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+    val playerState by vm.playerState.collectAsStateWithLifecycle()
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -57,11 +58,14 @@ fun HomeScreen(
                         is HomeViewModel.ContinueItem.Book -> AudiobookCard(
                             book = item.book,
                             onClick = { onOpenBook(item.book.id) },
+                            isPlaying = playerState.isActive && playerState.currentItemId == item.book.id,
                         )
                         is HomeViewModel.ContinueItem.Episode -> ContinueEpisodeCard(
                             episode = item.episode,
                             sourceTitle = item.sourceTitle,
                             progress = item.progress,
+                            isPlaying = playerState.isActive &&
+                                playerState.currentEpisodeId == (item.episode.resumeKey ?: item.episode.id),
                             onClick = {
                                 onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.episode.resumeKey ?: item.episode.id)
                             },

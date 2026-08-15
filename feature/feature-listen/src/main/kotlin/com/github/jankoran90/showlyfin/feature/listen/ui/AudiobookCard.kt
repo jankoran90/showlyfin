@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -26,6 +27,8 @@ fun AudiobookCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     downloaded: Boolean = false,
+    /** User (2026-08-15 16:49) — odznak „hraje" (aktuálně načtená položka v přehrávači). */
+    isPlaying: Boolean = false,
     /** DROPSHIP F2c — long press v seznamu → úprava knihy. null = nic (zkratka). */
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -58,6 +61,20 @@ fun AudiobookCard(
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
                         .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .padding(3.dp)
+                        .size(16.dp),
+                )
+            }
+            // User (2026-08-15 16:49) — odznak „hraje", když je kniha zrovna ve frontě/přehrává se.
+            if (isPlaying) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = "Hraje",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
                         .padding(6.dp)
                         .background(MaterialTheme.colorScheme.primary, CircleShape)
                         .padding(3.dp)

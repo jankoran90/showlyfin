@@ -207,6 +207,7 @@ private fun BooksContent(
                 var actionBook by remember { mutableStateOf<Audiobook?>(null) }
                 val notDownloaded = state.books.any { it.id !in state.downloadedBookIds }
                 val batchProgress by viewModel.batchDownloadProgress.collectAsStateWithLifecycle()
+                val playerState by viewModel.playerState.collectAsStateWithLifecycle()
                 Column(Modifier.fillMaxSize()) {
                     if (!state.isOffline && (notDownloaded || batchProgress != null)) {
                         DownloadAllRow(progress = batchProgress, onClick = viewModel::downloadAllBooks)
@@ -224,6 +225,7 @@ private fun BooksContent(
                                     book = item.book,
                                     onClick = { onOpenBook(item.book.id) },
                                     downloaded = item.book.id in state.downloadedBookIds,
+                                    isPlaying = playerState.isActive && playerState.currentItemId == item.book.id,
                                     onLongClick = { actionBook = item.book },
                                 )
                                 is BookShelfItem.SeriesGroup -> SeriesCard(
@@ -249,6 +251,8 @@ private fun BooksContent(
                         canDownload = !state.isOffline && book.id !in state.downloadedBookIds,
                         onDownload = { viewModel.downloadBook(book) },
                         onEdit = { onEditBook(book.id, book.title, book.author) },
+                        onResetProgress = { viewModel.resetBookProgress(book) },
+                        onMarkFinished = { viewModel.markBookFinished(book) },
                         onDismiss = { actionBook = null },
                     )
                 }

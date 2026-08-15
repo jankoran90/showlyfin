@@ -36,7 +36,7 @@ class CtvProgramViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val connection: AudiobookPlayerConnection,
     private val naTv: NaTvService,
-    resumeStore: DirectResumeStore,
+    private val resumeStore: DirectResumeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -95,6 +95,9 @@ class CtvProgramViewModel @Inject constructor(
 
     /** Stabilní klíč epizody pro frontu i resume (shoda s [PodcastSourcesRepository] `ctv:<idec>`). */
     fun episodeKey(ep: CtvEpisode): String = "ctv:${ep.id}"
+
+    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
+    fun resetPosition(ep: CtvEpisode) = resumeStore.clear(episodeKey(ep))
 
     /** Mapování ČT dílu na položku fronty: audio přes audio-only DASH manifest (poslech). */
     private fun toQueued(ep: CtvEpisode): QueuedEpisode {

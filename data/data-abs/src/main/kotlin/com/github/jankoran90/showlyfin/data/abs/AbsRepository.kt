@@ -359,6 +359,23 @@ class AbsRepository @Inject constructor(
         }.onFailure { Timber.w(it, "[ABS] setEpisodeFinished selhal") }
     }
 
+    /** User (2026-08-15 16:49) — „Označit jako poslechnuté" audioknihy (bez episodeId = celá kniha). */
+    suspend fun setBookFinished(itemId: String, finished: Boolean = true) {
+        runCatching {
+            service.patchProgress(
+                api("/api/me/progress/$itemId"), bearer(),
+                AbsProgressUpdate(isFinished = finished),
+            )
+        }.onFailure { Timber.w(it, "[ABS] setBookFinished selhal") }
+    }
+
+    /** User (2026-08-15 16:49) — „Reset poslechu" audioknihy: úplně smaže progress (ne jen isFinished=false). */
+    suspend fun resetProgress(itemId: String) {
+        runCatching {
+            service.deleteProgress(api("/api/me/progress/$itemId"), bearer())
+        }.onFailure { Timber.w(it, "[ABS] resetProgress selhal") }
+    }
+
     /** Otevře ABS play session a vrátí streamovatelnou URL + uloženou pozici. */
     suspend fun startPlayback(itemId: String): AbsPlayback {
         val req = AbsPlayRequest(deviceInfo = AbsDeviceInfo(deviceId = prefs.deviceId))

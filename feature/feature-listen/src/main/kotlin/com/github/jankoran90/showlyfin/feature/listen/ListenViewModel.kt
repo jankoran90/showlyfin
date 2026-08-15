@@ -472,6 +472,22 @@ class ListenViewModel @Inject constructor(
         audiobookDownloads.download(book.id, book.title, book.author, book.coverUrl)
     }
 
+    /** User (2026-08-15 16:49) — „Reset poslechu" (long-press menu): smaže progress, refresh ať zmizí. */
+    fun resetBookProgress(book: Audiobook) {
+        viewModelScope.launch {
+            repo.resetProgress(book.id)
+            refresh()
+        }
+    }
+
+    /** User (2026-08-15 16:49) — „Označit jako poslechnuté" (long-press menu). */
+    fun markBookFinished(book: Audiobook) {
+        viewModelScope.launch {
+            repo.setBookFinished(book.id, finished = true)
+            refresh()
+        }
+    }
+
     /**
      * "Stáhnout vše" — všechny knihy aktuálně viditelné police, co ještě nejsou stažené. User
      * (2026-08-15) „stahuje se i na pozadí?" — dávka může trvat déle než appka zůstane v popředí,

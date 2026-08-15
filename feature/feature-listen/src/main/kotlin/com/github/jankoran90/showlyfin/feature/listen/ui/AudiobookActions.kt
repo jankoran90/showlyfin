@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -19,6 +21,9 @@ import com.github.jankoran90.showlyfin.data.abs.model.BatchDownloadProgress
  * User (2026-08-15) — long press na audioknihu dřív rovnou otevřel editaci; teď nabídne menu:
  * „Stáhnout" (jen když online a ještě není stažená) a „Upravit" (metadata/obálka/vyhledání, dřívější
  * chování). Sdílený sheet [ListenEpisodeActionSheet] (stejný jako u epizod podcastů).
+ * User (2026-08-15 16:49) — u rozposlouchané knihy (progress>0, nedočtená) navíc „Reset poslechu"
+ * (smaže progress) / „Označit jako poslechnuté", decentně schované za long-press, ne jako tlačítko
+ * přímo na kartě (ať se nedá omylem trefit).
  */
 @Composable
 fun AudiobookActionSheet(
@@ -26,13 +31,18 @@ fun AudiobookActionSheet(
     canDownload: Boolean,
     onDownload: () -> Unit,
     onEdit: () -> Unit,
+    onResetProgress: () -> Unit,
+    onMarkFinished: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val inProgress = book.progress > 0.001 && !book.isFinished
     ListenEpisodeActionSheet(
         title = book.title,
-        actions = listOf(
+        actions = listOfNotNull(
             ListenEpisodeAction(Icons.Default.Download, "Stáhnout", enabled = canDownload, onClick = onDownload),
             ListenEpisodeAction(Icons.Default.Edit, "Upravit", onClick = onEdit),
+            if (inProgress) ListenEpisodeAction(Icons.Default.RestartAlt, "Reset poslechu", onClick = onResetProgress) else null,
+            if (inProgress) ListenEpisodeAction(Icons.Default.CheckCircle, "Označit jako poslechnuté", onClick = onMarkFinished) else null,
         ),
         onDismiss = onDismiss,
     )

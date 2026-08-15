@@ -156,6 +156,7 @@ fun KidsListenContent(
 
             val notDownloaded = state.books.any { it.id !in state.downloadedBookIds }
             val batchProgress by viewModel.batchDownloadProgress.collectAsStateWithLifecycle()
+            val playerState by viewModel.playerState.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize()) {
                 Column(Modifier.fillMaxSize()) {
                     if (!state.isOffline && (notDownloaded || batchProgress != null)) {
@@ -175,6 +176,7 @@ fun KidsListenContent(
                                         book = b.book,
                                         onClick = { onOpenBook(b.book.id) },
                                         downloaded = b.book.id in state.downloadedBookIds,
+                                        isPlaying = playerState.isActive && playerState.currentItemId == b.book.id,
                                         onLongClick = { actionBook = b.book },
                                     )
                                     is BookShelfItem.SeriesGroup -> SeriesCard(
@@ -223,6 +225,8 @@ fun KidsListenContent(
                         canDownload = !state.isOffline && book.id !in state.downloadedBookIds,
                         onDownload = { viewModel.downloadBook(book) },
                         onEdit = { onEditBook(book.id, book.title, book.author) },
+                        onResetProgress = { viewModel.resetBookProgress(book) },
+                        onMarkFinished = { viewModel.markBookFinished(book) },
                         onDismiss = { actionBook = null },
                     )
                 }

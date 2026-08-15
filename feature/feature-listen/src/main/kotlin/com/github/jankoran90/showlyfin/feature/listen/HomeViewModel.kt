@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
+import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +28,11 @@ class HomeViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val sourcesRepo: PodcastSourcesRepository,
     private val directResume: DirectResumeStore,
+    connection: AudiobookPlayerConnection,
 ) : ViewModel() {
+
+    /** User (2026-08-15 16:49) — odznak „hraje" na dlaždici, když je zrovna aktivní v přehrávači. */
+    val playerState = connection.state
 
     sealed interface ContinueItem {
         val updatedAt: Long

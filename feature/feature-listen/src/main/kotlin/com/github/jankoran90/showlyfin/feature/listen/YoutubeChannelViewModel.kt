@@ -41,7 +41,7 @@ class YoutubeChannelViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val naTv: NaTvService,
-    resumeStore: DirectResumeStore,
+    private val resumeStore: DirectResumeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -115,6 +115,9 @@ class YoutubeChannelViewModel @Inject constructor(
 
     /** Stabilní klíč epizody pro frontu i offline index (audio). */
     fun episodeKey(ep: YtEpisode): String = "yt:${ep.id}"
+
+    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
+    fun resetPosition(ep: YtEpisode) = resumeStore.clear(episodeKey(ep))
 
     /**
      * Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session.

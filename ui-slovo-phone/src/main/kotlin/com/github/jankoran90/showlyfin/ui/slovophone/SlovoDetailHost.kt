@@ -1,9 +1,12 @@
 package com.github.jankoran90.showlyfin.ui.slovophone
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
@@ -78,6 +81,15 @@ internal fun SlovoDetailEntry.isFullscreenPlayer(): Boolean =
  * Zdroj epizody → SLOUČENÁ obrazovka (TWINE), pokud je pořad propojený, jinac samostatný zdroj podle typu.
  * Sdílené shellem (onOpenSourceEpisode z Poslechu) i přehrávačem (onOpenSource). [type] = "youtube"/"ctv"/rss.
  */
+/**
+ * User (2026-08-15 16:49) — appka nemá vlastní YouTube video přehrávač, jen poslech + decentní odkaz
+ * do YouTube appky. Proxy stream URL (`.../api/yt/stream/{id}?...` nebo `.../api/yt/hls/{id}.m3u8?...`,
+ * viz `UploaderApi.ytVideoUrl`) má syrové YouTube ID v cestě — vytáhneme ho odsud, ať se nesahá na
+ * sdílený `feature-listen` kód (stejný modul používá i app-filmy, kde in-app video přehrávání zůstává).
+ */
+private fun youtubeIdFromProxyUrl(url: String): String? =
+    Regex("""/yt/(?:stream|hls)/([^/?.]+)""").find(url)?.groupValues?.get(1)
+
 internal fun linkedOrPlain(
     podcastLinkLookup: PodcastLinkLookupViewModel,
     type: String,
@@ -111,6 +123,17 @@ internal fun SlovoDetail(
     // sloučeném pořadu se úplně skryjí (i u TWINE-propojeného páru, nikdy YouTube odkaz dětem).
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
     val audioOnly = activeProfile?.isAdmin == false
+    // User (2026-08-15 16:49) — YouTube video ven z appky, jen odkaz do YouTube appky/prohlížeče.
+    val context = LocalContext.current
+    val openYoutubeVideo: (proxyUrl: String) -> Unit = { proxyUrl ->
+        val id = youtubeIdFromProxyUrl(proxyUrl)
+        val watchUrl = if (id != null) "https://www.youtube.com/watch?v=$id" else proxyUrl
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(watchUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) },
+            )
+        }
+    }
     // SLOVO-KIDS-EPISODE — admin dlouhý stisk na AUTO-detekované sérii (RssPodcastScreen) potřebuje
     // vědět, které série jsou dětskému profilu už schválené (toggle stav v action sheetu).
     val kidsVisibleSourceKeys by listenVm.kidsVisibleSourceKeys.collectAsStateWithLifecycle()
@@ -165,9 +188,7 @@ internal fun SlovoDetail(
             kidsVisibleSeriesKeys = kidsVisibleSourceKeys,
             onSetSeriesVisibleForKids = { key, visible -> listenVm.setSourceVisibleForKids(setOf(key), visible) },
             onBack = onPop,
-            onPlayVideo = { url, title, poster ->
-                onPush(SlovoDetailEntry.VideoPlayer(externalUrl = url, title = title, posterUrl = poster))
-            },
+            onPlayVideo = { url, _, _ -> openYoutubeVideo(url) },
             onOpenAudioPlayer = { onPush(SlovoDetailEntry.AudiobookPlayer(itemId = null, fromStart = false)) },
             modifier = Modifier.fillMaxSize(),
         )
@@ -185,9 +206,7 @@ internal fun SlovoDetail(
             onPlayVideo = { jfItemId, videoTitle, resumeKey ->
                 onPush(SlovoDetailEntry.VideoPlayer(itemId = jfItemId, title = videoTitle, resumeKey = resumeKey))
             },
-            onPlayYoutubeVideo = { url, videoTitle, poster ->
-                onPush(SlovoDetailEntry.VideoPlayer(externalUrl = url, title = videoTitle, posterUrl = poster))
-            },
+            onPlayYoutubeVideo = { url, _, _ -> openYoutubeVideo(url) },
             modifier = Modifier.fillMaxSize(),
         )
         is SlovoDetailEntry.CtvProgram -> CtvProgramScreen(
@@ -213,9 +232,7 @@ internal fun SlovoDetail(
             audioOnly = audioOnly,
             onBack = onPop,
             onOpenAudioPlayer = { onPush(SlovoDetailEntry.AudiobookPlayer(itemId = null, fromStart = false)) },
-            onPlayVideo = { url, videoTitle, poster ->
-                onPush(SlovoDetailEntry.VideoPlayer(externalUrl = url, title = videoTitle, posterUrl = poster))
-            },
+            onPlayVideo = { url, _, _ -> openYoutubeVideo(url) },
             onUnlinked = onPop,
         )
         is SlovoDetailEntry.AudiobookEdit -> AudiobookEditScreen(

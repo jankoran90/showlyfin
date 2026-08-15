@@ -43,7 +43,7 @@ class RssPodcastViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val naTv: NaTvService,
-    resumeStore: DirectResumeStore,
+    private val resumeStore: DirectResumeStore,
     videoResumeStore: VideoResumeStore,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
@@ -110,6 +110,9 @@ class RssPodcastViewModel @Inject constructor(
 
     /** Stabilní klíč epizody pro frontu i offline index. */
     fun episodeKey(ep: RssEpisode): String = "rss:${ep.id}"
+
+    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
+    fun resetPosition(ep: RssEpisode) = resumeStore.clear(episodeKey(ep))
 
     /**
      * Mapování RSS epizody na položku fronty (LEVER): přímá enclosure URL, bez ABS session.
