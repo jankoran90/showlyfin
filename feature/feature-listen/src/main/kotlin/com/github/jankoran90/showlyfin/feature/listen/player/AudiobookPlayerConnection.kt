@@ -10,6 +10,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
@@ -43,6 +44,7 @@ class AudiobookPlayerConnection @Inject constructor(
     internal val prefs: AbsPreferences,
     private val downloads: EpisodeDownloadManager,
     private val resumeStore: DirectResumeStore,
+    private val profileRepository: ProfileRepository,
 ) {
     // Internal (ne private) = čtou/píší je extension funkce fronty v AudiobookPlayerQueue.kt.
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -61,13 +63,45 @@ class AudiobookPlayerConnection @Inject constructor(
     private val _chapters = MutableStateFlow<List<Chapter>>(emptyList())
     val chapters = _chapters.asStateFlow()
 
-    /** Fronta podcastových epizod. */
-    internal val _queue = MutableStateFlow<List<QueuedEpisode>>(loadPersistedQueue(prefs))
+    /** Fronta podcastových epizod. Naplní se reaktivně (viz init) — per profil, ne natvrdo při konstrukci. */
+    internal val _queue = MutableStateFlow<List<QueuedEpisode>>(emptyList())
     val queue = _queue.asStateFlow()
+
+    /** Profil, jehož frontu [_queue] právě drží — [setQueue]/persistQueue z AudiobookPlayerQueue.kt
+     * potřebují vědět, do kterého per-profil slotu zapsat (internal = čtou ho extension funkce). */
+    internal var queueProfileUuid: String? = null
 
     /** Aktuálně hraná podcast epizoda (null = audiokniha → bez fronty/auto-mark). */
     internal var currentEpisode: QueuedEpisode? = null
     private var advancing = false
+
+    init {
+        // PROFIL (2026-08-16, user „vse per profile") — fronta přehrávání byla GLOBÁLNÍ napříč
+        // profily (Nel by po přepnutí uviděla rozehrané věci Honzy). AudiobookPlayerConnection je
+        // @Singleton (přežije i re-create Activity při přepnutí profilu), takže se sama nepřenačte —
+        // musí se aktivně přihlásit k odběru aktivního profilu, vzor [DirectResumeStore.activeUuidFlow].
+        scope.launch {
+            profileRepository.activeProfile.collect { profile ->
+                val uuid = profile?.profileUuid?.takeIf { it.isNotBlank() } ?: return@collect
+                // Reálné PŘEPNUTÍ (ne první start appky) → zastav přehrávání, ať se nová identita
+                // neocitne uprostřed cizí epizody. Frontu STARÉHO profilu tím nemažeme (jen playback).
+                if (queueProfileUuid != null && queueProfileUuid != uuid) {
+                    stopPlaybackForProfileSwitch()
+                }
+                queueProfileUuid = uuid
+                _queue.value = loadPersistedQueue(prefs, uuid, profile.isDefault)
+            }
+        }
+    }
+
+    /** Zastaví přehrávání a vyprázdní stav BEZ zápisu do perzistované fronty (ta patří starému
+     * profilu a zůstává netknutá — na rozdíl od [clearAll], což je uživatelská akce „vyprázdnit"). */
+    private fun stopPlaybackForProfileSwitch() {
+        withController { c -> c.stop(); c.clearMediaItems() }
+        currentEpisode = null
+        _chapters.value = emptyList()
+        _state.value = PlayerState()
+    }
 
     // Stabilní titul/autor knihy — drží se mimo MediaItem metadata, protože systémovou metadata titulek
     // (notifikace + Android Auto) přepisujeme na PRÁVĚ HRANOU KAPITOLU. In-app UI tak ukáže titul knihy

@@ -16,6 +16,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -360,24 +361,33 @@ private fun FollowingContent(
     downloadCount: Int,
     sourceType: String,
 ) {
-    // Filtr typu zdroje (z filtru): all|rss|youtube — aplikuje se na vlastní zdroje. ABS podcasty
-    // ukazujeme jen u „Vše" nebo „Podcasty" (jsou to RSS-like pořady, ne YouTube).
-    val sources = state.customSources.filter { sourceType == "all" || it.type == sourceType }
-    val showAbs = sourceType == "all" || sourceType == "rss"
-
-    // TWINE (SHW-74 / plán F7): slinkované zdroje (audio+video = týž pořad) → 1 sloučená karta.
-    val links by viewModel.sourceLinks.collectAsStateWithLifecycle()
-    var linkFor by remember { mutableStateOf<com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource?>(null) }
     // WEFT (SHW-75/W5): per-profil skrytí pořadů ve Sledovaných + akční sheet při dlouhém stisku karty.
     val cfg by viewModel.profileConfig.collectAsStateWithLifecycle()
     val hiddenFollowing = cfg.hiddenFollowingSourceKeys
     var actionCard by remember { mutableStateOf<LibraryCard?>(null) }
     // User (2026-08-15) — dlouhý stisk na ABS podcast (jen Dospělý) → "Zobrazit/Skrýt dětem".
     val activeProfile by viewModel.activeProfile.collectAsStateWithLifecycle()
+    // PROFIL (2026-08-16, „zdroje per profil + sdílení") — vidím jen svoje vlastní zdroje + co mi kdo
+    // sdílel. Legacy zdroje (addedBy == null, vznikly PŘED touhle featurou) zůstávají viditelné všem.
+    val myUuid = activeProfile?.profileUuid
+    val visibleSources = remember(state.customSources, myUuid, cfg.sharedSourceKeys) {
+        state.customSources.filter { src ->
+            src.addedBy.isNullOrBlank() || src.addedBy == myUuid ||
+                "${src.type}:${src.ref}" in cfg.sharedSourceKeys
+        }
+    }
+    // Filtr typu zdroje (z filtru): all|rss|youtube — aplikuje se na vlastní zdroje. ABS podcasty
+    // ukazujeme jen u „Vše" nebo „Podcasty" (jsou to RSS-like pořady, ne YouTube).
+    val sources = visibleSources.filter { sourceType == "all" || it.type == sourceType }
+    val showAbs = sourceType == "all" || sourceType == "rss"
+
+    // TWINE (SHW-74 / plán F7): slinkované zdroje (audio+video = týž pořad) → 1 sloučená karta.
+    val links by viewModel.sourceLinks.collectAsStateWithLifecycle()
+    var linkFor by remember { mutableStateOf<com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource?>(null) }
     val kidsHidden by viewModel.kidsHiddenPodcastIds.collectAsStateWithLifecycle()
     // SLOVO-KIDS-EPISODE — dlouhý stisk i na vlastních zdrojích (Plain/Merged) → "Zobrazit/Skrýt dětem".
     val kidsVisibleSources by viewModel.kidsVisibleSourceKeys.collectAsStateWithLifecycle()
-    val byKey = remember(state.customSources) { state.customSources.associateBy { viewModel.sourceKey(it) } }
+    val byKey = remember(visibleSources) { visibleSources.associateBy { viewModel.sourceKey(it) } }
     val linkedKeys = remember(links) { links.flatMap { it.members }.toSet() }
     // Samostatné karty = filtrované zdroje, které nejsou v žádné skupině.
     val plainSources = sources.filter { viewModel.sourceKey(it) !in linkedKeys }
@@ -468,8 +478,19 @@ private fun FollowingContent(
     // WEFT (SHW-75/W5): dlouhý stisk karty → akce (Propojit / Skrýt ve Sledovaných / Skrýt na časové ose).
     // User (2026-08-15): u ABS podcastu navíc (jen Dospělý) "Zobrazit/Skrýt dětem" — zkratka k témuž
     // hiddenPodcastIds, co jinak nastavuje sekce Profil → Podcasty pro Děti (rychlejší z gridu).
+    // PROFIL (2026-08-16) — ostatní dospělí profilové → "Sdílet s…" akce, jedna na profil.
+    val otherAdultProfiles by viewModel.otherAdultProfiles.collectAsStateWithLifecycle()
     actionCard?.let { card ->
         val absPodcastId = (card as? LibraryCard.Abs)?.podcast?.id
+        val shareActions = if (card is LibraryCard.Plain || card is LibraryCard.Merged) {
+            otherAdultProfiles.map { target ->
+                val shared = viewModel.isSourceSharedWith(card.hideKeys, target)
+                ListenEpisodeAction(
+                    if (shared) Icons.Default.Visibility else Icons.Default.Share,
+                    if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
+                ) { viewModel.setSourceSharedWith(card.hideKeys, target.id, !shared) }
+            }
+        } else emptyList()
         ListenEpisodeActionSheet(
             title = card.sortTitle,
             actions = listOfNotNull(
@@ -493,6 +514,7 @@ private fun FollowingContent(
                         if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
                     ) { viewModel.setSourceVisibleForKids(card.hideKeys, !visibleToKids) }
                 } else null,
+            ) + shareActions + listOfNotNull(
                 ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt ve Sledovaných") {
                     viewModel.setHidden(card.hideKeys, timeline = false, hidden = true)
                 },

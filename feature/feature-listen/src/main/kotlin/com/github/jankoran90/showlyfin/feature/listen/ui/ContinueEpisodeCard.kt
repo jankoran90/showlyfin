@@ -29,6 +29,8 @@ fun ContinueEpisodeCard(
     modifier: Modifier = Modifier,
     /** User (2026-08-15 16:49) — odznak „hraje" (aktuálně načtená epizoda v přehrávači). */
     isPlaying: Boolean = false,
+    /** PROFIL (2026-08-16) — dlouhý stisk → „Sdílet s…" (celý zdroj epizody). null = nic (zkratka). */
+    onLongClick: (() -> Unit)? = null,
 ) {
     CoverCard(
         title = episode.title,
@@ -36,6 +38,7 @@ fun ContinueEpisodeCard(
         imageUrl = episode.imageUrl,
         onClick = onClick,
         modifier = modifier,
+        onLongClick = onLongClick,
         placeholder = Icons.Default.Podcasts,
         overlay = {
             if (progress > 0.001f) {

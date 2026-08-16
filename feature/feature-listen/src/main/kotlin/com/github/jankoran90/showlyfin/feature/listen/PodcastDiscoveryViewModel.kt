@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceCategory
@@ -32,6 +33,7 @@ class PodcastDiscoveryViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
     private val favorites: FavoriteSourcesStore,
     private val prefs: AbsPreferences,
+    private val profileRepository: ProfileRepository,
 ) : ViewModel() {
 
     /** Země — segment nahoře (CZ výchozí). */
@@ -261,7 +263,8 @@ class PodcastDiscoveryViewModel @Inject constructor(
 
     fun add(result: SourceSearchResult) {
         viewModelScope.launch {
-            val ok = repo.add(result.type, result.ref, result.title, result.thumbnail)
+            val addedBy = profileRepository.activeProfile.value?.profileUuid
+            val ok = repo.add(result.type, result.ref, result.title, result.thumbnail, addedBy)
             _state.update { it.copy(message = if (ok) "Přidáno: ${result.title}" else "Přidání se nezdařilo") }
         }
     }

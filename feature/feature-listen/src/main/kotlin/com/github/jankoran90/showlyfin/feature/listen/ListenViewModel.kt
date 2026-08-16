@@ -131,6 +131,39 @@ class ListenViewModel @Inject constructor(
         }
     }
 
+    /**
+     * PROFIL (2026-08-16, user „Honza muze dat zobrazit podcast uzivateli Nel a naopak") — ostatní
+     * DOSPĚLÉ profily (bez mě, bez Dětí — ty mají vlastní whitelist [kidsVisibleSourceKeys]/
+     * [setSourceVisibleForKids]) → cíle pro „Sdílet s…" v kontext menu karty zdroje.
+     */
+    val otherAdultProfiles: StateFlow<List<com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity>> =
+        profileRepository.observeAll()
+            .combine(activeProfile) { profiles, active ->
+                profiles.filter { it.isAdmin && it.id != active?.id }
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * true = zdroj (klíč `type:ref`, u sloučeného páru kterýkoli z [keys]) je nasdílený profilu
+     * [target] (viz [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.sharedSourceKeys]).
+     */
+    fun isSourceSharedWith(keys: Set<String>, target: com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity): Boolean {
+        val cfg = com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(target.configJson)
+        return keys.any { it in cfg.sharedSourceKeys }
+    }
+
+    /** Nasdílí/odebere sdílení zdroje ([keys] = `type:ref`, u sloučeného páru všichni členové) profilu [targetId]. */
+    fun setSourceSharedWith(keys: Set<String>, targetId: Long, shared: Boolean) {
+        if (keys.isEmpty()) return
+        viewModelScope.launch {
+            profileRepository.updateConfig(targetId) { cfg ->
+                val s = cfg.sharedSourceKeys.toMutableSet()
+                    .also { if (shared) it.addAll(keys) else it.removeAll(keys) }
+                cfg.copy(sharedSourceKeys = s)
+            }
+        }
+    }
+
     /** Klíče skrytí karty knihovny: sloučená = všichni členové, samostatný zdroj = `type:ref`. */
     fun followingKeysForGroup(memberKeys: Collection<String>): Set<String> = memberKeys.toSet()
 

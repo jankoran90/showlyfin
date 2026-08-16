@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
@@ -10,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -25,6 +27,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SourceManagerViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
+    private val profileRepository: ProfileRepository,
 ) : ViewModel() {
 
     enum class TypeFilter(val apiValue: String, val label: String) {
@@ -48,7 +51,13 @@ class SourceManagerViewModel @Inject constructor(
     private var searchJob: Job? = null
 
     init {
-        repo.sources
+        // PROFIL (2026-08-16) — spravuju jen svoje vlastní zdroje + co mi kdo sdílel (viz PodcastSource
+        // .addedBy/ProfileConfig.sharedSourceKeys). Bez filtru by šel omylem smazat cizí PRIVÁTNÍ
+        // zdroj, co je tu vidět jen mimoděk (list z backendu je pořád globální).
+        combine(repo.sources, profileRepository.activeProfile, profileRepository.activeConfig) { srcs, active, cfg ->
+            val myUuid = active?.profileUuid
+            srcs.filter { it.addedBy.isNullOrBlank() || it.addedBy == myUuid || "${it.type}:${it.ref}" in cfg.sharedSourceKeys }
+        }
             .onEach { srcs -> _state.update { it.copy(sources = srcs) } }
             .launchIn(viewModelScope)
         viewModelScope.launch { repo.refresh() }
@@ -87,7 +96,10 @@ class SourceManagerViewModel @Inject constructor(
 
     fun add(r: SourceSearchResult) {
         viewModelScope.launch {
-            val ok = repo.add(r.type, r.ref, r.title, r.thumbnail)
+            // PROFIL (2026-08-16) — nový zdroj je zpočátku vidět jen tomu, kdo ho přidal (viz
+            // ProfileConfig.sharedSourceKeys pro explicitní sdílení ostatním profilům).
+            val addedBy = profileRepository.activeProfile.value?.profileUuid
+            val ok = repo.add(r.type, r.ref, r.title, r.thumbnail, addedBy)
             _state.update { it.copy(message = if (ok) "Přidáno: ${r.title}" else "Přidání se nezdařilo") }
         }
     }

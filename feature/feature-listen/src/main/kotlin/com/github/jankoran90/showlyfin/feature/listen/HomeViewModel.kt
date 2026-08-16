@@ -2,6 +2,9 @@ package com.github.jankoran90.showlyfin.feature.listen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
@@ -11,8 +14,11 @@ import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConn
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -28,11 +34,36 @@ class HomeViewModel @Inject constructor(
     private val repo: AbsRepository,
     private val sourcesRepo: PodcastSourcesRepository,
     private val directResume: DirectResumeStore,
+    private val profileRepository: ProfileRepository,
     connection: AudiobookPlayerConnection,
 ) : ViewModel() {
 
     /** User (2026-08-15 16:49) — odznak „hraje" na dlaždici, když je zrovna aktivní v přehrávači. */
     val playerState = connection.state
+
+    /** PROFIL (2026-08-16) — ostatní dospělí profily → cíle „Sdílet s…" (dlouhý stisk karty epizody). */
+    val otherAdultProfiles: StateFlow<List<ProfileEntity>> =
+        profileRepository.observeAll()
+            .combine(profileRepository.activeProfile) { profiles, active ->
+                profiles.filter { it.isAdmin && it.id != active?.id }
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun isSourceSharedWith(keys: Set<String>, target: ProfileEntity): Boolean {
+        val cfg = ProfileConfig.fromJson(target.configJson)
+        return keys.any { it in cfg.sharedSourceKeys }
+    }
+
+    fun setSourceSharedWith(keys: Set<String>, targetId: Long, shared: Boolean) {
+        if (keys.isEmpty()) return
+        viewModelScope.launch {
+            profileRepository.updateConfig(targetId) { cfg ->
+                val s = cfg.sharedSourceKeys.toMutableSet()
+                    .also { if (shared) it.addAll(keys) else it.removeAll(keys) }
+                cfg.copy(sharedSourceKeys = s)
+            }
+        }
+    }
 
     sealed interface ContinueItem {
         val updatedAt: Long

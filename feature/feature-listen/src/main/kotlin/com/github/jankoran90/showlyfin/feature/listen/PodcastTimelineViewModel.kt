@@ -100,10 +100,15 @@ class PodcastTimelineViewModel @Inject constructor(
 
     init {
         // Reaktivně sleduj sdílený seznam zdrojů — přidání/odebrání → přepočti timeline.
+        // PROFIL (2026-08-16) — jen moje vlastní zdroje + co mi kdo sdílel (legacy addedBy==null
+        // zůstává viditelné všem). Timeline nesmí agregovat epizody ze zdrojů, co pro mě nejsou vidět.
         repo.sources
             .onEach { srcs ->
-                val changed = srcs.map { it.id } != sources.map { it.id }
-                sources = srcs
+                val myUuid = profileRepository.activeProfile.value?.profileUuid
+                val shared = profileRepository.activeConfig.value.sharedSourceKeys
+                val visible = srcs.filter { it.addedBy.isNullOrBlank() || it.addedBy == myUuid || "${it.type}:${it.ref}" in shared }
+                val changed = visible.map { it.id } != sources.map { it.id }
+                sources = visible
                 if (changed) load()
             }
             .launchIn(viewModelScope)

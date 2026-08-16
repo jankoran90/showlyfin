@@ -80,6 +80,16 @@ data class ProfileConfig(
      * knihovna, takže admin musí explicitně zvolit, co dítě smí vidět. Prázdné = nic schváleno.
      */
     val visibleForKidsSourceKeys: Set<String> = emptySet(),
+    /**
+     * PROFIL (2026-08-16, user „Honza muze dat zobrazit podcast nebo audioknihu uzivateli Nel,
+     * detem, a to same Nel") — zdroje (RSS/YouTube/ČT, klíč `type:ref`), které SEM explicitně
+     * nasdílel JINÝ dospělý profil. Na rozdíl od [visibleForKidsSourceKeys] (jednosměrný whitelist
+     * admin→Děti) je tohle SYMETRICKÉ — každý dospělý profil má vlastní `sharedSourceKeys` a
+     * kterýkoli JINÝ profil do něj může zapsat (viz `ShareSourceViewModel`/dlouhý stisk). Efektivní
+     * viditelnost zdroje pro dospělého: `addedBy == null` (legacy, dřív než tahle featura vznikla)
+     * NEBO `addedBy == můj profil` NEBO klíč zdroje je v tomhle setu.
+     */
+    val sharedSourceKeys: Set<String> = emptySet(),
     /** Povolené žánry (lowercase). Prázdné = bez allow-listu (vše kromě blacklistu). */
     val allowedGenres: Set<String> = emptySet(),
     /** Zakázané žánry (lowercase) — blacklist. */

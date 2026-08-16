@@ -8,11 +8,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -36,6 +42,9 @@ fun HomeScreen(
     val items by vm.items.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
     val playerState by vm.playerState.collectAsStateWithLifecycle()
+    val otherAdultProfiles by vm.otherAdultProfiles.collectAsStateWithLifecycle()
+    // PROFIL (2026-08-16) — dlouhý stisk epizody na Domů → „Sdílet s…" (celý zdroj epizody, ne jen tuhle).
+    var shareEpisode by remember { mutableStateOf<HomeViewModel.ContinueItem.Episode?>(null) }
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -69,11 +78,27 @@ fun HomeScreen(
                             onClick = {
                                 onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.episode.resumeKey ?: item.episode.id)
                             },
+                            onLongClick = if (otherAdultProfiles.isNotEmpty()) ({ shareEpisode = item }) else null,
                         )
                     }
                 }
             }
         }
+    }
+
+    shareEpisode?.let { item ->
+        val key = "${item.sourceType}:${item.sourceRef}"
+        ListenEpisodeActionSheet(
+            title = item.sourceTitle,
+            actions = otherAdultProfiles.map { target ->
+                val shared = vm.isSourceSharedWith(setOf(key), target)
+                ListenEpisodeAction(
+                    if (shared) Icons.Default.Visibility else Icons.Default.Share,
+                    if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
+                ) { vm.setSourceSharedWith(setOf(key), target.id, !shared) }
+            },
+            onDismiss = { shareEpisode = null },
+        )
     }
 }
 

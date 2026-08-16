@@ -9,9 +9,17 @@ import org.json.JSONObject
 // extension nad Connection (přístup k internal _queue/currentEpisode/prefs). Přehrávací jádro (playBook/
 // playDirect/startEpisode/onPlaybackEnded) zůstává v Connection.
 
-internal fun loadPersistedQueue(prefs: AbsPreferences): List<QueuedEpisode> {
+/**
+ * PROFIL (2026-08-16) — fronta PER PROFIL ([AbsPreferences.queueJsonFor]). [isDefaultProfile] řeší
+ * jednorázovou migraci: profil Honza (dřív jediný uživatel appky) měl frontu v LEGACY globálním
+ * slotu ([AbsPreferences.queueJson]) — dokud nemá vlastní per-profil záznam, čte se odtud. Nel/Děti
+ * legacy slot NEDĚDÍ (nikdy neměly frontu, začínají čisté).
+ */
+internal fun loadPersistedQueue(prefs: AbsPreferences, profileUuid: String, isDefaultProfile: Boolean): List<QueuedEpisode> {
     if (!prefs.persistQueue) return emptyList()
-    val json = prefs.queueJson.ifBlank { return emptyList() }
+    val scoped = prefs.queueJsonFor(profileUuid)
+    val json = (if (scoped.isNotBlank()) scoped else if (isDefaultProfile) prefs.queueJson else "")
+        .ifBlank { return emptyList() }
     return runCatching {
         val arr = JSONArray(json)
         (0 until arr.length()).map { i ->
@@ -37,8 +45,8 @@ internal fun loadPersistedQueue(prefs: AbsPreferences): List<QueuedEpisode> {
     }.getOrElse { emptyList() }
 }
 
-internal fun persistQueue(prefs: AbsPreferences, queue: List<QueuedEpisode>) {
-    if (!prefs.persistQueue) { prefs.queueJson = ""; return }
+internal fun persistQueue(prefs: AbsPreferences, profileUuid: String, queue: List<QueuedEpisode>) {
+    if (!prefs.persistQueue) { prefs.setQueueJsonFor(profileUuid, ""); return }
     val arr = JSONArray()
     queue.forEach { q ->
         arr.put(
@@ -61,12 +69,12 @@ internal fun persistQueue(prefs: AbsPreferences, queue: List<QueuedEpisode>) {
                 ),
         )
     }
-    prefs.queueJson = arr.toString()
+    prefs.setQueueJsonFor(profileUuid, arr.toString())
 }
 
 internal fun AudiobookPlayerConnection.setQueue(list: List<QueuedEpisode>) {
     _queue.value = list
-    persistQueue(prefs, _queue.value)
+    queueProfileUuid?.let { persistQueue(prefs, it, _queue.value) }
 }
 
 internal fun AudiobookPlayerConnection.currentIndex(): Int =
