@@ -196,9 +196,11 @@ private fun SlovoShellContent() {
                 }
                 sectionStateHolder.SaveableStateProvider(current) {
                     when (current) {
-                        SlovoSection.DOMU -> SlovoSectionScaffold(
+                        // POSLECH se vykreslí stejně (redirect výš ho hned přepne na DOMU+stranu 1,
+                        // tady jen ať when zůstane exhaustivní a nic neblikne).
+                        SlovoSection.DOMU, SlovoSection.POSLECH -> SlovoSectionScaffold(
                             // Titulek lišty žije s pagerem: strana 0 = Domů, strana 1 = Poslech.
-                            if (domuPager.currentPage == 0) current.label else poslechLabel,
+                            if (domuPager.currentPage == 0) SlovoSection.DOMU.label else poslechLabel,
                             onMenu,
                             trailing = if (domuPager.currentPage == 0 || isKidsProfile) null else {
                                 {
