@@ -187,6 +187,19 @@ class HomeViewModel @Inject constructor(
             .distinctUntilChanged()
             .onEach { refresh() }
             .launchIn(viewModelScope)
+
+        /**
+         * User (2026-08-16 14:57, „poslouchám podcast Cukrfree, na Domů neskočí okamžitě, musím
+         * zavřít/otevřít appku") — Domů se dřív přepočítalo jen na `refresh()`, ne reaktivně na nové
+         * rozposlouchané epizody. Klíče NEDOKONČENÝCH marek (ne celá mapa/pozice) ať se nerefreshuje
+         * na KAŽDÝ update pozice (`DirectResumeStore.save()` běží často během přehrávání) — jen když
+         * PŘIBUDE nová epizoda (začal poslouchat) nebo ZMIZÍ (dohráno/reset).
+         */
+        directResume.marks
+            .map { marks -> marks.filterValues { !it.isFinished }.keys }
+            .distinctUntilChanged()
+            .onEach { refresh() }
+            .launchIn(viewModelScope)
     }
 
     /**
