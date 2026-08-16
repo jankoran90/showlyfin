@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -152,7 +155,25 @@ class HomeViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    init { refresh() }
+    /**
+     * User (2026-08-16 14:03, „při přepnutí profilu se musí hned překreslit nabídka, ukazuje vždy
+     * data předchozího profilu do restartu appky") — root cause: `init { refresh() }` je JEDNORÁZOVÉ,
+     * ne reaktivní na aktivní profil. `Activity.recreate()` (viz `ProfileSwitchSignal`/`SlovoPhoneShell`)
+     * NEZNIČÍ ViewModelStore (Android to zachovává stejně jako při change konfigurace), takže tahle
+     * VM instance přežije rekreaci a `init` se znovu nespustí → visí na starých datech. [ListenViewModel]
+     * má stejný vzor („Plan VAULT") už dřív, tady chyběl. `activeProfile.profileUuid` jako klíč, ať se
+     * nerefreshuje na každou drobnou změnu configu (na rozdíl od [ListenViewModel] Domů nesleduje
+     * knihovní whitelist/creds, jen KDO je aktivní).
+     */
+    init {
+        viewModelScope.launch {
+            profileRepository.activeProfile
+                .map { it?.profileUuid }
+                .distinctUntilChanged()
+                .onEach { refresh() }
+                .collect()
+        }
+    }
 
     /**
      * User (2026-08-16 13:36, „nacita se pokazde 6-10s") — knihy i epizody dřív běžely striktně za
