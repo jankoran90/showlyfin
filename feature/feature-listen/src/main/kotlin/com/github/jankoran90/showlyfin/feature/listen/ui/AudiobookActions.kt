@@ -36,10 +36,13 @@ fun AudiobookActionSheet(
     onDismiss: () -> Unit,
     /** PROFIL (2026-08-16) — „Sdílet s…"/„Přestat sdílet" akce, jedna na ostatní dospělý profil. */
     shareActions: List<ListenEpisodeAction> = emptyList(),
+    /** User (2026-08-16) — „V knihovně: …" info řádek (vlastník + komu je nasdíleno). */
+    infoLine: String? = null,
 ) {
     val inProgress = book.progress > 0.001 && !book.isFinished
     ListenEpisodeActionSheet(
         title = book.title,
+        infoLine = infoLine,
         actions = listOfNotNull(
             ListenEpisodeAction(Icons.Default.Download, "Stáhnout", enabled = canDownload, onClick = onDownload),
             ListenEpisodeAction(Icons.Default.Edit, "Upravit", onClick = onEdit),

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
@@ -210,6 +211,7 @@ fun RssPodcastScreen(
             },
             onVideo = { ep.jfItemId?.let { onPlayVideo(it, ep.title.ifBlank { fallbackTitle }, key) } },
             onMore = { actionEpisode = ep },
+            onEndListening = { viewModel.resetPosition(ep) },
         )
     }
 
@@ -356,6 +358,13 @@ fun RssPodcastScreen(
                         Icons.Default.RestartAlt, "Reset poslechu",
                         confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.resetPosition(ep) }
+                } else null,
+                // User (2026-08-16 12:51, „chci volbu, která označí jako poslechnuto") — parita s audioknihami.
+                if (resumeMarks[viewModel.episodeKey(ep)]?.isFinished != true) {
+                    ListenEpisodeAction(
+                        Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                        confirmMessage = "Epizoda se označí jako poslechnutá a zmizí z Domů z „Pokračovat“.",
+                    ) { viewModel.markFinished(ep) }
                 } else null,
             ),
             onDismiss = { actionEpisode = null },

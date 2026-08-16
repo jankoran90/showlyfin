@@ -32,6 +32,9 @@ fun AudiobookCard(
     isPlaying: Boolean = false,
     /** DROPSHIP F2c — long press v seznamu → úprava knihy. null = nic (zkratka). */
     onLongClick: (() -> Unit)? = null,
+    /** User (2026-08-16, „ikonu ukončit poslech přímo na kartě") — viditelný odznak u rozposlouchané
+     *  knihy, ne jen schované za long-press. null = nezobrazí se (žádná rozdělaná pozice). */
+    onEndListening: (() -> Unit)? = null,
 ) {
     CoverCard(
         title = book.title,
@@ -95,6 +98,13 @@ fun AudiobookCard(
                         .background(MaterialTheme.colorScheme.primary, CircleShape)
                         .padding(3.dp)
                         .size(16.dp),
+                )
+            }
+            if (book.progress > 0.001 && !book.isFinished && onEndListening != null) {
+                EndListeningButton(
+                    compact = true,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
+                    onConfirm = onEndListening,
                 )
             }
         },

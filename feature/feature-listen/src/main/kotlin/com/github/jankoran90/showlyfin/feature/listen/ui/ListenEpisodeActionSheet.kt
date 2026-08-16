@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,7 +8,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Downloading
@@ -15,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -57,6 +62,11 @@ fun ListenEpisodeActionSheet(
     title: String,
     actions: List<ListenEpisodeAction>,
     onDismiss: () -> Unit,
+    /**
+     * User (2026-08-16, „chci na long-pressu vidět, jestli je to sdíleno a s kým / kdo jiný to má
+     * v knihovně") — informační řádek pod titulkem, jen text (ne akce). null = nezobrazí se.
+     */
+    infoLine: String? = null,
 ) {
     var pendingConfirm by remember { mutableStateOf<ListenEpisodeAction?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
@@ -68,6 +78,14 @@ fun ListenEpisodeActionSheet(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
+        if (infoLine != null) {
+            Text(
+                infoLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 0.dp).padding(bottom = 8.dp),
+            )
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
         actions.forEach { a ->
             ListenActionRow(a.icon, a.label, a.enabled) {
@@ -110,6 +128,47 @@ fun offlineDownloadAction(
         ListenEpisodeAction(Icons.Default.Download, "Čeká na stažení…", enabled = false) {}
     else ->
         ListenEpisodeAction(Icons.Default.Download, "Stáhnout do telefonu", onClick = onDownload)
+}
+
+/**
+ * User (2026-08-16, „chci ikonu ukončit poslech přímo na kartě/v detailu, ne schovanou za long
+ * press") — viditelná ikonka MIMO sheet, přímo na řádku epizody / dlaždici. [compact]=true pro
+ * malý odznak v rohu dlaždice (vzor „hraje"/„staženo" v [AudiobookCard]/[ContinueEpisodeCard]),
+ * jinak plnohodnotné [IconButton] do řádku akcí ([PodcastEpisodeRow] apod.). Potvrzovací dialog
+ * stejný jako [ListenEpisodeActionSheet] — ať se nedá omylem trefit.
+ */
+@Composable
+fun EndListeningButton(modifier: Modifier = Modifier, compact: Boolean = false, onConfirm: () -> Unit) {
+    var confirming by remember { mutableStateOf(false) }
+    if (compact) {
+        Icon(
+            imageVector = Icons.Default.Close,
+            contentDescription = "Ukončit poslech",
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = modifier
+                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                .padding(3.dp)
+                .size(16.dp)
+                .clickable { confirming = true },
+        )
+    } else {
+        IconButton(onClick = { confirming = true }, modifier = modifier) {
+            Icon(Icons.Default.Close, contentDescription = "Ukončit poslech", modifier = Modifier.size(20.dp))
+        }
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Ukončit poslech") },
+            text = { Text("Smaže se uložená pozice poslechu a položka zmizí z Domů z „Pokračovat“.") },
+            confirmButton = {
+                TextButton(onClick = { onConfirm(); confirming = false }) { Text("Potvrdit") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("Zrušit") }
+            },
+        )
+    }
 }
 
 @Composable

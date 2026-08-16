@@ -114,6 +114,9 @@ class RssPodcastViewModel @Inject constructor(
     /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
     fun resetPosition(ep: RssEpisode) = resumeStore.clear(episodeKey(ep))
 
+    /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
+    fun markFinished(ep: RssEpisode) = resumeStore.markFinished(episodeKey(ep))
+
     /**
      * Mapování RSS epizody na položku fronty (LEVER): přímá enclosure URL, bez ABS session.
      * L3: když je epizoda STAŽENÁ, hraj z lokálního `file://` souboru (offline + šetří data).

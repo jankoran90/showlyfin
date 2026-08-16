@@ -69,6 +69,9 @@ internal fun PodcastEpisodeRow(
     onPlay: () -> Unit,
     onVideo: () -> Unit,
     onMore: () -> Unit,
+    /** User (2026-08-16, „ikonu ukončit poslech přímo na kartě/v detailu") — viditelné tlačítko v
+     *  řádku akcí, ne jen schované v „⋮" menu. null = nezobrazí se (žádná rozdělaná pozice). */
+    onEndListening: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -171,6 +174,9 @@ internal fun PodcastEpisodeRow(
                     Icon(Icons.Default.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))
                 }
+            }
+            if (canResume && !isFinished && onEndListening != null) {
+                EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))

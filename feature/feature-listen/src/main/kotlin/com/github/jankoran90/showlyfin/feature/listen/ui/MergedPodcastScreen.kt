@@ -203,6 +203,7 @@ fun MergedPodcastScreen(
                             viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
                         },
                         onMore = { actionItem = item },
+                        onEndListening = { viewModel.resetPosition(item) },
                     )
                 }
             }
@@ -251,6 +252,13 @@ fun MergedPodcastScreen(
                         confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.resetPosition(item) }
                 } else null,
+                // User (2026-08-16 12:51, „chci volbu, která označí jako poslechnuto") — parita s audioknihami.
+                if (resumeMarks[item.key]?.isFinished != true) {
+                    ListenEpisodeAction(
+                        Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                        confirmMessage = "Epizoda se označí jako poslechnutá a zmizí z Domů z „Pokračovat“.",
+                    ) { viewModel.markFinished(item) }
+                } else null,
             ),
             onDismiss = { actionItem = null },
         )
@@ -272,6 +280,7 @@ private fun MergedEpisodeRow(
     onPlayAudio: () -> Unit,
     onPlayVideo: () -> Unit,
     onMore: () -> Unit,
+    onEndListening: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -372,6 +381,9 @@ private fun MergedEpisodeRow(
                     Icon(Icons.Default.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))
                 }
+            }
+            if (canResume && !isFinished && onEndListening != null) {
+                EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))

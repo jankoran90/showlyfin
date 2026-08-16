@@ -70,6 +70,7 @@ fun HomeScreen(
                             onClick = { onOpenBook(item.book.id) },
                             isPlaying = playerState.isActive && playerState.currentItemId == item.book.id,
                             onLongClick = if (otherAdultProfiles.isNotEmpty()) ({ shareBook = item }) else null,
+                            onEndListening = { vm.resetBookProgress(item.book) },
                         )
                         is HomeViewModel.ContinueItem.Episode -> ContinueEpisodeCard(
                             episode = item.episode,
@@ -81,6 +82,7 @@ fun HomeScreen(
                                 onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.episode.resumeKey ?: item.episode.id)
                             },
                             onLongClick = if (otherAdultProfiles.isNotEmpty()) ({ shareEpisode = item }) else null,
+                            onEndListening = { vm.resetEpisodeProgress(item) },
                         )
                     }
                 }
@@ -90,8 +92,10 @@ fun HomeScreen(
 
     shareEpisode?.let { item ->
         val key = "${item.sourceType}:${item.sourceRef}"
+        val owner = vm.ownerOfSourceKey(key)
         ListenEpisodeActionSheet(
             title = item.sourceTitle,
+            infoLine = vm.ownershipInfoLine(owner, otherAdultProfiles.filter { vm.isSourceSharedWith(setOf(key), it) }),
             actions = otherAdultProfiles.map { target ->
                 val shared = vm.isSourceSharedWith(setOf(key), target)
                 ListenEpisodeAction(
@@ -104,8 +108,10 @@ fun HomeScreen(
     }
 
     shareBook?.let { item ->
+        val owner = vm.ownerOfBook(item.book.id)
         ListenEpisodeActionSheet(
             title = item.book.title,
+            infoLine = vm.ownershipInfoLine(owner, otherAdultProfiles.filter { vm.isBookSharedWith(item.book.id, it) }),
             actions = otherAdultProfiles.map { target ->
                 val shared = vm.isBookSharedWith(item.book.id, target)
                 ListenEpisodeAction(

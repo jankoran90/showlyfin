@@ -71,6 +71,39 @@ class HomeViewModel @Inject constructor(
     fun isBookSharedWith(itemId: String, target: ProfileEntity): Boolean =
         itemId in ProfileConfig.fromJson(target.configJson).sharedAudiobookIds
 
+    /** User (2026-08-16) — vzor [ListenViewModel.adultProfileName]/[ownerOfSourceKey]/[ownershipInfoLine]. */
+    fun adultProfileName(uuid: String?): String? {
+        if (uuid.isNullOrBlank()) return null
+        if (uuid == profileRepository.activeProfile.value?.profileUuid) return "já"
+        return otherAdultProfiles.value.firstOrNull { it.profileUuid == uuid }?.name
+    }
+
+    fun ownerOfSourceKey(key: String): String? =
+        sourcesRepo.sources.value.firstOrNull { "${it.type}:${it.ref}" == key }?.addedBy
+
+    fun ownerOfBook(itemId: String): String? = audiobookOwnership.ownership.value[itemId]
+
+    fun ownershipInfoLine(ownerUuid: String?, sharedWithProfiles: List<ProfileEntity>): String {
+        val owner = adultProfileName(ownerUuid) ?: "já"
+        val sharedNames = sharedWithProfiles.mapNotNull { it.name.takeIf { n -> n.isNotBlank() } }
+        return if (sharedNames.isEmpty()) "V knihovně: $owner"
+        else "V knihovně: $owner · sdíleno s: ${sharedNames.joinToString(", ")}"
+    }
+
+    /** User (2026-08-16 12:51, „ukončit poslech ať je vidět i na Domů") — vzor [ListenViewModel.resetBookProgress]. */
+    fun resetBookProgress(book: Audiobook) {
+        viewModelScope.launch {
+            repo.resetProgress(book.id)
+            refresh()
+        }
+    }
+
+    /** Vzor [ListenViewModel.resetPosition] pro direct epizody — smaže mark, refresh ať zmizí z Domů. */
+    fun resetEpisodeProgress(item: ContinueItem.Episode) {
+        item.episode.resumeKey?.let { directResume.clear(it) }
+        refresh()
+    }
+
     fun setBookSharedWith(itemId: String, targetId: Long, shared: Boolean) {
         viewModelScope.launch {
             profileRepository.updateConfig(targetId) { cfg ->

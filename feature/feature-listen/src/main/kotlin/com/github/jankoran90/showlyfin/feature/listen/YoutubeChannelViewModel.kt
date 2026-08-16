@@ -119,6 +119,9 @@ class YoutubeChannelViewModel @Inject constructor(
     /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
     fun resetPosition(ep: YtEpisode) = resumeStore.clear(episodeKey(ep))
 
+    /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
+    fun markFinished(ep: YtEpisode) = resumeStore.markFinished(episodeKey(ep))
+
     /**
      * Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session.
      * L3: stažená epizoda hraje z lokálního `file://` souboru (offline + šetří mobilní data).

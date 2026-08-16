@@ -170,6 +170,31 @@ class ListenViewModel @Inject constructor(
     fun isBookSharedWith(itemId: String, target: com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity): Boolean =
         itemId in com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(target.configJson).sharedAudiobookIds
 
+    /**
+     * User (2026-08-16, „chci vidět na long-pressu, jestli je to sdíleno a s kým / kdo jiný to
+     * má v knihovně") — jméno profilu k `profileUuid` ("já" pro aktivní profil), jen dospělí.
+     */
+    fun adultProfileName(uuid: String?): String? {
+        if (uuid.isNullOrBlank()) return null
+        if (uuid == activeProfile.value?.profileUuid) return "já"
+        return otherAdultProfiles.value.firstOrNull { it.profileUuid == uuid }?.name
+    }
+
+    /** Vlastník (profileUuid) zdroje podle klíče `type:ref` — pro info řádek sdílení sloučených karet. */
+    fun ownerOfSourceKey(key: String): String? =
+        sourcesRepo.sources.value.firstOrNull { "${it.type}:${it.ref}" == key }?.addedBy
+
+    /** Vlastník (profileUuid) audioknihy podle ABS itemId — pro info řádek sdílení. */
+    fun ownerOfBook(itemId: String): String? = audiobookOwnership.ownership.value[itemId]
+
+    /** Postaví text „V knihovně: …" pro sdílecí sheet (owner + komu je nasdíleno kromě vlastníka). */
+    fun ownershipInfoLine(ownerUuid: String?, sharedWithProfiles: List<com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity>): String {
+        val owner = adultProfileName(ownerUuid) ?: "já"
+        val sharedNames = sharedWithProfiles.mapNotNull { it.name.takeIf { n -> n.isNotBlank() } }
+        return if (sharedNames.isEmpty()) "V knihovně: $owner"
+        else "V knihovně: $owner · sdíleno s: ${sharedNames.joinToString(", ")}"
+    }
+
     fun setBookSharedWith(itemId: String, targetId: Long, shared: Boolean) {
         viewModelScope.launch {
             profileRepository.updateConfig(targetId) { cfg ->

@@ -203,6 +203,7 @@ fun CtvProgramScreen(
                     onOpenAudioPlayer()
                 },
                 onMore = { actionEpisode = ep },
+                onEndListening = { viewModel.resetPosition(ep) },
             )
         }
 
@@ -318,6 +319,13 @@ fun CtvProgramScreen(
                         confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.resetPosition(ep) }
                 } else null,
+                // User (2026-08-16 12:51, „chci volbu, která označí jako poslechnuto") — parita s audioknihami.
+                if (resumeMarks[viewModel.episodeKey(ep)]?.isFinished != true) {
+                    ListenEpisodeAction(
+                        Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                        confirmMessage = "Epizoda se označí jako poslechnutá a zmizí z Domů z „Pokračovat“.",
+                    ) { viewModel.markFinished(ep) }
+                } else null,
             ),
             onDismiss = { actionEpisode = null },
         )
@@ -342,6 +350,7 @@ private fun EpisodeRow(
     onVideo: () -> Unit,
     onAudio: () -> Unit,
     onMore: () -> Unit,
+    onEndListening: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -433,6 +442,9 @@ private fun EpisodeRow(
             OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {
                 Icon(audioIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(audioLabel, Modifier.padding(start = 6.dp))
+            }
+            if (canResume && !isFinished && onEndListening != null) {
+                EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))

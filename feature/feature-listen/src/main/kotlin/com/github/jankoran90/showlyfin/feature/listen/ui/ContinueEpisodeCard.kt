@@ -31,6 +31,8 @@ fun ContinueEpisodeCard(
     isPlaying: Boolean = false,
     /** PROFIL (2026-08-16) — dlouhý stisk → „Sdílet s…" (celý zdroj epizody). null = nic (zkratka). */
     onLongClick: (() -> Unit)? = null,
+    /** User (2026-08-16, „ikonu ukončit poslech přímo na kartě") — vzor [AudiobookCard]. null = nezobrazí se. */
+    onEndListening: (() -> Unit)? = null,
 ) {
     CoverCard(
         title = episode.title,
@@ -63,6 +65,13 @@ fun ContinueEpisodeCard(
                         .background(MaterialTheme.colorScheme.primary, CircleShape)
                         .padding(3.dp)
                         .size(16.dp),
+                )
+            }
+            if (onEndListening != null) {
+                EndListeningButton(
+                    compact = true,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
+                    onConfirm = onEndListening,
                 )
             }
         },

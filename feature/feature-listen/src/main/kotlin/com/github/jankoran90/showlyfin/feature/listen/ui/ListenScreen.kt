@@ -228,6 +228,7 @@ private fun BooksContent(
                                     downloaded = item.book.id in state.downloadedBookIds,
                                     isPlaying = playerState.isActive && playerState.currentItemId == item.book.id,
                                     onLongClick = { actionBook = item.book },
+                                    onEndListening = { viewModel.resetBookProgress(item.book) },
                                 )
                                 is BookShelfItem.SeriesGroup -> SeriesCard(
                                     group = item,
@@ -263,6 +264,10 @@ private fun BooksContent(
                                 if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
                             ) { viewModel.setBookSharedWith(book.id, target.id, !shared) }
                         },
+                        infoLine = viewModel.ownershipInfoLine(
+                            viewModel.ownerOfBook(book.id),
+                            otherAdults.filter { viewModel.isBookSharedWith(book.id, it) },
+                        ),
                     )
                 }
             }
@@ -501,6 +506,10 @@ private fun FollowingContent(
         } else emptyList()
         ListenEpisodeActionSheet(
             title = card.sortTitle,
+            infoLine = if (card is LibraryCard.Plain || card is LibraryCard.Merged) {
+                val owner = card.hideKeys.firstNotNullOfOrNull { viewModel.ownerOfSourceKey(it) }
+                viewModel.ownershipInfoLine(owner, otherAdultProfiles.filter { viewModel.isSourceSharedWith(card.hideKeys, it) })
+            } else null,
             actions = listOfNotNull(
                 (card as? LibraryCard.Plain)?.let { c ->
                     ListenEpisodeAction(Icons.Default.Link, "Propojit s jinou verzí (audio + video)") {
