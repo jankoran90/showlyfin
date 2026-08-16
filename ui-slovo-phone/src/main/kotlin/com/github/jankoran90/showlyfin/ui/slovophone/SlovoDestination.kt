@@ -21,6 +21,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 enum class SlovoSection(val label: String, val icon: ImageVector) {
     DOMU("Domů", Icons.Rounded.Home),
+    /**
+     * User (2026-08-16 17:06, „Domů jedna sekce, Poslech se swipne horizontalně vedle") — Poslech
+     * přestal být samostatnou sekcí draweru: je to 2. strana pageru sekce Domů. Hodnota zůstává
+     * (label pro titulek lišty + redirect starých uložených stavů ve [SlovoPhoneShell]).
+     */
     POSLECH("Poslech", Icons.Rounded.Headphones),
     OBJEVIT("Objevit", Icons.Rounded.Explore),
     ZDROJE("Zdroje", Icons.Rounded.RssFeed),
@@ -40,7 +45,7 @@ object SlovoShellPrefs {
     /** Výchozí sekce při otevření appky — Domů (user 2026-08-15: „home obrazovka, co se vždy otevře"). */
     fun startSection(@Suppress("UNUSED_PARAMETER") ctx: Context): SlovoSection = SlovoSection.DOMU
 
-    /** Pořadí sekcí v draweru skupiny „Poslech". */
+    /** Pořadí sekcí v draweru skupiny „Poslech" (bez POSLECH — ten je 2. strana pageru Domů). */
     val drawerOrder: List<SlovoSection> =
-        listOf(SlovoSection.DOMU, SlovoSection.POSLECH, SlovoSection.OBJEVIT, SlovoSection.ZDROJE)
+        listOf(SlovoSection.DOMU, SlovoSection.OBJEVIT, SlovoSection.ZDROJE)
 }

@@ -44,8 +44,10 @@ fun SlovoDrawer(
                 modifier = Modifier.padding(start = 20.dp, top = 28.dp, bottom = 16.dp),
             )
             DrawerSectionLabel("Poslech")
+            // User (2026-08-16 17:06, „Domů bude v sidebaru jedna sekce, Poslech se swipne vedle") —
+            // Poslech už NENÍ položka draweru: je to 2. strana pageru sekce Domů.
             val poslechSections =
-                if (isAdmin) SlovoShellPrefs.drawerOrder else listOf(SlovoSection.DOMU, SlovoSection.POSLECH)
+                if (isAdmin) SlovoShellPrefs.drawerOrder else listOf(SlovoSection.DOMU)
             poslechSections.forEach { DrawerRow(it, current, onSelect) }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))
