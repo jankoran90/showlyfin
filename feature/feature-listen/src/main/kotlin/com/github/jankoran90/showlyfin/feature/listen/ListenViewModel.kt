@@ -146,6 +146,19 @@ class ListenViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
+     * User (2026-08-16 14:42, „Sdílet s Nel u dětské knihy nedává smysl") — vzor [HomeViewModel.kidsLibraryIds].
+     * Vlastnictví/sdílení se knih z čistě dětské ABS knihovny netýká.
+     */
+    val kidsLibraryIds: StateFlow<Set<String>> =
+        profileRepository.observeAll()
+            .map { profiles ->
+                profiles.filterNot { it.isAdmin }
+                    .flatMap { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).absLibraryWhitelist.orEmpty() }
+                    .toSet()
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /**
      * true = zdroj (klíč `type:ref`, u sloučeného páru kterýkoli z [keys]) je nasdílený profilu
      * [target] (viz [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.sharedSourceKeys]).
      */

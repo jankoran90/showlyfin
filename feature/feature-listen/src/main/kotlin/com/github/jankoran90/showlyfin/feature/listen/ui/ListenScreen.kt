@@ -219,6 +219,10 @@ private fun BooksContent(
                 }
                 actionBook?.let { book ->
                     val otherAdults by viewModel.otherAdultProfiles.collectAsStateWithLifecycle()
+                    val kidsLibraryIds by viewModel.kidsLibraryIds.collectAsStateWithLifecycle()
+                    // User (2026-08-16 14:42, „Sdílet s Nel u dětské knihy nedává smysl") — vlastnictví/
+                    // sdílení se dětské knihovny netýká, sheet pro ni nenabídne žádné „Sdílet s…".
+                    val isKidsBook = book.libraryId in kidsLibraryIds
                     AudiobookActionSheet(
                         book = book,
                         canDownload = !state.isOffline && book.id !in state.downloadedBookIds,
@@ -227,14 +231,14 @@ private fun BooksContent(
                         onResetProgress = { viewModel.resetBookProgress(book) },
                         onMarkFinished = { viewModel.markBookFinished(book) },
                         onDismiss = { actionBook = null },
-                        shareActions = otherAdults.map { target ->
+                        shareActions = if (isKidsBook) emptyList() else otherAdults.map { target ->
                             val shared = viewModel.isBookSharedWith(book.id, target)
                             ListenEpisodeAction(
                                 if (shared) Icons.Default.Visibility else Icons.Default.Share,
                                 if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
                             ) { viewModel.setBookSharedWith(book.id, target.id, !shared) }
                         },
-                        infoLine = viewModel.ownershipInfoLine(
+                        infoLine = if (isKidsBook) null else viewModel.ownershipInfoLine(
                             viewModel.ownerOfBook(book.id),
                             otherAdults.filter { viewModel.isBookSharedWith(book.id, it) },
                         ),

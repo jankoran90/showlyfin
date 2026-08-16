@@ -65,6 +65,21 @@ class HomeViewModel @Inject constructor(
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    /**
+     * User (2026-08-16 14:42, „Sdílet s Nel u dětské knihy nedává smysl") — ABS knihovny vyhrazené
+     * VÝHRADNĚ dětskému profilu. Vlastnictví/sdílení se na ně nevztahuje (je jen mezi dospělými), ale
+     * na rozdíl od dřívějšího 13:29 fixu je NEVYLUČUJEME z Domů úplně (admin, co si sám poslechl kus
+     * dětské knihy, se k ní chce vrátit) — jen se pro ně potlačí nabídka „Sdílet s…" v UI.
+     */
+    val kidsLibraryIds: StateFlow<Set<String>> =
+        profileRepository.observeAll()
+            .map { profiles ->
+                profiles.filterNot { it.isAdmin }
+                    .flatMap { ProfileConfig.fromJson(it.configJson).absLibraryWhitelist.orEmpty() }
+                    .toSet()
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
     fun isSourceSharedWith(keys: Set<String>, target: ProfileEntity): Boolean {
         val cfg = ProfileConfig.fromJson(target.configJson)
         return keys.any { it in cfg.sharedSourceKeys }
@@ -206,6 +221,12 @@ class HomeViewModel @Inject constructor(
      * User (2026-08-16 13:49, „nech zobrazit Domů i dětem") — dětský profil nemá koncept vlastnictví/
      * sdílení (ten je jen mezi dospělými), místo toho striktně jen VLASTNÍ knihovna ([ProfileConfig.absLibraryWhitelist]),
      * ať se mu do Domů nepřimíchá dospělácký obsah.
+     * User (2026-08-16 14:42, „Baron Prášil a Acid for the Children nejsou vidět na Home, chybí
+     * pokračovat") — REGRESE z 13:29 fixu: knihy z dětské knihovny se dřív z adminova Domů úplně
+     * vylučovaly (`libraryId !in kidsLibraryIds`), ale to je moc tvrdé — admin, co si sám poslechl
+     * kus dětské knihy, chce se k ní z Domů taky vrátit. Skutečný problém byl JEN nesmyslná nabídka
+     * „Sdílet s Nel" u takové knihy (řeší se na úrovni UI sheetu, ne mazáním z Domů) — vlastnictví/
+     * sdílení se na knihy z dětské knihovny prostě nevztahuje (`isVisible` check pro ně přeskočen).
      */
     private suspend fun filterVisibleBooks(books: List<Audiobook>): List<Audiobook> {
         val active = profileRepository.activeProfile.value ?: return books
@@ -215,24 +236,11 @@ class HomeViewModel @Inject constructor(
         }
         audiobookOwnership.refresh()
         val shared = profileRepository.activeConfig.value.sharedAudiobookIds
-        val kidsLibraryIds = kidsOnlyLibraryIds()
-        return books
-            .filter { it.libraryId !in kidsLibraryIds }
-            .filter { audiobookOwnership.isVisible(it.id, active.profileUuid, shared) }
+        val kidsIds = kidsLibraryIds.value
+        return books.filter {
+            it.libraryId in kidsIds || audiobookOwnership.isVisible(it.id, active.profileUuid, shared)
+        }
     }
-
-    /**
-     * User (2026-08-16 13:29, „Harry Potter je stejný zdroj, nerozumím proč ne") — root cause:
-     * Domů „Pokračovat" sčítalo audioknihy napříč VŠEMI ABS knihovnami bez ohledu na výběr, takže
-     * admin (Honza) tam dostal i knihy z dětské knihovny (jiná fyzická knihovna, ne jen nasdílená
-     * položka) i s nesmyslnou nabídkou „Sdílet s Nel". Knihovny vyhrazené VÝHRADNĚ dětskému profilu
-     * (`ProfileConfig.absLibraryWhitelist`) patří jen jim, ne do adminova osobního přehledu.
-     */
-    private suspend fun kidsOnlyLibraryIds(): Set<String> =
-        profileRepository.getAll()
-            .filterNot { it.isAdmin }
-            .flatMap { ProfileConfig.fromJson(it.configJson).absLibraryWhitelist.orEmpty() }
-            .toSet()
 
     /**
      * Rozposlouchané direct epizody → dohledané přes feedy zdrojů (stejný join jako CRUISE Android Auto).
