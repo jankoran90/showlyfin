@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -81,6 +82,20 @@ private fun SlovoShellContent() {
     LaunchedEffect(isKidsProfile) {
         if (isKidsProfile && current in setOf(SlovoSection.DOMU, SlovoSection.OBJEVIT, SlovoSection.ZDROJE)) {
             current = SlovoSection.POSLECH
+        }
+    }
+    // PROFIL (2026-08-16, user: „přepnutí profilu obrazovku nepřekreslí live, musí shodit a nahodit
+    // app") — Slovo tenhle signál na rozdíl od Filmy (FilmyPhoneShell) nikdy neposlouchalo. Dokud byl
+    // jen jeden dospělý profil se sdíleným ABS přihlášením, přepnutí na Děti/zpět měnilo jen whitelist
+    // (reaktivní cesty to stihly); s Honza/Nel (KAŽDÝ jiný ABS účet) je re-create Activity nutný,
+    // jinak zůstanou ViewModely viset na obsahu předchozího profilu. Vzor 1:1 z FilmyPhoneShell.
+    val profileSwitch by com.github.jankoran90.showlyfin.core.domain.profile.ProfileSwitchSignal.switches
+        .collectAsStateWithLifecycle()
+    var lastProfileSwitch by rememberSaveable { mutableStateOf(0L) }
+    LaunchedEffect(profileSwitch) {
+        if (profileSwitch > 0 && profileSwitch != lastProfileSwitch) {
+            lastProfileSwitch = profileSwitch
+            (ctx as? android.app.Activity)?.recreate()
         }
     }
 
