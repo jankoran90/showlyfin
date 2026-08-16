@@ -68,8 +68,12 @@ class AudiobookUploadRepository @Inject constructor(
     private fun String.toRequestBodyForm(): RequestBody =
         this.toRequestBody(MultipartBody.FORM)
 
-    /** SLOVO-UPLOAD-NET krok 1/4 — založí chunkovanou upload session, vrátí session_id. */
-    suspend fun startUploadSession(libraryId: String, title: String?, author: String?, autoMatch: Boolean): String {
+    /**
+     * SLOVO-UPLOAD-NET krok 1/4 — založí chunkovanou upload session, vrátí session_id.
+     * [addedBy] = profileUuid nahrávajícího profilu (PROFIL 2026-08-16) — backend si ho uloží k
+     * hotové audioknize, appka podle něj pak řídí per-profil viditelnost + sdílení.
+     */
+    suspend fun startUploadSession(libraryId: String, title: String?, author: String?, autoMatch: Boolean, addedBy: String?): String {
         val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
         val url = "$b/api/audiobook/upload/start"
         val resp = service.startUploadSession(
@@ -78,6 +82,7 @@ class AudiobookUploadRepository @Inject constructor(
             title?.takeIf { it.isNotBlank() }?.toRequestBodyForm(),
             author?.takeIf { it.isNotBlank() }?.toRequestBodyForm(),
             autoMatch.toString().toRequestBodyForm(),
+            addedBy?.takeIf { it.isNotBlank() }?.toRequestBodyForm(),
         )
         if (!resp.isSuccessful) {
             throw HttpException(resp).also { Timber.w(it, "[DROPSHIP] upload/start HTTP ${resp.code()}") }

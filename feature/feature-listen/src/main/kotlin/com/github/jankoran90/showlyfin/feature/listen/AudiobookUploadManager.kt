@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.uploader.AudiobookUploadRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.AudiobookUploadResponse
 import com.github.jankoran90.showlyfin.feature.listen.service.UploadAudiobookService
@@ -41,6 +42,7 @@ import javax.inject.Singleton
 @Singleton
 class AudiobookUploadManager @Inject constructor(
     private val uploaderRepo: AudiobookUploadRepository,
+    private val profileRepository: ProfileRepository,
     @ApplicationContext private val context: Context,
 ) {
 
@@ -72,7 +74,10 @@ class AudiobookUploadManager @Inject constructor(
         scope.launch {
             var sessionId: String? = null
             runCatching {
-                val sid = uploaderRepo.startUploadSession(libraryId, title, author, autoMatch)
+                // PROFIL (2026-08-16) — nová audiokniha je zpočátku vidět jen tomu, kdo ji nahrál
+                // (viz ProfileConfig.sharedAudiobookIds pro explicitní sdílení ostatním profilům).
+                val addedBy = profileRepository.activeProfile.value?.profileUuid
+                val sid = uploaderRepo.startUploadSession(libraryId, title, author, autoMatch, addedBy)
                 sessionId = sid
                 val sizes = uris.map { sizeOfUri(it) }
                 val totalSize = if (sizes.any { it <= 0 }) -1L else sizes.sum()

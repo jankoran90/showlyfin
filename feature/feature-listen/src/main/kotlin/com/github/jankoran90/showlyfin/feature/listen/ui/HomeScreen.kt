@@ -45,6 +45,7 @@ fun HomeScreen(
     val otherAdultProfiles by vm.otherAdultProfiles.collectAsStateWithLifecycle()
     // PROFIL (2026-08-16) — dlouhý stisk epizody na Domů → „Sdílet s…" (celý zdroj epizody, ne jen tuhle).
     var shareEpisode by remember { mutableStateOf<HomeViewModel.ContinueItem.Episode?>(null) }
+    var shareBook by remember { mutableStateOf<HomeViewModel.ContinueItem.Book?>(null) }
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -68,6 +69,7 @@ fun HomeScreen(
                             book = item.book,
                             onClick = { onOpenBook(item.book.id) },
                             isPlaying = playerState.isActive && playerState.currentItemId == item.book.id,
+                            onLongClick = if (otherAdultProfiles.isNotEmpty()) ({ shareBook = item }) else null,
                         )
                         is HomeViewModel.ContinueItem.Episode -> ContinueEpisodeCard(
                             episode = item.episode,
@@ -98,6 +100,20 @@ fun HomeScreen(
                 ) { vm.setSourceSharedWith(setOf(key), target.id, !shared) }
             },
             onDismiss = { shareEpisode = null },
+        )
+    }
+
+    shareBook?.let { item ->
+        ListenEpisodeActionSheet(
+            title = item.book.title,
+            actions = otherAdultProfiles.map { target ->
+                val shared = vm.isBookSharedWith(item.book.id, target)
+                ListenEpisodeAction(
+                    if (shared) Icons.Default.Visibility else Icons.Default.Share,
+                    if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
+                ) { vm.setBookSharedWith(item.book.id, target.id, !shared) }
+            },
+            onDismiss = { shareBook = null },
         )
     }
 }

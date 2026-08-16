@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
+import com.github.jankoran90.showlyfin.data.uploader.AudiobookOwnershipRepository
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
@@ -35,6 +36,7 @@ class HomeViewModel @Inject constructor(
     private val sourcesRepo: PodcastSourcesRepository,
     private val directResume: DirectResumeStore,
     private val profileRepository: ProfileRepository,
+    private val audiobookOwnership: AudiobookOwnershipRepository,
     connection: AudiobookPlayerConnection,
 ) : ViewModel() {
 
@@ -61,6 +63,20 @@ class HomeViewModel @Inject constructor(
                 val s = cfg.sharedSourceKeys.toMutableSet()
                     .also { if (shared) it.addAll(keys) else it.removeAll(keys) }
                 cfg.copy(sharedSourceKeys = s)
+            }
+        }
+    }
+
+    /** PROFIL (2026-08-16) — audiokniha (vzor sources, klíč = ABS itemId). */
+    fun isBookSharedWith(itemId: String, target: ProfileEntity): Boolean =
+        itemId in ProfileConfig.fromJson(target.configJson).sharedAudiobookIds
+
+    fun setBookSharedWith(itemId: String, targetId: Long, shared: Boolean) {
+        viewModelScope.launch {
+            profileRepository.updateConfig(targetId) { cfg ->
+                val s = cfg.sharedAudiobookIds.toMutableSet()
+                    .also { if (shared) it.add(itemId) else it.remove(itemId) }
+                cfg.copy(sharedAudiobookIds = s)
             }
         }
     }
@@ -97,12 +113,22 @@ class HomeViewModel @Inject constructor(
                 else repo.getAudiobookLibraries()
                     .flatMap { repo.getAudiobooks(it.id) }
                     .filter { it.progress > 0.001 && !it.isFinished }
+                    .let { filterVisibleBooks(it) }
             }.getOrDefault(emptyList())
             val episodes = runCatching { continueDirectEpisodes() }.getOrDefault(emptyList())
             _items.value = (books.map(ContinueItem::Book) + episodes)
                 .sortedByDescending { it.updatedAt }
             _isLoading.value = false
         }
+    }
+
+    /** PROFIL (2026-08-16) — jen moje audioknihy + co mi kdo sdílel (vzor [ListenViewModel.filterVisibleBooks]). */
+    private suspend fun filterVisibleBooks(books: List<Audiobook>): List<Audiobook> {
+        val active = profileRepository.activeProfile.value ?: return books
+        if (!active.isAdmin) return books
+        audiobookOwnership.refresh()
+        val shared = profileRepository.activeConfig.value.sharedAudiobookIds
+        return books.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, shared) }
     }
 
     /** Rozposlouchané direct epizody → dohledané přes feedy zdrojů (stejný join jako CRUISE Android Auto). */

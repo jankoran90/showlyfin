@@ -34,6 +34,8 @@ fun AudiobookActionSheet(
     onResetProgress: () -> Unit,
     onMarkFinished: () -> Unit,
     onDismiss: () -> Unit,
+    /** PROFIL (2026-08-16) — „Sdílet s…"/„Přestat sdílet" akce, jedna na ostatní dospělý profil. */
+    shareActions: List<ListenEpisodeAction> = emptyList(),
 ) {
     val inProgress = book.progress > 0.001 && !book.isFinished
     ListenEpisodeActionSheet(
@@ -55,7 +57,7 @@ fun AudiobookActionSheet(
                     onClick = onMarkFinished,
                 )
             } else null,
-        ),
+        ) + shareActions,
         onDismiss = onDismiss,
     )
 }

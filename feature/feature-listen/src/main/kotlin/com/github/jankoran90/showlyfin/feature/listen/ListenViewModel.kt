@@ -18,6 +18,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
+import com.github.jankoran90.showlyfin.data.uploader.AudiobookOwnershipRepository
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -51,6 +52,7 @@ class ListenViewModel @Inject constructor(
     private val connectivity: ConnectivityObserver,
     private val profileRepository: ProfileRepository,
     private val sourcesRepo: PodcastSourcesRepository,
+    private val audiobookOwnership: AudiobookOwnershipRepository,
     private val linkStore: com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore,
     private val absPrefs: AbsPreferences,
     @param:ApplicationContext private val context: Context,
@@ -160,6 +162,20 @@ class ListenViewModel @Inject constructor(
                 val s = cfg.sharedSourceKeys.toMutableSet()
                     .also { if (shared) it.addAll(keys) else it.removeAll(keys) }
                 cfg.copy(sharedSourceKeys = s)
+            }
+        }
+    }
+
+    /** PROFIL (2026-08-16) — audiokniha (vzor [isSourceSharedWith], klíč = ABS itemId). */
+    fun isBookSharedWith(itemId: String, target: com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity): Boolean =
+        itemId in com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(target.configJson).sharedAudiobookIds
+
+    fun setBookSharedWith(itemId: String, targetId: Long, shared: Boolean) {
+        viewModelScope.launch {
+            profileRepository.updateConfig(targetId) { cfg ->
+                val s = cfg.sharedAudiobookIds.toMutableSet()
+                    .also { if (shared) it.add(itemId) else it.remove(itemId) }
+                cfg.copy(sharedAudiobookIds = s)
             }
         }
     }
@@ -540,10 +556,23 @@ class ListenViewModel @Inject constructor(
         viewModelScope.launch { loadBooks(libraryId) }
     }
 
+    /**
+     * PROFIL (2026-08-16, user „audioknihy taky per profil, nahrávám je já Honza") — Dospělý vidí
+     * jen svoje nahrané audioknihy + co mu kdo nasdílel (legacy bez záznamu vlastnictví = viditelné
+     * všem). Děti mají VLASTNÍ ABS knihovnu (`absLibraryWhitelist`), tenhle koncept se jich netýká.
+     */
+    private suspend fun filterVisibleBooks(books: List<Audiobook>): List<Audiobook> {
+        val active = profileRepository.activeProfile.value ?: return books
+        if (!active.isAdmin) return books
+        audiobookOwnership.refresh()
+        val shared = profileRepository.activeConfig.value.sharedAudiobookIds
+        return books.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, shared) }
+    }
+
     private suspend fun loadBooks(libraryId: String) {
         _uiState.update { it.copy(isLoading = true, error = null) }
         runCatching { repo.getAudiobooks(libraryId) }
-            .onSuccess { books -> _uiState.update { it.copy(isLoading = false, books = books) } }
+            .onSuccess { books -> _uiState.update { it.copy(isLoading = false, books = filterVisibleBooks(books)) } }
             .onFailure { e ->
                 Timber.w(e, "[Listen] knihy selhaly")
                 val offline = downloadedBooks()

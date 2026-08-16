@@ -43,3 +43,12 @@ data class AudiobookUploadEnrich(
     @SerializedName("matched") val matched: Boolean = false,
     @SerializedName("error") val error: String? = null,
 )
+
+/**
+ * PROFIL (2026-08-16) — odpověď `GET /api/audiobook/ownership`: itemId → kdo audioknihu nahrál.
+ * ABS sám koncept vlastníka nemá, drží ho jellyfin-uploader backend (vzor [PodcastSource.addedBy]).
+ */
+data class AudiobookOwnershipEntry(
+    @SerializedName("added_by") val addedBy: String? = null,
+    @SerializedName("added_at") val addedAt: Long? = null,
+)

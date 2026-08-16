@@ -90,6 +90,14 @@ data class ProfileConfig(
      * NEBO `addedBy == můj profil` NEBO klíč zdroje je v tomhle setu.
      */
     val sharedSourceKeys: Set<String> = emptySet(),
+    /**
+     * PROFIL (2026-08-16, user „audioknihy taky per profil, nahrávám je já Honza, sdílet mám na
+     * to fci") — audioknihy (ABS itemId), které SEM explicitně nasdílel jiný profil. Stejný vzor
+     * jako [sharedSourceKeys], jen klíčovaný ABS itemId místo `type:ref` (vlastnictví eviduje
+     * jellyfin-uploader backend, viz `AudiobookOwnershipRepository`, protože ABS sám koncept
+     * „kdo nahrál" nemá).
+     */
+    val sharedAudiobookIds: Set<String> = emptySet(),
     /** Povolené žánry (lowercase). Prázdné = bez allow-listu (vše kromě blacklistu). */
     val allowedGenres: Set<String> = emptySet(),
     /** Zakázané žánry (lowercase) — blacklist. */

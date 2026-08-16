@@ -247,6 +247,7 @@ private fun BooksContent(
                     )
                 }
                 actionBook?.let { book ->
+                    val otherAdults by viewModel.otherAdultProfiles.collectAsStateWithLifecycle()
                     AudiobookActionSheet(
                         book = book,
                         canDownload = !state.isOffline && book.id !in state.downloadedBookIds,
@@ -255,6 +256,13 @@ private fun BooksContent(
                         onResetProgress = { viewModel.resetBookProgress(book) },
                         onMarkFinished = { viewModel.markBookFinished(book) },
                         onDismiss = { actionBook = null },
+                        shareActions = otherAdults.map { target ->
+                            val shared = viewModel.isBookSharedWith(book.id, target)
+                            ListenEpisodeAction(
+                                if (shared) Icons.Default.Visibility else Icons.Default.Share,
+                                if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
+                            ) { viewModel.setBookSharedWith(book.id, target.id, !shared) }
+                        },
                     )
                 }
             }

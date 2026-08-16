@@ -197,6 +197,13 @@ interface UploaderService {
         @Part("author") author: RequestBody?,
     ): Response<com.github.jankoran90.showlyfin.data.uploader.model.AudiobookMatchResponse>
 
+    /** PROFIL (2026-08-16) — kdo nahrál kterou audioknihu: GET /api/audiobook/ownership. */
+    @GET
+    suspend fun getAudiobookOwnership(
+        @Url url: String,
+        @Header("Cookie") cookie: String,
+    ): Map<String, AudiobookOwnershipEntry>
+
     // SLOVO-UPLOAD-NET — chunkovaný upload (velký multipart v jednom requestu umíral na mobilní
     // síti/CGNAT po ~45s-2min, dřív než tělo dorazilo; rozsekáno na malé kousky s vlastním retry).
     @Multipart
@@ -208,6 +215,8 @@ interface UploaderService {
         @Part("title") title: RequestBody?,
         @Part("author") author: RequestBody?,
         @Part("auto_match") autoMatch: RequestBody,
+        /** PROFIL (2026-08-16) — profil, co audioknihu nahrává (viz backend `audiobook_ownership.json`). */
+        @Part("added_by") addedBy: RequestBody?,
     ): Response<UploadSessionStartResponse>
 
     @Multipart
