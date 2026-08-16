@@ -480,7 +480,9 @@ class AudiobookPlayerConnection @Inject constructor(
                 coverUrl = episode.coverUrl,
                 durationSec = d.durationSec,
                 mediaId = episode.episodeId,
-                startMs = resumeStore.get(episode.episodeId)?.posMs ?: 0L, // L2b: navázat na uloženou pozici
+                // L2b: navázat na uloženou pozici — DOHRANOU (2026-08-16, isFinished) epizodu spusť
+                // znovu od začátku, ne od uloženého konce.
+                startMs = resumeStore.get(episode.episodeId)?.takeUnless { it.isFinished }?.posMs ?: 0L,
                 episode = episode,
             )
             return

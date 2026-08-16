@@ -174,6 +174,10 @@ fun RssPodcastScreen(
         // jinak audio resume → progres + „Pokračovat" funguje i u VIDEO epizody.
         val markPos = videoResumeMarks[key]?.posMs ?: resumeMarks[key]?.posMs
         val markDur = videoResumeMarks[key]?.durMs ?: resumeMarks[key]?.durMs
+        // User (2026-08-16) — dohraná epizoda (mark na konci) = „poslechnuto", ne rozposlouchaná.
+        // Jen audio ([resumeMarks], `DirectResumeStore.Mark`) — video ([videoResumeMarks],
+        // `VideoResumeStore.Mark`) je jiný typ bez `isFinished` a řeší se jinde (Filmy).
+        val isFinished = resumeMarks[key]?.isFinished == true
         val progress: Float? = when {
             isCurrent && playerState.durationMs > 0 ->
                 (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
@@ -181,8 +185,8 @@ fun RssPodcastScreen(
                 (markPos.toFloat() / markDur).coerceIn(0f, 1f)
             else -> null
         }
-        val canResume = !isCurrent && markPos != null
-        val remainingLabel = if (!isCurrent && markPos != null && markDur != null && markDur > 0)
+        val canResume = !isCurrent && markPos != null && !isFinished
+        val remainingLabel = if (!isCurrent && !isFinished && markPos != null && markDur != null && markDur > 0)
             "zbývá ${formatClock((markDur - markPos).coerceAtLeast(0L))}" else null
         PodcastEpisodeRow(
             title = ep.title,
@@ -198,6 +202,7 @@ fun RssPodcastScreen(
             remainingLabel = remainingLabel,
             hasVideo = ep.jfItemId != null && !audioOnly,
             highlighted = isHighlighted,
+            isFinished = isFinished,
             onPlay = {
                 // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
                 if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep, fallbackTitle)

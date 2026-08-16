@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -172,13 +173,14 @@ fun CtvProgramScreen(
             val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
             val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
             val mark = resumeMarks[key]
+            val isFinished = mark?.isFinished == true
             val progress: Float? = when {
                 isCurrent && playerState.durationMs > 0 ->
                     (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
                 mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
                 else -> null
             }
-            val canResume = !isCurrent && mark != null
+            val canResume = !isCurrent && mark != null && !isFinished
             val remainingLabel = if (canResume && mark.durMs > 0)
                 "zbývá ${formatDuration((mark.durMs - mark.posMs).coerceAtLeast(0L) / 1000.0)}" else null
             EpisodeRow(
@@ -194,6 +196,7 @@ fun CtvProgramScreen(
                 remainingLabel = remainingLabel,
                 highlighted = isHighlighted,
                 showVideo = !audioOnly,
+                isFinished = isFinished,
                 onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.image) },
                 onAudio = {
                     if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep)
@@ -335,6 +338,7 @@ private fun EpisodeRow(
     remainingLabel: String?,
     highlighted: Boolean,
     showVideo: Boolean = true,
+    isFinished: Boolean = false,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
     onMore: () -> Unit,
@@ -368,15 +372,25 @@ private fun EpisodeRow(
                 )
                 val meta = listOfNotNull(formatDate(date), durationSec?.let { formatDuration(it) }, remainingLabel)
                     .joinToString(" · ")
-                if (meta.isNotBlank()) {
-                    Text(
-                        meta,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isFinished) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Poslechnuto",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                        )
+                    }
+                    if (meta.isNotBlank()) {
+                        Text(
+                            meta,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
-                if (progress != null) {
+                if (progress != null && !isFinished) {
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 6.dp),
@@ -412,7 +426,8 @@ private fun EpisodeRow(
             val (audioIcon, audioLabel) = when {
                 isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
                 isCurrent -> Icons.Default.PlayArrow to "Pokračovat"
-                canResume -> Icons.Default.PlayArrow to "Pokračovat"
+                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
                 else -> Icons.Default.Headphones to "Poslech"
             }
             OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {

@@ -113,7 +113,8 @@ internal suspend fun AudiobookPlayerService.continueItems(): List<MediaItem> {
 
 /** CRUISE: rozposlouchané direct epizody → (čas posledního poslechu, položka), resolvnuté přes feedy zdrojů. */
 internal suspend fun AudiobookPlayerService.continueDirectEntries(): List<Pair<Long, MediaItem>> {
-    val marks = directResume.marks.value
+    // User (2026-08-16) — dohrané epizody (isFinished) mark drží pro badge/reset, ale do „Pokračovat" nepatří.
+    val marks = directResume.marks.value.filterValues { !it.isFinished }
     if (marks.isEmpty()) return emptyList()
     sourcesRepo.refresh()
     val byKey = HashMap<String, Pair<SourceEpisode, String>>()

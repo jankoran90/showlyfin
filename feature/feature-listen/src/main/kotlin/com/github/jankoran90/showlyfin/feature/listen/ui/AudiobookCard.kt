@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -72,6 +73,21 @@ fun AudiobookCard(
                 Icon(
                     imageVector = Icons.Default.GraphicEq,
                     contentDescription = "Hraje",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .padding(3.dp)
+                        .size(16.dp),
+                )
+            }
+            // User (2026-08-16, „poslechnuto znak vidět všude") — odznak „poslechnuto" na dlaždici,
+            // dřív se dokončenost projevila jen zmizením progress baru (nerozeznatelné od nikdy-nespuštěné).
+            if (book.isFinished && !isPlaying) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Poslechnuto",
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
                         .align(Alignment.TopEnd)

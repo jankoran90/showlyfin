@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -173,13 +174,14 @@ fun MergedPodcastScreen(
                     val key = item.key
                     val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
                     val mark = resumeMarks[key]
+                    val isFinished = mark?.isFinished == true
                     val progress: Float? = when {
                         isCurrent && playerState.durationMs > 0 ->
                             (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
                         mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
                         else -> null
                     }
-                    val canResume = !isCurrent && mark != null
+                    val canResume = !isCurrent && mark != null && !isFinished
                     val remainingLabel = if (canResume && mark.durMs > 0)
                         "zbývá ${formatMergedClock((mark.durMs - mark.posMs).coerceAtLeast(0L))}" else null
                     MergedEpisodeRow(
@@ -191,6 +193,7 @@ fun MergedPodcastScreen(
                         progress = progress,
                         canResume = canResume,
                         remainingLabel = remainingLabel,
+                        isFinished = isFinished,
                         onPlayAudio = {
                             if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(item)
                             onOpenAudioPlayer()
@@ -265,6 +268,7 @@ private fun MergedEpisodeRow(
     canResume: Boolean,
     remainingLabel: String?,
     showVideo: Boolean = true,
+    isFinished: Boolean = false,
     onPlayAudio: () -> Unit,
     onPlayVideo: () -> Unit,
     onMore: () -> Unit,
@@ -310,6 +314,14 @@ private fun MergedEpisodeRow(
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
                         )
                     }
+                    if (isFinished) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Poslechnuto",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                        )
+                    }
                     if (meta.isNotBlank()) {
                         Text(
                             meta,
@@ -319,7 +331,7 @@ private fun MergedEpisodeRow(
                         )
                     }
                 }
-                if (progress != null) {
+                if (progress != null && !isFinished) {
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 6.dp),
@@ -347,7 +359,8 @@ private fun MergedEpisodeRow(
             val (playIcon, playLabel) = when {
                 isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
                 isCurrent -> Icons.Default.PlayArrow to "Pokračovat"
-                canResume -> Icons.Default.PlayArrow to "Pokračovat"
+                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
                 else -> Icons.Default.Headphones to "Přehrát"
             }
             FilledTonalButton(onClick = onPlayAudio, modifier = Modifier.weight(1f)) {

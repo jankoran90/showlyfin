@@ -76,7 +76,9 @@ class HomeViewModel @Inject constructor(
 
     /** Rozposlouchané direct epizody → dohledané přes feedy zdrojů (stejný join jako CRUISE Android Auto). */
     private suspend fun continueDirectEpisodes(): List<ContinueItem.Episode> {
-        val marks = directResume.marks.value
+        // User (2026-08-16, „doposlouchané zmizí z Domů") — od té doby, co [DirectResumeStore] mark
+        // při dohrání NEMAŽE (jen ho nechá na isFinished), musí Domů dohrané výslovně vyfiltrovat.
+        val marks = directResume.marks.value.filterValues { !it.isFinished }
         if (marks.isEmpty()) return emptyList()
         sourcesRepo.refresh()
         val byKey = HashMap<String, Pair<SourceEpisode, PodcastSource>>()

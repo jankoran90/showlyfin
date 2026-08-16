@@ -50,7 +50,16 @@ class DirectResumeStore @Inject constructor(
     @param:Named("traktPreferences") private val appPrefs: SharedPreferences,
 ) {
     /** Pozice + (známá) délka v ms pro jednu direct epizodu. [updatedAt] = čas posledního zápisu (epoch ms). */
-    data class Mark(val posMs: Long, val durMs: Long, val updatedAt: Long = 0L)
+    data class Mark(val posMs: Long, val durMs: Long, val updatedAt: Long = 0L) {
+        /**
+         * User (2026-08-16, „doposlouchané epizody ať se označí jako poslechnuté a zmizí z Domů,
+         * všude bude vidět znak poslechnuto") — než dohraje, [posMs] doběhne až k [durMs] (v rámci
+         * [FINISH_TAIL_MS] ocasu). Dřív se v tu chvíli mark celý SMAZAL ([clear]) → dohraná epizoda
+         * nebyla od nikdy-nespuštěné k rozeznání. Teď [save] mark místo smazání ponechá s pozicí na
+         * konci, takže „poslechnuto" jde poznat i zpětně (UI badge, filtr Domů).
+         */
+        val isFinished: Boolean get() = durMs > 0 && posMs >= durMs - FINISH_TAIL_MS
+    }
 
     private val legacyPrefs = context.getSharedPreferences("direct_resume", Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -89,22 +98,25 @@ class DirectResumeStore @Inject constructor(
     fun get(mediaId: String): Mark? = _marks.value[mediaId]
 
     /**
-     * Ulož pozici. Blízko konce ([FINISH_TAIL_MS]) = dohrané → [clear]. Pod [MIN_RESUME_MS] neukládáme.
+     * Ulož pozici. Pod [MIN_RESUME_MS] neukládáme. Blízko konce ([FINISH_TAIL_MS]) — 2026-08-16:
+     * mark se PONECHÁ (pozice zarovnaná na [durMs]), NE smaže jako dřív — jinak „poslechnuto" nešlo
+     * odlišit od „nikdy nespuštěno" (viz [Mark.isFinished]). Explicitní reset stále dělá [clear].
      * Optimisticky do [_marks] (snappy UI + [get]) + `dirty=1` do Room; server push řeší [syncNow] na lifecycle.
      */
     fun save(mediaId: String, posMs: Long, durMs: Long) {
         if (mediaId.isBlank()) return
-        if (durMs > 0 && posMs >= durMs - FINISH_TAIL_MS) { clear(mediaId); return }
         if (posMs < MIN_RESUME_MS) return
+        val finished = durMs > 0 && posMs >= durMs - FINISH_TAIL_MS
+        val effectivePos = if (finished) durMs else posMs
         val cur = _marks.value[mediaId]
-        if (cur != null && cur.posMs == posMs && cur.durMs == durMs) return
+        if (cur != null && cur.posMs == effectivePos && cur.durMs == durMs) return
         val now = System.currentTimeMillis()
-        _marks.update { it + (mediaId to Mark(posMs, durMs, now)) }
+        _marks.update { it + (mediaId to Mark(effectivePos, durMs, now)) }
         val key = activeKey() ?: return
         scope.launch {
             dao.upsert(
                 PlaybackStateEntity(
-                    profileKey = key, mediaKey = mediaId, posMs = posMs, durMs = durMs,
+                    profileKey = key, mediaKey = mediaId, posMs = effectivePos, durMs = durMs,
                     updatedAt = now, dirty = 1, deleted = 0,
                 ),
             )

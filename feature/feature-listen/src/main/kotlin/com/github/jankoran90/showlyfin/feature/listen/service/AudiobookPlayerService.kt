@@ -346,8 +346,10 @@ class AudiobookPlayerService : MediaLibraryService() {
                         } else {
                             val idx = items.indexOfFirst { it.mediaId == first.mediaId }.coerceAtLeast(0)
                             // CRUISE: navázat na uloženou pozici (resume sdílený s in-app přehrávačem).
+                            // DOHRANOU epizodu (2026-08-16, isFinished) spusť znovu od začátku.
                             val resumeMs = items.getOrNull(idx)?.mediaMetadata?.extras
-                                ?.getString(KEY_DIRECT_KEY)?.let { directResume.get(it)?.posMs } ?: 0L
+                                ?.getString(KEY_DIRECT_KEY)
+                                ?.let { directResume.get(it)?.takeUnless { m -> m.isFinished }?.posMs } ?: 0L
                             MediaSession.MediaItemsWithStartPosition(items.toMutableList(), idx, resumeMs)
                         }
                     }

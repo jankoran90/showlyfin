@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
@@ -184,13 +185,14 @@ fun YoutubeChannelScreen(
             // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
             val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
             val mark = resumeMarks[key]
+            val isFinished = mark?.isFinished == true
             val progress: Float? = when {
                 isCurrent && playerState.durationMs > 0 ->
                     (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
                 mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
                 else -> null
             }
-            val canResume = !isCurrent && mark != null
+            val canResume = !isCurrent && mark != null && !isFinished
             val remainingLabel = if (canResume && mark.durMs > 0)
                 "zbývá ${formatDuration((mark.durMs - mark.posMs).coerceAtLeast(0L) / 1000.0)}" else null
             EpisodeRow(
@@ -207,6 +209,7 @@ fun YoutubeChannelScreen(
                 remainingLabel = remainingLabel,
                 highlighted = isHighlighted,
                 showVideo = !audioOnly,
+                isFinished = isFinished,
                 onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
                 onAudio = {
                     // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
@@ -363,6 +366,7 @@ private fun EpisodeRow(
     remainingLabel: String?,
     highlighted: Boolean,
     showVideo: Boolean = true,
+    isFinished: Boolean = false,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
     onMore: () -> Unit,
@@ -406,6 +410,14 @@ private fun EpisodeRow(
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
                         )
                     }
+                    if (isFinished) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Poslechnuto",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                        )
+                    }
                     if (meta.isNotBlank()) {
                         Text(
                             meta,
@@ -415,7 +427,7 @@ private fun EpisodeRow(
                         )
                     }
                 }
-                if (progress != null) {
+                if (progress != null && !isFinished) {
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 6.dp),
@@ -451,7 +463,8 @@ private fun EpisodeRow(
             val (audioIcon, audioLabel) = when {
                 isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
                 isCurrent -> Icons.Default.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
-                canResume -> Icons.Default.PlayArrow to "Pokračovat"
+                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
                 else -> Icons.Default.Headphones to "Poslech"
             }
             OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {

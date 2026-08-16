@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -61,6 +62,10 @@ internal fun PodcastEpisodeRow(
     remainingLabel: String?,
     hasVideo: Boolean,
     highlighted: Boolean,
+    /** User (2026-08-16, „doposlouchané epizody ať se označí jako poslechnuté, znak vidět všude") —
+     * dohraná epizoda (DirectResumeStore.Mark.isFinished): checkmark místo progress baru, tlačítko
+     * nabídne přehrání OD ZAČÁTKU (ne pokračování na konci). */
+    isFinished: Boolean = false,
     onPlay: () -> Unit,
     onVideo: () -> Unit,
     onMore: () -> Unit,
@@ -104,6 +109,14 @@ internal fun PodcastEpisodeRow(
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
                         )
                     }
+                    if (isFinished) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Poslechnuto",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                        )
+                    }
                     if (meta.isNotBlank()) {
                         Text(
                             meta,
@@ -113,7 +126,7 @@ internal fun PodcastEpisodeRow(
                         )
                     }
                 }
-                if (progress != null) {
+                if (progress != null && !isFinished) {
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 6.dp),
@@ -144,7 +157,8 @@ internal fun PodcastEpisodeRow(
             val (playIcon, playLabel) = when {
                 isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
                 isCurrent -> Icons.Default.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
-                canResume -> Icons.Default.PlayArrow to "Pokračovat"
+                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
                 else -> Icons.Default.Headphones to "Poslech"
             }
             FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
