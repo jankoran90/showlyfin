@@ -19,10 +19,12 @@ import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -41,7 +43,7 @@ class RssPodcastViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val naTv: NaTvService,
-    resumeStore: DirectResumeStore,
+    private val resumeStore: DirectResumeStore,
     videoResumeStore: VideoResumeStore,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
@@ -89,8 +91,13 @@ class RssPodcastViewModel @Inject constructor(
                     }
                     // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod (staré stažení bez
                     // těchto polí) → offline detail je ukáže i u „Divokých kár". Ignoruje ne-stažené.
-                    feed.episodes.forEach { ep ->
-                        offline.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.date), loadedFor?.let { "rss:$it" })
+                    // PERF (2026-08-15, WATCHDOG incident): [OfflineDownloadManager.backfillMeta] serializuje
+                    // CELÝ stažený index (gson.toJson) při každé změně — na hlavním vlákně to appku na
+                    // několik sekund zablokuje (nejde recomposovat, dokud smyčka nedoběhne). Přesunuto na IO.
+                    withContext(Dispatchers.IO) {
+                        feed.episodes.forEach { ep ->
+                            offline.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.date), loadedFor?.let { "rss:$it" })
+                        }
                     }
                 }
                 .onFailure {
@@ -103,6 +110,12 @@ class RssPodcastViewModel @Inject constructor(
 
     /** Stabilní klíč epizody pro frontu i offline index. */
     fun episodeKey(ep: RssEpisode): String = "rss:${ep.id}"
+
+    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
+    fun resetPosition(ep: RssEpisode) = resumeStore.clear(episodeKey(ep))
+
+    /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
+    fun markFinished(ep: RssEpisode) = resumeStore.markFinished(episodeKey(ep))
 
     /**
      * Mapování RSS epizody na položku fronty (LEVER): přímá enclosure URL, bez ABS session.

@@ -219,7 +219,7 @@ interface UploaderRemoteDataSource {
 
     // PRESET (SHW-65) — dynamický správce zdrojů Poslechu: sdílený store + hledání podle názvu + RSS epizody
     suspend fun listSources(baseUrl: String, sessionCookie: String): List<PodcastSource>
-    suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?): List<PodcastSource>
+    suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?, addedBy: String? = null): List<PodcastSource>
     suspend fun removeSource(baseUrl: String, sessionCookie: String, id: String): List<PodcastSource>
     suspend fun searchSources(baseUrl: String, sessionCookie: String, query: String, type: String = "all", limit: Int = 8): List<SourceSearchResult>
     /** RSS podcast feed → epizody (přímé audio enclosure URL — ExoPlayer hraje rovnou, nic se neukládá). */

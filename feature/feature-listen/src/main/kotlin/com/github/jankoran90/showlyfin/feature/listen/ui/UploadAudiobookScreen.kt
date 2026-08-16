@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -77,6 +78,9 @@ fun UploadAudiobookScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // F2d: upload může doběhnout (i probíhat) na pozadí ve službě — při otevření obrazovky
+    // přebere se aktuální stav z manageru.
+    LaunchedEffect(Unit) { viewModel.syncFromManager() }
 
     val selectedUris = remember { mutableStateListOf<Uri>() }
     var firstFileName by remember { mutableStateOf<String?>(null) }

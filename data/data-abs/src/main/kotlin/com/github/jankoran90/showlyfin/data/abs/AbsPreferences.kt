@@ -101,10 +101,21 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_PERSIST_QUEUE, true)
         set(value) = prefs.edit { putBoolean(KEY_PERSIST_QUEUE, value) }
 
-    /** Serializovaná fronta (JSON) — perzistence napříč restarty. */
+    /** Serializovaná fronta (JSON) — perzistence napříč restarty. LEGACY globální slot (2026-08-16
+     * nahrazeno per-profil [queueJsonFor]/[setQueueJsonFor]) — ponecháno jen jako jednorázový
+     * migrační zdroj pro profil Honza (viz `loadPersistedQueue`), nový kód ho jinak nezapisuje. */
     var queueJson: String
         get() = prefs.getString(KEY_QUEUE_JSON, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_QUEUE_JSON, value) }
+
+    /** Fronta přehrávání PER PROFIL (2026-08-16, user „vse per profile") — každý profil (Honza/Nel/
+     * Děti) má vlastní frontu, ať Nel po přepnutí nenajde rozehrané věci Honzy. */
+    fun queueJsonFor(profileUuid: String): String =
+        prefs.getString("$KEY_QUEUE_JSON.$profileUuid", "").orEmpty()
+
+    fun setQueueJsonFor(profileUuid: String, value: String) {
+        prefs.edit { putString("$KEY_QUEUE_JSON.$profileUuid", value) }
+    }
 
     // ──────────────── Stahování ────────────────
 

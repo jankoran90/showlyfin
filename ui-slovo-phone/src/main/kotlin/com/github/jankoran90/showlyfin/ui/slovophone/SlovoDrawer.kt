@@ -19,25 +19,40 @@ import androidx.compose.ui.unit.dp
  * Slovo (EXCISE/SHW-103) — postranní menu poslechové appky (zrcadlo
  * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmyDrawer]). Poslech/Objevit/Zdroje + oddělené
  * Nastavení dole. Scrollovatelné (na škálovaných displejích se položky nesmí uříznout). Vzhled z motivu.
+ *
+ * Profily (2026-08-15, user „děti nebudou mít Zdroje a Objevit") — dětský profil dostane JEN
+ * Poslech (obsahuje sloučenou audioknihy+podcasty sekci) + Nastavení + Profil; [isAdmin] filtruje
+ * „Objevit"/„Zdroje" pryč (ty jsou dospělácká vrstva — správa vlastních RSS/YouTube zdrojů).
+ * User (2026-08-16 13:49, „nech zobrazit Domů sekci i dětem, ať se můžou rychle vracet k
+ * rozposlouchaným věcem") — Domů PŘIBYLO zpět i dětem ([HomeViewModel] samo správně omezuje obsah
+ * na dětskou knihovnu/schválené zdroje, viz `kidsOnlyLibraryIds`/`visibleForKidsSourceKeys`).
  */
 @Composable
 fun SlovoDrawer(
     current: SlovoSection,
+    isAdmin: Boolean,
+    /** Jméno aktivního profilu (2026-08-15, user „profil v sidebaru není napsaný") — vidět na první pohled. */
+    activeProfileName: String?,
     onSelect: (SlovoSection) -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(
-                text = "Slovo",
+                text = if (activeProfileName != null) "Slovo · $activeProfileName" else "Slovo",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 20.dp, top = 28.dp, bottom = 16.dp),
             )
             DrawerSectionLabel("Poslech")
-            SlovoShellPrefs.drawerOrder.forEach { DrawerRow(it, current, onSelect) }
+            // User (2026-08-16 17:06, „Domů bude v sidebaru jedna sekce, Poslech se swipne vedle") —
+            // Poslech už NENÍ položka draweru: je to 2. strana pageru sekce Domů.
+            val poslechSections =
+                if (isAdmin) SlovoShellPrefs.drawerOrder else listOf(SlovoSection.DOMU)
+            poslechSections.forEach { DrawerRow(it, current, onSelect) }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))
             DrawerRow(SlovoSection.NASTAVENI, current, onSelect)
+            DrawerRow(SlovoSection.PROFIL, current, onSelect)
         }
     }
 }

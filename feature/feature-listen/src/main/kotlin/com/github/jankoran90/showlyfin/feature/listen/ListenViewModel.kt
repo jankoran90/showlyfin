@@ -1,5 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import android.content.Context
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
@@ -11,9 +13,12 @@ import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import android.net.Uri
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.toAudiobook
+import com.github.jankoran90.showlyfin.feature.listen.service.AudiobookBatchDownloadService
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
+import com.github.jankoran90.showlyfin.data.uploader.AudiobookOwnershipRepository
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -47,8 +52,10 @@ class ListenViewModel @Inject constructor(
     private val connectivity: ConnectivityObserver,
     private val profileRepository: ProfileRepository,
     private val sourcesRepo: PodcastSourcesRepository,
+    private val audiobookOwnership: AudiobookOwnershipRepository,
     private val linkStore: com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore,
     private val absPrefs: AbsPreferences,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     // TWINE (SHW-74 / plán F7): propojení zdrojů „týž pořad jako audio+video". Lokální, reaktivní.
@@ -67,6 +74,149 @@ class ListenViewModel @Inject constructor(
     // ───────────────────────── WEFT (SHW-75/W5): per-profil skrytí pořadů ─────────────────────────
     /** Config aktivního profilu (reaktivně) → Sledované/Timeline se přefiltrují při změně skrytí. */
     val profileConfig = profileRepository.activeConfig
+
+    /** Profily (2026-08-15) — aktivní profil (`isAdmin` rozhoduje dospělý/dětský vzhled sekce Poslech). */
+    val activeProfile = profileRepository.activeProfile
+
+    /**
+     * User (2026-08-15) „na kartě podcastu při long pressu možnost ukázat u dětí" — reaktivně
+     * skrytí podcastů PRO DĚTSKÝ profil (první ne-admin profil; generické napříč appkami s 2
+     * profily, ne natvrdo Slovo UUID — ty žijí výš v `ui-slovo-phone`, sem by šel cyklus).
+     */
+    val kidsHiddenPodcastIds: StateFlow<Set<String>> = profileRepository.observeAll()
+        .map { profiles ->
+            profiles.firstOrNull { !it.isAdmin }
+                ?.let { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).hiddenPodcastIds }
+                .orEmpty()
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /** Admin (Dospělý) — přepne, jestli podcast [podcastId] vidí dětský profil. No-op bez dětského profilu. */
+    fun setPodcastVisibleForKids(podcastId: String, visible: Boolean) {
+        viewModelScope.launch {
+            val kids = profileRepository.getAll().firstOrNull { !it.isAdmin } ?: return@launch
+            profileRepository.updateConfig(kids.id) { cfg ->
+                cfg.copy(
+                    hiddenPodcastIds = if (visible) cfg.hiddenPodcastIds - podcastId else cfg.hiddenPodcastIds + podcastId,
+                )
+            }
+        }
+    }
+
+    /**
+     * SLOVO-KIDS-EPISODE — reaktivně schválené vlastní zdroje (RSS/YouTube/ČT) PRO DĚTSKÝ profil
+     * (whitelist [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.visibleForKidsSourceKeys]).
+     * Vzor [kidsHiddenPodcastIds], ale opačná sémantika (whitelist, ne blacklist).
+     */
+    val kidsVisibleSourceKeys: StateFlow<Set<String>> = profileRepository.observeAll()
+        .map { profiles ->
+            profiles.firstOrNull { !it.isAdmin }
+                ?.let { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).visibleForKidsSourceKeys }
+                .orEmpty()
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /**
+     * Admin (Dospělý) — přepne, jestli vlastní zdroj (klíče `type:ref`, u sloučeného páru všichni
+     * členové) vidí dětský profil. Whitelist → visible=true PŘIDÁ klíče, false je odebere. No-op bez
+     * dětského profilu.
+     */
+    fun setSourceVisibleForKids(keys: Set<String>, visible: Boolean) {
+        if (keys.isEmpty()) return
+        viewModelScope.launch {
+            val kids = profileRepository.getAll().firstOrNull { !it.isAdmin } ?: return@launch
+            profileRepository.updateConfig(kids.id) { cfg ->
+                val s = cfg.visibleForKidsSourceKeys.toMutableSet()
+                    .also { if (visible) it.addAll(keys) else it.removeAll(keys) }
+                cfg.copy(visibleForKidsSourceKeys = s)
+            }
+        }
+    }
+
+    /**
+     * PROFIL (2026-08-16, user „Honza muze dat zobrazit podcast uzivateli Nel a naopak") — ostatní
+     * DOSPĚLÉ profily (bez mě, bez Dětí — ty mají vlastní whitelist [kidsVisibleSourceKeys]/
+     * [setSourceVisibleForKids]) → cíle pro „Sdílet s…" v kontext menu karty zdroje.
+     */
+    val otherAdultProfiles: StateFlow<List<com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity>> =
+        profileRepository.observeAll()
+            .combine(activeProfile) { profiles, active ->
+                profiles.filter { it.isAdmin && it.id != active?.id }
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * User (2026-08-16 14:42, „Sdílet s Nel u dětské knihy nedává smysl") — vzor [HomeViewModel.kidsLibraryIds].
+     * Vlastnictví/sdílení se knih z čistě dětské ABS knihovny netýká.
+     */
+    val kidsLibraryIds: StateFlow<Set<String>> =
+        profileRepository.observeAll()
+            .map { profiles ->
+                profiles.filterNot { it.isAdmin }
+                    .flatMap { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).absLibraryWhitelist.orEmpty() }
+                    .toSet()
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /**
+     * true = zdroj (klíč `type:ref`, u sloučeného páru kterýkoli z [keys]) je nasdílený profilu
+     * [target] (viz [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.sharedSourceKeys]).
+     */
+    fun isSourceSharedWith(keys: Set<String>, target: com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity): Boolean {
+        val cfg = com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(target.configJson)
+        return keys.any { it in cfg.sharedSourceKeys }
+    }
+
+    /** Nasdílí/odebere sdílení zdroje ([keys] = `type:ref`, u sloučeného páru všichni členové) profilu [targetId]. */
+    fun setSourceSharedWith(keys: Set<String>, targetId: Long, shared: Boolean) {
+        if (keys.isEmpty()) return
+        viewModelScope.launch {
+            profileRepository.updateConfig(targetId) { cfg ->
+                val s = cfg.sharedSourceKeys.toMutableSet()
+                    .also { if (shared) it.addAll(keys) else it.removeAll(keys) }
+                cfg.copy(sharedSourceKeys = s)
+            }
+        }
+    }
+
+    /** PROFIL (2026-08-16) — audiokniha (vzor [isSourceSharedWith], klíč = ABS itemId). */
+    fun isBookSharedWith(itemId: String, target: com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity): Boolean =
+        itemId in com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(target.configJson).sharedAudiobookIds
+
+    /**
+     * User (2026-08-16, „chci vidět na long-pressu, jestli je to sdíleno a s kým / kdo jiný to
+     * má v knihovně") — jméno profilu k `profileUuid` ("já" pro aktivní profil), jen dospělí.
+     */
+    fun adultProfileName(uuid: String?): String? {
+        if (uuid.isNullOrBlank()) return null
+        if (uuid == activeProfile.value?.profileUuid) return "já"
+        return otherAdultProfiles.value.firstOrNull { it.profileUuid == uuid }?.name
+    }
+
+    /** Vlastník (profileUuid) zdroje podle klíče `type:ref` — pro info řádek sdílení sloučených karet. */
+    fun ownerOfSourceKey(key: String): String? =
+        sourcesRepo.sources.value.firstOrNull { "${it.type}:${it.ref}" == key }?.addedBy
+
+    /** Vlastník (profileUuid) audioknihy podle ABS itemId — pro info řádek sdílení. */
+    fun ownerOfBook(itemId: String): String? = audiobookOwnership.ownership.value[itemId]
+
+    /** Postaví text „V knihovně: …" pro sdílecí sheet (owner + komu je nasdíleno kromě vlastníka). */
+    fun ownershipInfoLine(ownerUuid: String?, sharedWithProfiles: List<com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity>): String {
+        val owner = adultProfileName(ownerUuid) ?: "já"
+        val sharedNames = sharedWithProfiles.mapNotNull { it.name.takeIf { n -> n.isNotBlank() } }
+        return if (sharedNames.isEmpty()) "V knihovně: $owner"
+        else "V knihovně: $owner · sdíleno s: ${sharedNames.joinToString(", ")}"
+    }
+
+    fun setBookSharedWith(itemId: String, targetId: Long, shared: Boolean) {
+        viewModelScope.launch {
+            profileRepository.updateConfig(targetId) { cfg ->
+                val s = cfg.sharedAudiobookIds.toMutableSet()
+                    .also { if (shared) it.add(itemId) else it.remove(itemId) }
+                cfg.copy(sharedAudiobookIds = s)
+            }
+        }
+    }
 
     /** Klíče skrytí karty knihovny: sloučená = všichni členové, samostatný zdroj = `type:ref`. */
     fun followingKeysForGroup(memberKeys: Collection<String>): Set<String> = memberKeys.toSet()
@@ -395,16 +545,82 @@ class ListenViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Profily (2026-08-15) — dětský profil nemá záložku Podcasty ([setMode] se nikdy nezavolá s
+     * PODCASTS), ale [ListenUiState.podcasts] (admin-schválené) v mergnuté sekci Poslech potřebuje.
+     * Idempotentní no-op, když už jsou načtené.
+     */
+    fun ensurePodcastsLoaded() {
+        if (!_uiState.value.podcastsLoaded) loadPodcastLibraries()
+    }
+
+    /** Stáhne jednu audioknihu (long-press menu v gridu — "Stáhnout"). */
+    fun downloadBook(book: Audiobook) {
+        audiobookDownloads.download(book.id, book.title, book.author, book.coverUrl)
+    }
+
+    /**
+     * User (2026-08-15 16:49) — „Ukončit poslech" (long-press menu): smaže progress.
+     * User (2026-08-16 13:19, „chci live akci, ať je to hned po potvrzení provedené a vidím změnu")
+     * — knize se progress vynuluje v `_uiState.books` OKAMŽITĚ, server volání + [refresh] na pozadí.
+     */
+    fun resetBookProgress(book: Audiobook) {
+        _uiState.update { s ->
+            s.copy(books = s.books.map { if (it.id == book.id) it.copy(progress = 0.0, currentTimeSec = 0.0) else it })
+        }
+        viewModelScope.launch {
+            repo.endListening(book.id, book.progressId)
+            refresh()
+        }
+    }
+
+    /** User (2026-08-15 16:49) — „Označit jako poslechnuté" (long-press menu), viz [resetBookProgress]. */
+    fun markBookFinished(book: Audiobook) {
+        _uiState.update { s ->
+            s.copy(books = s.books.map { if (it.id == book.id) it.copy(isFinished = true, progress = 1.0) else it })
+        }
+        viewModelScope.launch {
+            repo.setBookFinished(book.id, finished = true)
+            refresh()
+        }
+    }
+
+    /**
+     * "Stáhnout vše" — všechny knihy aktuálně viditelné police, co ještě nejsou stažené. User
+     * (2026-08-15) „stahuje se i na pozadí?" — dávka může trvat déle než appka zůstane v popředí,
+     * proto foreground služba (vzor upload F2d), ať Android proces nezabije.
+     */
+    fun downloadAllBooks() {
+        audiobookDownloads.downloadAll(_uiState.value.books)
+        ContextCompat.startForegroundService(context, AudiobookBatchDownloadService.intent(context))
+    }
+
+    /** Souhrnný postup "Stáhnout vše" (null = žádná dávka neběží) — pro UI "staženo X/Y". */
+    val batchDownloadProgress = audiobookDownloads.batchProgress
+
     fun selectLibrary(libraryId: String) {
         if (libraryId == _uiState.value.selectedLibraryId) return
         _uiState.update { it.copy(selectedLibraryId = libraryId) }
         viewModelScope.launch { loadBooks(libraryId) }
     }
 
+    /**
+     * PROFIL (2026-08-16, user „audioknihy taky per profil, nahrávám je já Honza") — Dospělý vidí
+     * jen svoje nahrané audioknihy + co mu kdo nasdílel (legacy bez záznamu vlastnictví = viditelné
+     * všem). Děti mají VLASTNÍ ABS knihovnu (`absLibraryWhitelist`), tenhle koncept se jich netýká.
+     */
+    private suspend fun filterVisibleBooks(books: List<Audiobook>): List<Audiobook> {
+        val active = profileRepository.activeProfile.value ?: return books
+        if (!active.isAdmin) return books
+        audiobookOwnership.refresh()
+        val shared = profileRepository.activeConfig.value.sharedAudiobookIds
+        return books.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, shared) }
+    }
+
     private suspend fun loadBooks(libraryId: String) {
         _uiState.update { it.copy(isLoading = true, error = null) }
         runCatching { repo.getAudiobooks(libraryId) }
-            .onSuccess { books -> _uiState.update { it.copy(isLoading = false, books = books) } }
+            .onSuccess { books -> _uiState.update { it.copy(isLoading = false, books = filterVisibleBooks(books)) } }
             .onFailure { e ->
                 Timber.w(e, "[Listen] knihy selhaly")
                 val offline = downloadedBooks()

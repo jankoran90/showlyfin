@@ -44,7 +44,7 @@ class MergedPodcastViewModel @Inject constructor(
     private val offline: OfflineDownloadManager,
     private val linkStore: PodcastLinkStore,
     private val naTv: NaTvService,
-    resumeStore: DirectResumeStore,
+    private val resumeStore: DirectResumeStore,
     @javax.inject.Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -114,8 +114,12 @@ class MergedPodcastViewModel @Inject constructor(
             // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvých feedů (parita
             // s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes sloučený pohled.
             // Ne-stažené epizody backfillMeta ignoruje (levný no-op).
-            merged.forEach { ep ->
-                offline.backfillMeta(ep.key, ep.description, parseEpisodeDateMs(ep.date), members.firstOrNull { it.type == "rss" }?.let { "rss:${it.ref}" })
+            // PERF (2026-08-15, WATCHDOG incident): backfillMeta serializuje CELÝ stažený index na hlavním
+            // vlákně při každé změně → přesunuto na IO (viz RssPodcastViewModel — stejný fix).
+            withContext(Dispatchers.IO) {
+                merged.forEach { ep ->
+                    offline.backfillMeta(ep.key, ep.description, parseEpisodeDateMs(ep.date), members.firstOrNull { it.type == "rss" }?.let { "rss:${it.ref}" })
+                }
             }
         }
     }
@@ -161,6 +165,12 @@ class MergedPodcastViewModel @Inject constructor(
         val a = item.audio ?: return
         connection.enqueue(toQueued(a), atFront = atFront)
     }
+
+    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
+    fun resetPosition(item: PodcastPairing.MergedEpisode) = resumeStore.clear(item.key)
+
+    /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
+    fun markFinished(item: PodcastPairing.MergedEpisode) = resumeStore.markFinished(item.key)
 
     /** VIDEO URL pro přehrání i cast na TV — jen u epizody s video verzí. CLARITY: 360 progresiv / 720·max HLS. */
     fun videoUrl(item: PodcastPairing.MergedEpisode): String? {

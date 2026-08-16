@@ -49,10 +49,14 @@ class PodcastSourcesRepository @Inject constructor(
             .onFailure { Timber.w(it, "[PRESET] načtení zdrojů selhalo") }
     }
 
-    /** Přidá zdroj (sdíleně na server) a aktualizuje flow. Vrací true při úspěchu. */
-    suspend fun add(type: String, ref: String, title: String, thumbnail: String?): Boolean {
+    /**
+     * Přidá zdroj (sdíleně na server) a aktualizuje flow. Vrací true při úspěchu.
+     * [addedBy] = profileUuid profilu, co zdroj přidává (PROFIL, 2026-08-16) — volající (VM) ho zná
+     * z aktivního profilu; repo samo profil nezná (nižší datová vrstva, žádná závislost na core-data).
+     */
+    suspend fun add(type: String, ref: String, title: String, thumbnail: String?, addedBy: String? = null): Boolean {
         if (!isConfigured) return false
-        return runCatching { remote.addSource(baseUrl, cookie, type, ref, title, thumbnail) }
+        return runCatching { remote.addSource(baseUrl, cookie, type, ref, title, thumbnail, addedBy) }
             .onSuccess { _sources.value = it.normalized() }
             .onFailure { Timber.w(it, "[PRESET] přidání zdroje selhalo") }
             .isSuccess

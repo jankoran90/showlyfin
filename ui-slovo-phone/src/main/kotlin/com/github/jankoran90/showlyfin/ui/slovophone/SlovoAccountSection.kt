@@ -13,6 +13,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,10 +27,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
- * Slovo (EXCISE/SHW-103, Fáze A) — sekce „Účet / Audioknihy" v Nastavení: přihlášení k Audiobookshelf
- * serveru (single-user). Bez přihlášení = formulář URL+jméno+heslo; po přihlášení = stav + Odhlásit.
- * Login se ukládá cross-device ([SlovoSettingsViewModel]). Podcast zdroje (RSS/YouTube/ČT) jsou v sekci
- * ZDROJE (server účet); tady jen audioknihy z ABS.
+ * Slovo (EXCISE/SHW-103, Fáze A; 2026-08-16 rozseknuto na Honza/Nel) — sekce „Účet / Audioknihy"
+ * v Nastavení: přihlášení k Audiobookshelf serveru PRO AKTIVNÍ PROFIL. Bez přihlášení = formulář
+ * URL+jméno+heslo (URL předvyplněná z jiného profilu, pokud appka nějaký zná); po přihlášení = stav
+ * + Odhlásit. Login se ukládá cross-device, per profil ([SlovoSettingsViewModel]). Podcast zdroje
+ * (RSS/YouTube/ČT) jsou v sekci ZDROJE (server účet); tady jen audioknihy z ABS.
  */
 @Composable
 internal fun SlovoAccountSection(
@@ -58,6 +60,7 @@ internal fun SlovoAccountSection(
             AbsLoginForm(
                 loading = state.absLoading,
                 error = state.absError,
+                initialUrl = state.knownServerUrl.orEmpty(),
                 onLogin = { url, user, pass -> viewModel.absLogin(url, user, pass) },
             )
         }
@@ -68,11 +71,15 @@ internal fun SlovoAccountSection(
 private fun AbsLoginForm(
     loading: Boolean,
     error: String?,
+    initialUrl: String = "",
     onLogin: (String, String, String) -> Unit,
 ) {
-    var url by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf(initialUrl) }
     var user by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
+    // knownServerUrl (2026-08-16) dorazí async z VM (DB čtení) — může přijít PO první kresbě formuláře.
+    // Dopiš ho, jen dokud uživatel sám nic nenapsal, ať mu předvyplnění nepřepíše rozepsaný vstup.
+    LaunchedEffect(initialUrl) { if (url.isBlank() && initialUrl.isNotBlank()) url = initialUrl }
 
     OutlinedTextField(
         value = url,

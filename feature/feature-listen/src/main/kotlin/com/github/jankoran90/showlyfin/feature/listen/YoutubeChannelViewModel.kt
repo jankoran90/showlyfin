@@ -17,10 +17,12 @@ import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -39,7 +41,7 @@ class YoutubeChannelViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val naTv: NaTvService,
-    resumeStore: DirectResumeStore,
+    private val resumeStore: DirectResumeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -92,8 +94,12 @@ class YoutubeChannelViewModel @Inject constructor(
                     // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvého feedu
                     // (parita s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes YouTube.
                     // Ne-stažené epizody backfillMeta ignoruje (levný no-op).
-                    feed.entries.forEach { ep ->
-                        offline.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.uploadDate), loadedFor?.let { "youtube:$it" })
+                    // PERF (2026-08-15, WATCHDOG incident): backfillMeta serializuje CELÝ stažený index
+                    // na hlavním vlákně při každé změně → přesunuto na IO (viz RssPodcastViewModel).
+                    withContext(Dispatchers.IO) {
+                        feed.entries.forEach { ep ->
+                            offline.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.uploadDate), loadedFor?.let { "youtube:$it" })
+                        }
                     }
                 }
                 .onFailure {
@@ -109,6 +115,12 @@ class YoutubeChannelViewModel @Inject constructor(
 
     /** Stabilní klíč epizody pro frontu i offline index (audio). */
     fun episodeKey(ep: YtEpisode): String = "yt:${ep.id}"
+
+    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
+    fun resetPosition(ep: YtEpisode) = resumeStore.clear(episodeKey(ep))
+
+    /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
+    fun markFinished(ep: YtEpisode) = resumeStore.markFinished(episodeKey(ep))
 
     /**
      * Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session.

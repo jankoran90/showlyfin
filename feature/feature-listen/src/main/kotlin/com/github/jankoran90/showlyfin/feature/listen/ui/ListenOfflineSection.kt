@@ -217,6 +217,23 @@ private fun episodesWord(n: Int): String = when {
 }
 
 /**
+ * Seskupí stažené epizody dle pořadu (subtitle = název pořadu; fallback zdroj) → jedna karta na pořad,
+ * nejnovější epizoda nahoře. Vyňato z [OfflineDownloadedPodcasts] jen pro čitelnost (anti-monolit).
+ */
+private fun buildOfflineShows(downloads: List<OfflineDownload>): List<OfflinePodcastShow> =
+    downloads
+        .groupBy { it.subtitle?.takeIf { s -> s.isNotBlank() } ?: it.sourceLabel }
+        .map { (title, eps) ->
+            OfflinePodcastShow(
+                title = title,
+                poster = eps.firstNotNullOfOrNull { it.posterPath ?: it.posterUrl },
+                sourceLabel = eps.first().sourceLabel,
+                episodes = eps.sortedByDescending { it.publishedAt ?: it.addedAt },
+            )
+        }
+        .sortedBy { it.title.lowercase(Locale("cs")) }
+
+/**
  * Offline sekce Podcasty — stažené epizody jako GRID KARET POŘADŮ (parita s Audioknihy/Sledované grid),
  * NE plochý seznam. Karta = jeden pořad (obálka + počet stažených), klik → [OfflinePodcastDetailScreen]
  * se staženými epizodami toho pořadu. Nahrazuje online taby (Timeline/Sledované/Objev), které bez sítě
@@ -234,21 +251,8 @@ internal fun OfflineDownloadedPodcasts(
         )
         return
     }
-    // Seskup stažené epizody dle pořadu (subtitle = název pořadu; fallback zdroj) → jedna karta na pořad.
     // RESONANCE (SHW-81): epizody NEJNOVĚJŠÍ NAHOŘE dle data vydání (fallback datum stažení u starých).
-    val shows = remember(podcastDownloads) {
-        podcastDownloads
-            .groupBy { it.subtitle?.takeIf { s -> s.isNotBlank() } ?: it.sourceLabel }
-            .map { (title, eps) ->
-                OfflinePodcastShow(
-                    title = title,
-                    poster = eps.firstNotNullOfOrNull { it.posterPath ?: it.posterUrl },
-                    sourceLabel = eps.first().sourceLabel,
-                    episodes = eps.sortedByDescending { it.publishedAt ?: it.addedAt },
-                )
-            }
-            .sortedBy { it.title.lowercase(Locale("cs")) }
-    }
+    val shows = remember(podcastDownloads) { buildOfflineShows(podcastDownloads) }
     var openShow by remember { mutableStateOf<OfflinePodcastShow?>(null) }
     var highlightKey by remember { mutableStateOf<String?>(null) }
 

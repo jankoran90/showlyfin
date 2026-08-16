@@ -21,14 +21,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -78,6 +83,14 @@ fun YoutubeChannelScreen(
     onOpenAudioPlayer: () -> Unit,
     // NAVIGATE (SHW-73): klíč epizody (`yt:…`) k zvýraznění + scrollu (z Timeline řádku / cover prokliku).
     highlightEpisodeKey: String? = null,
+    // SLOVO-KIDS-EPISODE (2026-08-15) — dětský profil: vždy jen audio, video volby úplně skryté.
+    audioOnly: Boolean = false,
+    // SLOVO-KIDS-EPISODE — non-null = otevřeno JEN na jednu AUTO-detekovanou sérii (dětská cesta).
+    seriesFilter: String? = null,
+    // WATCHDOG — admin (Dospělý) dlouhým stiskem na kartě série „Zobrazit/Skrýt dětem".
+    isAdmin: Boolean = false,
+    kidsVisibleSeriesKeys: Set<String> = emptySet(),
+    onSetSeriesVisibleForKids: (key: String, visible: Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: YoutubeChannelViewModel = hiltViewModel(),
 ) {
@@ -91,12 +104,34 @@ fun YoutubeChannelScreen(
 
     LaunchedEffect(channel) { viewModel.load(channel) }
 
+    // SLOVO-KIDS-EPISODE / WATCHDOG — série stejným vzorem jako RssPodcastScreen.
+    val sourceKey = "youtube:$channel"
+    val filteredEpisodes = remember(state.episodes, seriesFilter) {
+        if (seriesFilter == null) state.episodes
+        else state.episodes.filter {
+            PodcastEpisodeSeriesGrouping.detectSeriesTitle(it.title)
+                ?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
+        }
+    }
+    val shelfItems = remember(filteredEpisodes, seriesFilter) {
+        if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
+    }
+    var expandedSeries by remember { mutableStateOf(setOf<String>()) }
+    var seriesForAction by remember {
+        mutableStateOf<PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup<YtEpisode>?>(null)
+    }
+    var seriesOnly by remember { mutableStateOf(false) }
+    val seriesOnlyGroups = remember(shelfItems) {
+        shelfItems?.filterIsInstance<PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup<YtEpisode>>()
+            ?.sortedByDescending { g -> PodcastEpisodeSeriesGrouping.latestDateMs(g.members) { it.uploadDate } ?: 0L }
+    }
+
     // NAVIGATE (SHW-73): jakmile se epizody načtou, jednorázově odscrolluj na zvýrazněnou epizodu.
     val listState = rememberLazyListState()
     var scrolledToHighlight by remember { mutableStateOf(false) }
-    LaunchedEffect(highlightEpisodeKey, state.episodes) {
-        if (!scrolledToHighlight && highlightEpisodeKey != null && state.episodes.isNotEmpty()) {
-            val idx = state.episodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
+    LaunchedEffect(highlightEpisodeKey, filteredEpisodes) {
+        if (!scrolledToHighlight && highlightEpisodeKey != null && filteredEpisodes.isNotEmpty()) {
+            val idx = filteredEpisodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
             if (idx >= 0) {
                 listState.scrollToItem(idx)
                 scrolledToHighlight = true
@@ -124,6 +159,16 @@ fun YoutubeChannelScreen(
                 },
                 actions = {
                     val chTitle = state.channelTitle ?: channelTitle
+                    // WATCHDOG — „Jen série" přepínač (jen admin, neserials-filtrovaný pohled).
+                    if (seriesFilter == null && !seriesOnlyGroups.isNullOrEmpty()) {
+                        IconButton(onClick = { seriesOnly = !seriesOnly }) {
+                            Icon(
+                                Icons.Default.Layers,
+                                contentDescription = if (seriesOnly) "Zobrazit vše" else "Jen série",
+                                tint = if (seriesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     IconButton(onClick = {
                         ShareLinks.share(context, chTitle, ShareLinks.youtube(channel, chTitle))
                     }) {
@@ -133,13 +178,72 @@ fun YoutubeChannelScreen(
             )
         },
     ) { padding ->
+        @Composable
+        fun EpisodeRowFor(ep: YtEpisode) {
+            val key = viewModel.episodeKey(ep)
+            val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
+            // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
+            val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
+            val mark = resumeMarks[key]
+            val isFinished = mark?.isFinished == true
+            val progress: Float? = when {
+                isCurrent && playerState.durationMs > 0 ->
+                    (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
+                mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
+                else -> null
+            }
+            val canResume = !isCurrent && mark != null && !isFinished
+            val remainingLabel = if (canResume && mark.durMs > 0)
+                "zbývá ${formatDuration((mark.durMs - mark.posMs).coerceAtLeast(0L) / 1000.0)}" else null
+            EpisodeRow(
+                title = ep.title,
+                thumbnail = ep.thumbnail,
+                durationSec = ep.duration,
+                uploadDate = ep.uploadDate,
+                description = ep.description,
+                downloaded = offlineStates[key]?.status == OfflineStatus.DOWNLOADED,
+                isCurrent = isCurrent,
+                isPlaying = isCurrent && playerState.isPlaying,
+                progress = progress,
+                canResume = canResume,
+                remainingLabel = remainingLabel,
+                highlighted = isHighlighted,
+                showVideo = !audioOnly,
+                isFinished = isFinished,
+                onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
+                onAudio = {
+                    // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
+                    if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep)
+                    onOpenAudioPlayer()
+                },
+                onMore = { actionEpisode = ep },
+                onEndListening = { viewModel.resetPosition(ep) },
+            )
+        }
+
+        @Composable
+        fun SeriesRowFor(group: PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup<YtEpisode>) {
+            val latestMs = PodcastEpisodeSeriesGrouping.latestDateMs(group.members) { it.uploadDate }
+            PodcastSeriesRow(
+                title = group.title,
+                memberCount = group.members.size,
+                latestDateLabel = latestMs?.let { PodcastEpisodeSeriesGrouping.formatSeriesDate(it) },
+                thumbnail = group.members.firstOrNull()?.thumbnail,
+                expanded = group.slug in expandedSeries,
+                onClick = {
+                    expandedSeries = if (group.slug in expandedSeries) expandedSeries - group.slug else expandedSeries + group.slug
+                },
+                onLongClick = if (isAdmin) ({ seriesForAction = group }) else null,
+            )
+        }
+
         when {
-            state.isLoading && state.episodes.isEmpty() ->
+            state.isLoading && filteredEpisodes.isEmpty() ->
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
 
-            state.error != null && state.episodes.isEmpty() ->
+            state.error != null && filteredEpisodes.isEmpty() ->
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 }
@@ -154,45 +258,48 @@ fun YoutubeChannelScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(state.episodes, key = { it.id }) { ep ->
-                    val key = viewModel.episodeKey(ep)
-                    val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
-                    // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
-                    val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
-                    val mark = resumeMarks[key]
-                    val progress: Float? = when {
-                        isCurrent && playerState.durationMs > 0 ->
-                            (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
-                        mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
-                        else -> null
+                if (shelfItems == null) {
+                    items(filteredEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
+                } else if (seriesOnly) {
+                    seriesOnlyGroups.orEmpty().forEach { group ->
+                        item(key = "series_${group.slug}") { SeriesRowFor(group) }
+                        if (group.slug in expandedSeries) {
+                            items(group.members, key = { it.id }) { ep -> EpisodeRowFor(ep) }
+                        }
                     }
-                    val canResume = !isCurrent && mark != null
-                    val remainingLabel = if (canResume && mark.durMs > 0)
-                        "zbývá ${formatDuration((mark.durMs - mark.posMs).coerceAtLeast(0L) / 1000.0)}" else null
-                    EpisodeRow(
-                        title = ep.title,
-                        thumbnail = ep.thumbnail,
-                        durationSec = ep.duration,
-                        uploadDate = ep.uploadDate,
-                        description = ep.description,
-                        downloaded = offlineStates[key]?.status == OfflineStatus.DOWNLOADED,
-                        isCurrent = isCurrent,
-                        isPlaying = isCurrent && playerState.isPlaying,
-                        progress = progress,
-                        canResume = canResume,
-                        remainingLabel = remainingLabel,
-                        highlighted = isHighlighted,
-                        onVideo = { onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) },
-                        onAudio = {
-                            // L2b: ťuk vždy ROVNOU spustí přehrávání (current=resume bez reloadu, jinak nová epizoda).
-                            if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(ep)
-                            onOpenAudioPlayer()
-                        },
-                        onMore = { actionEpisode = ep },
-                    )
+                } else {
+                    shelfItems.forEach { shelfItem ->
+                        when (shelfItem) {
+                            is PodcastEpisodeSeriesGrouping.EpisodeShelfItem.Standalone ->
+                                item(key = shelfItem.item.id) { EpisodeRowFor(shelfItem.item) }
+
+                            is PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup -> {
+                                item(key = "series_${shelfItem.slug}") { SeriesRowFor(shelfItem) }
+                                if (shelfItem.slug in expandedSeries) {
+                                    items(shelfItem.members, key = { it.id }) { ep -> EpisodeRowFor(ep) }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // WATCHDOG — admin dlouhý stisk na kartě AUTO-detekované série → Zobrazit/Skrýt dětem.
+    seriesForAction?.let { group ->
+        val seriesKey = PodcastEpisodeSeriesGrouping.buildSeriesKey(sourceKey, group.title)
+        val visibleToKids = seriesKey in kidsVisibleSeriesKeys
+        ListenEpisodeActionSheet(
+            title = group.title,
+            actions = listOf(
+                ListenEpisodeAction(
+                    if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
+                    if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
+                ) { onSetSeriesVisibleForKids(seriesKey, !visibleToKids) },
+            ),
+            onDismiss = { seriesForAction = null },
+        )
     }
 
     // LEVER (SHW-61) L2: sjednocené akční menu epizody (Do fronty / Sdílet) jako u ABS/RSS.
@@ -200,17 +307,22 @@ fun YoutubeChannelScreen(
         ListenEpisodeActionSheet(
             title = ep.title,
             // WEFT (SHW-75/W1): jednotné menu jako NaVýbornou/RSS — Přehrát · Video · Na TV · fronta×2 · …
-            actions = listOf(
+            // SLOVO-KIDS-EPISODE: dětský profil (audioOnly) = video volby se ani nenabídnou.
+            actions = listOfNotNull(
                 ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
                     viewModel.playAudio(ep); onOpenAudioPlayer()
                 },
-                ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
-                    onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail)
-                },
+                if (!audioOnly) {
+                    ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                        onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail)
+                    }
+                } else null,
                 // L4 (LEVER): VIDEO verze epizody na TV/box (jako film). U YouTube vždy dostupné (video).
-                ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
-                    viewModel.castVideoToTv(ep)
-                },
+                if (!audioOnly) {
+                    ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                        viewModel.castVideoToTv(ep)
+                    }
+                } else null,
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, atFront = true)
                 },
@@ -227,6 +339,20 @@ fun YoutubeChannelScreen(
                     onDownload = { viewModel.download(ep) },
                     onDelete = { viewModel.deleteOffline(ep) },
                 ),
+                // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
+                if (resumeMarks[viewModel.episodeKey(ep)] != null) {
+                    ListenEpisodeAction(
+                        Icons.Default.Close, "Ukončit poslech",
+                        confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
+                    ) { viewModel.resetPosition(ep) }
+                } else null,
+                // User (2026-08-16 12:51, „chci volbu, která označí jako poslechnuto") — parita s audioknihami.
+                if (resumeMarks[viewModel.episodeKey(ep)]?.isFinished != true) {
+                    ListenEpisodeAction(
+                        Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                        confirmMessage = "Epizoda se označí jako poslechnutá a zmizí z Domů z „Pokračovat“.",
+                    ) { viewModel.markFinished(ep) }
+                } else null,
             ),
             onDismiss = { actionEpisode = null },
         )
@@ -247,9 +373,12 @@ private fun EpisodeRow(
     canResume: Boolean,
     remainingLabel: String?,
     highlighted: Boolean,
+    showVideo: Boolean = true,
+    isFinished: Boolean = false,
     onVideo: () -> Unit,
     onAudio: () -> Unit,
     onMore: () -> Unit,
+    onEndListening: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -290,6 +419,14 @@ private fun EpisodeRow(
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
                         )
                     }
+                    if (isFinished) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Poslechnuto",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                        )
+                    }
                     if (meta.isNotBlank()) {
                         Text(
                             meta,
@@ -299,7 +436,7 @@ private fun EpisodeRow(
                         )
                     }
                 }
-                if (progress != null) {
+                if (progress != null && !isFinished) {
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 6.dp),
@@ -326,19 +463,25 @@ private fun EpisodeRow(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilledTonalButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Video", Modifier.padding(start = 6.dp))
+            if (showVideo) {
+                FilledTonalButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("Video", Modifier.padding(start = 6.dp))
+                }
             }
             val (audioIcon, audioLabel) = when {
                 isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
                 isCurrent -> Icons.Default.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
-                canResume -> Icons.Default.PlayArrow to "Pokračovat"
+                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
                 else -> Icons.Default.Headphones to "Poslech"
             }
             OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {
                 Icon(audioIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(audioLabel, Modifier.padding(start = 6.dp))
+            }
+            if (canResume && !isFinished && onEndListening != null) {
+                EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))

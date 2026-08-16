@@ -950,8 +950,8 @@ internal class UploaderApi(
     override suspend fun listSources(baseUrl: String, sessionCookie: String): List<PodcastSource> =
         service.listSources("${baseUrl.trimEnd('/')}/api/sources", cookieOf(sessionCookie)).sources
 
-    override suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?): List<PodcastSource> =
-        service.addSource("${baseUrl.trimEnd('/')}/api/sources", cookieOf(sessionCookie), AddSourceRequest(type, ref, title, thumbnail)).sources
+    override suspend fun addSource(baseUrl: String, sessionCookie: String, type: String, ref: String, title: String, thumbnail: String?, addedBy: String?): List<PodcastSource> =
+        service.addSource("${baseUrl.trimEnd('/')}/api/sources", cookieOf(sessionCookie), AddSourceRequest(type, ref, title, thumbnail, addedBy)).sources
 
     override suspend fun removeSource(baseUrl: String, sessionCookie: String, id: String): List<PodcastSource> =
         service.removeSource("${baseUrl.trimEnd('/')}/api/sources/${URLEncoder.encode(id, "UTF-8")}", cookieOf(sessionCookie)).sources

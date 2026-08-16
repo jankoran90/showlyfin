@@ -50,7 +50,16 @@ class DirectResumeStore @Inject constructor(
     @param:Named("traktPreferences") private val appPrefs: SharedPreferences,
 ) {
     /** Pozice + (známá) délka v ms pro jednu direct epizodu. [updatedAt] = čas posledního zápisu (epoch ms). */
-    data class Mark(val posMs: Long, val durMs: Long, val updatedAt: Long = 0L)
+    data class Mark(val posMs: Long, val durMs: Long, val updatedAt: Long = 0L) {
+        /**
+         * User (2026-08-16, „doposlouchané epizody ať se označí jako poslechnuté a zmizí z Domů,
+         * všude bude vidět znak poslechnuto") — než dohraje, [posMs] doběhne až k [durMs] (v rámci
+         * [FINISH_TAIL_MS] ocasu). Dřív se v tu chvíli mark celý SMAZAL ([clear]) → dohraná epizoda
+         * nebyla od nikdy-nespuštěné k rozeznání. Teď [save] mark místo smazání ponechá s pozicí na
+         * konci, takže „poslechnuto" jde poznat i zpětně (UI badge, filtr Domů).
+         */
+        val isFinished: Boolean get() = durMs > 0 && posMs >= durMs - FINISH_TAIL_MS
+    }
 
     private val legacyPrefs = context.getSharedPreferences("direct_resume", Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -89,22 +98,25 @@ class DirectResumeStore @Inject constructor(
     fun get(mediaId: String): Mark? = _marks.value[mediaId]
 
     /**
-     * Ulož pozici. Blízko konce ([FINISH_TAIL_MS]) = dohrané → [clear]. Pod [MIN_RESUME_MS] neukládáme.
+     * Ulož pozici. Pod [MIN_RESUME_MS] neukládáme. Blízko konce ([FINISH_TAIL_MS]) — 2026-08-16:
+     * mark se PONECHÁ (pozice zarovnaná na [durMs]), NE smaže jako dřív — jinak „poslechnuto" nešlo
+     * odlišit od „nikdy nespuštěno" (viz [Mark.isFinished]). Explicitní reset stále dělá [clear].
      * Optimisticky do [_marks] (snappy UI + [get]) + `dirty=1` do Room; server push řeší [syncNow] na lifecycle.
      */
     fun save(mediaId: String, posMs: Long, durMs: Long) {
         if (mediaId.isBlank()) return
-        if (durMs > 0 && posMs >= durMs - FINISH_TAIL_MS) { clear(mediaId); return }
         if (posMs < MIN_RESUME_MS) return
+        val finished = durMs > 0 && posMs >= durMs - FINISH_TAIL_MS
+        val effectivePos = if (finished) durMs else posMs
         val cur = _marks.value[mediaId]
-        if (cur != null && cur.posMs == posMs && cur.durMs == durMs) return
+        if (cur != null && cur.posMs == effectivePos && cur.durMs == durMs) return
         val now = System.currentTimeMillis()
-        _marks.update { it + (mediaId to Mark(posMs, durMs, now)) }
+        _marks.update { it + (mediaId to Mark(effectivePos, durMs, now)) }
         val key = activeKey() ?: return
         scope.launch {
             dao.upsert(
                 PlaybackStateEntity(
-                    profileKey = key, mediaKey = mediaId, posMs = posMs, durMs = durMs,
+                    profileKey = key, mediaKey = mediaId, posMs = effectivePos, durMs = durMs,
                     updatedAt = now, dirty = 1, deleted = 0,
                 ),
             )
@@ -116,6 +128,29 @@ class DirectResumeStore @Inject constructor(
         _marks.update { it - mediaId }
         val key = activeKey() ?: return
         scope.launch { dao.markDeleted(key, mediaId, System.currentTimeMillis()) }
+    }
+
+    /**
+     * User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako
+     * poslechnuté" pro direct epizody (analogie `AbsRepository.setBookFinished` u audioknih).
+     * Na rozdíl od [save] obchází [MIN_RESUME_MS] (pos=dur může být klidně 0..pár sekund).
+     * [durMsHint] = známá délka epizody (feed), použije se jen když ještě neexistuje mark s délkou.
+     */
+    fun markFinished(mediaId: String, durMsHint: Long = 0L) {
+        if (mediaId.isBlank()) return
+        val cur = _marks.value[mediaId]
+        val durMs = cur?.durMs?.takeIf { it > 0 } ?: durMsHint.takeIf { it > 0 } ?: DEFAULT_FINISH_DUR_MS
+        val now = System.currentTimeMillis()
+        _marks.update { it + (mediaId to Mark(durMs, durMs, now)) }
+        val key = activeKey() ?: return
+        scope.launch {
+            dao.upsert(
+                PlaybackStateEntity(
+                    profileKey = key, mediaKey = mediaId, posMs = durMs, durMs = durMs,
+                    updatedAt = now, dirty = 1, deleted = 0,
+                ),
+            )
+        }
     }
 
     /** Push dirty pozic + pull ze serveru (lifecycle: příchod appky do popředí / pauza přehrávání). */
@@ -172,6 +207,7 @@ class DirectResumeStore @Inject constructor(
     companion object {
         const val MIN_RESUME_MS = 5_000L
         const val FINISH_TAIL_MS = 15_000L
+        private const val DEFAULT_FINISH_DUR_MS = 60_000L
         private const val DOMAIN = "playback-state"
         private const val LEGACY_KEY = "marks"
         private const val KEY_MIGRATED = "substrate_playback_migrated"

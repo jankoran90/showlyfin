@@ -100,10 +100,15 @@ class PodcastTimelineViewModel @Inject constructor(
 
     init {
         // Reaktivně sleduj sdílený seznam zdrojů — přidání/odebrání → přepočti timeline.
+        // PROFIL (2026-08-16) — jen moje vlastní zdroje + co mi kdo sdílel (legacy addedBy==null
+        // zůstává viditelné všem). Timeline nesmí agregovat epizody ze zdrojů, co pro mě nejsou vidět.
         repo.sources
             .onEach { srcs ->
-                val changed = srcs.map { it.id } != sources.map { it.id }
-                sources = srcs
+                val myUuid = profileRepository.activeProfile.value?.profileUuid
+                val shared = profileRepository.activeConfig.value.sharedSourceKeys
+                val visible = srcs.filter { it.addedBy.isNullOrBlank() || it.addedBy == myUuid || "${it.type}:${it.ref}" in shared }
+                val changed = visible.map { it.id } != sources.map { it.id }
+                sources = visible
                 if (changed) load()
             }
             .launchIn(viewModelScope)
@@ -121,8 +126,9 @@ class PodcastTimelineViewModel @Inject constructor(
     /**
      * Agreguje epizody všech zdrojů paralelně, parsuje datum, odfiltruje starší než nastavený rozsah,
      * seřadí sestupně a rozdělí do časových bucketů. Epizody bez data (datum se NEPODAŘILO naparsovat)
-     * NESMÍ spadnout do „Dnes" — dostanou sentinel ([NO_DATE_TS]) a jdou do samostatného bucketu
-     * „Bez data" na KONEC timeline (cutoff rozsahu se na ně neaplikuje, ať nezmizí).
+     * dostanou sentinel ([NO_DATE_TS]) → [bucketize] je z Timeline VYNECHÁ ÚPLNĚ (user 2026-08-15:
+     * „bez data se v timeline nemaj zobrazovat"). Cutoff rozsahu se na ně neaplikuje (irelevantní,
+     * stejně nikam nespadnou), jen ať zbytečně nepropadnou filtrem dřív, než se odfiltrují jako sentinel.
      */
     private fun load() {
         loadJob?.cancel()
@@ -153,7 +159,7 @@ class PodcastTimelineViewModel @Inject constructor(
                                         sourceTitle = src.title,
                                         sourceType = src.type,
                                         sourceRef = src.ref,
-                                        // Bez data → sentinel: NIKDY do „Dnes", vždy do bucketu „Bez data".
+                                        // Bez data → sentinel; [bucketize] takové epizody z Timeline vynechá.
                                         timestampMs = parseEpisodeDate(ep.date) ?: NO_DATE_TS,
                                     )
                                     when {
@@ -184,13 +190,6 @@ class PodcastTimelineViewModel @Inject constructor(
             // správnější datum + jde rovnou přehrát). Nespárované audio i video zůstanou.
             val deduped = dedupeLinked(collected)
 
-            // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvé agregace (parita
-            // s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes Timeline. Ne-stažené
-            // epizody backfillMeta ignoruje (levný no-op). Sentinel „bez data" (< 0) se nepředává.
-            deduped.forEach { item ->
-                offline.backfillMeta(item.key, item.episode.description, item.timestampMs.takeIf { it > 0L }, "${item.sourceType}:${item.sourceRef}")
-            }
-
             // WEFT (SHW-75/W5): odfiltruj pořady skryté na časové ose pro tento profil (klíč `type:ref`).
             val hidden = profileRepository.activeConfig.value.hiddenTimelineSourceKeys
             val visible = if (hidden.isEmpty()) deduped
@@ -207,6 +206,19 @@ class PodcastTimelineViewModel @Inject constructor(
                     noSources = false,
                     display = display,
                 )
+            }
+
+            // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod z čerstvé agregace (parita
+            // s RSS backfill) → offline detail je ukáže i u pořadů otevřených přes Timeline. Ne-stažené
+            // epizody backfillMeta ignoruje (levný no-op). Sentinel „bez data" (< 0) se nepředává.
+            // PERF (2026-08-15, WATCHDOG incident): backfillMeta serializuje CELÝ stažený index (gson.toJson)
+            // na hlavním vlákně při každé změně — Timeline agreguje VŠECHNY zdroje, takže tahle smyčka appku
+            // na dlouho zablokovala (i vykreslení bucketů čekalo, až doběhne). Teď běží AŽ PO zobrazení
+            // bucketů, na pozadí (fire-and-forget, jen dovyplní metadata u již stažených epizod).
+            launch(Dispatchers.IO) {
+                deduped.forEach { item ->
+                    offline.backfillMeta(item.key, item.episode.description, item.timestampMs.takeIf { it > 0L }, "${item.sourceType}:${item.sourceRef}")
+                }
             }
         }
     }
@@ -337,17 +349,16 @@ class PodcastTimelineViewModel @Inject constructor(
         val lastWeekStart = weekStart - WEEK_MS
 
         val grouped = LinkedHashMap<String, MutableList<TimelineItem>>()
-        val noDate = mutableListOf<TimelineItem>()   // sentinel epizody → samostatný bucket na KONEC
         fun bucket(label: String, item: TimelineItem) {
             grouped.getOrPut(label) { mutableListOf() }.add(item)
         }
         for (it in items) {
             val ts = it.timestampMs
-            if (ts == NO_DATE_TS) {
-                // Bez data: NIKDY do „Dnes" — vlastní bucket „Bez data" připojený až nakonec.
-                noDate.add(it)
-                continue
-            }
+            // WATCHDOG (2026-08-15, user „některé podcasty jsou bez data, v timeline se nemaj
+            // zobrazovat") — epizoda bez naparsovatelného data se do Timeline VŮBEC nezařadí (dřív
+            // padala do zvláštního bucketu „Bez data", ale ten navíc kvůli formátovacímu bugu
+            // renderoval sentinel [NO_DATE_TS] jako absurdní rok — radši ji rovnou vynechat).
+            if (ts == NO_DATE_TS) continue
             val label = when {
                 ts >= today0 -> "Dnes"
                 ts >= yesterday0 -> "Včera"
@@ -357,9 +368,7 @@ class PodcastTimelineViewModel @Inject constructor(
             }
             bucket(label, it)
         }
-        val result = grouped.map { (label, list) -> Bucket(label, list) }.toMutableList()
-        if (noDate.isNotEmpty()) result.add(Bucket("Bez data", noDate))
-        return result
+        return grouped.map { (label, list) -> Bucket(label, list) }
     }
 
     /** Pro epizody starší než „minulý týden": po týdnech do ~5 týdnů, pak po měsících. */
@@ -396,7 +405,7 @@ class PodcastTimelineViewModel @Inject constructor(
         // ukáže i starší epizody, ne jen ~poslední dva týdny. Tahá se paralelně per zdroj.
         private const val EPISODES_PER_SOURCE = 100
 
-        /** Sentinel pro epizodu bez naparsovatelného data → bucket „Bez data" na konci (NE „Dnes"). */
+        /** Sentinel pro epizodu bez naparsovatelného data → [bucketize] ji z Timeline úplně vynechá. */
         const val NO_DATE_TS = Long.MIN_VALUE
 
         /**

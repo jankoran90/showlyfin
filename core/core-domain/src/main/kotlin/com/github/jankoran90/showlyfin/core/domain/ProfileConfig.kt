@@ -72,6 +72,32 @@ data class ProfileConfig(
     val hiddenTimelineSourceKeys: Set<String> = emptySet(),
     /** WEFT (SHW-75/W5): per-profil skrytí POŘADŮ ve **Sledovaných** (knihovna). Klíč jako výše. */
     val hiddenFollowingSourceKeys: Set<String> = emptySet(),
+    /**
+     * SLOVO-KIDS-EPISODE (2026-08-15) — WHITELIST vlastních zdrojů (RSS/YouTube/ČT, `PodcastSource`)
+     * schválených pro DĚTSKÝ profil. Klíč `type:ref` (u sloučeného TWINE páru = kterýkoli člen páru).
+     * Na rozdíl od [hiddenPodcastIds] (ABS, blacklist/default-viditelné) je tohle WHITELIST/default-
+     * NEviditelné — vlastní zdroje jsou uživatelovy osobní RSS/YouTube odběry, ne kurátorovaná ABS
+     * knihovna, takže admin musí explicitně zvolit, co dítě smí vidět. Prázdné = nic schváleno.
+     */
+    val visibleForKidsSourceKeys: Set<String> = emptySet(),
+    /**
+     * PROFIL (2026-08-16, user „Honza muze dat zobrazit podcast nebo audioknihu uzivateli Nel,
+     * detem, a to same Nel") — zdroje (RSS/YouTube/ČT, klíč `type:ref`), které SEM explicitně
+     * nasdílel JINÝ dospělý profil. Na rozdíl od [visibleForKidsSourceKeys] (jednosměrný whitelist
+     * admin→Děti) je tohle SYMETRICKÉ — každý dospělý profil má vlastní `sharedSourceKeys` a
+     * kterýkoli JINÝ profil do něj může zapsat (viz `ShareSourceViewModel`/dlouhý stisk). Efektivní
+     * viditelnost zdroje pro dospělého: `addedBy == null` (legacy, dřív než tahle featura vznikla)
+     * NEBO `addedBy == můj profil` NEBO klíč zdroje je v tomhle setu.
+     */
+    val sharedSourceKeys: Set<String> = emptySet(),
+    /**
+     * PROFIL (2026-08-16, user „audioknihy taky per profil, nahrávám je já Honza, sdílet mám na
+     * to fci") — audioknihy (ABS itemId), které SEM explicitně nasdílel jiný profil. Stejný vzor
+     * jako [sharedSourceKeys], jen klíčovaný ABS itemId místo `type:ref` (vlastnictví eviduje
+     * jellyfin-uploader backend, viz `AudiobookOwnershipRepository`, protože ABS sám koncept
+     * „kdo nahrál" nemá).
+     */
+    val sharedAudiobookIds: Set<String> = emptySet(),
     /** Povolené žánry (lowercase). Prázdné = bez allow-listu (vše kromě blacklistu). */
     val allowedGenres: Set<String> = emptySet(),
     /** Zakázané žánry (lowercase) — blacklist. */
@@ -198,6 +224,9 @@ data class ProfileConfig(
 
     /** WEFT (SHW-75/W5): true = pořad se má profilu ukázat ve Sledovaných. */
     fun isFollowingSourceVisible(sourceKey: String): Boolean = sourceKey !in hiddenFollowingSourceKeys
+
+    /** SLOVO-KIDS-EPISODE: true = vlastní zdroj (klíč `type:ref`) je na TOMTO (dětském) profilu schválený. */
+    fun isSourceVisibleForKids(sourceKey: String): Boolean = sourceKey in visibleForKidsSourceKeys
 
     /**
      * CONVERGE V1 — Trakt řady v efektivním pořadí (dynamická sada [available] = co dnes existuje). Neznámé

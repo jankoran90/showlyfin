@@ -19,6 +19,8 @@ fun PodcastCard(
     podcast: Podcast,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** User (2026-08-15) — dlouhý stisk → admin menu "Zobrazit/Skrýt dětem". null = beze změny. */
+    onLongClick: (() -> Unit)? = null,
 ) {
     CoverCard(
         title = podcast.title,
@@ -26,6 +28,7 @@ fun PodcastCard(
         imageUrl = podcast.coverUrl,
         onClick = onClick,
         modifier = modifier,
+        onLongClick = onLongClick,
         placeholder = Icons.Default.Podcasts,
         overlay = {
             if (podcast.numUnfinished > 0) {

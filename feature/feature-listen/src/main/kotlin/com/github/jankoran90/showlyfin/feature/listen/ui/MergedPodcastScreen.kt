@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,6 +79,9 @@ fun MergedPodcastScreen(
     onOpenAudioPlayer: () -> Unit,
     onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit,
     onUnlinked: () -> Unit,
+    // SLOVO-KIDS-EPISODE (2026-08-15) — dětský profil: vždy jen audio, video volby úplně skryté
+    // (i když je pořad TWINE-propojený s YouTube členem).
+    audioOnly: Boolean = false,
     modifier: Modifier = Modifier,
     // WEFT (SHW-75/W2-FIX): klíč epizody (`rss:`/`yt:`) k zvýraznění + odscrollování — proklik z časové
     // osy / z coveru přehrávače na SLOUČENÝ pořad. Match na audio NEBO video verzi spárované epizody.
@@ -169,13 +174,14 @@ fun MergedPodcastScreen(
                     val key = item.key
                     val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
                     val mark = resumeMarks[key]
+                    val isFinished = mark?.isFinished == true
                     val progress: Float? = when {
                         isCurrent && playerState.durationMs > 0 ->
                             (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
                         mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
                         else -> null
                     }
-                    val canResume = !isCurrent && mark != null
+                    val canResume = !isCurrent && mark != null && !isFinished
                     val remainingLabel = if (canResume && mark.durMs > 0)
                         "zbývá ${formatMergedClock((mark.durMs - mark.posMs).coerceAtLeast(0L))}" else null
                     MergedEpisodeRow(
@@ -187,14 +193,17 @@ fun MergedPodcastScreen(
                         progress = progress,
                         canResume = canResume,
                         remainingLabel = remainingLabel,
+                        isFinished = isFinished,
                         onPlayAudio = {
                             if (isCurrent) viewModel.resumeCurrent() else viewModel.playAudio(item)
                             onOpenAudioPlayer()
                         },
+                        showVideo = !audioOnly,
                         onPlayVideo = {
                             viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
                         },
                         onMore = { actionItem = item },
+                        onEndListening = { viewModel.resetPosition(item) },
                     )
                 }
             }
@@ -205,20 +214,25 @@ fun MergedPodcastScreen(
         ListenEpisodeActionSheet(
             title = item.title.ifBlank { state.title },
             // WEFT (SHW-75/W1): jednotné menu jako NaVýbornou/RSS — Přehrát · Video · Na TV · fronta×2 · stáhnout.
+            // SLOVO-KIDS-EPISODE: dětský profil (audioOnly) = video volby se ani nenabídnou.
             actions = listOfNotNull(
                 ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
                     viewModel.playAudio(item); onOpenAudioPlayer()
                 },
-                item.video?.let {
-                    ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
-                        viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
+                if (!audioOnly) {
+                    item.video?.let {
+                        ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                            viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
+                        }
                     }
-                },
-                item.video?.let {
-                    ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
-                        viewModel.castVideoToTv(item)
+                } else null,
+                if (!audioOnly) {
+                    item.video?.let {
+                        ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                            viewModel.castVideoToTv(item)
+                        }
                     }
-                },
+                } else null,
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(item, atFront = true)
                 },
@@ -231,6 +245,20 @@ fun MergedPodcastScreen(
                     onDownload = { viewModel.download(item) },
                     onDelete = { viewModel.deleteOffline(item) },
                 ),
+                // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
+                if (resumeMarks[item.key] != null) {
+                    ListenEpisodeAction(
+                        Icons.Default.Close, "Ukončit poslech",
+                        confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
+                    ) { viewModel.resetPosition(item) }
+                } else null,
+                // User (2026-08-16 12:51, „chci volbu, která označí jako poslechnuto") — parita s audioknihami.
+                if (resumeMarks[item.key]?.isFinished != true) {
+                    ListenEpisodeAction(
+                        Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                        confirmMessage = "Epizoda se označí jako poslechnutá a zmizí z Domů z „Pokračovat“.",
+                    ) { viewModel.markFinished(item) }
+                } else null,
             ),
             onDismiss = { actionItem = null },
         )
@@ -247,9 +275,12 @@ private fun MergedEpisodeRow(
     progress: Float?,
     canResume: Boolean,
     remainingLabel: String?,
+    showVideo: Boolean = true,
+    isFinished: Boolean = false,
     onPlayAudio: () -> Unit,
     onPlayVideo: () -> Unit,
     onMore: () -> Unit,
+    onEndListening: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -281,13 +312,21 @@ private fun MergedEpisodeRow(
                     formatMergedDate(item.date),
                     if (item.durationSec > 0) formatMergedDuration(item.durationSec) else null,
                     remainingLabel,
-                    if (item.video != null) "video" else null,
+                    if (item.video != null && showVideo) "video" else null,
                 ).joinToString(" · ")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (downloaded) {
                         Icon(
                             Icons.Default.DownloadDone,
                             contentDescription = "Staženo do telefonu",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                        )
+                    }
+                    if (isFinished) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Poslechnuto",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
                         )
@@ -301,7 +340,7 @@ private fun MergedEpisodeRow(
                         )
                     }
                 }
-                if (progress != null) {
+                if (progress != null && !isFinished) {
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 6.dp),
@@ -329,18 +368,22 @@ private fun MergedEpisodeRow(
             val (playIcon, playLabel) = when {
                 isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
                 isCurrent -> Icons.Default.PlayArrow to "Pokračovat"
-                canResume -> Icons.Default.PlayArrow to "Pokračovat"
+                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
                 else -> Icons.Default.Headphones to "Přehrát"
             }
             FilledTonalButton(onClick = onPlayAudio, modifier = Modifier.weight(1f)) {
                 Icon(playIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(playLabel, Modifier.padding(start = 6.dp))
             }
-            if (item.video != null) {
+            if (item.video != null && showVideo) {
                 OutlinedButton(onClick = onPlayVideo, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))
                 }
+            }
+            if (canResume && !isFinished && onEndListening != null) {
+                EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))

@@ -97,6 +97,13 @@ data class AbsFeedPodcast(
     val episodes: List<com.google.gson.JsonObject> = emptyList(),
 )
 
+/** DROPSHIP série — položka series[] v expanded book metadata (název série + číslo dílu). */
+data class AbsSeriesRef(
+    val id: String? = null,
+    val name: String? = null,
+    val sequence: String? = null,
+)
+
 data class AbsMetadata(
     val title: String? = null,
     val subtitle: String? = null,
@@ -104,6 +111,8 @@ data class AbsMetadata(
     val author: String? = null,              // podcast metadata používá `author`
     val narratorName: String? = null,
     val seriesName: String? = null,
+    /** DROPSHIP série: expanded=1 vrací i plné series[] s číslem dílu. */
+    val series: List<AbsSeriesRef>? = null,
     val description: String? = null,
     val publishedYear: String? = null,
     val genres: List<String>? = null,
@@ -153,7 +162,26 @@ data class AbsFileMetadata(
 
 /** Tělo PATCH /api/me/progress/{itemId}/{episodeId} pro označení přehráno/nepřehráno. */
 data class AbsProgressUpdate(
-    val isFinished: Boolean,
+    val isFinished: Boolean? = null,
+    /**
+     * User (2026-08-16 13:38, „kniha se po ukončení poslechu vrátí za 2s") — root cause (ABS server
+     * zdroj `MeController.js`): DELETE `/api/me/progress/:id` hledá podle INTERNÍHO id media-progress
+     * záznamu (`mediaProgresses.id`), NE podle libraryItemId, který appka posílala → vždy 404 „Media
+     * progress not found", reset se tiše nepovedl. PATCH naopak `libraryItemId` čeká správně, takže
+     * reset teď jde přes PATCH `currentTime=0` (null = neposílat, Gson pole s null vynechá).
+     */
+    val currentTime: Double? = null,
+    /**
+     * User (2026-08-16 15:48, „ukončit poslech se pořád vrací") — DRUHÝ, skutečný root cause (ověřeno
+     * přímo ve zdroji `MediaProgress.js`/`User.js` na serveru): appka čte pole `progress` z API, ale
+     * ABS ho NEPOČÍTÁ čerstvě z `currentTime/duration` — `getOldMediaProgress()` vrací uložené
+     * `extraData.progress`, samostatné pole, které `currentTime` reset vůbec nemaže. A `applyProgressUpdate`
+     * na serveru navíc `extraData.progress` resetuje JEN větví „isFinished: true→false" (nikdy pro
+     * normální nedohranou knihu), JINDY čte `progress` z payloadu VÝHRADNĚ když `isFinished` v
+     * požadavku vůbec NENÍ přítomné — proto teď `resetProgress` posílá `progress=0.0` a `isFinished`
+     * vynechává (null), ať ABS server skutečně smaže i tohle druhé pole.
+     */
+    val progress: Double? = null,
 )
 
 data class AbsChapter(
@@ -171,6 +199,8 @@ data class AbsMeResponse(
 )
 
 data class AbsMediaProgress(
+    /** Interní id media-progress řádku (ABS `getOldMediaProgress().id`) — pro DELETE /api/me/progress/{id}. */
+    val id: String? = null,
     val libraryItemId: String? = null,
     val episodeId: String? = null,
     val duration: Double? = null,

@@ -111,6 +111,8 @@ class AbsRepository @Inject constructor(
                 currentTimeSec = p?.currentTime ?: 0.0,
                 isFinished = p?.isFinished ?: false,
                 lastUpdate = p?.lastUpdate,
+                progressId = p?.id,
+                libraryId = libraryId,
             )
         }
     }
@@ -130,11 +132,13 @@ class AbsRepository @Inject constructor(
             author = md?.authorName?.takeIf { it.isNotBlank() },
             narrator = md?.narratorName?.takeIf { it.isNotBlank() },
             seriesName = md?.seriesName?.takeIf { it.isNotBlank() },
+            seriesSequence = md?.series?.firstOrNull()?.sequence?.takeIf { it.isNotBlank() },
             coverUrl = coverUrl(item.id),
             durationSec = m?.duration ?: 0.0,
             progress = progress?.progress ?: 0.0,
             currentTimeSec = progress?.currentTime ?: 0.0,
             isFinished = progress?.isFinished ?: false,
+            progressId = progress?.id,
         )
         val parsedChapters = (m?.chapters ?: emptyList()).map {
             Chapter(it.id, it.title ?: "Kapitola ${it.id + 1}", it.start, it.end)
@@ -356,6 +360,65 @@ class AbsRepository @Inject constructor(
                 AbsProgressUpdate(isFinished = finished),
             )
         }.onFailure { Timber.w(it, "[ABS] setEpisodeFinished selhal") }
+    }
+
+    /** User (2026-08-15 16:49) — „Označit jako poslechnuté" audioknihy (bez episodeId = celá kniha). */
+    suspend fun setBookFinished(itemId: String, finished: Boolean = true) {
+        runCatching {
+            val resp = service.patchProgress(
+                api("/api/me/progress/$itemId"), bearer(),
+                AbsProgressUpdate(isFinished = finished),
+            )
+            if (!resp.isSuccessful) Timber.w("[ABS] setBookFinished HTTP ${resp.code()} pro $itemId")
+        }.onFailure { Timber.w(it, "[ABS] setBookFinished selhal") }
+    }
+
+    /**
+     * User (2026-08-15 16:49) — „Ukončit poslech" audioknihy: vynuluje progress.
+     * User (2026-08-16 13:38, „kniha se po ukončení poslechu vrátí za 2s") — root cause #1 (ověřeno
+     * přímo v ABS server zdroji `MeController.js`): DELETE `/api/me/progress/:id` hledá záznam podle
+     * INTERNÍHO id media-progress řádku (`mediaProgresses.id`), ne podle libraryItemId, který appka
+     * posílala → ABS log „Media progress not found", request VŽDY 404 (potvrzeno v `docker logs`).
+     * Řešení: stejná PATCH cesta jako [setBookFinished] (ta libraryItemId čeká správně).
+     * User (2026-08-16 15:48, „pořád se vrací i po opravě refreshe") — root cause #2 (ověřeno přímo
+     * ve zdroji `MediaProgress.js`/`User.js`): appka čte `Audiobook.progress` z API pole `progress`,
+     * ale ABS ho NEPOČÍTÁ čerstvě z `currentTime/duration` — vrací uložené `extraData.progress`,
+     * samostatné pole, které DŘÍVĚJŠÍ `isFinished=false, currentTime=0` payload vůbec nemazal (server
+     * ho resetuje jen při přechodu isFinished true→false, což se u normální nedohrané knihy nikdy
+     * nestane). Server navíc `progress` z payloadu čte JEN když `isFinished` v požadavku vůbec NENÍ
+     * přítomné → `isFinished` teď vynecháváme (null), posíláme `currentTime=0` + `progress=0`.
+     */
+    suspend fun resetProgress(itemId: String) {
+        runCatching {
+            val resp = service.patchProgress(
+                api("/api/me/progress/$itemId"), bearer(),
+                AbsProgressUpdate(currentTime = 0.0, progress = 0.0),
+            )
+            if (!resp.isSuccessful) Timber.w("[ABS] resetProgress HTTP ${resp.code()} pro $itemId")
+        }.onFailure { Timber.w(it, "[ABS] resetProgress selhal") }
+    }
+
+    /**
+     * User (2026-08-16 16:30, „některé knihy nejdou ukončit, jiné jo") — root cause #3 (ověřeno na
+     *živém serveru v DB + proxy logu): PATCH reset u řádků, kde `currentTime=0`, ale `extraData.progress>0`
+     * (pozůstatek resetů starými verzemi appky), je na serveru NO-OP — `MediaProgress.get progress()`
+     * počítá `currentTime/duration` (= 0), takže větev mazání `extraData.progress` se přeskočí a
+     * Sequelize `save()` nemá co zapsat; API pak pořád hlásí starý `extraData.progress` → kniha se
+     * vrací do Domů. Řešení: smazat CELÝ progress řádek DELETE `/api/me/progress/{interní id}`
+     * (id z `getMe().mediaProgress[].id`); PATCH reset jen jako fallback, když id nemáme.
+     */
+    suspend fun endListening(itemId: String, progressId: String?) {
+        if (progressId != null) {
+            runCatching {
+                val resp = service.deleteProgress(api("/api/me/progress/$progressId"), bearer())
+                if (resp.isSuccessful) {
+                    Timber.i("[ABS] endListening: progress $progressId (item $itemId) smazán DELETEm")
+                    return
+                }
+                Timber.w("[ABS] endListening: DELETE HTTP ${resp.code()} pro $progressId → fallback PATCH reset")
+            }.onFailure { Timber.w(it, "[ABS] endListening DELETE selhal → fallback PATCH reset") }
+        }
+        resetProgress(itemId)
     }
 
     /** Otevře ABS play session a vrátí streamovatelnou URL + uloženou pozici. */

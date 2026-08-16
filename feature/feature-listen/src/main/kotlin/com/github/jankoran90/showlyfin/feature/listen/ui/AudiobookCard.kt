@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -26,12 +28,18 @@ fun AudiobookCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     downloaded: Boolean = false,
+    /** User (2026-08-15 16:49) — odznak „hraje" (aktuálně načtená položka v přehrávači). */
+    isPlaying: Boolean = false,
     /** DROPSHIP F2c — long press v seznamu → úprava knihy. null = nic (zkratka). */
     onLongClick: (() -> Unit)? = null,
+    /** User (2026-08-16, „ikonu ukončit poslech přímo na kartě") — viditelný odznak u rozposlouchané
+     *  knihy, ne jen schované za long-press. null = nezobrazí se (žádná rozdělaná pozice). */
+    onEndListening: (() -> Unit)? = null,
 ) {
     CoverCard(
         title = book.title,
-        subtitle = book.author,
+        // DROPSHIP série: pod názvem autor + název série („Enid Blyton · Správná pětka").
+        subtitle = listOfNotNull(book.author, book.seriesName).joinToString(" · "),
         imageUrl = book.coverUrl,
         onClick = onClick,
         modifier = modifier,
@@ -61,6 +69,42 @@ fun AudiobookCard(
                         .background(MaterialTheme.colorScheme.primary, CircleShape)
                         .padding(3.dp)
                         .size(16.dp),
+                )
+            }
+            // User (2026-08-15 16:49) — odznak „hraje", když je kniha zrovna ve frontě/přehrává se.
+            if (isPlaying) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = "Hraje",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .padding(3.dp)
+                        .size(16.dp),
+                )
+            }
+            // User (2026-08-16, „poslechnuto znak vidět všude") — odznak „poslechnuto" na dlaždici,
+            // dřív se dokončenost projevila jen zmizením progress baru (nerozeznatelné od nikdy-nespuštěné).
+            if (book.isFinished && !isPlaying) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Poslechnuto",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .padding(3.dp)
+                        .size(16.dp),
+                )
+            }
+            if (book.progress > 0.001 && !book.isFinished && onEndListening != null) {
+                EndListeningButton(
+                    compact = true,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
+                    onConfirm = onEndListening,
                 )
             }
         },

@@ -8,6 +8,8 @@ data class Audiobook(
     val author: String?,
     val narrator: String?,
     val seriesName: String?,
+    /** DROPSHIP série: číslo dílu v sérii (jen detail, expanded=1; seznam vrací jen seriesName). */
+    val seriesSequence: String? = null,
     val coverUrl: String?,
     val durationSec: Double,
     val progress: Double,        // 0.0 - 1.0
@@ -15,6 +17,21 @@ data class Audiobook(
     val isFinished: Boolean,
     /** CRUISE (SHW-70): čas posledního poslechu (epoch ms z ABS mediaProgress) → řazení AA „Pokračovat". */
     val lastUpdate: Long? = null,
+    /**
+     * Interní id media-progress řádku na ABS serveru. „Ukončit poslech" ho používá pro DELETE
+     * (PATCH reset na serveru totiž u řádků s currentTime=0 a zaprášeným extraData.progress
+     * dělá no-op — server porovnává payload progress proti currentTime/duration, ne uložené
+     * extraData.progress, takže nic nezmění a vrátí 200).
+     */
+    val progressId: String? = null,
+    /**
+     * User (2026-08-16 13:29, „Harry Potter je stejný zdroj, nerozumím proč ne") — ABS knihovna,
+     * odkud kniha pochází. „" = neznámo (detail/offline stažené — pro filtrování se neuplatní).
+     * Vyplněno jen v [com.github.jankoran90.showlyfin.data.abs.AbsRepository.getAudiobooks] (list
+     * je vždy dotažen PRO konkrétní libraryId), ne v `getAudiobookDetail` (ABS item response ho
+     * nevrací bez extra volání, detail se s ním nefiltruje).
+     */
+    val libraryId: String = "",
 )
 
 data class AudiobookDetail(

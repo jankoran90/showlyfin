@@ -9,6 +9,9 @@ data class DownloadState(
     val progress: Float = 0f,   // 0..1 — vyplněno jen během DOWNLOADING
 )
 
+/** User (2026-08-15) „Stáhnout vše" — souhrnný postup dávky stahování (viz `AudiobookDownloadManager.downloadAll`). */
+data class BatchDownloadProgress(val completed: Int, val total: Int)
+
 /** Perzistovaný záznam o stažené epizodě (index pro offline přehrání + správu stažení). */
 data class EpisodeDownload(
     val episodeId: String,

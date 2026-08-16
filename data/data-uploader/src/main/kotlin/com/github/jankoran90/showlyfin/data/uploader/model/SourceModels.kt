@@ -18,6 +18,13 @@ data class PodcastSource(
     @SerializedName("added_at") val addedAt: Long? = null,
     /** EXODUS (SHW-67): prémiový zdroj rodiny (NaVýbornou přes herolink) — pin nahoru, odznak, nemazat. */
     val premium: Boolean = false,
+    /**
+     * PROFIL (2026-08-16, „zdroje per profil + sdílení") — profileUuid profilu, který zdroj přidal.
+     * null = zdroj vznikl PŘED touhle featurou (legacy) → viditelný VŠEM (zachování stávajícího
+     * chování, žádná migrace dat). Nové zdroje jsou viditelné jen tomu, kdo je přidal, dokud je
+     * explicitně nesdílí ([com.github.jankoran90.showlyfin.core.domain.ProfileConfig.sharedSourceKeys]).
+     */
+    @SerializedName("added_by") val addedBy: String? = null,
 )
 
 /** Odpověď store endpointů (`/api/sources` GET/POST/DELETE). */
@@ -33,6 +40,8 @@ data class AddSourceRequest(
     val ref: String,
     val title: String,
     val thumbnail: String? = null,
+    /** PROFIL (2026-08-16) — profil, co zdroj přidává (viz [PodcastSource.addedBy]). */
+    @SerializedName("added_by") val addedBy: String? = null,
 )
 
 /**
