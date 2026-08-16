@@ -14,6 +14,9 @@ import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -145,18 +148,28 @@ class HomeViewModel @Inject constructor(
 
     init { refresh() }
 
+    /**
+     * User (2026-08-16 13:36, „nacita se pokazde 6-10s") — knihy i epizody dřív běžely striktně za
+     * sebou (audioknihovny navíc jedna po druhé uvnitř [flatMap]); teď obojí souběžně ([async]).
+     */
     fun refresh() {
         viewModelScope.launch {
             _isLoading.value = true
-            val books = runCatching {
-                if (!repo.isConfigured) emptyList()
-                else repo.getAudiobookLibraries()
-                    .flatMap { repo.getAudiobooks(it.id) }
-                    .filter { it.progress > 0.001 && !it.isFinished }
-                    .let { filterVisibleBooks(it) }
-            }.getOrDefault(emptyList())
-            val episodes = runCatching { continueDirectEpisodes() }.getOrDefault(emptyList())
-            _items.value = (books.map(ContinueItem::Book) + episodes)
+            val booksDeferred = async {
+                runCatching {
+                    if (!repo.isConfigured) emptyList()
+                    else coroutineScope {
+                        repo.getAudiobookLibraries()
+                            .map { lib -> async { repo.getAudiobooks(lib.id) } }
+                            .awaitAll()
+                            .flatten()
+                    }
+                        .filter { it.progress > 0.001 && !it.isFinished }
+                        .let { filterVisibleBooks(it) }
+                }.getOrDefault(emptyList())
+            }
+            val episodesDeferred = async { runCatching { continueDirectEpisodes() }.getOrDefault(emptyList()) }
+            _items.value = (booksDeferred.await().map(ContinueItem::Book) + episodesDeferred.await())
                 .sortedByDescending { it.updatedAt }
             _isLoading.value = false
         }
@@ -187,18 +200,37 @@ class HomeViewModel @Inject constructor(
             .flatMap { ProfileConfig.fromJson(it.configJson).absLibraryWhitelist.orEmpty() }
             .toSet()
 
-    /** Rozposlouchané direct epizody → dohledané přes feedy zdrojů (stejný join jako CRUISE Android Auto). */
+    /**
+     * Rozposlouchané direct epizody → dohledané přes feedy zdrojů (stejný join jako CRUISE Android Auto).
+     * User (2026-08-16 13:36, „nacita se pokazde 6-10s, chci to hned") — dřív se feedy VŠECH zdrojů
+     * natahovaly jedna po druhé ([forEach]) jen kvůli pár markům; teď (1) přeskočí zdroje typu, co v
+     * markách vůbec není (`rss:`/`yt:`/`ctv:` prefix klíče), (2) zbylé natáhne SOUBĚŽNĚ ([async]) —
+     * čas se zkrátí z „součet všech zdrojů" na „nejpomalejší jeden zdroj".
+     */
     private suspend fun continueDirectEpisodes(): List<ContinueItem.Episode> {
         // User (2026-08-16, „doposlouchané zmizí z Domů") — od té doby, co [DirectResumeStore] mark
         // při dohrání NEMAŽE (jen ho nechá na isFinished), musí Domů dohrané výslovně vyfiltrovat.
         val marks = directResume.marks.value.filterValues { !it.isFinished }
         if (marks.isEmpty()) return emptyList()
         sourcesRepo.refresh()
-        val byKey = HashMap<String, Pair<SourceEpisode, PodcastSource>>()
-        sourcesRepo.sources.value.forEach { src ->
-            runCatching { sourcesRepo.loadEpisodes(src) }.getOrDefault(emptyList()).forEach { ep ->
-                ep.resumeKey?.let { byKey[it] = ep to src }
+        // Klíč markay má prefix "yt:"/"rss:"/"ctv:" ([DirectResumeStore]), ale PodcastSource.type je
+        // "youtube"/"rss"/"ctv" (viz [SourceCard]) — NEJSOU stejné stringy, nutná explicitní mapa.
+        val neededTypes = marks.keys.mapNotNullTo(mutableSetOf()) {
+            when (it.substringBefore(':', missingDelimiterValue = "")) {
+                "yt" -> "youtube"
+                "rss" -> "rss"
+                "ctv" -> "ctv"
+                else -> null
             }
+        }
+        val relevant = sourcesRepo.sources.value.filter { it.type in neededTypes }
+        val byKey = coroutineScope {
+            relevant
+                .map { src -> async { src to runCatching { sourcesRepo.loadEpisodes(src) }.getOrDefault(emptyList()) } }
+                .awaitAll()
+        }.fold(HashMap<String, Pair<SourceEpisode, PodcastSource>>()) { acc, (src, episodes) ->
+            episodes.forEach { ep -> ep.resumeKey?.let { acc[it] = ep to src } }
+            acc
         }
         return marks.entries.mapNotNull { (key, mark) ->
             byKey[key]?.let { (ep, src) ->

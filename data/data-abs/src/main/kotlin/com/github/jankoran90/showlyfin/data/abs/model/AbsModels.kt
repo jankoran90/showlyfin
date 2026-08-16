@@ -163,6 +163,14 @@ data class AbsFileMetadata(
 /** Tělo PATCH /api/me/progress/{itemId}/{episodeId} pro označení přehráno/nepřehráno. */
 data class AbsProgressUpdate(
     val isFinished: Boolean,
+    /**
+     * User (2026-08-16 13:38, „kniha se po ukončení poslechu vrátí za 2s") — root cause (ABS server
+     * zdroj `MeController.js`): DELETE `/api/me/progress/:id` hledá podle INTERNÍHO id media-progress
+     * záznamu (`mediaProgresses.id`), NE podle libraryItemId, který appka posílala → vždy 404 „Media
+     * progress not found", reset se tiše nepovedl. PATCH naopak `libraryItemId` čeká správně, takže
+     * reset teď jde přes PATCH `currentTime=0` (null = neposílat, Gson pole s null vynechá).
+     */
+    val currentTime: Double? = null,
 )
 
 data class AbsChapter(

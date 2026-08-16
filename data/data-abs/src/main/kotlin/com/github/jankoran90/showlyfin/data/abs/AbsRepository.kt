@@ -372,13 +372,21 @@ class AbsRepository @Inject constructor(
     }
 
     /**
-     * User (2026-08-15 16:49) — „Ukončit poslech" audioknihy: úplně smaže progress (ne jen isFinished=false).
-     * User (2026-08-16 13:19, „ukončit poslech nic neudělá") — dřív se HTTP chyba (non-2xx) tiše
-     * spolkla ([runCatching] chytá jen výjimky, ne neúspěšný status kód) → tichý no-op bez logu.
+     * User (2026-08-15 16:49) — „Ukončit poslech" audioknihy: vynuluje progress.
+     * User (2026-08-16 13:38, „kniha se po ukončení poslechu vrátí za 2s") — root cause (ověřeno
+     * přímo v ABS server zdroji `MeController.js`): DELETE `/api/me/progress/:id` hledá záznam podle
+     * INTERNÍHO id media-progress řádku (`mediaProgresses.id`), ne podle libraryItemId, který appka
+     * posílala → ABS log „Media progress not found", request VŽDY 404 (potvrzeno v `docker logs`).
+     * Optimistický update v UI se pak po [refresh] vrátil zpět, protože server progress reálně
+     * nikdy nesmazal. Řešení: stejná PATCH cesta jako [setBookFinished] (ta libraryItemId čeká
+     * správně), `currentTime=0` + `isFinished=false`.
      */
     suspend fun resetProgress(itemId: String) {
         runCatching {
-            val resp = service.deleteProgress(api("/api/me/progress/$itemId"), bearer())
+            val resp = service.patchProgress(
+                api("/api/me/progress/$itemId"), bearer(),
+                AbsProgressUpdate(isFinished = false, currentTime = 0.0),
+            )
             if (!resp.isSuccessful) Timber.w("[ABS] resetProgress HTTP ${resp.code()} pro $itemId")
         }.onFailure { Timber.w(it, "[ABS] resetProgress selhal") }
     }
