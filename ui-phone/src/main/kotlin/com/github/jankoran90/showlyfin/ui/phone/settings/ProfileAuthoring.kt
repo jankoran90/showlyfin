@@ -200,7 +200,10 @@ internal fun ProfileAuthoringBlock(
                                         val current = c.jellyfinLibraryWhitelist?.toMutableSet()
                                             ?: jellyfinLibraries.map { it.id }.toMutableSet()
                                         if (enabled) current.add(lib.id) else current.remove(lib.id)
-                                        val newWl = if (current.size == jellyfinLibraries.size) null else current.toList()
+                                        // Odškrtnutí PŮLKY = jen tyhle vidět; odškrtnutí VŠECH = label slibuje
+                                        // "nic zaškrtnuté = všechny" (LibraryRowsViewModel: prázdný seznam = žádná
+                                        // knihovna, ne všechny) → prázdné current musí padnout zpět na null.
+                                        val newWl = if (current.isEmpty() || current.size == jellyfinLibraries.size) null else current.toList()
                                         c.copy(jellyfinLibraryWhitelist = newWl)
                                     }
                                 },
