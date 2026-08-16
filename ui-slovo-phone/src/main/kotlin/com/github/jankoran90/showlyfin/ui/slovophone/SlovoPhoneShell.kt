@@ -1,18 +1,18 @@
 package com.github.jankoran90.showlyfin.ui.slovophone
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -34,9 +34,12 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
+import kotlin.math.absoluteValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel
@@ -199,9 +202,18 @@ private fun SlovoShellContent() {
                         // POSLECH se vykreslí stejně (redirect výš ho hned přepne na DOMU+stranu 1,
                         // tady jen ať when zůstane exhaustivní a nic neblikne).
                         SlovoSection.DOMU, SlovoSection.POSLECH -> SlovoSectionScaffold(
-                            // Titulek lišty žije s pagerem: strana 0 = Domů, strana 1 = Poslech.
-                            if (domuPager.currentPage == 0) SlovoSection.DOMU.label else poslechLabel,
-                            onMenu,
+                            onMenu = onMenu,
+                            // User (2026-08-16 17:38, „ať se ta nabídka, co není aktivní, taky
+                            // objeví nahoře jako karta a při swipnutí se rozsvítí/zhasne") — obě
+                            // strany viditelné v liště zároveň, aktivní svítí, neaktivní ztlumená.
+                            titleContent = {
+                                DomuPagerTabs(
+                                    pagerState = domuPager,
+                                    domuLabel = SlovoSection.DOMU.label,
+                                    poslechLabel = poslechLabel,
+                                    onSelect = { page -> scope.launch { domuPager.animateScrollToPage(page) } },
+                                )
+                            },
                             trailing = if (domuPager.currentPage == 0 || isKidsProfile) null else {
                                 {
                                     // User (2026-08-16 13:43, „šoupni tlačítka Podcasty/Audioknihy nahoru
@@ -222,10 +234,10 @@ private fun SlovoShellContent() {
                                 }
                             },
                         ) {
-                            Column(Modifier.fillMaxSize()) {
+                            Box(Modifier.fillMaxSize()) {
                                 HorizontalPager(
                                     state = domuPager,
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.fillMaxSize(),
                                 ) { page ->
                                     when (page) {
                                         0 -> HomeScreen(
@@ -267,8 +279,6 @@ private fun SlovoShellContent() {
                                         )
                                     }
                                 }
-                                // Drobný indikátor dvou stran (signalizuje swipovatelnost).
-                                DomuPagerIndicator(domuPager.currentPage)
                             }
                         }
                         SlovoSection.OBJEVIT -> SlovoSectionScaffold(current.label, onMenu) {
@@ -300,7 +310,7 @@ private fun SlovoShellContent() {
 private fun SlovoSectionScaffold(
     title: String,
     onMenu: () -> Unit,
-    trailing: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -309,28 +319,46 @@ private fun SlovoSectionScaffold(
     }
 }
 
+/** Varianta s vlastním obsahem titulku místo prostého textu (viz [DomuPagerTabs]). */
+@Composable
+private fun SlovoSectionScaffold(
+    onMenu: () -> Unit,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    titleContent: @Composable BoxScope.() -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        SlovoSectionBar(onMenu = onMenu, trailing = trailing, content = titleContent)
+        Box(Modifier.fillMaxSize()) { content() }
+    }
+}
+
 /**
- * Dvě tečky pod pagerem sekce Domů (strana 0 = rozposlouchané, strana 1 = Poslech) — jemný
- * signál, že jde swipovat. Z motivu (primary/outlineVariant), žádné hardcoded barvy.
+ * Obě strany pageru sekce Domů viditelné v liště zároveň (Domů vlevo, Poslech vpravo) — aktivní
+ * strana svítí plnou barvou, neaktivní je ztlumená; přechod sleduje živě samotné swipnutí prstem
+ * (ne jen doskok stránky). Tap na kartu = přeskok na tu stránku. User (2026-08-16 17:38): dřív byl
+ * titulek jen text, co se přehodil při doskoku, a tečkový indikátor dole — tohle je nahrazuje.
  */
 @Composable
-private fun DomuPagerIndicator(page: Int) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        repeat(2) { i ->
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 3.dp)
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (i == page) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.outlineVariant
-                    ),
+private fun DomuPagerTabs(
+    pagerState: PagerState,
+    domuLabel: String,
+    poslechLabel: String,
+    onSelect: (Int) -> Unit,
+) {
+    val position = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, 1f)
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        listOf(domuLabel to 0, poslechLabel to 1).forEach { (label, index) ->
+            val distance = (position - index).absoluteValue.coerceIn(0f, 1f)
+            val alpha = lerp(0.4f, 1f, 1f - distance)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = if (index == pagerState.currentPage) FontWeight.Bold else FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = alpha),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { onSelect(index) },
             )
         }
     }
