@@ -45,14 +45,18 @@ fun SlovoSectionBar(
     }
 }
 
-/** Titulková varianta — ☰ + název sekce. */
+/**
+ * Titulková varianta — ☰ + název sekce (+ volitelné [trailing], např. přepínač Audioknihy/Podcasty
+ * u Poslechu — user 2026-08-16 13:43 „šoupni tlačítka nahoru vedle nadpisu Poslech").
+ */
 @Composable
 fun SlovoSectionBar(
     title: String,
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    SlovoSectionBar(onMenu = onMenu, modifier = modifier) {
+    SlovoSectionBar(onMenu = onMenu, modifier = modifier, trailing = trailing) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,

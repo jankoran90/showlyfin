@@ -6,9 +6,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.core.theme.ShowlyfinPhoneTheme
 import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
+import com.github.jankoran90.showlyfin.feature.listen.ListenMode
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
 import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
@@ -59,6 +65,7 @@ fun SlovoPhoneShell() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SlovoShellContent() {
     val ctx = LocalContext.current
@@ -162,7 +169,30 @@ private fun SlovoShellContent() {
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
-                        SlovoSection.POSLECH -> SlovoSectionScaffold(poslechLabel, onMenu) {
+                        SlovoSection.POSLECH -> SlovoSectionScaffold(
+                            poslechLabel,
+                            onMenu,
+                            trailing = if (isKidsProfile) null else {
+                                {
+                                    // User (2026-08-16 13:43, „šoupni tlačítka Podcasty/Audioknihy nahoru
+                                    // vedle nadpisu Poslech") — přepínač žije teď v horní liště, ne jako
+                                    // samostatný řádek uvnitř ListenScreen (ten přestal mít vlastní swipe
+                                    // stránkování mezi Audioknihy/Podcasty, viz ListenScreen.kt).
+                                    val lState by listenVm.uiState.collectAsStateWithLifecycle()
+                                    val modes = if (lState.booksFirst) listOf(ListenMode.BOOKS, ListenMode.PODCASTS)
+                                    else listOf(ListenMode.PODCASTS, ListenMode.BOOKS)
+                                    SingleChoiceSegmentedButtonRow {
+                                        modes.forEachIndexed { i, m ->
+                                            SegmentedButton(
+                                                selected = lState.mode == m,
+                                                onClick = { listenVm.setMode(m) },
+                                                shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
+                                            ) { Text(if (m == ListenMode.BOOKS) "Audioknihy" else "Podcasty") }
+                                        }
+                                    }
+                                }
+                            },
+                        ) {
                             ListenScreen(
                                 onOpenBook = onOpenBook,
                                 onEditBook = { id, title, author ->
@@ -225,10 +255,11 @@ private fun SlovoShellContent() {
 private fun SlovoSectionScaffold(
     title: String,
     onMenu: () -> Unit,
+    trailing: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        SlovoSectionBar(title = title, onMenu = onMenu)
+        SlovoSectionBar(title = title, onMenu = onMenu, trailing = trailing)
         Box(Modifier.fillMaxSize()) { content() }
     }
 }

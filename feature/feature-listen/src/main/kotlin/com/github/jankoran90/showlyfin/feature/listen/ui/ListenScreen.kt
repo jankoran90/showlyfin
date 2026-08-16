@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Link
@@ -22,20 +20,14 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -108,50 +100,24 @@ fun ListenScreen(
                     onOpenSourceSeries = onOpenSourceSeries,
                 )
             } else {
-                // PRESET (SHW-65) — pořadí záložek dle nastavení (Audioknihy / Podcasty první).
-                val modes = remember(state.booksFirst) {
-                    if (state.booksFirst) listOf(ListenMode.BOOKS, ListenMode.PODCASTS)
-                    else listOf(ListenMode.PODCASTS, ListenMode.BOOKS)
-                }
-                key(state.booksFirst) {
-                    val pagerState = rememberPagerState(
-                        initialPage = modes.indexOf(state.mode).coerceAtLeast(0),
-                    ) { modes.size }
-                    val scope = rememberCoroutineScope()
-                    // Swipe ⇄ přepíná režim (a tím i načítání dat).
-                    LaunchedEffect(pagerState.currentPage) {
-                        viewModel.setMode(modes[pagerState.currentPage])
-                    }
-                    Column(Modifier.fillMaxSize()) {
-                        if (state.isOffline) OfflineBanner()
-                        SingleChoiceSegmentedButtonRow(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        ) {
-                            modes.forEachIndexed { i, m ->
-                                SegmentedButton(
-                                    selected = pagerState.currentPage == i,
-                                    onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
-                                    shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
-                                ) { Text(if (m == ListenMode.BOOKS) "Audioknihy" else "Podcasty") }
-                            }
-                        }
-
-                        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-                            when (modes[page]) {
-                                ListenMode.BOOKS -> BooksContent(state, viewModel, onOpenBook, onEditBook)
-                                ListenMode.PODCASTS -> PodcastsContent(
-                                    state, viewModel, onOpenPodcast,
-                                    downloadCount = downloads.size + podcastDownloads.size,
-                                    onOpenDownloads = { showDownloads = true },
-                                    onOpenSource = onOpenSource,
-                                    onOpenSourceEpisode = onOpenSourceEpisode,
-                                    onOpenMerged = onOpenMerged,
-                                    podcastDownloads = podcastDownloads,
-                                )
-                            }
-                        }
+                // User (2026-08-16 13:43, „horizontal scroll zůstane jen v aktivní sekci, ne mezi
+                // Podcasty/Audioknihy") — přepínač [ListenMode] se teď ovládá TAPEM z horní lišty
+                // (viz SlovoPhoneShell.SlovoShellContent), žádné swipe stránkování mezi režimy; obsah
+                // se jen přepne. Horizontal scroll/tab uvnitř podsekcí (Timeline/Sledované/Objev v
+                // [PodcastsContent], knihovní chips v [BooksContent]) beze změny.
+                Column(Modifier.fillMaxSize()) {
+                    if (state.isOffline) OfflineBanner()
+                    when (state.mode) {
+                        ListenMode.BOOKS -> BooksContent(state, viewModel, onOpenBook, onEditBook)
+                        ListenMode.PODCASTS -> PodcastsContent(
+                            state, viewModel, onOpenPodcast,
+                            downloadCount = downloads.size + podcastDownloads.size,
+                            onOpenDownloads = { showDownloads = true },
+                            onOpenSource = onOpenSource,
+                            onOpenSourceEpisode = onOpenSourceEpisode,
+                            onOpenMerged = onOpenMerged,
+                            podcastDownloads = podcastDownloads,
+                        )
                     }
                 }
             }
