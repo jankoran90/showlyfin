@@ -337,9 +337,10 @@ fun YoutubeChannelScreen(
                 ),
                 // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
                 if (resumeMarks[viewModel.episodeKey(ep)] != null) {
-                    ListenEpisodeAction(Icons.Default.RestartAlt, "Reset poslechu") {
-                        viewModel.resetPosition(ep)
-                    }
+                    ListenEpisodeAction(
+                        Icons.Default.RestartAlt, "Reset poslechu",
+                        confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat".",
+                    ) { viewModel.resetPosition(ep) }
                 } else null,
             ),
             onDismiss = { actionEpisode = null },

@@ -7,10 +7,15 @@ package com.github.jankoran90.showlyfin.ui.slovophone
  * modulu — opačný směr by byl cyklus).
  */
 object SlovoProfiles {
+    /** Honza — původní jediný „Dospělý" profil (2026-08-16 rozseknut na Honza/Nel, UUID zachováno,
+     * jen přejmenováno, ať se nemusí migrovat ABS přihlášení ani žádná data). */
     const val UUID_ADULT = "slovo-adult"
+    /** Nel (manželka, 2026-08-16) — druhý dospělý profil, VLASTNÍ ABS účet (žádné dědění od Honzy). */
+    const val UUID_NEL = "slovo-nel"
     const val UUID_KIDS = "slovo-kids"
     /** Profilový klíč per-profil vrstvy (opaque, neprázdný) — lokální, na rozdíl od Filmy. */
     const val KEY_ADULT = "slovo-adult"
+    const val KEY_NEL = "slovo-nel"
     const val KEY_KIDS = "slovo-kids"
     /** ABS knihovna „děti" (police audioknih) — jediná viditelná pro dětský profil. */
     const val KIDS_ABS_LIBRARY_ID = "6940a4bc-6b67-4a4d-9e2f-cf4e33421fcf"

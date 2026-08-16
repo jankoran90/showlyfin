@@ -243,9 +243,10 @@ fun MergedPodcastScreen(
                 ),
                 // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
                 if (resumeMarks[item.key] != null) {
-                    ListenEpisodeAction(Icons.Default.RestartAlt, "Reset poslechu") {
-                        viewModel.resetPosition(item)
-                    }
+                    ListenEpisodeAction(
+                        Icons.Default.RestartAlt, "Reset poslechu",
+                        confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat".",
+                    ) { viewModel.resetPosition(item) }
                 } else null,
             ),
             onDismiss = { actionItem = null },

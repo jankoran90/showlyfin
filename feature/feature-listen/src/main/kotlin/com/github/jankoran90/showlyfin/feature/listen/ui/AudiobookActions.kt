@@ -41,8 +41,20 @@ fun AudiobookActionSheet(
         actions = listOfNotNull(
             ListenEpisodeAction(Icons.Default.Download, "Stáhnout", enabled = canDownload, onClick = onDownload),
             ListenEpisodeAction(Icons.Default.Edit, "Upravit", onClick = onEdit),
-            if (inProgress) ListenEpisodeAction(Icons.Default.RestartAlt, "Reset poslechu", onClick = onResetProgress) else null,
-            if (inProgress) ListenEpisodeAction(Icons.Default.CheckCircle, "Označit jako poslechnuté", onClick = onMarkFinished) else null,
+            if (inProgress) {
+                ListenEpisodeAction(
+                    Icons.Default.RestartAlt, "Reset poslechu",
+                    confirmMessage = "Smaže se uložená pozice poslechu a kniha zmizí z Domů z „Pokračovat".",
+                    onClick = onResetProgress,
+                )
+            } else null,
+            if (inProgress) {
+                ListenEpisodeAction(
+                    Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                    confirmMessage = "Kniha se označí jako dočtená a zmizí z Domů z „Pokračovat".",
+                    onClick = onMarkFinished,
+                )
+            } else null,
         ),
         onDismiss = onDismiss,
     )

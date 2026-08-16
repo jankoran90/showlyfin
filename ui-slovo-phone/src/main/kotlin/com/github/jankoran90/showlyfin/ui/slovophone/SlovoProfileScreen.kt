@@ -50,10 +50,12 @@ import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.PinHasher
 
 /**
- * Profily (2026-08-15, user „profily jak jsme je používali v showlyfin") — sekce „Profil" appky
- * Slovo. Vzor [com.github.jankoran90.showlyfin.ui.filmyphone.FilmyProfileScreen]: 2 pevné profily
- * (Dospělý/Děti), přepnutí s PINem (chrání zpětné přepnutí na Dospělého), podržením nastav/zruš PIN.
- * Navíc jen u Dospělého: seznam ABS podcastů s zaškrtávátkem „vidí Děti" (admin curation).
+ * Profily (2026-08-15, user „profily jak jsme je používali v showlyfin"; 2026-08-16 rozseknuto na
+ * Honza/Nel) — sekce „Profil" appky Slovo. Vzor
+ * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmyProfileScreen]: 3 pevné profily (Honza/Nel/
+ * Děti), přepnutí s PINem (chrání zpětné přepnutí na dospělého), podržením nastav/zruš PIN. Seznam
+ * je generický ([SlovoProfileViewModel.uiState.profiles]) — nezáleží na počtu profilů. Navíc jen u
+ * dospělého: seznam ABS podcastů s zaškrtávátkem „vidí Děti" (admin curation).
  */
 @Composable
 fun SlovoProfileScreen(
@@ -205,7 +207,7 @@ private fun SlovoProfileCard(profile: ProfileEntity, active: Boolean, onClick: (
             Column(Modifier.weight(1f)) {
                 Text(profile.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    text = if (profile.isAdmin) "Dospělý — plný přístup" else "Děti — dětská knihovna + schválené podcasty",
+                    text = if (profile.isAdmin) "Dospělý — plný přístup, vlastní ABS účet" else "Děti — dětská knihovna + schválené podcasty",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
