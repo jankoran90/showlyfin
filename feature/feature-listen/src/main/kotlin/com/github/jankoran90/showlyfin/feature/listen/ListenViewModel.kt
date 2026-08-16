@@ -546,16 +546,26 @@ class ListenViewModel @Inject constructor(
         audiobookDownloads.download(book.id, book.title, book.author, book.coverUrl)
     }
 
-    /** User (2026-08-15 16:49) — „Reset poslechu" (long-press menu): smaže progress, refresh ať zmizí. */
+    /**
+     * User (2026-08-15 16:49) — „Ukončit poslech" (long-press menu): smaže progress.
+     * User (2026-08-16 13:19, „chci live akci, ať je to hned po potvrzení provedené a vidím změnu")
+     * — knize se progress vynuluje v `_uiState.books` OKAMŽITĚ, server volání + [refresh] na pozadí.
+     */
     fun resetBookProgress(book: Audiobook) {
+        _uiState.update { s ->
+            s.copy(books = s.books.map { if (it.id == book.id) it.copy(progress = 0.0, currentTimeSec = 0.0) else it })
+        }
         viewModelScope.launch {
             repo.resetProgress(book.id)
             refresh()
         }
     }
 
-    /** User (2026-08-15 16:49) — „Označit jako poslechnuté" (long-press menu). */
+    /** User (2026-08-15 16:49) — „Označit jako poslechnuté" (long-press menu), viz [resetBookProgress]. */
     fun markBookFinished(book: Audiobook) {
+        _uiState.update { s ->
+            s.copy(books = s.books.map { if (it.id == book.id) it.copy(isFinished = true, progress = 1.0) else it })
+        }
         viewModelScope.launch {
             repo.setBookFinished(book.id, finished = true)
             refresh()

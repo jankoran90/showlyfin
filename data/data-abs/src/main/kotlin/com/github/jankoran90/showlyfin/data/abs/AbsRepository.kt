@@ -362,17 +362,23 @@ class AbsRepository @Inject constructor(
     /** User (2026-08-15 16:49) — „Označit jako poslechnuté" audioknihy (bez episodeId = celá kniha). */
     suspend fun setBookFinished(itemId: String, finished: Boolean = true) {
         runCatching {
-            service.patchProgress(
+            val resp = service.patchProgress(
                 api("/api/me/progress/$itemId"), bearer(),
                 AbsProgressUpdate(isFinished = finished),
             )
+            if (!resp.isSuccessful) Timber.w("[ABS] setBookFinished HTTP ${resp.code()} pro $itemId")
         }.onFailure { Timber.w(it, "[ABS] setBookFinished selhal") }
     }
 
-    /** User (2026-08-15 16:49) — „Reset poslechu" audioknihy: úplně smaže progress (ne jen isFinished=false). */
+    /**
+     * User (2026-08-15 16:49) — „Ukončit poslech" audioknihy: úplně smaže progress (ne jen isFinished=false).
+     * User (2026-08-16 13:19, „ukončit poslech nic neudělá") — dřív se HTTP chyba (non-2xx) tiše
+     * spolkla ([runCatching] chytá jen výjimky, ne neúspěšný status kód) → tichý no-op bez logu.
+     */
     suspend fun resetProgress(itemId: String) {
         runCatching {
-            service.deleteProgress(api("/api/me/progress/$itemId"), bearer())
+            val resp = service.deleteProgress(api("/api/me/progress/$itemId"), bearer())
+            if (!resp.isSuccessful) Timber.w("[ABS] resetProgress HTTP ${resp.code()} pro $itemId")
         }.onFailure { Timber.w(it, "[ABS] resetProgress selhal") }
     }
 

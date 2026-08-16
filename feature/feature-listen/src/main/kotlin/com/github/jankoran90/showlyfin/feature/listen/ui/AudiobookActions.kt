@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,7 +48,7 @@ fun AudiobookActionSheet(
             ListenEpisodeAction(Icons.Default.Edit, "Upravit", onClick = onEdit),
             if (inProgress) {
                 ListenEpisodeAction(
-                    Icons.Default.RestartAlt, "Reset poslechu",
+                    Icons.Default.Close, "Ukončit poslech",
                     confirmMessage = "Smaže se uložená pozice poslechu a kniha zmizí z Domů z „Pokračovat“.",
                     onClick = onResetProgress,
                 )

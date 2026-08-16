@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -90,16 +91,22 @@ class HomeViewModel @Inject constructor(
         else "V knihovně: $owner · sdíleno s: ${sharedNames.joinToString(", ")}"
     }
 
-    /** User (2026-08-16 12:51, „ukončit poslech ať je vidět i na Domů") — vzor [ListenViewModel.resetBookProgress]. */
+    /**
+     * User (2026-08-16 12:51, „ukončit poslech ať je vidět i na Domů") — vzor [ListenViewModel.resetBookProgress].
+     * User (2026-08-16 13:19, „chci live akci, ať je to hned po potvrzení provedené a vidím změnu")
+     * — položka mizí z `_items` OKAMŽITĚ (optimisticky), server volání + [refresh] doběhne na pozadí.
+     */
     fun resetBookProgress(book: Audiobook) {
+        _items.update { list -> list.filterNot { it is ContinueItem.Book && it.book.id == book.id } }
         viewModelScope.launch {
             repo.resetProgress(book.id)
             refresh()
         }
     }
 
-    /** Vzor [ListenViewModel.resetPosition] pro direct epizody — smaže mark, refresh ať zmizí z Domů. */
+    /** Vzor [ListenViewModel.resetPosition] pro direct epizody — smaže mark, mizí z Domů OKAMŽITĚ. */
     fun resetEpisodeProgress(item: ContinueItem.Episode) {
+        _items.update { list -> list - item }
         item.episode.resumeKey?.let { directResume.clear(it) }
         refresh()
     }
