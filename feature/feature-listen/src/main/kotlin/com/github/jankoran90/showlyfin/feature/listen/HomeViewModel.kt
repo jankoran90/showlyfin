@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -166,13 +167,11 @@ class HomeViewModel @Inject constructor(
      * knihovní whitelist/creds, jen KDO je aktivní).
      */
     init {
-        viewModelScope.launch {
-            profileRepository.activeProfile
-                .map { it?.profileUuid }
-                .distinctUntilChanged()
-                .onEach { refresh() }
-                .collect()
-        }
+        profileRepository.activeProfile
+            .map { it?.profileUuid }
+            .distinctUntilChanged()
+            .onEach { refresh() }
+            .launchIn(viewModelScope)
     }
 
     /**
