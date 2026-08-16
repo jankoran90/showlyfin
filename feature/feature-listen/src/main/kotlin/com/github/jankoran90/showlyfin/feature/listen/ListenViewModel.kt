@@ -556,7 +556,7 @@ class ListenViewModel @Inject constructor(
 
     /** Stáhne jednu audioknihu (long-press menu v gridu — "Stáhnout"). */
     fun downloadBook(book: Audiobook) {
-        audiobookDownloads.download(book.id, book.title, book.author, book.coverUrl)
+        audiobookDownloads.download(book.id, book.title, book.author, book.coverUrl, book.libraryId, book.seriesName)
     }
 
     /**
@@ -568,6 +568,7 @@ class ListenViewModel @Inject constructor(
         _uiState.update { s ->
             s.copy(books = s.books.map { if (it.id == book.id) it.copy(progress = 0.0, currentTimeSec = 0.0) else it })
         }
+        audiobookDownloads.clearLocalProgress(book.id)
         viewModelScope.launch {
             repo.endListening(book.id, book.progressId)
             refresh()
