@@ -13,6 +13,7 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 /**
@@ -46,8 +47,11 @@ fun SlovoDrawer(
             DrawerSectionLabel("Poslech")
             // User (2026-08-16 17:06, „Domů bude v sidebaru jedna sekce, Poslech se swipne vedle") —
             // Poslech už NENÍ položka draweru: je to 2. strana pageru sekce Domů.
+            // User (2026-08-16 18:30, „pořadí a co se zobrazí si nastavím sám") — pořadí/viditelnost
+            // Objevit/Zdroje je teď konfigurovatelné v Nastavení → Pořadí menu ([SlovoShellPrefs]).
+            val ctx = LocalContext.current
             val poslechSections =
-                if (isAdmin) SlovoShellPrefs.drawerOrder else listOf(SlovoSection.DOMU)
+                if (isAdmin) SlovoShellPrefs.drawerOrder(ctx) else listOf(SlovoSection.DOMU)
             poslechSections.forEach { DrawerRow(it, current, onSelect) }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))
