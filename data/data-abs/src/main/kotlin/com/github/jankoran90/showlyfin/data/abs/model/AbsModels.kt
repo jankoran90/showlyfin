@@ -199,6 +199,8 @@ data class AbsMeResponse(
 )
 
 data class AbsMediaProgress(
+    /** Interní id media-progress řádku (ABS `getOldMediaProgress().id`) — pro DELETE /api/me/progress/{id}. */
+    val id: String? = null,
     val libraryItemId: String? = null,
     val episodeId: String? = null,
     val duration: Double? = null,

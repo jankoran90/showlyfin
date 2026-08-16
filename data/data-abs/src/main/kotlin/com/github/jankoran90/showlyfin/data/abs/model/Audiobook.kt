@@ -18,6 +18,13 @@ data class Audiobook(
     /** CRUISE (SHW-70): čas posledního poslechu (epoch ms z ABS mediaProgress) → řazení AA „Pokračovat". */
     val lastUpdate: Long? = null,
     /**
+     * Interní id media-progress řádku na ABS serveru. „Ukončit poslech" ho používá pro DELETE
+     * (PATCH reset na serveru totiž u řádků s currentTime=0 a zaprášeným extraData.progress
+     * dělá no-op — server porovnává payload progress proti currentTime/duration, ne uložené
+     * extraData.progress, takže nic nezmění a vrátí 200).
+     */
+    val progressId: String? = null,
+    /**
      * User (2026-08-16 13:29, „Harry Potter je stejný zdroj, nerozumím proč ne") — ABS knihovna,
      * odkud kniha pochází. „" = neznámo (detail/offline stažené — pro filtrování se neuplatní).
      * Vyplněno jen v [com.github.jankoran90.showlyfin.data.abs.AbsRepository.getAudiobooks] (list

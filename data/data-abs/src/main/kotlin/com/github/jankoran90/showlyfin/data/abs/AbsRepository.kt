@@ -111,6 +111,7 @@ class AbsRepository @Inject constructor(
                 currentTimeSec = p?.currentTime ?: 0.0,
                 isFinished = p?.isFinished ?: false,
                 lastUpdate = p?.lastUpdate,
+                progressId = p?.id,
                 libraryId = libraryId,
             )
         }
@@ -137,6 +138,7 @@ class AbsRepository @Inject constructor(
             progress = progress?.progress ?: 0.0,
             currentTimeSec = progress?.currentTime ?: 0.0,
             isFinished = progress?.isFinished ?: false,
+            progressId = progress?.id,
         )
         val parsedChapters = (m?.chapters ?: emptyList()).map {
             Chapter(it.id, it.title ?: "Kapitola ${it.id + 1}", it.start, it.end)
@@ -394,6 +396,29 @@ class AbsRepository @Inject constructor(
             )
             if (!resp.isSuccessful) Timber.w("[ABS] resetProgress HTTP ${resp.code()} pro $itemId")
         }.onFailure { Timber.w(it, "[ABS] resetProgress selhal") }
+    }
+
+    /**
+     * User (2026-08-16 16:30, „některé knihy nejdou ukončit, jiné jo") — root cause #3 (ověřeno na
+     *živém serveru v DB + proxy logu): PATCH reset u řádků, kde `currentTime=0`, ale `extraData.progress>0`
+     * (pozůstatek resetů starými verzemi appky), je na serveru NO-OP — `MediaProgress.get progress()`
+     * počítá `currentTime/duration` (= 0), takže větev mazání `extraData.progress` se přeskočí a
+     * Sequelize `save()` nemá co zapsat; API pak pořád hlásí starý `extraData.progress` → kniha se
+     * vrací do Domů. Řešení: smazat CELÝ progress řádek DELETE `/api/me/progress/{interní id}`
+     * (id z `getMe().mediaProgress[].id`); PATCH reset jen jako fallback, když id nemáme.
+     */
+    suspend fun endListening(itemId: String, progressId: String?) {
+        if (progressId != null) {
+            runCatching {
+                val resp = service.deleteProgress(api("/api/me/progress/$progressId"), bearer())
+                if (resp.isSuccessful) {
+                    Timber.i("[ABS] endListening: progress $progressId (item $itemId) smazán DELETEm")
+                    return
+                }
+                Timber.w("[ABS] endListening: DELETE HTTP ${resp.code()} pro $progressId → fallback PATCH reset")
+            }.onFailure { Timber.w(it, "[ABS] endListening DELETE selhal → fallback PATCH reset") }
+        }
+        resetProgress(itemId)
     }
 
     /** Otevře ABS play session a vrátí streamovatelnou URL + uloženou pozici. */

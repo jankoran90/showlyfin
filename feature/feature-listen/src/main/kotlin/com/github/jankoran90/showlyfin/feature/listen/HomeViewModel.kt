@@ -130,7 +130,7 @@ class HomeViewModel @Inject constructor(
     fun resetBookProgress(book: Audiobook) {
         _items.update { list -> list.filterNot { it is ContinueItem.Book && it.book.id == book.id } }
         viewModelScope.launch {
-            repo.resetProgress(book.id)
+            repo.endListening(book.id, book.progressId)
             refresh()
         }
     }

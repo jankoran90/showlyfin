@@ -569,7 +569,7 @@ class ListenViewModel @Inject constructor(
             s.copy(books = s.books.map { if (it.id == book.id) it.copy(progress = 0.0, currentTimeSec = 0.0) else it })
         }
         viewModelScope.launch {
-            repo.resetProgress(book.id)
+            repo.endListening(book.id, book.progressId)
             refresh()
         }
     }
