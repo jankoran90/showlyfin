@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Link
@@ -26,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,6 +41,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.feature.listen.ListenMode
 import com.github.jankoran90.showlyfin.feature.listen.ListenUiState
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
+import kotlinx.coroutines.launch
 
 /**
  * Poslechová sekce — přepínač Audioknihy ↔ Podcasty, knihovní chips + grid obálek s progressem.
@@ -281,30 +285,42 @@ private fun PodcastsContent(
             selected = tab,
             onSelect = { tab = it },
             onOpenFilter = { showFilter = true },
-            activeFilterCount = filterVm.activeCount(discoveryState.excluded.size),
         )
 
         // „Stažené" chip přesunut z řady do filtru (ikona Filtr) — viz PodcastFilterSheet.
 
-        when (tab) {
-            PodcastTab.TIMELINE -> PodcastTimelineSection(
-                onOpenDiscover = { tab = PodcastTab.DISCOVER },
-                onOpenSource = { item ->
-                    onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.key)
-                },
-                refreshKey = filterEpoch,
-                modifier = Modifier.fillMaxSize(),
-            )
-            PodcastTab.FOLLOWING -> FollowingContent(
-                state = state,
-                viewModel = viewModel,
-                onOpenPodcast = onOpenPodcast,
-                onOpenSource = onOpenSource,
-                onOpenMerged = onOpenMerged,
-                downloadCount = downloadCount,
-                sourceType = filterState.sourceType,
-            )
-            PodcastTab.DISCOVER -> PodcastDiscoverSection(modifier = Modifier.fillMaxSize())
+        // User (2026-08-16 14:26, „udělej ten horizontal scroll mezi podsekcemi jak jsem chtěl") —
+        // Timeline/Sledované/Objev jde teď i swipe gestem, ne jen tapem na PodcastTabRow. Tab a
+        // pagerState se drží ve dvou směrech synchronizované (tap → scroll na stránku, swipe → tab).
+        val tabs = PodcastTab.entries
+        val pagerState = rememberPagerState(initialPage = tabs.indexOf(tab).coerceAtLeast(0)) { tabs.size }
+        val pagerScope = rememberCoroutineScope()
+        LaunchedEffect(tab) {
+            if (tabs[pagerState.currentPage] != tab) pagerScope.launch { pagerState.animateScrollToPage(tabs.indexOf(tab)) }
+        }
+        LaunchedEffect(pagerState.currentPage) { tab = tabs[pagerState.currentPage] }
+
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            when (tabs[page]) {
+                PodcastTab.TIMELINE -> PodcastTimelineSection(
+                    onOpenDiscover = { tab = PodcastTab.DISCOVER },
+                    onOpenSource = { item ->
+                        onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.key)
+                    },
+                    refreshKey = filterEpoch,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                PodcastTab.FOLLOWING -> FollowingContent(
+                    state = state,
+                    viewModel = viewModel,
+                    onOpenPodcast = onOpenPodcast,
+                    onOpenSource = onOpenSource,
+                    onOpenMerged = onOpenMerged,
+                    downloadCount = downloadCount,
+                    sourceType = filterState.sourceType,
+                )
+                PodcastTab.DISCOVER -> PodcastDiscoverSection(modifier = Modifier.fillMaxSize())
+            }
         }
         }
     }

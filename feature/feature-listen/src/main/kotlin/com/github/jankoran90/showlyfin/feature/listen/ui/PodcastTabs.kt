@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SegmentedButton
@@ -50,7 +48,6 @@ fun PodcastTabRow(
     selected: PodcastTab,
     onSelect: (PodcastTab) -> Unit,
     onOpenFilter: () -> Unit,
-    activeFilterCount: Int,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -61,14 +58,10 @@ fun PodcastTabRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // 1) Filtr — úplně první prvek řady. Vždy tonální (secondaryContainer) → sourodé se světlým i
-        // tmavým motivem; aktivní filtr signalizuje červený badge (FilledIconButton=primary byl ve
-        // světlém motivu tmavě oranžový a nesourodý).
-        BadgedBox(
-            badge = { if (activeFilterCount > 0) Badge { Text("$activeFilterCount") } },
-        ) {
-            FilledTonalIconButton(onClick = onOpenFilter, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Default.Tune, contentDescription = "Filtr podcastů")
-            }
+        // tmavým motivem. User (2026-08-16 14:27, „zruš ten červený flek s číslem na filtr ikoně") —
+        // dřív tu byl červený Badge s `activeFilterCount`, teď jen ikona (aktivní filtr pozná v sheetu).
+        FilledTonalIconButton(onClick = onOpenFilter, modifier = Modifier.size(40.dp)) {
+            Icon(Icons.Default.Tune, contentDescription = "Filtr podcastů")
         }
 
         // 2) Timeline · Sledované · Objev

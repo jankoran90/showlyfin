@@ -141,6 +141,9 @@ private fun SlovoShellContent() {
     val onMenu: () -> Unit = { scope.launch { drawerState.open() } }
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // User (2026-08-16 14:26, „zruš swipe sidebar, bude jen vlevo nahoře přístup v ikoně") —
+        // edge-swipe gesto vypnuto (kolidovalo by s horizontal scroll uvnitř podsekcí), menu jen ☰.
+        gesturesEnabled = false,
         drawerContent = {
             SlovoDrawer(current = current, isAdmin = !isKidsProfile, activeProfileName = activeProfile?.name) { section ->
                 sectionStateHolder.removeState(section)
