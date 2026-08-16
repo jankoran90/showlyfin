@@ -168,8 +168,24 @@ class HomeViewModel @Inject constructor(
         if (!active.isAdmin) return books
         audiobookOwnership.refresh()
         val shared = profileRepository.activeConfig.value.sharedAudiobookIds
-        return books.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, shared) }
+        val kidsLibraryIds = kidsOnlyLibraryIds()
+        return books
+            .filter { it.libraryId !in kidsLibraryIds }
+            .filter { audiobookOwnership.isVisible(it.id, active.profileUuid, shared) }
     }
+
+    /**
+     * User (2026-08-16 13:29, „Harry Potter je stejný zdroj, nerozumím proč ne") — root cause:
+     * Domů „Pokračovat" sčítalo audioknihy napříč VŠEMI ABS knihovnami bez ohledu na výběr, takže
+     * admin (Honza) tam dostal i knihy z dětské knihovny (jiná fyzická knihovna, ne jen nasdílená
+     * položka) i s nesmyslnou nabídkou „Sdílet s Nel". Knihovny vyhrazené VÝHRADNĚ dětskému profilu
+     * (`ProfileConfig.absLibraryWhitelist`) patří jen jim, ne do adminova osobního přehledu.
+     */
+    private suspend fun kidsOnlyLibraryIds(): Set<String> =
+        profileRepository.getAll()
+            .filterNot { it.isAdmin }
+            .flatMap { ProfileConfig.fromJson(it.configJson).absLibraryWhitelist.orEmpty() }
+            .toSet()
 
     /** Rozposlouchané direct epizody → dohledané přes feedy zdrojů (stejný join jako CRUISE Android Auto). */
     private suspend fun continueDirectEpisodes(): List<ContinueItem.Episode> {

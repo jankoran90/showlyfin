@@ -17,6 +17,14 @@ data class Audiobook(
     val isFinished: Boolean,
     /** CRUISE (SHW-70): čas posledního poslechu (epoch ms z ABS mediaProgress) → řazení AA „Pokračovat". */
     val lastUpdate: Long? = null,
+    /**
+     * User (2026-08-16 13:29, „Harry Potter je stejný zdroj, nerozumím proč ne") — ABS knihovna,
+     * odkud kniha pochází. „" = neznámo (detail/offline stažené — pro filtrování se neuplatní).
+     * Vyplněno jen v [com.github.jankoran90.showlyfin.data.abs.AbsRepository.getAudiobooks] (list
+     * je vždy dotažen PRO konkrétní libraryId), ne v `getAudiobookDetail` (ABS item response ho
+     * nevrací bez extra volání, detail se s ním nefiltruje).
+     */
+    val libraryId: String = "",
 )
 
 data class AudiobookDetail(

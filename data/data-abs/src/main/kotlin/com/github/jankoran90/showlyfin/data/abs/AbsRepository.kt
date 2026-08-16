@@ -111,6 +111,7 @@ class AbsRepository @Inject constructor(
                 currentTimeSec = p?.currentTime ?: 0.0,
                 isFinished = p?.isFinished ?: false,
                 lastUpdate = p?.lastUpdate,
+                libraryId = libraryId,
             )
         }
     }
