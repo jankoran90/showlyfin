@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.dp
  * Profily (2026-08-15, user „děti nebudou mít Zdroje a Objevit") — dětský profil dostane JEN
  * Poslech (obsahuje sloučenou audioknihy+podcasty sekci) + Nastavení + Profil; [isAdmin] filtruje
  * „Objevit"/„Zdroje" pryč (ty jsou dospělácká vrstva — správa vlastních RSS/YouTube zdrojů).
+ * User (2026-08-16 13:49, „nech zobrazit Domů sekci i dětem, ať se můžou rychle vracet k
+ * rozposlouchaným věcem") — Domů PŘIBYLO zpět i dětem ([HomeViewModel] samo správně omezuje obsah
+ * na dětskou knihovnu/schválené zdroje, viz `kidsOnlyLibraryIds`/`visibleForKidsSourceKeys`).
  */
 @Composable
 fun SlovoDrawer(
@@ -41,7 +44,8 @@ fun SlovoDrawer(
                 modifier = Modifier.padding(start = 20.dp, top = 28.dp, bottom = 16.dp),
             )
             DrawerSectionLabel("Poslech")
-            val poslechSections = if (isAdmin) SlovoShellPrefs.drawerOrder else listOf(SlovoSection.POSLECH)
+            val poslechSections =
+                if (isAdmin) SlovoShellPrefs.drawerOrder else listOf(SlovoSection.DOMU, SlovoSection.POSLECH)
             poslechSections.forEach { DrawerRow(it, current, onSelect) }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))

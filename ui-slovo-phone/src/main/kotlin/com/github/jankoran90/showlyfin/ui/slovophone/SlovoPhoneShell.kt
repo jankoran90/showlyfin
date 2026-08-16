@@ -77,10 +77,12 @@ private fun SlovoShellContent() {
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
     val isKidsProfile = activeProfile?.isAdmin == false
     val poslechLabel = if (isKidsProfile) "Poslech - děti" else SlovoSection.POSLECH.label
-    // Pojistka: přepnutí NA Děti, když je otevřená Domů/Objevit/Zdroje (odjinud, dřív dospělý) → vrať na Poslech.
-    // Domů sjednocuje rozposlouchané napříč VŠEMI zdroji dospěláckého profilu — dítě ho nemá vidět.
+    // Pojistka: přepnutí NA Děti, když je otevřená Objevit/Zdroje (odjinud, dřív dospělý) → vrať na Poslech.
+    // User (2026-08-16 13:49, „nech zobrazit Domů i dětem, ať se můžou rychle vracet") — Domů už
+    // NENÍ v tomhle seznamu; [HomeViewModel] správně omezuje obsah dětského profilu na jeho vlastní
+    // knihovnu/schválené zdroje (viz `kidsOnlyLibraryIds`), takže dítě tam vidí jen SVÉ rozposlouchané.
     LaunchedEffect(isKidsProfile) {
-        if (isKidsProfile && current in setOf(SlovoSection.DOMU, SlovoSection.OBJEVIT, SlovoSection.ZDROJE)) {
+        if (isKidsProfile && current in setOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE)) {
             current = SlovoSection.POSLECH
         }
     }

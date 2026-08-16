@@ -47,11 +47,17 @@ class HomeViewModel @Inject constructor(
     /** User (2026-08-15 16:49) — odznak „hraje" na dlaždici, když je zrovna aktivní v přehrávači. */
     val playerState = connection.state
 
-    /** PROFIL (2026-08-16) — ostatní dospělí profily → cíle „Sdílet s…" (dlouhý stisk karty epizody). */
+    /**
+     * PROFIL (2026-08-16) — ostatní dospělí profily → cíle „Sdílet s…" (dlouhý stisk karty epizody).
+     * User (2026-08-16 13:49, „nech zobrazit Domů i dětem") — sdílení je jen mezi dospělými (stejný
+     * záměr jako u audioknih/zdrojů); z dětského profilu prázdné, ať se dítěti dlouhý stisk netváří
+     * jako nabídka „Sdílet".
+     */
     val otherAdultProfiles: StateFlow<List<ProfileEntity>> =
         profileRepository.observeAll()
             .combine(profileRepository.activeProfile) { profiles, active ->
-                profiles.filter { it.isAdmin && it.id != active?.id }
+                if (active?.isAdmin != true) emptyList()
+                else profiles.filter { it.isAdmin && it.id != active.id }
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -175,10 +181,18 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** PROFIL (2026-08-16) — jen moje audioknihy + co mi kdo sdílel (vzor [ListenViewModel.filterVisibleBooks]). */
+    /**
+     * PROFIL (2026-08-16) — jen moje audioknihy + co mi kdo sdílel (vzor [ListenViewModel.filterVisibleBooks]).
+     * User (2026-08-16 13:49, „nech zobrazit Domů i dětem") — dětský profil nemá koncept vlastnictví/
+     * sdílení (ten je jen mezi dospělými), místo toho striktně jen VLASTNÍ knihovna ([ProfileConfig.absLibraryWhitelist]),
+     * ať se mu do Domů nepřimíchá dospělácký obsah.
+     */
     private suspend fun filterVisibleBooks(books: List<Audiobook>): List<Audiobook> {
         val active = profileRepository.activeProfile.value ?: return books
-        if (!active.isAdmin) return books
+        if (!active.isAdmin) {
+            val wl = profileRepository.activeConfig.value.absLibraryWhitelist ?: return books
+            return books.filter { it.libraryId in wl }
+        }
         audiobookOwnership.refresh()
         val shared = profileRepository.activeConfig.value.sharedAudiobookIds
         val kidsLibraryIds = kidsOnlyLibraryIds()
@@ -223,7 +237,18 @@ class HomeViewModel @Inject constructor(
                 else -> null
             }
         }
-        val relevant = sourcesRepo.sources.value.filter { it.type in neededTypes }
+        // User (2026-08-16 13:49, „nech zobrazit Domů i dětem") — dětský profil smí dohledávat jen
+        // zdroje, co mu admin schválil (stejná whitelist jako [KidsListenContent]), jinak by Domů
+        // ukázalo epizody z dospěláckých zdrojů, co dítě jinde v appce vůbec nevidí.
+        val active = profileRepository.activeProfile.value
+        val relevant = sourcesRepo.sources.value
+            .filter { it.type in neededTypes }
+            .let { srcs ->
+                if (active?.isAdmin == false) {
+                    val visibleKeys = profileRepository.activeConfig.value.visibleForKidsSourceKeys
+                    srcs.filter { "${it.type}:${it.ref}" in visibleKeys }
+                } else srcs
+            }
         val byKey = coroutineScope {
             relevant
                 .map { src -> async { src to runCatching { sourcesRepo.loadEpisodes(src) }.getOrDefault(emptyList()) } }
