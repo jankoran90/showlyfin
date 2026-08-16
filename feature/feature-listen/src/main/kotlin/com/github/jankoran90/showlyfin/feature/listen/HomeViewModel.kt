@@ -23,8 +23,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -180,6 +180,14 @@ class HomeViewModel @Inject constructor(
      * starší (pomalejší) běh mohl dopsat `_items` PO novějším a přepsat ho zpátky na neaktuální data
      * (classic poslední-zápis-vyhrává race). [refreshRequests] + `collectLatest` zaručí, že běží
      * vždy jen JEDEN refresh najednou — nový požadavek zruší předchozí ještě nedoběhlý.
+     * User (2026-08-16 15:24, „acid for the children pořád visí, žádné živé překreslení") — DOOPRAVDY
+     * ZAVINĚNO tímhle fixem: server měl progress správně na 0 (ověřeno v DB), ale appka se k tomu
+     * nedostala — při rychlém testování (klik, přehrání, další klik) přicházely požadavky rychleji,
+     * než stihl doběhnout síťový fetch (víc knihoven + `getMe()` + zdroje) → `collectLatest` je pořád
+     * dokola RUŠIL, než jediný stihl dopsat `_items` → LIVELOCK, appka trvale visela na starých datech.
+     * `debounce(300)` počká na chvilku klidu mezi požadavky, než refresh doopravdy spustí; navíc obyčejné
+     * `collect` (NE `collectLatest`) — jednou spuštěný refresh se už NIKDY neruší, doběhne vždy do konce
+     * (mezitím příchozí požadavky se jen naskládají do bufferu a spustí JEDEN další běh hned po dokončení).
      */
     private val refreshRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
@@ -195,7 +203,7 @@ class HomeViewModel @Inject constructor(
      */
     init {
         viewModelScope.launch {
-            refreshRequests.collectLatest { doRefresh() }
+            refreshRequests.debounce(300).collect { doRefresh() }
         }
 
         profileRepository.activeProfile
@@ -216,13 +224,27 @@ class HomeViewModel @Inject constructor(
             .distinctUntilChanged()
             .onEach { refresh() }
             .launchIn(viewModelScope)
+
+        /**
+         * User (2026-08-16 15:24, „dal jsem Acid for... přehrát a pak Domů, tam vůbec nebyl, až po
+         * restartu appky") — [directResume.marks] pokrývá jen DIRECT epizody (RSS/YouTube/ČT); nová
+         * audiokniha nemá žádný lokální reaktivní signál (progress žije jen na ABS serveru, žádný
+         * lokální push) — bez tohohle triggeru se Domů o novém poslechu audioknihy dozví JEN na
+         * `init` (nový VM = restart appky). Sleduje se `currentItemId` z přehrávače (mění se, jakmile
+         * začne hrát jiná položka), ne pozice — nerefreshuje na každý tick přehrávání.
+         */
+        connection.state
+            .map { it.currentItemId }
+            .distinctUntilChanged()
+            .onEach { refresh() }
+            .launchIn(viewModelScope)
     }
 
     /**
      * User (2026-08-16 13:36, „nacita se pokazde 6-10s") — knihy i epizody dřív běžely striktně za
      * sebou (audioknihovny navíc jedna po druhé uvnitř [flatMap]); teď obojí souběžně ([async]).
-     * Volání jen POŽÁDÁ o refresh ([refreshRequests]) — skutečný běh a případné zrušení staršího
-     * nedoběhlého běhu řeší `collectLatest` v [init].
+     * Volání jen POŽÁDÁ o refresh ([refreshRequests]) — skutečný běh (s debounce + garancí doběhnutí)
+     * řeší [init].
      */
     fun refresh() {
         refreshRequests.tryEmit(Unit)
