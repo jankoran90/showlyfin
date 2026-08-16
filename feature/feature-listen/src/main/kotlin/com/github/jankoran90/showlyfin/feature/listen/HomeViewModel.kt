@@ -188,8 +188,16 @@ class HomeViewModel @Inject constructor(
      * `debounce(300)` počká na chvilku klidu mezi požadavky, než refresh doopravdy spustí; navíc obyčejné
      * `collect` (NE `collectLatest`) — jednou spuštěný refresh se už NIKDY neruší, doběhne vždy do konce
      * (mezitím příchozí požadavky se jen naskládají do bufferu a spustí JEDEN další běh hned po dokončení).
+     * User (2026-08-16 15:36, „zmizí na vteřinu a je hned zpět") — DRUHÁ vrstva stejného problému:
+     * `collect`/„doběhne vždy do konce" garantuje, že refresh NIKDY nezůstane viset (žádný livelock),
+     * ale sám o sobě NEZARUČÍ ČERSTVOST — refresh spuštěný TĚSNĚ PŘED „ukončit poslech" může dokončit
+     * síťový fetch (víc knihoven, pár sekund) AŽ PO reset PATCHi a přepsat optimisticky smazanou
+     * položku zpátky daty, co ještě neviděla reset. [refreshGeneration] řeší i tohle: běh na konci
+     * zapíše `_items` JEN pokud mezitím nezačal žádný novější požadavek — jinak výsledek zahodí (příští
+     * fronta ve frontě už doběhne nad čerstvými daty).
      */
     private val refreshRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private var refreshGeneration = 0L
 
     /**
      * User (2026-08-16 14:03, „při přepnutí profilu se musí hned překreslit nabídka, ukazuje vždy
@@ -247,10 +255,12 @@ class HomeViewModel @Inject constructor(
      * řeší [init].
      */
     fun refresh() {
+        refreshGeneration++
         refreshRequests.tryEmit(Unit)
     }
 
     private suspend fun doRefresh() {
+        val myGeneration = refreshGeneration
         coroutineScope {
             _isLoading.value = true
             val booksDeferred = async {
@@ -267,8 +277,11 @@ class HomeViewModel @Inject constructor(
                 }.getOrDefault(emptyList())
             }
             val episodesDeferred = async { runCatching { continueDirectEpisodes() }.getOrDefault(emptyList()) }
-            _items.value = (booksDeferred.await().map(ContinueItem::Book) + episodesDeferred.await())
+            val result = (booksDeferred.await().map(ContinueItem::Book) + episodesDeferred.await())
                 .sortedByDescending { it.updatedAt }
+            // Zahoď zastaralý výsledek — mezitím vznikl novější požadavek (refresh()/reset), jehož
+            // vlastní běh dopíše čerstvá data sám; tenhle by je jen přepsal starými.
+            if (refreshGeneration == myGeneration) _items.value = result
             _isLoading.value = false
         }
     }
