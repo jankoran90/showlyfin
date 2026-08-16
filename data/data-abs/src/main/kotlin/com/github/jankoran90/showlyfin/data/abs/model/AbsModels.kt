@@ -162,7 +162,7 @@ data class AbsFileMetadata(
 
 /** Tělo PATCH /api/me/progress/{itemId}/{episodeId} pro označení přehráno/nepřehráno. */
 data class AbsProgressUpdate(
-    val isFinished: Boolean,
+    val isFinished: Boolean? = null,
     /**
      * User (2026-08-16 13:38, „kniha se po ukončení poslechu vrátí za 2s") — root cause (ABS server
      * zdroj `MeController.js`): DELETE `/api/me/progress/:id` hledá podle INTERNÍHO id media-progress
@@ -171,6 +171,17 @@ data class AbsProgressUpdate(
      * reset teď jde přes PATCH `currentTime=0` (null = neposílat, Gson pole s null vynechá).
      */
     val currentTime: Double? = null,
+    /**
+     * User (2026-08-16 15:48, „ukončit poslech se pořád vrací") — DRUHÝ, skutečný root cause (ověřeno
+     * přímo ve zdroji `MediaProgress.js`/`User.js` na serveru): appka čte pole `progress` z API, ale
+     * ABS ho NEPOČÍTÁ čerstvě z `currentTime/duration` — `getOldMediaProgress()` vrací uložené
+     * `extraData.progress`, samostatné pole, které `currentTime` reset vůbec nemaže. A `applyProgressUpdate`
+     * na serveru navíc `extraData.progress` resetuje JEN větví „isFinished: true→false" (nikdy pro
+     * normální nedohranou knihu), JINDY čte `progress` z payloadu VÝHRADNĚ když `isFinished` v
+     * požadavku vůbec NENÍ přítomné — proto teď `resetProgress` posílá `progress=0.0` a `isFinished`
+     * vynechává (null), ať ABS server skutečně smaže i tohle druhé pole.
+     */
+    val progress: Double? = null,
 )
 
 data class AbsChapter(

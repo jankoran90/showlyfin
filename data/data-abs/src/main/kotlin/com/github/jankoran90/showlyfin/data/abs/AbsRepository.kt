@@ -373,19 +373,24 @@ class AbsRepository @Inject constructor(
 
     /**
      * User (2026-08-15 16:49) — „Ukončit poslech" audioknihy: vynuluje progress.
-     * User (2026-08-16 13:38, „kniha se po ukončení poslechu vrátí za 2s") — root cause (ověřeno
+     * User (2026-08-16 13:38, „kniha se po ukončení poslechu vrátí za 2s") — root cause #1 (ověřeno
      * přímo v ABS server zdroji `MeController.js`): DELETE `/api/me/progress/:id` hledá záznam podle
      * INTERNÍHO id media-progress řádku (`mediaProgresses.id`), ne podle libraryItemId, který appka
      * posílala → ABS log „Media progress not found", request VŽDY 404 (potvrzeno v `docker logs`).
-     * Optimistický update v UI se pak po [refresh] vrátil zpět, protože server progress reálně
-     * nikdy nesmazal. Řešení: stejná PATCH cesta jako [setBookFinished] (ta libraryItemId čeká
-     * správně), `currentTime=0` + `isFinished=false`.
+     * Řešení: stejná PATCH cesta jako [setBookFinished] (ta libraryItemId čeká správně).
+     * User (2026-08-16 15:48, „pořád se vrací i po opravě refreshe") — root cause #2 (ověřeno přímo
+     * ve zdroji `MediaProgress.js`/`User.js`): appka čte `Audiobook.progress` z API pole `progress`,
+     * ale ABS ho NEPOČÍTÁ čerstvě z `currentTime/duration` — vrací uložené `extraData.progress`,
+     * samostatné pole, které DŘÍVĚJŠÍ `isFinished=false, currentTime=0` payload vůbec nemazal (server
+     * ho resetuje jen při přechodu isFinished true→false, což se u normální nedohrané knihy nikdy
+     * nestane). Server navíc `progress` z payloadu čte JEN když `isFinished` v požadavku vůbec NENÍ
+     * přítomné → `isFinished` teď vynecháváme (null), posíláme `currentTime=0` + `progress=0`.
      */
     suspend fun resetProgress(itemId: String) {
         runCatching {
             val resp = service.patchProgress(
                 api("/api/me/progress/$itemId"), bearer(),
-                AbsProgressUpdate(isFinished = false, currentTime = 0.0),
+                AbsProgressUpdate(currentTime = 0.0, progress = 0.0),
             )
             if (!resp.isSuccessful) Timber.w("[ABS] resetProgress HTTP ${resp.code()} pro $itemId")
         }.onFailure { Timber.w(it, "[ABS] resetProgress selhal") }
