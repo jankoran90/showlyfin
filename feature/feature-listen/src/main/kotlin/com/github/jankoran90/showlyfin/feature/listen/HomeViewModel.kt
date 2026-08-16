@@ -16,11 +16,14 @@ import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
@@ -172,6 +175,15 @@ class HomeViewModel @Inject constructor(
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     /**
+     * User (2026-08-16 15:00, „vyhodím z Home audioknihu a pořád tam visí") — VÍC nezávislých
+     * spouštěčů refreshe (profil, marky, ruční akce jako ukončit poslech) mohlo běžet SOUBĚŽNĚ;
+     * starší (pomalejší) běh mohl dopsat `_items` PO novějším a přepsat ho zpátky na neaktuální data
+     * (classic poslední-zápis-vyhrává race). [refreshRequests] + `collectLatest` zaručí, že běží
+     * vždy jen JEDEN refresh najednou — nový požadavek zruší předchozí ještě nedoběhlý.
+     */
+    private val refreshRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /**
      * User (2026-08-16 14:03, „při přepnutí profilu se musí hned překreslit nabídka, ukazuje vždy
      * data předchozího profilu do restartu appky") — root cause: `init { refresh() }` je JEDNORÁZOVÉ,
      * ne reaktivní na aktivní profil. `Activity.recreate()` (viz `ProfileSwitchSignal`/`SlovoPhoneShell`)
@@ -182,6 +194,10 @@ class HomeViewModel @Inject constructor(
      * knihovní whitelist/creds, jen KDO je aktivní).
      */
     init {
+        viewModelScope.launch {
+            refreshRequests.collectLatest { doRefresh() }
+        }
+
         profileRepository.activeProfile
             .map { it?.profileUuid }
             .distinctUntilChanged()
@@ -205,9 +221,15 @@ class HomeViewModel @Inject constructor(
     /**
      * User (2026-08-16 13:36, „nacita se pokazde 6-10s") — knihy i epizody dřív běžely striktně za
      * sebou (audioknihovny navíc jedna po druhé uvnitř [flatMap]); teď obojí souběžně ([async]).
+     * Volání jen POŽÁDÁ o refresh ([refreshRequests]) — skutečný běh a případné zrušení staršího
+     * nedoběhlého běhu řeší `collectLatest` v [init].
      */
     fun refresh() {
-        viewModelScope.launch {
+        refreshRequests.tryEmit(Unit)
+    }
+
+    private suspend fun doRefresh() {
+        coroutineScope {
             _isLoading.value = true
             val booksDeferred = async {
                 runCatching {
