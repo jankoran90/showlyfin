@@ -349,7 +349,7 @@ fun RssPodcastScreen(
                 if (resumeMarks[viewModel.episodeKey(ep)] != null) {
                     ListenEpisodeAction(
                         Icons.Default.RestartAlt, "Reset poslechu",
-                        confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat".",
+                        confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.resetPosition(ep) }
                 } else null,
             ),

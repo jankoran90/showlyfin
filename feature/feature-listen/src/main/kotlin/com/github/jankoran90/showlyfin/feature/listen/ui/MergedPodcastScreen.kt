@@ -245,7 +245,7 @@ fun MergedPodcastScreen(
                 if (resumeMarks[item.key] != null) {
                     ListenEpisodeAction(
                         Icons.Default.RestartAlt, "Reset poslechu",
-                        confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat".",
+                        confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.resetPosition(item) }
                 } else null,
             ),

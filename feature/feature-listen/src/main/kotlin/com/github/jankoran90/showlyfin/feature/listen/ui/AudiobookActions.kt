@@ -44,14 +44,14 @@ fun AudiobookActionSheet(
             if (inProgress) {
                 ListenEpisodeAction(
                     Icons.Default.RestartAlt, "Reset poslechu",
-                    confirmMessage = "Smaže se uložená pozice poslechu a kniha zmizí z Domů z „Pokračovat".",
+                    confirmMessage = "Smaže se uložená pozice poslechu a kniha zmizí z Domů z „Pokračovat“.",
                     onClick = onResetProgress,
                 )
             } else null,
             if (inProgress) {
                 ListenEpisodeAction(
                     Icons.Default.CheckCircle, "Označit jako poslechnuté",
-                    confirmMessage = "Kniha se označí jako dočtená a zmizí z Domů z „Pokračovat".",
+                    confirmMessage = "Kniha se označí jako dočtená a zmizí z Domů z „Pokračovat“.",
                     onClick = onMarkFinished,
                 )
             } else null,
