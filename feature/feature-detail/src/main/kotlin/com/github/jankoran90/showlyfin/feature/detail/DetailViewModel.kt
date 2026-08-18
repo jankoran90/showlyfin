@@ -302,8 +302,6 @@ class DetailViewModel @Inject constructor(
                 streams = emptyList(),
                 // SIEVE S3: připomeň zdroj, který pro tenhle film posledně fungoval (pin v pickeru).
                 rememberedSource = workingSourceStore.get(item.imdbId, item.tmdbId)?.stream,
-                // SEZONA f2: stav jazykového chipu (profilová volba, jinak výchozí podle věku profilu).
-                audioChoice = audioChoice(item.imdbId),
                 titleAudioOverride = item.imdbId?.let { profileRepository.activeConfig.value.titleAudioChoice[it] },
                 hasSeasonSource = false,
                 // U seriálu se `rememberedSource` naplní až po otevření dílu — tohle ví hned, takže
@@ -1211,19 +1209,10 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * SEZONA f2 — jazykový chip. Přepíná NASTAVENÍ CELÉHO PROFILU (user 2026-08-01 16:45: „plošně na celý
-     * profil — karty filmu, seriálu, pořadu"); karta je jen místo, odkud se to dá přehodit.
-     */
-    fun setAudioChoice(choice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice) {
-        audioPathStore.set(choice)
-        _uiState.update { it.copy(audioChoice = choice) }
-    }
-
-    /**
      * User 2026-08-18 (Splitsville: „tady ten film má být v originále") — PER-TITUL přebití
      * profilového jazykového chipu. Cyklus Profil → CZ dabing → Originál → Profil…, uložené do
      * `ProfileConfig.titleAudioChoice` (synced appka↔web). „Profil" = smaž přebití, dál se řídí
-     * profilovým výchozím ([setAudioChoice]/[AudioPathStore]) beze změny.
+     * profilovým výchozím (`AudioPathStore`, nastavuje se teď v Nastavení → Obraz a zvuk).
      */
     fun cycleTitleAudioOverride() {
         val item = _uiState.value.item ?: return

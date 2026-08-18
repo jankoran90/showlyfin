@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 // SEZONA (SHW-113) f2 — přepínač zvukové stopy pod „Více" (parita s telefonním ⋮).
 import androidx.compose.material.icons.filled.Translate
-import com.github.jankoran90.showlyfin.data.uploader.AudioPathStore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -204,25 +203,10 @@ internal fun TvDetailActions(
         // Overflow „Více" — vzácné akce, ať hlavní řada není přeplácaná.
         if (showMore) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // SEZONA (SHW-113) f2 — PARITA S TELEFONEM (user 2026-08-01 17:27: „mysli i na TV, ať je to
-                // tam taky v nějakém dalším tlačítku… ať je to vše hotové a funkční TV a phone").
-                // Přepíná stopu za CELÝ PROFIL, takže změna na TV platí i na telefonu a naopak. Tlačítko je
-                // MIMO gate `hasRemembered` — na stopu chce divák sáhnout PŘED tím, než zdroj vůbec má.
-                TvActionButton(
-                    icon = Icons.Filled.Translate,
-                    label = if (uiState.audioChoice == AudioPathStore.Choice.CZ) "Zvuk: český dabing" else "Zvuk: originál",
-                    primary = false,
-                    active = uiState.audioChoice == AudioPathStore.Choice.CZ,
-                    onClick = {
-                        viewModel.setAudioChoice(
-                            if (uiState.audioChoice == AudioPathStore.Choice.CZ) {
-                                AudioPathStore.Choice.ORIGINAL
-                            } else {
-                                AudioPathStore.Choice.CZ
-                            },
-                        )
-                    },
-                )
+                // SEZONA (SHW-113) f2 — profilový přepínač PARITA S TELEFONEM odstraněna (user 2026-08-18:
+                // „zapnul jsem ho na jednom filmu a teď je všude" — matlo to vedle per-titul tlačítka
+                // hned pod ním, riziko omylem přepnout zvuk VŠECH filmů). TODO: až bude mít TV shell
+                // vlastní Nastavení obraz/zvuk, patří tam (na telefonu je teď ve FilmyAudioSection).
                 // user 2026-08-18 (Harry Potter 20 let → Splitsville) — PARITA S TELEFONEM. PER TITUL
                 // přebití, JEDNA volba pro OBOJÍ (auto-hledání na pozadí i výběr zvukové stopy) —
                 // nemění profilový výchozí (tlačítko výš), cykluje Profil → CZ dabing → Originál →

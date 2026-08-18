@@ -20,6 +20,20 @@ fun FilmyAudioSection(vm: SettingsViewModel = hiltViewModel()) {
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SettingSectionTitle("Obraz a zvuk")
+        // user 2026-08-18 (Rurouni Kenshin: "zapnul jsem ho na jednom filmu a teď je všude") —
+        // profilový jazykový chip PŘESUNUT SEM z menu karty filmu, kde matl vedle per-titul volby
+        // a hrozilo omylem přepnout zvuk VŠECH filmů. Tady je jasné, že se týká celého profilu.
+        SettingSwitchRow(
+            title = "Zvuk: český dabing",
+            subtitle = "Když soubor nabízí obě stopy, appka pustí dabing místo originálu. Platí pro celý profil — jednotlivý titul lze přebít v jeho vlastním menu (\"Tenhle titul\").",
+            checked = sys.audioChoice == com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ,
+            onCheckedChange = {
+                vm.setAudioChoice(
+                    if (it) com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ
+                    else com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL,
+                )
+            },
+        )
         SettingChips(
             label = "Normalizace hlasitosti filmu",
             subtitle = "Ztlumí hlasité scény, zesílí ticho",
