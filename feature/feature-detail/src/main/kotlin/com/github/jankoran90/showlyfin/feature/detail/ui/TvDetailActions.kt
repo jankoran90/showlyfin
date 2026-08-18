@@ -227,8 +227,8 @@ internal fun TvDetailActions(
                 // (celý profil) tenhle platí JEN pro tenhle titul: přepnutí HNED znovu nastartuje
                 // auto-hledání na pozadí s CZ/sdilej-first politikou (jako dětský profil).
                 TvActionButton(
-                    icon = Icons.Filled.Translate,
-                    label = if (uiState.titleWantsCzDub) "Auto-hledání: CZ zapnuté" else "Auto-hledání: chci CZ dabing",
+                    icon = Icons.Filled.Search,
+                    label = if (uiState.titleWantsCzDub) "Hledat: CZ dabing přednostně" else "Hledat: preferuj CZ dabing",
                     primary = false,
                     active = uiState.titleWantsCzDub,
                     onClick = { viewModel.toggleTitleCzPreference() },

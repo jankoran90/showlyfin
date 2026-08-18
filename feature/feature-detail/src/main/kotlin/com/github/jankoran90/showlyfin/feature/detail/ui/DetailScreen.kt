@@ -1028,8 +1028,8 @@ private fun DetailActionBar(
                 // + CZ/SK zvuk napřed (jako dětský profil). Přepnutí HNED znovu nastartuje hledání.
                 if (onToggleTitleCzPref != null) {
                     DropdownMenuItem(
-                        text = { Text(if (titleWantsCzDub) "Auto-hledání zapnuté: CZ dabing" else "Auto-hledání: chci CZ dabing") },
-                        leadingIcon = { Icon(Icons.Default.Translate, null) },
+                        text = { Text(if (titleWantsCzDub) "Hledat zdroje: CZ dabing přednostně" else "Hledat zdroje: preferuj CZ dabing") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
                         trailingIcon = {
                             Switch(checked = titleWantsCzDub, onCheckedChange = { onToggleTitleCzPref() })
                         },
