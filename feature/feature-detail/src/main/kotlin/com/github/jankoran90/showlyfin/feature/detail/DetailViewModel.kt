@@ -1170,7 +1170,7 @@ class DetailViewModel @Inject constructor(
     /** Znovu nastartuje auto-hledání s AKTUÁLNÍ efektivní politikou pro tenhle titul — volá se po
      * každém přepnutí [cycleTitleAudioOverride], ať se projeví hned, ne až při dalším nesouvisejícím
      * signálu (přidání do Chci vidět apod.). */
-    private fun retriggerSourceSearch(item: MediaItem, imdb: String) {
+    private suspend fun retriggerSourceSearch(item: MediaItem, imdb: String) {
         val title = _uiState.value.tmdbCzTitle ?: item.title
         if (item.type == MediaType.SHOW) {
             val season = _uiState.value.selectedSeason
