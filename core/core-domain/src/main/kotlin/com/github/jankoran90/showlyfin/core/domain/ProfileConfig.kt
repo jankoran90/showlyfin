@@ -153,6 +153,14 @@ data class ProfileConfig(
      */
     val czPreferredImdbIds: List<String> = emptyList(),
     /**
+     * User 2026-08-18 (Splitsville: „tady ten film má být v originále") — per-titul PŘEBITÍ profilového
+     * jazykového chipu ([AudioPathStore], SHW-113 f2). Klíč = imdb id, hodnota "CZ" nebo "ORIGINAL";
+     * chybí-li titul v mapě, řídí se dál profilovým výchozím (beze změny chování). Na rozdíl od
+     * [czPreferredImdbIds] (politika AUTO-HLEDÁNÍ zdroje) tohle řídí VÝBĚR ZVUKOVÉ STOPY u souboru,
+     * který má obě stopy uvnitř. Synced appka↔web (stejný config balík).
+     */
+    val titleAudioChoice: Map<String, String> = emptyMap(),
+    /**
      * FOYER (SHW-107, user 2026-07-27 „jdi do toho") — per-profil nastavení Filmotéky SYNCED napříč
      * zařízeními (dřív jen lokální prefs `tv_filmoteka`, takže TV a telefon se nastavovaly zvlášť).
      * null = zařízení si drží svoje lokální hodnoty a při první změně je samo vystrčí sem (migrace).

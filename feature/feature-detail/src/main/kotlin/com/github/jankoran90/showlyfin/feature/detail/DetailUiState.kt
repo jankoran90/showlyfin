@@ -189,6 +189,8 @@ data class DetailUiState(
     // dospělého profilu (výchozí = originál) chci pro TENHLE titul, aby auto-hledání na pozadí
     // dávalo přednost sdilej.cz/CZ zvuku, i když profil zůstává jinak na originále.
     val titleWantsCzDub: Boolean = false,
+    // user 2026-08-18 (Splitsville) — per-titul přebití zvukové stopy. null = drž se profilu.
+    val titleAudioOverride: String? = null,
     // user 2026-08-18 (Harry Potter 20 let) — ruční vložení odkazu jako zdroj (parita s webem).
     val showManualUrlDialog: Boolean = false,
     // SEZONA f2 — je pro TUTO sezónu uložený zdroj (receptura pro všechny díly)? Řídí popisek akce.

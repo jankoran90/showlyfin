@@ -303,9 +303,10 @@ class DetailViewModel @Inject constructor(
                 // SIEVE S3: připomeň zdroj, který pro tenhle film posledně fungoval (pin v pickeru).
                 rememberedSource = workingSourceStore.get(item.imdbId, item.tmdbId)?.stream,
                 // SEZONA f2: stav jazykového chipu (profilová volba, jinak výchozí podle věku profilu).
-                audioChoice = audioChoice(),
+                audioChoice = audioChoice(item.imdbId),
                 titleWantsCzDub = item.imdbId != null &&
                     profileRepository.activeConfig.value.czPreferredImdbIds.contains(item.imdbId),
+                titleAudioOverride = item.imdbId?.let { profileRepository.activeConfig.value.titleAudioChoice[it] },
                 hasSeasonSource = false,
                 // U seriálu se `rememberedSource` naplní až po otevření dílu — tohle ví hned, takže
                 // menu karty může nabídnout „zapomenout zdroje" bez proklikávání se k epizodě.
@@ -1201,9 +1202,25 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    /** SEZONA f2: platná volba stopy = chip profilu, jinak výchozí podle věku. */
-    private fun audioChoice(): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice =
-        audioPathStore.effective(isChildProfile())
+    /** SEZONA f2: platná volba stopy = PER-TITUL přebití ([titleAudioOverride], user 2026-08-18
+     * Splitsville), jinak chip profilu, jinak výchozí podle věku. Používá se pro SKUTEČNÝ výběr
+     * stopy při přehrání ([publishPreferredAudioLanguages]) — přebití tedy reálně řídí přehrávač,
+     * ne jen popisek v menu. */
+    // imdb SCHVÁLNĚ jako parametr, ne čtení z `_uiState.value.item` — v `load()` se volá UVNITŘ
+    // `_uiState.update { it.copy(...) }`, kde `_uiState.value` ještě drží STARÝ (nebo null) titul.
+    private fun audioChoice(imdb: String?): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice {
+        titleAudioOverrideChoice(imdb)?.let { return it }
+        return audioPathStore.effective(isChildProfile())
+    }
+
+    private fun titleAudioOverrideChoice(imdb: String?): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice? {
+        if (imdb == null) return null
+        return when (profileRepository.activeConfig.value.titleAudioChoice[imdb]) {
+            "CZ" -> com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ
+            "ORIGINAL" -> com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL
+            else -> null
+        }
+    }
 
     /**
      * SEZONA f2 — jazykový chip. Přepíná NASTAVENÍ CELÉHO PROFILU (user 2026-08-01 16:45: „plošně na celý
@@ -1212,6 +1229,34 @@ class DetailViewModel @Inject constructor(
     fun setAudioChoice(choice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice) {
         audioPathStore.set(choice)
         _uiState.update { it.copy(audioChoice = choice) }
+    }
+
+    /**
+     * User 2026-08-18 (Splitsville: „tady ten film má být v originále") — PER-TITUL přebití
+     * profilového jazykového chipu. Cyklus Profil → CZ dabing → Originál → Profil…, uložené do
+     * `ProfileConfig.titleAudioChoice` (synced appka↔web). „Profil" = smaž přebití, dál se řídí
+     * profilovým výchozím ([setAudioChoice]/[AudioPathStore]) beze změny.
+     */
+    fun cycleTitleAudioOverride() {
+        val item = _uiState.value.item ?: return
+        val imdb = item.imdbId ?: return
+        val profileId = profileRepository.activeProfile.value?.id ?: return
+        val current = profileRepository.activeConfig.value.titleAudioChoice[imdb]
+        val next = when (current) {
+            null -> "CZ"
+            "CZ" -> "ORIGINAL"
+            else -> null
+        }
+        _uiState.update { it.copy(titleAudioOverride = next) }
+        viewModelScope.launch {
+            profileRepository.updateConfig(profileId) { cfg ->
+                cfg.copy(
+                    titleAudioChoice = if (next == null) cfg.titleAudioChoice - imdb
+                    else cfg.titleAudioChoice + (imdb to next),
+                )
+            }
+            publishPreferredAudioLanguages()
+        }
     }
 
     /**
@@ -1225,7 +1270,7 @@ class DetailViewModel @Inject constructor(
         val st = _uiState.value
         val orig = st.movieDetails?.original_language ?: st.showDetails?.original_language
         val langs = com.github.jankoran90.showlyfin.data.uploader.AudioPathStore
-            .languagesFor(audioChoice(), orig)
+            .languagesFor(audioChoice(st.item?.imdbId), orig)
         prefs.edit().putString(
             com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.PREF_PREFERRED_AUDIO_LANGS,
             langs.joinToString(","),
@@ -1310,7 +1355,7 @@ class DetailViewModel @Inject constructor(
         // původně jen PŘEDVYBÍRAL, ale rozcestník se pořád ptal — tedy na otázku, kterou divák už zodpověděl.
         // Teď se rozcestník PŘESKOČÍ a jde se rovnou na zdroje ve zvolené stopě; jednorázová výjimka
         // zůstává dostupná tlačítkem „← Změnit dabing / originál" přímo v seznamu.
-        val path = when (audioChoice()) {
+        val path = when (audioChoice(imdb)) {
             com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ -> StreamAudioPath.CZ_DUB
             com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL -> StreamAudioPath.ORIGINAL
         }

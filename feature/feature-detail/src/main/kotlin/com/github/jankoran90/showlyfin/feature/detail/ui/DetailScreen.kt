@@ -518,6 +518,10 @@ fun DetailScreen(
                         // SEZONA f2: switch zvukové stopy v ⋮ (user 17:24 — chip pryč z těla karty).
                         audioChoice = uiState.audioChoice,
                         onAudioChoice = { viewModel.setAudioChoice(it) },
+                        // user 2026-08-18 (Splitsville): per-titul přebití zvukové stopy — „tenhle
+                        // film má být v originále", i když je profil jinak na CZ dabingu.
+                        titleAudioOverride = uiState.titleAudioOverride,
+                        onCycleTitleAudioOverride = { viewModel.cycleTitleAudioOverride() },
                         // user 2026-08-18 (Harry Potter 20 let): per-titul „chci CZ dabing" pro auto-hledání
                         // na pozadí. U dětského profilu je no-op (ten je na CZ napřed vždy), ale
                         // nabídnout se to může beze škody — ViewModel gating řeší `effectiveCachePolicy`.
@@ -905,6 +909,10 @@ private fun DetailActionBar(
     // SEZONA (SHW-113) f2: přepínač zvukové stopy v ⋮ menu (platí za PROFIL). null = přepínač skrytý.
     audioChoice: AudioPathStore.Choice = AudioPathStore.Choice.ORIGINAL,
     onAudioChoice: ((AudioPathStore.Choice) -> Unit)? = null,
+    // user 2026-08-18 (Splitsville) — PER TITUL přebití téhož jazykového chipu. null = drž se profilu
+    // (řádek se pořád zobrazí, jen ukazuje „Profil"). onCycleTitleAudioOverride == null = skryto.
+    titleAudioOverride: String? = null,
+    onCycleTitleAudioOverride: (() -> Unit)? = null,
     // user 2026-08-18 (Harry Potter 20 let): PER TITUL (na rozdíl od `audioChoice` výše) — auto-hledání
     // na pozadí pro tenhle konkrétní titul. null = přepínač skrytý.
     titleWantsCzDub: Boolean = false,
@@ -1020,6 +1028,21 @@ private fun DetailActionBar(
                                 if (czSelected) AudioPathStore.Choice.ORIGINAL else AudioPathStore.Choice.CZ,
                             )
                         },
+                    )
+                }
+                // user 2026-08-18 (Splitsville: „tady ten film má být v originále") — PER TITUL
+                // přebití přepínače výš. Klikem cykluje Profil → CZ dabing → Originál → Profil…
+                // Nemění profilový výchozí (řádek výš) — jen tenhle konkrétní titul.
+                if (onCycleTitleAudioOverride != null) {
+                    val label = when (titleAudioOverride) {
+                        "CZ" -> "Tenhle titul: CZ dabing"
+                        "ORIGINAL" -> "Tenhle titul: originál"
+                        else -> "Tenhle titul: podle profilu"
+                    }
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        leadingIcon = { Icon(Icons.Default.Translate, null) },
+                        onClick = onCycleTitleAudioOverride,
                     )
                 }
                 // user 2026-08-18 (Harry Potter 20 let) — na rozdíl od přepínače výš (celý profil)
