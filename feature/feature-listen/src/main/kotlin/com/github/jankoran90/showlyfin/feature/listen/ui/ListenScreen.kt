@@ -142,8 +142,34 @@ fun ListenScreen(
     }
 }
 
+/**
+ * User (2026-08-16 18:23, „Poslech čisté jako Domů") — Timeline jako samostatná swipe strana
+ * sekce Domů (viz `SlovoPhoneShell`), bez vnořeného tab řádku/filtru. `onGoToObjevit` nahrazuje
+ * dřívější interní přepnutí na tab Objev (ten teď žije jen v sidebaru, viz [SlovoSection.OBJEVIT]
+ * v ui-slovo-phone) — prázdný stav Timeline („Zatím nesleduješ žádné zdroje") tam navede.
+ */
 @Composable
-private fun BooksContent(
+fun TimelinePage(
+    state: ListenUiState,
+    viewModel: ListenViewModel,
+    podcastDownloads: List<com.github.jankoran90.showlyfin.data.offline.OfflineDownload>,
+    onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
+    onGoToObjevit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (state.isOffline) {
+        OfflineDownloadedPodcasts(podcastDownloads, viewModel)
+    } else {
+        PodcastTimelineSection(
+            onOpenDiscover = onGoToObjevit,
+            onOpenSource = { item -> onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.key) },
+            modifier = modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+fun BooksContent(
     state: ListenUiState,
     viewModel: ListenViewModel,
     onOpenBook: (String) -> Unit,
@@ -349,9 +375,14 @@ private fun PodcastsContent(
     }
 }
 
-/** AGORA-TABS: Sledované = dnešní grid vlastních zdrojů + ABS podcastů (s filtrem typu zdroje). */
+/**
+ * AGORA-TABS: Sledované = grid vlastních zdrojů + ABS podcastů. User (2026-08-16 18:23, „Poslech
+ * čisté jako Domů") — samostatná swipe strana bez filtru typu zdroje (ten dřív žil ve sdíleném
+ * filtr sheetu s Timeline/Objev — na téhle čisté stránce se neukazuje; `sourceType` volající strana
+ * nechá na "all").
+ */
 @Composable
-private fun FollowingContent(
+fun FollowingContent(
     state: ListenUiState,
     viewModel: ListenViewModel,
     onOpenPodcast: (String) -> Unit,

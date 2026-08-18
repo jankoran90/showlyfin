@@ -290,7 +290,7 @@ class SettingsViewModel @Inject constructor(
                 libs.flatMap { absRepo.getAudiobooks(it.id) }
             }.onSuccess { books ->
                 _bulkTargets.value = books.map { it.id }.toSet()
-                books.forEach { b -> audiobookDownloads.download(b.id, b.title, b.author, b.coverUrl) }
+                books.forEach { b -> audiobookDownloads.download(b.id, b.title, b.author, b.coverUrl, b.libraryId, b.seriesName) }
             }.onFailure { e ->
                 Timber.w(e, "[Listen] hromadné stažení audioknih selhalo")
             }

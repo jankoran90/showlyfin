@@ -115,7 +115,7 @@ class AudiobookDownloadManager @Inject constructor(
                 pending.isNotEmpty()
             }.collect {}
         }
-        targets.forEach { download(it.id, it.title, it.author, it.coverUrl) }
+        targets.forEach { download(it.id, it.title, it.author, it.coverUrl, it.libraryId, it.seriesName) }
     }
 
     fun stateFor(itemId: String): DownloadState = _states.value[itemId] ?: DownloadState()
@@ -126,12 +126,19 @@ class AudiobookDownloadManager @Inject constructor(
     fun downloadRecord(itemId: String): AudiobookDownload? = index[itemId]
 
     /** Spustí stažení celé audioknihy (idempotentně — už stažená/stahující se přeskočí). */
-    fun download(itemId: String, title: String, author: String?, coverUrl: String?) {
+    fun download(
+        itemId: String,
+        title: String,
+        author: String?,
+        coverUrl: String?,
+        libraryId: String? = null,
+        seriesName: String? = null,
+    ) {
         if (isDownloaded(itemId)) return
         if (jobs[itemId]?.isActive == true) return
         setState(itemId, DownloadState(DownloadStatus.DOWNLOADING, 0f))
         jobs[itemId] = scope.launch {
-            runCatching { doDownload(itemId, title, author, coverUrl) }
+            runCatching { doDownload(itemId, title, author, coverUrl, libraryId, seriesName) }
                 .onSuccess { dl ->
                     index[itemId] = dl
                     persistIndex()
@@ -152,11 +159,13 @@ class AudiobookDownloadManager @Inject constructor(
         title: String,
         author: String?,
         coverUrl: String?,
+        libraryId: String?,
+        seriesName: String?,
     ): AudiobookDownload = withContext(Dispatchers.IO) {
         if (absPrefs.downloadWifiOnly && !isOnWifi()) {
             error("Stahování je povolené jen přes Wi-Fi (viz Nastavení → Poslech).")
         }
-        gate.withPermit { downloadLocked(itemId, title, author, coverUrl) }
+        gate.withPermit { downloadLocked(itemId, title, author, coverUrl, libraryId, seriesName) }
     }
 
     private suspend fun downloadLocked(
@@ -164,6 +173,8 @@ class AudiobookDownloadManager @Inject constructor(
         title: String,
         author: String?,
         coverUrl: String?,
+        libraryId: String?,
+        seriesName: String?,
     ): AudiobookDownload = withContext(Dispatchers.IO) {
         val pb = repo.startPlayback(itemId)
         // FIX (2026-08-15, incident „audioknihy nedrží pozici při stahování více kusů") — startPlayback
@@ -203,6 +214,8 @@ class AudiobookDownloadManager @Inject constructor(
             tracks = local,
             sizeBytes = local.sumOf { File(it.filePath).length() },
             localCoverPath = localCover,
+            libraryId = libraryId,
+            seriesName = seriesName,
         )
     }
 
@@ -257,6 +270,51 @@ class AudiobookDownloadManager @Inject constructor(
         refreshDownloads()
     }
 
+    /**
+     * User (2026-08-16 17:38/17:56, „offline nezaznamenává změny") — periodický + na-dohrání zápis
+     * pozice OFFLINE přehrávané stažené knihy (viz `AudiobookPlayerConnection.pushState`/
+     * `onPlaybackEnded`). No-op, pokud kniha není (už) stažená — nepřidává nový záznam.
+     */
+    fun updateLocalProgress(itemId: String, positionSec: Double, isFinished: Boolean) {
+        val dl = index[itemId] ?: return
+        index[itemId] = dl.copy(
+            localPositionSec = positionSec,
+            localUpdatedAt = System.currentTimeMillis(),
+            localIsFinished = isFinished,
+        )
+        persistIndex()
+        refreshDownloads()
+    }
+
+    /** „Ukončit poslech"/reset u stažené knihy — smaže i lokálně uloženou pozici (mirror server DELETE). */
+    fun clearLocalProgress(itemId: String) {
+        val dl = index[itemId] ?: return
+        if (dl.localPositionSec == 0.0 && !dl.localIsFinished) return
+        index[itemId] = dl.copy(localPositionSec = 0.0, localUpdatedAt = 0L, localIsFinished = false)
+        persistIndex()
+        refreshDownloads()
+    }
+
+    /**
+     * Dopočte `libraryId`/`seriesName` do JIŽ staženého záznamu ze síťově načtené knihy
+     * ([HomeViewModel.doRefresh]/`ListenViewModel.refresh`) — `download()` sama tahle pole zná jen
+     * v okamžiku stažení; starší záznamy (před 1.0.48) je mají `null`, nově stažené z detailu
+     * (`AudiobookDetailViewModel`) můžou mít `libraryId=""` (ABS detail response ho nevrací). Levné
+     * no-op, když se nic nezměnilo — nezápíše zbytečně na disk při každém refreshi.
+     */
+    fun backfillMetadata(book: Audiobook) {
+        val dl = index[book.id] ?: return
+        val needsLibrary = book.libraryId.isNotBlank() && dl.libraryId != book.libraryId
+        val needsSeries = !book.seriesName.isNullOrBlank() && dl.seriesName != book.seriesName
+        if (!needsLibrary && !needsSeries) return
+        index[book.id] = dl.copy(
+            libraryId = if (needsLibrary) book.libraryId else dl.libraryId,
+            seriesName = if (needsSeries) book.seriesName else dl.seriesName,
+        )
+        persistIndex()
+        refreshDownloads()
+    }
+
     fun deleteAll() {
         jobs.values.forEach { it.cancel() }
         jobs.clear()
@@ -289,7 +347,10 @@ class AudiobookDownloadManager @Inject constructor(
             author = dl.author,
             coverUrl = dl.displayCover(),
             tracks = tracks,
-            startPositionSec = 0.0,
+            // User (2026-08-16 17:38, „spustil jsem 17. kapitolu, appka to nezaznamenala") — dřív
+            // natvrdo 0.0 → KAŽDÉ znovuotevření trvale offline knihy skočilo na začátek, i po
+            // rozposlouchání. Teď navazuje na [updateLocalProgress] (dohráno → 0, viz [clearLocalProgress]).
+            startPositionSec = if (dl.localIsFinished) 0.0 else dl.localPositionSec,
             durationSec = dl.durationSec,
             chapters = dl.chapters,
         )

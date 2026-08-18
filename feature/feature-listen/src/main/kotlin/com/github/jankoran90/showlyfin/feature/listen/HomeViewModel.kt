@@ -6,7 +6,9 @@ import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
+import com.github.jankoran90.showlyfin.data.abs.model.toAudiobook
 import com.github.jankoran90.showlyfin.data.uploader.AudiobookOwnershipRepository
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
@@ -44,6 +46,7 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repo: AbsRepository,
+    private val audiobookDownloads: AudiobookDownloadManager,
     private val sourcesRepo: PodcastSourcesRepository,
     private val directResume: DirectResumeStore,
     private val profileRepository: ProfileRepository,
@@ -129,6 +132,7 @@ class HomeViewModel @Inject constructor(
      */
     fun resetBookProgress(book: Audiobook) {
         _items.update { list -> list.filterNot { it is ContinueItem.Book && it.book.id == book.id } }
+        audiobookDownloads.clearLocalProgress(book.id)
         viewModelScope.launch {
             repo.endListening(book.id, book.progressId)
             refresh()
@@ -265,19 +269,37 @@ class HomeViewModel @Inject constructor(
             _isLoading.value = true
             val booksDeferred = async {
                 runCatching {
-                    if (!repo.isConfigured) emptyList()
+                    val fetched = if (!repo.isConfigured) emptyList()
                     else coroutineScope {
                         repo.getAudiobookLibraries()
                             .map { lib -> async { repo.getAudiobooks(lib.id) } }
                             .awaitAll()
                             .flatten()
                     }
-                        .filter { it.progress > 0.001 && !it.isFinished }
-                        .let { filterVisibleBooks(it) }
+                    // User (2026-08-16 17:38/17:56, „ať si to rozumí s online stavem a nepere se to")
+                    // — network vždy vyhrává tam, kde ho MÁME (server je zdroj pravdy); jen dopočte
+                    // libraryId/seriesName do lokálního download indexu (chybí tam, když se stahovalo
+                    // z detailu, nebo u starších stažení před 1.0.48), ať offline i online cesta
+                    // vidí STEJNÝ výsledek u téže knihy, ne dvě různá zařazení.
+                    fetched.forEach { audiobookDownloads.backfillMetadata(it) }
+                    fetched.filter { it.progress > 0.001 && !it.isFinished }
                 }.getOrDefault(emptyList())
             }
             val episodesDeferred = async { runCatching { continueDirectEpisodes() }.getOrDefault(emptyList()) }
-            val result = (booksDeferred.await().map(ContinueItem::Book) + episodesDeferred.await())
+            val networkBooks = booksDeferred.await()
+            // User (2026-08-16 17:38, „Domů je offline prázdné, nezaznamenává změny") — knihy STAŽENÉ
+            // pro offline s lokálně uloženým rozposlechem (viz `AudiobookPlayerConnection`). Union s
+            // network výsledkem, ne náhrada: síťová položka (server progres) má přednost, offline
+            // záznam doplní jen to, o čem server (ještě/offline vůbec) neví — na trvale offline
+            // zařízení `networkBooks` vždy prázdné (síť selhala), tady jediný zdroj Domů.
+            val networkIds = networkBooks.mapTo(mutableSetOf()) { it.id }
+            val offlineExtra = runCatching {
+                audiobookDownloads.downloads.value
+                    .filter { it.itemId !in networkIds && it.localPositionSec > 0.5 && !it.localIsFinished }
+                    .map { it.toAudiobook() }
+                    .let { filterVisibleBooks(it) }
+            }.getOrDefault(emptyList())
+            val result = ((networkBooks + offlineExtra).map(ContinueItem::Book) + episodesDeferred.await())
                 .sortedByDescending { it.updatedAt }
             // Zahoď zastaralý výsledek — mezitím vznikl novější požadavek (refresh()/reset), jehož
             // vlastní běh dopíše čerstvá data sám; tenhle by je jen přepsal starými.

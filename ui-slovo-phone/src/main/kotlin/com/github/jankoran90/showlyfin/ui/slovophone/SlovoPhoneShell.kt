@@ -1,26 +1,25 @@
 package com.github.jankoran90.showlyfin.ui.slovophone
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -34,22 +33,29 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
+import kotlin.math.absoluteValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.core.theme.ShowlyfinPhoneTheme
 import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
-import com.github.jankoran90.showlyfin.feature.listen.ListenMode
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
+import com.github.jankoran90.showlyfin.feature.listen.ui.BooksContent
+import com.github.jankoran90.showlyfin.feature.listen.ui.FollowingContent
 import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.TimelinePage
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import kotlinx.coroutines.launch
 
 /**
@@ -89,15 +95,25 @@ private fun SlovoShellContent() {
     // Activity-scoped → tytéž instance jako uvnitř ListenScreen/přehrávače (jednotný stav poslechu).
     val listenVm: ListenViewModel = hiltViewModel()
     val podcastLinkLookup: PodcastLinkLookupViewModel = hiltViewModel()
-    // User (2026-08-16 17:06, „Dej mi pod Domů sekci Poslech a bude to swipovatelné — první bude
-    // Domů obsah a pak se swipne na Poslech") — Poslech už NENÍ samostatná sekce v draweru: žije
-    // jako 2. stránka pageru v sekci Domů (strana 0 = rozposlouchané, strana 1 = celý Poslech).
-    val domuPager = rememberPagerState(initialPage = 0) { 2 }
     // Profily (2026-08-15): dětský profil → titulek sekce Poslech se změní na "Poslech - děti",
     // v draweru zmizí Objevit/Zdroje (dospělácká vrstva správy zdrojů — user „děti je mít nebudou").
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
     val isKidsProfile = activeProfile?.isAdmin == false
+    // User (2026-08-15) dětský profil = KidsListenContent uvnitř ListenScreen (sloučený obsah, žádný
+    // rozpad na Timeline/Sledované/Audioknihy) — nezměněno, jen dospělácká cesta se dnes (2026-08-16
+    // 18:23, „chci mít Poslech čistý jako Domů") rozpadá na samostatné swipe strany.
     val poslechLabel = if (isKidsProfile) "Poslech - děti" else SlovoSection.POSLECH.label
+    // User (2026-08-16 17:06, „Dej mi pod Domů sekci Poslech a bude to swipovatelné") + (18:27, „5
+    // sekcí bude swipovatelných — Domů, Timeline, Sledované, Audioknihy; Objevit jen v sidebaru") —
+    // dětský profil má pořád jen 2 strany (Domů + sloučený Poslech), dospělý 4.
+    val domuPager = rememberPagerState(initialPage = 0) { if (isKidsProfile) 2 else 4 }
+    val domuPageLabels = if (isKidsProfile) listOf(SlovoSection.DOMU.label, poslechLabel)
+    else listOf(SlovoSection.DOMU.label, "Timeline", "Sledované", "Audioknihy")
+    val listenState by listenVm.uiState.collectAsStateWithLifecycle()
+    val podcastDownloads by listenVm.offlinePodcasts.collectAsStateWithLifecycle()
+    // Dřív se volalo uvnitř ListenScreen (init) — dospělácká cesta ho teď obchází, zavolej sama, ať
+    // se po návratu z Nastavení (pořadí knihoven/podcastů) projeví změna.
+    LaunchedEffect(Unit) { listenVm.reloadOrderPrefs() }
     // Pojistka: přepnutí NA Děti, když je otevřená Objevit/Zdroje (odjinud, dřív dospělý) → vrať na Poslech.
     // User (2026-08-16 13:49, „nech zobrazit Domů i dětem, ať se můžou rychle vracet") — Domů už
     // NENÍ v tomhle seznamu; [HomeViewModel] správně omezuje obsah dětského profilu na jeho vlastní
@@ -163,9 +179,9 @@ private fun SlovoShellContent() {
         return
     }
 
-    // Back na 2. straně pageru Domů (Poslech) = vrať se na 1. stranu, dokud není zavřený drawer
-    // (drawer handler registrovaný níž má při otevřeném menu přednost).
-    BackHandler(enabled = current == SlovoSection.DOMU && domuPager.currentPage == 1) {
+    // Back na jakékoli straně pageru Domů kromě 1. (Timeline/Sledované/Audioknihy, dřív jen Poslech)
+    // = vrať se na 1. stranu (Domů), dokud není zavřený drawer (handler níž má přednost).
+    BackHandler(enabled = current == SlovoSection.DOMU && domuPager.currentPage > 0) {
         scope.launch { domuPager.animateScrollToPage(0) }
     }
     BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
@@ -199,76 +215,97 @@ private fun SlovoShellContent() {
                         // POSLECH se vykreslí stejně (redirect výš ho hned přepne na DOMU+stranu 1,
                         // tady jen ať when zůstane exhaustivní a nic neblikne).
                         SlovoSection.DOMU, SlovoSection.POSLECH -> SlovoSectionScaffold(
-                            // Titulek lišty žije s pagerem: strana 0 = Domů, strana 1 = Poslech.
-                            if (domuPager.currentPage == 0) SlovoSection.DOMU.label else poslechLabel,
-                            onMenu,
-                            trailing = if (domuPager.currentPage == 0 || isKidsProfile) null else {
-                                {
-                                    // User (2026-08-16 13:43, „šoupni tlačítka Podcasty/Audioknihy nahoru
-                                    // vedle nadpisu Poslech") — přepínač žije v horní liště (jen na straně
-                                    // Poslech; dětský profil ho nevidí, má sloučený obsah).
-                                    val lState by listenVm.uiState.collectAsStateWithLifecycle()
-                                    val modes = if (lState.booksFirst) listOf(ListenMode.BOOKS, ListenMode.PODCASTS)
-                                    else listOf(ListenMode.PODCASTS, ListenMode.BOOKS)
-                                    SingleChoiceSegmentedButtonRow {
-                                        modes.forEachIndexed { i, m ->
-                                            SegmentedButton(
-                                                selected = lState.mode == m,
-                                                onClick = { listenVm.setMode(m) },
-                                                shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
-                                            ) { Text(if (m == ListenMode.BOOKS) "Audioknihy" else "Podcasty") }
+                            onMenu = onMenu,
+                            // User (2026-08-16 17:38, „ať se ta nabídka, co není aktivní, taky
+                            // objeví nahoře jako karta a při swipnutí se rozsvítí/zhasne") — všechny
+                            // strany viditelné v liště zároveň, aktivní svítí, neaktivní ztlumená.
+                            titleContent = {
+                                DomuPagerTabs(
+                                    pagerState = domuPager,
+                                    labels = domuPageLabels,
+                                    onSelect = { page -> scope.launch { domuPager.animateScrollToPage(page) } },
+                                )
+                            },
+                            // User (2026-08-16 18:23, „ať zmizí úplně všechna tlačítka jako na Domů
+                            // obrazovce — čisté") — přepínač Podcasty/Audioknihy zmizel úplně, Audioknihy
+                            // je teď vlastní swipe strana.
+                        ) {
+                            Box(Modifier.fillMaxSize()) {
+                                HorizontalPager(
+                                    state = domuPager,
+                                    modifier = Modifier.fillMaxSize(),
+                                ) { page ->
+                                    if (isKidsProfile) {
+                                        when (page) {
+                                            0 -> HomeScreen(
+                                                onOpenBook = onOpenBook,
+                                                onOpenSourceEpisode = onOpenSourceEpisode,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                            else -> ListenScreen(
+                                                onOpenBook = onOpenBook,
+                                                onEditBook = { id, title, author ->
+                                                    onPush(SlovoDetailEntry.AudiobookEdit(id, title, author))
+                                                },
+                                                onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
+                                                onPlayEpisode = { itemId, episodeId ->
+                                                    onPush(SlovoDetailEntry.AudiobookPlayer(itemId, fromStart = false, episodeId = episodeId))
+                                                },
+                                                onOpenSource = { src -> onPush(sourceDetail(src)) },
+                                                onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
+                                                onOpenSourceEpisode = onOpenSourceEpisode,
+                                                // SLOVO-KIDS-EPISODE / WATCHDOG — dítě otevře jen schválenou sérii, routing podle typu.
+                                                onOpenSourceSeries = { src, slug, seriesTitle ->
+                                                    onPush(sourceSeriesDetail(src, slug, seriesTitle))
+                                                },
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                        }
+                                    } else if (page == 0) {
+                                        HomeScreen(
+                                            onOpenBook = onOpenBook,
+                                            onOpenSourceEpisode = onOpenSourceEpisode,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    } else if (!listenState.isConfigured) {
+                                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                            Text(
+                                                "Poslech zatím není nastaven.\nPřihlas se k Audiobookshelf serveru v Nastavení → Poslech (Audiobookshelf).",
+                                                textAlign = TextAlign.Center,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(24.dp),
+                                            )
+                                        }
+                                    } else {
+                                        when (page) {
+                                            1 -> TimelinePage(
+                                                state = listenState,
+                                                viewModel = listenVm,
+                                                podcastDownloads = podcastDownloads,
+                                                onOpenSourceEpisode = onOpenSourceEpisode,
+                                                onGoToObjevit = { current = SlovoSection.OBJEVIT },
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                            2 -> FollowingContent(
+                                                state = listenState,
+                                                viewModel = listenVm,
+                                                onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
+                                                onOpenSource = { src -> onPush(sourceDetail(src)) },
+                                                onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
+                                                downloadCount = podcastDownloads.size,
+                                                sourceType = "all",
+                                            )
+                                            else -> BooksContent(
+                                                state = listenState,
+                                                viewModel = listenVm,
+                                                onOpenBook = onOpenBook,
+                                                onEditBook = { id, title, author ->
+                                                    onPush(SlovoDetailEntry.AudiobookEdit(id, title, author))
+                                                },
+                                            )
                                         }
                                     }
                                 }
-                            },
-                        ) {
-                            Column(Modifier.fillMaxSize()) {
-                                HorizontalPager(
-                                    state = domuPager,
-                                    modifier = Modifier.weight(1f),
-                                ) { page ->
-                                    when (page) {
-                                        0 -> HomeScreen(
-                                            onOpenBook = onOpenBook,
-                                            onOpenSourceEpisode = onOpenSourceEpisode,
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
-                                        else -> ListenScreen(
-                                            onOpenBook = onOpenBook,
-                                            onEditBook = { id, title, author ->
-                                                onPush(SlovoDetailEntry.AudiobookEdit(id, title, author))
-                                            },
-                                            onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
-                                            onPlayEpisode = { itemId, episodeId ->
-                                                onPush(SlovoDetailEntry.AudiobookPlayer(itemId, fromStart = false, episodeId = episodeId))
-                                            },
-                                            onOpenSource = { src ->
-                                                onPush(
-                                                    when (src.type) {
-                                                        "youtube" -> SlovoDetailEntry.YoutubeChannel(src.ref, src.title)
-                                                        "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, src.title)
-                                                        else -> SlovoDetailEntry.RssPodcast(src.ref, src.title)
-                                                    }
-                                                )
-                                            },
-                                            onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
-                                            onOpenSourceEpisode = onOpenSourceEpisode,
-                                            // SLOVO-KIDS-EPISODE / WATCHDOG — dítě otevře jen schválenou sérii, routing podle typu.
-                                            onOpenSourceSeries = { src, slug, seriesTitle ->
-                                                onPush(
-                                                    when (src.type) {
-                                                        "youtube" -> SlovoDetailEntry.YoutubeChannel(src.ref, seriesTitle, seriesFilter = slug)
-                                                        "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, seriesTitle, seriesFilter = slug)
-                                                        else -> SlovoDetailEntry.RssPodcast(src.ref, seriesTitle, seriesFilter = slug)
-                                                    },
-                                                )
-                                            },
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
-                                    }
-                                }
-                                // Drobný indikátor dvou stran (signalizuje swipovatelnost).
-                                DomuPagerIndicator(domuPager.currentPage)
                             }
                         }
                         SlovoSection.OBJEVIT -> SlovoSectionScaffold(current.label, onMenu) {
@@ -300,7 +337,7 @@ private fun SlovoShellContent() {
 private fun SlovoSectionScaffold(
     title: String,
     onMenu: () -> Unit,
-    trailing: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -309,29 +346,66 @@ private fun SlovoSectionScaffold(
     }
 }
 
+/** Varianta s vlastním obsahem titulku místo prostého textu (viz [DomuPagerTabs]). */
+@Composable
+private fun SlovoSectionScaffold(
+    onMenu: () -> Unit,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    titleContent: @Composable BoxScope.() -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        SlovoSectionBar(onMenu = onMenu, trailing = trailing, content = titleContent)
+        Box(Modifier.fillMaxSize()) { content() }
+    }
+}
+
 /**
- * Dvě tečky pod pagerem sekce Domů (strana 0 = rozposlouchané, strana 1 = Poslech) — jemný
- * signál, že jde swipovat. Z motivu (primary/outlineVariant), žádné hardcoded barvy.
+ * Všechny strany pageru sekce Domů viditelné v liště zároveň — aktivní strana svítí plnou barvou,
+ * neaktivní jsou ztlumené; přechod sleduje živě samotné swipnutí prstem (ne jen doskok stránky).
+ * Tap na label = přeskok na tu stránku. User (2026-08-16 17:38): dřív byl titulek jen text, co se
+ * přehodil při doskoku, a tečkový indikátor dole — tohle je nahrazuje. User (2026-08-16 18:27, „5
+ * sekcí bude swipovatelných") — rozšířeno z pevných 2 (Domů/Poslech) na obecný seznam [labels].
  */
 @Composable
-private fun DomuPagerIndicator(page: Int) {
+private fun DomuPagerTabs(
+    pagerState: PagerState,
+    labels: List<String>,
+    onSelect: (Int) -> Unit,
+) {
+    val maxIndex = (labels.size - 1).coerceAtLeast(0)
+    val position = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, maxIndex.toFloat())
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
     ) {
-        repeat(2) { i ->
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 3.dp)
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (i == page) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.outlineVariant
-                    ),
+        labels.forEachIndexed { index, label ->
+            val distance = (position - index).absoluteValue.coerceIn(0f, 1f)
+            val alpha = lerp(0.4f, 1f, 1f - distance)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = if (index == pagerState.currentPage) FontWeight.Bold else FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = alpha),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { onSelect(index) },
             )
         }
     }
 }
+
+/** Sdíleno mezi kartou zdroje ve Sledovaných a Timeline řádkem (viz [SlovoDetailHost.linkedOrPlain]). */
+private fun sourceDetail(src: PodcastSource): SlovoDetailEntry = when (src.type) {
+    "youtube" -> SlovoDetailEntry.YoutubeChannel(src.ref, src.title)
+    "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, src.title)
+    else -> SlovoDetailEntry.RssPodcast(src.ref, src.title)
+}
+
+/** SLOVO-KIDS-EPISODE / WATCHDOG — dítě otevře jen schválenou sérii, routing podle typu zdroje. */
+private fun sourceSeriesDetail(src: PodcastSource, slug: String, seriesTitle: String): SlovoDetailEntry =
+    when (src.type) {
+        "youtube" -> SlovoDetailEntry.YoutubeChannel(src.ref, seriesTitle, seriesFilter = slug)
+        "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, seriesTitle, seriesFilter = slug)
+        else -> SlovoDetailEntry.RssPodcast(src.ref, seriesTitle, seriesFilter = slug)
+    }

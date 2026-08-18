@@ -13,6 +13,7 @@ import androidx.media3.session.SessionToken
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
+import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.AbsPlayback
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
@@ -43,6 +44,7 @@ class AudiobookPlayerConnection @Inject constructor(
     private val repo: AbsRepository,
     internal val prefs: AbsPreferences,
     private val downloads: EpisodeDownloadManager,
+    private val audiobookDownloads: AudiobookDownloadManager,
     private val resumeStore: DirectResumeStore,
     private val profileRepository: ProfileRepository,
 ) {
@@ -216,8 +218,25 @@ class AudiobookPlayerConnection @Inject constructor(
                 lastDirectSaveMs = now
                 resumeStore.save(ep.episodeId, pos, bookDurationMs)
             }
+        } else if (ep == null && sessionId(extras).isNullOrBlank()) {
+            // User (2026-08-16 17:38/17:56, „offline nezaznamenává změny") — audiokniha bez ABS
+            // session = buď čistě lokální (offline) přehrání stažené knihy, nebo právě dočasně
+            // offline stažení (viz `AudiobookDownloadManager.downloadLocked` — session se hned
+            // zavírá). `updateLocalProgress` je no-op, pokud kniha není stažená, takže druhý případ
+            // nic nezapíše. Stejný throttle jako u direct epizod (sdílený `lastDirectSaveMs`, hraje
+            // vždy jen jedna položka najednou).
+            val itemId = _state.value.currentItemId
+            if (!itemId.isNullOrBlank()) {
+                val now = System.currentTimeMillis()
+                if (now - lastDirectSaveMs >= DIRECT_SAVE_INTERVAL_MS) {
+                    lastDirectSaveMs = now
+                    audiobookDownloads.updateLocalProgress(itemId, posSec, isFinished = false)
+                }
+            }
         }
     }
+
+    private fun sessionId(extras: Bundle?): String? = extras?.getString(AudiobookPlayerService.KEY_SESSION_ID)
 
     fun playBook(
         pb: AbsPlayback,
@@ -553,11 +572,23 @@ class AudiobookPlayerConnection @Inject constructor(
     /**
      * Konec přehrávání podcast epizody. Dle nastavení: označ dokončenou, smaž stažení, přehraj
      * další z fronty / pokračuj dalšími epizodami podcastu. U audioknihy ([currentEpisode] == null)
-     * neděláme nic.
+     * frontu/auto-advance neřešíme (knihy nemají), jen OFFLINE dohrání zapíšeme lokálně (viz níže).
      */
     private fun onPlaybackEnded() {
         if (advancing) return
-        val ended = currentEpisode ?: return
+        val ended = currentEpisode
+        if (ended == null) {
+            // Audiokniha (ne epizoda) dohrána offline — server o tom neví (offline session nemá
+            // periodický sync), zapiš lokálně, ať appka nezůstane myslet, že je rozposlouchaná od
+            // začátku (viz [pushState] výše, stejný vzor).
+            val itemId = _state.value.currentItemId
+            val extras = controller?.currentMediaItem?.mediaMetadata?.extras
+            if (sessionId(extras).isNullOrBlank() && !itemId.isNullOrBlank()) {
+                val durSec = extras?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0
+                audiobookDownloads.updateLocalProgress(itemId, durSec, isFinished = true)
+            }
+            return
+        }
         advancing = true
         currentEpisode = null
 

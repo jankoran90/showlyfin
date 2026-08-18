@@ -1,36 +1,30 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Podcasts
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,17 +51,17 @@ import java.util.Locale
 
 /**
  * AGORA (Timeline): chronologický feed nových epizod ze všech sledovaných zdrojů, bucketovaný po čase
- * (Dnes / Tento týden / Minulý týden / po týdnech a měsících). Každý řádek je PŘEHLEDNÝ: obálka,
- * **tučný název pořadu** + datum, název epizody, pár řádků popisu (klik = rozbalit celý) a akce
- * Přehrát · Do fronty · Stáhnout. Vše čte z [MaterialTheme] tokenů (UNISON) a respektuje zobrazovací
- * volby z Nastavení (popis on/off, počet řádků popisu, datum on/off).
+ * (Dnes / Tento týden / Minulý týden / po týdnech a měsících). User (2026-08-16 18:23, „Poslech čisté
+ * jako Domů") — karta je ČISTÁ: obálka, **tučný název pořadu** + datum, název epizody, žádná viditelná
+ * tlačítka. Klik = otevři zdroj, dlouhý stisk = akce (Přehrát/fronta/stáhnout/skrýt), stejný vzor jako
+ * karty na Domů. Vše čte z [MaterialTheme] tokenů (UNISON).
  *
- * [refreshKey] = libovolná hodnota, jejíž změna vynutí refresh (např. zavření filtru přepočítá feed).
+ * [refreshKey] = libovolná hodnota, jejíž změna vynutí refresh.
  */
 @Composable
 fun PodcastTimelineSection(
     onOpenDiscover: () -> Unit,
-    /** Klik na řádek (ne na akční tlačítka) → otevři obsah zdroje + zvýrazni tuto epizodu. */
+    /** Klik na řádek → otevři obsah zdroje + zvýrazni tuto epizodu; dlouhý stisk = akce (menu). */
     onOpenSource: (PodcastTimelineViewModel.TimelineItem) -> Unit,
     modifier: Modifier = Modifier,
     refreshKey: Any? = null,
@@ -98,10 +91,7 @@ fun PodcastTimelineSection(
             )
 
         state.empty ->
-            TimelineMessage(
-                modifier,
-                "Za zvolené období žádné nové epizody.\nZkus rozšířit časový rozsah ve filtru.",
-            )
+            TimelineMessage(modifier, "Zatím žádné nové epizody.")
 
         else -> LazyColumn(
             modifier = modifier.fillMaxSize(),
@@ -141,6 +131,7 @@ fun PodcastTimelineSection(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TimelineRow(
     item: PodcastTimelineViewModel.TimelineItem,
@@ -157,7 +148,6 @@ private fun TimelineRow(
     onHideFollowing: () -> Unit,
 ) {
     val ep = item.episode
-    var descExpanded by remember(item.key) { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     val dateLabel = remember(ep.date) { if (display.showDate) formatEpisodeDate(item.timestampMs) else null }
 
@@ -169,8 +159,10 @@ private fun TimelineRow(
                 if (isPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.surface,
             )
-            // Klik na řádek → obsah zdroje + zvýraznění epizody (přehrání je na chipu „Přehrát" níž).
-            .clickable(onClick = onOpenSource)
+            // User (2026-08-16 18:23, „Poslech čisté jako Domů") — karta bez viditelných tlačítek:
+            // klik = otevři zdroj (jako dřív), dlouhý stisk = akce (Přehrát/fronta/stáhnout/skrýt),
+            // stejný vzor jako AudiobookCard/CoverCard na Domů.
+            .combinedClickable(onClick = onOpenSource, onLongClick = { showMenu = true })
             .padding(vertical = 10.dp, horizontal = 8.dp)
             .animateContentSize(),
     ) {
@@ -239,37 +231,6 @@ private fun TimelineRow(
                 )
             }
         }
-
-        // ── Popis „o čem epizoda je" (3–5 řádků dle Nastavení, klik = celý) ──
-        val desc = ep.description?.let { cleanDescription(it) }
-        if (display.showDescription && !desc.isNullOrBlank()) {
-            Text(
-                desc,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = if (descExpanded) Int.MAX_VALUE else display.descriptionLines,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .clickable { descExpanded = !descExpanded },
-            )
-        }
-
-        // ── Akce (WEFT SHW-75/W1): Přehrát + živý stav stažení + ⋮ menu — sjednoceno s ostatními
-        //    sekcemi Poslechu (fronta → menu). Video/Na TV nemá Timeline (agregát); klik na řádek
-        //    otevře pořad, kde jsou plné akce (NAVIGATE/W2). ──
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ActionChip(Icons.Default.PlayArrow, "Přehrát", onClick = onPlay)
-            DownloadChip(offlineStatus, onClick = onDownload)
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = { showMenu = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Další akce")
-            }
-        }
     }
 
     if (showMenu) {
@@ -291,83 +252,6 @@ private fun TimelineRow(
             ),
             onDismiss = { showMenu = false },
         )
-    }
-}
-
-/** Malé akční tlačítko (ikona + text) v tokenech — primary akcent na pozadí. */
-@Composable
-private fun ActionChip(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
-
-/** Akce Stáhnout s indikací stavu (stahuje se / staženo / k dispozici). */
-@Composable
-private fun DownloadChip(status: OfflineStatus, onClick: () -> Unit) {
-    when (status) {
-        OfflineStatus.DOWNLOADED ->
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = "Staženo",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Staženo",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-
-        OfflineStatus.QUEUED, OfflineStatus.DOWNLOADING ->
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Stahuji…",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-        else -> ActionChip(Icons.Default.Download, "Stáhnout", onClick = onClick)
     }
 }
 
@@ -413,11 +297,3 @@ private fun formatEpisodeDate(timestampMs: Long): String {
         else -> SimpleDateFormat("d. M. yyyy", Locale("cs")).format(Date(timestampMs))
     }
 }
-
-/** Očistí popis od HTML tagů a nadbytečných bílých znaků (RSS popisy bývají HTML). */
-private fun cleanDescription(raw: String): String =
-    raw.replace(Regex("<[^>]*>"), " ")
-        .replace(Regex("&nbsp;", RegexOption.IGNORE_CASE), " ")
-        .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
-        .replace(Regex("\\s+"), " ")
-        .trim()

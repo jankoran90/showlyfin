@@ -42,7 +42,7 @@ class AudiobookDetailViewModel @Inject constructor(
     /** Stáhnout celou aktuální audioknihu do zařízení (offline). */
     fun downloadAudiobook() {
         val d = _uiState.value.detail?.book ?: return
-        audiobookDownloads.download(d.id, d.title, d.author, d.coverUrl)
+        audiobookDownloads.download(d.id, d.title, d.author, d.coverUrl, d.libraryId, d.seriesName)
     }
 
     fun cancelDownload() {

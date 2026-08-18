@@ -19,6 +19,27 @@ data class AudiobookDownload(
     val sizeBytes: Long,
     /** Lokálně stažený obal (Plan CASTAWAY CA-4) — null u starších stažení / když se nepodařil. */
     val localCoverPath: String? = null,
+    /**
+     * User (2026-08-16 17:38, „dětský telefon je trvale offline, Domů nic nezaznamenává") — ABS
+     * knihovna, ze které kniha pochází ([Audiobook.libraryId]). Nullable (ne `= ""` jako u
+     * [Audiobook]) — Gson při deserializaci starších záznamů BEZ tohohle pole objekt nekonstruuje
+     * přes konstruktor (reflexe/Unsafe), takže Kotliní default `= ""` se u chybějícího klíče
+     * NEPOUŽIJE a pole by skončilo na runtime `null` i přes staticky non-null typ — nullable typ
+     * tohle riziko odstraňuje. Dopočítáno zpětně v `HomeViewModel.doRefresh()` ze síťového seznamu.
+     */
+    val libraryId: String? = null,
+    /**
+     * User (2026-08-16 17:56, „série karty se offline nezobrazují, Harry Potter není pod kartou
+     * série ale zvlášť") — [Audiobook.seriesName] se dřív do staženého záznamu vůbec neukládal,
+     * `groupBooksBySeries()` proto offline knihu vždy zařadil jako samostatnou položku.
+     */
+    val seriesName: String? = null,
+    /** Poslední lokálně uložená pozice přehrávání OFFLINE (sekundy) — zapisuje přehrávač periodicky + při dohrání. */
+    val localPositionSec: Double = 0.0,
+    /** Epoch ms poslední lokální aktualizace pozice — řadí Domů stejně jako `Audiobook.lastUpdate`. */
+    val localUpdatedAt: Long = 0L,
+    /** Kniha dohrána OFFLINE (server o tom neví). */
+    val localIsFinished: Boolean = false,
 )
 
 /** Jedna lokálně stažená audio stopa audioknihy (offset v rámci celé knihy zachován). */
@@ -30,9 +51,10 @@ data class LocalAudiobookTrack(
 )
 
 /**
- * Mapování stažené audioknihy na UI model police [Audiobook] (Plan CASTAWAY CA-2). Offline nemáme
- * server-side progres/pozici (ty drží jen server) → 0/false; obal je stále serverové URL (lokální
- * cache obalů = CASTAWAY CA-4 follow-up).
+ * Mapování stažené audioknihy na UI model police [Audiobook] (Plan CASTAWAY CA-2). User (2026-08-16
+ * 17:38) — server-side progres se dřív ukazoval natvrdo 0/false (appka na trvale offline zařízení
+ * nikdy neviděla progres) → teď se čte z lokálně persistovaného [localPositionSec]/[localIsFinished]
+ * (zapisuje přehrávač, viz `AudiobookPlayerConnection`).
  */
 /** Obal k zobrazení: lokálně stažený (offline) má přednost, jinak serverové URL. */
 fun AudiobookDownload.displayCover(): String? =
@@ -43,12 +65,14 @@ fun AudiobookDownload.toAudiobook(): Audiobook = Audiobook(
     title = title,
     author = author,
     narrator = null,
-    seriesName = null,
     coverUrl = displayCover(),
     durationSec = durationSec,
-    progress = 0.0,
-    currentTimeSec = 0.0,
-    isFinished = false,
+    progress = if (durationSec > 0.0) (localPositionSec / durationSec).coerceIn(0.0, 1.0) else 0.0,
+    currentTimeSec = localPositionSec,
+    isFinished = localIsFinished,
+    lastUpdate = localUpdatedAt.takeIf { it > 0L },
+    libraryId = libraryId ?: "",
+    seriesName = seriesName,
 )
 
 /**

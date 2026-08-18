@@ -28,6 +28,10 @@ dependencies {
     implementation(project(":feature:feature-playback")) // video epizody podcastů (PlaybackScreen)
     implementation(project(":data:data-uploader"))      // PodcastSource
     implementation(project(":data:data-abs"))           // ABS login (AbsRepository/AbsPreferences) — sekce Účet
+    // User (2026-08-16 18:23, „Poslech čisté jako Domů") — TimelinePage (nová veřejná API
+    // feature-listen) má v signatuře OfflineDownload (podcastDownloads); dřív SlovoPhoneShell tenhle
+    // typ nikdy přímo nepoužíval (jen skrz ListenScreen, který ho měl na svém vlastním classpath).
+    implementation(project(":data:data-offline"))       // OfflineDownload (TimelinePage podcastDownloads)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
