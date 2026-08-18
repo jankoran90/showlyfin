@@ -185,11 +185,9 @@ data class DetailUiState(
     // karta je jen místo, odkud se přepíná. Výchozí plyne z věku profilu: dětský CZ, dospělý originál.
     val audioChoice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice =
         com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL,
-    // user 2026-08-18 (Harry Potter 20 let): PER TITUL (na rozdíl od `audioChoice` výše) — u
-    // dospělého profilu (výchozí = originál) chci pro TENHLE titul, aby auto-hledání na pozadí
-    // dávalo přednost sdilej.cz/CZ zvuku, i když profil zůstává jinak na originále.
-    val titleWantsCzDub: Boolean = false,
-    // user 2026-08-18 (Splitsville) — per-titul přebití zvukové stopy. null = drž se profilu.
+    // user 2026-08-18 (Harry Potter 20 let → Splitsville) — PER TITUL přebití: null = drží se
+    // profilu, "CZ"/"ORIGINAL" ovlivní OBOJÍ (auto-hledání na pozadí i výběr zvukové stopy).
+    // Dřív dva samostatné příznaky, sloučeno po zpětné vazbě usera.
     val titleAudioOverride: String? = null,
     // user 2026-08-18 (Harry Potter 20 let) — ruční vložení odkazu jako zdroj (parita s webem).
     val showManualUrlDialog: Boolean = false,

@@ -223,9 +223,10 @@ internal fun TvDetailActions(
                         )
                     },
                 )
-                // user 2026-08-18 (Splitsville: „tady ten film má být v originále") — PARITA S TELEFONEM.
-                // PER TITUL přebití zvukové stopy — nemění profilový výchozí (tlačítko výš), cykluje
-                // Profil → CZ dabing → Originál → Profil… jen pro tenhle titul.
+                // user 2026-08-18 (Harry Potter 20 let → Splitsville) — PARITA S TELEFONEM. PER TITUL
+                // přebití, JEDNA volba pro OBOJÍ (auto-hledání na pozadí i výběr zvukové stopy) —
+                // nemění profilový výchozí (tlačítko výš), cykluje Profil → CZ dabing → Originál →
+                // Profil… (dřív dva samostatná tlačítka, sloučeno po zpětné vazbě usera).
                 TvActionButton(
                     icon = Icons.Filled.Translate,
                     label = when (uiState.titleAudioOverride) {
@@ -236,16 +237,6 @@ internal fun TvDetailActions(
                     primary = false,
                     active = uiState.titleAudioOverride != null,
                     onClick = { viewModel.cycleTitleAudioOverride() },
-                )
-                // user 2026-08-18 (Harry Potter 20 let) — PARITA S TELEFONEM. Na rozdíl od tlačítka výš
-                // (celý profil) tenhle platí JEN pro tenhle titul: přepnutí HNED znovu nastartuje
-                // auto-hledání na pozadí s CZ/sdilej-first politikou (jako dětský profil).
-                TvActionButton(
-                    icon = Icons.Filled.Search,
-                    label = if (uiState.titleWantsCzDub) "Hledat: CZ dabing přednostně" else "Hledat: preferuj CZ dabing",
-                    primary = false,
-                    active = uiState.titleWantsCzDub,
-                    onClick = { viewModel.toggleTitleCzPreference() },
                 )
                 if (hasRemembered) {
                     // Parita s telefonem (⋮ „Vybrat jiný zdroj") — TÝŽ sdílený picker (⭐ pin + chipy, D-pad).

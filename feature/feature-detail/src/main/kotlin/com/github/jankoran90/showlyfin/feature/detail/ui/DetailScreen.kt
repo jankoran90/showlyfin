@@ -518,15 +518,11 @@ fun DetailScreen(
                         // SEZONA f2: switch zvukové stopy v ⋮ (user 17:24 — chip pryč z těla karty).
                         audioChoice = uiState.audioChoice,
                         onAudioChoice = { viewModel.setAudioChoice(it) },
-                        // user 2026-08-18 (Splitsville): per-titul přebití zvukové stopy — „tenhle
-                        // film má být v originále", i když je profil jinak na CZ dabingu.
+                        // user 2026-08-18 (Harry Potter 20 let → Splitsville): per-titul přebití —
+                        // JEDNA volba řídí OBOJÍ (auto-hledání na pozadí i výběr zvukové stopy),
+                        // dřív dva samostatné přepínače, sloučeno po zpětné vazbě usera.
                         titleAudioOverride = uiState.titleAudioOverride,
                         onCycleTitleAudioOverride = { viewModel.cycleTitleAudioOverride() },
-                        // user 2026-08-18 (Harry Potter 20 let): per-titul „chci CZ dabing" pro auto-hledání
-                        // na pozadí. U dětského profilu je no-op (ten je na CZ napřed vždy), ale
-                        // nabídnout se to může beze škody — ViewModel gating řeší `effectiveCachePolicy`.
-                        titleWantsCzDub = uiState.titleWantsCzDub,
-                        onToggleTitleCzPref = { viewModel.toggleTitleCzPreference() },
                         onManualUrl = { viewModel.openManualUrlDialog() },
                         hasShowSources = uiState.hasAnyShowSource,
                         onForgetShowSources = { viewModel.forgetShowSources() },
@@ -913,10 +909,6 @@ private fun DetailActionBar(
     // (řádek se pořád zobrazí, jen ukazuje „Profil"). onCycleTitleAudioOverride == null = skryto.
     titleAudioOverride: String? = null,
     onCycleTitleAudioOverride: (() -> Unit)? = null,
-    // user 2026-08-18 (Harry Potter 20 let): PER TITUL (na rozdíl od `audioChoice` výše) — auto-hledání
-    // na pozadí pro tenhle konkrétní titul. null = přepínač skrytý.
-    titleWantsCzDub: Boolean = false,
-    onToggleTitleCzPref: (() -> Unit)? = null,
     // user 2026-08-18 (Harry Potter 20 let) — otevře dialog ručního vložení odkazu. null = skryto.
     onManualUrl: (() -> Unit)? = null,
     /** SEZONA: seriál má uložený zdroj u některé sezóny/dílu → nabídni zapomenutí i bez otevření dílu. */
@@ -1030,9 +1022,13 @@ private fun DetailActionBar(
                         },
                     )
                 }
-                // user 2026-08-18 (Splitsville: „tady ten film má být v originále") — PER TITUL
-                // přebití přepínače výš. Klikem cykluje Profil → CZ dabing → Originál → Profil…
-                // Nemění profilový výchozí (řádek výš) — jen tenhle konkrétní titul.
+                // user 2026-08-18 (Harry Potter 20 let → Splitsville) — PER TITUL přebití přepínače
+                // výš, JEDNA volba pro OBOJÍ: auto-hledání na pozadí (CZ = sdilej.cz + CZ/SK zvuk
+                // napřed, jako dětský profil) i výběr zvukové stopy při přehrání. Nemění profilový
+                // výchozí (řádek výš) — jen tenhle konkrétní titul. Klik cykluje Profil → CZ dabing
+                // → Originál → Profil…, HNED znovu nastartuje hledání s novou politikou.
+                // (Dřív dva samostatné přepínače — sloučeno po zpětné vazbě usera: „nechápu tu volbu
+                // hledat zdroje, obojí se týká jen českého dabingu".)
                 if (onCycleTitleAudioOverride != null) {
                     val label = when (titleAudioOverride) {
                         "CZ" -> "Tenhle titul: CZ dabing"
@@ -1043,20 +1039,6 @@ private fun DetailActionBar(
                         text = { Text(label) },
                         leadingIcon = { Icon(Icons.Default.Translate, null) },
                         onClick = onCycleTitleAudioOverride,
-                    )
-                }
-                // user 2026-08-18 (Harry Potter 20 let) — na rozdíl od přepínače výš (celý profil)
-                // tenhle platí JEN pro tenhle titul: dospělý profil zůstává na originále, ale pro
-                // titul, kde divák VÍ, že chce dabing, se auto-hledání na pozadí přepne na sdilej.cz
-                // + CZ/SK zvuk napřed (jako dětský profil). Přepnutí HNED znovu nastartuje hledání.
-                if (onToggleTitleCzPref != null) {
-                    DropdownMenuItem(
-                        text = { Text(if (titleWantsCzDub) "Hledat zdroje: CZ dabing přednostně" else "Hledat zdroje: preferuj CZ dabing") },
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        trailingIcon = {
-                            Switch(checked = titleWantsCzDub, onCheckedChange = { onToggleTitleCzPref() })
-                        },
-                        onClick = onToggleTitleCzPref,
                     )
                 }
                 // user 2026-08-01: doporučení má být po ruce přímo u filmu, ne jen v samostatné sekci.

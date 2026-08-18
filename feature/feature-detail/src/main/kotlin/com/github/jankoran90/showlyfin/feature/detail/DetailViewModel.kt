@@ -78,8 +78,8 @@ class DetailViewModel @Inject constructor(
     private val homeTheaterScene: com.github.jankoran90.showlyfin.data.maestro.HomeTheaterScene,
     // SEZONA (SHW-113) f2: volba zvukové stopy per titul (chip na kartě); výchozí dává profil.
     private val audioPathStore: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore,
-    // user 2026-08-18 (Harry Potter 20 let): „chci CZ dabing pro TENHLE titul" — čte/zapisuje
-    // ProfileConfig.czPreferredImdbIds (synced appka↔web), ovlivňuje auto-hledání na pozadí.
+    // user 2026-08-18 (Harry Potter 20 let / Splitsville): „chci CZ dabing / originál pro TENHLE
+    // titul" — čte/zapisuje ProfileConfig.titleAudioChoice (synced appka↔web).
     private val profileRepository: com.github.jankoran90.showlyfin.core.data.ProfileRepository,
     // BACKLOG link mode: play-gate — na mobilních datech nahraď uložený velký zdroj menší alternativou.
     private val connectivity: com.github.jankoran90.showlyfin.core.network.ConnectivityObserver,
@@ -304,8 +304,6 @@ class DetailViewModel @Inject constructor(
                 rememberedSource = workingSourceStore.get(item.imdbId, item.tmdbId)?.stream,
                 // SEZONA f2: stav jazykového chipu (profilová volba, jinak výchozí podle věku profilu).
                 audioChoice = audioChoice(item.imdbId),
-                titleWantsCzDub = item.imdbId != null &&
-                    profileRepository.activeConfig.value.czPreferredImdbIds.contains(item.imdbId),
                 titleAudioOverride = item.imdbId?.let { profileRepository.activeConfig.value.titleAudioChoice[it] },
                 hasSeasonSource = false,
                 // U seriálu se `rememberedSource` naplní až po otevření dílu — tohle ví hned, takže
@@ -1157,47 +1155,37 @@ class DetailViewModel @Inject constructor(
      * jinak by zapnutí u jednoho filmu tiše přepnulo výchozí zvuk pro celý zbytek appky. */
     private fun isChildProfile(): Boolean = cachePolicy() == "child"
 
-    /** User 2026-08-18 (Harry Potter 20 let) — pro AUTO-HLEDÁNÍ na pozadí (na rozdíl od [cachePolicy]
-     * samotné) navíc zohlední per-titul přání „chci CZ dabing" (`ProfileConfig.czPreferredImdbIds`):
-     * dospělý profil zůstává jinak na originále, jen pro TENHLE titul auto-hledání dá přednost
-     * sdilej.cz/CZ zvuku, jako by šlo o dětský profil. */
+    /** User 2026-08-18 (Harry Potter 20 let → Splitsville, sloučeno po zpětné vazbě usera „obojí se
+     * týká jen CZ dabingu") — pro AUTO-HLEDÁNÍ na pozadí (na rozdíl od [cachePolicy] samotné) navíc
+     * zohlední PER-TITUL přebití (`ProfileConfig.titleAudioChoice`, stejné pole jako [audioChoice]):
+     * "CZ" dá přednost sdilej.cz/CZ zvuku jako dětský profil; "ORIGINAL"/chybí = beze změny (dospělý
+     * profil hledá originálem stejně, tam není co přebíjet). Dětský profil je VŽDY CZ-first,
+     * nepřebitelné — bezpečnostní záměr, ne jen defaultní chování. */
     private fun effectiveCachePolicy(imdb: String?): String {
         val base = cachePolicy()
         if (base == "child" || imdb == null) return base
-        return if (profileRepository.activeConfig.value.czPreferredImdbIds.contains(imdb)) "child" else base
+        return if (profileRepository.activeConfig.value.titleAudioChoice[imdb] == "CZ") "child" else base
     }
 
-    /** Přepne per-titul „chci CZ dabing" (menu karty) a HNED znovu nastartuje auto-hledání s novou
-     * politikou, ať se projeví bez čekání na další nesouvisející signál (přidání do Chci vidět apod.). */
-    fun toggleTitleCzPreference() {
-        val item = _uiState.value.item ?: return
-        val imdb = item.imdbId ?: return
-        val profileId = profileRepository.activeProfile.value?.id ?: return
-        val wantsNow = !profileRepository.activeConfig.value.czPreferredImdbIds.contains(imdb)
-        _uiState.update { it.copy(titleWantsCzDub = wantsNow) }
-        viewModelScope.launch {
-            profileRepository.updateConfig(profileId) { cfg ->
-                cfg.copy(
-                    czPreferredImdbIds = if (wantsNow) cfg.czPreferredImdbIds + imdb
-                    else cfg.czPreferredImdbIds - imdb,
+    /** Znovu nastartuje auto-hledání s AKTUÁLNÍ efektivní politikou pro tenhle titul — volá se po
+     * každém přepnutí [cycleTitleAudioOverride], ať se projeví hned, ne až při dalším nesouvisejícím
+     * signálu (přidání do Chci vidět apod.). */
+    private fun retriggerSourceSearch(item: MediaItem, imdb: String) {
+        val title = _uiState.value.tmdbCzTitle ?: item.title
+        if (item.type == MediaType.SHOW) {
+            val season = _uiState.value.selectedSeason
+                ?: _uiState.value.seasons.firstOrNull { s -> s.season_number >= 1 }?.season_number
+                ?: 1
+            runCatching {
+                workingSourceStore.triggerSeasonCache(
+                    item.imdbId, item.tmdbId, title, item.year, effectiveCachePolicy(imdb), season,
                 )
             }
-            val title = _uiState.value.tmdbCzTitle ?: item.title
-            if (item.type == MediaType.SHOW) {
-                val season = _uiState.value.selectedSeason
-                    ?: _uiState.value.seasons.firstOrNull { s -> s.season_number >= 1 }?.season_number
-                    ?: 1
-                runCatching {
-                    workingSourceStore.triggerSeasonCache(
-                        item.imdbId, item.tmdbId, title, item.year, effectiveCachePolicy(imdb), season,
-                    )
-                }
-            } else {
-                runCatching {
-                    workingSourceStore.triggerAutoCache(
-                        item.imdbId, item.tmdbId, title, item.year, effectiveCachePolicy(imdb),
-                    )
-                }
+        } else {
+            runCatching {
+                workingSourceStore.triggerAutoCache(
+                    item.imdbId, item.tmdbId, title, item.year, effectiveCachePolicy(imdb),
+                )
             }
         }
     }
@@ -1256,6 +1244,9 @@ class DetailViewModel @Inject constructor(
                 )
             }
             publishPreferredAudioLanguages()
+            // sloučeno s dřívějším samostatným "Hledat zdroje" přepínačem (user 2026-08-18: „obojí
+            // se týká jen CZ dabingu") — jeden klik teď řídí OBOJÍ, hledání i výběr stopy.
+            retriggerSourceSearch(item, imdb)
         }
     }
 

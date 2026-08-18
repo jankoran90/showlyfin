@@ -146,18 +146,15 @@ data class ProfileConfig(
      */
     val sourcePrefs: SourcePrefs? = null,
     /**
-     * User 2026-08-18 (Harry Potter 20 let) — imdb id titulů, kde chce CZ dabing i na dospělém profilu
-     * (jehož výchozí je jinak originál). Ovlivňuje JEN politiku auto-hledání na pozadí pro TENHLE titul
-     * (sdilej.cz + CZ/SK audio napřed, jako dětský profil) — profil jako celek zůstává na originále.
-     * Synced appka↔web (STEJNÝ config balík, čte/zapisuje obojí).
-     */
-    val czPreferredImdbIds: List<String> = emptyList(),
-    /**
-     * User 2026-08-18 (Splitsville: „tady ten film má být v originále") — per-titul PŘEBITÍ profilového
-     * jazykového chipu ([AudioPathStore], SHW-113 f2). Klíč = imdb id, hodnota "CZ" nebo "ORIGINAL";
-     * chybí-li titul v mapě, řídí se dál profilovým výchozím (beze změny chování). Na rozdíl od
-     * [czPreferredImdbIds] (politika AUTO-HLEDÁNÍ zdroje) tohle řídí VÝBĚR ZVUKOVÉ STOPY u souboru,
-     * který má obě stopy uvnitř. Synced appka↔web (stejný config balík).
+     * User 2026-08-18 (Harry Potter 20 let → Splitsville: „nechápu tu volbu hledat zdroje, obojí se
+     * týká jen českého dabingu") — PER-TITUL přebití, JEDNA volba pro dospělý profil (jehož výchozí
+     * je jinak originál/originál řazení). Klíč = imdb id, hodnota "CZ" nebo "ORIGINAL"; chybí-li
+     * titul v mapě, řídí se profilovým výchozím ([AudioPathStore], SHW-113 f2) beze změny chování.
+     * "CZ" ovlivňuje OBOJÍ najednou: politiku auto-hledání na pozadí (sdilej.cz + CZ/SK audio napřed,
+     * jako dětský profil) I výběr zvukové stopy u souboru s oběma jazyky uvnitř. "ORIGINAL" ovlivňuje
+     * jen výběr stopy (dospělý profil hledá originálem stejně, tam není co přebíjet). Dřív dva
+     * samostatné přepínače (`czPreferredImdbIds` + tohle) — sloučeno po zpětné vazbě usera, že
+     * vedle sebe matou. Synced appka↔web (stejný config balík, čte/zapisuje obojí).
      */
     val titleAudioChoice: Map<String, String> = emptyMap(),
     /**
