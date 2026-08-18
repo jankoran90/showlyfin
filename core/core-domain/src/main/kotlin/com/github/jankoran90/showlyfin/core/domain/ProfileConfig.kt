@@ -146,6 +146,13 @@ data class ProfileConfig(
      */
     val sourcePrefs: SourcePrefs? = null,
     /**
+     * User 2026-08-18 (Harry Potter 20 let) — imdb id titulů, kde chce CZ dabing i na dospělém profilu
+     * (jehož výchozí je jinak originál). Ovlivňuje JEN politiku auto-hledání na pozadí pro TENHLE titul
+     * (sdilej.cz + CZ/SK audio napřed, jako dětský profil) — profil jako celek zůstává na originále.
+     * Synced appka↔web (STEJNÝ config balík, čte/zapisuje obojí).
+     */
+    val czPreferredImdbIds: List<String> = emptyList(),
+    /**
      * FOYER (SHW-107, user 2026-07-27 „jdi do toho") — per-profil nastavení Filmotéky SYNCED napříč
      * zařízeními (dřív jen lokální prefs `tv_filmoteka`, takže TV a telefon se nastavovaly zvlášť).
      * null = zařízení si drží svoje lokální hodnoty a při první změně je samo vystrčí sem (migrace).

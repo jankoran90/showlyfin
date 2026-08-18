@@ -185,6 +185,12 @@ data class DetailUiState(
     // karta je jen místo, odkud se přepíná. Výchozí plyne z věku profilu: dětský CZ, dospělý originál.
     val audioChoice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice =
         com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL,
+    // user 2026-08-18 (Harry Potter 20 let): PER TITUL (na rozdíl od `audioChoice` výše) — u
+    // dospělého profilu (výchozí = originál) chci pro TENHLE titul, aby auto-hledání na pozadí
+    // dávalo přednost sdilej.cz/CZ zvuku, i když profil zůstává jinak na originále.
+    val titleWantsCzDub: Boolean = false,
+    // user 2026-08-18 (Harry Potter 20 let) — ruční vložení odkazu jako zdroj (parita s webem).
+    val showManualUrlDialog: Boolean = false,
     // SEZONA f2 — je pro TUTO sezónu uložený zdroj (receptura pro všechny díly)? Řídí popisek akce.
     val hasSeasonSource: Boolean = false,
     // SEZONA — má seriál uložený JAKÝKOLI zdroj (kterákoli sezóna nebo díl)? Na rozdíl od

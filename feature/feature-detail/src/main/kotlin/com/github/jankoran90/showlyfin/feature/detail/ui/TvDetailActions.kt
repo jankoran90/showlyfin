@@ -223,6 +223,16 @@ internal fun TvDetailActions(
                         )
                     },
                 )
+                // user 2026-08-18 (Harry Potter 20 let) — PARITA S TELEFONEM. Na rozdíl od tlačítka výš
+                // (celý profil) tenhle platí JEN pro tenhle titul: přepnutí HNED znovu nastartuje
+                // auto-hledání na pozadí s CZ/sdilej-first politikou (jako dětský profil).
+                TvActionButton(
+                    icon = Icons.Filled.Translate,
+                    label = if (uiState.titleWantsCzDub) "Auto-hledání: CZ zapnuté" else "Auto-hledání: chci CZ dabing",
+                    primary = false,
+                    active = uiState.titleWantsCzDub,
+                    onClick = { viewModel.toggleTitleCzPreference() },
+                )
                 if (hasRemembered) {
                     // Parita s telefonem (⋮ „Vybrat jiný zdroj") — TÝŽ sdílený picker (⭐ pin + chipy, D-pad).
                     TvActionButton(
