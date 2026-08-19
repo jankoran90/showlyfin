@@ -42,6 +42,9 @@ data class AudiobookUploadScan(
 data class AudiobookUploadEnrich(
     @SerializedName("matched") val matched: Boolean = false,
     @SerializedName("error") val error: String? = null,
+    // 2026-08-19 — enrich (CZ+Audible lookup) běží od teď na pozadí (fire-and-forget), aby finalize
+    // nečekal na network hledání a upload nevypadal jako zaseklý; pending=true = ještě doběhne.
+    @SerializedName("pending") val pending: Boolean = false,
 )
 
 /**

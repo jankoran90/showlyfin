@@ -457,6 +457,12 @@ private fun ResultCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
+            } else if (res.enrich?.pending == true) {
+                Text(
+                    "Dohledávám obálku a popisek na pozadí — za chvíli hotovo, netřeba čekat.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
             }
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
