@@ -27,8 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 // SEZONA (SHW-113) f2 — přepínač zvukové stopy v ⋮ menu.
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
-import com.github.jankoran90.showlyfin.data.uploader.AudioPathStore
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MovieFilter
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -362,6 +363,39 @@ fun DetailScreen(
             },
         )
     }
+    // user 2026-08-18 (Harry Potter 20 let) — ruční vložení odkazu jako zdroj, parita s webem
+    // (`episodes.js` `vlozitVlastniZdroj`). Parsování (sdilej.cz → sdilej://) dělá ViewModel.
+    if (uiState.showManualUrlDialog) {
+        var urlText by remember(uiState.showManualUrlDialog) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissManualUrlDialog() },
+            title = { Text("Vložit vlastní odkaz") },
+            text = {
+                Column {
+                    Text(
+                        "Přímý odkaz na video (sdilej.cz nebo jiná přímá URL) — nahradí uložený zdroj tohoto titulu.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = urlText,
+                        onValueChange = { urlText = it },
+                        singleLine = true,
+                        placeholder = { Text("https://sdilej.cz/…") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    uiState.streamError?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.saveManualSource(urlText) }) { Text("Uložit") }
+            },
+            dismissButton = { TextButton(onClick = { viewModel.dismissManualUrlDialog() }) { Text("Zrušit") } },
+        )
+    }
     if (uiState.showDownloadMenu) {
         DownloadMenuSheet(
             // HOARD (SHW-84): stáhnout do telefonu = film z knihovny NEBO film se zapamatovaným zdrojem.
@@ -480,9 +514,12 @@ fun DetailScreen(
                         onWatchlist = { viewModel.toggleWatchlist() },
                         onShare = onShareCard,
                         onSimilar = onSimilar?.let { cb -> { cb(displayItem) } },
-                        // SEZONA f2: switch zvukové stopy v ⋮ (user 17:24 — chip pryč z těla karty).
-                        audioChoice = uiState.audioChoice,
-                        onAudioChoice = { viewModel.setAudioChoice(it) },
+                        // user 2026-08-18 (Harry Potter 20 let → Splitsville): per-titul přebití —
+                        // JEDNA volba řídí OBOJÍ (auto-hledání na pozadí i výběr zvukové stopy),
+                        // dřív dva samostatné přepínače, sloučeno po zpětné vazbě usera.
+                        titleAudioOverride = uiState.titleAudioOverride,
+                        onCycleTitleAudioOverride = { viewModel.cycleTitleAudioOverride() },
+                        onManualUrl = { viewModel.openManualUrlDialog() },
                         hasShowSources = uiState.hasAnyShowSource,
                         onForgetShowSources = { viewModel.forgetShowSources() },
                         castInOverflow = castInOverflow,
@@ -861,9 +898,12 @@ private fun DetailActionBar(
     onShare: (() -> Unit)? = null,
     /** „Doporuč podobné" — tenhle titul jako reference pro kurátora (user 2026-08-01). null = skryto. */
     onSimilar: (() -> Unit)? = null,
-    // SEZONA (SHW-113) f2: přepínač zvukové stopy v ⋮ menu (platí za PROFIL). null = přepínač skrytý.
-    audioChoice: AudioPathStore.Choice = AudioPathStore.Choice.ORIGINAL,
-    onAudioChoice: ((AudioPathStore.Choice) -> Unit)? = null,
+    // user 2026-08-18 (Splitsville) — PER TITUL přebití jazykové stopy. null = drž se profilu
+    // (řádek se pořád zobrazí, jen ukazuje „Profil"). onCycleTitleAudioOverride == null = skryto.
+    titleAudioOverride: String? = null,
+    onCycleTitleAudioOverride: (() -> Unit)? = null,
+    // user 2026-08-18 (Harry Potter 20 let) — otevře dialog ručního vložení odkazu. null = skryto.
+    onManualUrl: (() -> Unit)? = null,
     /** SEZONA: seriál má uložený zdroj u některé sezóny/dílu → nabídni zapomenutí i bez otevření dílu. */
     hasShowSources: Boolean = false,
     onForgetShowSources: (() -> Unit)? = null,
@@ -952,27 +992,26 @@ private fun DetailActionBar(
                     leadingIcon = { Icon(Icons.Default.Download, null) },
                     onClick = { menuOpen = false; onDownload() },
                 )
-                // SEZONA (SHW-113) f2 — přepínač zvukové stopy. User 2026-08-01 17:24: „dej ho spíš do
-                // pravého horního rohu do menu jako switch button" (dřív to byly chipy v těle karty).
-                // Přepíná PROFIL, ne titul — menu zůstává otevřené, ať je změna hned vidět na switchi.
-                if (onAudioChoice != null) {
-                    val czSelected = audioChoice == AudioPathStore.Choice.CZ
+                // SEZONA (SHW-113) f2 — profilový přepínač zvukové stopy PŘESUNUT do Nastavení →
+                // Obraz a zvuk (user 2026-08-18: „zapnul jsem ho na jednom filmu a teď je všude" —
+                // v menu karty vedle per-titul volby matl a hrozilo omylem přepnout VŠECHNY filmy).
+                // user 2026-08-18 (Harry Potter 20 let → Splitsville) — PER TITUL přebití přepínače
+                // výš, JEDNA volba pro OBOJÍ: auto-hledání na pozadí (CZ = sdilej.cz + CZ/SK zvuk
+                // napřed, jako dětský profil) i výběr zvukové stopy při přehrání. Nemění profilový
+                // výchozí (řádek výš) — jen tenhle konkrétní titul. Klik cykluje Profil → CZ dabing
+                // → Originál → Profil…, HNED znovu nastartuje hledání s novou politikou.
+                // (Dřív dva samostatné přepínače — sloučeno po zpětné vazbě usera: „nechápu tu volbu
+                // hledat zdroje, obojí se týká jen českého dabingu".)
+                if (onCycleTitleAudioOverride != null) {
+                    val label = when (titleAudioOverride) {
+                        "CZ" -> "Tenhle titul: CZ dabing"
+                        "ORIGINAL" -> "Tenhle titul: originál"
+                        else -> "Tenhle titul: podle profilu"
+                    }
                     DropdownMenuItem(
-                        text = { Text(if (czSelected) "Zvuk: český dabing" else "Zvuk: originál") },
+                        text = { Text(label) },
                         leadingIcon = { Icon(Icons.Default.Translate, null) },
-                        trailingIcon = {
-                            Switch(
-                                checked = czSelected,
-                                onCheckedChange = {
-                                    onAudioChoice(if (it) AudioPathStore.Choice.CZ else AudioPathStore.Choice.ORIGINAL)
-                                },
-                            )
-                        },
-                        onClick = {
-                            onAudioChoice(
-                                if (czSelected) AudioPathStore.Choice.ORIGINAL else AudioPathStore.Choice.CZ,
-                            )
-                        },
+                        onClick = onCycleTitleAudioOverride,
                     )
                 }
                 // user 2026-08-01: doporučení má být po ruce přímo u filmu, ne jen v samostatné sekci.
@@ -1005,6 +1044,15 @@ private fun DetailActionBar(
                         text = { Text("Odebrat zapamatovaný zdroj") },
                         leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                         onClick = { menuOpen = false; onRemoveRemembered() },
+                    )
+                }
+                // user 2026-08-18 (Harry Potter 20 let) — parita s webem: ruční vložení odkazu jako
+                // zdroj, když auto-hledání netrefí přesně tu verzi, kterou user sám ověří.
+                if (!inLibrary && onManualUrl != null) {
+                    DropdownMenuItem(
+                        text = { Text("Vložit vlastní odkaz") },
+                        leadingIcon = { Icon(Icons.Default.Link, null) },
+                        onClick = { menuOpen = false; onManualUrl() },
                     )
                 }
                 // SEZONA (user 2026-08-02, Arcane: „Nikde nemám možnost"): u seriálu je zdroj uložený

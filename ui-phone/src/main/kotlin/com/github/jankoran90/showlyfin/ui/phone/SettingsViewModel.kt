@@ -81,6 +81,9 @@ data class SettingsUiState(
     val streamFilterError: String? = null,
     // PROSPECT (SHW-102) — per-profil AUTO výběr zdroje (řazení/cap/speed/fallback), synced přes ProfileConfig.
     val sourcePrefs: SourcePrefs = SourcePrefs.DEFAULT,
+    // user 2026-08-18 — profilový jazykový chip (SHW-113 f2), přesunutý sem z menu karty.
+    val audioChoice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice =
+        com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL,
     // Plan EVEN — DRC/normalizér filmu (0 Vyp default / 1 Mírná / 2 Střední / 3 Noční); jen telefon.
     val movieDrcLevel: Int = 0,
     // TENFOOT F2c — TV transport lišta přehrávače: auto-skrytí ovládání (0 = nikdy) + krok převíjení (s).
@@ -203,6 +206,10 @@ class SettingsViewModel @Inject constructor(
     @Named("traktPreferences") private val prefs: SharedPreferences,
     // BACKLOG link mode — detekce WiFi/mobilní data pro play-gate (zustává v poolu SharedPreferences).
     private val connectivity: com.github.jankoran90.showlyfin.core.network.ConnectivityObserver,
+    // user 2026-08-18 (Rurouni Kenshin: "zapnul jsem ho na jednom filmu a teď je všude") — profilový
+    // jazykový chip zmizel z menu karty (matoucí vedle per-titul volby, riziko omylem přepnout
+    // VŠECHNO), přesunuto sem do Nastavení, kde není šance na to sáhnout omylem při prohlížení filmu.
+    private val audioPathStore: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore,
 ) : ViewModel() {
 
     companion object {
@@ -342,8 +349,16 @@ class SettingsViewModel @Inject constructor(
                         parentalAgeRating = profile.effectiveAgeRating,
                         parentalLocked = profile.isLocked,
                         maxParentalRating = profile.userInfo?.maxParentalRating,
+                        audioChoice = audioPathStore.effective(isChildAgeRating(profile.effectiveAgeRating)),
                     )
                 }
+            }
+            .launchIn(viewModelScope)
+        // user 2026-08-18 — profilový jazykový chip přesunutý sem z menu karty (viz konstruktor).
+        audioPathStore.choice
+            .onEach { _ ->
+                val childNow = isChildAgeRating(parentalControlsRepository.profile.value.effectiveAgeRating)
+                _uiState.update { it.copy(audioChoice = audioPathStore.effective(childNow)) }
             }
             .launchIn(viewModelScope)
         profileRepository.observeAll()
@@ -490,6 +505,14 @@ class SettingsViewModel @Inject constructor(
     fun setSourceSpeedProbeEnabled(v: Boolean) = updateSourcePrefs { it.copy(speedProbeEnabled = v) }
     fun setSourceSkCzFallback(v: Boolean) = updateSourcePrefs { it.copy(allowSkCzFallback = v) }
     fun setSourceSdilejFallback(v: Boolean) = updateSourcePrefs { it.copy(allowSdilejFallback = v) }
+
+    private fun isChildAgeRating(rating: AgeRating?) = rating == AgeRating.CHILDREN || rating == AgeRating.FAMILY
+
+    /** user 2026-08-18 — profilový jazykový chip (SHW-113 f2), přesunutý sem z menu karty (mátl vedle
+     * per-titul volby, hrozilo omylem přepnout zvuk VŠECH filmů). Platí za CELÝ profil, jako dřív. */
+    fun setAudioChoice(choice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice) {
+        audioPathStore.set(choice)
+    }
 
     // SEZONA f3b — chování auto-hledání U SERIÁLŮ (na filmy nemá vliv).
     fun setPreferSubtitledRelease(v: Boolean) = updateSourcePrefs { it.copy(preferSubtitledRelease = v) }

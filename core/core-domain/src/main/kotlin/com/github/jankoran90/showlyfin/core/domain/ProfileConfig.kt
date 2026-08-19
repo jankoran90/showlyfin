@@ -146,6 +146,18 @@ data class ProfileConfig(
      */
     val sourcePrefs: SourcePrefs? = null,
     /**
+     * User 2026-08-18 (Harry Potter 20 let → Splitsville: „nechápu tu volbu hledat zdroje, obojí se
+     * týká jen českého dabingu") — PER-TITUL přebití, JEDNA volba pro dospělý profil (jehož výchozí
+     * je jinak originál/originál řazení). Klíč = imdb id, hodnota "CZ" nebo "ORIGINAL"; chybí-li
+     * titul v mapě, řídí se profilovým výchozím ([AudioPathStore], SHW-113 f2) beze změny chování.
+     * "CZ" ovlivňuje OBOJÍ najednou: politiku auto-hledání na pozadí (sdilej.cz + CZ/SK audio napřed,
+     * jako dětský profil) I výběr zvukové stopy u souboru s oběma jazyky uvnitř. "ORIGINAL" ovlivňuje
+     * jen výběr stopy (dospělý profil hledá originálem stejně, tam není co přebíjet). Dřív dva
+     * samostatné přepínače (`czPreferredImdbIds` + tohle) — sloučeno po zpětné vazbě usera, že
+     * vedle sebe matou. Synced appka↔web (stejný config balík, čte/zapisuje obojí).
+     */
+    val titleAudioChoice: Map<String, String> = emptyMap(),
+    /**
      * FOYER (SHW-107, user 2026-07-27 „jdi do toho") — per-profil nastavení Filmotéky SYNCED napříč
      * zařízeními (dřív jen lokální prefs `tv_filmoteka`, takže TV a telefon se nastavovaly zvlášť).
      * null = zařízení si drží svoje lokální hodnoty a při první změně je samo vystrčí sem (migrace).

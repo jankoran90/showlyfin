@@ -78,6 +78,9 @@ class DetailViewModel @Inject constructor(
     private val homeTheaterScene: com.github.jankoran90.showlyfin.data.maestro.HomeTheaterScene,
     // SEZONA (SHW-113) f2: volba zvukové stopy per titul (chip na kartě); výchozí dává profil.
     private val audioPathStore: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore,
+    // user 2026-08-18 (Harry Potter 20 let / Splitsville): „chci CZ dabing / originál pro TENHLE
+    // titul" — čte/zapisuje ProfileConfig.titleAudioChoice (synced appka↔web).
+    private val profileRepository: com.github.jankoran90.showlyfin.core.data.ProfileRepository,
     // BACKLOG link mode: play-gate — na mobilních datech nahraď uložený velký zdroj menší alternativou.
     private val connectivity: com.github.jankoran90.showlyfin.core.network.ConnectivityObserver,
     @Named("traktPreferences") private val prefs: SharedPreferences,
@@ -232,11 +235,11 @@ class DetailViewModel @Inject constructor(
         runCatching {
             if (item.type == MediaType.SHOW) {
                 workingSourceStore.triggerSeasonCache(
-                    item.imdbId, item.tmdbId, title, item.year, cachePolicy(), season ?: 1,
+                    item.imdbId, item.tmdbId, title, item.year, effectiveCachePolicy(item.imdbId), season ?: 1,
                 )
             } else {
                 workingSourceStore.triggerAutoCache(
-                    item.imdbId, item.tmdbId, title, item.year, cachePolicy(),
+                    item.imdbId, item.tmdbId, title, item.year, effectiveCachePolicy(item.imdbId),
                 )
             }
         }
@@ -299,8 +302,7 @@ class DetailViewModel @Inject constructor(
                 streams = emptyList(),
                 // SIEVE S3: připomeň zdroj, který pro tenhle film posledně fungoval (pin v pickeru).
                 rememberedSource = workingSourceStore.get(item.imdbId, item.tmdbId)?.stream,
-                // SEZONA f2: stav jazykového chipu (profilová volba, jinak výchozí podle věku profilu).
-                audioChoice = audioChoice(),
+                titleAudioOverride = item.imdbId?.let { profileRepository.activeConfig.value.titleAudioChoice[it] },
                 hasSeasonSource = false,
                 // U seriálu se `rememberedSource` naplní až po otevření dílu — tohle ví hned, takže
                 // menu karty může nabídnout „zapomenout zdroje" bez proklikávání se k epizodě.
@@ -807,7 +809,7 @@ class DetailViewModel @Inject constructor(
             workingSourceStore.clearTombstoneFor(item.imdbId, item.tmdbId)
             viewModelScope.launch {
                 workingSourceStore.triggerAutoCache(
-                    item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+                    item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, effectiveCachePolicy(item.imdbId),
                 )
             }
         }
@@ -1060,7 +1062,7 @@ class DetailViewModel @Inject constructor(
         workingSourceStore.clearTombstoneFor(item.imdbId, item.tmdbId)
         if (item.type == MediaType.MOVIE) {
             workingSourceStore.triggerAutoCache(
-                item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+                item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, effectiveCachePolicy(item.imdbId),
             )
             return
         }
@@ -1072,7 +1074,7 @@ class DetailViewModel @Inject constructor(
             ?: 1
         workingSourceStore.triggerSeasonCache(
             item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title,
-            item.year, cachePolicy(), season,
+            item.year, effectiveCachePolicy(item.imdbId), season,
         )
         // SEZONA f3b: otevřená sezóna se hledá HNED (výše), ZBYTEK seriálu jde do persistentní fronty
         // s retry — jinak by druhá a další sezóna zůstaly bez zdroje, dokud si je někdo ručně neotevře.
@@ -1087,7 +1089,7 @@ class DetailViewModel @Inject constructor(
                         kind = "show",
                     ),
                 ),
-                cachePolicy(),
+                effectiveCachePolicy(item.imdbId),
             )
         }.onFailure { timber.log.Timber.w(it, "[SEZONA] fronta pro zbylé sezóny selhala") }
     }
@@ -1146,20 +1148,95 @@ class DetailViewModel @Inject constructor(
             else -> "original"
         }
 
-    /** SEZONA f2: je aktivní profil dětský? Určuje VÝCHOZÍ zvukovou stopu (dětský CZ, dospělý originál). */
+    /** SEZONA f2: je aktivní profil dětský? Určuje VÝCHOZÍ zvukovou stopu (dětský CZ, dospělý originál).
+     * ZÁMĚRNĚ jen věk profilu — per-titul CZ přání ([effectiveCachePolicy]) do tohohle NEVSTUPUJE,
+     * jinak by zapnutí u jednoho filmu tiše přepnulo výchozí zvuk pro celý zbytek appky. */
     private fun isChildProfile(): Boolean = cachePolicy() == "child"
 
-    /** SEZONA f2: platná volba stopy = chip profilu, jinak výchozí podle věku. */
-    private fun audioChoice(): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice =
-        audioPathStore.effective(isChildProfile())
+    /** User 2026-08-18 (Harry Potter 20 let → Splitsville, sloučeno po zpětné vazbě usera „obojí se
+     * týká jen CZ dabingu") — pro AUTO-HLEDÁNÍ na pozadí (na rozdíl od [cachePolicy] samotné) navíc
+     * zohlední PER-TITUL přebití (`ProfileConfig.titleAudioChoice`, stejné pole jako [audioChoice]):
+     * "CZ" dá přednost sdilej.cz/CZ zvuku jako dětský profil; "ORIGINAL"/chybí = beze změny (dospělý
+     * profil hledá originálem stejně, tam není co přebíjet). Dětský profil je VŽDY CZ-first,
+     * nepřebitelné — bezpečnostní záměr, ne jen defaultní chování. */
+    private fun effectiveCachePolicy(imdb: String?): String {
+        val base = cachePolicy()
+        if (base == "child" || imdb == null) return base
+        return if (profileRepository.activeConfig.value.titleAudioChoice[imdb] == "CZ") "child" else base
+    }
+
+    /** Znovu nastartuje auto-hledání s AKTUÁLNÍ efektivní politikou pro tenhle titul — volá se po
+     * každém přepnutí [cycleTitleAudioOverride], ať se projeví hned, ne až při dalším nesouvisejícím
+     * signálu (přidání do Chci vidět apod.). */
+    private suspend fun retriggerSourceSearch(item: MediaItem, imdb: String) {
+        val title = _uiState.value.tmdbCzTitle ?: item.title
+        if (item.type == MediaType.SHOW) {
+            val season = _uiState.value.selectedSeason
+                ?: _uiState.value.seasons.firstOrNull { s -> s.season_number >= 1 }?.season_number
+                ?: 1
+            runCatching {
+                workingSourceStore.triggerSeasonCache(
+                    item.imdbId, item.tmdbId, title, item.year, effectiveCachePolicy(imdb), season,
+                )
+            }
+        } else {
+            runCatching {
+                workingSourceStore.triggerAutoCache(
+                    item.imdbId, item.tmdbId, title, item.year, effectiveCachePolicy(imdb),
+                )
+            }
+        }
+    }
+
+    /** SEZONA f2: platná volba stopy = PER-TITUL přebití ([titleAudioOverride], user 2026-08-18
+     * Splitsville), jinak chip profilu, jinak výchozí podle věku. Používá se pro SKUTEČNÝ výběr
+     * stopy při přehrání ([publishPreferredAudioLanguages]) — přebití tedy reálně řídí přehrávač,
+     * ne jen popisek v menu. */
+    // imdb SCHVÁLNĚ jako parametr, ne čtení z `_uiState.value.item` — v `load()` se volá UVNITŘ
+    // `_uiState.update { it.copy(...) }`, kde `_uiState.value` ještě drží STARÝ (nebo null) titul.
+    private fun audioChoice(imdb: String?): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice {
+        titleAudioOverrideChoice(imdb)?.let { return it }
+        return audioPathStore.effective(isChildProfile())
+    }
+
+    private fun titleAudioOverrideChoice(imdb: String?): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice? {
+        if (imdb == null) return null
+        return when (profileRepository.activeConfig.value.titleAudioChoice[imdb]) {
+            "CZ" -> com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ
+            "ORIGINAL" -> com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL
+            else -> null
+        }
+    }
 
     /**
-     * SEZONA f2 — jazykový chip. Přepíná NASTAVENÍ CELÉHO PROFILU (user 2026-08-01 16:45: „plošně na celý
-     * profil — karty filmu, seriálu, pořadu"); karta je jen místo, odkud se to dá přehodit.
+     * User 2026-08-18 (Splitsville: „tady ten film má být v originále") — PER-TITUL přebití
+     * profilového jazykového chipu. Cyklus Profil → CZ dabing → Originál → Profil…, uložené do
+     * `ProfileConfig.titleAudioChoice` (synced appka↔web). „Profil" = smaž přebití, dál se řídí
+     * profilovým výchozím (`AudioPathStore`, nastavuje se teď v Nastavení → Obraz a zvuk).
      */
-    fun setAudioChoice(choice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice) {
-        audioPathStore.set(choice)
-        _uiState.update { it.copy(audioChoice = choice) }
+    fun cycleTitleAudioOverride() {
+        val item = _uiState.value.item ?: return
+        val imdb = item.imdbId ?: return
+        val profileId = profileRepository.activeProfile.value?.id ?: return
+        val current = profileRepository.activeConfig.value.titleAudioChoice[imdb]
+        val next = when (current) {
+            null -> "CZ"
+            "CZ" -> "ORIGINAL"
+            else -> null
+        }
+        _uiState.update { it.copy(titleAudioOverride = next) }
+        viewModelScope.launch {
+            profileRepository.updateConfig(profileId) { cfg ->
+                cfg.copy(
+                    titleAudioChoice = if (next == null) cfg.titleAudioChoice - imdb
+                    else cfg.titleAudioChoice + (imdb to next),
+                )
+            }
+            publishPreferredAudioLanguages()
+            // sloučeno s dřívějším samostatným "Hledat zdroje" přepínačem (user 2026-08-18: „obojí
+            // se týká jen CZ dabingu") — jeden klik teď řídí OBOJÍ, hledání i výběr stopy.
+            retriggerSourceSearch(item, imdb)
+        }
     }
 
     /**
@@ -1173,7 +1250,7 @@ class DetailViewModel @Inject constructor(
         val st = _uiState.value
         val orig = st.movieDetails?.original_language ?: st.showDetails?.original_language
         val langs = com.github.jankoran90.showlyfin.data.uploader.AudioPathStore
-            .languagesFor(audioChoice(), orig)
+            .languagesFor(audioChoice(st.item?.imdbId), orig)
         prefs.edit().putString(
             com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.PREF_PREFERRED_AUDIO_LANGS,
             langs.joinToString(","),
@@ -1258,7 +1335,7 @@ class DetailViewModel @Inject constructor(
         // původně jen PŘEDVYBÍRAL, ale rozcestník se pořád ptal — tedy na otázku, kterou divák už zodpověděl.
         // Teď se rozcestník PŘESKOČÍ a jde se rovnou na zdroje ve zvolené stopě; jednorázová výjimka
         // zůstává dostupná tlačítkem „← Změnit dabing / originál" přímo v seznamu.
-        val path = when (audioChoice()) {
+        val path = when (audioChoice(imdb)) {
             com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ -> StreamAudioPath.CZ_DUB
             com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL -> StreamAudioPath.ORIGINAL
         }
@@ -1398,6 +1475,42 @@ class DetailViewModel @Inject constructor(
         rememberSeasonRecipeFrom(stream)
         _uiState.update { it.copy(rememberedSource = stream, pendingWorkingConfirm = null) }
         cleanupRdKeepingSource(stream)
+    }
+
+    fun openManualUrlDialog() = _uiState.update { it.copy(showManualUrlDialog = true) }
+    fun dismissManualUrlDialog() = _uiState.update { it.copy(showManualUrlDialog = false) }
+
+    /**
+     * User 2026-08-18 (Harry Potter 20 let): auto-hledání někdy netrefí přesně tu CZ dabovanou
+     * verzi, kterou si user sám ověří na sdilej.cz — ruční vložení odkazu STEJNOU cestou jako
+     * u jiných zapamatovaných zdrojů (parita s webem, viz `episodes.js` `vlozitVlastniZdroj`).
+     * sdilej.cz odkaz se převede na naši `sdilej://` proxy schéma, jiná přímá URL se uloží beze
+     * změny (backend `_resolve_stream_obj` nechá „obyčejnou" https url beze změny projít).
+     */
+    fun saveManualSource(rawUrl: String) {
+        val url = rawUrl.trim()
+        if (url.isBlank()) return
+        val item = _uiState.value.item ?: return
+        val sdilejMatch = Regex("""^https?://sdilej\.cz/(\d+)/([^?#]+)""", RegexOption.IGNORE_CASE).find(url)
+        val (parsedUrl, name) = if (sdilejMatch != null) {
+            val (fileId, slug) = sdilejMatch.destructured
+            "sdilej://$fileId/$slug" to slug
+        } else if (url.startsWith("http://", true) || url.startsWith("https://", true)) {
+            url to (url.substringAfterLast('/').ifBlank { url })
+        } else {
+            _uiState.update { it.copy(streamError = "Tohle nevypadá jako platná http(s) URL.") }
+            return
+        }
+        val stream = UploaderStream(
+            name = name, description = "Ručně vložený odkaz", url = parsedUrl, addon = "Ruční odkaz",
+        )
+        val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: item.title
+        workingSourceStore.save(
+            item.imdbId, item.tmdbId, title, stream,
+            season = episodeSelector?.season, episode = episodeSelector?.episode,
+        )
+        rememberSeasonRecipeFrom(stream)
+        _uiState.update { it.copy(rememberedSource = stream, showManualUrlDialog = false) }
     }
 
     /**
@@ -1584,7 +1697,7 @@ class DetailViewModel @Inject constructor(
         )
         viewModelScope.launch {
             workingSourceStore.triggerAutoCache(
-                item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, cachePolicy(),
+                item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, effectiveCachePolicy(item.imdbId),
             )
         }
     }
@@ -1617,7 +1730,7 @@ class DetailViewModel @Inject constructor(
             runCatching {
                 workingSourceStore.triggerSeasonCache(
                     item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title,
-                    item.year, cachePolicy(), season,
+                    item.year, effectiveCachePolicy(item.imdbId), season,
                 )
             }.onFailure { timber.log.Timber.w(it, "[SEZONA] re-hledání po zapomenutí selhalo") }
             // Zbytek seriálu do fronty s retry — jinak by se dohledala jen ta právě otevřená sezóna
@@ -1633,7 +1746,7 @@ class DetailViewModel @Inject constructor(
                             kind = "show",
                         ),
                     ),
-                    cachePolicy(),
+                    effectiveCachePolicy(item.imdbId),
                 )
             }.onFailure { timber.log.Timber.w(it, "[SEZONA] fronta pro zbylé sezóny po zapomenutí selhala") }
         }
