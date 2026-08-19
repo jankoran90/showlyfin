@@ -161,4 +161,41 @@ class AudiobookUploadRepository @Inject constructor(
         }
         return resp.body() ?: error("Server nevrátil odpověď.")
     }
+
+    /** EXCISE (2026-08-19) — soft-smazání (archivace na serveru, ne fyzické mazání). */
+    suspend fun deleteAudiobook(itemId: String, requestedBy: String?): com.github.jankoran90.showlyfin.data.uploader.model.AudiobookDeleteResponse {
+        val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
+        val url = "$b/api/audiobook/delete"
+        val byPart = requestedBy?.takeIf { it.isNotBlank() }?.toRequestBodyForm()
+        val resp = service.deleteAudiobook(url, cookie(), itemId.toRequestBodyForm(), byPart)
+        if (!resp.isSuccessful) {
+            val msg = runCatching { resp.errorBody()?.string() }.getOrNull()?.take(200).orEmpty()
+            throw HttpException(resp).also { Timber.w(it, "[EXCISE] delete HTTP ${resp.code()}: $msg") }
+        }
+        return resp.body() ?: error("Server nevrátil odpověď.")
+    }
+
+    /** EXCISE (2026-08-19) — víc kandidátů obálky (CZ+Audible) k ručnímu výběru, nic se nepatchuje. */
+    suspend fun searchCovers(title: String, author: String?): List<com.github.jankoran90.showlyfin.data.uploader.model.AudiobookCoverCandidate> {
+        val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
+        val url = "$b/api/audiobook/cover_search"
+        val authorPart = author?.takeIf { it.isNotBlank() }?.toRequestBodyForm()
+        val resp = service.searchAudiobookCovers(url, cookie(), title.toRequestBodyForm(), authorPart)
+        if (!resp.isSuccessful) {
+            val msg = runCatching { resp.errorBody()?.string() }.getOrNull()?.take(200).orEmpty()
+            throw HttpException(resp).also { Timber.w(it, "[EXCISE] cover_search HTTP ${resp.code()}: $msg") }
+        }
+        return resp.body()?.candidates ?: emptyList()
+    }
+
+    /** EXCISE (2026-08-19) — aplikuje jednu z obálek vrácených [searchCovers]. */
+    suspend fun setCover(itemId: String, coverUrl: String) {
+        val b = base().ifBlank { error("Uploader server není nastaven v Nastavení.") }
+        val url = "$b/api/audiobook/set_cover"
+        val resp = service.setAudiobookCover(url, cookie(), itemId.toRequestBodyForm(), coverUrl.toRequestBodyForm())
+        if (!resp.isSuccessful) {
+            val msg = runCatching { resp.errorBody()?.string() }.getOrNull()?.take(200).orEmpty()
+            throw HttpException(resp).also { Timber.w(it, "[EXCISE] set_cover HTTP ${resp.code()}: $msg") }
+        }
+    }
 }

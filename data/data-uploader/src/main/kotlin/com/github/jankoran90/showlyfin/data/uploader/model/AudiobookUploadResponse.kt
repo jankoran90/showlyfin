@@ -47,6 +47,26 @@ data class AudiobookUploadEnrich(
     @SerializedName("pending") val pending: Boolean = false,
 )
 
+/** EXCISE (2026-08-19) — odpověď `POST /api/audiobook/delete` (soft, archivováno na serveru). */
+data class AudiobookDeleteResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("archived_to") val archivedTo: String? = null,
+)
+
+/** EXCISE (2026-08-19) — jeden kandidát obálky z `POST /api/audiobook/cover_search`. */
+data class AudiobookCoverCandidate(
+    @SerializedName("label") val label: String,
+    @SerializedName("cover") val cover: String,
+)
+
+data class AudiobookCoverSearchResponse(
+    @SerializedName("candidates") val candidates: List<AudiobookCoverCandidate> = emptyList(),
+)
+
+data class AudiobookSetCoverResponse(
+    @SerializedName("success") val success: Boolean = false,
+)
+
 /**
  * PROFIL (2026-08-16) — odpověď `GET /api/audiobook/ownership`: itemId → kdo audioknihu nahrál.
  * ABS sám koncept vlastníka nemá, drží ho jellyfin-uploader backend (vzor [PodcastSource.addedBy]).

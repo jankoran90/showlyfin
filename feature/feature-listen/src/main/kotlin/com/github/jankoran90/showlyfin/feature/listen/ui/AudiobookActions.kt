@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +39,9 @@ fun AudiobookActionSheet(
     shareActions: List<ListenEpisodeAction> = emptyList(),
     /** User (2026-08-16) — „V knihovně: …" info řádek (vlastník + komu je nasdíleno). */
     infoLine: String? = null,
+    /** EXCISE (2026-08-19) — „Smazat" (soft, archivováno na serveru); null = akce se vůbec nenabídne
+     * (server-side ownership check appku ochrání i kdyby klient omylem dovolil víc, tohle je jen UI). */
+    onDelete: (() -> Unit)? = null,
 ) {
     val inProgress = book.progress > 0.001 && !book.isFinished
     ListenEpisodeActionSheet(
@@ -60,7 +64,15 @@ fun AudiobookActionSheet(
                     onClick = onMarkFinished,
                 )
             } else null,
-        ) + shareActions,
+        ) + shareActions + listOfNotNull(
+            onDelete?.let {
+                ListenEpisodeAction(
+                    Icons.Default.Delete, "Smazat",
+                    confirmMessage = "Kniha zmizí z appky. Soubory zůstanou na serveru, dá se vrátit zpět.",
+                    onClick = it,
+                )
+            },
+        ),
         onDismiss = onDismiss,
     )
 }

@@ -197,6 +197,36 @@ interface UploaderService {
         @Part("author") author: RequestBody?,
     ): Response<com.github.jankoran90.showlyfin.data.uploader.model.AudiobookMatchResponse>
 
+    /** EXCISE (2026-08-19) — soft-smazání audioknihy (archivace, ne fyzické mazání): POST /api/audiobook/delete. */
+    @Multipart
+    @POST
+    suspend fun deleteAudiobook(
+        @Url url: String,
+        @Header("Cookie") cookie: String,
+        @Part("item_id") itemId: RequestBody,
+        @Part("requested_by") requestedBy: RequestBody?,
+    ): Response<com.github.jankoran90.showlyfin.data.uploader.model.AudiobookDeleteResponse>
+
+    /** EXCISE (2026-08-19) — víc kandidátů obálky k ručnímu výběru: POST /api/audiobook/cover_search. */
+    @Multipart
+    @POST
+    suspend fun searchAudiobookCovers(
+        @Url url: String,
+        @Header("Cookie") cookie: String,
+        @Part("title") title: RequestBody,
+        @Part("author") author: RequestBody?,
+    ): Response<com.github.jankoran90.showlyfin.data.uploader.model.AudiobookCoverSearchResponse>
+
+    /** EXCISE (2026-08-19) — aplikuje vybranou obálku z /cover_search: POST /api/audiobook/set_cover. */
+    @Multipart
+    @POST
+    suspend fun setAudiobookCover(
+        @Url url: String,
+        @Header("Cookie") cookie: String,
+        @Part("item_id") itemId: RequestBody,
+        @Part("cover_url") coverUrl: RequestBody,
+    ): Response<com.github.jankoran90.showlyfin.data.uploader.model.AudiobookSetCoverResponse>
+
     /** PROFIL (2026-08-16) — kdo nahrál kterou audioknihu: GET /api/audiobook/ownership. */
     @GET
     suspend fun getAudiobookOwnership(

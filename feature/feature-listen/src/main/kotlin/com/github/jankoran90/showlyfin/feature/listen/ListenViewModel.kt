@@ -19,6 +19,7 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineDownload
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.AudiobookOwnershipRepository
+import com.github.jankoran90.showlyfin.data.uploader.AudiobookUploadRepository
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -53,6 +54,7 @@ class ListenViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val sourcesRepo: PodcastSourcesRepository,
     private val audiobookOwnership: AudiobookOwnershipRepository,
+    private val audiobookUploadRepo: AudiobookUploadRepository,
     private val linkStore: com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore,
     private val absPrefs: AbsPreferences,
     @param:ApplicationContext private val context: Context,
@@ -199,6 +201,14 @@ class ListenViewModel @Inject constructor(
 
     /** Vlastník (profileUuid) audioknihy podle ABS itemId — pro info řádek sdílení. */
     fun ownerOfBook(itemId: String): String? = audiobookOwnership.ownership.value[itemId]
+
+    /** EXCISE (2026-08-19, user "B) jen pro profil") — smazat smí jen vlastník; legacy knihy bez
+     * zaznamenaného vlastníka (starší než PROFIL featura) povoleny všem dospělým, ať nezůstanou navždy
+     * nesmazatelné. Server tenhle check ověřuje znovu (nedůvěřuj jen klientu). */
+    fun canDeleteBook(itemId: String): Boolean {
+        val owner = ownerOfBook(itemId) ?: return true
+        return owner == activeProfile.value?.profileUuid
+    }
 
     /** Postaví text „V knihovně: …" pro sdílecí sheet (owner + komu je nasdíleno kromě vlastníka). */
     fun ownershipInfoLine(ownerUuid: String?, sharedWithProfiles: List<com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity>): String {
@@ -582,6 +592,23 @@ class ListenViewModel @Inject constructor(
         }
         viewModelScope.launch {
             repo.setBookFinished(book.id, finished = true)
+            refresh()
+        }
+    }
+
+    /**
+     * EXCISE (2026-08-19, user "dej moznost odstranit knihu... nechat na serveru pro pripad znovu
+     * natazeni") — kniha okamžitě zmizí z UI (optimistický update jako [resetBookProgress]), server
+     * ji jen archivuje (nemaže soubory). Neúspěch → [refresh] vrátí knihu zpátky do seznamu a chyba
+     * jde do `message` (stejný snackbar kanál jako jinde ve VM).
+     */
+    fun deleteBook(book: Audiobook) {
+        _uiState.update { s -> s.copy(books = s.books.filterNot { it.id == book.id }) }
+        viewModelScope.launch {
+            runCatching {
+                audiobookUploadRepo.deleteAudiobook(book.id, activeProfile.value?.profileUuid)
+            }.onFailure { Timber.w(it, "[EXCISE] smazání knihy selhalo") }
+            // Neúspěch → refresh knihu vrátí zpět (server ji nikdy nesmazal), success → zmizí trvale.
             refresh()
         }
     }

@@ -268,6 +268,9 @@ fun BooksContent(
                             viewModel.ownerOfBook(book.id),
                             otherAdults.filter { viewModel.isBookSharedWith(book.id, it) },
                         ),
+                        onDelete = if (viewModel.canDeleteBook(book.id)) {
+                            { viewModel.deleteBook(book); actionBook = null }
+                        } else null,
                     )
                 }
             }

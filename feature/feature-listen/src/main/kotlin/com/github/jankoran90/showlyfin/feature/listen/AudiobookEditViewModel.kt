@@ -34,6 +34,9 @@ class AudiobookEditViewModel @Inject constructor(
         val author: String = "",
         val isWorking: Boolean = false,
         val message: String? = null,
+        // EXCISE (2026-08-19) — grid kandidátů obálky k ručnímu výběru ("vyhledat obrázek online").
+        val coverCandidates: List<com.github.jankoran90.showlyfin.data.uploader.model.AudiobookCoverCandidate> = emptyList(),
+        val coverSearchOpen: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -100,4 +103,39 @@ class AudiobookEditViewModel @Inject constructor(
     }
 
     fun consumeMessage() = _state.update { it.copy(message = null) }
+
+    /** EXCISE (2026-08-19) — vyhledá VÍC kandidátů obálky (CZ+Audible), nic nepatchuje. */
+    fun searchCovers() {
+        val s = _state.value
+        if (s.title.isBlank()) return
+        viewModelScope.launch {
+            _state.update { it.copy(isWorking = true, message = null) }
+            runCatching { uploaderRepo.searchCovers(s.title, s.author.ifBlank { null }) }
+                .onSuccess { list ->
+                    _state.update {
+                        it.copy(
+                            isWorking = false,
+                            coverCandidates = list,
+                            coverSearchOpen = true,
+                            message = if (list.isEmpty()) "Žádná obálka nenalezena" else null,
+                        )
+                    }
+                }
+                .onFailure { e -> Timber.w(e, "[EXCISE] cover_search"); _state.update { it.copy(isWorking = false, message = "Chyba: ${e.message ?: e.localizedMessage ?: "neznámá"}") } }
+        }
+    }
+
+    fun dismissCoverSearch() = _state.update { it.copy(coverSearchOpen = false) }
+
+    /** EXCISE (2026-08-19) — aplikuje vybranou obálku z gridu. */
+    fun applyCover(url: String) {
+        val s = _state.value
+        if (s.itemId.isBlank()) return
+        viewModelScope.launch {
+            _state.update { it.copy(isWorking = true, coverSearchOpen = false, message = null) }
+            runCatching { uploaderRepo.setCover(s.itemId, url) }
+                .onSuccess { _state.update { it.copy(isWorking = false, message = "Obálka nastavena") } }
+                .onFailure { e -> Timber.w(e, "[EXCISE] set_cover"); _state.update { it.copy(isWorking = false, message = "Chyba: ${e.message ?: e.localizedMessage ?: "neznámá"}") } }
+        }
+    }
 }
