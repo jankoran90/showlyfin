@@ -100,10 +100,11 @@ object PodcastPairing {
                 MergedEpisode(
                     title = a.title,
                     date = a.date,                                 // audio/RSS datum = správnější
-                    // User (2026-08-19) — podcast (audio/RSS) popisek i obrázek preferovaný, video jen
-                    // fallback když RSS pole chybí NEBO je prázdné (ne jen null — RSS feedy občas
-                    // dávají "" místo chybějícího pole).
-                    imageUrl = a.imageUrl?.takeIf { it.isNotBlank() } ?: best?.imageUrl,
+                    // User (2026-08-19, obrázek YT kanálu) — YouTube dává per-epizodu ilustrovaný
+                    // thumbnail (host+branding), RSS feed mívá jen obecné logo pořadu → video obrázek
+                    // preferovaný, RSS jen fallback. Popisek OPAČNĚ — tam preferován podcast/RSS text,
+                    // video popis (SEO odstavec) jen fallback když RSS pole chybí/je prázdné.
+                    imageUrl = best?.imageUrl?.takeIf { it.isNotBlank() } ?: a.imageUrl,
                     description = a.description?.takeIf { it.isNotBlank() } ?: best?.description,
                     durationSec = a.durationSec.takeIf { it > 0 } ?: (best?.durationSec ?: 0.0),
                     audio = a,
