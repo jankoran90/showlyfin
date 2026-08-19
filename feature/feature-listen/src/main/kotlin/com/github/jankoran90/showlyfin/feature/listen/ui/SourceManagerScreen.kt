@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -78,6 +79,9 @@ fun SourceManagerScreen(
 
     Scaffold(
         modifier = modifier,
+        // User (2026-08-19) — obrazovka žije POD vlastní SlovoSectionBar, výchozí contentWindowInsets
+        // by ale přičetl status bar inset znovu → velká prázdná mezera nahoře (viz DiscoverScreen).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         LazyColumn(

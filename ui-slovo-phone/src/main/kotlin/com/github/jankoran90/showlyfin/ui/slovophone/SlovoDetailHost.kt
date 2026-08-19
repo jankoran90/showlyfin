@@ -128,10 +128,24 @@ internal fun SlovoDetail(
     val openYoutubeVideo: (proxyUrl: String) -> Unit = { proxyUrl ->
         val id = youtubeIdFromProxyUrl(proxyUrl)
         val watchUrl = if (id != null) "https://www.youtube.com/watch?v=$id" else proxyUrl
-        runCatching {
+        // User (2026-08-19) — bez setPackage šlo přes Android "open by default" i do prohlížeče
+        // (ReVanced YouTube není vždy zaregistrovaný jako auto-verified handler pro youtube.com odkazy).
+        // Vynutit YouTube appku (ReVanced instaluje pod stejným package id jako originál) přímo,
+        // fallback na obecný intent jen když appka chybí/nezvládne to.
+        val openedInApp = runCatching {
             context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(watchUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) },
+                Intent(Intent.ACTION_VIEW, Uri.parse(watchUrl)).apply {
+                    setPackage("com.google.android.youtube")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
             )
+        }.isSuccess
+        if (!openedInApp) {
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(watchUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) },
+                )
+            }
         }
     }
     // SLOVO-KIDS-EPISODE — admin dlouhý stisk na AUTO-detekované sérii (RssPodcastScreen) potřebuje

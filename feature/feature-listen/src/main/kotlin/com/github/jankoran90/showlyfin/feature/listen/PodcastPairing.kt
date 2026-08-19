@@ -74,22 +74,37 @@ object PodcastPairing {
 
         for (a in audio) {
             var best: SourceEpisode? = null
-            var bestSim = TITLE_THRESHOLD
+            var bestScore = -1.0
             for (v in video) {
                 if (v.id in usedVideo) continue
-                val sim = titleSimilarity(a.title, v.title)
-                if (sim < bestSim) continue
                 val dd = daysApart(a.date, v.date)
                 if (dd != null && dd > MAX_DAYS_APART) continue   // data známá a daleko → ne
-                best = v; bestSim = sim
+                val sim = titleSimilarity(a.title, v.title)
+                // User (2026-08-19) — reálné pořady (Tetragrammaton) mívají audio/RSS titulek jen
+                // jméno hosta, YouTube titulek zcela jinak (SEO clickbait) → čistá podobnost názvu
+                // pod prahem, i když jde o TUTÉŽ epizodu. V rámci jednoho pořadu ale blízké datum
+                // vydání je samo o sobě silný signál → bonus k similarity, ne tvrdý druhý gate.
+                val dateBonus = when (dd) {
+                    null -> 0.0
+                    0L -> 0.45
+                    1L -> 0.30
+                    in 2L..3L -> 0.15
+                    else -> 0.0
+                }
+                val score = sim + dateBonus
+                if (score < TITLE_THRESHOLD || score <= bestScore) continue
+                best = v; bestScore = score
             }
             if (best != null) usedVideo.add(best.id)
             merged.add(
                 MergedEpisode(
                     title = a.title,
                     date = a.date,                                 // audio/RSS datum = správnější
-                    imageUrl = a.imageUrl ?: best?.imageUrl,
-                    description = a.description ?: best?.description,
+                    // User (2026-08-19) — podcast (audio/RSS) popisek i obrázek preferovaný, video jen
+                    // fallback když RSS pole chybí NEBO je prázdné (ne jen null — RSS feedy občas
+                    // dávají "" místo chybějícího pole).
+                    imageUrl = a.imageUrl?.takeIf { it.isNotBlank() } ?: best?.imageUrl,
+                    description = a.description?.takeIf { it.isNotBlank() } ?: best?.description,
                     durationSec = a.durationSec.takeIf { it > 0 } ?: (best?.durationSec ?: 0.0),
                     audio = a,
                     video = best,

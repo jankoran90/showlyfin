@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -89,6 +90,10 @@ fun PodcastDiscoveryScreen(
     ListenExpressiveTheme {
         Scaffold(
             modifier = modifier,
+            // User (2026-08-19) — obrazovka žije POD vlastní SlovoSectionBar (ne systémovým Scaffoldem
+            // appky), výchozí contentWindowInsets by ale stejně přičetl status bar inset znovu → velká
+            // prázdná mezera nahoře (viz DiscoverScreen stejný vzor).
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             LazyVerticalGrid(
