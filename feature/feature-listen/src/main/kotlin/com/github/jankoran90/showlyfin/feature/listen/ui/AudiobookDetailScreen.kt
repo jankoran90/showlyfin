@@ -234,7 +234,7 @@ private fun DetailContent(
         detail.description?.let { desc ->
             item {
                 Text(
-                    desc,
+                    cleanAudiobookDescription(desc),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.86f),
                     modifier = Modifier.padding(top = 18.dp),
@@ -342,6 +342,14 @@ private fun ChapterRow(ch: Chapter, isCurrent: Boolean, onClick: () -> Unit) {
         )
     }
 }
+
+/** Očistí popis knihy od HTML tagů a entit — Audible/enrich zdroje vrací <p>/<i> místo čistého textu. */
+private fun cleanAudiobookDescription(raw: String): String =
+    raw.replace(Regex("<[^>]*>"), " ")
+        .replace(Regex("&nbsp;", RegexOption.IGNORE_CASE), " ")
+        .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
 private fun formatDuration(seconds: Double): String {
     val total = seconds.toLong()
