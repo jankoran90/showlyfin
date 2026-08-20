@@ -246,6 +246,9 @@ data class ProfileMetaRequest(
     val templateUuid: String? = null,
     // Plan HELM — app-login PIN hash (null = neposílat/nezměnit; "" = zrušit PIN). Gson vynechá null.
     val loginPinHash: String? = null,
+    // SHW-113 f4 (2026-08-20) — AgeRating.name ("CHILDREN"/"FAMILY"/…), null = beze změny/bez omezení.
+    // Web z toho odvodí dětský profil (dřív jen lokálně na appce, web to neviděl vůbec).
+    val maxAgeRating: String? = null,
 )
 
 // ── TMM Pipeline models ──────────────────────────────────────────────────────
