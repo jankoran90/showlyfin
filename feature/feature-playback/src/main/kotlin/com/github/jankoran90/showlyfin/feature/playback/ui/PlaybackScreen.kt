@@ -101,6 +101,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.playback.service.MoviePlayerService
@@ -112,6 +113,13 @@ import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/** [PlayerPrefs] string → Media3 konstanta. Neznámá/stará hodnota spadne na FIT (bezpečný default). */
+private fun resizeModeConst(mode: String): Int = when (mode) {
+    com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+    else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+}
 
 private fun Context.findActivity(): Activity? {
     var ctx: Context = this
@@ -286,6 +294,8 @@ fun PlaybackScreen(
     var currentSubtitle by remember { mutableStateOf<String?>(null) }
     // Krátký popis zdroje do lišty: rozlišení · video kodek · audio kodek · kanály.
     var sourceMeta by remember { mutableStateOf("") }
+    // user 2026-08-20: skutečný fps videa (ne fps titulkového kandidáta) k ruční volbě "Rychlost titulků".
+    var videoFps by remember { mutableStateOf(0f) }
     // TEMPO (SHW-49): výběr zvukové stopy v lokálním přehrávači. Telefon (ExoPlayer bez FFmpeg dekodéru)
     // neumí DTS/DTS-HD/TrueHD → `isTrackSupported` říká autoritativně, co reálně hraje. Když je vybraná
     // stopa nepodporovaná a existuje podporovaná (např. AC3 vedle DTS-HD), přepneme; když žádná, hlásíme.
@@ -479,7 +489,9 @@ fun PlaybackScreen(
         while (true) {
             val s = viewModel.state.value
             currentSubtitle = if (s.selectedSubtitleIndex >= 0 && s.subtitleCues.isNotEmpty()) {
-                val t = c.currentPosition - s.subtitleStyle.offsetMs
+                // fpsScale NEJDŘÍV (kompenzuje narůstající drift úměrně uplynulému času), Posun
+                // AŽ POTOM (zbylá konstantní odchylka na začátku po vyrovnání fps).
+                val t = (c.currentPosition * s.subtitleStyle.fpsScale).toLong() - s.subtitleStyle.offsetMs
                 s.subtitleCues.firstOrNull { t in it.startMs..it.endMs }?.text
             } else {
                 null
@@ -618,6 +630,7 @@ fun PlaybackScreen(
                 val af = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                     .firstNotNullOfOrNull { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it) } }
                 sourceMeta = buildSourceMeta(vf, af)
+                vf?.frameRate?.takeIf { it > 0f }?.let { videoFps = it }
             }
         }
         c.addListener(listener)
@@ -746,10 +759,13 @@ fun PlaybackScreen(
                             // Vlastní ukazatel (kolečko + vteřiny) kreslíme sami — vestavěný by se s ním
                             // překrýval a mlčel by, což je přesně to, na co si user stěžoval.
                             setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                            resizeMode = resizeModeConst(state.resizeMode)
                         }.also { playerViewRef = it }
                     },
                     // controller se připojí asynchronně → přiřaď ho do PlayerView, až je hotový.
-                    update = { it.player = controller },
+                    // resizeMode se řeší i tady (ne jen ve factory) — cyklování za běhu (⛶ ikona
+                    // v liště) musí projevit hned, bez znovuvytvoření PlayerView/prepare.
+                    update = { it.player = controller; it.resizeMode = resizeModeConst(state.resizeMode) },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -1006,6 +1022,23 @@ fun PlaybackScreen(
                                             .clickable { showSubtitleMenu = true; controlsVisible = true }
                                             .padding(horizontal = 8.dp, vertical = 2.dp),
                                     )
+                                    Spacer(Modifier.width(12.dp))
+                                    // user 2026-08-20 (černé pruhy na všech stranách): rychlé cyklování
+                                    // poměru stran přímo v přehrávači, beze změny přes Nastavení.
+                                    val resizeLabel = when (state.resizeMode) {
+                                        com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_ZOOM -> "Ořez"
+                                        com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_FILL -> "Plné"
+                                        else -> "Fit"
+                                    }
+                                    Text(
+                                        text = "⛶ $resizeLabel",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier
+                                            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                            .clickable { viewModel.cycleResizeMode(); controlsVisible = true }
+                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
                                 }
                             }
                         }
@@ -1020,6 +1053,8 @@ fun PlaybackScreen(
                             onColor = { viewModel.setColor(it) },
                             onPosition = { viewModel.setBottomPadding(it) },
                             onNudge = { viewModel.nudgeOffset(it) },
+                            onFpsScale = { viewModel.setFpsScale(it) },
+                            videoFps = videoFps,
                             onEdge = { viewModel.setEdge(it) },
                             onEdgeStrength = { viewModel.setEdgeStrength(it) },
                             onFont = { viewModel.setFont(it) },
@@ -1152,6 +1187,8 @@ private fun SubtitleSettingsPanel(
     onColor: (Int) -> Unit,
     onPosition: (Float) -> Unit,
     onNudge: (Long) -> Unit,
+    onFpsScale: (Float) -> Unit,
+    videoFps: Float = 0f,
     onEdge: (SubtitleEdge) -> Unit,
     onEdgeStrength: (Float) -> Unit,
     onFont: (SubtitleFont) -> Unit,
@@ -1281,10 +1318,56 @@ private fun SubtitleSettingsPanel(
             onMinus = { onPosition(state.subtitleStyle.bottomPaddingFraction - 0.02f) },
             onPlus = { onPosition(state.subtitleStyle.bottomPaddingFraction + 0.02f) })
 
+        // SUBSYNC (user 2026-08-20): server zkusil titulky sám srovnat podle anglické reference —
+        // ukaž výsledek, ať je jasné, že "Posun"/"Rychlost" už nemusí být vůbec potřeba.
+        state.subtitleSyncInfo?.let { info ->
+            Text(
+                "🤖 Auto-sync: $info",
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+
         // Posun (synchronizace, krok 0,25 s) — per film; nový film startuje na 0.
         StepperRow("Posun", "%+.2f s".format(state.subtitleStyle.offsetMs / 1000.0),
             onMinus = { onNudge(-250L) },
             onPlus = { onNudge(250L) })
+
+        // user 2026-08-20 ("to hraní si s fps nechci omylem spustit… chci auto search auto match"):
+        // ruční škálování je záložní nástroj pro případ, že auto-sync výš nesedne — schované za
+        // rozbalení, ať se nedá zmáčknout omylem. NARŮSTAJÍCÍ drift ≠ konstantní posun výš — video
+        // a soubor titulků mají jiný frame rate (typicky 23,976 vs 25 fps), odchylka roste s časem.
+        var fpsAdvancedOpen by remember { mutableStateOf(false) }
+        Row(
+            Modifier.fillMaxWidth().clickable { fpsAdvancedOpen = !fpsAdvancedOpen }.padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Ruční rychlost titulků (pokročilé)", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
+            Text(if (fpsAdvancedOpen) "Skrýt" else "Rozbalit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        }
+        if (fpsAdvancedOpen) {
+            if (videoFps > 0f) {
+                Text(
+                    "Video hraje na %.3f fps — podle toho zvol fps titulkového souboru.".format(videoFps),
+                    color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            StepperRow("Rychlost titulků", "%.1f %%".format(state.subtitleStyle.fpsScale * 100.0),
+                onMinus = { onFpsScale(state.subtitleStyle.fpsScale - 0.001f) },
+                onPlus = { onFpsScale(state.subtitleStyle.fpsScale + 0.001f) })
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Nejčastější reálná záměna PAL/film fps u releasů — rychlý start místo ladění po 0,1 %.
+                TextButton(onClick = { onFpsScale(23.976f / 25f) }) { Text("25→23,976", style = MaterialTheme.typography.labelSmall) }
+                TextButton(onClick = { onFpsScale(25f / 23.976f) }) { Text("23,976→25", style = MaterialTheme.typography.labelSmall) }
+                TextButton(onClick = { onFpsScale(1.0f) }) { Text("Reset", style = MaterialTheme.typography.labelSmall) }
+            }
+        }
 
         // Okraj (vzhled pozadí titulku)
         Spacer(Modifier.height(8.dp))

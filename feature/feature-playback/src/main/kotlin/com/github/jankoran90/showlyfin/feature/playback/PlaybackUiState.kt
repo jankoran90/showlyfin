@@ -28,6 +28,8 @@ data class PlaybackUiState(
     val subtitleCues: List<SubtitleCue> = emptyList(), // naparsované cue aktuální stopy (renderujeme sami)
     val subtitleRuntimeOk: String = "-",         // "1"/"0"/"-" — sedí délka na film
     val subtitleError: String? = null,
+    // SUBSYNC — server srovnal časování podle anglické reference (nebo řekl proč ne). null = nic k hlášení.
+    val subtitleSyncInfo: String? = null,
     // ── AI překlad titulků EN→CS (Plan LINGUA Fáze 2) — poslední záloha, když 0 CZ titulků ───
     val canTranslateAi: Boolean = false,         // 0 CZ kandidátů + máme imdb → nabídni tlačítko
     val aiTranslating: Boolean = false,          // běží async překlad (spinner)
@@ -45,6 +47,9 @@ data class PlaybackUiState(
     // SEZONA f3l — mezi stopami TÉHOŽ jazyka vzít tu s nejvíc kanály (5.1 před stereo). Jen na TV;
     // viz [PlayerPrefs.PREFER_MOST_CHANNELS_KEY].
     val preferMostChannels: Boolean = PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS,
+    // user 2026-08-20 (černé pruhy na všech stranách): poměr stran místního přehrávače — dřív
+    // natvrdo FIT bez možnosti změny. Viz [PlayerPrefs.VIDEO_RESIZE_MODE_KEY].
+    val resizeMode: String = PlayerPrefs.DEFAULT_VIDEO_RESIZE_MODE,
 )
 
 /** Jeden titulkový blok (.srt) — renderujeme vlastním overlayem, takže posun/přepnutí stopy
@@ -65,6 +70,9 @@ data class SubtitleStyle(
     val edgeStrength: Float = 1.0f,       // síla okraje: obrys tloušťka / stín rozostření / podklad krytí (0.4–2.5)
     val font: SubtitleFont = SubtitleFont.SERIF, // typ písma (bezpatkové/patkové/strojové)
     val weight: Int = 400,                // tučnost písma (FontWeight 100–900)
+    // user 2026-08-20 ("po 3. minutě jdou opožděně"): narůstající drift = jiný fps videa vs.
+    // souboru titulků, ne konstantní posun. 1.0 = beze změny. Per-source jako [offsetMs].
+    val fpsScale: Float = 1.0f,
 )
 
 /** Vzhled okraje titulku pro vlastní render. */

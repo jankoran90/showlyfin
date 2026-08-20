@@ -3295,6 +3295,23 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(mergedCollection = merged) }
     }
 
+    /** „Zkusit ČSFD znovu" (⋮ menu, user 2026-08-20 — obrázky/recenze u ČSFD ukazovaly jiný titul):
+     * zahodí appkou lokálně vyřešené (a jednou třeba špatně) ČSFD id a vynutí čerstvé hledání. */
+    fun retryCsfd() {
+        val item = _uiState.value.item ?: return
+        val czTitle = _uiState.value.tmdbCzTitle
+        viewModelScope.launch {
+            csfdRepository.forceRefreshCsfdId(
+                item.imdbId.orEmpty(), item.tmdbId,
+                czTitle?.takeIf { it.isNotBlank() } ?: item.title, item.year ?: 0,
+            )
+            _uiState.update {
+                it.copy(isCsfdLoading = true, csfdId = null, csfdRating = null, csfdPlot = null, csfdReviews = emptyList(), csfdGallery = emptyList())
+            }
+            loadCsfd(item, czTitle)
+        }
+    }
+
     private suspend fun loadCsfd(item: MediaItem, czTitle: String?) {
         val titles = buildList {
             czTitle?.takeIf { it.isNotBlank() }?.let { add(it) }

@@ -158,6 +158,11 @@ interface UploaderRemoteDataSource {
     suspend fun downloadSubtitle(
         baseUrl: String, sessionCookie: String, titulkyId: String,
         season: Int? = null, episode: Int? = null, runtime: Int? = null,
+        // SUBSYNC (user 2026-08-20, "po 3. minutě jdou opožděně"): server umí titulky sám srovnat
+        // podle anglické reference (řeší i narůstající fps drift, ne jen konstantní posun) — funkce
+        // existovala od 2026-08-02, ale appka `sync`/`imdb_for_sync` nikdy neposílala (mrtvý kód).
+        // Server sám nic nemění, když si výsledkem není jistý (viz `services/subsync.py`).
+        imdbId: String? = null,
     ): SubtitleDownload
     // Plan LINGUA Fáze 2 — async AI překlad EN→CS (poslední záloha když 0 CZ titulků)
     suspend fun startSubtitleTranslate(

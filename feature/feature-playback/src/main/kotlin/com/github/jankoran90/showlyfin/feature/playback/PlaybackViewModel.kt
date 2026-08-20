@@ -70,9 +70,24 @@ class PlaybackViewModel @Inject constructor(
             preferMostChannels = prefs.getBoolean(
                 PlayerPrefs.PREFER_MOST_CHANNELS_KEY, PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS,
             ),
+            // user 2026-08-20: černé pruhy na všech stranách — místní přehrávání dřív nemělo VŮBEC
+            // žádnou volbu poměru stran (natvrdo FIT). Persistováno stejnou cestou jako výš.
+            resizeMode = prefs.getString(PlayerPrefs.VIDEO_RESIZE_MODE_KEY, PlayerPrefs.DEFAULT_VIDEO_RESIZE_MODE)
+                ?: PlayerPrefs.DEFAULT_VIDEO_RESIZE_MODE,
         ),
     )
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
+
+    /** Cykluje Přizpůsobit → Ořez(zoom) → Roztáhnout → …, persistuje pro příští přehrávání. */
+    fun cycleResizeMode() {
+        val next = when (_state.value.resizeMode) {
+            PlayerPrefs.VIDEO_RESIZE_FIT -> PlayerPrefs.VIDEO_RESIZE_ZOOM
+            PlayerPrefs.VIDEO_RESIZE_ZOOM -> PlayerPrefs.VIDEO_RESIZE_FILL
+            else -> PlayerPrefs.VIDEO_RESIZE_FIT
+        }
+        prefs.edit().putString(PlayerPrefs.VIDEO_RESIZE_MODE_KEY, next).apply()
+        _state.update { it.copy(resizeMode = next) }
+    }
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
@@ -111,6 +126,7 @@ class PlaybackViewModel @Inject constructor(
     // na backend → zápisy DEBOUNCUJEME (lokální _state se mění instantně, sync doběhne po ustálení).
     private val styleWrites = MutableSharedFlow<SubtitleStyle>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val offsetWrites = MutableSharedFlow<Pair<String, Long>>(extraBufferCapacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val fpsScaleWrites = MutableSharedFlow<Pair<String, Float>>(extraBufferCapacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private fun activeProfileId(): Long? = profileRepository.activeProfile.value?.id
 
@@ -128,6 +144,13 @@ class PlaybackViewModel @Inject constructor(
             offsetWrites.debounce(400).collect { (key, ms) ->
                 activeProfileId()?.let { id ->
                     profileRepository.updateConfig(id) { it.copy(subtitleOffsets = it.subtitleOffsets.putCappedLru(key, ms)) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            fpsScaleWrites.debounce(400).collect { (key, scale) ->
+                activeProfileId()?.let { id ->
+                    profileRepository.updateConfig(id) { it.copy(subtitleFpsScales = it.subtitleFpsScales.putCappedLru(key, scale)) }
                 }
             }
         }
@@ -392,8 +415,9 @@ class PlaybackViewModel @Inject constructor(
             // aby posun z předchozího filmu nepřetekl. Aplikuj ho HNED (i před AI cestou u 0 titulků).
             val key = sourceKey(q)
             val storedOffset = loadSourceOffset(key)
-            if (storedOffset != _state.value.subtitleStyle.offsetMs) {
-                _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = storedOffset)) }
+            val storedFpsScale = loadSourceFpsScale(key)
+            if (storedOffset != _state.value.subtitleStyle.offsetMs || storedFpsScale != _state.value.subtitleStyle.fpsScale) {
+                _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = storedOffset, fpsScale = storedFpsScale)) }
             }
             // LINGUA: 0 CZ titulků + máme imdb → AI překlad jako poslední záloha. Fáze 3: dřív
             // přeložené (persistované) nasaď sám = „nezmizí nikdy"; jinak nabídni tlačítko a pozoruj
@@ -455,6 +479,7 @@ class PlaybackViewModel @Inject constructor(
                 uploaderDs.downloadSubtitle(
                     uploaderBaseUrl, uploaderCookie, cand.id,
                     season = q?.season, episode = q?.episode, runtime = q?.runtime,
+                    imdbId = q?.imdb,
                 )
             }.getOrElse { e ->
                 // 🔴🔴 REGRESE VLASTNÍHO FIXU (2026-08-15): `runCatching` chytá i `CancellationException`
@@ -485,7 +510,7 @@ class PlaybackViewModel @Inject constructor(
             _state.update {
                 it.copy(
                     subtitlesLoading = false, selectedSubtitleIndex = index,
-                    subtitleCues = cues, subtitleRuntimeOk = dl.runtimeOk,
+                    subtitleCues = cues, subtitleRuntimeOk = dl.runtimeOk, subtitleSyncInfo = dl.syncInfo,
                 )
             }
             timber.log.Timber.i("[Titulky] stopa '${cand.release.ifBlank { cand.title }}' → ${cues.size} cue")
@@ -587,6 +612,14 @@ class PlaybackViewModel @Inject constructor(
         query?.let { saveSourceOffset(sourceKey(it), newOffset) }
     }
 
+    /** Poměrové škálování časování (narůstající drift = jiný fps videa vs. titulků). Per-source
+     *  jako [nudgeOffset]. Rozsah zúžen na smysluplné hodnoty (±10 %), ať nejde omylem "vypnout". */
+    fun setFpsScale(scale: Float) {
+        val clamped = scale.coerceIn(0.9f, 1.1f)
+        _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(fpsScale = clamped)) }
+        query?.let { saveSourceFpsScale(sourceKey(it), clamped) }
+    }
+
     private fun updateStyle(transform: (SubtitleStyle) -> SubtitleStyle) {
         val s = transform(_state.value.subtitleStyle)
         _state.update { it.copy(subtitleStyle = s) }
@@ -662,6 +695,14 @@ class PlaybackViewModel @Inject constructor(
     private fun saveSourceOffset(key: String, ms: Long) {
         if (activeProfileId() != null) offsetWrites.tryEmit(key to ms)
         else prefs.edit().putLong("sub_off_$key", ms).apply()
+    }
+
+    private fun loadSourceFpsScale(key: String): Float =
+        profileRepository.activeConfig.value.subtitleFpsScales[key] ?: prefs.getFloat("sub_fps_$key", 1.0f)
+
+    private fun saveSourceFpsScale(key: String, scale: Float) {
+        if (activeProfileId() != null) fpsScaleWrites.tryEmit(key to scale)
+        else prefs.edit().putFloat("sub_fps_$key", scale).apply()
     }
 
     private fun loadSourceSelectedId(key: String): String? =

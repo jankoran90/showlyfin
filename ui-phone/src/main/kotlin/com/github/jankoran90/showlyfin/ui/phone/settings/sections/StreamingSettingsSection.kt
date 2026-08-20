@@ -203,6 +203,7 @@ internal fun StreamingSettingsSection(
                 var preferMostChannels by remember { mutableStateOf(pp.getBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.PREFER_MOST_CHANNELS_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS)) }
                 var allowRepack by remember { mutableStateOf(pp.getBoolean(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.ALLOW_REPACK_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_ALLOW_REPACK)) }
                 var resumeMode by remember { mutableStateOf(pp.getString(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.RESUME_MODE_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_RESUME_MODE) ?: com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_RESUME_MODE) }
+                var resizeMode by remember { mutableStateOf(pp.getString(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_MODE_KEY, com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_VIDEO_RESIZE_MODE) ?: com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.DEFAULT_VIDEO_RESIZE_MODE) }
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.padding(16.dp)) {
                         ListenInfoText("Nastav jednou pro tohle zařízení a nesahej. V autě (slabý head unit, který seká na HEVC) zvol H.264 — appka pak při výběru zdroje preferuje H.264 verzi filmu, když existuje. Doma na TV/AVR nech Auto. Volba je jen na tomhle zařízení, ostatní se nezmění.")
@@ -271,6 +272,22 @@ internal fun StreamingSettingsSection(
                             pp.edit().putString(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.RESUME_MODE_KEY, v).apply()
                         }
                         ListenInfoText("Výchozí je „Od začátku\". „Navázat\" pokračuje tam, kde jsi skončil, „Zeptat se\" ukáže dialog s volbou. Když se týž film doručí znovu během chvíle (jiný zdroj), naváže se vždycky bez ptaní.")
+                        Spacer(Modifier.height(8.dp))
+                        // User 2026-08-20 (černé pruhy na všech stranách u "Zločin je extrémní sport"):
+                        // místní přehrávání dřív nemělo VŮBEC žádnou volbu poměru stran, natvrdo FIT.
+                        PresetChipRow(
+                            title = "Obraz (poměr stran)",
+                            options = listOf(
+                                "Přizpůsobit" to com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_FIT,
+                                "Ořez (zoom)" to com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_ZOOM,
+                                "Roztáhnout" to com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_FILL,
+                            ),
+                            selected = resizeMode,
+                        ) { v ->
+                            resizeMode = v
+                            pp.edit().putString(com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_MODE_KEY, v).apply()
+                        }
+                        ListenInfoText("„Přizpůsobit\" (výchozí) ukáže celý obraz, u nesedícího poměru stran jsou pruhy. „Ořez\" pruhy odstraní tím, že ořízne přebytek — poměr zůstane správný, jen se trochu přiblíží. „Roztáhnout\" pruhy odstraní beze ztráty obrazu, ale zkreslí proporce (lidi budou vypadat širší/užší). Dá se přepnout i přímo v přehrávači, projeví se hned. V přehrávači na Ovladači (cast na Zenbook) je tahle volba samostatná.")
                     }
                 }
             }
