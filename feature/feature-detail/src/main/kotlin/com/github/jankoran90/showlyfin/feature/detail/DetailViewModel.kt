@@ -1196,7 +1196,7 @@ class DetailViewModel @Inject constructor(
     // `_uiState.update { it.copy(...) }`, kde `_uiState.value` ještě drží STARÝ (nebo null) titul.
     private fun audioChoice(imdb: String?): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice {
         titleAudioOverrideChoice(imdb)?.let { return it }
-        return audioPathStore.effective(isChildProfile())
+        return audioPathStore.effective(isChildProfile(), profileRepository.activeConfig.value.audioChoice)
     }
 
     private fun titleAudioOverrideChoice(imdb: String?): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice? {

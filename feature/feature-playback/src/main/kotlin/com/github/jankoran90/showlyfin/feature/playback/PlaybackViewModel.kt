@@ -150,7 +150,7 @@ class PlaybackViewModel @Inject constructor(
         val choice = when (override) {
             "CZ" -> com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ
             "ORIGINAL" -> com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL
-            else -> audioPathStore.effective(isChildProfile())
+            else -> audioPathStore.effective(isChildProfile(), profileRepository.activeConfig.value.audioChoice)
         }
         // Original_language z TMDB tady nemáme (JF BaseItemDto ho nenese) — languagesFor() bez něj
         // sama spadne na angličtinu jako nejčastější originál (stejný fallback jako u detailu).

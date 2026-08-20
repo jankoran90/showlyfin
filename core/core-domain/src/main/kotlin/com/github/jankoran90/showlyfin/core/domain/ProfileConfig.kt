@@ -165,6 +165,16 @@ data class ProfileConfig(
      */
     val titleAudioChoice: Map<String, String> = emptyMap(),
     /**
+     * SEZONA (SHW-113) f4 (user 2026-08-20, po nálezu „Leo z JF knihovny hraje anglicky na CZ
+     * profilu": „to by přece mělo být v databázi per profil, ať se nestává, že přijdeš do app nebo
+     * na web a nastavení je jiné") — PROFILOVÁ volba zvukové stopy, SYNCED appka↔web. Dřív appka
+     * ([AudioPathStore]) i web (`webDisplay.preferOriginalAudio`) měly VLASTNÍ nesynchronizované
+     * úložiště → appka a web se mohly rozejít. "CZ"/"ORIGINAL"/null = výchozí podle věku profilu
+     * (dětský CZ, dospělý originál), viz [AudioPathStore.effective]. [titleAudioChoice] pořád
+     * vyhrává jako PER-TITUL přebití nad tímhle.
+     */
+    val audioChoice: String? = null,
+    /**
      * FOYER (SHW-107, user 2026-07-27 „jdi do toho") — per-profil nastavení Filmotéky SYNCED napříč
      * zařízeními (dřív jen lokální prefs `tv_filmoteka`, takže TV a telefon se nastavovaly zvlášť).
      * null = zařízení si drží svoje lokální hodnoty a při první změně je samo vystrčí sem (migrace).

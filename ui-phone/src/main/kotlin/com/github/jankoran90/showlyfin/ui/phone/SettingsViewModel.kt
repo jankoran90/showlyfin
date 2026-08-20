@@ -349,7 +349,10 @@ class SettingsViewModel @Inject constructor(
                         parentalAgeRating = profile.effectiveAgeRating,
                         parentalLocked = profile.isLocked,
                         maxParentalRating = profile.userInfo?.maxParentalRating,
-                        audioChoice = audioPathStore.effective(isChildAgeRating(profile.effectiveAgeRating)),
+                        audioChoice = audioPathStore.effective(
+                            isChildAgeRating(profile.effectiveAgeRating),
+                            profileRepository.activeConfig.value.audioChoice,
+                        ),
                     )
                 }
             }
@@ -358,7 +361,11 @@ class SettingsViewModel @Inject constructor(
         audioPathStore.choice
             .onEach { _ ->
                 val childNow = isChildAgeRating(parentalControlsRepository.profile.value.effectiveAgeRating)
-                _uiState.update { it.copy(audioChoice = audioPathStore.effective(childNow)) }
+                _uiState.update {
+                    it.copy(
+                        audioChoice = audioPathStore.effective(childNow, profileRepository.activeConfig.value.audioChoice),
+                    )
+                }
             }
             .launchIn(viewModelScope)
         profileRepository.observeAll()
@@ -378,6 +385,11 @@ class SettingsViewModel @Inject constructor(
                         orderedSections = cfg.orderedSections(),
                         orderedSubsections = cfg.orderedSubsections(),
                         sourcePrefs = cfg.sourcePrefs ?: SourcePrefs.DEFAULT,
+                        // SEZONA f4 — synced z jiného zařízení/webu ať se hned promítne i sem.
+                        audioChoice = audioPathStore.effective(
+                            isChildAgeRating(parentalControlsRepository.profile.value.effectiveAgeRating),
+                            cfg.audioChoice,
+                        ),
                     )
                 }
                 refreshJellyfinState()
@@ -509,9 +521,12 @@ class SettingsViewModel @Inject constructor(
     private fun isChildAgeRating(rating: AgeRating?) = rating == AgeRating.CHILDREN || rating == AgeRating.FAMILY
 
     /** user 2026-08-18 — profilový jazykový chip (SHW-113 f2), přesunutý sem z menu karty (mátl vedle
-     * per-titul volby, hrozilo omylem přepnout zvuk VŠECH filmů). Platí za CELÝ profil, jako dřív. */
+     * per-titul volby, hrozilo omylem přepnout zvuk VŠECH filmů). Platí za CELÝ profil, jako dřív.
+     * SHW-113 f4 (2026-08-20): zapisuje teď do SYNCED `ProfileConfig.audioChoice` (appka↔web),
+     * ne jen do lokálního zařízení — [AudioPathStore.set]/lokální úložiště se dál čte jako fallback
+     * pro profily, které tenhle přepínač ještě nikdy nesáhly na novou appku. */
     fun setAudioChoice(choice: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice) {
-        audioPathStore.set(choice)
+        updateActiveConfig { it.copy(audioChoice = choice.name) }
     }
 
     // SEZONA f3b — chování auto-hledání U SERIÁLŮ (na filmy nemá vliv).
