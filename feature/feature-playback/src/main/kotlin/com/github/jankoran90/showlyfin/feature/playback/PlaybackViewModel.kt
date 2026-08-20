@@ -126,6 +126,7 @@ class PlaybackViewModel @Inject constructor(
     // na backend → zápisy DEBOUNCUJEME (lokální _state se mění instantně, sync doběhne po ustálení).
     private val styleWrites = MutableSharedFlow<SubtitleStyle>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val offsetWrites = MutableSharedFlow<Pair<String, Long>>(extraBufferCapacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val fpsScaleWrites = MutableSharedFlow<Pair<String, Float>>(extraBufferCapacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private fun activeProfileId(): Long? = profileRepository.activeProfile.value?.id
 
@@ -143,6 +144,13 @@ class PlaybackViewModel @Inject constructor(
             offsetWrites.debounce(400).collect { (key, ms) ->
                 activeProfileId()?.let { id ->
                     profileRepository.updateConfig(id) { it.copy(subtitleOffsets = it.subtitleOffsets.putCappedLru(key, ms)) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            fpsScaleWrites.debounce(400).collect { (key, scale) ->
+                activeProfileId()?.let { id ->
+                    profileRepository.updateConfig(id) { it.copy(subtitleFpsScales = it.subtitleFpsScales.putCappedLru(key, scale)) }
                 }
             }
         }
@@ -407,8 +415,9 @@ class PlaybackViewModel @Inject constructor(
             // aby posun z předchozího filmu nepřetekl. Aplikuj ho HNED (i před AI cestou u 0 titulků).
             val key = sourceKey(q)
             val storedOffset = loadSourceOffset(key)
-            if (storedOffset != _state.value.subtitleStyle.offsetMs) {
-                _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = storedOffset)) }
+            val storedFpsScale = loadSourceFpsScale(key)
+            if (storedOffset != _state.value.subtitleStyle.offsetMs || storedFpsScale != _state.value.subtitleStyle.fpsScale) {
+                _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(offsetMs = storedOffset, fpsScale = storedFpsScale)) }
             }
             // LINGUA: 0 CZ titulků + máme imdb → AI překlad jako poslední záloha. Fáze 3: dřív
             // přeložené (persistované) nasaď sám = „nezmizí nikdy"; jinak nabídni tlačítko a pozoruj
@@ -602,6 +611,14 @@ class PlaybackViewModel @Inject constructor(
         query?.let { saveSourceOffset(sourceKey(it), newOffset) }
     }
 
+    /** Poměrové škálování časování (narůstající drift = jiný fps videa vs. titulků). Per-source
+     *  jako [nudgeOffset]. Rozsah zúžen na smysluplné hodnoty (±10 %), ať nejde omylem "vypnout". */
+    fun setFpsScale(scale: Float) {
+        val clamped = scale.coerceIn(0.9f, 1.1f)
+        _state.update { it.copy(subtitleStyle = it.subtitleStyle.copy(fpsScale = clamped)) }
+        query?.let { saveSourceFpsScale(sourceKey(it), clamped) }
+    }
+
     private fun updateStyle(transform: (SubtitleStyle) -> SubtitleStyle) {
         val s = transform(_state.value.subtitleStyle)
         _state.update { it.copy(subtitleStyle = s) }
@@ -677,6 +694,14 @@ class PlaybackViewModel @Inject constructor(
     private fun saveSourceOffset(key: String, ms: Long) {
         if (activeProfileId() != null) offsetWrites.tryEmit(key to ms)
         else prefs.edit().putLong("sub_off_$key", ms).apply()
+    }
+
+    private fun loadSourceFpsScale(key: String): Float =
+        profileRepository.activeConfig.value.subtitleFpsScales[key] ?: prefs.getFloat("sub_fps_$key", 1.0f)
+
+    private fun saveSourceFpsScale(key: String, scale: Float) {
+        if (activeProfileId() != null) fpsScaleWrites.tryEmit(key to scale)
+        else prefs.edit().putFloat("sub_fps_$key", scale).apply()
     }
 
     private fun loadSourceSelectedId(key: String): String? =

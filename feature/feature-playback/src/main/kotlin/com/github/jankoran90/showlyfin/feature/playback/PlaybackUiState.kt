@@ -68,6 +68,9 @@ data class SubtitleStyle(
     val edgeStrength: Float = 1.0f,       // síla okraje: obrys tloušťka / stín rozostření / podklad krytí (0.4–2.5)
     val font: SubtitleFont = SubtitleFont.SERIF, // typ písma (bezpatkové/patkové/strojové)
     val weight: Int = 400,                // tučnost písma (FontWeight 100–900)
+    // user 2026-08-20 ("po 3. minutě jdou opožděně"): narůstající drift = jiný fps videa vs.
+    // souboru titulků, ne konstantní posun. 1.0 = beze změny. Per-source jako [offsetMs].
+    val fpsScale: Float = 1.0f,
 )
 
 /** Vzhled okraje titulku pro vlastní render. */

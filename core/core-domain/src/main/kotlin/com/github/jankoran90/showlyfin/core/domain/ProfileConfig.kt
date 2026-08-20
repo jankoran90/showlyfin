@@ -129,6 +129,13 @@ data class ProfileConfig(
     /** Per-source posun synchronizace titulků (ms). Klíč jako [subtitleSelections]. Cap ~300 (LRU). */
     val subtitleOffsets: Map<String, Long> = emptyMap(),
     /**
+     * Per-source poměrové škálování časování titulků (user 2026-08-20: "začátek sedí, po 3. minutě
+     * jdou opožděně" — narůstající drift, na rozdíl od [subtitleOffsets] to NENÍ konstantní posun,
+     * ale rozdílný frame rate mezi videem a souborem titulků, typicky 23,976 vs 25 fps). `1.0` =
+     * beze změny. Klíč jako [subtitleSelections]. Cap ~300 (LRU).
+     */
+    val subtitleFpsScales: Map<String, Float> = emptyMap(),
+    /**
      * AUTEUR (SHW-91) Fáze C1 — per-profil nastavení kurátorského mozku „Pro tebe", synchronizované
      * TV↔telefon (vzor [subtitleStyle]). null = profil zatím nemá vlastní volby → čte se [CuratorPrefs]
      * default (kurátor zapnutý, lehké objevování). Dětský vs. dospělý profil má vlastní konfiguraci.

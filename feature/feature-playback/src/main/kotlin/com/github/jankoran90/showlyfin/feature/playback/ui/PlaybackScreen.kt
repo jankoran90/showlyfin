@@ -487,7 +487,9 @@ fun PlaybackScreen(
         while (true) {
             val s = viewModel.state.value
             currentSubtitle = if (s.selectedSubtitleIndex >= 0 && s.subtitleCues.isNotEmpty()) {
-                val t = c.currentPosition - s.subtitleStyle.offsetMs
+                // fpsScale NEJDŘÍV (kompenzuje narůstající drift úměrně uplynulému času), Posun
+                // AŽ POTOM (zbylá konstantní odchylka na začátku po vyrovnání fps).
+                val t = (c.currentPosition * s.subtitleStyle.fpsScale).toLong() - s.subtitleStyle.offsetMs
                 s.subtitleCues.firstOrNull { t in it.startMs..it.endMs }?.text
             } else {
                 null
@@ -1048,6 +1050,7 @@ fun PlaybackScreen(
                             onColor = { viewModel.setColor(it) },
                             onPosition = { viewModel.setBottomPadding(it) },
                             onNudge = { viewModel.nudgeOffset(it) },
+                            onFpsScale = { viewModel.setFpsScale(it) },
                             onEdge = { viewModel.setEdge(it) },
                             onEdgeStrength = { viewModel.setEdgeStrength(it) },
                             onFont = { viewModel.setFont(it) },
@@ -1180,6 +1183,7 @@ private fun SubtitleSettingsPanel(
     onColor: (Int) -> Unit,
     onPosition: (Float) -> Unit,
     onNudge: (Long) -> Unit,
+    onFpsScale: (Float) -> Unit,
     onEdge: (SubtitleEdge) -> Unit,
     onEdgeStrength: (Float) -> Unit,
     onFont: (SubtitleFont) -> Unit,
@@ -1313,6 +1317,22 @@ private fun SubtitleSettingsPanel(
         StepperRow("Posun", "%+.2f s".format(state.subtitleStyle.offsetMs / 1000.0),
             onMinus = { onNudge(-250L) },
             onPlus = { onNudge(250L) })
+
+        // user 2026-08-20 ("začátek sedí, po 3. minutě jdou opožděně"): NARŮSTAJÍCÍ drift ≠ konstantní
+        // posun výš — video a soubor titulků mají jiný frame rate (typicky 23,976 vs 25 fps), takže
+        // odchylka roste úměrně s časem. Poměrové škálování, per zdroj jako Posun; 100,0 % = beze změny.
+        StepperRow("Rychlost titulků", "%.1f %%".format(state.subtitleStyle.fpsScale * 100.0),
+            onMinus = { onFpsScale(state.subtitleStyle.fpsScale - 0.001f) },
+            onPlus = { onFpsScale(state.subtitleStyle.fpsScale + 0.001f) })
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Nejčastější reálná záměna PAL/film fps u releasů — rychlý start místo ladění po 0,1 %.
+            TextButton(onClick = { onFpsScale(23.976f / 25f) }) { Text("25→23,976", style = MaterialTheme.typography.labelSmall) }
+            TextButton(onClick = { onFpsScale(25f / 23.976f) }) { Text("23,976→25", style = MaterialTheme.typography.labelSmall) }
+            TextButton(onClick = { onFpsScale(1.0f) }) { Text("Reset", style = MaterialTheme.typography.labelSmall) }
+        }
 
         // Okraj (vzhled pozadí titulku)
         Spacer(Modifier.height(8.dp))
