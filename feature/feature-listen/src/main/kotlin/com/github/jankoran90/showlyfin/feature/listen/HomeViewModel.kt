@@ -322,7 +322,13 @@ class HomeViewModel @Inject constructor(
                     // z detailu, nebo u starších stažení před 1.0.48), ať offline i online cesta
                     // vidí STEJNÝ výsledek u téže knihy, ne dvě různá zařazení.
                     fetched.forEach { audiobookDownloads.backfillMetadata(it) }
-                    fetched.filter { it.progress > 0.001 && !it.isFinished }
+                    // User (2026-08-20 12:33, „proč skáče k dětem na Domov data z dospělý profil??")
+                    // — `filterVisibleBooks` se dřív aplikoval JEN na `offlineExtra` (offline-only
+                    // knihy), síťová větev proletěla BEZ profilového filtru → na zařízení s internetem
+                    // viděl dětský profil úplně VŠECHNY rozposlouchané knihy napříč knihovnami (i
+                    // adminovy osobní), protože appka jede na jednom sdíleném ABS admin účtu a profilové
+                    // omezení je čistě appkové (client-side), ne serverové. Fix: filtr na obě větve.
+                    filterVisibleBooks(fetched.filter { it.progress > 0.001 && !it.isFinished })
                 }.getOrDefault(emptyList())
             }
             val episodesDeferred = async { runCatching { continueDirectEpisodes() }.getOrDefault(emptyList()) }
