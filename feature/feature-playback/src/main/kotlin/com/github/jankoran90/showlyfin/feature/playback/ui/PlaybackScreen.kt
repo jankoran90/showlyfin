@@ -294,6 +294,8 @@ fun PlaybackScreen(
     var currentSubtitle by remember { mutableStateOf<String?>(null) }
     // Krátký popis zdroje do lišty: rozlišení · video kodek · audio kodek · kanály.
     var sourceMeta by remember { mutableStateOf("") }
+    // user 2026-08-20: skutečný fps videa (ne fps titulkového kandidáta) k ruční volbě "Rychlost titulků".
+    var videoFps by remember { mutableStateOf(0f) }
     // TEMPO (SHW-49): výběr zvukové stopy v lokálním přehrávači. Telefon (ExoPlayer bez FFmpeg dekodéru)
     // neumí DTS/DTS-HD/TrueHD → `isTrackSupported` říká autoritativně, co reálně hraje. Když je vybraná
     // stopa nepodporovaná a existuje podporovaná (např. AC3 vedle DTS-HD), přepneme; když žádná, hlásíme.
@@ -628,6 +630,7 @@ fun PlaybackScreen(
                 val af = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                     .firstNotNullOfOrNull { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it) } }
                 sourceMeta = buildSourceMeta(vf, af)
+                vf?.frameRate?.takeIf { it > 0f }?.let { videoFps = it }
             }
         }
         c.addListener(listener)
@@ -1051,6 +1054,7 @@ fun PlaybackScreen(
                             onPosition = { viewModel.setBottomPadding(it) },
                             onNudge = { viewModel.nudgeOffset(it) },
                             onFpsScale = { viewModel.setFpsScale(it) },
+                            videoFps = videoFps,
                             onEdge = { viewModel.setEdge(it) },
                             onEdgeStrength = { viewModel.setEdgeStrength(it) },
                             onFont = { viewModel.setFont(it) },
@@ -1184,6 +1188,7 @@ private fun SubtitleSettingsPanel(
     onPosition: (Float) -> Unit,
     onNudge: (Long) -> Unit,
     onFpsScale: (Float) -> Unit,
+    videoFps: Float = 0f,
     onEdge: (SubtitleEdge) -> Unit,
     onEdgeStrength: (Float) -> Unit,
     onFont: (SubtitleFont) -> Unit,
@@ -1329,20 +1334,39 @@ private fun SubtitleSettingsPanel(
             onMinus = { onNudge(-250L) },
             onPlus = { onNudge(250L) })
 
-        // user 2026-08-20 ("začátek sedí, po 3. minutě jdou opožděně"): NARŮSTAJÍCÍ drift ≠ konstantní
-        // posun výš — video a soubor titulků mají jiný frame rate (typicky 23,976 vs 25 fps), takže
-        // odchylka roste úměrně s časem. Poměrové škálování, per zdroj jako Posun; 100,0 % = beze změny.
-        StepperRow("Rychlost titulků", "%.1f %%".format(state.subtitleStyle.fpsScale * 100.0),
-            onMinus = { onFpsScale(state.subtitleStyle.fpsScale - 0.001f) },
-            onPlus = { onFpsScale(state.subtitleStyle.fpsScale + 0.001f) })
+        // user 2026-08-20 ("to hraní si s fps nechci omylem spustit… chci auto search auto match"):
+        // ruční škálování je záložní nástroj pro případ, že auto-sync výš nesedne — schované za
+        // rozbalení, ať se nedá zmáčknout omylem. NARŮSTAJÍCÍ drift ≠ konstantní posun výš — video
+        // a soubor titulků mají jiný frame rate (typicky 23,976 vs 25 fps), odchylka roste s časem.
+        var fpsAdvancedOpen by remember { mutableStateOf(false) }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().clickable { fpsAdvancedOpen = !fpsAdvancedOpen }.padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Nejčastější reálná záměna PAL/film fps u releasů — rychlý start místo ladění po 0,1 %.
-            TextButton(onClick = { onFpsScale(23.976f / 25f) }) { Text("25→23,976", style = MaterialTheme.typography.labelSmall) }
-            TextButton(onClick = { onFpsScale(25f / 23.976f) }) { Text("23,976→25", style = MaterialTheme.typography.labelSmall) }
-            TextButton(onClick = { onFpsScale(1.0f) }) { Text("Reset", style = MaterialTheme.typography.labelSmall) }
+            Text("Ruční rychlost titulků (pokročilé)", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
+            Text(if (fpsAdvancedOpen) "Skrýt" else "Rozbalit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        }
+        if (fpsAdvancedOpen) {
+            if (videoFps > 0f) {
+                Text(
+                    "Video hraje na %.3f fps — podle toho zvol fps titulkového souboru.".format(videoFps),
+                    color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            StepperRow("Rychlost titulků", "%.1f %%".format(state.subtitleStyle.fpsScale * 100.0),
+                onMinus = { onFpsScale(state.subtitleStyle.fpsScale - 0.001f) },
+                onPlus = { onFpsScale(state.subtitleStyle.fpsScale + 0.001f) })
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Nejčastější reálná záměna PAL/film fps u releasů — rychlý start místo ladění po 0,1 %.
+                TextButton(onClick = { onFpsScale(23.976f / 25f) }) { Text("25→23,976", style = MaterialTheme.typography.labelSmall) }
+                TextButton(onClick = { onFpsScale(25f / 23.976f) }) { Text("23,976→25", style = MaterialTheme.typography.labelSmall) }
+                TextButton(onClick = { onFpsScale(1.0f) }) { Text("Reset", style = MaterialTheme.typography.labelSmall) }
+            }
         }
 
         // Okraj (vzhled pozadí titulku)
