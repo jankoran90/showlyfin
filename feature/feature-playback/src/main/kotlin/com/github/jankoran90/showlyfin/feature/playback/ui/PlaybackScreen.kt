@@ -1313,6 +1313,17 @@ private fun SubtitleSettingsPanel(
             onMinus = { onPosition(state.subtitleStyle.bottomPaddingFraction - 0.02f) },
             onPlus = { onPosition(state.subtitleStyle.bottomPaddingFraction + 0.02f) })
 
+        // SUBSYNC (user 2026-08-20): server zkusil titulky sám srovnat podle anglické reference —
+        // ukaž výsledek, ať je jasné, že "Posun"/"Rychlost" už nemusí být vůbec potřeba.
+        state.subtitleSyncInfo?.let { info ->
+            Text(
+                "🤖 Auto-sync: $info",
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+
         // Posun (synchronizace, krok 0,25 s) — per film; nový film startuje na 0.
         StepperRow("Posun", "%+.2f s".format(state.subtitleStyle.offsetMs / 1000.0),
             onMinus = { onNudge(-250L) },

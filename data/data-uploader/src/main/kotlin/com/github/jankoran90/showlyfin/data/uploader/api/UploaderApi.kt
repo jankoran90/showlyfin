@@ -818,13 +818,16 @@ internal class UploaderApi(
 
     override suspend fun downloadSubtitle(
         baseUrl: String, sessionCookie: String, titulkyId: String,
-        season: Int?, episode: Int?, runtime: Int?,
+        season: Int?, episode: Int?, runtime: Int?, imdbId: String?,
     ): SubtitleDownload {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
         val params = buildList {
             if (season != null && episode != null) { add("season=$season"); add("episode=$episode") }
             if (runtime != null && runtime > 0) add("runtime=$runtime")
+            // SUBSYNC: server sám srovná časování podle anglické reference (klasický i narůstající fps
+            // drift), jen když má imdb; nic nezmění, když si výsledkem není jistý (safety v subsync.py).
+            if (!imdbId.isNullOrBlank()) { add("sync=1"); add("imdb_for_sync=$imdbId") }
         }
         var url = "$base/api/subtitles/download/$titulkyId"
         if (params.isNotEmpty()) url += "?" + params.joinToString("&")
@@ -833,6 +836,7 @@ internal class UploaderApi(
         val body = resp.body() ?: throw IllegalStateException("Stažení titulků nevrátilo data")
         val lastTs = resp.headers()["X-Sub-LastTs"]?.toIntOrNull() ?: 0
         val runtimeOk = resp.headers()["X-Sub-RuntimeOk"] ?: "-"
+        val syncInfo = resp.headers()["X-Sub-Sync"]?.takeIf { it != "-" }
         // 🔴🔴 `downloadSubtitle` je v `UploaderService` označená `@Streaming` → Retrofit tělo NEBUFFERUJE.
         // `body.bytes()` je tedy BLOKUJÍCÍ čtení ze socketu, a protože se volá z `viewModelScope.launch`
         // (Main dispatcher), spadne na `NetworkOnMainThreadException`. Ta má `message == null`, takže se
@@ -841,7 +845,7 @@ internal class UploaderApi(
         // kliknutí a u každého filmu. *Tělo @Streaming odpovědi se NIKDY nesmí číst na hlavním vlákně.*
         // (Malé titulky mohly projít, když se vešly do už načteného bufferu — odtud „někdy to šlo".)
         val bytes = withContext(Dispatchers.IO) { body.bytes() }
-        return SubtitleDownload(bytes = bytes, lastTsSec = lastTs, runtimeOk = runtimeOk)
+        return SubtitleDownload(bytes = bytes, lastTsSec = lastTs, runtimeOk = runtimeOk, syncInfo = syncInfo)
     }
 
     override suspend fun startSubtitleTranslate(

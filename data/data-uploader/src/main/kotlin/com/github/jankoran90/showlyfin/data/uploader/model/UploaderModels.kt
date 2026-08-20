@@ -537,6 +537,9 @@ data class SubtitleDownload(
     val bytes: ByteArray,
     val lastTsSec: Int = 0,
     val runtimeOk: String = "-",   // "1" sedí / "0" nesedí / "-" neznámo
+    // SUBSYNC — server hlásí, co (ne)udělal ("posun +1.20 s, rychlost ×1.04267 (sedí 87 % replik)"
+    // nebo "časování se nepodařilo spolehlivě určit"). null = sync se nepožadoval (chybí imdb).
+    val syncInfo: String? = null,
 )
 
 /** Parametry hledání CZ titulků (titulky.com). In-memory přenos Detail → Playback. */

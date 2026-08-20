@@ -479,6 +479,7 @@ class PlaybackViewModel @Inject constructor(
                 uploaderDs.downloadSubtitle(
                     uploaderBaseUrl, uploaderCookie, cand.id,
                     season = q?.season, episode = q?.episode, runtime = q?.runtime,
+                    imdbId = q?.imdb,
                 )
             }.getOrElse { e ->
                 // 🔴🔴 REGRESE VLASTNÍHO FIXU (2026-08-15): `runCatching` chytá i `CancellationException`
@@ -509,7 +510,7 @@ class PlaybackViewModel @Inject constructor(
             _state.update {
                 it.copy(
                     subtitlesLoading = false, selectedSubtitleIndex = index,
-                    subtitleCues = cues, subtitleRuntimeOk = dl.runtimeOk,
+                    subtitleCues = cues, subtitleRuntimeOk = dl.runtimeOk, subtitleSyncInfo = dl.syncInfo,
                 )
             }
             timber.log.Timber.i("[Titulky] stopa '${cand.release.ifBlank { cand.title }}' → ${cues.size} cue")
