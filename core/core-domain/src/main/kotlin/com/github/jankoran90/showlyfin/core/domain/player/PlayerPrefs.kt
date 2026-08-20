@@ -103,4 +103,18 @@ object PlayerPrefs {
      */
     const val TRAKT_MARK_WATCHED_KEY = "player_trakt_mark_watched"
     const val DEFAULT_TRAKT_MARK_WATCHED = false
+
+    /**
+     * User 2026-08-20 ("Zločin je extrémní sport" — černé pruhy na všech stranách): appka MÍSTNÍ
+     * přehrávání (na rozdíl od Ovladače pro cast na Zenbook, ten svoje 3 volby má) nemělo žádnou
+     * volbu poměru stran vůbec — natvrdo FIT (Media3 default). `FIT` = celý obraz, pruhy když
+     * poměr nesedí (beze ztráty obrazu); `ZOOM` = ořízne přebytek, ať pruhy zmizí, poměr stran
+     * zůstane zachovaný (nezkreslí); `FILL` = roztáhne přes celou obrazovku, žádný ořez ani pruh,
+     * ale zkreslí proporce (typicky ne to, co user chce, ale nabízíme jako appka na Ovladači).
+     */
+    const val VIDEO_RESIZE_MODE_KEY = "player_video_resize_mode"
+    const val VIDEO_RESIZE_FIT = "FIT"
+    const val VIDEO_RESIZE_ZOOM = "ZOOM"
+    const val VIDEO_RESIZE_FILL = "FILL"
+    const val DEFAULT_VIDEO_RESIZE_MODE = VIDEO_RESIZE_FIT
 }

@@ -101,6 +101,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.playback.service.MoviePlayerService
@@ -112,6 +113,13 @@ import com.github.jankoran90.showlyfin.feature.playback.SubtitleStyle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/** [PlayerPrefs] string → Media3 konstanta. Neznámá/stará hodnota spadne na FIT (bezpečný default). */
+private fun resizeModeConst(mode: String): Int = when (mode) {
+    com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+    else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+}
 
 private fun Context.findActivity(): Activity? {
     var ctx: Context = this
@@ -746,10 +754,13 @@ fun PlaybackScreen(
                             // Vlastní ukazatel (kolečko + vteřiny) kreslíme sami — vestavěný by se s ním
                             // překrýval a mlčel by, což je přesně to, na co si user stěžoval.
                             setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                            resizeMode = resizeModeConst(state.resizeMode)
                         }.also { playerViewRef = it }
                     },
                     // controller se připojí asynchronně → přiřaď ho do PlayerView, až je hotový.
-                    update = { it.player = controller },
+                    // resizeMode se řeší i tady (ne jen ve factory) — cyklování za běhu (⛶ ikona
+                    // v liště) musí projevit hned, bez znovuvytvoření PlayerView/prepare.
+                    update = { it.player = controller; it.resizeMode = resizeModeConst(state.resizeMode) },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -1004,6 +1015,23 @@ fun PlaybackScreen(
                                                 RoundedCornerShape(4.dp),
                                             )
                                             .clickable { showSubtitleMenu = true; controlsVisible = true }
+                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    // user 2026-08-20 (černé pruhy na všech stranách): rychlé cyklování
+                                    // poměru stran přímo v přehrávači, beze změny přes Nastavení.
+                                    val resizeLabel = when (state.resizeMode) {
+                                        com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_ZOOM -> "Ořez"
+                                        com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs.VIDEO_RESIZE_FILL -> "Plné"
+                                        else -> "Fit"
+                                    }
+                                    Text(
+                                        text = "⛶ $resizeLabel",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier
+                                            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                            .clickable { viewModel.cycleResizeMode(); controlsVisible = true }
                                             .padding(horizontal = 8.dp, vertical = 2.dp),
                                     )
                                 }

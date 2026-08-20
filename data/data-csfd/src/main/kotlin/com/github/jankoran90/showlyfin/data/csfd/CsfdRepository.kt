@@ -21,6 +21,11 @@ class CsfdRepository @Inject constructor(
 
     companion object {
         private const val TTL_PLOT_MS = 24 * 60 * 60 * 1000L
+        // 2026-08-20 (user: "Zločin je extrémní sport" ukazoval obrázky/recenze jiného titulu):
+        // dřív se ID cachovalo NATRVALO bez expirace — jednou špatně vyřešené (typicky dřív, než
+        // backend znal správný imdb, takže spadlo na nespolehlivý title-search fallback) se pak
+        // NIKDY samo neopravilo, i když se zdrojová data později opravila. TTL = self-heal.
+        private const val TTL_ID_MS = 30L * 24 * 60 * 60 * 1000L
     }
 
     suspend fun getCsfdId(imdbId: String, tmdbId: Long? = null, title: String = "", year: Int = 0): Long? = withContext(Dispatchers.IO) {
@@ -40,8 +45,12 @@ class CsfdRepository @Inject constructor(
             tmdbId != null -> "CSFD_ID_TMDB_$tmdbId"
             else -> "CSFD_ID_TITLE_${normalize(title)}_$year"
         }
+        // "${cacheKey}_EXP" nese moment vypršení (ne čas uložení) — staré záznamy (uložené PŘED
+        // touhle opravou) tenhle klíč vůbec nemají → expiresAt=0 → vždy v minulosti → automaticky
+        // se považují za stará a přeověří se, bez nutnosti mazat appce data.
+        val expiresAt = prefs.getLong("${cacheKey}_EXP", 0L)
         val cached = prefs.getLong(cacheKey, -1L)
-        if (cached != -1L) {
+        if (cached != -1L && System.currentTimeMillis() < expiresAt) {
             Timber.d("[CsfdRepository] cache hit: csfdId=$cached")
             return@withContext cached
         }
@@ -53,7 +62,7 @@ class CsfdRepository @Inject constructor(
             val wikidataId = wikidataLookupByImdb(imdbId)
             Timber.d("[CsfdRepository] wikidata(imdb=$imdbId) → csfdId=$wikidataId")
             if (wikidataId != null) {
-                prefs.edit { putLong(cacheKey, wikidataId) }
+                cacheId(cacheKey, wikidataId)
                 return@withContext wikidataId
             }
         }
@@ -62,7 +71,7 @@ class CsfdRepository @Inject constructor(
             val wikidataId = wikidataLookupByTmdb(tmdbId)
             Timber.d("[CsfdRepository] wikidata(tmdb=$tmdbId) → csfdId=$wikidataId")
             if (wikidataId != null) {
-                prefs.edit { putLong(cacheKey, wikidataId) }
+                cacheId(cacheKey, wikidataId)
                 return@withContext wikidataId
             }
         }
@@ -71,7 +80,9 @@ class CsfdRepository @Inject constructor(
             val searchId = runCatching { scraper.searchByTitle(title, year) }.getOrNull()
             if (searchId != null) {
                 Timber.d("[CsfdRepository] title search('$title', $year) → csfdId=$searchId")
-                prefs.edit { putLong(cacheKey, searchId) }
+                // Textové hledání je nespolehlivější než Wikidata (odtud pocházel dřívější mismatch)
+                // → krátká TTL, ať appka brzy zkusí znovu autoritativní cestu (imdb/tmdb dorazí později).
+                cacheId(cacheKey, searchId, ttlMs = TTL_PLOT_MS)
                 return@withContext searchId
             }
         }
@@ -127,6 +138,7 @@ class CsfdRepository @Inject constructor(
         prefs.edit {
             putLong("CSFD_OVERRIDE_$imdbId", csfdId)
             remove("CSFD_ID_$imdbId")
+            remove("CSFD_ID_${imdbId}_EXP")
         }
     }
 
@@ -134,12 +146,31 @@ class CsfdRepository @Inject constructor(
         prefs.edit {
             remove("CSFD_OVERRIDE_$imdbId")
             remove("CSFD_ID_$imdbId")
+            remove("CSFD_ID_${imdbId}_EXP")
         }
+    }
+
+    /** „Zkusit ČSFD znovu" (⋮ menu, user 2026-08-20 — obrázky/recenze ukazovaly jiný titul): zahodí
+     * override i všechny 3 varianty cache klíče (imdb/tmdb/title), ať se příště vyřeší úplně nanovo. */
+    fun forceRefreshCsfdId(imdbId: String, tmdbId: Long?, title: String, year: Int) {
+        val keys = buildList {
+            if (imdbId.isNotBlank()) { add("CSFD_ID_$imdbId"); add("CSFD_OVERRIDE_$imdbId") }
+            if (tmdbId != null) add("CSFD_ID_TMDB_$tmdbId")
+            if (title.isNotBlank()) add("CSFD_ID_TITLE_${normalize(title)}_$year")
+        }
+        prefs.edit { keys.forEach { remove(it); remove("${it}_EXP") } }
     }
 
     fun clearAllCache() {
         val csfdKeys = prefs.all.keys.filter { it.startsWith("CSFD_") }
         prefs.edit { csfdKeys.forEach { remove(it) } }
+    }
+
+    private fun cacheId(cacheKey: String, csfdId: Long, ttlMs: Long = TTL_ID_MS) {
+        prefs.edit {
+            putLong(cacheKey, csfdId)
+            putLong("${cacheKey}_EXP", System.currentTimeMillis() + ttlMs)
+        }
     }
 
     private fun wikidataLookupByImdb(imdbId: String): Long? = wikidataSparql(

@@ -45,6 +45,9 @@ data class PlaybackUiState(
     // SEZONA f3l — mezi stopami TÉHOŽ jazyka vzít tu s nejvíc kanály (5.1 před stereo). Jen na TV;
     // viz [PlayerPrefs.PREFER_MOST_CHANNELS_KEY].
     val preferMostChannels: Boolean = PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS,
+    // user 2026-08-20 (černé pruhy na všech stranách): poměr stran místního přehrávače — dřív
+    // natvrdo FIT bez možnosti změny. Viz [PlayerPrefs.VIDEO_RESIZE_MODE_KEY].
+    val resizeMode: String = PlayerPrefs.DEFAULT_VIDEO_RESIZE_MODE,
 )
 
 /** Jeden titulkový blok (.srt) — renderujeme vlastním overlayem, takže posun/přepnutí stopy

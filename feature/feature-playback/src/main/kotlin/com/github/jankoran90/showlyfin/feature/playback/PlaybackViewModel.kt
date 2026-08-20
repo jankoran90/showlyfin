@@ -70,9 +70,24 @@ class PlaybackViewModel @Inject constructor(
             preferMostChannels = prefs.getBoolean(
                 PlayerPrefs.PREFER_MOST_CHANNELS_KEY, PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS,
             ),
+            // user 2026-08-20: černé pruhy na všech stranách — místní přehrávání dřív nemělo VŮBEC
+            // žádnou volbu poměru stran (natvrdo FIT). Persistováno stejnou cestou jako výš.
+            resizeMode = prefs.getString(PlayerPrefs.VIDEO_RESIZE_MODE_KEY, PlayerPrefs.DEFAULT_VIDEO_RESIZE_MODE)
+                ?: PlayerPrefs.DEFAULT_VIDEO_RESIZE_MODE,
         ),
     )
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
+
+    /** Cykluje Přizpůsobit → Ořez(zoom) → Roztáhnout → …, persistuje pro příští přehrávání. */
+    fun cycleResizeMode() {
+        val next = when (_state.value.resizeMode) {
+            PlayerPrefs.VIDEO_RESIZE_FIT -> PlayerPrefs.VIDEO_RESIZE_ZOOM
+            PlayerPrefs.VIDEO_RESIZE_ZOOM -> PlayerPrefs.VIDEO_RESIZE_FILL
+            else -> PlayerPrefs.VIDEO_RESIZE_FIT
+        }
+        prefs.edit().putString(PlayerPrefs.VIDEO_RESIZE_MODE_KEY, next).apply()
+        _state.update { it.copy(resizeMode = next) }
+    }
 
     private val uploaderBaseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val uploaderCookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
