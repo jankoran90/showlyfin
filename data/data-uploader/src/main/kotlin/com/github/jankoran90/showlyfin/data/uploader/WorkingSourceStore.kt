@@ -117,6 +117,9 @@ data class BackfillItem(
 /** Obálka serverového JSONu `{"sources":[…]}` (endpoint /api/profiles/{key}/working-sources). */
 private data class WorkingSourcesEnvelope(val sources: List<WorkingSource> = emptyList())
 
+/** SEZONA f5 — `epKey` „s3" (sezóna) nebo „s3e1" (díl) → (season, episode). Viz [normalizeEpKeyFields]. */
+private val EPKEY_REGEX = Regex("^s(\\d+)(?:e(\\d+))?$")
+
 @Singleton
 class WorkingSourceStore @Inject constructor(
     @ApplicationContext context: Context,
@@ -259,6 +262,24 @@ class WorkingSourceStore @Inject constructor(
         if (raw == null) return null
         return runCatching { gson.fromJson(raw, WorkingSourcesEnvelope::class.java)?.sources ?: emptyList() }
             .onFailure { Timber.w(it, "[SIEVE] parse server sources") }.getOrNull()
+            ?.map(::normalizeEpKeyFields)
+    }
+
+    /**
+     * SEZONA f5 (2026-08-20, Legion: „balík řady" uložený z webu nikdy neukazoval odznak/nenabídl
+     * „Další díly") — `episodes.js` `zapamatujZdroj` na webu ukládá JEN `epKey` ("s3"/"s3e1"), ne
+     * appčino oddělené `season`/`episode` pole. `isSeasonRecipe()` (a `RealDebridViewModel.
+     * clearSeason` s `ws.season!!`) na tom poli závisí → web-uložená receptura sezóny se appce tiše
+     * ztratila (season=null → isSeasonRecipe()=false). Dopočítej chybějící pole z `epKey` HNED při
+     * příjmu ze serveru, ať appce nezáleží, KDO záznam uložil — jedno místo, opravuje se to napořád
+     * (i pro záznamy uložené předtím, než tohle existovalo).
+     */
+    private fun normalizeEpKeyFields(ws: WorkingSource): WorkingSource {
+        if (ws.season != null || ws.epKey == null) return ws
+        val m = EPKEY_REGEX.matchEntire(ws.epKey) ?: return ws
+        val season = m.groupValues[1].toIntOrNull() ?: return ws
+        val episode = m.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull()
+        return ws.copy(season = season, episode = episode)
     }
 
     private suspend fun pushNow(key: String, base: String, cookie: String, list: List<WorkingSource>) {
