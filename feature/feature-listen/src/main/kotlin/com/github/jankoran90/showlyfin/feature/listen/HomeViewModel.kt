@@ -273,6 +273,23 @@ class HomeViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+
+        /**
+         * User (2026-08-20 12:06, „děti poslouchají striktně offline, musí to fungovat i v tomto
+         * režimu") — výše uvedený odložený refresh je odvozený od `syncIntervalSeconds`, což je
+         * ABS SERVEROVÝ interval; na trvale offline zařízení žádný ABS sync neproběhne vůbec
+         * (`AudiobookPlayerConnection.pushState`, `sessionId(extras).isNullOrBlank()` větev zapisuje
+         * jen LOKÁLNĚ přes `audiobookDownloads.updateLocalProgress`, `repo.syncProgress` na server se
+         * tam vůbec nevolá). Ten offline zápis MÁ vlastní reaktivní zdroj ([AudiobookDownloadManager.
+         * downloads], `refreshDownloads()` po každém `updateLocalProgress`) — sleduj ho stejným vzorem
+         * jako [directResume.marks] výše, ať se Domů na stažené (offline) audioknize dozví do pár
+         * vteřin (throttle zápisu pozice `DIRECT_SAVE_INTERVAL_MS` = 4 s), ne až po restartu appky.
+         */
+        audiobookDownloads.downloads
+            .map { list -> list.filter { it.localPositionSec > 0.5 && !it.localIsFinished }.map { it.itemId }.toSet() }
+            .distinctUntilChanged()
+            .onEach { refresh() }
+            .launchIn(viewModelScope)
     }
 
     /**
