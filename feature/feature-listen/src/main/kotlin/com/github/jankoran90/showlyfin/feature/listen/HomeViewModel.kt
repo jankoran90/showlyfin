@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
+import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
@@ -20,6 +21,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,6 +53,7 @@ class HomeViewModel @Inject constructor(
     private val directResume: DirectResumeStore,
     private val profileRepository: ProfileRepository,
     private val audiobookOwnership: AudiobookOwnershipRepository,
+    private val absPrefs: AbsPreferences,
     connection: AudiobookPlayerConnection,
 ) : ViewModel() {
 
@@ -244,11 +247,31 @@ class HomeViewModel @Inject constructor(
          * lokální push) — bez tohohle triggeru se Domů o novém poslechu audioknihy dozví JEN na
          * `init` (nový VM = restart appky). Sleduje se `currentItemId` z přehrávače (mění se, jakmile
          * začne hrát jiná položka), ne pozice — nerefreshuje na každý tick přehrávání.
+         *
+         * User (2026-08-20 12:01, „kluk poslouchá Hurvínka, na rozposlouchaných není, dokud
+         * neresetuju appku") — tenhle refresh() sám o sobě přijde MOC BRZY: `AudiobookPlayerService.
+         * startSync()` čeká celý `syncIntervalSeconds` (výchozí 15 s, nastavitelné 5–60 s), než pošle
+         * PRVNÍ pozici na ABS server (`while(true){ delay(interval); syncNow() }` — delay je PŘED
+         * prvním syncem). V okamžiku téhle refresh() má tedy server pořád progress 0 → `doRefresh()`
+         * knihu vyfiltruje (`progress > 0.001`) a nic víc už znovu nezkusí, dokud se nezmění profil/
+         * marky/currentItemId znovu — appka pak visí na starých datech přesně jako user popsal.
+         * Druhý, ODLOŽENÝ refresh (o `syncIntervalSeconds + 2s` později) domů dožene stav TĚSNĚ PO
+         * prvním serverovém syncu, bez nutnosti restartu appky. Vlastní `viewModelScope.launch` (ne
+         * blokovat tenhle collector) — přehrávání se může mezitím přepnout na jinou položku, tenhle
+         * followup pak jen zbytečně (ale neškodně) refreshne nad už aktuálním stavem.
          */
         connection.state
             .map { it.currentItemId }
             .distinctUntilChanged()
-            .onEach { refresh() }
+            .onEach { itemId ->
+                refresh()
+                if (itemId != null) {
+                    viewModelScope.launch {
+                        delay((absPrefs.syncIntervalSeconds + 2) * 1000L)
+                        refresh()
+                    }
+                }
+            }
             .launchIn(viewModelScope)
     }
 
