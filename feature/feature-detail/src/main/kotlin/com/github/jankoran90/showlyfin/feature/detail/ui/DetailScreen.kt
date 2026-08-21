@@ -398,9 +398,13 @@ fun DetailScreen(
         )
     }
     if (uiState.showDownloadMenu) {
+        val isShowItem = displayItem.type == MediaType.SHOW
         DownloadMenuSheet(
-            // HOARD (SHW-84): stáhnout do telefonu = film z knihovny NEBO film se zapamatovaným zdrojem.
-            canDevice = displayItem.type == MediaType.MOVIE && (uiState.isOwnedInLibrary || uiState.rememberedSource != null),
+            // HOARD (SHW-84) + SEZONA (SHW-113): stáhnout do telefonu = film z knihovny/zapamatovaný
+            // zdroj, NEBO u seriálu vůbec (dovolí kliknout, `downloadCurrentToDevice()` sám poradí
+            // "otevři díl", není-li žádný vybraný — stejná zpráva jako dřív, jen teď dostupná z menu).
+            canDevice = displayItem.type == MediaType.MOVIE && (uiState.isOwnedInLibrary || uiState.rememberedSource != null) ||
+                isShowItem,
             offlineState = uiState.offlineState,
             showServerOptions = !uiState.isOwnedInLibrary,
             onDevice = { viewModel.downloadCurrentToDevice() },
@@ -408,6 +412,9 @@ fun DetailScreen(
             onSdilej = { viewModel.openSdilejPicker() },
             onSmartRemux = { viewModel.dismissDownloadMenu(); onSmartDetect?.invoke(displayItem) },
             onDismiss = { viewModel.dismissDownloadMenu() },
+            isShow = isShowItem,
+            onDownloadSeason = if (isShowItem) { { viewModel.downloadSeasonToDevice() } } else null,
+            onDownloadAllEpisodes = if (isShowItem) { { viewModel.downloadAllEpisodesToDevice() } } else null,
         )
     }
     if (uiState.showSdilejPicker) {

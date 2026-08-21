@@ -845,16 +845,34 @@ internal fun DownloadMenuSheet(
     onSdilej: () -> Unit,
     onSmartRemux: () -> Unit,
     onDismiss: () -> Unit,
+    // SEZONA-DÁVKA (user 2026-08-21: „stahovat filmy a seriály celé i po sezónach i po epizodách") —
+    // u seriálu se nabídne navíc hromadné stažení (jednotlivý díl řeší [onDevice] výš, stejně jako dřív).
+    isShow: Boolean = false,
+    onDownloadSeason: (() -> Unit)? = null,
+    onDownloadAllEpisodes: (() -> Unit)? = null,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetHeader("Stáhnout", Icons.Default.Download)
-        // NOMAD (SHW-60): stažení do telefonu (offline „na chatu") — slice jen filmy z knihovny.
+        // NOMAD (SHW-60): stažení do telefonu (offline „na chatu") — film NEBO otevřený díl seriálu.
         if (canDevice) {
             when (offlineState.status) {
                 OfflineStatus.DOWNLOADED -> MenuRow("Staženo v telefonu", "Smazat stažený soubor", Icons.Default.Download, onDeleteDevice)
                 OfflineStatus.DOWNLOADING -> MenuRow("Stahuje se… ${(offlineState.progress * 100).toInt()} %", "Průběh v sekci Stažené", Icons.Default.Download) {}
                 OfflineStatus.QUEUED -> MenuRow("Čeká ve frontě…", "Průběh v sekci Stažené", Icons.Default.Download) {}
-                else -> MenuRow("Do telefonu (offline)", "Stáhnout film do telefonu na chatu bez wifi", Icons.Default.Download, onDevice)
+                else -> MenuRow(
+                    "Do telefonu (offline)",
+                    if (isShow) "Stáhnout otevřený díl do telefonu na cesty bez wifi" else "Stáhnout film do telefonu na cesty bez wifi",
+                    Icons.Default.Download, onDevice,
+                )
+            }
+            if (isShow || showServerOptions) HorizontalDivider()
+        }
+        if (isShow) {
+            if (onDownloadSeason != null) {
+                MenuRow("Stáhnout celou sezónu", "Všechny díly aktuální sezóny do telefonu", Icons.Default.Download, onDownloadSeason)
+            }
+            if (onDownloadAllEpisodes != null) {
+                MenuRow("Stáhnout celou řadu", "Všechny díly všech sezón do telefonu", Icons.Default.Download, onDownloadAllEpisodes)
             }
             if (showServerOptions) HorizontalDivider()
         }
