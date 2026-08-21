@@ -15,6 +15,10 @@ android {
 }
 
 dependencies {
+    // SEZONA-DÁVKA (2026-08-21): ListenNavSignal.EXTRA_OPEN_DOWNLOADS — notifikace prokliká rovnou
+    // do sekce „Stažené" (stejný vzor jako AudiobookPlayerService/CuratorCheckWorker). core-ui závisí
+    // jen na core-domain, žádný cyklus.
+    implementation(project(":core:core-ui"))
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.core.ktx)

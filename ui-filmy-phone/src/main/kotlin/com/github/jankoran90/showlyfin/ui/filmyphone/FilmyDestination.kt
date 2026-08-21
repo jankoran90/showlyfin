@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Diamond
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MonitorHeart
@@ -31,6 +32,8 @@ enum class FilmySection(val label: String, val icon: ImageVector) {
     FILMOTEKA("Filmotéka", Icons.Rounded.Movie),
     GEMS("Vzácné klenoty", Icons.Rounded.Diamond),
     LIBRARY("Knihovna", Icons.Rounded.VideoLibrary),
+    // SEZONA-DÁVKA (user 2026-08-21: „udelej mi sekci stazeno") — offline filmy/epizody v telefonu.
+    DOWNLOADS("Stažené", Icons.Rounded.Download),
     SEARCH("Hledat", Icons.Rounded.Search),
     // PROVOZ (SHW-114): co se právě hraje, jak to jede, stav zdrojů. Jen telefon (zadání usera).
     OPS("Provoz", Icons.Rounded.MonitorHeart),
@@ -69,12 +72,12 @@ object FilmyShellPrefs {
             listOf(
                 FilmySection.FILMOTEKA, FilmySection.HOME, FilmySection.WANT_TO_SEE,
                 FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.REFERENCE,
-                FilmySection.GEMS, FilmySection.SEARCH, FilmySection.OPS,
+                FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
             )
         else
             listOf(
                 FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.HISTORY,
                 FilmySection.FOR_YOU, FilmySection.REFERENCE, FilmySection.FILMOTEKA,
-                FilmySection.GEMS, FilmySection.SEARCH, FilmySection.OPS,
+                FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
             )
 }

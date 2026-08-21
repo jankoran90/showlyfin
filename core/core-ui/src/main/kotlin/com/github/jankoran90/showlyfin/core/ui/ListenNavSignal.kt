@@ -19,6 +19,11 @@ object ListenNavSignal {
     /** BESPOKE F4: boolean extra na launch intentu z notifikace kurátora „nová doporučení". */
     const val EXTRA_OPEN_FORYOU = "showlyfin_open_foryou"
 
+    /** SEZONA-DÁVKA (2026-08-21): boolean extra na launch intentu z notifikace stahování
+     *  ([com.github.jankoran90.showlyfin.data.offline.OfflineDownloadService]) — proklik má vést
+     *  rovnou do sekce „Stažené", ne jen otevřít appku na poslední obrazovce. */
+    const val EXTRA_OPEN_DOWNLOADS = "showlyfin_open_downloads"
+
     /** Broadcast: AudiobookPlayerService -> app obnovi Poslouchej widget pri zmene prehravani. */
     const val ACTION_LISTEN_STATE_CHANGED = "com.github.jankoran90.showlyfin.LISTEN_STATE_CHANGED"
 
@@ -46,6 +51,14 @@ object ListenNavSignal {
 
     fun requestOpenForYou() {
         _openForYou.value = _openForYou.value + 1
+    }
+
+    /** SEZONA-DÁVKA (2026-08-21): proklik notifikace stahování → shell přepne na sekci „Stažené". */
+    private val _openDownloads = MutableStateFlow(0L)
+    val openDownloads = _openDownloads.asStateFlow()
+
+    fun requestOpenDownloads() {
+        _openDownloads.value = _openDownloads.value + 1
     }
 
     /**

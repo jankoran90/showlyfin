@@ -211,6 +211,19 @@ private fun FilmyShellContent() {
         }
     }
 
+    // SEZONA-DÁVKA (user 2026-08-21: „stav lišty proklik sem") — proklik notifikace stahování
+    // (FilmyMainActivity → EXTRA_OPEN_DOWNLOADS) → přepni na sekci „Stažené", stejný vzor jako výš.
+    val openDownloads by ListenNavSignal.openDownloads.collectAsStateWithLifecycle()
+    var lastOpenDownloads by rememberSaveable { mutableStateOf(0L) }
+    LaunchedEffect(openDownloads) {
+        if (openDownloads > 0 && openDownloads != lastOpenDownloads) {
+            lastOpenDownloads = openDownloads
+            current = FilmySection.DOWNLOADS
+            detailStack = emptyList()
+            player = null
+        }
+    }
+
     CompositionLocalProvider(
         LocalCsfdRatingProvider provides cardCsfd,
         LocalCzechOverviewProvider provides cardCsfd,
@@ -369,6 +382,8 @@ private fun FilmyShellContent() {
                                 onOpenDetail = openDetail,
                                 onOpenCtv = { t -> detailStack = detailStack + FilmyDetailEntry.Ctv(t) },
                             )
+                            // SEZONA-DÁVKA (user 2026-08-21): stažené filmy/seriály (karty, seskupené po dílech).
+                            FilmySection.DOWNLOADS -> FilmyDownloadsScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // PROVOZ (SHW-114): co hraje kde, výkon přenosu, stav zdrojů + akce nad nimi.
                             FilmySection.OPS -> FilmyOpsScreen(onMenu = onMenu)
                             // M2.3b: Nastavení = uploader login (ČSFD) + vypínač živého logu.

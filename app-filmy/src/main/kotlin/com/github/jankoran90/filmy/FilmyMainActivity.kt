@@ -77,6 +77,7 @@ class FilmyMainActivity : ComponentActivity() {
         runStartupUpdateCheck()
         maybeShowUpdateDialogFromIntent(intent)
         handleForYouIntent(intent)
+        handleOpenDownloadsIntent(intent)
         val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         lifecycleScope.launch {
             // CELLULOID M1.3 — Filmy má 2 PEVNÉ LOKÁLNÍ profily (Dospělý/Děti), NE backend roster
@@ -206,6 +207,7 @@ class FilmyMainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         maybeShowUpdateDialogFromIntent(intent)
         handleForYouIntent(intent)
+        handleOpenDownloadsIntent(intent)
     }
 
     // Parity (CELLULOID): proklik notifikace kurátora „nová doporučení" (CuratorCheckWorker míří na tuto
@@ -213,6 +215,14 @@ class FilmyMainActivity : ComponentActivity() {
     private fun handleForYouIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(ListenNavSignal.EXTRA_OPEN_FORYOU, false) == true) {
             ListenNavSignal.requestOpenForYou()
+        }
+    }
+
+    // SEZONA-DÁVKA (user 2026-08-21: „stav lišty proklik sem") — stejná parita pro notifikaci
+    // stahování (OfflineDownloadService míří na tuto aktivitu s EXTRA_OPEN_DOWNLOADS).
+    private fun handleOpenDownloadsIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(ListenNavSignal.EXTRA_OPEN_DOWNLOADS, false) == true) {
+            ListenNavSignal.requestOpenDownloads()
         }
     }
 

@@ -2893,6 +2893,28 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
+     * SEZONA-DÁVKA (user 2026-08-21: „udělej mi long press stažení na epizodě") — stáhni KONKRÉTNÍ
+     * díl ze seznamu epizod (dlouhý stisk na řádku), bez ohledu na to, jestli je zrovna „otevřený"/
+     * vybraný přes Přehrát (na rozdíl od [downloadEpisodeToDevice], co potřebuje [episodeSelector]).
+     */
+    fun downloadEpisode(season: Int, episode: Int) {
+        val item = _uiState.value.item ?: return
+        _uiState.update { it.copy(captureMessage = "Připravuji stahování dílu…") }
+        viewModelScope.launch {
+            val result = enqueueOneEpisode(item, season, episode)
+            _uiState.update {
+                it.copy(
+                    captureMessage = when (result) {
+                        EpisodeEnqueueResult.LIBRARY -> "Stahuji díl z knihovny — sleduj v sekci Stažené."
+                        EpisodeEnqueueResult.REMEMBERED -> "Stahuji díl do telefonu — sleduj v sekci Stažené."
+                        EpisodeEnqueueResult.NO_SOURCE -> "Tenhle díl ještě nemáš přehraný/zapamatovaný — nejdřív ho spusť a zapamatuj zdroj (⭐)."
+                    },
+                )
+            }
+        }
+    }
+
+    /**
      * SEZONA-DÁVKA (user 2026-08-21: „stahovat filmy a seriály celé i po sezónach i po epizodách") —
      * stáhni VŠECHNY díly JEDNÉ sezóny. [seasonNumber] = null → aktuálně vybraná (nebo první, není-li
      * žádná vybraná). Sdílí frontu s jednotlivým stahováním ([OfflineDownloadManager.enqueue] je samo
