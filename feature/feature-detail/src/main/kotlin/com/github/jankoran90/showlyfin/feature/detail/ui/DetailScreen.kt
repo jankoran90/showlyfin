@@ -872,6 +872,7 @@ fun DetailScreen(
                     nextUp = uiState.nextUpEpisode,
                     onToggleWatched = { s, e -> viewModel.toggleEpisodeWatched(s, e) },
                     onMarkSeasonWatched = { s, w -> viewModel.markSeasonWatched(s, w) },
+                    onDownloadEpisode = { s, e -> viewModel.downloadEpisode(s, e) },
                 )
             }
 
