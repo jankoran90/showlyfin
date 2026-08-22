@@ -69,6 +69,12 @@ sealed interface SlovoDetailEntry {
         /** User (2026-08-22) — YouTube video zpátky do ExoPlayer: nese synteticky "yt:<id>" imdb,
          *  ať přehrávač nabídne AI překlad titulků stejným mechanismem jako u filmů (LINGUA). */
         val subtitleQuery: SubtitleQuery? = null,
+        /** 🔴 INCIDENT (2026-08-22, živě chyceno logcatem po nasazení) — spousta YouTube videí NEMÁ
+         *  HLS formát (jen progresivní itag 18), backend na to `/api/yt/hls/…` odpovídá schválně 404
+         *  („HLS pro toto video nedostupné" — dokumentováno v `routes/youtube.py`, ale klient tenhle
+         *  fallback nikdy neimplementoval, dřív to řešila externí YouTube appka sama). Progresivní
+         *  360p URL jako záložka — [onPlaybackFailed] u této entry ji jednou zkusí místo pádu na seznam. */
+        val fallbackUrl: String? = null,
     ) : SlovoDetailEntry
     /** DROPSHIP F2 — Nahrát audioknihu z telefonu do ABS knihovny. */
     data object UploadAudiobook : SlovoDetailEntry
@@ -90,6 +96,19 @@ internal fun SlovoDetailEntry.isFullscreenPlayer(): Boolean =
  */
 private fun youtubeIdFromProxyUrl(url: String): String? =
     Regex("""/yt/(?:stream|hls)/([^/?.]+)""").find(url)?.groupValues?.get(1)
+
+/**
+ * 720p HLS proxy URL → progresivní 360p záložka (stejný base+key, jiná cesta/kvalita). Backend
+ * `/api/yt/hls/…` schválně 404uje, když video HLS formát nemá (jen itag 18 progresiv) — 360p
+ * přes `/api/yt/stream/…?kind=video&quality=360` funguje prakticky vždy. `null` = url nesedí na
+ * očekávaný HLS proxy tvar (žádná záložka, ať se nic nerozbije na neznámém formátu URL).
+ */
+private fun youtube360Fallback(hlsUrl: String): String? {
+    val m = Regex("""^(.*)/api/yt/hls/([^/?.]+)\.m3u8\?(.*)$""").find(hlsUrl) ?: return null
+    val (base, id, query) = m.destructured
+    val key = Regex("""key=([^&]+)""").find(query)?.value ?: return null
+    return "$base/api/yt/stream/$id?kind=video&quality=360&$key"
+}
 
 /**
  * User (2026-08-22) — „youtube videa ze slova musíme zpět do exoplayer": AI titulky bez IMDb (běžný
@@ -143,6 +162,7 @@ internal fun SlovoDetail(
             SlovoDetailEntry.VideoPlayer(
                 externalUrl = url, title = title, posterUrl = poster,
                 subtitleQuery = youtubeSubtitleQuery(url, title),
+                fallbackUrl = youtube360Fallback(url),
             ),
         )
     }
@@ -262,7 +282,19 @@ internal fun SlovoDetail(
             resumeKey = entry.resumeKey,
             subtitleQuery = entry.subtitleQuery,
             onBack = onPop,
-            onPlaybackFailed = { onPop() },
+            // 🔴 INCIDENT (2026-08-22) — HLS 404 (viz VideoPlayer.fallbackUrl) → zkus JEDNOU 360p
+            // progresiv místo pádu na seznam. NAHRADÍ vršek stacku (pop pak push), ne pushne navrch —
+            // jinak by druhé selhání (360p taky nejde) spadlo zpátky na PRVNÍ (už známě mrtvou) entry
+            // a zacyklilo se. `fallbackUrl = null` v nové entry = druhé selhání už nemá kam couvnout.
+            onPlaybackFailed = {
+                val fb = entry.fallbackUrl
+                if (fb != null) {
+                    onPop()
+                    onPush(entry.copy(externalUrl = fb, fallbackUrl = null))
+                } else {
+                    onPop()
+                }
+            },
         )
         SlovoDetailEntry.UploadAudiobook -> UploadAudiobookScreen(
             onBack = onPop,
