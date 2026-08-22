@@ -1,13 +1,11 @@
 package com.github.jankoran90.showlyfin.ui.slovophone
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
@@ -68,6 +66,9 @@ sealed interface SlovoDetailEntry {
         val title: String,
         val posterUrl: String? = null,
         val resumeKey: String? = null,
+        /** User (2026-08-22) — YouTube video zpátky do ExoPlayer: nese synteticky "yt:<id>" imdb,
+         *  ať přehrávač nabídne AI překlad titulků stejným mechanismem jako u filmů (LINGUA). */
+        val subtitleQuery: SubtitleQuery? = null,
     ) : SlovoDetailEntry
     /** DROPSHIP F2 — Nahrát audioknihu z telefonu do ABS knihovny. */
     data object UploadAudiobook : SlovoDetailEntry
@@ -82,13 +83,23 @@ internal fun SlovoDetailEntry.isFullscreenPlayer(): Boolean =
  * Sdílené shellem (onOpenSourceEpisode z Poslechu) i přehrávačem (onOpenSource). [type] = "youtube"/"ctv"/rss.
  */
 /**
- * User (2026-08-15 16:49) — appka nemá vlastní YouTube video přehrávač, jen poslech + decentní odkaz
- * do YouTube appky. Proxy stream URL (`.../api/yt/stream/{id}?...` nebo `.../api/yt/hls/{id}.m3u8?...`,
- * viz `UploaderApi.ytVideoUrl`) má syrové YouTube ID v cestě — vytáhneme ho odsud, ať se nesahá na
- * sdílený `feature-listen` kód (stejný modul používá i app-filmy, kde in-app video přehrávání zůstává).
+ * Proxy stream URL (`.../api/yt/stream/{id}?...` nebo `.../api/yt/hls/{id}.m3u8?...`, viz
+ * `UploaderApi.ytVideoUrl`) má syrové YouTube ID v cestě — vytáhneme ho odsud, ať se nesahá na
+ * sdílený `feature-listen` kód (stejný modul používá i app-filmy). Slouží k sestavení syntetického
+ * "yt:<id>" klíče pro AI překlad titulků (viz [youtubeSubtitleQuery]).
  */
 private fun youtubeIdFromProxyUrl(url: String): String? =
     Regex("""/yt/(?:stream|hls)/([^/?.]+)""").find(url)?.groupValues?.get(1)
+
+/**
+ * User (2026-08-22) — „youtube videa ze slova musíme zpět do exoplayer": AI titulky bez IMDb (běžný
+ * LINGUA gate čeká na `tt…` id) fungují přes stejné pole `SubtitleQuery.imdb`, jen synteticky "yt:<id>"
+ * — backend na tenhle prefix v `/api/subtitles/{imdb}` (žádné CZ hledání, rovnou 0 kandidátů) a
+ * `/api/subtitles/translate/{imdb}` (anglické titulky z YouTube místo OpenSubtitles) reaguje zvlášť.
+ * Bez rozpoznatelného id (neproxovaná/cizí URL) vrací null → přehraje se beze titulků, beze pádu.
+ */
+private fun youtubeSubtitleQuery(url: String, title: String): SubtitleQuery? =
+    youtubeIdFromProxyUrl(url)?.let { id -> SubtitleQuery(imdb = "yt:$id", title = title, origTitle = title) }
 
 internal fun linkedOrPlain(
     podcastLinkLookup: PodcastLinkLookupViewModel,
@@ -123,30 +134,17 @@ internal fun SlovoDetail(
     // sloučeném pořadu se úplně skryjí (i u TWINE-propojeného páru, nikdy YouTube odkaz dětem).
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
     val audioOnly = activeProfile?.isAdmin == false
-    // User (2026-08-15 16:49) — YouTube video ven z appky, jen odkaz do YouTube appky/prohlížeče.
-    val context = LocalContext.current
-    val openYoutubeVideo: (proxyUrl: String) -> Unit = { proxyUrl ->
-        val id = youtubeIdFromProxyUrl(proxyUrl)
-        val watchUrl = if (id != null) "https://www.youtube.com/watch?v=$id" else proxyUrl
-        // User (2026-08-19) — bez setPackage šlo přes Android "open by default" i do prohlížeče
-        // (ReVanced YouTube není vždy zaregistrovaný jako auto-verified handler pro youtube.com odkazy).
-        // Vynutit YouTube appku (ReVanced instaluje pod stejným package id jako originál) přímo,
-        // fallback na obecný intent jen když appka chybí/nezvládne to.
-        val openedInApp = runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(watchUrl)).apply {
-                    setPackage("com.google.android.youtube")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                },
-            )
-        }.isSuccess
-        if (!openedInApp) {
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(watchUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) },
-                )
-            }
-        }
+    // User (2026-08-22) — „youtube videa ze slova musíme zpět do exoplayer": dřív šlo VŽDY ven do
+    // YouTube appky/prohlížeče (2026-08-15 rozhodnutí), teď hraje ROVNOU ve sdíleném přehrávači
+    // (:feature:feature-playback — stejný, co používá Filmy), ať appka nabídne stejný styl titulků
+    // + AI překlad (viz [youtubeSubtitleQuery]).
+    val playYoutubeVideo: (url: String, title: String, poster: String?) -> Unit = { url, title, poster ->
+        onPush(
+            SlovoDetailEntry.VideoPlayer(
+                externalUrl = url, title = title, posterUrl = poster,
+                subtitleQuery = youtubeSubtitleQuery(url, title),
+            ),
+        )
     }
     // SLOVO-KIDS-EPISODE — admin dlouhý stisk na AUTO-detekované sérii (RssPodcastScreen) potřebuje
     // vědět, které série jsou dětskému profilu už schválené (toggle stav v action sheetu).
@@ -202,7 +200,7 @@ internal fun SlovoDetail(
             kidsVisibleSeriesKeys = kidsVisibleSourceKeys,
             onSetSeriesVisibleForKids = { key, visible -> listenVm.setSourceVisibleForKids(setOf(key), visible) },
             onBack = onPop,
-            onPlayVideo = { url, _, _ -> openYoutubeVideo(url) },
+            onPlayVideo = playYoutubeVideo,
             onOpenAudioPlayer = { onPush(SlovoDetailEntry.AudiobookPlayer(itemId = null, fromStart = false)) },
             modifier = Modifier.fillMaxSize(),
         )
@@ -220,7 +218,7 @@ internal fun SlovoDetail(
             onPlayVideo = { jfItemId, videoTitle, resumeKey ->
                 onPush(SlovoDetailEntry.VideoPlayer(itemId = jfItemId, title = videoTitle, resumeKey = resumeKey))
             },
-            onPlayYoutubeVideo = { url, _, _ -> openYoutubeVideo(url) },
+            onPlayYoutubeVideo = playYoutubeVideo,
             modifier = Modifier.fillMaxSize(),
         )
         is SlovoDetailEntry.CtvProgram -> CtvProgramScreen(
@@ -246,7 +244,7 @@ internal fun SlovoDetail(
             audioOnly = audioOnly,
             onBack = onPop,
             onOpenAudioPlayer = { onPush(SlovoDetailEntry.AudiobookPlayer(itemId = null, fromStart = false)) },
-            onPlayVideo = { url, _, _ -> openYoutubeVideo(url) },
+            onPlayVideo = playYoutubeVideo,
             onUnlinked = onPop,
         )
         is SlovoDetailEntry.AudiobookEdit -> AudiobookEditScreen(
@@ -262,6 +260,7 @@ internal fun SlovoDetail(
             externalTitle = entry.title,
             externalPosterUrl = entry.posterUrl,
             resumeKey = entry.resumeKey,
+            subtitleQuery = entry.subtitleQuery,
             onBack = onPop,
             onPlaybackFailed = { onPop() },
         )

@@ -77,12 +77,25 @@ class YoutubeChannelViewModel @Inject constructor(
 
     private var loadedFor: String? = null
 
+    // User (2026-08-22) — „pevný filtr", ne jednorázové vyhledávání: text se uloží PER KANÁL
+    // (klíč = handle), příště se otevře rovnou s ním. Prázdné = bez filtru.
+    private val _channelFilter = MutableStateFlow("")
+    val channelFilter = _channelFilter.asStateFlow()
+
+    fun setChannelFilter(text: String) {
+        _channelFilter.value = text
+        loadedFor?.let { prefs.edit().putString(filterPrefKey(it), text).apply() }
+    }
+
+    private fun filterPrefKey(channel: String) = "yt_kw_filter_$channel"
+
     fun load(channel: String) {
+        _channelFilter.value = prefs.getString(filterPrefKey(channel), "") ?: ""
         if (loadedFor == channel && _state.value.episodes.isNotEmpty()) return
         loadedFor = channel
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
-            runCatching { uploaderDs.getYtFeed(baseUrl, cookie, channel, limit = 40) }
+            runCatching { uploaderDs.getYtFeed(baseUrl, cookie, channel, limit = YoutubeFeedPrefs.limit(prefs)) }
                 .onSuccess { feed ->
                     _state.update {
                         it.copy(isLoading = false, channelTitle = feed.channel, episodes = feed.entries)
