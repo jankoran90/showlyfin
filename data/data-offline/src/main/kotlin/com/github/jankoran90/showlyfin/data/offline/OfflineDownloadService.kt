@@ -84,7 +84,10 @@ class OfflineDownloadService : Service() {
             active <= 1 -> "Příprava stahování…"
             else -> "Stahuji $active položky"
         }
+        // SEZONA-DÁVKA (user 2026-08-21: „stav lišty proklik sem") — proklik vede rovnou do sekce
+        // „Stažené" (stejný vzor jako notifikace kurátora „Pro tebe"), ne jen generické otevření appky.
         val launch = packageManager.getLaunchIntentForPackage(packageName)
+            ?.putExtra(com.github.jankoran90.showlyfin.core.ui.ListenNavSignal.EXTRA_OPEN_DOWNLOADS, true)
         val contentIntent = launch?.let {
             PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         }

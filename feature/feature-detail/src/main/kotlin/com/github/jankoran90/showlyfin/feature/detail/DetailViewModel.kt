@@ -885,6 +885,13 @@ class DetailViewModel @Inject constructor(
         }
         val parts = sorted
             .filter { it.id != excludeTmdbId && !it.poster_path.isNullOrBlank() }
+            // user 2026-08-22 („The Day the Conducator Died 2019 je špatně a vymyšlené") — TMDB občas
+            // vede člověka jako Director i u pár-minutového segmentu sborníkového filmu (ověřeno živě:
+            // TMDB id 708046, 3min segment uvnitř „30/30 Vision", 0 hodnocení, žádný žánr). Reálné, ne
+            // vymyšlené appkou, ale u „Od stejného režiséra"/„studia" jen matou → schovej položky bez
+            // JAKÉHOKOLI žánru A bez hodnocení (obojí zaráz = silný signál obskurní/nekompletní záznam,
+            // samotné „nehodnoceno" by mohlo useknout i legitimní čerstvý film bez hlasů).
+            .filter { m -> !(m.genre_ids.isNullOrEmpty() && (m.vote_average ?: 0f) <= 0f) }
             .filter { !releasedOnly || (it.release_date?.let { d -> d.isNotBlank() && d <= today } == true) }
             .take(limit)
             .map { m ->
@@ -1196,7 +1203,7 @@ class DetailViewModel @Inject constructor(
     // `_uiState.update { it.copy(...) }`, kde `_uiState.value` ještě drží STARÝ (nebo null) titul.
     private fun audioChoice(imdb: String?): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice {
         titleAudioOverrideChoice(imdb)?.let { return it }
-        return audioPathStore.effective(isChildProfile())
+        return audioPathStore.effective(isChildProfile(), profileRepository.activeConfig.value.audioChoice)
     }
 
     private fun titleAudioOverrideChoice(imdb: String?): com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice? {
@@ -2872,14 +2879,123 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * SEZONA (SHW-113): stáhni JEDEN DÍL seriálu do telefonu.
-     *
-     * Pořadí: **díl z Jellyfin knihovny** (hraje ze serveru, tedy nejjistější zdroj) → jinak zapamatovaný
-     * zdroj dílu ([WorkingSourceStore.get] se season/episode). Jellyfin id DÍLU drží `episodeJellyfinIds`
-     * (`ownedJellyfinId` je id SERIÁLU — tím to dřív padalo na „stahování dílů z knihovny je samostatný krok").
+     * SEZONA (SHW-113): stáhni JEDEN DÍL seriálu do telefonu. Tenký wrapper nad [enqueueOneEpisode]
+     * (sdílené jádro s dávkovým stahováním sezóny/řady, viz [downloadSeasonToDevice]) — jen řeší
+     * UX zprávu pro jednotlivý klik z menu karty.
      */
     private fun downloadEpisodeToDevice(item: MediaItem, sel: EpisodeSelector) {
-        val epJfId = _uiState.value.episodeJellyfinIds[sel.season to sel.episode]
+        _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Připravuji stahování dílu…") }
+        viewModelScope.launch {
+            val result = enqueueOneEpisode(item, sel.season, sel.episode)
+            _uiState.update {
+                it.copy(
+                    captureMessage = when (result) {
+                        EpisodeEnqueueResult.LIBRARY -> "Stahuji díl z knihovny — sleduj v sekci Stažené."
+                        EpisodeEnqueueResult.REMEMBERED -> "Stahuji díl do telefonu — sleduj v sekci Stažené."
+                        EpisodeEnqueueResult.NO_SOURCE -> "Nejdřív díl přehraj a zapamatuj zdroj (⭐), pak půjde stáhnout do telefonu."
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * SEZONA-DÁVKA (user 2026-08-21: „udělej mi long press stažení na epizodě") — stáhni KONKRÉTNÍ
+     * díl ze seznamu epizod (dlouhý stisk na řádku), bez ohledu na to, jestli je zrovna „otevřený"/
+     * vybraný přes Přehrát (na rozdíl od [downloadEpisodeToDevice], co potřebuje [episodeSelector]).
+     */
+    fun downloadEpisode(season: Int, episode: Int) {
+        val item = _uiState.value.item ?: return
+        _uiState.update { it.copy(captureMessage = "Připravuji stahování dílu…") }
+        viewModelScope.launch {
+            val result = enqueueOneEpisode(item, season, episode)
+            _uiState.update {
+                it.copy(
+                    captureMessage = when (result) {
+                        EpisodeEnqueueResult.LIBRARY -> "Stahuji díl z knihovny — sleduj v sekci Stažené."
+                        EpisodeEnqueueResult.REMEMBERED -> "Stahuji díl do telefonu — sleduj v sekci Stažené."
+                        EpisodeEnqueueResult.NO_SOURCE -> "Tenhle díl ještě nemáš přehraný/zapamatovaný — nejdřív ho spusť a zapamatuj zdroj (⭐)."
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * SEZONA-DÁVKA (user 2026-08-21: „stahovat filmy a seriály celé i po sezónach i po epizodách") —
+     * stáhni VŠECHNY díly JEDNÉ sezóny. [seasonNumber] = null → aktuálně vybraná (nebo první, není-li
+     * žádná vybraná). Sdílí frontu s jednotlivým stahováním ([OfflineDownloadManager.enqueue] je samo
+     * idempotentní + gatuje souběh) — díly BEZ zdroje (nikdy nepřehrané/nezapamatované) se prostě
+     * přeskočí, ne že by celá dávka spadla.
+     */
+    fun downloadSeasonToDevice(seasonNumber: Int? = null) {
+        val item = _uiState.value.item ?: return
+        val tmdbId = item.tmdbId
+        val season = seasonNumber ?: _uiState.value.selectedSeason
+            ?: _uiState.value.seasons.firstOrNull { it.season_number >= 1 }?.season_number
+        if (season == null) return
+        _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Připravuji stahování sezóny…") }
+        viewModelScope.launch {
+            val episodes = if (season == _uiState.value.selectedSeason && _uiState.value.seasonEpisodes.isNotEmpty()) {
+                _uiState.value.seasonEpisodes
+            } else {
+                tmdbId?.let { tmdbApi.fetchSeason(it, season)?.episodes }.orEmpty()
+            }
+            enqueueEpisodesBatch(item, episodes)
+        }
+    }
+
+    /** SEZONA-DÁVKA: stáhni VŠECHNY díly VŠECH sezón (celá řada). Postupně, sezóna po sezóně. */
+    fun downloadAllEpisodesToDevice() {
+        val item = _uiState.value.item ?: return
+        val tmdbId = item.tmdbId ?: return
+        val seasonNumbers = _uiState.value.seasons.map { it.season_number }.filter { it >= 1 }
+        if (seasonNumbers.isEmpty()) return
+        _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Připravuji stahování celé řady…") }
+        viewModelScope.launch {
+            val episodes = seasonNumbers.flatMap { s ->
+                if (s == _uiState.value.selectedSeason && _uiState.value.seasonEpisodes.isNotEmpty()) {
+                    _uiState.value.seasonEpisodes
+                } else {
+                    tmdbApi.fetchSeason(tmdbId, s)?.episodes.orEmpty()
+                }
+            }
+            enqueueEpisodesBatch(item, episodes)
+        }
+    }
+
+    /** Společné jádro obou dávek výš — enqueue každého dílu zvlášť, sečti výsledky do jedné zprávy. */
+    private suspend fun enqueueEpisodesBatch(item: MediaItem, episodes: List<com.github.jankoran90.showlyfin.data.tmdb.model.TmdbEpisode>) {
+        var enqueued = 0
+        var skipped = 0
+        for (ep in episodes.sortedWith(compareBy({ it.season_number ?: 0 }, { it.episode_number }))) {
+            val season = ep.season_number ?: continue
+            if (enqueueOneEpisode(item, season, ep.episode_number) == EpisodeEnqueueResult.NO_SOURCE) skipped++ else enqueued++
+        }
+        _uiState.update {
+            it.copy(
+                captureMessage = if (enqueued > 0) {
+                    "Do fronty přidáno $enqueued dílů" +
+                        (if (skipped > 0) " ($skipped bez zapamatovaného zdroje přeskočeno)" else "") +
+                        " — sleduj v sekci Stažené."
+                } else {
+                    "Žádný díl nešlo stáhnout — zkus je nejdřív jednotlivě přehrát a zapamatovat zdroj (⭐)."
+                },
+            )
+        }
+    }
+
+    private enum class EpisodeEnqueueResult { LIBRARY, REMEMBERED, NO_SOURCE }
+
+    /**
+     * SEZONA (SHW-113) + SEZONA-DÁVKA: sdílené jádro stažení JEDNOHO dílu — volá ho jak
+     * [downloadEpisodeToDevice] (jednotlivý klik), tak dávkové stahování sezóny/řady.
+     * Pořadí: **díl z Jellyfin knihovny** (hraje ze serveru, tedy nejjistější zdroj) → jinak
+     * zapamatovaný zdroj dílu ([WorkingSourceStore.get] se season/episode) → jinak (jen pokud jde
+     * o PRÁVĚ otevřený díl) rozehraný `rememberedSource` z uiState. Bez UI zpráv — ty si řeší volající.
+     */
+    private suspend fun enqueueOneEpisode(item: MediaItem, season: Int, episode: Int): EpisodeEnqueueResult {
+        val epJfId = _uiState.value.episodeJellyfinIds[season to episode]
         val serverUrl = prefs.getString("jellyfin_server_url", "").orEmpty()
         val token = prefs.getString("jellyfin_token", "").orEmpty()
         if (epJfId != null && serverUrl.isNotBlank() && token.isNotBlank()) {
@@ -2887,53 +3003,43 @@ class DetailViewModel @Inject constructor(
                 com.github.jankoran90.showlyfin.data.offline.OfflineRequest(
                     key = "jf_$epJfId",
                     title = item.title,
-                    subtitle = "S${sel.season}E${sel.episode}",
+                    subtitle = "S${season}E${episode}",
                     type = com.github.jankoran90.showlyfin.data.offline.OfflineRequest.TYPE_EPISODE,
                     sourceLabel = "Knihovna",
                     videoUrl = "$serverUrl/Videos/$epJfId/stream?static=true&api_key=$token",
                     posterUrl = "$serverUrl/Items/$epJfId/Images/Primary?api_key=$token",
                     imdb = item.imdbId,
                     tmdb = item.tmdbId?.toInt(),
-                    season = sel.season,
-                    episode = sel.episode,
+                    season = season,
+                    episode = episode,
                 ),
             )
-            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Stahuji díl z knihovny — sleduj v sekci Stažené.") }
-            return
+            return EpisodeEnqueueResult.LIBRARY
         }
-        val source = workingSourceStore.get(item.imdbId, item.tmdbId, sel.season, sel.episode)?.stream
-            ?: _uiState.value.rememberedSource
-        if (source == null) {
-            _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Nejdřív díl přehraj a zapamatuj zdroj (⭐), pak půjde stáhnout do telefonu.") }
-            return
+        val currentSel = episodeSelector
+        val source = workingSourceStore.get(item.imdbId, item.tmdbId, season, episode)?.stream
+            ?: (_uiState.value.rememberedSource.takeIf { currentSel?.season == season && currentSel?.episode == episode })
+        if (source == null) return EpisodeEnqueueResult.NO_SOURCE
+        val url = resolveDownloadUrl(item, source) ?: return EpisodeEnqueueResult.NO_SOURCE
+        val poster = (item.posterPath ?: _uiState.value.movieDetails?.poster_path)?.let {
+            if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w342$it"
         }
-        _uiState.update { it.copy(showDownloadMenu = false, captureMessage = "Připravuji stahování dílu…") }
-        viewModelScope.launch {
-            val url = resolveDownloadUrl(item, source)
-            if (url.isNullOrBlank()) {
-                _uiState.update { it.copy(captureMessage = "Zdroj dílu se nepodařilo připravit ke stažení — zkus ho přehrát a zapamatovat znovu.") }
-                return@launch
-            }
-            val poster = (item.posterPath ?: _uiState.value.movieDetails?.poster_path)?.let {
-                if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w342$it"
-            }
-            offlineManager.enqueue(
-                com.github.jankoran90.showlyfin.data.offline.OfflineRequest(
-                    key = episodeOfflineKey(item, sel.season, sel.episode),
-                    title = item.title,
-                    subtitle = "S${sel.season}E${sel.episode}",
-                    type = com.github.jankoran90.showlyfin.data.offline.OfflineRequest.TYPE_EPISODE,
-                    sourceLabel = "Zapamatovaný zdroj",
-                    videoUrl = url,
-                    posterUrl = poster,
-                    imdb = item.imdbId,
-                    tmdb = item.tmdbId?.toInt(),
-                    season = sel.season,
-                    episode = sel.episode,
-                ),
-            )
-            _uiState.update { it.copy(captureMessage = "Stahuji díl do telefonu — sleduj v sekci Stažené.") }
-        }
+        offlineManager.enqueue(
+            com.github.jankoran90.showlyfin.data.offline.OfflineRequest(
+                key = episodeOfflineKey(item, season, episode),
+                title = item.title,
+                subtitle = "S${season}E${episode}",
+                type = com.github.jankoran90.showlyfin.data.offline.OfflineRequest.TYPE_EPISODE,
+                sourceLabel = "Zapamatovaný zdroj",
+                videoUrl = url,
+                posterUrl = poster,
+                imdb = item.imdbId,
+                tmdb = item.tmdbId?.toInt(),
+                season = season,
+                episode = episode,
+            ),
+        )
+        return EpisodeEnqueueResult.REMEMBERED
     }
 
     /** HOARD (SHW-84): stáhni zapamatovaný zdroj filmu (týž, co hraje přes Přehrát) do telefonu. */

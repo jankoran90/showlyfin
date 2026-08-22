@@ -47,6 +47,9 @@ dependencies {
     implementation(project(":data:data-uploader"))
     // Motiv (ShowlyfinPhoneTheme) + telefonní VM pro reuse. Gap Fáze 4 (viz hlavička).
     implementation(project(":ui-phone"))
+    // SEZONA-DÁVKA (2026-08-21): FilmyDownloadsScreen čte OfflineDownload/OfflineRequest/OfflineStatus
+    // přímo (ui-phone je má jen jako `implementation`, není tranzitivní).
+    implementation(project(":data:data-offline"))
     // „O aplikaci" v Nastavení: UpdateChecker (fetchManifest/notes) + AppServices.config (verze). Launcher je v core-ui.
     implementation(project(":core:core-appservices"))
 

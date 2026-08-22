@@ -86,7 +86,9 @@ internal fun TvDetailActions(
     val hasRemembered = uiState.rememberedSource != null
     val hasSource = inLibrary || hasRemembered
     val isMovie = uiState.item?.type == MediaType.MOVIE
-    val canDevice = isMovie && hasSource
+    // SEZONA-DÁVKA (2026-08-21): u seriálu tlačítko "Stáhnout" ukaž vždy — menu (DownloadMenuSheet)
+    // teď u seriálu nabízí "Stáhnout sezónu/celou řadu" nezávisle na tom, jestli zrovna hraje díl.
+    val canDevice = (isMovie && hasSource) || uiState.item?.type == MediaType.SHOW
     val downloaded = uiState.offlineState.status == OfflineStatus.DOWNLOADED
     val downloading = uiState.offlineState.status == OfflineStatus.DOWNLOADING ||
         uiState.offlineState.status == OfflineStatus.QUEUED

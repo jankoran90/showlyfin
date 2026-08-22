@@ -64,9 +64,17 @@ class AudioPathStore @Inject constructor(
         Timber.i("[SEZONA] zvuk profilu %s = %s", profileKey(), choice?.name ?: "výchozí dle věku")
     }
 
-    /** Volba profilu, jinak výchozí podle věku: dětský → CZ dabing, dospělý → originál. */
-    fun effective(isChildProfile: Boolean): Choice =
-        _choice.value ?: if (isChildProfile) Choice.CZ else Choice.ORIGINAL
+    /**
+     * Volba profilu, jinak výchozí podle věku: dětský → CZ dabing, dospělý → originál.
+     * [synced] = `ProfileConfig.audioChoice` ze serveru (SHW-113 f4, sdílené appka↔web) — má
+     * PŘEDNOST před lokálním úložištěm tady, které zůstává jen jako fallback, dokud [synced]
+     * poprvé nedorazí (starší appky, profil bez configu) nebo dokud ho volající nemá po ruce.
+     */
+    fun effective(isChildProfile: Boolean, synced: String? = null): Choice = when (synced) {
+        "CZ" -> Choice.CZ
+        "ORIGINAL" -> Choice.ORIGINAL
+        else -> _choice.value ?: if (isChildProfile) Choice.CZ else Choice.ORIGINAL
+    }
 
     companion object {
         /**

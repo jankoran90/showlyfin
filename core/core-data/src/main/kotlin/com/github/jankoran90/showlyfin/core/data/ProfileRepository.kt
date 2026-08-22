@@ -236,7 +236,7 @@ class ProfileRepository @Inject constructor(
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
         Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
-        configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId)
+        configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
     }
 
     /**
@@ -326,7 +326,7 @@ class ProfileRepository @Inject constructor(
         )
         // VAULT V9: snapshot změnil override → propsat i config (jinak by ho příští sync vrátil).
         if (newJson != profile.configJson) {
-            configGateway.pushConfig(profile.backendKey(), newJson ?: "{}", profile.name, profile.isAdmin, profile.jellyfinUserId)
+            configGateway.pushConfig(profile.backendKey(), newJson ?: "{}", profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
         }
     }
 
@@ -399,7 +399,7 @@ class ProfileRepository @Inject constructor(
         val newJson = ProfileConfig.toJson(newOverride)
         dao.update(profile.copy(configJson = newJson))
         // Best-effort write-through (gateway polyká chyby); NEaplikujeme — prefs už ten token drží.
-        configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId)
+        configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
         return true
     }
 

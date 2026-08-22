@@ -50,6 +50,10 @@ fun SeasonEpisodeSection(
     onToggleWatched: ((season: Int, episode: Int) -> Unit)? = null,
     /** Označ/odznač CELOU sezónu (user 2026-07-28) — jinak se rozkoukaný seriál dohání po jednom dílu. */
     onMarkSeasonWatched: ((season: Int, watched: Boolean) -> Unit)? = null,
+    /** SEZONA-DÁVKA (user 2026-08-21) — long-press na telefonu nabídne i „Stáhnout" díl (viz
+     *  [PhoneEpisodeRow]). TV nedotčeno (long-press tam zůstává jen zhlédnuto, „Stáhnout" má
+     *  vlastní tlačítko v akční liště). */
+    onDownloadEpisode: ((season: Int, episode: Int) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (seasons.isEmpty()) return
@@ -120,6 +124,9 @@ fun SeasonEpisodeSection(
                         onClick = { play(e) },
                         // Parita s TV (tam long-press funguje od KOLO2) — telefon fajfku ani přepínač neměl.
                         onLongClick = toggle?.let { cb -> { cb(e) } },
+                        onDownload = onDownloadEpisode?.let { cb ->
+                            { byKey[e.key]?.let { ep -> cb(ep.season_number ?: season, ep.episode_number) } }
+                        },
                     )
                 }
             }

@@ -78,7 +78,7 @@ interface UploaderRemoteDataSource {
                             stableId: String? = null): RepackJob?
     suspend fun repackStatus(baseUrl: String, sessionCookie: String, jobId: String): RepackJob?
     suspend fun gemsCatalog(baseUrl: String, sessionCookie: String, country: String, status: String = "all", sort: String? = null): String?
-    suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String? = null, loginPinHash: String? = null)
+    suspend fun putProfile(baseUrl: String, sessionCookie: String, key: String, name: String, isAdmin: Boolean, jellyfinUserId: String, templateUuid: String? = null, loginPinHash: String? = null, maxAgeRating: String? = null)
     // Plan WARDEN W3c — raw JSON: pole šablon (/api/templates) + pole profilových meta (/api/profiles).
     suspend fun getTemplates(baseUrl: String, sessionCookie: String): String?
     suspend fun getProfilesMeta(baseUrl: String, sessionCookie: String): String?

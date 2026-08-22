@@ -22,14 +22,22 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -217,18 +225,44 @@ fun PhoneEpisodeRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    // SEZONA-DÁVKA (user 2026-08-21: „udelej mi long press stazeni na epizode") — long-press byl
+    // dřív VÝHRADNĚ „označit/odznačit zhlédnuto" ([onLongClick]); s [onDownload] zadaným navíc
+    // otevře malé menu s obojím (nic se neztratí, jen klik navíc), místo aby jedno gesto přebilo
+    // druhé. Bez [onDownload] chová se přesně jako dřív (přímá akce, žádné menu).
+    onDownload: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .tvFocusable(shape = RoundedCornerShape(10.dp))
             .clip(RoundedCornerShape(10.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = when {
+                    onLongClick != null && onDownload != null -> { { showMenu = true } }
+                    else -> onLongClick
+                },
+            )
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (onLongClick != null && onDownload != null) {
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (episode.watched) "Odznačit zhlédnuto" else "Označit zhlédnuto") },
+                    leadingIcon = { Icon(if (episode.watched) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, contentDescription = null) },
+                    onClick = { showMenu = false; onLongClick() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Stáhnout") },
+                    leadingIcon = { Icon(Icons.Filled.Download, contentDescription = null) },
+                    onClick = { showMenu = false; onDownload() },
+                )
+            }
+        }
         Box(
             Modifier
                 .width(132.dp)

@@ -55,6 +55,8 @@ class PlaybackViewModel @Inject constructor(
     private val opsHeartbeat: OpsHeartbeatReporter,
     private val profileRepository: ProfileRepository,
     @ApplicationContext private val appContext: Context,
+    private val parentalControls: com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository,
+    private val audioPathStore: com.github.jankoran90.showlyfin.data.uploader.AudioPathStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
@@ -129,6 +131,31 @@ class PlaybackViewModel @Inject constructor(
     private val fpsScaleWrites = MutableSharedFlow<Pair<String, Float>>(extraBufferCapacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private fun activeProfileId(): Long? = profileRepository.activeProfile.value?.id
+
+    /** SEZONA f2 (bug 2026-08-20: „Leo" z JF knihovny hrálo anglicky i na dětském CZ profilu) —
+     * `onPlayJellyfin` cesta (přímo z karty do přehrávače) NIKDY neprocházela `DetailViewModel.
+     * publishPreferredAudioLanguages()` (ta se volá jen před externím RD/sdilej streamem), takže
+     * přehrávač u JF-knihovních titulů buď neměl preferenci vůbec, nebo měl zastaralou z dřívějšího
+     * externího přehrávání. Fix: spočítat ji ČERSTVĚ tady, přímo v `load()`, stejnou logikou jako
+     * `DetailViewModel.audioChoice()` (per-titul přebití → jinak podle věku profilu). */
+    private fun isChildProfile(): Boolean =
+        when (parentalControls.profile.value.effectiveAgeRating) {
+            com.github.jankoran90.showlyfin.core.domain.AgeRating.CHILDREN,
+            com.github.jankoran90.showlyfin.core.domain.AgeRating.FAMILY -> true
+            else -> false
+        }
+
+    private fun preferredAudioLanguagesFor(imdb: String?): List<String> {
+        val override = imdb?.let { profileRepository.activeConfig.value.titleAudioChoice[it] }
+        val choice = when (override) {
+            "CZ" -> com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.CZ
+            "ORIGINAL" -> com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.Choice.ORIGINAL
+            else -> audioPathStore.effective(isChildProfile(), profileRepository.activeConfig.value.audioChoice)
+        }
+        // Original_language z TMDB tady nemáme (JF BaseItemDto ho nenese) — languagesFor() bez něj
+        // sama spadne na angličtinu jako nejčastější originál (stejný fallback jako u detailu).
+        return com.github.jankoran90.showlyfin.data.uploader.AudioPathStore.languagesFor(choice, null)
+    }
 
     init {
         viewModelScope.launch {
@@ -807,6 +834,11 @@ class PlaybackViewModel @Inject constructor(
                 // 🔴 LEAK FIX (user 2026-08-12): Jellyfin přehrávání taky musí vyhodit titulky
                 // z předchozího filmu. loadExternal/loadLocal to dělají, `load()` until teď ne → na TV
                 // zůstávaly cue z včerejšího dospělého filmu (Stremio/RD) i přes dětský Bluey z Jellyfinu.
+                // Bug 2026-08-20 (Leo z JF knihovny hrálo anglicky na dětském CZ profilu): imdb bere
+                // SÉRIOVÝ/filmový `item`, ne epizodu (`playItem`) — epizody providerIds často nenesou.
+                val imdb = item?.providerIds?.get("Imdb")
+                val preferredAudioLanguages = preferredAudioLanguagesFor(imdb)
+
                 translateObserveJob?.cancel(); translateObserveJob = null; translateKey = null
                 _state.update {
                     it.copy(
@@ -820,6 +852,7 @@ class PlaybackViewModel @Inject constructor(
                         subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                         subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
                         canTranslateAi = false, aiTranslating = false, aiTranslateError = null,
+                        preferredAudioLanguages = preferredAudioLanguages,
                     )
                 }
             } catch (e: Exception) {

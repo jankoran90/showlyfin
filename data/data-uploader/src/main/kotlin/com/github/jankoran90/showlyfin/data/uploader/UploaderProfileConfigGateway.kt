@@ -86,11 +86,11 @@ internal class UploaderProfileConfigGateway @Inject constructor(
         }.onFailure { Timber.w(it, "[GATEKEY] fetchAllProfiles selhal") }.getOrNull()
     }
 
-    override suspend fun pushConfig(key: String, json: String, name: String, isAdmin: Boolean, jellyfinUserId: String) {
+    override suspend fun pushConfig(key: String, json: String, name: String, isAdmin: Boolean, jellyfinUserId: String, maxAgeRating: String?) {
         Timber.i("[PUSH] gw.pushConfig key='$key' avail=${isAvailable()} url='${baseUrl()}' cookie=${cookie().isNotBlank()}")
         if (!isAvailable() || key.isBlank()) { Timber.i("[PUSH] gw.pushConfig SKIP (avail/key)"); return }
         runCatching {
-            remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId)
+            remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId, maxAgeRating = maxAgeRating)
             remote.putProfileConfig(baseUrl(), cookie(), key, json)
         }.onSuccess { Timber.i("[PUSH] gw.pushConfig OK '$key'") }
             .onFailure { Timber.i(it, "[PUSH] gw.pushConfig FAIL '$key': ${it.message}") }

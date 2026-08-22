@@ -145,8 +145,10 @@ fun DownloadsScreen(
     }
 }
 
+// SEZONA-DÁVKA (2026-08-21): už ne `private` — sdíleno s ui-filmy-phone/FilmyDownloadsScreen (kartová
+// obrazovka appky Filmy reuse-uje tenhle jeden progress-řádek, žádná duplicitní logika).
 @Composable
-private fun ActiveRow(
+fun ActiveRow(
     title: String,
     status: OfflineStatus,
     progress: Float,

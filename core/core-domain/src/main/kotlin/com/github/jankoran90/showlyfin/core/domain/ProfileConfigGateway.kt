@@ -100,8 +100,12 @@ interface ProfileConfigGateway {
      */
     suspend fun fetchAllProfiles(): List<ProfileMeta>?
 
-    /** Uloží metadata + config balík profilu na backend. Selhání se tiše ignoruje. */
-    suspend fun pushConfig(key: String, json: String, name: String, isAdmin: Boolean, jellyfinUserId: String)
+    /**
+     * Uloží metadata + config balík profilu na backend. Selhání se tiše ignoruje.
+     * [maxAgeRating] = [com.github.jankoran90.showlyfin.core.domain.AgeRating] `.name` nebo null
+     * (SHW-113 f4, 2026-08-20) — web z toho odvodí dětský profil pro výchozí volbu zvuku.
+     */
+    suspend fun pushConfig(key: String, json: String, name: String, isAdmin: Boolean, jellyfinUserId: String, maxAgeRating: String? = null)
 
     /**
      * Plan WARDEN W3c — stáhne všechny šablony autorované na backendu (web admin). null = nedostupné.
