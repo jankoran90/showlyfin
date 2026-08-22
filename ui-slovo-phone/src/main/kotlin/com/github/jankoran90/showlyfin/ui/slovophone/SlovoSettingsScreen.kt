@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Info
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.github.jankoran90.showlyfin.feature.listen.ui.CastTargetSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.HiddenPodcastsSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenOfflineSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenOrderSettingsSection
@@ -31,7 +33,8 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastVideoQualitySett
  * Slovo (EXCISE/SHW-103 Krok 2) — Nastavení poslechové appky (zrcadlo
  * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmySettingsScreen], ale bez filmu/profilu/PIN).
  * Kategorické sbalovací karty: Vzhled (sdílený motiv) + poslechové sekce reuse z :feature:feature-listen.
- * Známý gap (Krok 3 app-slovo): „O aplikaci" (verze/OTA UpdateChecker) + cast cíl „Na TV" — potřebují app kontext.
+ * „Přehrávání na TV/Zenbooku" (2026-08-22) — parita s Filmy DOCK (SHW-77), cílové zařízení „Na TV".
+ * Známý gap (Krok 3 app-slovo): „O aplikaci" (verze/OTA UpdateChecker) — potřebuje app kontext.
  */
 @Composable
 fun SlovoSettingsScreen(
@@ -73,6 +76,9 @@ fun SlovoSettingsScreen(
             }
             SlovoCollapsibleSection("Kvalita videa", Icons.Rounded.HighQuality) {
                 PodcastVideoQualitySettingsSection()
+            }
+            SlovoCollapsibleSection("Přehrávání na TV/Zenbooku", Icons.Rounded.Cast) {
+                CastTargetSettingsSection()
             }
             SlovoCollapsibleSection("O aplikaci", Icons.Rounded.Info) {
                 SlovoAboutSection()
