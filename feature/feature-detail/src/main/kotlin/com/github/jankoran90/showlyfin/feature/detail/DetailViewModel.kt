@@ -885,6 +885,13 @@ class DetailViewModel @Inject constructor(
         }
         val parts = sorted
             .filter { it.id != excludeTmdbId && !it.poster_path.isNullOrBlank() }
+            // user 2026-08-22 („The Day the Conducator Died 2019 je špatně a vymyšlené") — TMDB občas
+            // vede člověka jako Director i u pár-minutového segmentu sborníkového filmu (ověřeno živě:
+            // TMDB id 708046, 3min segment uvnitř „30/30 Vision", 0 hodnocení, žádný žánr). Reálné, ne
+            // vymyšlené appkou, ale u „Od stejného režiséra"/„studia" jen matou → schovej položky bez
+            // JAKÉHOKOLI žánru A bez hodnocení (obojí zaráz = silný signál obskurní/nekompletní záznam,
+            // samotné „nehodnoceno" by mohlo useknout i legitimní čerstvý film bez hlasů).
+            .filter { m -> !(m.genre_ids.isNullOrEmpty() && (m.vote_average ?: 0f) <= 0f) }
             .filter { !releasedOnly || (it.release_date?.let { d -> d.isNotBlank() && d <= today } == true) }
             .take(limit)
             .map { m ->
