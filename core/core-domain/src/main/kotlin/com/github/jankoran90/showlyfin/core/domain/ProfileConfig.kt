@@ -695,7 +695,7 @@ data class FilmotekaPrefs(
     /** Hybridní seskupení žánrů (Akční komedie, Sci-fi horor…). */
     val hybridGenres: Boolean = true,
     /** Karty kolekcí (Jellyfin BoxSet) ve Filmotéce. */
-    val showCollections: Boolean = false,
+    val showCollections: Boolean = true,
     /** Jen tituly s dohledaným zdrojem / z JF knihovny. */
     val onlyWithSource: Boolean = false,
 )

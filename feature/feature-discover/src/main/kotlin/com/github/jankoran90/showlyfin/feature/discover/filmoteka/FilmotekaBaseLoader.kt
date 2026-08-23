@@ -427,9 +427,13 @@ class FilmotekaBaseLoader @Inject constructor(
         val session = prepareJellyfin() ?: return@coroutineScope emptyList()
         val filmoWhitelist = profileRepository.activeConfig.value.filmotekaJfLibraries
             ?.map { it.replace("-", "").lowercase() }?.toSet()
+        // 🔒 2026-08-23 (user: Harry Potter/Zlouni/Auta kolekce nikdy nebyly vidět, i se zapnutým
+        // přepínačem a správnými JF právy) — `isFilmotekaLibrary()` je stavěná pro loader FILMŮ/
+        // SERIÁLŮ (MOVIES/TVSHOWS/MIXED), takže vyřazovala i samotnou "Kolekce" (BOXSETS) knihovnu,
+        // ve které BoxSety fyzicky žijí → getItems níže nikdy neměl na čem běžet, views bylo prázdné.
         val views = runCatching { apiClient.userViewsApi.getUserViews(session.userUuid).content.items }
             .getOrElse { emptyList() }
-            .filter { it.isFilmotekaLibrary() }
+            .filter { it.isFilmotekaLibrary() || it.collectionType?.name?.uppercase() == "BOXSETS" }
             .let { list ->
                 if (filmoWhitelist == null) list
                 else list.filter { it.id.toString().replace("-", "").lowercase() in filmoWhitelist }
