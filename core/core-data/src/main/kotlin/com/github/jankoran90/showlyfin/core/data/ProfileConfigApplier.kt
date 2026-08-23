@@ -63,7 +63,7 @@ internal fun appendTraktDecision(prefs: SharedPreferences, line: String) {
 class ProfileConfigApplier @Inject constructor(
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
-    fun apply(config: ProfileConfig, ownerProfileId: Long) {
+    fun apply(config: ProfileConfig, ownerProfileId: Long, isChildProfile: Boolean = false) {
         val creds = config.credentials
         // DEVICE DIAG (2026-07-21) — jeden řádek rozhodnutí Trakt větve, zapsaný do prefs PO edit bloku
         // (flood-imunní, `[SIEVE]` spam nezaplaví). DIAG dump ho vypíše. Odstranit po vyřešení perzistence.
@@ -139,6 +139,24 @@ class ProfileConfigApplier @Inject constructor(
                 val kRef = ppKey(K_TRAKT_REFRESH, ownerProfileId)
                 val kCrt = ppKey(K_TRAKT_CREATED, ownerProfileId)
                 val kExp = ppKey(K_TRAKT_EXPIRES, ownerProfileId)
+
+                // 🔒 2026-08-23 (user: dětský profil pořád hlásil "Trakt vypršelo", i po smazání tokenu
+                // na serveru) — "Trakt JEN dospělý" (rozhodnuto 2026-07-20) narazilo přesně na filozofii
+                // téhle třídy: živý LOKÁLNÍ per-profil token je autoritativní a apply() ho normálně NIKDY
+                // nemaže (SELECT větev níže) — takže starý token, co dítě dostalo ještě PŘED rozhodnutím,
+                // přežíval navěky v zařízení a žádný serverový zásah ho nemohl smazat. Dětský profil je
+                // jediná výjimka z pravidla "lokální živé nikdy nemaž": vyčisti i per-profil store, ne jen
+                // kanonický slot, a SELECT/BOOTSTRAP se pro něj vůbec nezkouší.
+                if (isChildProfile) {
+                    remove(kAcc); remove(kRef); remove(kCrt); remove(kExp)
+                    if (prefs.getLong(K_ACTIVE_PROFILE, 0L) == ownerProfileId) {
+                        remove(K_TRAKT_ACCESS); remove(K_TRAKT_REFRESH)
+                        remove(K_TRAKT_CREATED); remove(K_TRAKT_EXPIRES); remove(K_TRAKT_OWNER)
+                    }
+                    timber.log.Timber.w("[TRAKT-KEYRING] CLEAR (dětský profil %d) — Trakt jen dospělý", ownerProfileId)
+                    decLine = "$t APPLY own=$ownerProfileId dec=CHILD-CLEAR"
+                    return@run
+                }
 
                 // Aktuální per-profil token (in-memory kopie — v edit transakci nelze re-readovat právě zapsané).
                 var localAccess = prefs.getString(kAcc, null)

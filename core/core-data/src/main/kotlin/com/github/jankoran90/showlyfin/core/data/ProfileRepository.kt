@@ -23,6 +23,11 @@ import javax.inject.Singleton
 
 private const val PREF_ACTIVE_PROFILE_ID = "active_profile_id"
 
+/** "Trakt jen dospělý" (2026-07-20) — `ProfileConfigApplier` musí vědět, jestli má dětský profil,
+ * ať Trakt token nikdy nesedí ani lokálně (viz [ProfileConfigApplier.apply] CHILD-CLEAR). */
+private fun ProfileEntity.isChildAgeRating(): Boolean =
+    maxAgeRating == "FAMILY" || maxAgeRating == "CHILDREN"
+
 @Singleton
 class ProfileRepository @Inject constructor(
     private val dao: ProfileDao,
@@ -231,7 +236,7 @@ class ProfileRepository @Inject constructor(
             val effective = effectiveConfigFor(updated)
             // Applier PŘED publikací do _activeConfig — observeři (ListenViewModel…) čtou kanonické
             // prefs, takže je musí applier stihnout zapsat dřív, než je emise configu probudí.
-            configApplier.apply(effective, updated.id)
+            configApplier.apply(effective, updated.id, updated.isChildAgeRating())
             _activeConfig.value = effective
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
@@ -291,7 +296,7 @@ class ProfileRepository @Inject constructor(
         val active = _activeProfile.value ?: return
         if (active.templateUuid != uuid) return
         val effective = effectiveConfigFor(active)
-        configApplier.apply(effective, active.id)
+        configApplier.apply(effective, active.id, active.isChildAgeRating())
         _activeConfig.value = effective
     }
 
@@ -317,7 +322,7 @@ class ProfileRepository @Inject constructor(
         if (_activeProfile.value?.id == profileId && updated != null) {
             _activeProfile.value = updated
             val effective = effectiveConfigFor(updated)
-            configApplier.apply(effective, updated.id)
+            configApplier.apply(effective, updated.id, updated.isChildAgeRating())
             _activeConfig.value = effective
         }
         // Plan WARDEN W3c: write-through přiřazení na backend ("" = zrušit → backend uloží "").
@@ -446,7 +451,7 @@ class ProfileRepository @Inject constructor(
         // tohoto profilu; načti ho znovu z DAO, ať effectiveConfigFor nestaví config ze STALE snapshotu.
         val profileForConfig = dao.getById(profileId) ?: profile
         val config = effectiveConfigFor(profileForConfig)
-        configApplier.apply(config, profile.id)
+        configApplier.apply(config, profile.id, profileForConfig.isChildAgeRating())
         _activeConfig.value = config
         // Emise profilu AŽ po zápisu prefs + configu → observeři reloadují s korektními creds.
         _activeProfile.value = profile
@@ -558,7 +563,7 @@ class ProfileRepository @Inject constructor(
             if (updated != null) {
                 _activeProfile.value = updated
                 val effective = effectiveConfigFor(updated)
-                configApplier.apply(effective, updated.id)
+                configApplier.apply(effective, updated.id, updated.isChildAgeRating())
                 _activeConfig.value = effective
             }
         }
