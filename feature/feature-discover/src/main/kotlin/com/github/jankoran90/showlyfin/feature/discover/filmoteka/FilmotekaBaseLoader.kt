@@ -127,12 +127,24 @@ class FilmotekaBaseLoader @Inject constructor(
      */
     @Volatile private var lastJellyfinCount: Int = 0
 
+    /** 🔒 2026-08-24 (user: "Auta" 2006 chybělo dětem, byť je fyzicky v JF knihovně "PRO DĚTI") —
+     * ROOT CAUSE: [ContentAgeGate]'s vlastní dokumentace tvrdí "Jellyfin knihovna se NEfiltruje
+     * (je pro děti schválená ručně)", ale [loadBase] ve skutečnosti gatuje VŠECHNO dohromady
+     * (JF+working+Trakt) — starý design slib, co přestal platit po sloučení zdrojů. Konkrétní dopad:
+     * TMDB mělo pro "Auta" chybnou CZ certifikaci "15+" (zjevná chyba dat — sourozenci Auta 2/3 mají
+     * normální U/G, samotný film je manuálně umístěný ve schválené dětské knihovně), takže gate ho
+     * tiše odfiltroval. Fix: pamatuj si dedup klíče JF položek z [gather] a [loadBase] je nechá VŽDY
+     * projít gate, bez ohledu na (třeba chybnou) TMDB certifikaci — přesně podle původního záměru. */
+    @Volatile private var lastJellyfinKeys: Set<String> = emptySet()
+
     /** Báze bez Oblíbených: JF ∪ working ∪ Trakt watchlist → dedup → enrich → věkový gate. */
     suspend fun loadBase(enabled: Set<FilmotekaSource> = settings.sources.value): List<MediaItem> {
         ensureProfile()
         val cap = ageCap()
         val enriched = enricher.enrich(gather(enabled), withCertification = cap != null)
-        return ContentAgeGate.filter(cap, enriched, hideUnrated())
+        // JF knihovnu gate NIKDY nezastaví (viz komentář u lastJellyfinKeys výš) — jen working-source/
+        // Trakt položky (nekurátorované appkou) skutečně podléhají věkovému stropu.
+        return enriched.filter { dedupKey(it) in lastJellyfinKeys || ContentAgeGate.isAllowed(cap, it, hideUnrated()) }
     }
 
     /** Oblíbené (jen filmy) → enrich → věkový gate. Vypnutý zdroj = prázdno. */
@@ -287,6 +299,7 @@ class FilmotekaBaseLoader @Inject constructor(
         // Tituly z watchlistu vstupují do Filmotéky jen se zapnutým zdrojem; DATA z nich bereme vždy.
         val tk = if (FilmotekaSource.TRAKT_WATCHLIST in enabled) tkAll else emptyList()
         lastJellyfinCount = jf.size
+        lastJellyfinKeys = jf.mapNotNull { dedupKey(it) }.toSet()
         // FOYER (SHW-107, user 2026-07-27): „jen tituly s dohledaným zdrojem" — do Filmotéky (a tím i do řady
         // na domově) pusť jen to, co jde reálně pustit: má uložený PŘEHRATELNÝ zdroj, nebo je přímo v Jellyfin
         // knihovně (ta hraje ze serveru). Tituly z „Chci vidět"/Oblíbených, kterým se zdroj teprve shání, se
