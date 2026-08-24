@@ -349,6 +349,7 @@ class DetailViewModel @Inject constructor(
                 showCreators = prefs.getBoolean("detail_show_creators", true),
                 sectionStyle = readSectionStyle(),
                 showSeasons = prefs.getBoolean("detail_show_seasons", true),
+                askRemoveAfterRating = prefs.getBoolean(KEY_ASK_REMOVE_AFTER_RATING, true),
                 seasons = emptyList(),
                 selectedSeason = null,
                 seasonEpisodes = emptyList(),
@@ -998,7 +999,13 @@ class DetailViewModel @Inject constructor(
                     (!item.imdbId.isNullOrBlank() && it.getImdbId() == item.imdbId)
             }
         }.getOrNull()?.let { inWl ->
-            _uiState.update { it.copy(isInWatchlist = inWl) }
+            // 🔒 2026-08-24 (user: *„Legion určitě chci mít v seznamu, dokud ho neshlédnu"*, přitom
+            // má zhlédnuté 3 díly z 27) — TRAKT SERIÁL Z WATCHLISTU VYHODÍ, JAKMILE PUSTÍŠ PRVNÍ DÍL;
+            // jeho watchlist znamená „co jsem ještě nezačal". Divákův záměr tím ale nezmizel, a náš
+            // vlastní seznam „Chci vidět" ho drží dál (sekce oba seznamy spojuje už dávno — jen karta
+            // se ptala výhradně Traktu, takže nabízela „+ Chci vidět" u titulu, který V NAŠEM seznamu
+            // je). Sjednocení odstraňuje ten rozpor; kdo chce čistě Trakt, vypne si to v Nastavení.
+            _uiState.update { it.copy(isInWatchlist = inWl || keptLocally(item)) }
         } ?: run {
             // 🔒 2026-08-24 (user: „u seriálu není zaškrtnutí chci vidět, chybí tam fajka … buďto naše
             // app nesync nebo …") — DŮKAZ ze serveru: titul V TRAKTU JE (zrcadlo se ten den úspěšně
@@ -1008,6 +1015,17 @@ class DetailViewModel @Inject constructor(
             // ([FilmotekaBaseLoader.loadWatchlistMirror]), detail ne — tady se to dorovnává.
             loadWatchlistFromMirror(item)
         }
+    }
+
+    /**
+     * Drží tenhle titul NÁŠ vlastní seznam „Chci vidět"? Používá se jako doplněk Traktu — ten totiž
+     * seriál z watchlistu odebere hned po prvním zhlédnutém dílu (viz [loadWatchlistMembership]).
+     * Vypínatelné v Nastavení ([KEY_WANT_KEEP_UNTIL_WATCHED]); vypnuto = fajfka říká čistě Trakt.
+     */
+    private fun keptLocally(item: MediaItem): Boolean {
+        if (!prefs.getBoolean(KEY_WANT_KEEP_UNTIL_WATCHED, true)) return false
+        val tmdb = item.tmdbId ?: return false
+        return wantToSee.isWanted(tmdb, isShow = item.type == MediaType.SHOW)
     }
 
     /**
@@ -1026,7 +1044,7 @@ class DetailViewModel @Inject constructor(
                 (!item.imdbId.isNullOrBlank() && mi.imdb == item.imdbId)
         }
         timber.log.Timber.i("[Detail] Trakt mlčí → zrcadlo watchlistu: %s = %s", item.title, inWl)
-        _uiState.update { it.copy(isInWatchlist = inWl) }
+        _uiState.update { it.copy(isInWatchlist = inWl || keptLocally(item)) }
     }
 
     /**
@@ -1802,6 +1820,53 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             workingSourceStore.triggerAutoCache(
                 item.imdbId, item.tmdbId, _uiState.value.tmdbCzTitle ?: item.title, item.year, effectiveCachePolicy(item.imdbId),
+            )
+        }
+    }
+
+    /**
+     * ODEBRAT Z FILMOTÉKY (user 2026-08-24: *„když chci ručně odebrat, jak to udělám, aby se znova
+     * nehledaly zdroje"*).
+     *
+     * Rozdíl proti „Zapomenout zdroje": tam je odebrání ŽÁDOST O JINÝ ZDROJ, a proto hned startuje
+     * nové hledání (jeho vlastní přání z 2026-08-02). Tohle je opak — žádost, ať titul zmizí. Sundá
+     * proto obojí, co ho ve Filmotéce drží: zdroje (i s náhrobkem, aby je auto-cache neobnovila)
+     * a „Chci vidět" u Traktu i u nás. Nové hledání se NESPOUŠTÍ.
+     *
+     * Oblíbené ani Jellyfin knihovnu NESAHÁ — to jsou samostatné vědomé volby a mazat je potichu by
+     * bylo přepadení. Když titul drží dál, appka to ROVNOU ŘEKNE; jinak by to vypadalo, že se akce
+     * neprovedla.
+     */
+    fun removeFromFilmoteka() {
+        val item = _uiState.value.item ?: return
+        if (item.type == MediaType.MOVIE) {
+            workingSourceStore.clear(item.imdbId, item.tmdbId)
+        } else {
+            workingSourceStore.clearShow(item.imdbId, item.tmdbId)
+        }
+        _uiState.update {
+            it.copy(rememberedSource = null, hasSeasonSource = false, hasAnyShowSource = false)
+        }
+        // „Chci vidět" u Traktu i u nás. `toggleWatchlist()` při odebírání nespouští hledání zdroje
+        // (to dělá jen při přidání), takže je bezpečné ho použít i tady — a jde přes tutéž kontrolu
+        // odpovědi Traktu, takže se nedozvíme „hotovo", když Trakt nic neodebral.
+        if (_uiState.value.isInWatchlist) {
+            toggleWatchlist()
+        } else {
+            item.tmdbId?.let { wantToSee.remove(it, item.type == MediaType.SHOW) }
+        }
+        val holds = buildList {
+            if (_uiState.value.isOwnedInLibrary) add("je v Jellyfin knihovně")
+            if (_uiState.value.isFavorite) add("je v Oblíbených")
+        }
+        _uiState.update {
+            it.copy(
+                autoCastMessage = if (holds.isEmpty()) {
+                    "Odebráno z Filmotéky — zdroje ani „Chci vidět\" už titul nedrží."
+                } else {
+                    "Zdroje i „Chci vidět\" jsem odebral, ale titul ve Filmotéce zůstává, protože " +
+                        holds.joinToString(" a ") + "."
+                },
             )
         }
     }
@@ -3610,6 +3675,16 @@ class DetailViewModel @Inject constructor(
         const val MIN_PLAYABLE_BYTES = 30_000_000L
         // CELLULOID (SHW-98) — musí sedět s SettingsViewModel.KEY_AUTO_REFRESH_SOURCES (jiný modul, sdílený jen string).
         const val KEY_AUTO_REFRESH_SOURCES = "auto_refresh_sources_enabled"
+
+        /**
+         * „Držet v Chci vidět, dokud titul nedokoukám" (default zap). Trakt seriál z watchlistu
+         * odebere hned po prvním zhlédnutém dílu — s tímhle zapnutým rozhoduje o fajfce i NÁŠ
+         * seznam, takže divákův záměr přežije. Vypnuto = fajfka mluví čistě za Trakt.
+         */
+        const val KEY_WANT_KEEP_UNTIL_WATCHED = "want_keep_until_watched"
+
+        /** „Po ohodnocení nabídnout odebrání z Filmotéky" (default zap, user 2026-08-24). */
+        const val KEY_ASK_REMOVE_AFTER_RATING = "ask_remove_after_rating"
         // D-c: applicationId Filmy TV appky (release) na boxu — kterou probouzí wake scéna do popředí.
         const val FILMY_TV_PACKAGE = "com.github.jankoran90.filmy"
         // REPACK (SEZONA f3e): jak často se ptát na průběh přebalu a kdy to vzdát. Anime díl (~240 MB)

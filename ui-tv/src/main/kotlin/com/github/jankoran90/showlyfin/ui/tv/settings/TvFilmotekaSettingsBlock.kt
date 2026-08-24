@@ -79,7 +79,8 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
         )
         TvToggleRow(
             label = "Chci vidět",
-            subtitle = "Z Trakt watchlistu; u profilů bez Traktu (dětských) z místního seznamu „Chci vidět\"",
+            subtitle = "Z Trakt watchlistu i z našeho vlastního seznamu „Chci vidět\" — ten drží titul " +
+                "i potom, co ho Trakt sám vyhodí (u seriálu po prvním dílu)",
             checked = FilmotekaSource.TRAKT_WATCHLIST in sources,
             onCheckedChange = { vm.setSource(FilmotekaSource.TRAKT_WATCHLIST, it) },
         )

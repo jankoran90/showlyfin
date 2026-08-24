@@ -251,6 +251,17 @@ internal fun TvDetailActions(
                         onClick = { viewModel.forgetShowSources() },
                     )
                 }
+                // Parita s telefonem (user 2026-08-24): „Zapomenout zdroje" hledá nový, tohle je
+                // žádost, ať titul z Filmotéky zmizí — zdroje i „Chci vidět", bez nového hledání.
+                if (!uiState.isOwnedInLibrary) {
+                    TvActionButton(
+                        icon = Icons.Filled.Delete,
+                        label = "Odebrat z Filmotéky",
+                        primary = false,
+                        danger = true,
+                        onClick = { viewModel.removeFromFilmoteka() },
+                    )
+                }
             }
         }
     }

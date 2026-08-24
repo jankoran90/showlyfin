@@ -95,6 +95,11 @@ data class SettingsUiState(
     val playerMarkWatchedPct: Int = PlayerPrefs.DEFAULT_MARK_WATCHED_PCT,
     val playerExitOnFinish: Boolean = PlayerPrefs.DEFAULT_EXIT_ON_FINISH,
     val playerTraktMarkWatched: Boolean = PlayerPrefs.DEFAULT_TRAKT_MARK_WATCHED,
+    // user 2026-08-24 („Legion určitě chci mít v seznamu, dokud ho neshlédnu") — Trakt seriál
+    // z watchlistu odebere hned po prvním zhlédnutém dílu; s tímhle drží fajfku náš vlastní seznam.
+    val wantKeepUntilWatched: Boolean = true,
+    // user 2026-08-24 — po ohodnocení nabídnout úklid („Odebrat z Filmotéky?").
+    val askRemoveAfterRating: Boolean = true,
     // Živé logování (Debug)
     val liveLogging: Boolean = false,
     // CELLULOID (SHW-98) — živě dotahovat auto-nacachované zdroje (backfill watchlistu) při otevření detailu,
@@ -219,6 +224,10 @@ class SettingsViewModel @Inject constructor(
         const val KEY_LIVE_LOGGING = "live_logging_enabled"
         // CELLULOID (SHW-98) — musí sedět s DetailViewModel.KEY_AUTO_REFRESH_SOURCES (jiný modul, sdílený jen string).
         const val KEY_AUTO_REFRESH_SOURCES = "auto_refresh_sources_enabled"
+        // Musí sedět s DetailViewModel.KEY_WANT_KEEP_UNTIL_WATCHED (jiný modul, sdílený jen string).
+        const val KEY_WANT_KEEP_UNTIL_WATCHED = "want_keep_until_watched"
+        // Musí sedět s DetailViewModel.KEY_ASK_REMOVE_AFTER_RATING (jiný modul, sdílený jen string).
+        const val KEY_ASK_REMOVE_AFTER_RATING = "ask_remove_after_rating"
         const val KEY_AVR_ENABLED = "avr_enabled"
         const val KEY_AVR_HOST = "avr_host"
         const val KEY_AVR_BOX_HOST = "avr_box_host"
@@ -327,6 +336,8 @@ class SettingsViewModel @Inject constructor(
                 playerMarkWatchedPct = prefs.getInt(PlayerPrefs.MARK_WATCHED_PCT_KEY, PlayerPrefs.DEFAULT_MARK_WATCHED_PCT),
                 playerExitOnFinish = prefs.getBoolean(PlayerPrefs.EXIT_ON_FINISH_KEY, PlayerPrefs.DEFAULT_EXIT_ON_FINISH),
                 playerTraktMarkWatched = prefs.getBoolean(PlayerPrefs.TRAKT_MARK_WATCHED_KEY, PlayerPrefs.DEFAULT_TRAKT_MARK_WATCHED),
+                wantKeepUntilWatched = prefs.getBoolean(KEY_WANT_KEEP_UNTIL_WATCHED, true),
+                askRemoveAfterRating = prefs.getBoolean(KEY_ASK_REMOVE_AFTER_RATING, true),
             )
         }
         viewModelScope.launch {
@@ -592,6 +603,18 @@ class SettingsViewModel @Inject constructor(
     fun setPlayerTraktMarkWatched(v: Boolean) {
         prefs.edit().putBoolean(PlayerPrefs.TRAKT_MARK_WATCHED_KEY, v).apply()
         _uiState.update { it.copy(playerTraktMarkWatched = v) }
+    }
+
+    /** „Držet v Chci vidět, dokud titul nedokoukám" — klíč sdílený s DetailViewModelem přes string. */
+    fun setWantKeepUntilWatched(v: Boolean) {
+        prefs.edit().putBoolean(KEY_WANT_KEEP_UNTIL_WATCHED, v).apply()
+        _uiState.update { it.copy(wantKeepUntilWatched = v) }
+    }
+
+    /** „Po ohodnocení nabídnout odebrání z Filmotéky" — klíč sdílený s DetailViewModelem přes string. */
+    fun setAskRemoveAfterRating(v: Boolean) {
+        prefs.edit().putBoolean(KEY_ASK_REMOVE_AFTER_RATING, v).apply()
+        _uiState.update { it.copy(askRemoveAfterRating = v) }
     }
     fun setContinuePodcastAfterQueue(v: Boolean) = updateListen { continuePodcastAfterQueue = v }
     fun setPersistQueue(v: Boolean) = updateListen { persistQueue = v }

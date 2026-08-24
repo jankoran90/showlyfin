@@ -374,6 +374,21 @@ fun TvSettingsScreen(
                         onCheckedChange = settings::setAutoRefreshSources,
                     )
                 }
+                // Parita s telefonem (user 2026-08-24): Trakt seriál z watchlistu odebere po prvním dílu.
+                TvToggleRow(
+                    label = "Držet v „Chci vidět\", dokud titul nedokoukám",
+                    subtitle = "Trakt seriál ze seznamu vyhodí, jakmile pustíš první díl. Zapnuto = fajfku " +
+                        "drží náš vlastní seznam a titul zůstane i ve Filmotéce",
+                    checked = sys.wantKeepUntilWatched,
+                    onCheckedChange = settings::setWantKeepUntilWatched,
+                )
+                TvToggleRow(
+                    label = "Po ohodnocení nabídnout úklid",
+                    subtitle = "Po ohodnocení se appka zeptá, jestli titul odebrat z Filmotéky (zdroje " +
+                        "i „Chci vidět\"); Oblíbené a Jellyfin knihovna zůstanou",
+                    checked = sys.askRemoveAfterRating,
+                    onCheckedChange = settings::setAskRemoveAfterRating,
+                )
             }
         }
 

@@ -322,6 +322,43 @@ fun DetailScreen(
             onForgetSeason = { viewModel.forgetSeasonSource() },
         )
     }
+    // user 2026-08-24: *„po ohodnocení by mohl vyskočit dialog, zda se má položka odebrat z Filmotéky
+    // — tím se odebere zdroj, Trakt chci vidět a je to čisté"*. Hodnocení je tečka za dokoukáním,
+    // takže je to přirozená chvíle na úklid. Ptáme se JEN u titulu, který je zrovna otevřený, a jen
+    // jednou (událost se po zobrazení spotřebuje).
+    val ratingHost = com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider.current
+    var askRemoveAfterRating by remember { mutableStateOf(false) }
+    if (ratingHost != null && uiState.askRemoveAfterRating) {
+        val justRated by ratingHost.justRated.collectAsStateWithLifecycle()
+        LaunchedEffect(justRated) {
+            val t = justRated ?: return@LaunchedEffect
+            val open = uiState.item
+            val sameTitle = open != null && (
+                (t.tmdbId != null && t.tmdbId == open.tmdbId) ||
+                    (!t.imdbId.isNullOrBlank() && t.imdbId == open.imdbId)
+                )
+            ratingHost.consumeJustRated()
+            if (sameTitle) askRemoveAfterRating = true
+        }
+    }
+    if (askRemoveAfterRating) {
+        AlertDialog(
+            onDismissRequest = { askRemoveAfterRating = false },
+            title = { Text("Odebrat z Filmotéky?") },
+            text = {
+                Text(
+                    "Ohodnoceno — mám titul uklidit? Zapomenu uložené zdroje a odeberu ho z „Chci vidět\" " +
+                        "(u nás i na Traktu). Oblíbené a Jellyfin knihovnu nechám být.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { askRemoveAfterRating = false; viewModel.removeFromFilmoteka() }) {
+                    Text("Odebrat")
+                }
+            },
+            dismissButton = { TextButton(onClick = { askRemoveAfterRating = false }) { Text("Nechat") } },
+        )
+    }
     // SIEVE S2: po lokálním přehrání Stremio zdroje se zeptej, jestli sedl → zapamatuj fungující zdroj.
     uiState.pendingWorkingConfirm?.let { stream ->
         val srcName = (stream.name ?: stream.description)?.replace("\n", " ")?.trim()?.ifBlank { null } ?: "tento zdroj"
@@ -537,6 +574,8 @@ fun DetailScreen(
                         onManualUrl = { viewModel.openManualUrlDialog() },
                         hasShowSources = uiState.hasAnyShowSource,
                         onForgetShowSources = { viewModel.forgetShowSources() },
+                        // user 2026-08-24: „jak odeberu z Filmotéky … aby se znova nehledaly zdroje"
+                        onRemoveFromFilmoteka = { viewModel.removeFromFilmoteka() },
                         castInOverflow = castInOverflow,
                         onRetryCsfd = uiState.item?.let { m ->
                             if (m.imdbId.isNullOrBlank() && m.tmdbId == null) null
@@ -928,6 +967,8 @@ private fun DetailActionBar(
     /** SEZONA: seriál má uložený zdroj u některé sezóny/dílu → nabídni zapomenutí i bez otevření dílu. */
     hasShowSources: Boolean = false,
     onForgetShowSources: (() -> Unit)? = null,
+    /** „Odebrat z Filmotéky" — zdroje i „Chci vidět" pryč, BEZ nového hledání (user 2026-08-24). */
+    onRemoveFromFilmoteka: (() -> Unit)? = null,
     castInOverflow: Boolean = false,
     // user 2026-08-20 ("Zločin je extrémní sport" — obrázky/recenze jiného titulu): jednou špatně
     // vyřešené ČSFD id se dřív v appce drželo natrvalo bez opravy. null = skryto (chybí imdb/tmdb).
@@ -1087,6 +1128,16 @@ private fun DetailActionBar(
                         text = { Text("Zapomenout zdroje seriálu") },
                         leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                         onClick = { menuOpen = false; onForgetShowSources() },
+                    )
+                }
+                // user 2026-08-24 („když chci ručně odebrat, jak to udělám, aby se znova nehledaly
+                // zdroje") — „Zapomenout zdroje" schválně hledá nový; tohle je opak: ať titul zmizí.
+                // Nemá smysl u titulu z knihovny (ten drží Jellyfin, ne my).
+                if (!inLibrary && onRemoveFromFilmoteka != null) {
+                    DropdownMenuItem(
+                        text = { Text("Odebrat z Filmotéky") },
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; onRemoveFromFilmoteka() },
                     )
                 }
                 // user 2026-08-20: obrázky/recenze u ČSFD ukazovaly jiný titul — dřív vyřešené (a

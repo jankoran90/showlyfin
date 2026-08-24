@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -48,6 +49,15 @@ interface UserRatingProvider {
     val ratings: StateFlow<Map<String, Int>>
     /** Otevři hvězdičkový dialog pro daný titul. */
     fun requestRate(target: RatingTarget)
+
+    /**
+     * Titul, který divák PRÁVĚ ohodnotil (user 2026-08-24: *„po ohodnocení by mohl vyskočit dialog,
+     * zda se má položka odebrat z Filmotéky"*). Ohodnocení je typicky tečka za dokoukáním, takže je
+     * to přirozená chvíle nabídnout úklid. `null` = nic nového. Konzument po zobrazení zavolá
+     * [consumeJustRated], ať dialog nevyskočí podruhé.
+     */
+    val justRated: StateFlow<RatingTarget?> get() = MutableStateFlow(null)
+    fun consumeJustRated() {}
 }
 
 val LocalUserRatingProvider = androidx.compose.runtime.staticCompositionLocalOf<UserRatingProvider?> { null }

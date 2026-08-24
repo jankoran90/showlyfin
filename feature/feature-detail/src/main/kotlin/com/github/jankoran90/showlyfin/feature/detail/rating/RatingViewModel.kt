@@ -97,6 +97,13 @@ class RatingViewModel @Inject constructor(
 
     override fun requestRate(target: RatingTarget) { _pending.value = target }
 
+    // user 2026-08-24 — po ohodnocení nabídne detail úklid („Odebrat z Filmotéky?"). Držíme to jako
+    // JEDNORÁZOVOU událost, ne odvozený stav: dialog má vyskočit po AKCI, ne pokaždé, co se karta
+    // překreslí u hodnoceného titulu.
+    private val _justRated = MutableStateFlow<RatingTarget?>(null)
+    override val justRated: StateFlow<RatingTarget?> = _justRated.asStateFlow()
+    override fun consumeJustRated() { _justRated.value = null }
+
     fun dismiss() { _pending.value = null }
 
     /** Ulož hvězdy (1–10): lokální store + zrcadlení do Traktu (přidání/úprava). */
@@ -111,6 +118,7 @@ class RatingViewModel @Inject constructor(
             )
         )
         if (t.traktId > 0L) postToTrakt(t, stars, remove = false)
+        _justRated.value = t
     }
 
     /** Zruš hodnocení: lokální store + odebrání z Traktu. */

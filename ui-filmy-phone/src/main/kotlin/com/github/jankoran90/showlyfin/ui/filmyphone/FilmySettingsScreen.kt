@@ -178,6 +178,25 @@ fun FilmySettingsScreen(
                         onCheckedChange = { settingsVm.setAutoRefreshSources(it) },
                     )
                 }
+                // user 2026-08-24 („Legion určitě chci mít v seznamu, dokud ho neshlédnu") — Trakt
+                // seriál z watchlistu odebere hned po PRVNÍM zhlédnutém dílu.
+                SettingSwitchRow(
+                    title = "Držet v „Chci vidět\", dokud titul nedokoukám",
+                    subtitle = "Trakt seriál ze svého seznamu vyhodí, jakmile pustíš první díl — pro něj " +
+                        "watchlist znamená „co jsem ještě nezačal\". Zapnuto = fajfku pak drží náš vlastní " +
+                        "seznam, takže titul zůstane v „Chci vidět\" i ve Filmotéce. Vypnuto = fajfka mluví " +
+                        "čistě za Trakt.",
+                    checked = settings.wantKeepUntilWatched,
+                    onCheckedChange = { settingsVm.setWantKeepUntilWatched(it) },
+                )
+                SettingSwitchRow(
+                    title = "Po ohodnocení nabídnout úklid",
+                    subtitle = "Jakmile titul ohodnotíš, appka se zeptá, jestli ho odebrat z Filmotéky — " +
+                        "zapomene uložené zdroje a odebere ho z „Chci vidět\" u nás i na Traktu. Oblíbené " +
+                        "a Jellyfin knihovna zůstanou nedotčené.",
+                    checked = settings.askRemoveAfterRating,
+                    onCheckedChange = { settingsVm.setAskRemoveAfterRating(it) },
+                )
                 FilmyPlayerSection()
                 FilmyAudioSection()
             }

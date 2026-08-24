@@ -46,8 +46,9 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
         )
         SettingSwitchRow(
             title = "Chci vidět",
-            subtitle = "Tituly z Trakt watchlistu, a u profilů bez Traktu (dětských) z místního " +
-                "seznamu „Chci vidět\" — filmy i seriály",
+            subtitle = "Tituly z Trakt watchlistu i z našeho vlastního seznamu „Chci vidět\" — filmy " +
+                "i seriály. Náš seznam drží titul i potom, co ho Trakt sám vyhodí (u seriálu hned po " +
+                "prvním zhlédnutém dílu); profily bez Traktu (dětské) mají jen ten náš.",
             checked = FilmotekaSource.TRAKT_WATCHLIST in sources,
             onCheckedChange = { vm.setSource(FilmotekaSource.TRAKT_WATCHLIST, it) },
         )

@@ -182,6 +182,9 @@ data class DetailUiState(
     // VESTIBUL (user 2026-08-24): kartu seriálu otevřel klik na KONKRÉTNÍ díl (řada „Další díly") →
     // vyber jeho sezónu a označ ho. Přebíjí „další na řadě", protože divák řekl, který díl chce.
     val focusedEpisode: Pair<Int, Int>? = null,
+    // user 2026-08-24 („po ohodnocení by mohl vyskočit dialog, zda se má položka odebrat z
+    // Filmotéky") — vypínatelné v Nastavení, výchozí zapnuto.
+    val askRemoveAfterRating: Boolean = true,
     // KOLO2 (G): (season,episode) → jellyfin episode id → přímé přehrání epizody vlastněného seriálu.
     val episodeJellyfinIds: Map<Pair<Int, Int>, String> = emptyMap(),
     // user 2026-08-18 (Harry Potter 20 let → Splitsville) — PER TITUL přebití: null = drží se
