@@ -271,7 +271,13 @@ class DetailViewModel @Inject constructor(
             it.copy(
                 item = item,
                 isLoading = true,
-                isCsfdLoading = item.type == MediaType.MOVIE,
+                // 🔒 2026-08-24 (user: „seriály nemaj csfd hodnocení, recenze a galerii jako maj karty
+                // filmu") — ČSFD má i seriály a celá cesta je typově agnostická: `CsfdRepository`
+                // hledá přes Wikidata (P4947 film UNION P4983 seriál) i textově, UI se řídí DATY, ne
+                // typem. Omezení na MOVIE byla jediná překážka.
+                // ČT tituly nesou syntetickou identitu (`ctvid:…`) a na ČSFD nejsou → nepředstírej
+                // načítání, jen by chvíli blikal spinner a nic nepřišlo.
+                isCsfdLoading = !item.isCtvTitle,
                 movieDetails = null,
                 showDetails = null,
                 tmdbCzOverview = null,
@@ -458,9 +464,7 @@ class DetailViewModel @Inject constructor(
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
                 }
-                if (item.type == MediaType.MOVIE) {
-                    loadCsfd(item, resolvedCzTitle)
-                }
+                if (!item.isCtvTitle) loadCsfd(item, resolvedCzTitle)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e   // překlik na jiný film → zrušený load, NEhlas jako chybu
             } catch (e: Throwable) {
