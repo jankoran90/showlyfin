@@ -83,50 +83,64 @@ class FilmotekaCollectionResolver @Inject constructor(
         jellyfinCollections: List<FilmotekaCollection>,
     ): List<FilmotekaCollectionGroup> {
         if (base.isEmpty()) return emptyList()
-        val byKey = base.mapNotNull { item -> filmotekaDedupKey(item)?.let { it to item } }.toMap()
 
-        // ── 1) Jellyfin BoxSety (mají přednost) ─────────────────────────────────
-        val jfGroups = jellyfinCollections.mapNotNull { coll ->
-            val members = coll.memberKeys.mapNotNull { byKey[it] }
-            if (members.isEmpty()) return@mapNotNull null
-            coll to members
+        // Kdo patří do kterého BoxSetu (dedup klíč → BoxSet). Jellyfin je pro členství autorita.
+        val jfOf = HashMap<String, FilmotekaCollection>()
+        for (coll in jellyfinCollections) for (key in coll.memberKeys) jfOf.putIfAbsent(key, coll)
+        // BoxSet podle TMDB kolekce — most, kterým BoxSet POHLTÍ i díly ležící mimo Jellyfin.
+        val jfByTmdbCollection = jellyfinCollections
+            .mapNotNull { coll -> coll.tmdbCollectionId?.let { it to coll } }
+            .toMap()
+
+        val tmdbCollectionOf = tmdbCollectionsOf(base)
+
+        // Jeden průchod bází: každý titul dostane klíč své kolekce, nebo žádný.
+        val groups = LinkedHashMap<String, MutableList<MediaItem>>()
+        val jfOfGroup = HashMap<String, FilmotekaCollection>()
+        val tmdbOfGroup = HashMap<String, TmdbCollectionInfo>()
+        for (item in base) {
+            val key = filmotekaDedupKey(item) ?: continue
+            val tmdbColl = tmdbCollectionOf[key]
+            // 🔴 POŘADÍ JE PODSTATA VĚCI (user 2026-08-24: „jf kolekce jsou nadřazené tmdb kolekcím"):
+            // (1) je členem BoxSetu → patří pod NĚJ; (2) není, ale jeho TMDB kolekce nějaký BoxSet má →
+            // pohltí ho TEN BoxSet (přesně Zootropolis: 1. díl v Jellyfinu, 2. přes sdilej.cz — dřív se
+            // nesešly, protože BoxSet o tom druhém neví a syntetická skupina se vedle BoxSetu nestavěla);
+            // (3) jinak čistě TMDB kolekce (oba díly mimo Jellyfin).
+            val jfColl = jfOf[key] ?: tmdbColl?.let { jfByTmdbCollection[it.id] }
+            val groupId = when {
+                jfColl != null -> "jf:${jfColl.jellyfinId}"
+                tmdbColl != null -> "tmdb:${tmdbColl.id}"
+                else -> continue
+            }
+            groups.getOrPut(groupId) { mutableListOf() }.add(item)
+            jfColl?.let { jfOfGroup.putIfAbsent(groupId, it) }
+            tmdbColl?.let { tmdbOfGroup.putIfAbsent(groupId, it) }
         }
-        // TMDB kolekce, které už Jellyfin pokrývá vlastním BoxSetem → syntetickou nestav.
-        val coveredTmdbCollections = jfGroups.mapNotNull { (coll, _) -> coll.tmdbCollectionId }.toSet()
-        // Klíče, které si BoxSet nárokuje → do syntetických skupin už nesmí (žádná duplicita).
-        val claimedKeys = jfGroups.flatMap { (_, members) -> members.mapNotNull { filmotekaDedupKey(it) } }.toSet()
 
-        // ── 2) TMDB kolekce pro zbytek (working-source díly bez JF protějšku) ───
-        val rest = base.filter { it.type == MediaType.MOVIE && filmotekaDedupKey(it) !in claimedKeys }
-        val tmdbGroups = groupByTmdbCollection(rest, coveredTmdbCollections)
-
-        val out = jfGroups.map { (coll, members) ->
+        return groups.mapNotNull { (groupId, members) ->
+            // Sdružuje se od 2 členů (viz pravidla v hlavičce souboru).
+            if (members.size < 2) return@mapNotNull null
+            val jf = jfOfGroup[groupId]
+            val tmdb = tmdbOfGroup[groupId]
+            val sorted = members.sortedByYearThenTitle()
             FilmotekaCollectionGroup(
-                id = "jf:${coll.jellyfinId}",
-                name = coll.name.ifBlank { members.first().displayTitle },
-                posterUrl = coll.posterUrl ?: members.firstNotNullOfOrNull { it.posterUrl("w342") },
-                backdropUrl = coll.backdropUrl ?: members.firstNotNullOfOrNull { it.backdropUrl("w780") },
-                jellyfinId = coll.jellyfinId,
-                members = members.sortedByYearThenTitle(),
-                addedAtMs = members.mapNotNull { it.addedAtMs }.maxOrNull(),
-                year = members.mapNotNull { it.year }.minOrNull(),
+                id = groupId,
+                name = jf?.name?.takeIf { it.isNotBlank() }
+                    ?: tmdb?.name?.takeIf { it.isNotBlank() }
+                    ?: sorted.first().displayTitle,
+                posterUrl = jf?.posterUrl ?: tmdb?.posterUrl ?: sorted.firstNotNullOfOrNull { it.posterUrl("w342") },
+                backdropUrl = jf?.backdropUrl ?: tmdb?.backdropUrl ?: sorted.firstNotNullOfOrNull { it.backdropUrl("w780") },
+                jellyfinId = jf?.jellyfinId,
+                members = sorted,
+                addedAtMs = sorted.mapNotNull { it.addedAtMs }.maxOrNull(),
+                year = sorted.mapNotNull { it.year }.minOrNull(),
             )
-        } + tmdbGroups
-        // Sdružuje se od 2 členů (viz pravidla v hlavičce souboru).
-        return out.filter { it.members.size >= 2 }
+        }
     }
 
-    /**
-     * Skupiny podle TMDB `belongs_to_collection`. Dotaz jde jen na FILMY, které ještě nemá pokryté
-     * Jellyfin BoxSet — u uživatele jsou to desítky uložených zdrojů, ne stovky titulů knihovny.
-     * [CachedTmdbRemoteDataSource] navíc drží odpovědi v paměti, takže přeskládání os nic nedotahuje.
-     */
-    private suspend fun groupByTmdbCollection(
-        items: List<MediaItem>,
-        skipCollectionIds: Set<Long>,
-    ): List<FilmotekaCollectionGroup> = coroutineScope {
-        val resolved = items
-            .filter { it.tmdbId != null && !it.isCtvTitle }
+    /** TMDB kolekce titulů báze (dedup klíč → kolekce). Jen filmy; seriál do filmové kolekce nepatří. */
+    private suspend fun tmdbCollectionsOf(base: List<MediaItem>): Map<String, TmdbCollectionInfo> = coroutineScope {
+        base.filter { it.type == MediaType.MOVIE && it.tmdbId != null && !it.isCtvTitle }
             .map { item ->
                 async {
                     semaphore.withPermit {
@@ -137,32 +151,29 @@ class FilmotekaCollectionResolver @Inject constructor(
                         val details = runCatching {
                             tmdb.fetchMovieDetails(item.tmdbId!!, MediaEnricher.LANG)
                         }.getOrNull()
-                        details?.belongs_to_collection?.let { coll -> Triple(item, coll.id, coll) }
+                        val coll = details?.belongs_to_collection ?: return@withPermit null
+                        val key = filmotekaDedupKey(item) ?: return@withPermit null
+                        key to TmdbCollectionInfo(
+                            id = coll.id,
+                            name = coll.name,
+                            posterUrl = coll.poster_path?.let { "https://image.tmdb.org/t/p/w342$it" },
+                            backdropUrl = coll.backdrop_path?.let { "https://image.tmdb.org/t/p/w780$it" },
+                        )
                     }
                 }
             }
             .awaitAll()
             .filterNotNull()
-            .filter { (_, collectionId, _) -> collectionId !in skipCollectionIds }
-
-        resolved.groupBy { (_, collectionId, _) -> collectionId }
-            .map { (collectionId, triples) ->
-                val members = triples.map { it.first }
-                val coll = triples.first().third
-                FilmotekaCollectionGroup(
-                    id = "tmdb:$collectionId",
-                    name = coll.name?.takeIf { it.isNotBlank() } ?: members.first().displayTitle,
-                    posterUrl = coll.poster_path?.let { "https://image.tmdb.org/t/p/w342$it" }
-                        ?: members.firstNotNullOfOrNull { it.posterUrl("w342") },
-                    backdropUrl = coll.backdrop_path?.let { "https://image.tmdb.org/t/p/w780$it" }
-                        ?: members.firstNotNullOfOrNull { it.backdropUrl("w780") },
-                    jellyfinId = null,
-                    members = members.sortedByYearThenTitle(),
-                    addedAtMs = members.mapNotNull { it.addedAtMs }.maxOrNull(),
-                    year = members.mapNotNull { it.year }.minOrNull(),
-                )
-            }
+            .toMap()
     }
+
+    /** TMDB kolekce filmu — identita + grafika, když ji Jellyfin nedodá. */
+    private data class TmdbCollectionInfo(
+        val id: Long,
+        val name: String?,
+        val posterUrl: String?,
+        val backdropUrl: String?,
+    )
 
     /** Uvnitř kolekce se díly řadí chronologicky (Auta → Auta 2 → Auta 3), bez roku podle názvu. */
     private fun List<MediaItem>.sortedByYearThenTitle(): List<MediaItem> {

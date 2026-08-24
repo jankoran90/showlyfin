@@ -17,6 +17,12 @@ android {
 }
 
 dependencies {
+    // ATRIUM (SHW-118): JVM unit testy sdružování kolekcí — resolver je čistá logika bez Androidu,
+    // takže jde ověřit bez emulátoru (jediná cesta, jak zkontrolovat pravidla proti userovým případům:
+    // Zootropolis napříč zdroji, ruční JF kolekce bez TMDB id, práh 2 členů).
+    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.test)
+
     implementation(project(":core:core-domain"))
     implementation(project(":core:core-data"))
     implementation(project(":core:core-db"))      // SUBSTRATE (SHW-99): FavoritesRepository (Room = zdroj pravdy)
