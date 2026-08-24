@@ -97,16 +97,21 @@ fun FilmyLibraryScreen(
     }
 }
 
-/** Řazení položek knihovní řady. NEDÁVNO = pořadí ze serveru (beze změny); ABECEDNĚ = dle názvu (Collator cs). */
+/**
+ * Řazení položek knihovní řady. NEDÁVNO = pořadí ze serveru (beze změny); ABECEDNĚ = dle názvu
+ * (Collator cs); STOPÁŽ (MERIDIAN SHW-119) = od nejkratší, neznámá délka na konec.
+ */
 private fun sortItems(items: List<HomeRowItem>, sort: FilmotekaAllSort): List<HomeRowItem> = when (sort) {
     FilmotekaAllSort.RECENT -> items
     FilmotekaAllSort.ALPHABETICAL -> {
         val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
         items.sortedWith(Comparator { a, b -> coll.compare(a.title, b.title) })
     }
+    FilmotekaAllSort.RUNTIME -> items.sortedBy { it.mediaItem?.runtimeMinutes ?: Int.MAX_VALUE }
 }
 
 private fun sortLabel(sort: FilmotekaAllSort): String = when (sort) {
     FilmotekaAllSort.RECENT -> "Nedávno přidané"
     FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
+    FilmotekaAllSort.RUNTIME -> "Od nejkratšího"
 }
