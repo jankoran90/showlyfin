@@ -7,6 +7,9 @@ import com.github.jankoran90.showlyfin.data.trakt.api.service.TraktUsersService
 import com.github.jankoran90.showlyfin.data.trakt.model.*
 import com.github.jankoran90.showlyfin.data.trakt.model.request.*
 import okhttp3.Headers
+import retrofit2.HttpException
+import retrofit2.Response
+import timber.log.Timber
 
 private const val TRAKT_SYNC_PAGE_LIMIT = 250
 
@@ -29,7 +32,7 @@ internal class AuthorizedTraktApi(
         val results = mutableListOf<HiddenItem>()
         do {
             val response = usersService.fetchHiddenShows(page, TRAKT_SYNC_PAGE_LIMIT)
-            results.addAll(response.body().orEmpty())
+            results.addAll(response.itemsOrThrow("users/hidden/shows", page))
             page += 1
         } while (page <= response.headers().getPaginationPageCount())
         return results
@@ -40,7 +43,7 @@ internal class AuthorizedTraktApi(
         val results = mutableListOf<HiddenItem>()
         do {
             val response = usersService.fetchDroppedShows(page, TRAKT_SYNC_PAGE_LIMIT)
-            results.addAll(response.body().orEmpty())
+            results.addAll(response.itemsOrThrow("users/hidden/dropped", page))
             page += 1
         } while (page <= response.headers().getPaginationPageCount())
         return results
@@ -59,7 +62,7 @@ internal class AuthorizedTraktApi(
         val results = mutableListOf<HiddenItem>()
         do {
             val response = usersService.fetchHiddenMovies(page, TRAKT_SYNC_PAGE_LIMIT)
-            results.addAll(response.body().orEmpty())
+            results.addAll(response.itemsOrThrow("users/hidden/movies", page))
             page += 1
         } while (page <= response.headers().getPaginationPageCount())
         return results
@@ -72,7 +75,7 @@ internal class AuthorizedTraktApi(
         val results = mutableListOf<SyncHistoryItem>()
         do {
             val response = syncService.fetchSyncShowHistory(showId, page, TRAKT_SYNC_PAGE_LIMIT)
-            results.addAll(response.body().orEmpty())
+            results.addAll(response.itemsOrThrow("sync/history/shows/$showId", page))
             page += 1
         } while (page <= response.headers().getPaginationPageCount())
         return results
@@ -108,7 +111,7 @@ internal class AuthorizedTraktApi(
         val results = mutableListOf<SyncItem>()
         do {
             val response = syncService.fetchSyncWatchlist(type, page, TRAKT_SYNC_PAGE_LIMIT)
-            results.addAll(response.body().orEmpty())
+            results.addAll(response.itemsOrThrow("sync/watchlist/$type", page))
             page += 1
         } while (page <= response.headers().getPaginationPageCount())
         return results
@@ -123,7 +126,7 @@ internal class AuthorizedTraktApi(
         val types = arrayListOf("show").apply { if (withMovies) add("movie") }.joinToString(",")
         do {
             val response = usersService.fetchSyncListItems(listId, types, page, TRAKT_SYNC_PAGE_LIMIT)
-            results.addAll(response.body().orEmpty())
+            results.addAll(response.itemsOrThrow("users/lists/$listId/items", page))
             page += 1
         } while (page <= response.headers().getPaginationPageCount())
         return results
@@ -198,3 +201,22 @@ internal class AuthorizedTraktApi(
 }
 
 private fun Headers.getPaginationPageCount(): Int = this["x-pagination-page-count"]?.toInt() ?: 0
+
+/**
+ * Položky stránkované odpovědi — a CHYBA MUSÍ BÝT CHYBA.
+ *
+ * 🔴🔴 KOŘENOVÁ PŘÍČINA „chybí fajfka Chci vidět" (user 2026-08-24: Legion i „Na západ", oba
+ * v Traktu prokazatelně JSOU — ověřeno serverovým zrcadlem). Retrofit u `Response<>` chybovou
+ * odpověď NEVYHAZUJE: při 401 (vypršelý token) nebo 429 (nával paralelních Trakt dotazů) je
+ * `body()` null a `orEmpty()` z ní udělá PRÁZDNÝ SEZNAM, k nerozeznání od „nic tam nemáš".
+ * Všechny pojistky nad tím — `runCatching` + záloha ze zrcadla v detailu i ve Filmotéce, retry na
+ * prázdno v sekci „Chci vidět" — čekají na VÝJIMKU, takže se nikdy nechytily. Vzorec „spolknutá
+ * chyba se tváří jako odpověď" (audit 2026-08-24), tentokrát v nejspodnějším patře.
+ */
+private fun <T> Response<List<T>>.itemsOrThrow(endpoint: String, page: Int): List<T> {
+    if (!isSuccessful) {
+        Timber.w("[TRAKT] %s HTTP %d (str. %d) — chyba, ne prázdný seznam", endpoint, code(), page)
+        throw HttpException(this)
+    }
+    return body().orEmpty()
+}

@@ -32,6 +32,10 @@ class TraktRowLoader @Inject constructor(
     private val tmdb: TmdbRemoteDataSource,
     private val enricher: MediaEnricher,
     private val parental: ParentalControlsRepository,
+    // Záloha, když Trakt vrátí jen půlku watchlistu (viz [watchlistMirrorFallback]).
+    private val uploaderDs: com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource,
+    private val profileRepository: com.github.jankoran90.showlyfin.core.data.ProfileRepository,
+    @javax.inject.Named("traktPreferences") private val prefs: android.content.SharedPreferences,
 ) {
     /** Aktivní věkový strop profilu (null = bez omezení). Řídí i to, zda enrich tahá certifikace. */
     private fun capAge(): Int? = parental.profile.value.effectiveAgeCap
@@ -42,18 +46,80 @@ class TraktRowLoader @Inject constructor(
         // Trakt requestů sekce Trakt) NESMÍ vynulovat druhý. Dřív jeden `runCatching` kolem obou → jeden timeout
         // smazal CELÝ watchlist (i filmy) → řada zmizela ze sekce (v Home lazy load prošla).
         suspend fun movies() = runCatching { authorizedTraktApi.fetchSyncMoviesWatchlist() }
-            .onFailure { Timber.w(it, "[WANTSEE] watchlist movies FAIL: %s", it.message) }.getOrElse { emptyList() }
+            .onFailure { Timber.w(it, "[WANTSEE] watchlist movies FAIL: %s", it.message) }
         suspend fun shows() = runCatching { authorizedTraktApi.fetchSyncShowsWatchlist() }
-            .onFailure { Timber.w(it, "[WANTSEE] watchlist shows FAIL: %s", it.message) }.getOrElse { emptyList() }
-        val raw = when (kind) {
-            "movies" -> movies()
-            "shows" -> shows()
-            else -> movies() + shows()
-        }
+            .onFailure { Timber.w(it, "[WANTSEE] watchlist shows FAIL: %s", it.message) }
+        val moviesRes = if (kind != "shows") movies() else null
+        val showsRes = if (kind != "movies") shows() else null
+        val raw = moviesRes?.getOrNull().orEmpty() + showsRes?.getOrNull().orEmpty()
         Timber.i("[WANTSEE] watchlist(%s) raw=%d", kind, raw.size)
         Log.i(TAG, "watchlist($kind): ${raw.size} položek")
         // CATALOGUE — nes `listed_at` na položku (addedAtMs) pro stabilní řazení „Nedávno přidané" ve Filmotéce.
-        return enrich(raw.sortedByDescending { it.lastListedMillis() }) { it.lastListedMillis() }
+        val fromTrakt = enrich(raw.sortedByDescending { it.lastListedMillis() }) { it.lastListedMillis() }
+        // 🔒 2026-08-24 (user: *„seriál není v appce pod chci vidět"*, ačkoli V TRAKTU JE — ověřeno
+        // serverovým zrcadlem: 112 položek, z toho 6 seriálů, „Into the West" mezi nimi).
+        // Nezávislost obou volání má SVOU CENU: když spadne jen jedno (seriály v návalu 429), druhé
+        // vrátí data → seznam NENÍ prázdný → dřívější pojistky (retry na prázdno, záloha ze zrcadla
+        // ve Filmotéce) se vůbec nechytí a CELÁ půlka watchlistu tiše chybí. Zase „nevím" v přestrojení
+        // za „nic tam není", jen o patro výš. Chybějící půlku proto doplň ze zrcadla.
+        val missingMovies = moviesRes?.isFailure == true
+        val missingShows = showsRes?.isFailure == true
+        if (!missingMovies && !missingShows) return fromTrakt
+        val backfill = watchlistMirrorFallback(missingMovies, missingShows, fromTrakt)
+        if (backfill.isEmpty()) return fromTrakt
+        Timber.w(
+            "[WANTSEE] Trakt vrátil jen část watchlistu (chybí filmy=%b seriály=%b) → %d položek ze zrcadla",
+            missingMovies, missingShows, backfill.size,
+        )
+        return (fromTrakt + backfill).sortedByDescending { it.addedAtMs ?: 0L }
+    }
+
+    /**
+     * Záloha pro půlku watchlistu, kterou Trakt nevrátil (`GET …/mirror/watchlist`). Bere jen chybějící
+     * typ a jen tituly, které v odpovědi Traktu nejsou — data jsou tak čerstvá, jak naposledy doběhl
+     * serverový sync, což je pořád nekonečně lepší než tvrdit „žádné seriály tu nemáš".
+     */
+    private suspend fun watchlistMirrorFallback(
+        missingMovies: Boolean,
+        missingShows: Boolean,
+        already: List<MediaItem>,
+    ): List<MediaItem> {
+        val base = prefs.getString("uploader_base_url", "").orEmpty()
+        val key = profileRepository.activeProfile.value?.profileUuid.orEmpty()
+        if (base.isBlank() || key.isBlank()) return emptyList()
+        val cookie = prefs.getString("uploader_session_cookie", "").orEmpty()
+        val resp = runCatching { uploaderDs.mirrorWatchlist(base, cookie, key) }
+            .onFailure { Timber.w(it, "[WANTSEE] zrcadlo watchlistu selhalo taky") }
+            .getOrNull() ?: return emptyList()
+        val wanted = resp.items.mapNotNull { it.toMediaItem() }.filter { mi ->
+            if (mi.type == MediaType.SHOW) missingShows else missingMovies
+        }.filterNot { mi ->
+            already.any { a ->
+                (mi.traktId != 0L && a.traktId == mi.traktId) ||
+                    (mi.tmdbId != null && a.tmdbId == mi.tmdbId) ||
+                    (!mi.imdbId.isNullOrBlank() && a.imdbId == mi.imdbId)
+            }
+        }
+        if (wanted.isEmpty()) return emptyList()
+        val enriched = enricher.enrich(wanted, withCertification = capAge() != null)
+        return ContentAgeGate.filter(capAge(), enriched, hideUnrated())
+    }
+
+    private fun com.github.jankoran90.showlyfin.data.uploader.model.MirrorWatchlistItem.toMediaItem(): MediaItem? {
+        val name = title?.takeIf { it.isNotBlank() } ?: return null
+        val listedMs = listedAt?.let { iso -> runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrNull() }
+        return MediaItem(
+            traktId = traktId ?: 0L,
+            tmdbId = tmdbId?.takeIf { it > 0L },
+            imdbId = imdb,
+            title = name,
+            year = year,
+            overview = null,
+            rating = null,
+            genres = null,
+            type = if (type == "show") MediaType.SHOW else MediaType.MOVIE,
+            addedAtMs = listedMs,
+        )
     }
 
     /** Historie sledování (watched), nejnověji sledované první. [kind] jako u [watchlist]. */
