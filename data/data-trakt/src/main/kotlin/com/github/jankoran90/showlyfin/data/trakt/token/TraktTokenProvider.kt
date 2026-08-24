@@ -43,6 +43,13 @@ internal class TraktTokenProvider(
         // StejnÉHO prefs souboru. Bez tohohle stampu by po re-loginu owner zůstal starý a sync-apply čerstvý token smazal.
         private const val KEY_TOKEN_OWNER = "TRAKT_TOKEN_OWNER_PROFILE"
         private const val KEY_ACTIVE_PROFILE_ID = "active_profile_id"
+        // 🔒🔒🔒 2026-08-24 (user: "Trakt jen dospělý" z 07-20 pořád obcházené, i po dvou klientských
+        // fixech v ProfileRepository — potvrzeno i na TV) — SKUTEČNÝ zdroj: tahle metoda zapisuje TICHÉ
+        // obnovení tokenu (OkHttp Authenticator na 401) VŽDY do aktivního profilu, bez ohledu na to,
+        // jestli je dětský — typicky race: dospělého Trakt požadavek doběhne PRÁVĚ, když je mezitím
+        // aktivní profil Děti. ProfileRepository.setActive() zapisuje tenhle příznak jako VŮBEC PRVNÍ
+        // věc PŘED čímkoli dalším (stejný "traktPreferences" soubor, žádná cross-modul závislost nutná).
+        private const val KEY_ACTIVE_PROFILE_IS_CHILD = "active_profile_is_child"
         // GLIDE — po dočasném selhání obnovy počkej, než zkusíš znovu (rozbije 429 bouři).
         private const val REFRESH_COOLDOWN_MS = 60_000L
         // WEATHER v2 — po DEFINITIVNÍM selhání obnovy (mrtvý refresh_token po migraci Traktu na V3) drž
@@ -83,6 +90,10 @@ internal class TraktTokenProvider(
     }
 
     override fun saveTokens(accessToken: String, refreshToken: String, expiresIn: Long, createdAt: Long) {
+        if (sharedPreferences.getBoolean(KEY_ACTIVE_PROFILE_IS_CHILD, false)) {
+            Timber.w("[TRAKT-GUARD] saveTokens ZAHOZENO — aktivní profil je dětský")
+            return
+        }
         Timber.i("[TRAKT-GUARD] saveTokens accessLen=%d refreshLen=%d", accessToken.length, refreshToken.length)
         val createdAtMillis = createdAt.seconds.inWholeMilliseconds
         val expiresAtMillis = createdAtMillis + expiresIn.seconds.inWholeMilliseconds

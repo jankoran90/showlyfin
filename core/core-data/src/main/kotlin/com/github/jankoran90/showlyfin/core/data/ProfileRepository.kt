@@ -23,6 +23,11 @@ import javax.inject.Singleton
 
 private const val PREF_ACTIVE_PROFILE_ID = "active_profile_id"
 
+/** 🔒 2026-08-24 — čte [com.github.jankoran90.showlyfin.data.trakt.token.TraktTokenProvider.saveTokens]
+ * (jiný modul, žádná přímá závislost na ProfileRepository) — sdílený "traktPreferences" soubor je
+ * jediný společný kanál. Zapisuje se PRVNÍ v [ProfileRepository.setActive], ať je vždy aktuální. */
+const val PREF_ACTIVE_PROFILE_IS_CHILD = "active_profile_is_child"
+
 /** "Trakt jen dospělý" (2026-07-20) — `ProfileConfigApplier` musí vědět, jestli má dětský profil,
  * ať Trakt token nikdy nesedí ani lokálně (viz [ProfileConfigApplier.apply] CHILD-CLEAR). */
 private fun ProfileEntity.isChildAgeRating(): Boolean =
@@ -440,6 +445,13 @@ class ProfileRepository @Inject constructor(
         // změně; jinak vznikne smyčka start → re-create → start (user 2026-07-28: „bliká co půl vteřiny
         // endlessly"). Čte se před zápisem prefs níž.
         val previousActiveId = prefs.getLong(PREF_ACTIVE_PROFILE_ID, 0L)
+        // 🔒🔒🔒 2026-08-24 (user: Trakt banner u dětí přežil DVĚ vrstvy klientských fixů + TV mělo
+        // stejný bug) — SKUTEČNÝ zdroj: `TraktTokenProvider.saveTokens()` (data-trakt modul, mimo
+        // ProfileRepository/ProfileConfigApplier úplně) zapisuje TICHÉ obnovení tokenu (OkHttp
+        // Authenticator na 401) VŽDY do aktivního profilu, bez ohledu na to, jestli je dětský — typicky
+        // race: dospělého Trakt požadavek doběhne PRÁVĚ, když je mezitím aktivní profil Děti. Zapiš
+        // sem PRVNÍ (dřív než cokoli dalšího), ať `saveTokens()` může tenhle příznak zkontrolovat.
+        prefs.edit().putBoolean(PREF_ACTIVE_PROFILE_IS_CHILD, profile.isChildAgeRating()).apply()
         // COUCH per-profil: rotovaný/legacy Trakt token patří POSLEDNÍMU aktivnímu profilu — zrcadli ho
         // do jeho balíku DŘÍV, než applier níže přepíše prefs tokenem z balíku aktivovaného profilu.
         prefs.getLong(PREF_ACTIVE_PROFILE_ID, 0L).takeIf { it > 0L }?.let { captureCurrentTraktIntoProfile(it) }
