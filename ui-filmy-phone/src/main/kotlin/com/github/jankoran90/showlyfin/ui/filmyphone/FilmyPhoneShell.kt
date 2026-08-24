@@ -27,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.feature.jellyfin.ui.JellyfinLibraryItemsScreen
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
@@ -82,6 +83,9 @@ private sealed interface FilmyDetailEntry {
     data class Jellyfin(val id: String) : FilmyDetailEntry
     // VLTAVA (SHW-110) F6: titul z ČT iVysílání — bez TMDB identity, vlastní karta ([FilmyCtvScreen]).
     data class Ctv(val title: CtvTitle) : FilmyDetailEntry
+    // 2026-08-24 (user: karty kolekcí ve Filmotéce nikdy nikam nevedly — telefon neměl vůbec kód,
+    // co by po kliknutí otevřel obsah kolekce, na rozdíl od TV). Klik na kartu "Auta (kolekce)" apod.
+    data class JfCollection(val id: String, val title: String) : FilmyDetailEntry
 }
 
 /** M2.6: stav přehrávače nad detailem — externí stream (Real-Debrid/Stremio) NEBO Jellyfin item. */
@@ -180,6 +184,10 @@ private fun FilmyShellContent() {
         player = FilmyPlayer(itemId = jfId, title = title)
     }
     val popDetail: () -> Unit = { detailStack = detailStack.dropLast(1) }
+    // 2026-08-24: klik na kartu kolekce ve Filmotéce → obsah BoxSetu (viz FilmyDetailEntry.JfCollection výš).
+    val openCollection: (String, String) -> Unit = { id, title ->
+        detailStack = detailStack + FilmyDetailEntry.JfCollection(id, title)
+    }
 
     // PROFIL (user 2026-07-28 „při přepnutí chci, aby se appka opravdu znovunačetla"): přepnutí profilu
     // mění úplně všechno (Jellyfin creds, Trakt, Oblíbené, uložené zdroje, věkový strop). Reaktivní cesty
@@ -301,6 +309,20 @@ private fun FilmyShellContent() {
                 onPlayStreamUrl = { url, title, subQuery -> playStream(url, title, subQuery, null) },
                 modifier = Modifier.fillMaxSize(),
             )
+        } else if (detailEntry is FilmyDetailEntry.JfCollection) {
+            // 2026-08-24: obsah JF kolekce (BoxSet) — vzor 1:1 ze ShowlyfinPhoneApp.kt Destination.JellyfinLibrary.
+            BackHandler(onBack = popDetail)
+            JellyfinLibraryItemsScreen(
+                libraryId = detailEntry.id,
+                libraryName = detailEntry.title,
+                collectionType = null,
+                parentItemType = "BOX_SET",
+                onBack = popDetail,
+                onItemPlay = { jfId -> playJellyfin(jfId, "") },
+                onItemOpenRich = { media -> detailStack = detailStack + FilmyDetailEntry.Media(media) },
+                onItemDrillIn = { itemId, _, _ -> detailStack = detailStack + FilmyDetailEntry.Jellyfin(itemId) },
+                modifier = Modifier.fillMaxSize(),
+            )
         } else {
             // Zavřený → back gesto zavře menu místo odchodu z appky.
             BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
@@ -367,7 +389,11 @@ private fun FilmyShellContent() {
                             // M2.5: Pro tebe = kurátor (reuse ForYouViewModel).
                             FilmySection.FOR_YOU -> FilmyForYouScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.4: Filmotéka = mřížka plakátů se sekcemi (reuse TvFilmotekaViewModel).
-                            FilmySection.FILMOTEKA -> FilmyFilmotekaScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            FilmySection.FILMOTEKA -> FilmyFilmotekaScreen(
+                                onMenu = onMenu,
+                                onOpenDetail = openDetail,
+                                onOpenCollection = openCollection,
+                            )
                             // M2.5: Vzácné klenoty = LAPIDARY řady (reuse TvLapidaryViewModel).
                             FilmySection.GEMS -> FilmyGemsScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.5: Knihovna = JF řady (reuse LibraryRowsViewModel).

@@ -57,9 +57,12 @@ import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.MediaRow
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.cachedDirector
+import com.github.jankoran90.showlyfin.core.ui.PosterCard
 import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
 import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
 import com.github.jankoran90.showlyfin.core.ui.warmDirector
+import androidx.compose.foundation.lazy.LazyRow
+import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollection
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaRail
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaUiState
 import kotlinx.coroutines.coroutineScope
@@ -81,6 +84,10 @@ fun FilmyBrowseSection(
     state: FilmotekaUiState,
     onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
+    // 2026-08-24 (user: karty kolekcí ve Filmotéce nikdy nikam nevedly na telefonu — chybějící UI,
+    // TV svoje `state.collections` renderovala odjakživa, telefon ne). Default no-op → volitelné,
+    // ať se „Pro tebe" (sdílí tuhle sekci) nemusí měnit, dokud pro ni kolekce nedávají smysl.
+    onOpenCollection: (id: String, title: String) -> Unit = { _, _ -> },
     onAxis: (FilmotekaAxis) -> Unit,
     onAllSort: (FilmotekaAllSort) -> Unit,
     onToggleGenre: (String) -> Unit,
@@ -183,6 +190,11 @@ fun FilmyBrowseSection(
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
+        }
+        // 2026-08-24 — karty kolekcí (Jellyfin BoxSet, přepínač „Karty kolekcí" v Nastavení → Filmotéka).
+        // Jen osa „Vše" (stejně jako TV) a bez rozjeté fulltext hledání (kolekce se do něj nepočítají).
+        if (state.axis == FilmotekaAxis.ALL && !searchOpen && state.collections.isNotEmpty()) {
+            FilmotekaCollectionsRow(state.collections, onOpenCollection)
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
@@ -340,6 +352,31 @@ private fun <T> SelectedFilterChips(labels: List<Pair<String, T>>, onRemove: (T)
                     )
                 },
             )
+        }
+    }
+}
+
+/** 2026-08-24 — vodorovná řada karet kolekcí (Jellyfin BoxSet) nad hlavní mřížkou/seznamem. */
+@Composable
+private fun FilmotekaCollectionsRow(
+    collections: List<FilmotekaCollection>,
+    onOpenCollection: (id: String, title: String) -> Unit,
+) {
+    Column {
+        SectionHeader("Kolekce")
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            listItems(collections, key = { it.jellyfinId }) { fc ->
+                PosterCard(
+                    posterUrl = fc.posterUrl,
+                    title = fc.name,
+                    year = null,
+                    onClick = { onOpenCollection(fc.jellyfinId, fc.name) },
+                    modifier = Modifier.size(width = 110.dp, height = 200.dp),
+                )
+            }
         }
     }
 }
