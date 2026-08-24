@@ -76,13 +76,6 @@ fun TvShell(
 
     val defaultSectionCtx = LocalContext.current
 
-    // 🔒 2026-08-24 (user: „na tv je hardcoded back button = home sekce. A teď mám filmotéku jako
-    // výchozí sekci takže zpět ve filmotéce má zůstat ve filmotéce") — zpět vede do VÝCHOZÍ sekce
-    // profilu, ne natvrdo na Domů. Pravidlo z doby, kdy byl domov jediná možná vstupní obrazovka.
-    // Když už uživatel ve výchozí sekci je, handler je vypnutý → zpět propadne dál (sekce si ho
-    // může vzít pro skok na začátek obsahu, viz TvFilmotekaScreen; jinak odejde z appky).
-    val backTarget = homeSectionOf(defaultSectionCtx, activeProfileId)
-    BackHandler(enabled = section != backTarget) { onSelectSection(backTarget) }
 
     // COUCH R2: kdyby se přepnul na dětský profil zatímco je otevřená sekce Trakt → hoď zpět na Domů.
     LaunchedEffect(traktAllowed, section) {
@@ -98,6 +91,15 @@ fun TvShell(
 
     // Immersive info z fokusované karty (debounce proti thrashingu při rychlém D-padu).
     val activeProfileId by homeVm.activeProfileId.collectAsStateWithLifecycle()
+
+    // 🔒 2026-08-24 (user: „na tv je hardcoded back button = home sekce. A teď mám filmotéku jako
+    // výchozí sekci takže zpět ve filmotéce má zůstat ve filmotéce") — zpět vede do VÝCHOZÍ sekce
+    // profilu, ne natvrdo na Domů. Pravidlo z doby, kdy byl domov jediná možná vstupní obrazovka.
+    // Když už uživatel ve výchozí sekci je, handler je vypnutý → zpět propadne dál (sekce si ho
+    // může vzít pro skok na začátek obsahu, viz TvFilmotekaScreen; jinak odejde z appky).
+    val backTarget = homeSectionOf(defaultSectionCtx, activeProfileId)
+    BackHandler(enabled = section != backTarget) { onSelectSection(backTarget) }
+
     var rawInfo by remember { mutableStateOf<ImmersiveInfo?>(null) }
     var shownInfo by remember { mutableStateOf<ImmersiveInfo?>(null) }
     LaunchedEffect(rawInfo) { delay(120); shownInfo = rawInfo }
