@@ -354,14 +354,15 @@ class FilmotekaBaseLoader @Inject constructor(
         // ORCHARD (user 07-19) — Filmotéka respektuje SVŮJ výběr JF knihoven (null = všechny, prázdné = žádná).
         val filmoWhitelist = profileRepository.activeConfig.value.filmotekaJfLibraries
             ?.map { it.replace("-", "").lowercase() }?.toSet()
-        val views = runCatching { apiClient.userViewsApi.getUserViews(session.userUuid).content.items }
+        val allViews = runCatching { apiClient.userViewsApi.getUserViews(session.userUuid).content.items }
             .getOrElse { Timber.w(it, "[Filmoteka] getUserViews selhalo"); emptyList() }
+        val views = allViews
             .filter { it.isFilmotekaLibrary() }
             .let { list ->
                 if (filmoWhitelist == null) list
                 else list.filter { it.id.toString().replace("-", "").lowercase() in filmoWhitelist }
             }
-        views.map { view ->
+        val direct = views.map { view ->
             async {
                 runCatching {
                     apiClient.itemsApi.getItems(
@@ -376,7 +377,47 @@ class FilmotekaBaseLoader @Inject constructor(
                     ).content.items
                 }.getOrElse { Timber.w(it, "[Filmoteka] getItems '${view.name}' selhalo"); emptyList() }
             }
-        }.awaitAll().flatten().mapNotNull { it.toFilmotekaMediaItem(session.serverUrl, session.token) }
+        }.awaitAll().flatten()
+        // 🔒 2026-08-24 (user: „filmy z kolekce se MUSÍ zobrazit i bez klikání na kartu kolekce") —
+        // fyzické knihovny ("Filmy animované"/"Filmy hrané" apod.) NEJSOU registrované views, takže
+        // je getUserViews() výš nikdy nenajde a filtr `isFilmotekaLibrary()` je odfiltruje i kdyby
+        // byly. Jediná cesta k jejich obsahu je přes BoxSet metadata (knihovna typu "boxsets",
+        // typicky "Kolekce") — projeď KAŽDÝ BoxSet a natáhni jeho členy jako BĚŽNÉ jednotlivé filmy/
+        // seriály, ne jen jako kartu kolekce (tu řeší samostatně [loadCollections]).
+        val boxsetViews = allViews.filter { it.collectionType?.name?.uppercase() == "BOXSETS" }
+            .let { list ->
+                if (filmoWhitelist == null) list
+                else list.filter { it.id.toString().replace("-", "").lowercase() in filmoWhitelist }
+            }
+        val boxsetIds = boxsetViews.map { view ->
+            async {
+                runCatching {
+                    apiClient.itemsApi.getItems(
+                        userId = session.userUuid,
+                        parentId = view.id,
+                        includeItemTypes = listOf(BaseItemKind.BOX_SET),
+                        recursive = true,
+                        limit = 200,
+                    ).content.items
+                }.getOrElse { Timber.w(it, "[Filmoteka] kolekce '${view.name}' selhaly"); emptyList() }
+            }
+        }.awaitAll().flatten()
+        val collectionMembers = boxsetIds.map { boxset ->
+            async {
+                runCatching {
+                    apiClient.itemsApi.getItems(
+                        userId = session.userUuid,
+                        parentId = boxset.id,
+                        includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+                        recursive = true,
+                        fields = listOf(ItemFields.PROVIDER_IDS, ItemFields.GENRES, ItemFields.DATE_CREATED),
+                        limit = 200,
+                    ).content.items
+                }.getOrElse { Timber.w(it, "[Filmoteka] obsah kolekce '${boxset.name}' selhal"); emptyList() }
+            }
+        }.awaitAll().flatten()
+        (direct + collectionMembers).distinctBy { it.id }
+            .mapNotNull { it.toFilmotekaMediaItem(session.serverUrl, session.token) }
     }
 
     private suspend fun loadWorkingSources(): List<MediaItem> {

@@ -191,11 +191,12 @@ fun FilmyBrowseSection(
                 )
             }
         }
-        // 2026-08-24 — karty kolekcí (Jellyfin BoxSet, přepínač „Karty kolekcí" v Nastavení → Filmotéka).
-        // Jen osa „Vše" (stejně jako TV) a bez rozjeté fulltext hledání (kolekce se do něj nepočítají).
-        if (state.axis == FilmotekaAxis.ALL && !searchOpen && state.collections.isNotEmpty()) {
-            FilmotekaCollectionsRow(state.collections, onOpenCollection)
-        }
+        // 2026-08-24 (user: „nechci žádný chipy kolekce, filmy z kolekce se musí zobrazovat mezi
+        // ostatními") — samostatná řada karet ZRUŠENA, byla to špatná stavba. Jednotlivé filmy z
+        // kolekcí teď [FilmotekaBaseLoader.loadJellyfinLibrary] natahuje rovnou do hlavního seznamu
+        // (viz commit "loadJellyfinLibrary teď natahuje i členy kolekcí"). `onOpenCollection` a
+        // `FilmotekaCollectionsRow` zůstávají v kódu nepoužité — počkají na potvrzení, jestli chce
+        // přepínač "Karty kolekcí" opravdu SDRUŽOVAT díly (Auta/Auta 2/Auta 3) pod jednu kartu.
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
                 state.loading -> CircularProgressIndicator()
