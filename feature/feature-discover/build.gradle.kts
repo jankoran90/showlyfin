@@ -21,6 +21,7 @@ dependencies {
     // takže jde ověřit bez emulátoru (jediná cesta, jak zkontrolovat pravidla proti userovým případům:
     // Zootropolis napříč zdroji, ruční JF kolekce bez TMDB id, práh 2 členů).
     testImplementation(libs.kotlin.test)
+    testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 
     implementation(project(":core:core-domain"))
