@@ -23,6 +23,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.derivedStateOf
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,6 +52,8 @@ import com.github.jankoran90.showlyfin.ui.tv.components.TvViewChips
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -126,6 +131,17 @@ fun TvFilmotekaScreen(
         }
     }
 
+    // 🔒 2026-08-24 (user: „udělejme že back button mě vrátí na začátek filmotéky") — dokud nejsi na
+    // začátku, Zpět skočí nahoru; na začátku je handler VYPNUTÝ, takže Zpět propadne na shell
+    // (výchozí sekce / odchod z appky) a uživatel neuvízne.
+    // Stav mřížky drží OBRAZOVKA, ne až [TvFilmotekaGrid] — potřebuje ho i chování tlačítka Zpět.
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    val atTop by remember {
+        derivedStateOf { gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0 }
+    }
+    BackHandler(enabled = !atTop) { scope.launch { gridState.scrollToItem(0) } }
+
     fun clickItem(item: HomeRowItem) {
         val media = item.mediaItem
         val jf = item.jellyfinId
@@ -144,6 +160,22 @@ fun TvFilmotekaScreen(
     // ATRIUM (SHW-118): žádná samostatná řada „Kolekce" nahoře (user: „žádná extra řada, to už jsem
     // říkal") — karty kolekcí sedí přímo mezi filmy na svém místě, sdružení řeší [FilmotekaGrouping].
 
+    // 🔒 2026-08-24 (user: „nejde zvolit film pod kolekcí") — obsah kolekce nahrazuje obsah sekce,
+    // NEkreslí se přes něj. Kdyby zůstal jen navrchu, mřížka pod ním je pořád fokusovatelná a dálkový
+    // ovladač ovládá neviditelné karty.
+    val shownCollection = openCollection
+    if (shownCollection != null) {
+        TvFilmotekaCollectionOverlay(
+            group = shownCollection,
+            onDismiss = { openCollection = null },
+            onItemClick = { item ->
+                openCollection = null
+                item.mediaItem?.let(onOpenDetail) ?: item.jellyfinId?.let(onOpenJellyfinDetail)
+            },
+        )
+        return
+    }
+
     Box(Modifier.fillMaxSize()) {
         // FOYER — plochá osa „Vše" v režimu MŘÍŽKA (TV default): jedna velká abecední mřížka místo jedné
         // dlouhé řady. Osy Žánr/Země a režim „Řada" jedou dál přes TvRailList (řady mají svůj smysl).
@@ -157,19 +189,12 @@ fun TvFilmotekaScreen(
                 immersive = immersive,
                 onFocusItem = onFocusItem,
                 onItemClick = ::clickItem,
-                header = {
-                    // Horní sekce zůstává beze změny (user: „zachovejme horní sekci jak je") — řada
-                    // „Další díly" se řadí POD ni, nad samotnou mřížku.
-                    TvSectionHeader(title = "Filmotéka", actions = { chips() })
-                    if (state.nextUp.isNotEmpty()) {
-                        TvNextUpRow(
-                            items = state.nextUp,
-                            immersive = immersive,
-                            onFocusItem = onFocusItem,
-                            onItemClick = ::clickItem,
-                        )
-                    }
-                },
+                header = { TvSectionHeader(title = "Filmotéka", actions = { chips() }) },
+                // 🔒 2026-08-24 (user: „další díly nezůstane always visible at the top, grid normálně
+                // bude přes celou obrazovku") — řada je PRVNÍ POLOŽKOU MŘÍŽKY, ne součástí pevné
+                // hlavičky: odscrolluje pryč a mřížka pak jede přes celou obrazovku.
+                nextUp = state.nextUp,
+                gridState = gridState,
                 modifier = modifier.fillMaxSize(),
             )
         } else if (state.rails.isNotEmpty()) {
@@ -205,17 +230,6 @@ fun TvFilmotekaScreen(
                     }
                 }
             }
-        }
-
-        openCollection?.let { group ->
-            TvFilmotekaCollectionOverlay(
-                group = group,
-                onDismiss = { openCollection = null },
-                onItemClick = { item ->
-                    openCollection = null
-                    item.mediaItem?.let(onOpenDetail) ?: item.jellyfinId?.let(onOpenJellyfinDetail)
-                },
-            )
         }
 
         if (showGenreFilter) {
@@ -286,10 +300,11 @@ private fun TvFilmotekaGrid(
     onFocusItem: (ImmersiveInfo?) -> Unit,
     onItemClick: (HomeRowItem) -> Unit,
     header: @Composable () -> Unit,
+    gridState: LazyGridState,
+    nextUp: List<HomeRowItem> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val cardScale = LocalTvCardScale.current
-    val gridState = rememberLazyGridState()
     val firstFocus = remember { FocusRequester() }
     AutoFocusFirst(
         focusRequester = firstFocus,
@@ -306,6 +321,16 @@ private fun TvFilmotekaGrid(
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
             modifier = Modifier.fillMaxWidth().weight(1f),
         ) {
+            if (nextUp.isNotEmpty()) {
+                item(key = "filmo_nextup_row", span = { GridItemSpan(maxLineSpan) }) {
+                    TvNextUpRow(
+                        items = nextUp,
+                        immersive = immersive,
+                        onFocusItem = onFocusItem,
+                        onItemClick = onItemClick,
+                    )
+                }
+            }
             itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
                 Box(
                     Modifier.onFocusChanged { if (it.hasFocus && immersive) onFocusItem(item.toImmersiveInfo()) },

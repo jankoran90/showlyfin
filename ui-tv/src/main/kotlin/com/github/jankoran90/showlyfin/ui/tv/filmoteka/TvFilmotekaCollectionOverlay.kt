@@ -29,6 +29,7 @@ import com.github.jankoran90.showlyfin.feature.discover.filmoteka.dilyLabel
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
+import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.tv.components.TvHomeCard
 import kotlin.math.roundToInt
 
@@ -52,6 +53,15 @@ fun TvFilmotekaCollectionOverlay(
     val gridState = rememberLazyGridState()
     val firstFocus = remember { FocusRequester() }
     val items = remember(group) { group.toRowItems() }
+    // 🔒 2026-08-24 (user: „pokud rozbalím kartu kolekce tak focus není na podkarty kolekce nemůžu je
+    // vybrat, dpad není fokusovaný na filmy uvnitř ale pod" + „měl by fokusovat hned na první
+    // položku") — překryv si musí fokus AKTIVNĚ vzít, jinak zůstane na mřížce pod ním a dálkový
+    // ovladač ovládá něco, co není vidět. Stejný vzor jako mřížka Filmotéky.
+    AutoFocusFirst(
+        focusRequester = firstFocus,
+        enabled = items.isNotEmpty(),
+        isTargetPlaced = { gridState.layoutInfo.visibleItemsInfo.any { it.index == 0 } },
+    )
 
     Box(
         Modifier

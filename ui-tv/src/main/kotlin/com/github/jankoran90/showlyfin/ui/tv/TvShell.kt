@@ -74,8 +74,15 @@ fun TvShell(
     // LAPIDARY (SHW-96) — klíče titulů s uloženým zdrojem → odznak „hraje hned" na kartách všech sekcí.
     val savedSourceKeys by homeVm.savedSourceKeys.collectAsStateWithLifecycle()
 
-    // Back v ne-Home sekci = zpět na Domů (skládá se jen když je shell aktuální = žádný drill nahoře).
-    BackHandler(enabled = section != TvSection.HOME) { onSelectSection(TvSection.HOME) }
+    val defaultSectionCtx = LocalContext.current
+
+    // 🔒 2026-08-24 (user: „na tv je hardcoded back button = home sekce. A teď mám filmotéku jako
+    // výchozí sekci takže zpět ve filmotéce má zůstat ve filmotéce") — zpět vede do VÝCHOZÍ sekce
+    // profilu, ne natvrdo na Domů. Pravidlo z doby, kdy byl domov jediná možná vstupní obrazovka.
+    // Když už uživatel ve výchozí sekci je, handler je vypnutý → zpět propadne dál (sekce si ho
+    // může vzít pro skok na začátek obsahu, viz TvFilmotekaScreen; jinak odejde z appky).
+    val backTarget = homeSectionOf(defaultSectionCtx, activeProfileId)
+    BackHandler(enabled = section != backTarget) { onSelectSection(backTarget) }
 
     // COUCH R2: kdyby se přepnul na dětský profil zatímco je otevřená sekce Trakt → hoď zpět na Domů.
     LaunchedEffect(traktAllowed, section) {
@@ -105,16 +112,12 @@ fun TvShell(
     // uloženo = beze změny). `appliedDefaultForProfile` je rememberSaveable → PŘEŽIJE Activity recreation (TV box jde
     // často na pozadí), takže recreation už NEaplikuje = neruší rozdělanou navigaci; přepnutí profilu (jiný pid) i
     // cold start (process death → flag null) aplikují správně.
-    val defaultSectionCtx = LocalContext.current
     var appliedDefaultForProfile by rememberSaveable { mutableStateOf<Long?>(null) }
     LaunchedEffect(activeProfileId) {
         val pid = activeProfileId ?: return@LaunchedEffect
         if (appliedDefaultForProfile == pid) return@LaunchedEffect
         appliedDefaultForProfile = pid
-        val saved = defaultSectionCtx
-            .getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE)
-            .getString("tv_default_section_$pid", null)
-        val target = saved?.let { runCatching { TvSection.valueOf(it) }.getOrNull() }
+        val target = savedDefaultSection(defaultSectionCtx, pid)
         if (target != null && target != section) onSelectSection(target)
     }
 
@@ -234,3 +237,16 @@ private fun TvSection.toSidebarItem(): SidebarItem = when (this) {
     TvSection.WANT_TO_SEE -> SidebarItem.CHCI_VIDET
     TvSection.SETTINGS -> SidebarItem.NASTAVENI
 }
+
+/**
+ * Výchozí sekce profilu z prefs (`tv_default_section_<profileId>`), nebo null když si ji uživatel
+ * nenastavil. JEDEN zdroj pravdy — čte ji cold start i chování tlačítka Zpět.
+ */
+private fun savedDefaultSection(context: android.content.Context, profileId: Long): TvSection? =
+    context.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE)
+        .getString("tv_default_section_$profileId", null)
+        ?.let { runCatching { TvSection.valueOf(it) }.getOrNull() }
+
+/** Kam vede Zpět: do výchozí sekce profilu; bez uložené volby (nebo bez profilu) na Domů jako dřív. */
+private fun homeSectionOf(context: android.content.Context, profileId: Long?): TvSection =
+    profileId?.let { savedDefaultSection(context, it) } ?: TvSection.HOME
