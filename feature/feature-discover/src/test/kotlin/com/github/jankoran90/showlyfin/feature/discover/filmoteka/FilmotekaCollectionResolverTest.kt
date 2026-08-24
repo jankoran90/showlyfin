@@ -270,6 +270,37 @@ class FilmotekaCollectionResolverTest {
     }
 
     @Test
+    fun `kolekce je i v ose Zanr, pod zanrem svych dilu`() = runTest {
+        val animovane = listOf("Animovaný", "Rodinný")
+        val base = listOf(
+            movie(920, "Auta", year = 2006).copy(genres = animovane),
+            movie(49013, "Auta 2", year = 2011).copy(genres = animovane),
+            movie(12345, "Drsny thriller").copy(genres = listOf("Thriller")),
+        )
+        val resolver = FilmotekaCollectionResolver(FakeTmdb(emptyMap()))
+        val groups = resolver.resolve(base, listOf(boxSet("bs1", "Auta (kolekce)", listOf(920, 49013))))
+
+        val result = FilmotekaGrouping.build(
+            all = base,
+            axis = com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis.GENRE,
+            allSort = com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort.ALPHABETICAL,
+            genreFilter = emptySet(),
+            countryFilter = emptySet(),
+            enabledRegions = emptySet(),
+            hybridGenres = false,
+            collectionGroups = groups,
+        )
+
+        // Karta kolekce musí být v NĚJAKÉ žánrové řadě (dědí žánr svých dílů), a to právě jednou.
+        val cards = result.rails.flatMap { rail -> rail.items.filter { it.collectionKey != null } }
+        assertEquals(1, cards.size, "kolekce patří do jedné žánrové sekce, ne do všech")
+        assertTrue(
+            result.rails.none { rail -> rail.items.any { it.mediaItem?.displayTitle == "Auta" } },
+            "díly se ani v ose Žánr neukazují vedle karty kolekce",
+        )
+    }
+
+    @Test
     fun `vypnuty prepinac nechava dily jednotlive`() {
         val base = listOf(movie(920, "Auta"), movie(49013, "Auta 2"))
 
