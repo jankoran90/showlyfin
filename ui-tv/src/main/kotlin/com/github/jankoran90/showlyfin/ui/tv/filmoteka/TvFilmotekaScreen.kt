@@ -130,18 +130,13 @@ fun TvFilmotekaScreen(
         }
     }
 
-    // FOYER — karty kolekcí (zapnutelné v Nastavení → Filmotéka; default vypnuto).
-    val collectionCards = remember(state.collections) {
-        state.collections.map {
-            HomeRowItem(
-                key = "filmo_collection_${it.jellyfinId}",
-                title = it.name,
-                posterUrl = it.posterUrl,
-                jellyfinId = it.jellyfinId,
-                collection = true,
-            )
-        }
-    }
+    // 🔒 2026-08-24 (user: „nechci žádné chipy kolekce, filmy z kolekce se musí zobrazovat mezi
+    // ostatními, nevymýšlej nové sekce/view type") — samostatná karta kolekce ZRUŠENA i na TV
+    // (telefon už tenhle den dřív). Jednotlivé filmy z kolekcí teď natahuje rovnou do `state.rails`
+    // [FilmotekaBaseLoader.loadJellyfinLibrary], takže tahle extra karta by je jen DUPLIKOVALA
+    // (přesně to user nahlásil: „zobrazují se jak v kolekci tak zvlášť"). VŽDY prázdné, dokud
+    // nevznikne skutečné sdružování dílů pod jednu kartu (jiná feature, zatím nepotvrzeno).
+    val collectionCards = emptyList<HomeRowItem>()
 
     Box(Modifier.fillMaxSize()) {
         // FOYER — plochá osa „Vše" v režimu MŘÍŽKA (TV default): jedna velká abecední mřížka místo jedné
