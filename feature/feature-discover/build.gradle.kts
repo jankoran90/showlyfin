@@ -20,7 +20,7 @@ dependencies {
     // ATRIUM (SHW-118): JVM unit testy sdružování kolekcí — resolver je čistá logika bez Androidu,
     // takže jde ověřit bez emulátoru (jediná cesta, jak zkontrolovat pravidla proti userovým případům:
     // Zootropolis napříč zdroji, ruční JF kolekce bez TMDB id, práh 2 členů).
-    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 
