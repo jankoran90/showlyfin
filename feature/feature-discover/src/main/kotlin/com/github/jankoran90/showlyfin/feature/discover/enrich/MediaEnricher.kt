@@ -112,7 +112,9 @@ class MediaEnricher @Inject constructor(
             .distinct()
             .takeIf { it.isNotEmpty() }
 
-    private companion object {
+    internal companion object {
+        /** Jazyk TMDB dotazů. SDÍLENÝ — kdo tahá details mimo enrich (např. [FilmotekaCollectionResolver]),
+         * musí použít TENTÝŽ, jinak minie cache (je keyed `(id, jazyk)`) a dotazy se zdvojí. */
         const val LANG = "cs-CZ"
     }
 }

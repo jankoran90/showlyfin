@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.discover.filmoteka
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
+import com.github.jankoran90.showlyfin.feature.discover.enrich.MediaEnricher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -129,7 +130,13 @@ class FilmotekaCollectionResolver @Inject constructor(
             .map { item ->
                 async {
                     semaphore.withPermit {
-                        val details = runCatching { tmdb.fetchMovieDetails(item.tmdbId!!) }.getOrNull()
+                        // 🔴 JAZYK MUSÍ SEDĚT S [MediaEnricher.LANG]: cache TMDB je keyed `(id, jazyk)`,
+                        // takže dotaz bez jazyka by MINUL už teplou cache z enrichu a Filmotéka by při
+                        // každém studeném startu vystřelila stovky zbytečných dotazů navíc. Se shodným
+                        // jazykem je resolver prakticky zadarmo — a název kolekce přijde rovnou česky.
+                        val details = runCatching {
+                            tmdb.fetchMovieDetails(item.tmdbId!!, MediaEnricher.LANG)
+                        }.getOrNull()
                         details?.belongs_to_collection?.let { coll -> Triple(item, coll.id, coll) }
                     }
                 }
