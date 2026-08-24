@@ -989,7 +989,34 @@ class DetailViewModel @Inject constructor(
             }
         }.getOrNull()?.let { inWl ->
             _uiState.update { it.copy(isInWatchlist = inWl) }
+        } ?: run {
+            // 🔒 2026-08-24 (user: „u seriálu není zaškrtnutí chci vidět, chybí tam fajka … buďto naše
+            // app nesync nebo …") — DŮKAZ ze serveru: titul V TRAKTU JE (zrcadlo se ten den úspěšně
+            // synchronizovalo), fajfka přesto nenaskočila. Příčina: Trakt dotaz selhal (vypršelý token
+            // na zařízení / výpadek) a `getOrNull()` chybu SPOLKL → stav zůstal na `false`, což vypadá
+            // úplně stejně jako „není ve watchlistu". Filmotéka tuhle situaci řeší zrcadlem už dávno
+            // ([FilmotekaBaseLoader.loadWatchlistMirror]), detail ne — tady se to dorovnává.
+            loadWatchlistFromMirror(item)
         }
+    }
+
+    /**
+     * Záloha členství ve „Chci vidět" ze serverového zrcadla (`GET …/mirror/watchlist`), když Trakt
+     * neodpoví. Data jsou tak čerstvá, jak naposledy doběhl serverový sync — pořád nekonečně lepší než
+     * tvrdit „není v seznamu". Selže-li i tohle, stav se NEMĚNÍ (radši nic než lež).
+     */
+    private suspend fun loadWatchlistFromMirror(item: MediaItem) {
+        val base = uploaderBaseUrl
+        val key = profileRepository.activeProfile.value?.profileUuid.orEmpty()
+        if (base.isBlank() || key.isBlank()) return
+        val resp = runCatching { uploaderDs.mirrorWatchlist(base, uploaderCookie, key) }.getOrNull() ?: return
+        val inWl = resp.items.any { mi ->
+            (item.traktId != 0L && mi.traktId == item.traktId) ||
+                (item.tmdbId != null && mi.tmdbId == item.tmdbId) ||
+                (!item.imdbId.isNullOrBlank() && mi.imdb == item.imdbId)
+        }
+        timber.log.Timber.i("[Detail] Trakt mlčí → zrcadlo watchlistu: %s = %s", item.title, inWl)
+        _uiState.update { it.copy(isInWatchlist = inWl) }
     }
 
     fun toggleWatchlist() {
