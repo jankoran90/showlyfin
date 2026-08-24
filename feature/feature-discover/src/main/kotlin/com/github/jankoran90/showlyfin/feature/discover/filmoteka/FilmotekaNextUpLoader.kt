@@ -2,8 +2,6 @@ package com.github.jankoran90.showlyfin.feature.discover.filmoteka
 
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
-import com.github.jankoran90.showlyfin.core.domain.MediaItem
-import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.feature.discover.home.CtvNextUpLoader
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.feature.discover.home.StreamNextUpLoader
@@ -114,20 +112,12 @@ class FilmotekaNextUpLoader @Inject constructor(
             posterUrl = still,
             landscapeUrl = jellyfinBackdropUrl(serverUrl, token) ?: still,
             jellyfinId = id.toString(),
-            // Epizoda nemá vlastní TMDB identitu → nese se jen jako Jellyfin položka (klik ji přehraje).
-            mediaItem = providerIds?.get("Tmdb")?.toLongOrNull()?.let { tmdb ->
-                MediaItem(
-                    traktId = 0L,
-                    tmdbId = tmdb,
-                    imdbId = providerIds?.get("Imdb"),
-                    title = showTitle,
-                    year = productionYear,
-                    overview = null,
-                    rating = null,
-                    genres = null,
-                    type = MediaType.SHOW,
-                )
-            },
+            // 🔴 `mediaItem` ZÁMĚRNĚ null. `providerIds.Tmdb` na epizodě je TMDB id EPIZODY, ne
+            // seriálu — kdyby se poslalo dál jako identita titulu, konzumenti (klik → detail, ČSFD,
+            // odznak zdroje) by si podle něj dotáhli úplně jiný obsah. Přesně ta past, na kterou
+            // Filmotéka narazila u BoxSetů (FOYER, „karta s cizím obsahem"). Klik má jít přes
+            // `jellyfinId` → Jellyfin detail epizody, který ji umí rovnou přehrát.
+            mediaItem = null,
         )
     }
 

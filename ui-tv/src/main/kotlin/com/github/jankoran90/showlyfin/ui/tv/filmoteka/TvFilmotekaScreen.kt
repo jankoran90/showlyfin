@@ -51,13 +51,14 @@ import com.github.jankoran90.showlyfin.feature.discover.tv.sortedBy
 import com.github.jankoran90.showlyfin.ui.tv.components.TvViewChips
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed as rowItemsIndexed
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollectionGroup
@@ -306,10 +307,18 @@ private fun TvFilmotekaGrid(
 ) {
     val cardScale = LocalTvCardScale.current
     val firstFocus = remember { FocusRequester() }
+    val nextUpFirstFocus = remember { FocusRequester() }
+    // 🔒 2026-08-24 (user: „když čerstvě načtu appku na tv, tak musím dpadem nahoru na další díly") —
+    // je-li řada „Další díly" první věcí na obrazovce, patří jí i VSTUPNÍ fokus. Bez ní (vypnutý
+    // přepínač / není co dokoukat) padne fokus na první dlaždici mřížky jako dřív.
+    val startOnNextUp = nextUp.isNotEmpty()
     AutoFocusFirst(
-        focusRequester = firstFocus,
-        enabled = items.isNotEmpty(),
-        isTargetPlaced = { gridState.layoutInfo.visibleItemsInfo.any { it.index == 0 } },
+        focusRequester = if (startOnNextUp) nextUpFirstFocus else firstFocus,
+        enabled = items.isNotEmpty() || startOnNextUp,
+        isTargetPlaced = {
+            val visible = gridState.layoutInfo.visibleItemsInfo
+            if (startOnNextUp) visible.any { it.key == "filmo_nextup_row" } else visible.any { it.index == 0 }
+        },
     )
     Column(modifier.tvOverscan()) {
         header()
@@ -328,6 +337,11 @@ private fun TvFilmotekaGrid(
                         immersive = immersive,
                         onFocusItem = onFocusItem,
                         onItemClick = onItemClick,
+                        firstFocusRequester = nextUpFirstFocus,
+                        // 🔴 Cíl pohybu dolů smí ukazovat jen na SKUTEČNĚ vykreslenou dlaždici:
+                        // `FocusRequester.requestFocus()` na nepřipojený uzel hodí výjimku, takže
+                        // u prázdné mřížky (jen řada, žádné filmy) se dolů nesmí přesměrovávat.
+                        downTarget = firstFocus.takeIf { items.isNotEmpty() },
                     )
                 }
             }
@@ -374,6 +388,14 @@ private fun TvNextUpRow(
     immersive: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
     onItemClick: (HomeRowItem) -> Unit,
+    firstFocusRequester: FocusRequester? = null,
+    /**
+     * 🔒 2026-08-24 (user: „když jsem nahoře na další díly zafokusovanej a dám dpadem dolů tak nejedu
+     * ve sloupci prvním v mřížce filmů ale v druhém" → „on sjede na nejbližší dlaždici kterou má pod
+     * sebou") — karty řady jsou širší než dlaždice mřížky, takže geometrické hledání trefí sloupec
+     * podle polohy karty. Cíl pohybu DOLŮ proto určujeme NATVRDO: vždy první dlaždice mřížky.
+     */
+    downTarget: FocusRequester? = null,
 ) {
     val cardScale = LocalTvCardScale.current
     Column(Modifier.padding(bottom = 8.dp)) {
@@ -384,16 +406,23 @@ private fun TvNextUpRow(
             modifier = Modifier.padding(bottom = 6.dp),
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(cardScale.spacing(16.dp))) {
-            items(items, key = { it.key }) { item ->
+            rowItemsIndexed(items, key = { _, item -> item.key }) { index, item ->
                 Box(
-                    Modifier.onFocusChanged {
-                        if (it.hasFocus && immersive) onFocusItem(item.toImmersiveInfo())
-                    },
+                    Modifier
+                        .onFocusChanged {
+                            if (it.hasFocus && immersive) onFocusItem(item.toImmersiveInfo())
+                        }
+                        .then(
+                            if (downTarget != null) {
+                                Modifier.focusProperties { down = downTarget }
+                            } else Modifier
+                        ),
                 ) {
                     TvHomeCard(
                         item = item,
                         style = HomeCardStyle.LANDSCAPE,
                         onClick = { onItemClick(item) },
+                        focusRequester = if (index == 0) firstFocusRequester else null,
                     )
                 }
             }
