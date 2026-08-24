@@ -68,6 +68,9 @@ class MediaEnricher @Inject constructor(
                 certificationAge = ageD.await() ?: item.certificationAge,
                 originCountries = countriesOfShow(details) ?: item.originCountries,
                 originalTitle = details?.original_name?.takeIf { it.isNotBlank() } ?: item.originalTitle,
+                // MERIDIAN (SHW-119): stopáž se veze s detailem, který enrich tahá tak jako tak —
+                // žádný dotaz navíc. U seriálu = typická délka epizody.
+                runtimeMinutes = details?.episode_run_time?.firstOrNull { it > 0 } ?: item.runtimeMinutes,
             )
         } else {
             val detailsD = async { runCatching { tmdb.fetchMovieDetails(tmdbId, LANG) }.getOrNull() }
@@ -85,6 +88,7 @@ class MediaEnricher @Inject constructor(
                 certificationAge = ageD.await() ?: item.certificationAge,
                 originCountries = countriesOfMovie(details) ?: item.originCountries,
                 originalTitle = details?.original_title?.takeIf { it.isNotBlank() } ?: item.originalTitle,
+                runtimeMinutes = details?.runtime?.takeIf { it > 0 } ?: item.runtimeMinutes,
             )
         }
     }

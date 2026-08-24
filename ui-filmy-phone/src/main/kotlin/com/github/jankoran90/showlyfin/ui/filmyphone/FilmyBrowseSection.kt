@@ -42,6 +42,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.formatRuntime
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegion
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
@@ -50,6 +51,7 @@ import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.cachedDirector
 import com.github.jankoran90.showlyfin.core.ui.warmDirector
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollectionGroup
+import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaRail
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaUiState
 import kotlinx.coroutines.coroutineScope
@@ -188,13 +190,37 @@ fun FilmyBrowseSection(
         val openGroupOf: (String) -> Unit = { key ->
             openCollection = state.collectionGroups.firstOrNull { it.id == key }
         }
+        // MERIDIAN (SHW-119, user 2026-08-24): co ukazuje bublina rychlého posuvníku, ŘÍDÍ AKTUÁLNÍ
+        // ŘAZENÍ — jinak by lišta lhala (písmeno u seznamu řazeného podle data nikam nevede).
+        // Osy Žánr/Země mají vlastní pořadí v rámci řad → tam náhled nedává smysl (null = bez bubliny).
+        val scrollerLabel: (HomeRowItem) -> String? = remember(state.axis, state.allSort) {
+            when {
+                state.axis != FilmotekaAxis.ALL -> ({ _: HomeRowItem -> null })
+                else -> when (state.allSort) {
+                    FilmotekaAllSort.ALPHABETICAL -> ({ row: HomeRowItem ->
+                        row.title.trimStart().firstOrNull()?.uppercaseChar()?.toString()
+                    })
+                    FilmotekaAllSort.RECENT -> ({ row: HomeRowItem ->
+                        row.mediaItem?.addedAtMs?.let { ms ->
+                            java.time.Instant.ofEpochMilli(ms)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .let { "%02d/%d".format(it.monthValue, it.year) }
+                        }
+                    })
+                    FilmotekaAllSort.RUNTIME -> ({ row: HomeRowItem ->
+                        formatRuntime(row.mediaItem?.runtimeMinutes)
+                    })
+                }
+            }
+        }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
                 state.loading -> CircularProgressIndicator()
                 state.rails.isEmpty() -> emptyContent()
                 displayRails.isEmpty() -> FilmotekaNoResults(query)
-                viewMode == ViewMode.LIST -> FilmotekaList(displayRails, onOpenDetail, openGroupOf)
-                else -> FilmotekaGrid(displayRails, onOpenDetail, openGroupOf)
+                viewMode == ViewMode.LIST ->
+                    FilmotekaList(displayRails, onOpenDetail, openGroupOf, scrollerLabel)
+                else -> FilmotekaGrid(displayRails, onOpenDetail, openGroupOf, scrollerLabel)
             }
         }
     }
@@ -377,6 +403,7 @@ private val FilmotekaAllSort.chipLabel: String
     get() = when (this) {
         FilmotekaAllSort.RECENT -> "Nedávno přidané"
         FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
+        FilmotekaAllSort.RUNTIME -> "Od nejkratšího"
     }
 
 /**

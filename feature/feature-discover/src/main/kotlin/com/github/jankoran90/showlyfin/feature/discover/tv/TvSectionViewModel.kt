@@ -48,6 +48,7 @@ fun List<HomeRowItem>.sortedBy(sort: TvSectionSort): List<HomeRowItem> = when (s
     TvSectionSort.NEDAVNO -> sortedByDescending { it.mediaItem?.addedAtMs ?: 0L }
     TvSectionSort.ROK -> sortedByDescending { it.year ?: 0 }
     TvSectionSort.HODNOCENI -> sortedByDescending { it.mediaItem?.rating ?: -1f }
+    TvSectionSort.STOPAZ -> sortedBy { it.mediaItem?.runtimeMinutes ?: Int.MAX_VALUE }
     TvSectionSort.VYCHOZI -> this
 }
 
@@ -58,5 +59,6 @@ fun List<MediaItem>.sortedBy(sort: TvSectionSort): List<MediaItem> = when (sort)
     TvSectionSort.NEDAVNO -> sortedByDescending { it.addedAtMs ?: 0L }
     TvSectionSort.ROK -> sortedByDescending { it.year ?: 0 }
     TvSectionSort.HODNOCENI -> sortedByDescending { it.rating ?: -1f }
+    TvSectionSort.STOPAZ -> sortedBy { it.runtimeMinutes ?: Int.MAX_VALUE }
     TvSectionSort.VYCHOZI -> this
 }

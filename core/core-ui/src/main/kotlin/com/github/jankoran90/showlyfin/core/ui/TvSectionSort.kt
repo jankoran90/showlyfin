@@ -13,6 +13,9 @@ enum class TvSectionSort(val label: String, val storeKey: String) {
     NEDAVNO("Nedávno přidané", "recent"),
     ROK("Rok (nejnovější)", "year"),
     HODNOCENI("Hodnocení", "rating"),
+    // MERIDIAN (SHW-119, user 2026-08-24 „řazení dle stopáže od nejkratší") — délka vzestupně;
+    // neznámá stopáž jde na konec (viz pravidlo v hlavičce enumu).
+    STOPAZ("Stopáž (nejkratší)", "runtime"),
     VYCHOZI("Výchozí (jak přišlo)", "default");
 
     companion object {

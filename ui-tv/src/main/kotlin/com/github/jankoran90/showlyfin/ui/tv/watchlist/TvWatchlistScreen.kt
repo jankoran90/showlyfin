@@ -63,8 +63,8 @@ fun TvWatchlistScreen(
             TvSectionSort.ABECEDNE -> allMovies.sortedBy { it.name.lowercase() }
             TvSectionSort.NEDAVNO -> allMovies.sortedByDescending { it.addedAtMs }
             TvSectionSort.ROK -> allMovies.sortedByDescending { it.year ?: 0 }
-            // Oblíbené nenesou hodnocení → chová se jako výchozí pořadí (žádné falešné řazení).
-            TvSectionSort.HODNOCENI, TvSectionSort.VYCHOZI -> allMovies
+            // Oblíbené nenesou hodnocení ani stopáž → chová se jako výchozí pořadí (žádné falešné řazení).
+            TvSectionSort.HODNOCENI, TvSectionSort.STOPAZ, TvSectionSort.VYCHOZI -> allMovies
         }
     }
     val gridState = rememberLazyGridState()

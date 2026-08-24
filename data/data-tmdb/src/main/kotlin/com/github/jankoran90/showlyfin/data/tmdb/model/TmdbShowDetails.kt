@@ -15,6 +15,9 @@ data class TmdbShowDetails(
     val overview: String?,
     val vote_average: Float?,
     val first_air_date: String?,
+    // MERIDIAN (SHW-119) — typická délka epizody v minutách (TMDB vrací pole, obvykle jednoprvkové).
+    // U seriálu je „stopáž" právě tohle; film má vlastní `runtime`.
+    val episode_run_time: List<Int>? = null,
     val number_of_seasons: Int?,
     val number_of_episodes: Int?,
     val genres: List<TmdbGenre>?,

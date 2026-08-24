@@ -99,7 +99,7 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
         TvOptionStepperRow(
             label = "Řazení řady „Vše\"",
             subtitle = "Jak seřadit plochý výpis v ose Vše",
-            options = listOf(FilmotekaAllSort.RECENT, FilmotekaAllSort.ALPHABETICAL),
+            options = listOf(FilmotekaAllSort.RECENT, FilmotekaAllSort.ALPHABETICAL, FilmotekaAllSort.RUNTIME),
             selected = allSort,
             labelOf = ::allSortLabel,
             onSelect = vm::setAllSort,
@@ -190,4 +190,5 @@ private fun axisLabel(axis: FilmotekaAxis): String = when (axis) {
 private fun allSortLabel(sort: FilmotekaAllSort): String = when (sort) {
     FilmotekaAllSort.RECENT -> "Nedávno přidané"
     FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
+    FilmotekaAllSort.RUNTIME -> "Od nejkratšího"
 }

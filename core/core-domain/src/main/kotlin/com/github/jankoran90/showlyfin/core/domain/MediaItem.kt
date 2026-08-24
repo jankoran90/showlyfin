@@ -46,6 +46,12 @@ data class MediaItem(
      * Plní ten, kdo položku vyrábí ze serverových dat (viz `FilmotekaBaseLoader`); enrich ho nepřepisuje.
      */
     val fallbackPosterUrl: String? = null,
+    /**
+     * MERIDIAN (SHW-119, user 2026-08-24 „za režisérem zobrazit stopáž … a taky řazení dle stopáže
+     * od nejkratší") — délka v MINUTÁCH. Film = TMDB `runtime`, seriál = typická délka epizody
+     * (`episode_run_time`). null = neznámá (titul se pak v řazení dle délky řadí na konec).
+     */
+    val runtimeMinutes: Int? = null,
 ) {
     fun posterUrl(size: String = "w342") =
         posterPath?.let { "https://image.tmdb.org/t/p/$size$it" } ?: fallbackPosterUrl

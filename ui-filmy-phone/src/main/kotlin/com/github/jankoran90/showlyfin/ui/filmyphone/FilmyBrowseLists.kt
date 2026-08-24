@@ -1,6 +1,12 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -52,10 +58,16 @@ internal fun FilmotekaGrid(
     rails: List<FilmotekaRail>,
     onOpenDetail: (MediaItem) -> Unit,
     onOpenCollection: (String) -> Unit,
+    scrollerLabel: (HomeRowItem) -> String?,
 ) {
     val cols = rememberGridColumnPref()
     val showHeaders = rails.size > 1
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    val flat = remember(rails) { rails.flatMap { it.items } }
+    Box(Modifier.fillMaxSize()) {
     LazyVerticalGrid(
+        state = gridState,
         columns = gridCellsFor(ViewMode.GRID, cols),
         contentPadding = PaddingValues(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -85,6 +97,16 @@ internal fun FilmotekaGrid(
             }
         }
     }
+    // MERIDIAN (SHW-119): posuvník počítá v POLOŽKÁCH, ne v řádcích mřížky — uživatel táhne k titulu,
+    // ne k řádku. Přepočet na řádek si udělá `scrollToItem` sám (LazyVerticalGrid indexuje položkami).
+    FilmyFastScroller(
+        itemCount = flat.size,
+        progress = if (flat.size <= 1) 0f else gridState.firstVisibleItemIndex.toFloat() / (flat.size - 1),
+        label = { i -> flat.getOrNull(i)?.let(scrollerLabel) },
+        onScrollTo = { i -> scope.launch { gridState.scrollToItem(i) } },
+        modifier = Modifier.align(Alignment.TopEnd).padding(vertical = 8.dp),
+    )
+    }
 }
 
 /** Seznam bohatých řádků (cover + název + režie + rok · žánry + popis) — stejný řádek jako domov. */
@@ -93,9 +115,15 @@ internal fun FilmotekaList(
     rails: List<FilmotekaRail>,
     onOpenDetail: (MediaItem) -> Unit,
     onOpenCollection: (String) -> Unit,
+    scrollerLabel: (HomeRowItem) -> String?,
 ) {
     val showHeaders = rails.size > 1
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val flat = remember(rails) { rails.flatMap { it.items } }
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize(),
@@ -105,66 +133,34 @@ internal fun FilmotekaList(
                 item(key = "hdr_${rail.id}") { SectionHeader(rail.title) }
             }
             listItems(rail.items, key = { it.key }) { row ->
-                val collectionKey = row.collectionKey
-                if (collectionKey != null) {
-                    FilmotekaCollectionRow(row = row, onClick = { onOpenCollection(collectionKey) })
+                row.mediaItem?.let { mi ->
+                    val collectionKey = row.collectionKey
+                    // 🔒 2026-08-24 (user: „kolekce v zobrazení seznam je zobrazeno špatně a jinak") —
+                    // kolekce kreslí TENTÝŽ [MediaRow] jako film, ne vlastní chudší řádek. Liší se jen
+                    // tím, co se pro ni nedá dohledat: režie (kolekce ji nemá) a ČSFD (nemá tmdb/imdb).
+                    // Klik řídí `collectionKey` — ten se testuje PŘED cestou na detail.
+                    MediaRow(
+                        item = mi,
+                        onClick = {
+                            if (collectionKey != null) onOpenCollection(collectionKey) else onOpenDetail(mi)
+                        },
+                        watched = row.watched,
+                        genreLine = mi.genres?.filter { it.isNotBlank() }?.take(3)?.joinToString(" · "),
+                        showDirector = collectionKey == null,
+                        enableCsfd = collectionKey == null,
+                        progressText = row.subtitle.takeIf { collectionKey != null },
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                } else {
-                    row.mediaItem?.let { mi ->
-                        MediaRow(
-                            item = mi,
-                            onClick = { onOpenDetail(mi) },
-                            watched = row.watched,
-                            genreLine = mi.genres?.filter { it.isNotBlank() }?.take(3)?.joinToString(" · "),
-                            showDirector = true,
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                    }
                 }
             }
         }
     }
-}
-
-
-/**
- * ATRIUM (SHW-118) — řádek sdružené kolekce v seznamovém režimu. Záměrně chudší než [MediaRow]:
- * kolekce nemá režii, popis ani hodnocení — jen plakát, název a počet dílů, aby bylo na první pohled
- * jasné, že klik nevede na film, ale na obsah.
- */
-@Composable
-internal fun FilmotekaCollectionRow(row: HomeRowItem, onClick: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
-    ) {
-        AsyncImage(
-            model = row.posterUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .width(56.dp)
-                .height(84.dp)
-                .clip(RoundedCornerShape(8.dp)),
-        )
-        Column(Modifier.fillMaxWidth()) {
-            Text(
-                text = collectionCardTitle(row.title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = listOfNotNull(row.year?.toString(), row.subtitle).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+    FilmyFastScroller(
+        itemCount = flat.size,
+        progress = if (flat.size <= 1) 0f else listState.firstVisibleItemIndex.toFloat() / (flat.size - 1),
+        label = { i -> flat.getOrNull(i)?.let(scrollerLabel) },
+        onScrollTo = { i -> scope.launch { listState.scrollToItem(i) } },
+        modifier = Modifier.align(Alignment.TopEnd).padding(vertical = 8.dp),
+    )
     }
 }

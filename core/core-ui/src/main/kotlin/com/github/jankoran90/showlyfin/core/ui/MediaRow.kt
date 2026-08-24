@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.formatRuntime
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 
 /** VANTAGE (SHW-48) — výška coveru řádku; výška textového sloupce = výška coveru (popis se ořízne). */
@@ -159,17 +160,34 @@ fun MediaRow(
                     UserRatingBadge(stars = it, modifier = Modifier.padding(top = 2.dp))
                 }
             }
-            // 2. řádek: režisér (líně z TMDB přes rememberDirector). Zobrazí se jen když je znám.
-            if (!director.isNullOrBlank()) {
+            // 2. řádek: režisér (líně z TMDB přes rememberDirector) + STOPÁŽ za ním (MERIDIAN SHW-119,
+            // user 2026-08-24 „za režisérem zobrazit stopáž"). Každý údaj se ukáže jen když je znám —
+            // u titulu bez režie tak stopáž zůstane sama, řádek nezmizí.
+            val runtimeText = item.runtimeMinutes?.let(::formatRuntime)
+            if (!director.isNullOrBlank() || runtimeText != null) {
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    text = director,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!director.isNullOrBlank()) {
+                        Text(
+                            text = director,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
+                    if (runtimeText != null) {
+                        if (!director.isNullOrBlank()) DotSeparator()
+                        Text(
+                            text = runtimeText,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(2.dp))
             // 3. řádek: rok · žánry · ČSFD · stav.

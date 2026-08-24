@@ -111,9 +111,11 @@ object FilmotekaGrouping {
         traktId = 0L,
         tmdbId = null,
         imdbId = null,
-        title = name,
+        title = collectionCardTitle(name),
         year = year,
-        overview = null,
+        // Místo popisu výčet dílů — seznamový řádek má stejný prostor jako u filmu a musí něco říkat.
+        overview = members.joinToString(" · ") { it.displayTitle },
+        overviewCz = members.joinToString(" · ") { it.displayTitle },
         rating = null,
         genres = members.firstNotNullOfOrNull { it.genres?.takeIf(List<String>::isNotEmpty) },
         type = com.github.jankoran90.showlyfin.core.domain.MediaType.MOVIE,
@@ -134,10 +136,20 @@ object FilmotekaGrouping {
                 val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
                 items.sortedWith(Comparator { a, b -> coll.compare(a.item.displayTitle, b.item.displayTitle) })
             }
+            // MERIDIAN (SHW-119): od nejkratší. Neznámá délka = Int.MAX_VALUE → na konec, ne na začátek
+            // (jinak by se hromada titulů bez metadat tvářila jako „nejkratší filmy").
+            FilmotekaAllSort.RUNTIME -> {
+                val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
+                items.sortedWith(
+                    compareBy<Entry> { it.item.runtimeMinutes ?: Int.MAX_VALUE }
+                        .thenComparator { a, b -> coll.compare(a.item.displayTitle, b.item.displayTitle) }
+                )
+            }
         }
         val title = when (allSort) {
             FilmotekaAllSort.RECENT -> "Nedávno přidané"
             FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
+            FilmotekaAllSort.RUNTIME -> "Od nejkratšího"
         }
         return listOf(FilmotekaRail(id = "filmo_all", title = title, items = sorted.map { it.toHomeRowItem("all") }))
     }
@@ -185,7 +197,9 @@ object FilmotekaGrouping {
             mediaItem = item,
         )
         // ATRIUM (SHW-118): karta kolekce — klik otevře její OBSAH, ne detail s hledáním zdroje.
-        // `mediaItem` schválně zůstává null: kolekce není titul a nesmí se dostat do cesty přehrání.
+        // `mediaItem` = syntetická položka kolekce (název, rok, žánry, plakát, výčet dílů), aby ji
+        // seznam uměl vykreslit TÝMŽ řádkem jako film. Do cesty přehrání se dostat nemůže: každý
+        // konzument testuje `collectionKey` PŘED `mediaItem`, a položka nemá tmdb/imdb identitu.
         return HomeRowItem(
             key = "filmo_${axisValue}_${g.id}",
             title = g.name,
@@ -193,7 +207,7 @@ object FilmotekaGrouping {
             year = g.year,
             posterUrl = g.posterUrl,
             landscapeUrl = g.backdropUrl,
-            mediaItem = null,
+            mediaItem = item,
             jellyfinId = g.jellyfinId,
             collection = true,
             collectionKey = g.id,
