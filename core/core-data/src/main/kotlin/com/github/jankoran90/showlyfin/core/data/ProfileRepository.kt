@@ -61,7 +61,18 @@ class ProfileRepository @Inject constructor(
         val template = profile.templateUuid
             ?.let { templateDao.getByUuid(it) }
             ?.let { ProfileConfig.fromJson(it.configJson) }
-        val merged = ProfileConfig.mergeEffective(template, override)
+        var merged = ProfileConfig.mergeEffective(template, override)
+        // 🔒🔒🔒 2026-08-24 (4. vrstva Trakt bugu — banner PŘEŽIL i saveTokens() guard) — SKUTEČNÝ
+        // choke point: `activeConfig.value`/`traktAllowed()` čte credentials.trakt PŘÍMO z tohohle
+        // configu, který se skládá z ROOM DB `configJson`. Ten může furt nést STARÝ token zapsaný
+        // PŘED jakýmkoli z předchozích fixů (SharedPreferences CHILD-CLEAR na něj nikdy nesahal —
+        // je to úplně jiné úložiště) — a jakákoli běžná změna configu ho znovu pushne na server, kde
+        // ho sice serverová pojistka odmítne, ale appka si LOKÁLNĚ svůj starý config furt myslí, že
+        // ho má. Jediné definitivní řešení: efektivní config dětského profilu Trakt credentials
+        // VŽDY ODSTRANÍ, bez ohledu na to, co je uloženo pod tím.
+        if (profile.isChildAgeRating() && merged.credentials.trakt != null) {
+            merged = merged.copy(credentials = merged.credentials.copy(trakt = null))
+        }
         // VAULT V7: applier per-profil creds MAŽE (null = odhlásit) — ale legacy/lokální profily
         // drží JF přihlášení jen v entitě (serverUrl+token), ne v balíku. Syntetizuj ho do configu,
         // ať applier funkční entity login nesmaže.
