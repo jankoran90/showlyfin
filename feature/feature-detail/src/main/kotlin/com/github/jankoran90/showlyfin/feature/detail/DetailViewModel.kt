@@ -356,6 +356,8 @@ class DetailViewModel @Inject constructor(
                 episodeWatched = emptySet(),
                 episodeProgress = emptyMap(),
                 nextUpEpisode = null,
+                // Nový titul → zapomeň označený díl předchozího (nastavuje ho [focusEpisode] hned po `load`).
+                focusedEpisode = null,
                 episodeJellyfinIds = emptyMap(),
                 plotCollapsedLines = prefs.getInt("detail_plot_lines", 5),
                 actionOrder = parseActionOrder(prefs.getString("detail_action_order", null)),
@@ -456,8 +458,13 @@ class DetailViewModel @Inject constructor(
                                 ?.sortedBy { s -> s.season_number }.orEmpty()
                             val defaultSeason = seasonList.firstOrNull { s -> s.season_number >= 1 && (s.episode_count ?: 0) > 0 }?.season_number
                                 ?: seasonList.firstOrNull()?.season_number
-                            if (defaultSeason != null && _uiState.value.item?.isSameAs(item) == true) {
-                                selectSeason(defaultSeason)
+                            // VESTIBUL: přišli jsme z kliku na KONKRÉTNÍ díl → jeho sezóna má přednost
+                            // před „první skutečnou". Neexistující číslo ignoruj (radši výchozí než prázdno).
+                            val wantedSeason = _uiState.value.focusedEpisode?.first
+                                ?.takeIf { s -> seasonList.any { it.season_number == s } }
+                            val openSeason = wantedSeason ?: defaultSeason
+                            if (openSeason != null && _uiState.value.item?.isSameAs(item) == true) {
+                                selectSeason(openSeason)
                             }
                         }
                     }
@@ -976,7 +983,9 @@ class DetailViewModel @Inject constructor(
             return
         }
         // WINNOW: tituly z pásu režisér/studio nemají traktId → členství poznáme i podle tmdbId.
-        if (item.traktId == 0L && item.tmdbId == null) return
+        // A seriály z uložených zdrojů mívají jen imdb → bez něj by tenhle titul fajfku nikdy
+        // nedostal (a ani by se nezeptal zrcadla). Porovnáváme proto všechna tři id.
+        if (item.traktId == 0L && item.tmdbId == null && item.imdbId.isNullOrBlank()) return
         runCatching {
             val list = if (item.type == MediaType.MOVIE) {
                 authorizedTrakt.fetchSyncMoviesWatchlist()
@@ -985,7 +994,8 @@ class DetailViewModel @Inject constructor(
             }
             list.any {
                 (item.traktId != 0L && it.getTraktId() == item.traktId) ||
-                    (item.tmdbId != null && it.getTmdbId() == item.tmdbId)
+                    (item.tmdbId != null && it.getTmdbId() == item.tmdbId) ||
+                    (!item.imdbId.isNullOrBlank() && it.getImdbId() == item.imdbId)
             }
         }.getOrNull()?.let { inWl ->
             _uiState.update { it.copy(isInWatchlist = inWl) }
@@ -1017,6 +1027,19 @@ class DetailViewModel @Inject constructor(
         }
         timber.log.Timber.i("[Detail] Trakt mlčí → zrcadlo watchlistu: %s = %s", item.title, inWl)
         _uiState.update { it.copy(isInWatchlist = inWl) }
+    }
+
+    /**
+     * Řekni serveru, ať si znovu natáhne Trakt (`POST …/mirror/refresh`). Voláme po KAŽDÉ úspěšné
+     * změně „Chci vidět" — zrcadlo je záloha pro chvíle, kdy Trakt mlčí, takže zastaralé zrcadlo by
+     * tvrdilo opak toho, co divák právě udělal. Selhání je neškodné (zrcadlo dojede vlastním syncem).
+     */
+    private suspend fun refreshWatchlistMirror() {
+        val base = uploaderBaseUrl
+        val key = profileRepository.activeProfile.value?.profileUuid.orEmpty()
+        if (base.isBlank() || key.isBlank()) return
+        runCatching { uploaderDs.mirrorRefresh(base, uploaderCookie, key) }
+            .onFailure { timber.log.Timber.w(it, "[Detail] mirror/refresh po změně watchlistu selhal") }
     }
 
     fun toggleWatchlist() {
@@ -1053,7 +1076,28 @@ class DetailViewModel @Inject constructor(
                 if (currentlyIn) authorizedTrakt.postDeleteWatchlist(request)
                 else authorizedTrakt.postSyncWatchlist(request)
             }
-            val ok = result.isSuccess
+            // 🔒 user 2026-08-24 („pokud dám na kartě odebrat z chci vidět, aby o tom Trakt opravdu
+            // věděl a udělal to také") — HTTP 200 NESTAČÍ. Když Trakt zaslané id nezná, odpoví 200
+            // s nulovými počty a titul jen zahodí; dřív jsme to brali jako úspěch a fajfka lhala.
+            // Rozhoduje tedy POČET dotčených položek našeho typu, ne to, že dotaz nespadl.
+            val isMovie = item.type == MediaType.MOVIE
+            val counts = result.getOrNull()
+            val applied: Int = when {
+                counts == null -> 0
+                currentlyIn -> counts.deleted?.countFor(isMovie) ?: 0
+                else -> (counts.added?.countFor(isMovie) ?: 0) + (counts.existing?.countFor(isMovie) ?: 0)
+            }
+            // Odebrání, které Trakt „nenašel": v jeho seznamu ten titul pod naším id není, takže
+            // fajfka pryč je SPRÁVNĚ (nesmíme ji vracet) — ale řekneme to nahlas, protože pak fajfku
+            // držel jen náš místní seznam, nebo Trakt titul vede pod jiným id.
+            val deletedNothing = currentlyIn && counts != null && applied == 0
+            if (deletedNothing) {
+                timber.log.Timber.w(
+                    "[Watchlist] Trakt neodebral '%s' (trakt=%d tmdb=%s imdb=%s) — v jeho seznamu pod tímhle id není",
+                    item.title, item.traktId, item.tmdbId, item.imdbId,
+                )
+            }
+            val ok = result.isSuccess && (applied > 0 || deletedNothing)
             // Diagnostika (2026-07-14): při selhání ukázat SKUTEČNÝ důvod — HttpException.message nese
             // „HTTP <kód>…" (420=plný watchlist/limit, 401=token, 429=rate limit), IOException=síť.
             val reason = result.exceptionOrNull()?.let { e ->
@@ -1072,9 +1116,13 @@ class DetailViewModel @Inject constructor(
                     // Při selhání revert na původní stav + hláška; při úspěchu ponech optimistický.
                     isInWatchlist = if (ok) !currentlyIn else currentlyIn,
                     autoCastMessage = when {
+                        deletedNothing -> "Trakt tenhle titul ve svém seznamu neměl (nejspíš jiné ID) — " +
+                            "u nás je odebraný."
                         ok -> it.autoCastMessage
                         authExpired -> "Trakt přihlášení vypršelo — titul se neuložil. Přihlas se znovu: " +
                             "Nastavení → Účty → Trakt."
+                        // 200 s nulovými počty: dotaz prošel, Trakt ale titul nepřijal (nezná id).
+                        result.isSuccess -> "Trakt titul nepřijal — nezná jeho ID. Zkus to z jiného zdroje."
                         else -> "Trakt seznam se neuložil: ${reason ?: "neznámá chyba"}. Zkus znovu."
                     },
                 )
@@ -1086,6 +1134,10 @@ class DetailViewModel @Inject constructor(
             if (ok && !currentlyIn) triggerWantSourceSearch(item)
             // COUCH: watchlist se změnil → domov přenačte Trakt řady (jinak čerstvý titul naskočí jen v sekci Trakt).
             if (ok) traktSyncSignal.bump()
+            // A hned za tím kopni SERVEROVÉ ZRCADLO, ať dohoní Trakt. Bez toho drží starý stav až do
+            // svého příštího syncu — a protože se ho detail ptá, když Trakt mlčí (viz
+            // [loadWatchlistFromMirror]), vrátilo by právě odebranou fajfku zpátky.
+            if (ok) refreshWatchlistMirror()
         }
     }
 
@@ -1304,6 +1356,20 @@ class DetailViewModel @Inject constructor(
     /** Vybraná epizoda pro stream flow — season/episode se propíšou do dotazů zdrojů i titulků. */
     private data class EpisodeSelector(val season: Int, val episode: Int, val label: String)
     private var episodeSelector: EpisodeSelector? = null
+
+    /**
+     * VESTIBUL (user 2026-08-24: *„stačí když se otevře karta seriálu a označí se ten díl"*) — kartu
+     * otevřel klik na KONKRÉTNÍ díl z řady „Další díly". Vyber jeho sezónu a označ ho.
+     *
+     * Volá se hned po [load]: když seriál teprve načítá, sezónu vybere `load` sám podle
+     * `focusedEpisode`; když už načtený je (návrat na tentýž titul, kde `load` dedupem odejde),
+     * přepneme sezónu tady.
+     */
+    fun focusEpisode(season: Int?, episode: Int?) {
+        if (season == null || episode == null) return
+        _uiState.update { it.copy(focusedEpisode = season to episode) }
+        if (_uiState.value.seasons.any { it.season_number == season }) selectSeason(season)
+    }
 
     /** WS-C: vyber sezónu → lazy-load seznamu epizod z TMDB (jen pokud se změnila / je prázdný). */
     fun selectSeason(seasonNumber: Int) {

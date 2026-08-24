@@ -18,14 +18,15 @@ interface TraktSyncService {
     @GET("sync/watchlist/{type}?extended=full")
     suspend fun fetchSyncWatchlist(@Path("type") type: String, @Query("page") page: Int? = null, @Query("limit") limit: Int? = null): Response<List<SyncItem>>
 
+    // Odpověď se NEZAHAZUJE: 200 s nulovými počty = Trakt titul nepřijal (viz [SyncWatchlistResult]).
     @POST("sync/watchlist")
-    suspend fun postSyncWatchlist(@Body request: SyncExportRequest)
+    suspend fun postSyncWatchlist(@Body request: SyncExportRequest): SyncWatchlistResult
 
     @POST("sync/history")
     suspend fun postSyncWatched(@Body request: SyncExportRequest)
 
     @POST("sync/watchlist/remove")
-    suspend fun deleteWatchlist(@Body request: SyncExportRequest)
+    suspend fun deleteWatchlist(@Body request: SyncExportRequest): SyncWatchlistResult
 
     @POST("sync/history/remove")
     suspend fun deleteHistory(@Body request: SyncExportRequest)

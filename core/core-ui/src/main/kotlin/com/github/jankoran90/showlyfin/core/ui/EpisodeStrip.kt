@@ -230,6 +230,12 @@ fun PhoneEpisodeRow(
     // otevře malé menu s obojím (nic se neztratí, jen klik navíc), místo aby jedno gesto přebilo
     // druhé. Bez [onDownload] chová se přesně jako dřív (přímá akce, žádné menu).
     onDownload: (() -> Unit)? = null,
+    /**
+     * VESTIBUL (user 2026-08-24) — TENHLE díl je „na řadě": buď na něj divák klikl v řadě „Další
+     * díly", nebo je to první nedokoukaný. TV ho značí štítkem „Pokračovat" ([TvEpisodeStrip]),
+     * telefon ho dosud nerozlišoval nijak → podbarvení, ať ho v seznamu najde okem.
+     */
+    highlighted: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -238,6 +244,10 @@ fun PhoneEpisodeRow(
             .fillMaxWidth()
             .tvFocusable(shape = RoundedCornerShape(10.dp))
             .clip(RoundedCornerShape(10.dp))
+            .then(
+                if (highlighted) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                else Modifier,
+            )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = when {

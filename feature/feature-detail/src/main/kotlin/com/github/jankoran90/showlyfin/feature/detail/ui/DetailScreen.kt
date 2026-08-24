@@ -138,14 +138,21 @@ fun DetailScreen(
     // user 2026-08-01 („doporučení by mohlo být v menu karty filmu") — akce „Doporuč podobné" v ⋮:
     // vezme TENHLE titul jako referenci a otevře sekci „Podle filmu". null = shell ji nenapojil (TV).
     onSimilar: ((MediaItem) -> Unit)? = null,
+    // VESTIBUL (user 2026-08-24) — kartu otevřel klik na konkrétní díl (řada „Další díly"): vyber
+    // jeho sezónu a označ ho. null = běžný vstup na titul.
+    focusSeason: Int? = null,
+    focusEpisode: Int? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(item.traktId, item.tmdbId, item.imdbId) {
+    LaunchedEffect(item.traktId, item.tmdbId, item.imdbId, focusSeason, focusEpisode) {
         viewModel.load(item)
+        // POŘADÍ: až PO `load` — ten stav titulu resetuje (`focusedEpisode = null`), takže opačně
+        // by označení dílu smazal.
+        viewModel.focusEpisode(focusSeason, focusEpisode)
         // TENFOOT KOLO2 (K): po návratu (back) na tento titul obnov stashnutou filmografii, pokud tu je.
         viewModel.reopenPendingPersonSheet(item)
         // CURTAIN: na TV je přehrávač destinace TÉŽE Activity → detail se sem vrací novou kompozicí (ne
@@ -869,7 +876,8 @@ fun DetailScreen(
                     // (TV to má od KOLO2) → fajfky, progres, „další díl" a označení celé sezóny i tady.
                     watched = uiState.episodeWatched,
                     progress = uiState.episodeProgress,
-                    nextUp = uiState.nextUpEpisode,
+                    // VESTIBUL: klik na díl z „Další díly" označí TEN díl; jinak „další na řadě".
+                    nextUp = uiState.focusedEpisode ?: uiState.nextUpEpisode,
                     onToggleWatched = { s, e -> viewModel.toggleEpisodeWatched(s, e) },
                     onMarkSeasonWatched = { s, w -> viewModel.markSeasonWatched(s, w) },
                     onDownloadEpisode = { s, e -> viewModel.downloadEpisode(s, e) },

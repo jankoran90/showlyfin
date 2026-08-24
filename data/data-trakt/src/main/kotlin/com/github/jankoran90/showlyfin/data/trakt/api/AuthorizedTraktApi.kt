@@ -156,7 +156,7 @@ internal class AuthorizedTraktApi(
     override suspend fun postSyncWatchlist(request: SyncExportRequest) = syncService.postSyncWatchlist(request)
     override suspend fun postSyncWatched(request: SyncExportRequest) = syncService.postSyncWatched(request)
     override suspend fun postDeleteProgress(request: SyncExportRequest) = syncService.deleteHistory(request)
-    override suspend fun postDeleteWatchlist(request: SyncExportRequest) { syncService.deleteWatchlist(request) }
+    override suspend fun postDeleteWatchlist(request: SyncExportRequest) = syncService.deleteWatchlist(request)
     override suspend fun deleteHiddenShow(request: SyncExportRequest) = usersService.deleteHidden("progress_watched", request)
     override suspend fun deleteDroppedShow(request: SyncExportRequest) = usersService.deleteHidden("dropped", request)
     override suspend fun deleteHiddenMovie(request: SyncExportRequest) = usersService.deleteHidden("calendar", request)

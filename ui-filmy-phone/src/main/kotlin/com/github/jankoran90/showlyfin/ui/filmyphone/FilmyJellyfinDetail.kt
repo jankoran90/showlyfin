@@ -35,7 +35,12 @@ import javax.inject.Inject
  */
 sealed interface FilmyJfResolve {
     data object Loading : FilmyJfResolve
-    data class Immersive(val item: MediaItem) : FilmyJfResolve
+    /** [focusSeason]/[focusEpisode] = díl, přes který se sem přišlo (klik v řadě „Další díly"). */
+    data class Immersive(
+        val item: MediaItem,
+        val focusSeason: Int? = null,
+        val focusEpisode: Int? = null,
+    ) : FilmyJfResolve
     data object Fallback : FilmyJfResolve
 }
 
@@ -53,8 +58,12 @@ class FilmyJellyfinResolveViewModel @Inject constructor(
         resolvedFor = jellyfinId
         _state.value = FilmyJfResolve.Loading
         viewModelScope.launch {
-            val meta = library.getItemMeta(jellyfinId)
-            _state.value = if (meta != null && (meta.tmdbId != null || meta.imdbId != null)) {
+            // 🔴 Táž past jako na TV (user 2026-08-24, „Panák"): u EPIZODY je `providerIds.Tmdb` id
+            // DÍLU → dřív z ní vyšel FILM s cizím id. [resolveDetailTarget] vrátí kartu SERIÁLU
+            // a díl jen označí; nedohledatelný seriál spadne na jellyfinový detail dílu.
+            val target = library.resolveDetailTarget(jellyfinId)
+            val meta = target?.meta
+            _state.value = if (meta != null && !meta.isEpisode && (meta.tmdbId != null || meta.imdbId != null)) {
                 FilmyJfResolve.Immersive(
                     MediaItem(
                         traktId = 0L,
@@ -68,6 +77,8 @@ class FilmyJellyfinResolveViewModel @Inject constructor(
                         // Seriál MUSÍ být SHOW, jinak DetailViewModel volá fetchMovieDetails na chybné id.
                         type = if (meta.isSeries) MediaType.SHOW else MediaType.MOVIE,
                     ),
+                    focusSeason = target.focusSeason,
+                    focusEpisode = target.focusEpisode,
                 )
             } else {
                 FilmyJfResolve.Fallback
@@ -100,6 +111,8 @@ fun FilmyJellyfinDetail(
             onPlayJellyfin = onPlayJellyfin,
             onPlayStreamUrl = onPlayStreamUrl,
             castInOverflow = true,
+            focusSeason = s.focusSeason,
+            focusEpisode = s.focusEpisode,
             modifier = modifier,
         )
         FilmyJfResolve.Fallback -> JellyfinDetailScreen(

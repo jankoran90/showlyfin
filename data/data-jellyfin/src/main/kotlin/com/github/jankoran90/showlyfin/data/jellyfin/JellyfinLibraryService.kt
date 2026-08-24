@@ -70,8 +70,41 @@ class JellyfinLibraryService @Inject constructor(
                 name = r.name ?: "",
                 year = r.productionYear,
                 overview = r.overview,
+                isEpisode = r.type == BaseItemKind.EPISODE,
+                seriesId = r.seriesId?.toString(),
+                seasonNumber = r.parentIndexNumber,
+                episodeNumber = r.indexNumber,
             )
         }.onFailure { Timber.w(it, "[Jellyfin] getItemMeta failed for $jellyfinId") }.getOrNull()
+    }
+
+    /**
+     * VESTIBUL (user 2026-08-24: *„další díly ve filmotéce po kliknutí na díl … se ukáže například
+     * u epizody Panák seriálu Bluey nějaký film Panák"*) — CO SE MÁ OTEVŘÍT po kliku na Jellyfin
+     * položku.
+     *
+     * 🔴 Past: u EPIZODY je `providerIds.Tmdb` id EPIZODY, ne seriálu, a `type` není `SERIES` →
+     * rozcestníky detailu (TV i telefon) z toho udělaly FILM s cizím TMDB id a otevřely úplně jiný
+     * titul. Epizoda proto NIKDY nesmí sama sebou určovat kartu: dohledá se její SERIÁL (`seriesId`)
+     * a díl se jen označí (sezóna + číslo).
+     *
+     * Nepodaří-li se seriál dohledat, vracíme meta EPIZODY beze změny — volající pak spadne na
+     * jellyfinový detail dílu. To je poctivé („neumím kartu seriálu"), zatímco cizí film je lež.
+     */
+    suspend fun resolveDetailTarget(jellyfinId: String): JfDetailTarget? {
+        val meta = getItemMeta(jellyfinId) ?: return null
+        if (!meta.isEpisode) return JfDetailTarget(meta = meta)
+        val seriesId = meta.seriesId
+        val seriesMeta = seriesId?.let { getItemMeta(it) }
+        if (seriesMeta == null) {
+            Timber.w("[Jellyfin] epizoda %s bez dohledatelného seriálu (seriesId=%s)", jellyfinId, seriesId)
+            return JfDetailTarget(meta = meta)
+        }
+        return JfDetailTarget(
+            meta = seriesMeta,
+            focusSeason = meta.seasonNumber,
+            focusEpisode = meta.episodeNumber,
+        )
     }
 
     suspend fun getOwnedIds(userId: UUID): OwnedIds {
@@ -383,6 +416,24 @@ data class JfItemMeta(
     val name: String,
     val year: Int?,
     val overview: String?,
+    /** Položka je EPIZODA — její `tmdbId` patří DÍLU, ne seriálu (viz [JellyfinLibraryService.resolveDetailTarget]). */
+    val isEpisode: Boolean = false,
+    /** Jellyfin id seriálu, pod který epizoda patří (jen u epizody). */
+    val seriesId: String? = null,
+    /** Číslo sezóny epizody (`parentIndexNumber`). */
+    val seasonNumber: Int? = null,
+    /** Číslo dílu v sezóně (`indexNumber`). */
+    val episodeNumber: Int? = null,
+)
+
+/**
+ * Cíl detailu pro klik na Jellyfin položku: u epizody karta SERIÁLU + označení dílu, u ostatních
+ * položka sama. Viz [JellyfinLibraryService.resolveDetailTarget].
+ */
+data class JfDetailTarget(
+    val meta: JfItemMeta,
+    val focusSeason: Int? = null,
+    val focusEpisode: Int? = null,
 )
 
 /** TV DETAIL REDESIGN (OTA 299): stav epizod seriálu z Jellyfinu, klíčováno (season, episode). */

@@ -122,6 +122,9 @@ fun SeasonEpisodeSection(
                     PhoneEpisodeRow(
                         episode = e,
                         onClick = { play(e) },
+                        // Parita s TV: díl „na řadě" (klik z „Další díly" / první nedokoukaný) je vidět.
+                        highlighted = nextUp != null &&
+                            e.seasonNumber == nextUp.first && e.episodeNumber == nextUp.second,
                         // Parita s TV (tam long-press funguje od KOLO2) — telefon fajfku ani přepínač neměl.
                         onLongClick = toggle?.let { cb -> { cb(e) } },
                         onDownload = onDownloadEpisode?.let { cb ->

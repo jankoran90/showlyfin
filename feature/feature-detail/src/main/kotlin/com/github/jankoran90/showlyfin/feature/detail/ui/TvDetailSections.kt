@@ -96,7 +96,8 @@ internal fun TvDetailSections(
                 },
                 watched = uiState.episodeWatched,
                 progress = uiState.episodeProgress,
-                nextUp = uiState.nextUpEpisode,
+                // VESTIBUL: klik na díl z „Další díly" označí (a zafokusuje) TEN díl.
+                nextUp = uiState.focusedEpisode ?: uiState.nextUpEpisode,
                 // KOLO2 (J): long-press na epizodě → přepni zhlédnuto (VM zapíše do Jellyfinu; no-op mimo knihovnu).
                 onToggleWatched = { s, e -> viewModel.toggleEpisodeWatched(s, e) },
                 onMarkSeasonWatched = { s, w -> viewModel.markSeasonWatched(s, w) },

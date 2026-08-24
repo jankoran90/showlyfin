@@ -32,10 +32,10 @@ interface AuthorizedTraktRemoteDataSource {
     suspend fun deleteList(listId: Long)
     suspend fun postAddListItems(listTraktId: Long, showsIds: List<Long>, moviesIds: List<Long>)
     suspend fun postRemoveListItems(listTraktId: Long, showsIds: List<Long>, moviesIds: List<Long>)
-    suspend fun postSyncWatchlist(request: SyncExportRequest)
+    suspend fun postSyncWatchlist(request: SyncExportRequest): SyncWatchlistResult
     suspend fun postSyncWatched(request: SyncExportRequest)
     suspend fun postDeleteProgress(request: SyncExportRequest)
-    suspend fun postDeleteWatchlist(request: SyncExportRequest)
+    suspend fun postDeleteWatchlist(request: SyncExportRequest): SyncWatchlistResult
     suspend fun deleteHiddenShow(request: SyncExportRequest)
     suspend fun deleteDroppedShow(request: SyncExportRequest)
     suspend fun deleteHiddenMovie(request: SyncExportRequest)
