@@ -58,10 +58,11 @@ class FilmotekaSettingsStore @Inject constructor(
 
     private val _showCollections = MutableStateFlow(loadShowCollections())
     /**
-     * FOYER (SHW-107, user 2026-07-26) — karty KOLEKCÍ (Jellyfin BoxSet) ve Filmotéce. Default **VYPNUTO**:
-     * Jellyfin vrací kolekce i při dotazu na Movie/Series a Filmotéka je brala jako film (TMDB id kolekce →
-     * karta s cizím obsahem a bez čeho přehrát). S vypnutým přepínačem jsou vidět jen filmy zvlášť; se
-     * zapnutým přibude řada „Kolekce" s kartami, které OTEVŘOU obsah kolekce (ne fiktivní film).
+     * ATRIUM (SHW-118, user 2026-08-24) — SDRUŽOVÁNÍ kolekcí ve Filmotéce. Default **ZAPNUTO** (user:
+     * „já stejně chci default karty kolekce"). Zapnuto = díly jedné kolekce (Auta / Auta 2 / Auta 3)
+     * zastupuje JEDNA karta na abecedním místě kolekce, klik otevře její obsah; vypnuto = každý díl
+     * zvlášť. Sdružuje napříč zdroji přes TMDB collection id, přednost má Jellyfin BoxSet — parita
+     * s webem (`static/filmy/flatgrid.js`).
      */
     val showCollections: StateFlow<Boolean> = _showCollections.asStateFlow()
 
@@ -137,7 +138,7 @@ class FilmotekaSettingsStore @Inject constructor(
     }
 
     private fun loadShowCollections(): Boolean =
-        prefs.getBoolean(keyFor(KEY_SHOW_COLLECTIONS), prefs.getBoolean(KEY_SHOW_COLLECTIONS, false))
+        prefs.getBoolean(keyFor(KEY_SHOW_COLLECTIONS), prefs.getBoolean(KEY_SHOW_COLLECTIONS, true))
 
     // ── SYNC most (FOYER SHW-107) ────────────────────────────────────────────────
     //

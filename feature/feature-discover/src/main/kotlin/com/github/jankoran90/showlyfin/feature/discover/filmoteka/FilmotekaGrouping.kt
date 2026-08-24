@@ -71,28 +71,68 @@ object FilmotekaGrouping {
         countryFilter: Set<CinematographyRegion>,
         enabledRegions: Set<CinematographyRegion>,
         hybridGenres: Boolean,
+        collectionGroups: List<FilmotekaCollectionGroup> = emptyList(),
     ): FilmotekaGroupingResult {
         val available = availableGenresOf(all, hybridGenres)
         val availableC = availableCountriesOf(all, enabledRegions)
-        val filtered = all
-            .let { if (genreFilter.isEmpty()) it else it.filter { m -> mainGenreOf(m, hybridGenres) in genreFilter } }
-            .let { if (countryFilter.isEmpty()) it else it.filter { m -> mainRegionOf(m) in countryFilter } }
+        // ATRIUM (SHW-118): sdružení PŘED filtrem i grupováním → karta kolekce se chová jako každý
+        // jiný titul (filtruje se, řadí se, je ve VŠECH osách), jen zastupuje své díly.
+        val entries = withCollections(all, collectionGroups)
+        val filtered = entries
+            .let { if (genreFilter.isEmpty()) it else it.filter { e -> mainGenreOf(e.item, hybridGenres) in genreFilter } }
+            .let { if (countryFilter.isEmpty()) it else it.filter { e -> mainRegionOf(e.item) in countryFilter } }
         val rails = when (axis) {
             FilmotekaAxis.ALL -> groupAll(filtered, allSort)
             FilmotekaAxis.GENRE -> groupByGenre(filtered, hybridGenres)
             FilmotekaAxis.COUNTRY -> groupByCountry(filtered, enabledRegions)
         }
-        return FilmotekaGroupingResult(rails, all.size, available, availableC)
+        return FilmotekaGroupingResult(rails, entries.size, available, availableC)
     }
 
+    /**
+     * Nahraď členy kolekce JEDNOU zastupující položkou (user 2026-08-24: „slouč její děti do jedné
+     * mateřské karty kolekce"). Titul, který v žádné sdružené kolekci není, projde beze změny.
+     */
+    private fun withCollections(
+        all: List<MediaItem>,
+        groups: List<FilmotekaCollectionGroup>,
+    ): List<Entry> {
+        if (groups.isEmpty()) return all.map { Entry(it) }
+        val claimed = groups.flatMapTo(HashSet()) { it.memberKeys }
+        val singles = all.filter { filmotekaDedupKey(it) !in claimed }.map { Entry(it) }
+        return singles + groups.map { Entry(it.asMediaItem(), it) }
+    }
+
+    /**
+     * Kolekce jako běžná položka pro řazení/filtrování: žánry, země a rok si bere od svých dílů, takže
+     * spadne do stejné sekce, kam by spadl její hlavní díl. Datum „přidáno" = nejmladší díl.
+     */
+    private fun FilmotekaCollectionGroup.asMediaItem() = MediaItem(
+        traktId = 0L,
+        tmdbId = null,
+        imdbId = null,
+        title = name,
+        year = year,
+        overview = null,
+        rating = null,
+        genres = members.firstNotNullOfOrNull { it.genres?.takeIf(List<String>::isNotEmpty) },
+        type = com.github.jankoran90.showlyfin.core.domain.MediaType.MOVIE,
+        originCountries = members.firstNotNullOfOrNull { it.originCountries?.takeIf(List<String>::isNotEmpty) },
+        fallbackPosterUrl = posterUrl,
+        addedAtMs = addedAtMs,
+    )
+
+    /** Položka seznamu: buď samotný titul, nebo kolekce zastupující své díly ([group] neprázdné). */
+    private data class Entry(val item: MediaItem, val group: FilmotekaCollectionGroup? = null)
+
     /** Osa „Vše": jedna plochá řada, řazení Nedávno (addedAtMs) / Abecedně (český Collator). */
-    private fun groupAll(items: List<MediaItem>, allSort: FilmotekaAllSort): List<FilmotekaRail> {
+    private fun groupAll(items: List<Entry>, allSort: FilmotekaAllSort): List<FilmotekaRail> {
         if (items.isEmpty()) return emptyList()
         val sorted = when (allSort) {
-            FilmotekaAllSort.RECENT -> items.sortedByDescending { it.addedAtMs ?: Long.MIN_VALUE }
+            FilmotekaAllSort.RECENT -> items.sortedByDescending { it.item.addedAtMs ?: Long.MIN_VALUE }
             FilmotekaAllSort.ALPHABETICAL -> {
                 val coll = java.text.Collator.getInstance(java.util.Locale("cs", "CZ"))
-                items.sortedWith(Comparator { a, b -> coll.compare(a.displayTitle, b.displayTitle) })
+                items.sortedWith(Comparator { a, b -> coll.compare(a.item.displayTitle, b.item.displayTitle) })
             }
         }
         val title = when (allSort) {
@@ -103,10 +143,10 @@ object FilmotekaGrouping {
     }
 
     /** Řady dle HLAVNÍHO žánru, sestupně dle četnosti. Film v jedné sekci. */
-    private fun groupByGenre(items: List<MediaItem>, hybrid: Boolean): List<FilmotekaRail> {
-        val byGenre = LinkedHashMap<String, MutableList<MediaItem>>()
+    private fun groupByGenre(items: List<Entry>, hybrid: Boolean): List<FilmotekaRail> {
+        val byGenre = LinkedHashMap<String, MutableList<Entry>>()
         for (item in items) {
-            val g = mainGenreOf(item, hybrid)
+            val g = mainGenreOf(item.item, hybrid)
             if (!g.isNullOrBlank()) byGenre.getOrPut(g) { mutableListOf() }.add(item)
         }
         return byGenre.entries
@@ -118,10 +158,10 @@ object FilmotekaGrouping {
     }
 
     /** Řady dle HLAVNÍHO regionu (film v jedné sekci); vypnuté regiony skryj, OSTATNI vždy. Řazení = pořadí enumu. */
-    private fun groupByCountry(items: List<MediaItem>, enabled: Set<CinematographyRegion>): List<FilmotekaRail> {
-        val byRegion = LinkedHashMap<CinematographyRegion, MutableList<MediaItem>>()
+    private fun groupByCountry(items: List<Entry>, enabled: Set<CinematographyRegion>): List<FilmotekaRail> {
+        val byRegion = LinkedHashMap<CinematographyRegion, MutableList<Entry>>()
         for (item in items) {
-            val region = mainRegionOf(item)
+            val region = mainRegionOf(item.item)
             if (region != CinematographyRegion.OSTATNI && region !in enabled) continue
             byRegion.getOrPut(region) { mutableListOf() }.add(item)
         }
@@ -135,12 +175,28 @@ object FilmotekaGrouping {
         }.filter { it.items.isNotEmpty() }
     }
 
-    private fun MediaItem.toHomeRowItem(axisValue: String) = HomeRowItem(
-        key = "filmo_${axisValue}_${tmdbId ?: imdbId ?: traktId}",
-        title = displayTitle,
-        year = year,
-        posterUrl = posterUrl("w342"),
-        landscapeUrl = backdropUrl("w780"),
-        mediaItem = this,
-    )
+    private fun Entry.toHomeRowItem(axisValue: String): HomeRowItem {
+        val g = group ?: return HomeRowItem(
+            key = "filmo_${axisValue}_${item.tmdbId ?: item.imdbId ?: item.traktId}",
+            title = item.displayTitle,
+            year = item.year,
+            posterUrl = item.posterUrl("w342"),
+            landscapeUrl = item.backdropUrl("w780"),
+            mediaItem = item,
+        )
+        // ATRIUM (SHW-118): karta kolekce — klik otevře její OBSAH, ne detail s hledáním zdroje.
+        // `mediaItem` schválně zůstává null: kolekce není titul a nesmí se dostat do cesty přehrání.
+        return HomeRowItem(
+            key = "filmo_${axisValue}_${g.id}",
+            title = g.name,
+            subtitle = dilyLabel(g.members.size),
+            year = g.year,
+            posterUrl = g.posterUrl,
+            landscapeUrl = g.backdropUrl,
+            mediaItem = null,
+            jellyfinId = g.jellyfinId,
+            collection = true,
+            collectionKey = g.id,
+        )
+    }
 }

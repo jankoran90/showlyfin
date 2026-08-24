@@ -33,7 +33,6 @@ import com.github.jankoran90.showlyfin.feature.discover.filmoteka.TvFilmotekaVie
 fun FilmyFilmotekaScreen(
     onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
-    onOpenCollection: (id: String, title: String) -> Unit,
     modifier: Modifier = Modifier,
     vm: TvFilmotekaViewModel = hiltViewModel(),
 ) {
@@ -46,7 +45,6 @@ fun FilmyFilmotekaScreen(
         state = state,
         onMenu = onMenu,
         onOpenDetail = onOpenDetail,
-        onOpenCollection = onOpenCollection,
         onAxis = vm::setAxis,
         onAllSort = vm::setAllSort,
         onToggleGenre = vm::toggleGenreFilter,

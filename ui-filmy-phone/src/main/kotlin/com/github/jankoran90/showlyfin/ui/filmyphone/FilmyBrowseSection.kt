@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,11 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ViewList
@@ -28,7 +22,6 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,16 +46,10 @@ import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegio
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
-import com.github.jankoran90.showlyfin.core.ui.MediaCard
-import com.github.jankoran90.showlyfin.core.ui.MediaRow
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.cachedDirector
-import com.github.jankoran90.showlyfin.core.ui.PosterCard
-import com.github.jankoran90.showlyfin.core.ui.gridCellsFor
-import com.github.jankoran90.showlyfin.core.ui.rememberGridColumnPref
 import com.github.jankoran90.showlyfin.core.ui.warmDirector
-import androidx.compose.foundation.lazy.LazyRow
-import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollection
+import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollectionGroup
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaRail
 import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaUiState
 import kotlinx.coroutines.coroutineScope
@@ -84,10 +71,6 @@ fun FilmyBrowseSection(
     state: FilmotekaUiState,
     onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
-    // 2026-08-24 (user: karty kolekcí ve Filmotéce nikdy nikam nevedly na telefonu — chybějící UI,
-    // TV svoje `state.collections` renderovala odjakživa, telefon ne). Default no-op → volitelné,
-    // ať se „Pro tebe" (sdílí tuhle sekci) nemusí měnit, dokud pro ni kolekce nedávají smysl.
-    onOpenCollection: (id: String, title: String) -> Unit = { _, _ -> },
     onAxis: (FilmotekaAxis) -> Unit,
     onAllSort: (FilmotekaAllSort) -> Unit,
     onToggleGenre: (String) -> Unit,
@@ -108,6 +91,8 @@ fun FilmyBrowseSection(
     // název + popisek + REŽIE. Filtruje se render-time nad railama (bez fetch). Prázdný dotaz = beze změny.
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    // ATRIUM (SHW-118) — otevřená kolekce (překryv s jejími díly); null = zavřeno.
+    var openCollection by remember { mutableStateOf<FilmotekaCollectionGroup?>(null) }
     // SEARCH-REŽISÉR (user 07-19): index režisérů pro hledání — provider + verze (roste, jak se dotahují).
     val directorProvider = LocalDirectorProvider.current
     var directorVersion by remember { mutableStateOf(0) }
@@ -141,7 +126,13 @@ fun FilmyBrowseSection(
             rail.copy(items = rail.items.filter { item ->
                 val mi = item.mediaItem
                 val dir = mi?.let { cachedDirector(it.tmdbId, it.imdbId) } ?: ""
-                q in normalizeSearch(item.title + " " + (mi?.overview ?: "") + " " + dir)
+                // ATRIUM: karta kolekce se najde i podle názvu DÍLU — hledání „auta" nesmí přestat
+                // fungovat jen proto, že díly teď zastupuje jedna karta (user 2026-08-24).
+                val memberTitles = item.collectionKey
+                    ?.let { key -> state.collectionGroups.firstOrNull { it.id == key } }
+                    ?.members?.joinToString(" ") { it.displayTitle }
+                    .orEmpty()
+                q in normalizeSearch(item.title + " " + (mi?.overview ?: "") + " " + dir + " " + memberTitles)
             })
         }.filter { it.items.isNotEmpty() }
     }
@@ -191,21 +182,29 @@ fun FilmyBrowseSection(
                 )
             }
         }
-        // 2026-08-24 (user: „nechci žádný chipy kolekce, filmy z kolekce se musí zobrazovat mezi
-        // ostatními") — samostatná řada karet ZRUŠENA, byla to špatná stavba. Jednotlivé filmy z
-        // kolekcí teď [FilmotekaBaseLoader.loadJellyfinLibrary] natahuje rovnou do hlavního seznamu
-        // (viz commit "loadJellyfinLibrary teď natahuje i členy kolekcí"). `onOpenCollection` a
-        // `FilmotekaCollectionsRow` zůstávají v kódu nepoužité — počkají na potvrzení, jestli chce
-        // přepínač "Karty kolekcí" opravdu SDRUŽOVAT díly (Auta/Auta 2/Auta 3) pod jednu kartu.
+        // ATRIUM (SHW-118, user 2026-08-24 „slouč její děti do jedné mateřské karty kolekce"):
+        // žádná extra řada nahoře — karta kolekce sedí PŘÍMO v seznamu na svém abecedním místě a
+        // zastupuje své díly (sdružení řeší [FilmotekaGrouping]). Klik ji rozbalí překryvem.
+        val openGroupOf: (String) -> Unit = { key ->
+            openCollection = state.collectionGroups.firstOrNull { it.id == key }
+        }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
                 state.loading -> CircularProgressIndicator()
                 state.rails.isEmpty() -> emptyContent()
                 displayRails.isEmpty() -> FilmotekaNoResults(query)
-                viewMode == ViewMode.LIST -> FilmotekaList(displayRails, onOpenDetail)
-                else -> FilmotekaGrid(displayRails, onOpenDetail)
+                viewMode == ViewMode.LIST -> FilmotekaList(displayRails, onOpenDetail, openGroupOf)
+                else -> FilmotekaGrid(displayRails, onOpenDetail, openGroupOf)
             }
         }
+    }
+
+    openCollection?.let { group ->
+        FilmyCollectionOverlay(
+            group = group,
+            onDismiss = { openCollection = null },
+            onOpenDetail = { item -> openCollection = null; onOpenDetail(item) },
+        )
     }
 
     if (showGenreFilter) {
@@ -357,87 +356,8 @@ private fun <T> SelectedFilterChips(labels: List<Pair<String, T>>, onRemove: (T)
     }
 }
 
-/** 2026-08-24 — vodorovná řada karet kolekcí (Jellyfin BoxSet) nad hlavní mřížkou/seznamem. */
 @Composable
-private fun FilmotekaCollectionsRow(
-    collections: List<FilmotekaCollection>,
-    onOpenCollection: (id: String, title: String) -> Unit,
-) {
-    Column {
-        SectionHeader("Kolekce")
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            listItems(collections, key = { it.jellyfinId }) { fc ->
-                PosterCard(
-                    posterUrl = fc.posterUrl,
-                    title = fc.name,
-                    year = null,
-                    onClick = { onOpenCollection(fc.jellyfinId, fc.name) },
-                    modifier = Modifier.size(width = 110.dp, height = 200.dp),
-                )
-            }
-        }
-    }
-}
-
-/** Mřížka plakátů se sekcemi. Víc řad (žánr/země) → full-width nadpis mezi sekcemi; jedna řada (Vše) → bez nadpisu. */
-@Composable
-private fun FilmotekaGrid(rails: List<FilmotekaRail>, onOpenDetail: (MediaItem) -> Unit) {
-    val cols = rememberGridColumnPref()
-    val showHeaders = rails.size > 1
-    LazyVerticalGrid(
-        columns = gridCellsFor(ViewMode.GRID, cols),
-        contentPadding = PaddingValues(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        rails.forEach { rail ->
-            if (showHeaders) {
-                item(key = "hdr_${rail.id}", span = { GridItemSpan(maxLineSpan) }) {
-                    SectionHeader(rail.title)
-                }
-            }
-            gridItems(rail.items, key = { it.key }) { row ->
-                row.mediaItem?.let { mi -> MediaCard(item = mi, onClick = { onOpenDetail(mi) }) }
-            }
-        }
-    }
-}
-
-/** Seznam bohatých řádků (cover + název + režie + rok · žánry + popis) — stejný řádek jako domov. */
-@Composable
-private fun FilmotekaList(rails: List<FilmotekaRail>, onOpenDetail: (MediaItem) -> Unit) {
-    val showHeaders = rails.size > 1
-    LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        rails.forEach { rail ->
-            if (showHeaders) {
-                item(key = "hdr_${rail.id}") { SectionHeader(rail.title) }
-            }
-            listItems(rail.items, key = { it.key }) { row ->
-                row.mediaItem?.let { mi ->
-                    MediaRow(
-                        item = mi,
-                        onClick = { onOpenDetail(mi) },
-                        watched = row.watched,
-                        genreLine = mi.genres?.filter { it.isNotBlank() }?.take(3)?.joinToString(" · "),
-                        showDirector = true,
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
+internal fun SectionHeader(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleMedium,

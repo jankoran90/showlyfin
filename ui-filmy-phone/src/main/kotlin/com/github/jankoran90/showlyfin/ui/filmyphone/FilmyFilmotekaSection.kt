@@ -82,8 +82,8 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
             onCheckedChange = { vm.setOnlyWithSource(it) },
         )
         SettingSwitchRow(
-            title = "Karty kolekcí",
-            subtitle = "Zobrazit řadu „Kolekce\" (Jellyfin BoxSet). Vypnuto = jen jednotlivé filmy.",
+            title = "Sdružovat kolekce",
+            subtitle = "Díly jedné kolekce (Auta, Auta 2, Auta 3…) zastoupí JEDNA karta na svém místě v seznamu; klik otevře její obsah. Spojí i díly z různých zdrojů (Jellyfin + uložené zdroje). Vypnuto = každý díl zvlášť.",
             checked = showCollections,
             onCheckedChange = { vm.setShowCollections(it) },
         )

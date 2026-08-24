@@ -33,6 +33,12 @@ data class HomeRowItem(
      * s TMDB id kolekce → karta s cizím obsahem, u které nebylo co přehrát (user 2026-07-26).
      */
     val collection: Boolean = false,
+    /**
+     * ATRIUM (SHW-118) — id sdružené kolekce Filmotéky (`jf:<boxSetId>` / `tmdb:<collectionId>`).
+     * Přes něj si obrazovka najde členy v `FilmotekaUiState.collectionGroups`. Neprázdné jen u karet
+     * se zapnutým [collection]; kolekce ze samotného Jellyfinu se otevírají přes [jellyfinId].
+     */
+    val collectionKey: String? = null,
 )
 
 /** Stav jedné řady na domově (lazy načítaná). */

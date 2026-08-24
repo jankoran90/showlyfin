@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /** Jedna řada Filmotéky (hodnota osy → tituly). Neutrální model — UI (ui-tv) ho mapuje na `TvRail`. */
@@ -68,10 +69,11 @@ data class FilmotekaUiState(
     /** Všechny hlavní regiony přítomné v bázi (dle četnosti sestupně) — nabídka pro picker filtru země. */
     val availableCountries: List<CinematographyRegion> = emptyList(),
     /**
-     * FOYER (SHW-107) — Jellyfin kolekce (BoxSet) jako VLASTNÍ karty; prázdné, když je přepínač „Karty
-     * kolekcí" vypnutý (default). Klik na kolekci otevře její obsah, ne detail filmu.
+     * ATRIUM (SHW-118) — sdružené kolekce: karta kolekce ZASTUPUJE své díly přímo v řadách (nahoře žádná
+     * extra řada — user 2026-08-24). Prázdné při vypnutém přepínači „Karty kolekcí" → díly se pak zobrazí
+     * jednotlivě. Obrazovka si tu podle `HomeRowItem.collectionKey` najde členy k zobrazení obsahu.
      */
-    val collections: List<FilmotekaCollection> = emptyList(),
+    val collectionGroups: List<FilmotekaCollectionGroup> = emptyList(),
 )
 
 /**
@@ -91,6 +93,7 @@ class TvFilmotekaViewModel @Inject constructor(
     // FOYER (SHW-107): sběr báze (JF/working/Trakt/Oblíbené + enrich + věkový gate) žije ve sdíleném
     // [FilmotekaBaseLoader] — VM drží už jen stav sekce (osa, filtry, řady).
     private val filmotekaBase: FilmotekaBaseLoader,
+    private val collectionResolver: FilmotekaCollectionResolver,
     // Poslední známá báze z disku → sekce ukáže obsah hned po otevření (user 2026-07-29).
     private val diskCache: FilmotekaDiskCache,
     private val favorites: FavoritesRepository,
@@ -120,8 +123,8 @@ class TvFilmotekaViewModel @Inject constructor(
     @Volatile private var baseItems: List<MediaItem> = emptyList()
     @Volatile private var favoriteItems: List<MediaItem> = emptyList()
 
-    /** FOYER — načtené Jellyfin kolekce (prázdné při vypnutém přepínači). */
-    @Volatile private var collections: List<FilmotekaCollection> = emptyList()
+    /** ATRIUM — sdružené kolekce (prázdné při vypnutém přepínači „Karty kolekcí"). */
+    @Volatile private var collectionGroups: List<FilmotekaCollectionGroup> = emptyList()
 
     /** GENRE-FILTER — živý výběr žánrů (viz [FilmotekaUiState.genreFilter]). Drží se napříč přeskupením os. */
     @Volatile private var genreFilter: Set<String> = emptySet()
@@ -299,7 +302,9 @@ class TvFilmotekaViewModel @Inject constructor(
                 }
             }
             baseItems = filmotekaBase.loadBase()
-            collections = filmotekaBase.loadCollections()
+            // ATRIUM (SHW-118): sdružení AŽ po bázi — členy kolekce bereme jen z toho, co prošlo
+            // dedupem i věkovým gate, takže se do kolekce nemůže propašovat skrytý titul.
+            collectionGroups = resolveCollections()
             rebuild(settings.defaultAxis.value)
             // Na disk až hotový obsah (báze ∪ Oblíbené, s dopočtenými daty) a jen z ÚPLNÉHO sběru —
             // neúplný (JF zapnutý, ale knihovna mlčela) by se zafixoval.
@@ -318,6 +323,9 @@ class TvFilmotekaViewModel @Inject constructor(
      */
     private suspend fun refreshFavorites(list: List<FavoriteItem>) {
         favoriteItems = filmotekaBase.loadFavorites(list) + filmotekaBase.loadWants(list)
+        // ATRIUM: Oblíbené můžou přinést další díl kolekce → přepočti sdružení, ať karta sedí (TMDB
+        // odpovědi jsou cachované, takže druhý průchod nic nedotahuje).
+        collectionGroups = resolveCollections()
         rebuild(_state.value.axis)
         // Oblíbené dorazí často AŽ po sběru báze a nesou data „přidáno" → přepiš jimi diskovou cache,
         // jinak by si příští start pamatoval seznam bez nich (a řadil je na konec).
@@ -336,6 +344,18 @@ class TvFilmotekaViewModel @Inject constructor(
      * volá i „Pro tebe" → obě sekce filtrují/grupují 1:1, žádný drift). Zde jen posbírej bázi (base>favorites),
      * předej živé filtry + nastavení a výsledek promítni do stavu.
      */
+    /**
+     * Sdružené kolekce nad aktuální bází. Vypnutý přepínač „Karty kolekcí" = prázdno (díly zůstanou
+     * jednotlivě). Selhání není fatální — Filmotéka se pak jen zobrazí nesdružená, ne prázdná.
+     */
+    private suspend fun resolveCollections(): List<FilmotekaCollectionGroup> {
+        if (!settings.showCollections.value) return emptyList()
+        val all = filmotekaBase.mergeWithFavorites(baseItems, favoriteItems)
+        return runCatching {
+            collectionResolver.resolve(all, filmotekaBase.lastJellyfinCollections)
+        }.getOrElse { Timber.w(it, "[Filmoteka] sdružení kolekcí selhalo"); emptyList() }
+    }
+
     private fun rebuild(axis: FilmotekaAxis) {
         val staleNow = filmotekaBase.traktStale.value
         // FOYER (SHW-107): merge base>Oblíbené + dopočet data „přidáno" dělá SDÍLENÝ [FilmotekaBaseLoader]
@@ -349,13 +369,14 @@ class TvFilmotekaViewModel @Inject constructor(
             countryFilter = countryFilter,
             enabledRegions = settings.enabledRegions.value,
             hybridGenres = settings.hybridGenres.value,
+            collectionGroups = collectionGroups,
         )
         _state.value = FilmotekaUiState(
             axis = axis, rails = result.rails, loading = false,
             allSort = settings.allSort.value, total = result.total,
             genreFilter = genreFilter, availableGenres = result.availableGenres,
             countryFilter = countryFilter, availableCountries = result.availableCountries,
-            collections = collections,
+            collectionGroups = collectionGroups,
             traktStale = staleNow,
         )
     }

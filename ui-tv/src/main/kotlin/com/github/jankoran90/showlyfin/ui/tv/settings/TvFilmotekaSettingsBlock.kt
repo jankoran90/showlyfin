@@ -118,12 +118,12 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
             checked = onlyWithSource,
             onCheckedChange = { vm.setOnlyWithSource(it) },
         )
-        // FOYER (SHW-107, user 2026-07-26): Jellyfin vrací kolekce (BoxSet) i mezi filmy a Filmotéka je brala
-        // jako film → karta, u které nebylo co přehrát. Vypnuto (default) = jen filmy zvlášť; zapnuto = řada
-        // „Kolekce" s kartami, které otevřou obsah kolekce.
+        // ATRIUM (SHW-118, user 2026-08-24): sdružení dílů kolekce pod jednu kartu, napříč zdroji
+        // (Jellyfin BoxSet + uložený zdroj přes TMDB kolekci). Default ZAPNUTO. Žádná extra řada —
+        // karta sedí přímo mezi filmy na svém místě.
         TvToggleRow(
-            label = "Karty kolekcí",
-            subtitle = "Zobrazit ve Filmotéce řadu „Kolekce\" (Jellyfin BoxSet). Vypnuto = jen jednotlivé filmy.",
+            label = "Sdružovat kolekce",
+            subtitle = "Díly jedné kolekce (Auta, Auta 2, Auta 3…) zastoupí JEDNA karta na svém místě v seznamu; klik otevře její obsah. Spojí i díly z různých zdrojů (Jellyfin + uložené zdroje). Vypnuto = každý díl zvlášť.",
             checked = showCollections,
             onCheckedChange = { vm.setShowCollections(it) },
         )

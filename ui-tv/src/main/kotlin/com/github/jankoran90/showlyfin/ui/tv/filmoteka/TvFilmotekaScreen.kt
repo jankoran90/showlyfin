@@ -53,6 +53,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.focus.onFocusChanged
 import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
+import com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollectionGroup
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.ui.tv.components.AutoFocusFirst
 import com.github.jankoran90.showlyfin.ui.tv.components.TvHomeCard
@@ -96,6 +97,9 @@ fun TvFilmotekaScreen(
     // na už aktivní osu Žánr.
     var showGenreFilter by remember { mutableStateOf(false) }
 
+    // ATRIUM (SHW-118) — otevřená sdružená kolekce (překryv s díly); null = zavřeno.
+    var openCollection by remember { mutableStateOf<FilmotekaCollectionGroup?>(null) }
+
     // KÁNON (CONVERGE): osa Filmotéky (Vše | Žánr | Země) jako chipy VEDLE názvu sekce — ne ve vlastním Row
     // nad TvRailList (to tlačilo obsah dolů a osa byla vizuálně odtržená od titulku). V řadovém stavu je
     // hlavička uvnitř TvRailList (sectionActions), v prázdném/loading nad obsahem přes TvSectionHeader.
@@ -123,28 +127,27 @@ fun TvFilmotekaScreen(
     fun clickItem(item: HomeRowItem) {
         val media = item.mediaItem
         val jf = item.jellyfinId
+        val collectionKey = item.collectionKey
         when {
+            // ATRIUM (SHW-118): sdružená kolekce se otevře VLASTNÍM překryvem, ne obsahem BoxSetu —
+            // kolekce může mít díl mimo Jellyfin (sdilej.cz) a ten by v JF prohlížeči chyběl.
+            collectionKey != null ->
+                openCollection = state.collectionGroups.firstOrNull { it.id == collectionKey }
             item.collection && jf != null -> onOpenCollection(jf, item.title)
             media != null -> onOpenDetail(media)
             jf != null -> onOpenJellyfinDetail(jf)
         }
     }
 
-    // 🔒 2026-08-24 (user: „nechci žádné chipy kolekce, filmy z kolekce se musí zobrazovat mezi
-    // ostatními, nevymýšlej nové sekce/view type") — samostatná karta kolekce ZRUŠENA i na TV
-    // (telefon už tenhle den dřív). Jednotlivé filmy z kolekcí teď natahuje rovnou do `state.rails`
-    // [FilmotekaBaseLoader.loadJellyfinLibrary], takže tahle extra karta by je jen DUPLIKOVALA
-    // (přesně to user nahlásil: „zobrazují se jak v kolekci tak zvlášť"). VŽDY prázdné, dokud
-    // nevznikne skutečné sdružování dílů pod jednu kartu (jiná feature, zatím nepotvrzeno).
-    val collectionCards = emptyList<HomeRowItem>()
+    // ATRIUM (SHW-118): žádná samostatná řada „Kolekce" nahoře (user: „žádná extra řada, to už jsem
+    // říkal") — karty kolekcí sedí přímo mezi filmy na svém místě, sdružení řeší [FilmotekaGrouping].
 
     Box(Modifier.fillMaxSize()) {
         // FOYER — plochá osa „Vše" v režimu MŘÍŽKA (TV default): jedna velká abecední mřížka místo jedné
         // dlouhé řady. Osy Žánr/Země a režim „Řada" jedou dál přes TvRailList (řady mají svůj smysl).
-        val flatItems = remember(state.rails, state.axis, sort, collectionCards) {
+        val flatItems = remember(state.rails, state.axis, sort) {
             if (state.axis != FilmotekaAxis.ALL) emptyList()
-            // Kolekce (když jsou zapnuté) drží pohromadě na začátku — jsou to rozcestníky, ne filmy.
-            else collectionCards + state.rails.flatMap { it.items }.sortedBy(sort)
+            else state.rails.flatMap { it.items }.sortedBy(sort)
         }
         if (state.axis == FilmotekaAxis.ALL && viewMode == ViewMode.GRID && flatItems.isNotEmpty()) {
             TvFilmotekaGrid(
@@ -156,11 +159,7 @@ fun TvFilmotekaScreen(
                 modifier = modifier.fillMaxSize(),
             )
         } else if (state.rails.isNotEmpty()) {
-            val rails = remember(state.rails, collectionCards) {
-                val base = state.rails.map { it.toTvRail() }
-                if (collectionCards.isEmpty()) base
-                else listOf(collectionRail(collectionCards)) + base
-            }
+            val rails = remember(state.rails) { state.rails.map { it.toTvRail() } }
             TvRailList(
                 rails = rails,
                 sectionTitle = "Filmotéka",
@@ -187,6 +186,17 @@ fun TvFilmotekaScreen(
                     }
                 }
             }
+        }
+
+        openCollection?.let { group ->
+            TvFilmotekaCollectionOverlay(
+                group = group,
+                onDismiss = { openCollection = null },
+                onItemClick = { item ->
+                    openCollection = null
+                    item.mediaItem?.let(onOpenDetail) ?: item.jellyfinId?.let(onOpenJellyfinDetail)
+                },
+            )
         }
 
         if (showGenreFilter) {
@@ -297,17 +307,6 @@ private fun TvFilmotekaGrid(
 private fun Centered(content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
 }
-
-/** FOYER — řada „Kolekce" nad ostatními řadami Filmotéky (jen když jsou karty kolekcí zapnuté). */
-private fun collectionRail(cards: List<HomeRowItem>): TvRail = TvRail(
-    id = "filmo_collections",
-    title = "Kolekce",
-    style = HomeCardStyle.POSTER,
-    items = cards,
-    configId = "filmo_collections",
-    showTitles = true,
-    immersiveHeader = false,
-)
 
 private fun FilmotekaRail.toTvRail(): TvRail = TvRail(
     id = id,

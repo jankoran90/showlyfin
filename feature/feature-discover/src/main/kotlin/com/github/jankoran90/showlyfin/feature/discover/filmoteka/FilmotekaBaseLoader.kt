@@ -29,13 +29,11 @@ import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
 import org.jellyfin.sdk.model.UUID
-import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
 import timber.log.Timber
-import java.time.ZoneOffset
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -53,16 +51,6 @@ import javax.inject.Singleton
  * CATALOGUE pravidlo (nechává se beze změny): „přidáno" = datum ČLENSTVÍ (JF `DateCreated` / Trakt
  * `listed_at`), NIKDY datum přiděleného working-source — jinak by dohledání zdroje přeskládalo pořadí.
  */
-/**
- * FOYER (SHW-107) — jedna Jellyfin KOLEKCE (BoxSet) jako samostatná entita. Není to film: klik na ni
- * otevře její OBSAH (mřížka položek kolekce), ne detail s hledáním zdroje.
- */
-data class FilmotekaCollection(
-    val jellyfinId: String,
-    val name: String,
-    val posterUrl: String?,
-)
-
 @Singleton
 class FilmotekaBaseLoader @Inject constructor(
     private val apiClient: ApiClient,
@@ -137,6 +125,12 @@ class FilmotekaBaseLoader @Inject constructor(
      * projít gate, bez ohledu na (třeba chybnou) TMDB certifikaci — přesně podle původního záměru. */
     @Volatile private var lastJellyfinKeys: Set<String> = emptySet()
 
+    /** ATRIUM (SHW-118) — BoxSety zaznamenané při posledním [loadJellyfinLibrary] (identita + grafika +
+     * klíče členů). Sbírají se MIMOCHODEM z dotazů, které loader dělá tak jako tak, takže sdružování
+     * kolekcí nestojí ani jeden síťový dotaz navíc. Čte [FilmotekaCollectionResolver]. */
+    @Volatile var lastJellyfinCollections: List<FilmotekaCollection> = emptyList()
+        private set
+
     /** Báze bez Oblíbených: JF ∪ working ∪ Trakt watchlist → dedup → enrich → věkový gate. */
     suspend fun loadBase(enabled: Set<FilmotekaSource> = settings.sources.value): List<MediaItem> {
         ensureProfile()
@@ -144,7 +138,7 @@ class FilmotekaBaseLoader @Inject constructor(
         val enriched = enricher.enrich(gather(enabled), withCertification = cap != null)
         // JF knihovnu gate NIKDY nezastaví (viz komentář u lastJellyfinKeys výš) — jen working-source/
         // Trakt položky (nekurátorované appkou) skutečně podléhají věkovému stropu.
-        return enriched.filter { dedupKey(it) in lastJellyfinKeys || ContentAgeGate.isAllowed(cap, it, hideUnrated()) }
+        return enriched.filter { filmotekaDedupKey(it) in lastJellyfinKeys || ContentAgeGate.isAllowed(cap, it, hideUnrated()) }
     }
 
     /** Oblíbené (jen filmy) → enrich → věkový gate. Vypnutý zdroj = prázdno. */
@@ -158,7 +152,7 @@ class FilmotekaBaseLoader @Inject constructor(
         val savedKeys = if (settings.onlyWithSource.value) workingSources.savedKeys.value else null
         val source = if (savedKeys == null) list else list.filter { "tmdb:${it.id}" in savedKeys }
         val base = source.filter { it.kind == FavoriteKind.MOVIE && it.id > 0L }
-            .map { fav -> stub(fav.id, null, fav.name, fav.year, isShow = false, addedAtMs = fav.addedAtMs.takeIf { it > 0L }) }
+            .map { fav -> filmotekaStub(fav.id, null, fav.name, fav.year, isShow = false, addedAtMs = fav.addedAtMs.takeIf { it > 0L }) }
         val enriched = enricher.enrich(base, withCertification = cap != null)
         return ContentAgeGate.filter(cap, enriched, hideUnrated())
     }
@@ -183,7 +177,7 @@ class FilmotekaBaseLoader @Inject constructor(
         val savedKeys = if (settings.onlyWithSource.value) workingSources.savedKeys.value else null
         val visible = if (savedKeys == null) wants else wants.filter { hasWorkingSource(it, savedKeys) }
         val base = visible.map { w ->
-            stub(
+            filmotekaStub(
                 w.id, null, w.name, w.year,
                 isShow = w.kind == FavoriteKind.WANT_SHOW,
                 addedAtMs = w.addedAtMs.takeIf { it > 0L },
@@ -207,9 +201,9 @@ class FilmotekaBaseLoader @Inject constructor(
      */
     fun mergeWithFavorites(base: List<MediaItem>, favoriteItems: List<MediaItem>): List<MediaItem> {
         val combined = LinkedHashMap<String, MediaItem>()
-        for (item in base + favoriteItems) { val k = dedupKey(item) ?: continue; combined.putIfAbsent(k, item) }
+        for (item in base + favoriteItems) { val k = filmotekaDedupKey(item) ?: continue; combined.putIfAbsent(k, item) }
         val favDates = HashMap<String, Long>()
-        for (f in favoriteItems) { val k = dedupKey(f) ?: continue; f.addedAtMs?.let { favDates.putIfAbsent(k, it) } }
+        for (f in favoriteItems) { val k = filmotekaDedupKey(f) ?: continue; f.addedAtMs?.let { favDates.putIfAbsent(k, it) } }
         // FOYER (SHW-107, user 2026-07-27 „Filmotéka neumí držet pořadí Chci vidět") — PRYČ S UMĚLÝM
         // „MĚSÍC ZPĚT". Dřív dostal KAŽDÝ titul bez členského data TENTÝŽ syntetický čas (dnes − 30 dní),
         // takže: (a) jejich vzájemné pořadí bylo náhodné (= pořadí, v jakém zdroje odpověděly), a hlavně
@@ -221,7 +215,7 @@ class FilmotekaBaseLoader @Inject constructor(
         // takže re-cache pořadím nehne). Nic z toho = null → řadí se na konec, ne doprostřed.
         return combined.values.map { item ->
             if (item.addedAtMs != null) item
-            else item.copy(addedAtMs = dedupKey(item)?.let { favDates[it] })
+            else item.copy(addedAtMs = filmotekaDedupKey(item)?.let { favDates[it] })
         }
     }
 
@@ -299,19 +293,19 @@ class FilmotekaBaseLoader @Inject constructor(
         // Tituly z watchlistu vstupují do Filmotéky jen se zapnutým zdrojem; DATA z nich bereme vždy.
         val tk = if (FilmotekaSource.TRAKT_WATCHLIST in enabled) tkAll else emptyList()
         lastJellyfinCount = jf.size
-        lastJellyfinKeys = jf.mapNotNull { dedupKey(it) }.toSet()
+        lastJellyfinKeys = jf.mapNotNull { filmotekaDedupKey(it) }.toSet()
         // FOYER (SHW-107, user 2026-07-27): „jen tituly s dohledaným zdrojem" — do Filmotéky (a tím i do řady
         // na domově) pusť jen to, co jde reálně pustit: má uložený PŘEHRATELNÝ zdroj, nebo je přímo v Jellyfin
         // knihovně (ta hraje ze serveru). Tituly z „Chci vidět"/Oblíbených, kterým se zdroj teprve shání, se
         // schovají, dokud auto-cache nedoběhne. Filtr běží PŘED enrichem = ušetří i TMDB dotazy.
         val playableOnly = settings.onlyWithSource.value
         val allowedKeys: Set<String>? = if (!playableOnly) null else buildSet {
-            jf.forEach { dedupKey(it)?.let(::add) }
-            ws.forEach { dedupKey(it)?.let(::add) }
+            jf.forEach { filmotekaDedupKey(it)?.let(::add) }
+            ws.forEach { filmotekaDedupKey(it)?.let(::add) }
         }
         val merged = LinkedHashMap<String, MediaItem>()
         for (list in listOf(jf, ws, tk)) {
-            for (item in list) { val k = dedupKey(item) ?: continue; merged.putIfAbsent(k, item) }
+            for (item in list) { val k = filmotekaDedupKey(item) ?: continue; merged.putIfAbsent(k, item) }
         }
         // Recency JEN z členských seznamů (JF/Trakt) — working-source datum sem nesmí (přeskládalo pořadí).
         // FOYER (SHW-107, user 2026-07-27): TRAKT „Chci vidět" MÁ PŘEDNOST před datem z Jellyfinu —
@@ -321,13 +315,13 @@ class FilmotekaBaseLoader @Inject constructor(
         // JF datum zůstává pro tituly, které ve watchlistu NEJSOU (tam je jediné, co o „přidání" víme).
         val recency = HashMap<String, Long>()
         for (list in listOf(tkAll, jf)) {
-            for (item in list) { val k = dedupKey(item) ?: continue; item.addedAtMs?.let { recency.putIfAbsent(k, it) } }
+            for (item in list) { val k = filmotekaDedupKey(item) ?: continue; item.addedAtMs?.let { recency.putIfAbsent(k, it) } }
         }
         merged.values
-            .filter { allowedKeys == null || dedupKey(it)?.let { k -> k in allowedKeys } == true }
+            .filter { allowedKeys == null || filmotekaDedupKey(it)?.let { k -> k in allowedKeys } == true }
             // Členské datum (Chci vidět → Jellyfin) VYHRÁVÁ; když titul v žádném seznamu není, nech mu
             // jeho vlastní (u zapamatovaného zdroje = NEMĚNNÉ datum prvního uložení) místo zahození na null.
-            .map { item -> item.copy(addedAtMs = dedupKey(item)?.let { recency[it] } ?: item.addedAtMs) }
+            .map { item -> item.copy(addedAtMs = filmotekaDedupKey(item)?.let { recency[it] } ?: item.addedAtMs) }
     }
 
     /**
@@ -410,14 +404,18 @@ class FilmotekaBaseLoader @Inject constructor(
                         parentId = view.id,
                         includeItemTypes = listOf(BaseItemKind.BOX_SET),
                         recursive = true,
+                        fields = listOf(ItemFields.PROVIDER_IDS),
                         limit = 200,
                     ).content.items
                 }.getOrElse { Timber.w(it, "[Filmoteka] kolekce '${view.name}' selhaly"); emptyList() }
             }
         }.awaitAll().flatten()
-        val collectionMembers = boxsetIds.map { boxset ->
+        // ATRIUM (SHW-118): členy si drž PER BOXSET — z téhož dotazu vzniká jak plochý seznam filmů,
+        // tak podklad pro sdruženou kartu kolekce ([lastJellyfinCollections]), takže sdružování
+        // nestojí žádný dotaz navíc.
+        val perCollection = boxsetIds.map { boxset ->
             async {
-                runCatching {
+                boxset to runCatching {
                     apiClient.itemsApi.getItems(
                         userId = session.userUuid,
                         parentId = boxset.id,
@@ -428,7 +426,25 @@ class FilmotekaBaseLoader @Inject constructor(
                     ).content.items
                 }.getOrElse { Timber.w(it, "[Filmoteka] obsah kolekce '${boxset.name}' selhal"); emptyList() }
             }
-        }.awaitAll().flatten()
+        }.awaitAll()
+        val collectionMembers = perCollection.flatMap { (_, members) -> members }
+        lastJellyfinCollections = perCollection.mapNotNull { (boxset, members) ->
+            val keys = members
+                .mapNotNull { it.toFilmotekaMediaItem(session.serverUrl, session.token) }
+                .mapNotNull(::filmotekaDedupKey)
+                .toSet()
+            if (keys.isEmpty()) return@mapNotNull null
+            FilmotekaCollection(
+                jellyfinId = boxset.id.toString(),
+                name = boxset.name.orEmpty(),
+                posterUrl = boxset.jellyfinPosterUrl(session.serverUrl, session.token),
+                backdropUrl = boxset.jellyfinBackdropUrl(session.serverUrl, session.token),
+                // Vlastní ruční kolekce (user 2026-08-24: „medvídek Pú je moje vlastní kolekce vytvořená
+                // v jf") TMDB id NEMÁ — a nevadí: členství drží Jellyfin, TMDB je jen most k dílům mimo něj.
+                tmdbCollectionId = boxset.providerIds?.get("Tmdb")?.toLongOrNull(),
+                memberKeys = keys,
+            )
+        }
         (direct + collectionMembers).distinctBy { it.id }
             .mapNotNull { it.toFilmotekaMediaItem(session.serverUrl, session.token) }
     }
@@ -470,114 +486,6 @@ class FilmotekaBaseLoader @Inject constructor(
         }
     }
 
-    /**
-     * FOYER (SHW-107) — KOLEKCE (Jellyfin BoxSet) jako VLASTNÍ karty, které umí otevřít svůj obsah
-     * (`TvDestination.LibraryItems` s `parentItemType=BOX_SET`), ne jako fiktivní film. Vrací prázdno,
-     * když je přepínač „Karty kolekcí" vypnutý (default) nebo Jellyfin zdroj není zapnutý.
-     */
-    suspend fun loadCollections(): List<FilmotekaCollection> = coroutineScope {
-        if (!settings.showCollections.value) return@coroutineScope emptyList()
-        if (FilmotekaSource.JELLYFIN !in settings.sources.value) return@coroutineScope emptyList()
-        val session = prepareJellyfin() ?: return@coroutineScope emptyList()
-        val filmoWhitelist = profileRepository.activeConfig.value.filmotekaJfLibraries
-            ?.map { it.replace("-", "").lowercase() }?.toSet()
-        // 🔒 2026-08-23 (user: Harry Potter/Zlouni/Auta kolekce nikdy nebyly vidět, i se zapnutým
-        // přepínačem a správnými JF právy) — `isFilmotekaLibrary()` je stavěná pro loader FILMŮ/
-        // SERIÁLŮ (MOVIES/TVSHOWS/MIXED), takže vyřazovala i samotnou "Kolekce" (BOXSETS) knihovnu,
-        // ve které BoxSety fyzicky žijí → getItems níže nikdy neměl na čem běžet, views bylo prázdné.
-        val views = runCatching { apiClient.userViewsApi.getUserViews(session.userUuid).content.items }
-            .getOrElse { emptyList() }
-            .filter { it.isFilmotekaLibrary() || it.collectionType?.name?.uppercase() == "BOXSETS" }
-            .let { list ->
-                if (filmoWhitelist == null) list
-                else list.filter { it.id.toString().replace("-", "").lowercase() in filmoWhitelist }
-            }
-        views.map { view ->
-            async {
-                runCatching {
-                    apiClient.itemsApi.getItems(
-                        userId = session.userUuid,
-                        parentId = view.id,
-                        includeItemTypes = listOf(BaseItemKind.BOX_SET),
-                        recursive = true,
-                        sortBy = listOf(ItemSortBy.SORT_NAME),
-                        sortOrder = listOf(SortOrder.ASCENDING),
-                        limit = 100,
-                    ).content.items
-                }.getOrElse { Timber.w(it, "[Filmoteka] kolekce '${view.name}' selhaly"); emptyList() }
-            }
-        }.awaitAll().flatten()
-            .filter { it.type == BaseItemKind.BOX_SET }
-            .map {
-                FilmotekaCollection(
-                    jellyfinId = it.id.toString(),
-                    name = it.name.orEmpty(),
-                    posterUrl = it.jellyfinPosterUrl(session.serverUrl, session.token),
-                )
-            }
-            .distinctBy { it.jellyfinId }
-    }
-
-    // ── Mapování ────────────────────────────────────────────────────────────────
-
-    /**
-     * FOYER (user 2026-07-26 „některé filmy nemají načtené obrázky coveru"): plakát z Jellyfinu se nese
-     * s položkou jako FALLBACK. Enricher plní [MediaItem.posterUrl] z TMDB; když titul na TMDB nesedí
-     * (nebo tam plakát není), zůstala karta prázdná, přestože Jellyfin obrázek MÁ. Vyplněný `posterUrl`
-     * si enricher nepřepisuje jen tak — a i kdyby, TMDB plakát je hezčí, tak je to výhra oběma směry.
-     */
-    private fun BaseItemDto.toFilmotekaMediaItem(serverUrl: String, token: String): MediaItem? {
-        // FOYER (SHW-107, DŮKAZ 2026-07-26): Jellyfin vrací BOX_SET (kolekce) i na dotaz `includeItemTypes=
-        // Movie,Series` (ověřeno proti serveru: „Harry Potter (kolekce)" Tmdb=1241 mezi 16 položkami knihovny
-        // Rodinné filmy). Bez téhle pojistky se kolekce mapovala na FILM s TMDB id KOLEKCE → enrich stáhl
-        // úplně jiný film → karta s cizím obsahem, u které není co přehrát (přesně userův report). Filmy
-        // uvnitř kolekce v seznamu ZŮSTÁVAJÍ (rekurzivní dotaz je vrací zvlášť) — nic se neztratí.
-        if (type != BaseItemKind.MOVIE && type != BaseItemKind.SERIES) return null
-        val tmdb = providerIds?.get("Tmdb")?.toLongOrNull()
-        val imdb = providerIds?.get("Imdb")?.takeIf { it.isNotBlank() }
-        if (tmdb == null && imdb == null) return null
-        val isShow = type == BaseItemKind.SERIES
-        return MediaItem(
-            traktId = 0L,
-            tmdbId = tmdb,
-            imdbId = imdb,
-            title = name ?: "",
-            year = productionYear,
-            overview = null,
-            rating = null,
-            genres = genres?.takeIf { it.isNotEmpty() },
-            type = if (isShow) MediaType.SHOW else MediaType.MOVIE,
-            fallbackPosterUrl = jellyfinPosterUrl(serverUrl, token),
-            addedAtMs = dateCreated?.toInstant(ZoneOffset.UTC)?.toEpochMilli(),
-        )
-    }
-
-    /** Plakát z Jellyfinu (Primary tag → cache-busting; bez tagu se obrázek stejně vrátí, jen bez cache klíče). */
-    private fun BaseItemDto.jellyfinPosterUrl(serverUrl: String, token: String): String? {
-        val tag = imageTags?.get(org.jellyfin.sdk.model.api.ImageType.PRIMARY) ?: return null
-        return "$serverUrl/Items/$id/Images/Primary?tag=$tag&fillWidth=400&quality=90&api_key=$token"
-    }
-
-    private fun dedupKey(item: MediaItem): String? = when {
-        item.tmdbId != null -> "tmdb:${item.tmdbId}"
-        !item.imdbId.isNullOrBlank() -> "imdb:${item.imdbId}"
-        else -> null
-    }
-
-    private fun stub(tmdbId: Long, imdbId: String?, title: String, year: Int?, isShow: Boolean, addedAtMs: Long? = null) =
-        MediaItem(
-            traktId = 0L,
-            tmdbId = tmdbId,
-            imdbId = imdbId,
-            title = title,
-            year = year,
-            overview = null,
-            rating = null,
-            genres = null,
-            type = if (isShow) MediaType.SHOW else MediaType.MOVIE,
-            addedAtMs = addedAtMs,
-        )
-
     // ── Jellyfin session ────────────────────────────────────────────────────────
 
     private data class JfSession(val serverUrl: String, val token: String, val userUuid: UUID)
@@ -598,13 +506,4 @@ class FilmotekaBaseLoader @Inject constructor(
         /** Jak dlouho platí cache řady „Filmotéka — nedávno přidané" (10 min). */
         const val RECENT_CACHE_TTL_MS = 10L * 60 * 1000
     }
-}
-
-/** Filmové/seriálové/smíšené knihovny (vzor LibraryRowsViewModel.isMediaLibrary); RealDebrid vynech. */
-internal fun BaseItemDto.isFilmotekaLibrary(): Boolean {
-    val ct = collectionType?.name?.uppercase()
-    val allowed = ct == null || ct == "MOVIES" || ct == "TVSHOWS" || ct == "MIXED"
-    if (!allowed) return false
-    val n = name?.lowercase() ?: return true
-    return !n.contains("realdebrid") && !n.contains("real-debrid")
 }
