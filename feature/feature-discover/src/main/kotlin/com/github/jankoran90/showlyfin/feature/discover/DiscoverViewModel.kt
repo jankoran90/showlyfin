@@ -280,12 +280,31 @@ class DiscoverViewModel @Inject constructor(
     private fun loadFilterContext() {
         viewModelScope.launch {
             if (tokenProvider.getToken() != null) {
+                // 🔒 2026-08-24 (user: „potřeboval bych předcházet chybám, ať nemáme systémovou slabinu")
+                // — TÝŽ vzorec, jaký téhož dne lhal o fajfce „Chci vidět" v detailu: selhání Traktu se
+                // spolklo a prázdná množina se pak tvářila jako „nic ve watchlistu není". Když Trakt
+                // mlčí, ptej se serverového zrcadla; když mlčí obojí, ALESPOŇ to zaloguj, ať chyba není
+                // neviditelná.
                 runCatching {
                     val watchlistMovies = authorizedTraktApi.fetchSyncMoviesWatchlist()
                     val watchlistShows = authorizedTraktApi.fetchSyncShowsWatchlist()
                     val ids = (watchlistMovies + watchlistShows).mapNotNull { it.getTraktId() }.toSet()
                     _uiState.update { it.copy(watchlistTraktIds = ids) }
+                }.onFailure { err ->
+                    Timber.w(err, "[Discover] Trakt watchlist selhal → zkouším zrcadlo")
+                    val key = profileRepository.activeProfile.value?.profileUuid.orEmpty()
+                    if (uploaderBaseUrl.isNotBlank() && key.isNotBlank()) {
+                        runCatching { uploaderDs.mirrorWatchlist(uploaderBaseUrl, uploaderCookie, key) }
+                            .getOrNull()
+                            ?.items
+                            ?.mapNotNull { it.traktId }
+                            ?.toSet()
+                            ?.let { ids -> _uiState.update { st -> st.copy(watchlistTraktIds = ids) } }
+                            ?: Timber.w("[Discover] ani zrcadlo watchlistu nedostupné — odznaky mohou chybět")
+                    }
                 }
+                // Zhlédnutost zrcadlo v tomhle tvaru nenabízí → aspoň nahlas zaloguj, ať se tichý
+                // výpadek pozná v logu a netvářil se jako „nic zhlédnuto".
                 runCatching {
                     val watchedMovies = authorizedTraktApi.fetchSyncWatchedMovies()
                     val watchedShows = authorizedTraktApi.fetchSyncWatchedShows()
@@ -301,7 +320,7 @@ class DiscoverViewModel @Inject constructor(
                         )
                     }
                     Timber.i("[Discover] Trakt watched: trakt=${traktIds.size} imdb=${imdbIds.size} tmdb=${tmdbIds.size}")
-                }
+                }.onFailure { Timber.w(it, "[Discover] Trakt zhlédnuté selhalo — odznaky 'viděl jsem' mohou chybět") }
                 // COUCH T3: hodnocené položky (ratings) — pro filtr „skryj co mám ohodnocené na Traktu".
                 runCatching {
                     val rated = authorizedTraktApi.fetchMoviesRatings().mapNotNull { it.movie.ids.trakt } +
