@@ -390,6 +390,14 @@ class ProfileRepository @Inject constructor(
     private suspend fun captureCurrentTraktIntoProfile(profileId: Long): Boolean {
         val access = prefs.getString("TRAKT_ACCESS_TOKEN", null)?.takeIf { it.isNotBlank() } ?: return false
         val profile = dao.getById(profileId) ?: return false
+        // 🔒 2026-08-24 (user: Trakt banner u dětí se vracel i po ProfileConfigApplier CHILD-CLEAR fixu,
+        // konkrétní stará dead hodnota — dokázáno přímo v serverovém configu) — DRUHÁ vrstva stejného
+        // bugu. Tahle funkce běží PŘED apply() (viz setActive níže) a zrcadlí, co je PRÁVĚ teď
+        // v kanonickém slotu (třeba ještě nevyčištěném z předchozí profilové session), rovnou DO
+        // balíku profilu a HNED ho pushne na server — takže i když apply() vzápětí lokální prefs
+        // vyčistí, server (a `activeConfig.value.credentials.trakt`, který `traktAllowed()` taky
+        // čte) zůstane špinavý. Dětský profil nesmí Trakt token dostat žádnou cestou.
+        if (profile.isChildAgeRating()) return false
         val override = ProfileConfig.fromJson(profile.configJson)
         if (override.credentials.trakt?.accessToken == access) return false // shoda → nic
         timber.log.Timber.i("[TRAKT-GUARD] capture prefs token→config profil=%d accessLen=%d", profileId, access.length)
