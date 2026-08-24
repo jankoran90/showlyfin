@@ -59,6 +59,8 @@ internal fun FilmotekaGrid(
     onOpenDetail: (MediaItem) -> Unit,
     onOpenCollection: (String) -> Unit,
     scrollerLabel: (HomeRowItem) -> String?,
+    nextUp: List<HomeRowItem> = emptyList(),
+    onOpenNextUp: (HomeRowItem) -> Unit = {},
 ) {
     val cols = rememberGridColumnPref()
     val showHeaders = rails.size > 1
@@ -74,6 +76,11 @@ internal fun FilmotekaGrid(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
+        if (nextUp.isNotEmpty()) {
+            item(key = "nextup_row", span = { GridItemSpan(maxLineSpan) }) {
+                FilmyNextUpRow(items = nextUp, onClick = onOpenNextUp)
+            }
+        }
         rails.forEach { rail ->
             if (showHeaders) {
                 item(key = "hdr_${rail.id}", span = { GridItemSpan(maxLineSpan) }) {
@@ -116,6 +123,8 @@ internal fun FilmotekaList(
     onOpenDetail: (MediaItem) -> Unit,
     onOpenCollection: (String) -> Unit,
     scrollerLabel: (HomeRowItem) -> String?,
+    nextUp: List<HomeRowItem> = emptyList(),
+    onOpenNextUp: (HomeRowItem) -> Unit = {},
 ) {
     val showHeaders = rails.size > 1
     val listState = rememberLazyListState()
@@ -128,6 +137,9 @@ internal fun FilmotekaList(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
+        if (nextUp.isNotEmpty()) {
+            item(key = "nextup_row") { FilmyNextUpRow(items = nextUp, onClick = onOpenNextUp) }
+        }
         rails.forEach { rail ->
             if (showHeaders) {
                 item(key = "hdr_${rail.id}") { SectionHeader(rail.title) }

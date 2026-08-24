@@ -27,6 +27,7 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
     val enabledRegions by vm.enabledRegions.collectAsStateWithLifecycle()
     val hybridGenres by vm.hybridGenres.collectAsStateWithLifecycle()
     val showCollections by vm.showCollections.collectAsStateWithLifecycle()
+    val showNextUp by vm.showNextUp.collectAsStateWithLifecycle()
     val onlyWithSource by vm.onlyWithSource.collectAsStateWithLifecycle()
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -80,6 +81,12 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
                 "zapnuté — dítě nepozná, že se zdroj teprve shání, a karta bez zdroje je pro něj rozbitá.",
             checked = onlyWithSource,
             onCheckedChange = { vm.setOnlyWithSource(it) },
+        )
+        SettingSwitchRow(
+            title = "Další díly nahoře",
+            subtitle = "Filmotéka začne řadou toho, co máš rozkoukané — další nezhlédnutý díl z Jellyfinu, z uložených zdrojů i z ČT. Vypnuto = začne rovnou svým obsahem.",
+            checked = showNextUp,
+            onCheckedChange = { vm.setShowNextUp(it) },
         )
         SettingSwitchRow(
             title = "Sdružovat kolekce",

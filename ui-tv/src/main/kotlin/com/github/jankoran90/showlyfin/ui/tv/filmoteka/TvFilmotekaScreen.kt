@@ -47,6 +47,8 @@ import com.github.jankoran90.showlyfin.feature.discover.tv.TvSectionViewModel
 import com.github.jankoran90.showlyfin.feature.discover.tv.sortedBy
 import com.github.jankoran90.showlyfin.ui.tv.components.TvViewChips
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -155,11 +157,28 @@ fun TvFilmotekaScreen(
                 immersive = immersive,
                 onFocusItem = onFocusItem,
                 onItemClick = ::clickItem,
-                header = { TvSectionHeader(title = "Filmotéka", actions = { chips() }) },
+                header = {
+                    // Horní sekce zůstává beze změny (user: „zachovejme horní sekci jak je") — řada
+                    // „Další díly" se řadí POD ni, nad samotnou mřížku.
+                    TvSectionHeader(title = "Filmotéka", actions = { chips() })
+                    if (state.nextUp.isNotEmpty()) {
+                        TvNextUpRow(
+                            items = state.nextUp,
+                            immersive = immersive,
+                            onFocusItem = onFocusItem,
+                            onItemClick = ::clickItem,
+                        )
+                    }
+                },
                 modifier = modifier.fillMaxSize(),
             )
         } else if (state.rails.isNotEmpty()) {
-            val rails = remember(state.rails) { state.rails.map { it.toTvRail() } }
+            // VESTIBUL (SHW-120): „Další díly" jako PRVNÍ řada — na velké TV se tak vejde spolu s řadou
+            // filmotéky na jednu obrazovku (user 2026-08-24). Immersive i popisky jedou jako u ostatních.
+            val rails = remember(state.rails, state.nextUp) {
+                val base = state.rails.map { it.toTvRail() }
+                if (state.nextUp.isEmpty()) base else listOf(nextUpRail(state.nextUp)) + base
+            }
             TvRailList(
                 rails = rails,
                 sectionTitle = "Filmotéka",
@@ -306,6 +325,55 @@ private fun TvFilmotekaGrid(
 @Composable
 private fun Centered(content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
+}
+
+/** VESTIBUL (SHW-120) — „Další díly" jako TV řada: široké karty s popiskem, immersive zapnuté. */
+private fun nextUpRail(items: List<HomeRowItem>): TvRail = TvRail(
+    id = "filmo_nextup",
+    title = "Další díly",
+    // Epizoda se ukazuje na ŠIROKÉ kartě (still dílu), ne na plakátu — stejně jako na webu i na domově.
+    style = HomeCardStyle.LANDSCAPE,
+    items = items,
+    configId = "filmo_nextup",
+    showTitles = true,
+    immersiveHeader = false,
+)
+
+/**
+ * Vodorovná řada „Další díly" pro MŘÍŽKOVÝ režim (v řadovém ji kreslí `TvRailList` sama).
+ * Fokus hlásí immersive pozadí, aby se karta chovala stejně jako v řadách.
+ */
+@Composable
+private fun TvNextUpRow(
+    items: List<HomeRowItem>,
+    immersive: Boolean,
+    onFocusItem: (ImmersiveInfo?) -> Unit,
+    onItemClick: (HomeRowItem) -> Unit,
+) {
+    val cardScale = LocalTvCardScale.current
+    Column(Modifier.padding(bottom = 8.dp)) {
+        Text(
+            text = "Další díly",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(cardScale.spacing(16.dp))) {
+            items(items, key = { it.key }) { item ->
+                Box(
+                    Modifier.onFocusChanged {
+                        if (it.hasFocus && immersive) onFocusItem(item.toImmersiveInfo())
+                    },
+                ) {
+                    TvHomeCard(
+                        item = item,
+                        style = HomeCardStyle.LANDSCAPE,
+                        onClick = { onItemClick(item) },
+                    )
+                }
+            }
+        }
+    }
 }
 
 private fun FilmotekaRail.toTvRail(): TvRail = TvRail(

@@ -370,6 +370,7 @@ private fun FilmyShellContent() {
                             FilmySection.FILMOTEKA -> FilmyFilmotekaScreen(
                                 onMenu = onMenu,
                                 onOpenDetail = openDetail,
+                                onOpenJellyfinDetail = openJfDetail,
                             )
                             // M2.5: Vzácné klenoty = LAPIDARY řady (reuse TvLapidaryViewModel).
                             FilmySection.GEMS -> FilmyGemsScreen(onMenu = onMenu, onOpenDetail = openDetail)

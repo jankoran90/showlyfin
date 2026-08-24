@@ -33,6 +33,9 @@ import com.github.jankoran90.showlyfin.feature.discover.filmoteka.TvFilmotekaVie
 fun FilmyFilmotekaScreen(
     onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
+    // VESTIBUL (SHW-120) — karta „Další díly" je Jellyfin epizoda / uložený zdroj; klik řeší shell
+    // stejným způsobem jako u řad domova (přehrát, jinak detail).
+    onOpenJellyfinDetail: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     vm: TvFilmotekaViewModel = hiltViewModel(),
 ) {
@@ -45,6 +48,14 @@ fun FilmyFilmotekaScreen(
         state = state,
         onMenu = onMenu,
         onOpenDetail = onOpenDetail,
+        onOpenNextUp = { item ->
+            val mi = item.mediaItem
+            val jf = item.jellyfinId
+            when {
+                jf != null -> onOpenJellyfinDetail(jf)
+                mi != null -> onOpenDetail(mi)
+            }
+        },
         onAxis = vm::setAxis,
         onAllSort = vm::setAllSort,
         onToggleGenre = vm::toggleGenreFilter,

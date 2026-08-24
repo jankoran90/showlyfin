@@ -73,6 +73,11 @@ fun FilmyBrowseSection(
     state: FilmotekaUiState,
     onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
+    /**
+     * VESTIBUL (SHW-120) — klik na kartu „Další díly". Default no-op, aby „Pro tebe" (sdílí tuhle
+     * sekci) nemusela nic řešit — řada se jí stejně nezobrazuje.
+     */
+    onOpenNextUp: (HomeRowItem) -> Unit = {},
     onAxis: (FilmotekaAxis) -> Unit,
     onAllSort: (FilmotekaAllSort) -> Unit,
     onToggleGenre: (String) -> Unit,
@@ -213,14 +218,24 @@ fun FilmyBrowseSection(
                 }
             }
         }
+        // VESTIBUL (SHW-120, user 2026-08-24 „i pro telefon nějakou obdobu včetně toho nastavení") —
+        // „Další díly" nad obsahem, v obou zobrazeních. Při hledání se skrývá: uživatel filtruje
+        // filmotéku, ne rozkoukané díly, a řada by mu jen ujídala obrazovku.
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
                 state.loading -> CircularProgressIndicator()
                 state.rails.isEmpty() -> emptyContent()
                 displayRails.isEmpty() -> FilmotekaNoResults(query)
-                viewMode == ViewMode.LIST ->
-                    FilmotekaList(displayRails, onOpenDetail, openGroupOf, scrollerLabel)
-                else -> FilmotekaGrid(displayRails, onOpenDetail, openGroupOf, scrollerLabel)
+                viewMode == ViewMode.LIST -> FilmotekaList(
+                    displayRails, onOpenDetail, openGroupOf, scrollerLabel,
+                    nextUp = if (query.isBlank()) state.nextUp else emptyList(),
+                    onOpenNextUp = onOpenNextUp,
+                )
+                else -> FilmotekaGrid(
+                    displayRails, onOpenDetail, openGroupOf, scrollerLabel,
+                    nextUp = if (query.isBlank()) state.nextUp else emptyList(),
+                    onOpenNextUp = onOpenNextUp,
+                )
             }
         }
     }

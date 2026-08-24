@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -74,6 +75,11 @@ data class FilmotekaUiState(
      * jednotlivě. Obrazovka si tu podle `HomeRowItem.collectionKey` najde členy k zobrazení obsahu.
      */
     val collectionGroups: List<FilmotekaCollectionGroup> = emptyList(),
+    /**
+     * VESTIBUL (SHW-120) — „Další díly" NAD obsahem Filmotéky (Jellyfin NextUp ∪ uložené zdroje ∪ ČT).
+     * Prázdné = přepínač vypnutý, nebo není co dokoukat → řada se vůbec nevykreslí.
+     */
+    val nextUp: List<HomeRowItem> = emptyList(),
 )
 
 /**
@@ -94,6 +100,7 @@ class TvFilmotekaViewModel @Inject constructor(
     // [FilmotekaBaseLoader] — VM drží už jen stav sekce (osa, filtry, řady).
     private val filmotekaBase: FilmotekaBaseLoader,
     private val collectionResolver: FilmotekaCollectionResolver,
+    private val nextUpLoader: FilmotekaNextUpLoader,
     // Poslední známá báze z disku → sekce ukáže obsah hned po otevření (user 2026-07-29).
     private val diskCache: FilmotekaDiskCache,
     private val favorites: FavoritesRepository,
@@ -125,6 +132,9 @@ class TvFilmotekaViewModel @Inject constructor(
 
     /** ATRIUM — sdružené kolekce (prázdné při vypnutém přepínači „Karty kolekcí"). */
     @Volatile private var collectionGroups: List<FilmotekaCollectionGroup> = emptyList()
+
+    /** VESTIBUL — „Další díly" (prázdné při vypnutém přepínači). */
+    @Volatile private var nextUpItems: List<HomeRowItem> = emptyList()
 
     /** GENRE-FILTER — živý výběr žánrů (viz [FilmotekaUiState.genreFilter]). Drží se napříč přeskupením os. */
     @Volatile private var genreFilter: Set<String> = emptySet()
@@ -198,6 +208,12 @@ class TvFilmotekaViewModel @Inject constructor(
 
         // FOYER (SHW-107) — přepnutí „Karty kolekcí" v Nastavení → přenačti (kolekce se dotahují zvlášť).
         settings.showCollections
+            .drop(1)
+            .onEach { reload() }
+            .launchIn(viewModelScope)
+
+        // VESTIBUL — přepnutí „Další díly" v Nastavení se musí projevit hned.
+        settings.showNextUp
             .drop(1)
             .onEach { reload() }
             .launchIn(viewModelScope)
@@ -301,7 +317,10 @@ class TvFilmotekaViewModel @Inject constructor(
                     rebuild(settings.defaultAxis.value)
                 }
             }
+            // VESTIBUL: „Další díly" jedou SOUBĚŽNĚ s bází — jsou to jiné zdroje, čekání se nemá sčítat.
+            val nextUpJob = async { loadNextUp() }
             baseItems = filmotekaBase.loadBase()
+            nextUpItems = nextUpJob.await()
             // ATRIUM (SHW-118): sdružení AŽ po bázi — členy kolekce bereme jen z toho, co prošlo
             // dedupem i věkovým gate, takže se do kolekce nemůže propašovat skrytý titul.
             collectionGroups = resolveCollections()
@@ -344,6 +363,13 @@ class TvFilmotekaViewModel @Inject constructor(
      * volá i „Pro tebe" → obě sekce filtrují/grupují 1:1, žádný drift). Zde jen posbírej bázi (base>favorites),
      * předej živé filtry + nastavení a výsledek promítni do stavu.
      */
+    /** „Další díly" dle přepínače; selhání není fatální — řada se prostě nevykreslí. */
+    private suspend fun loadNextUp(): List<HomeRowItem> {
+        if (!settings.showNextUp.value) return emptyList()
+        return runCatching { nextUpLoader.load() }
+            .getOrElse { Timber.w(it, "[Filmoteka] další díly selhaly"); emptyList() }
+    }
+
     /**
      * Sdružené kolekce nad aktuální bází. Vypnutý přepínač „Karty kolekcí" = prázdno (díly zůstanou
      * jednotlivě). Selhání není fatální — Filmotéka se pak jen zobrazí nesdružená, ne prázdná.
@@ -377,6 +403,7 @@ class TvFilmotekaViewModel @Inject constructor(
             genreFilter = genreFilter, availableGenres = result.availableGenres,
             countryFilter = countryFilter, availableCountries = result.availableCountries,
             collectionGroups = collectionGroups,
+            nextUp = nextUpItems,
             traktStale = staleNow,
         )
     }

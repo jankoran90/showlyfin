@@ -39,6 +39,8 @@ class TvFilmotekaSettingsViewModel @Inject constructor(
     val enabledRegions: StateFlow<Set<CinematographyRegion>> = store.enabledRegions
     val hybridGenres: StateFlow<Boolean> = store.hybridGenres
     /** FOYER (SHW-107) — karty kolekcí (Jellyfin BoxSet) ve Filmotéce; default vypnuto. */
+    /** VESTIBUL (SHW-120) — řada „Další díly" nad Filmotékou (per profil). */
+    val showNextUp: StateFlow<Boolean> = store.showNextUp
     val showCollections: StateFlow<Boolean> = store.showCollections
     /** FOYER (SHW-107) — jen tituly s dohledaným zdrojem / z JF knihovny; default vypnuto. */
     val onlyWithSource: StateFlow<Boolean> = store.onlyWithSource
@@ -68,6 +70,8 @@ class TvFilmotekaSettingsViewModel @Inject constructor(
 
     /** FOYER — zapni/vypni karty kolekcí (vypnuto = kolekce se neukazují, filmy uvnitř zůstávají zvlášť). */
     fun setShowCollections(enabled: Boolean) = store.setShowCollections(enabled)
+
+    fun setShowNextUp(enabled: Boolean) = store.setShowNextUp(enabled)
 
     fun setHybridGenres(enabled: Boolean) = store.setHybridGenresEnabled(enabled)
 

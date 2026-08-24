@@ -56,6 +56,15 @@ class FilmotekaSettingsStore @Inject constructor(
     /** RUBRIC (SHW-104) — hybridní seskupení žánrů (Akční komedie, Sci-fi horor…) na ose Žánr; default ON. */
     val hybridGenres: StateFlow<Boolean> = _hybridGenres.asStateFlow()
 
+    private val _showNextUp = MutableStateFlow(loadShowNextUp())
+    /**
+     * VESTIBUL (SHW-120, user 2026-08-24: „filmotéka začne nabídkou dalších dílů ke shlédnutí, které
+     * následují, bude se to dát zapínat vypínat v nastavení") — řada „Další díly" NAD obsahem Filmotéky.
+     * Default **ZAPNUTO** (user si o ni řekl). Skládá Jellyfin `/Shows/NextUp` + uložené zdroje (Trakt)
+     * + ČT — parita s webem. Vypnuto = Filmotéka začne rovnou svým obsahem.
+     */
+    val showNextUp: StateFlow<Boolean> = _showNextUp.asStateFlow()
+
     private val _showCollections = MutableStateFlow(loadShowCollections())
     /**
      * ATRIUM (SHW-118, user 2026-08-24) — SDRUŽOVÁNÍ kolekcí ve Filmotéce. Default **ZAPNUTO** (user:
@@ -99,6 +108,7 @@ class FilmotekaSettingsStore @Inject constructor(
         _enabledRegions.value = loadRegions()
         _hybridGenres.value = loadHybridGenres()
         _showCollections.value = loadShowCollections()
+        _showNextUp.value = loadShowNextUp()
         _onlyWithSource.value = loadOnlyWithSource()
     }
 
@@ -130,6 +140,15 @@ class FilmotekaSettingsStore @Inject constructor(
         _hybridGenres.value = enabled
         prefs.edit().putBoolean(keyFor(KEY_HYBRID), enabled).apply()
     }
+
+    /** VESTIBUL — zapni/vypni řadu „Další díly" nad Filmotékou (per profil). */
+    fun setShowNextUp(enabled: Boolean) {
+        _showNextUp.value = enabled
+        prefs.edit().putBoolean(keyFor(KEY_SHOW_NEXT_UP), enabled).apply()
+    }
+
+    private fun loadShowNextUp(): Boolean =
+        prefs.getBoolean(keyFor(KEY_SHOW_NEXT_UP), prefs.getBoolean(KEY_SHOW_NEXT_UP, true))
 
     /** FOYER — zapni/vypni karty kolekcí ve Filmotéce (per profil). */
     fun setShowCollections(enabled: Boolean) {
@@ -238,6 +257,8 @@ class FilmotekaSettingsStore @Inject constructor(
         const val KEY_HYBRID = "hybrid_genres"
         /** FOYER (SHW-107) — karty kolekcí (BoxSet) ve Filmotéce; default false. */
         const val KEY_SHOW_COLLECTIONS = "show_collections"
+        /** VESTIBUL (SHW-120) — řada „Další díly" nad Filmotékou; default true. */
+        const val KEY_SHOW_NEXT_UP = "show_next_up"
         /** FOYER (SHW-107) — jen tituly s dohledaným zdrojem / z JF knihovny; default false. */
         const val KEY_ONLY_WITH_SOURCE = "only_with_source"
         val ALL_SOURCES: Set<FilmotekaSource> = FilmotekaSource.entries.toSet()

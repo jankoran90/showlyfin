@@ -45,6 +45,7 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
     val enabledRegions by vm.enabledRegions.collectAsStateWithLifecycle()
     val hybridGenres by vm.hybridGenres.collectAsStateWithLifecycle()
     val showCollections by vm.showCollections.collectAsStateWithLifecycle()
+    val showNextUp by vm.showNextUp.collectAsStateWithLifecycle()
     val onlyWithSource by vm.onlyWithSource.collectAsStateWithLifecycle()
     val jfLibraries by vm.jfLibraries.collectAsStateWithLifecycle()
     val selectedFilmoLibs by vm.selectedFilmotekaLibs.collectAsStateWithLifecycle()
@@ -121,6 +122,13 @@ fun TvFilmotekaSettingsBlock(vm: TvFilmotekaSettingsViewModel = hiltViewModel())
         // ATRIUM (SHW-118, user 2026-08-24): sdružení dílů kolekce pod jednu kartu, napříč zdroji
         // (Jellyfin BoxSet + uložený zdroj přes TMDB kolekci). Default ZAPNUTO. Žádná extra řada —
         // karta sedí přímo mezi filmy na svém místě.
+        // VESTIBUL (SHW-120, user 2026-08-24) — řada „Další díly" nad obsahem Filmotéky, default ZAP.
+        TvToggleRow(
+            label = "Další díly nahoře",
+            subtitle = "Filmotéka začne řadou toho, co máš rozkoukané — další nezhlédnutý díl z Jellyfinu, z uložených zdrojů i z ČT. Vypnuto = začne rovnou svým obsahem.",
+            checked = showNextUp,
+            onCheckedChange = { vm.setShowNextUp(it) },
+        )
         TvToggleRow(
             label = "Sdružovat kolekce",
             subtitle = "Díly jedné kolekce (Auta, Auta 2, Auta 3…) zastoupí JEDNA karta na svém místě v seznamu; klik otevře její obsah. Spojí i díly z různých zdrojů (Jellyfin + uložené zdroje). Vypnuto = každý díl zvlášť.",
