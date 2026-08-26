@@ -265,18 +265,68 @@ class WorkingSourceStore @Inject constructor(
         prefs.edit().apply {
             if (tmdb != null && tmdb > 0L) remove(tombKey("tmdb:$tmdb$suffix"))
             if (!imdb.isNullOrBlank()) remove(tombKey("imdb:$imdb$suffix"))
+            // Vědomé uložení/vrácení JAKÉHOKOLI zdroje titulu ruší i blokaci CELÉHO titulu — divák
+            // říká „chci ho zpátky" (týž princip, jako že nové uložení ruší náhrobek řádku).
+            if (tmdb != null && tmdb > 0L) remove(titleTombKey("tmdb:$tmdb"))
+            if (!imdb.isNullOrBlank()) remove(titleTombKey("imdb:$imdb"))
         }.apply()
+    }
+
+    // ── BLOKACE CELÉHO TITULU (user 2026-08-26, Vetřelec: Země) ──────────────────
+    //
+    // 🔴 DÍRA, kterou tohle zavírá: „Odebrat z Filmotéky" tombstonovalo jen řádky, které v tu chvíli
+    // EXISTOVALY ([clearShow] jede přes `getEpisodes`). Backend ale umí zapsat řádek s NOVOU identitou
+    // i potom — u Vetřelce to byl sezónní recept `157239:s1`, kdežto náhrobky byly na dílech
+    // `157239:s1e1`…`s1e7`. Jiná identita = jiný klíč = náhrobek se ho netýkal → titul se „vrátil".
+    // DŮKAZ (log serveru): `POST /gems/cache-season?…tmdb=157239…` → `written: True` 12 minut po
+    // odebrání. Odebrat TITUL proto musí blokovat i BUDOUCÍ zápisy pro ten titul, ne jen ty stávající.
+    private fun titleTombKey(identity: String) = "sieve_tombtitle_$identity"
+
+    private fun titleTombstones(): Map<String, Long> {
+        val now = System.currentTimeMillis()
+        val out = HashMap<String, Long>()
+        val stale = ArrayList<String>()
+        for ((k, v) in prefs.all) {
+            if (!k.startsWith("sieve_tombtitle_")) continue
+            val at = (v as? Long) ?: continue
+            if (now - at > TOMB_TTL_MS) stale += k else out[k.removePrefix("sieve_tombtitle_")] = at
+        }
+        if (stale.isNotEmpty()) prefs.edit().apply { stale.forEach { remove(it) } }.apply()
+        return out
+    }
+
+    /**
+     * Zablokuj CELÝ titul: zahoď jeho zdroje bez ohledu na to, jakou identitu (sezóna/díl/film) ponesou
+     * — i ty, které teprve vzniknou. Volá „Odebrat z Filmotéky"; **NE** „zapomenout zdroje", protože to
+     * je žádost o JINÝ zdroj, ne o žádný (user 2026-08-02).
+     * Ruší se vědomým vrácením titulu (uložení zdroje / přidání do „Chci vidět" → [clearTombstoneFor]).
+     */
+    fun blockTitle(imdb: String?, tmdb: Long?) {
+        val now = System.currentTimeMillis()
+        prefs.edit().apply {
+            if (tmdb != null && tmdb > 0L) putLong(titleTombKey("tmdb:$tmdb"), now)
+            if (!imdb.isNullOrBlank()) putLong(titleTombKey("imdb:$imdb"), now)
+        }.apply()
+        Timber.i("[SIEVE] blokace titulu tmdb=%s imdb=%s (odebráno z Filmotéky)", tmdb, imdb)
     }
 
     /** Vyhoď záznamy, které uživatel smazal a od té doby je nikdo nepřepsal novějším uložením. */
     private fun applyTombstones(list: List<WorkingSource>): List<WorkingSource> {
         val tombs = tombstones()
-        if (tombs.isEmpty()) return list
+        val titleTombs = titleTombstones()
+        if (tombs.isEmpty() && titleTombs.isEmpty()) return list
         return list.filterNot { r ->
             val suffix = r.epKey?.let { ":$it" }.orEmpty()
             val byTmdb = if (r.tmdb > 0L) tombs["tmdb:${r.tmdb}$suffix"] else null
             val byImdb = if (r.imdb.isNotBlank()) tombs["imdb:${r.imdb}$suffix"] else null
-            val deletedAt = maxOf(byTmdb ?: 0L, byImdb ?: 0L)
+            // Blokace celého titulu platí na KAŽDOU jeho identitu (film, sezóna, díl) — i na tu, co
+            // v době odebrání ještě neexistovala. Právě tudy se vracel Vetřelec (sezónní recept).
+            val byTitleTmdb = if (r.tmdb > 0L) titleTombs["tmdb:${r.tmdb}"] else null
+            val byTitleImdb = if (r.imdb.isNotBlank()) titleTombs["imdb:${r.imdb}"] else null
+            val deletedAt = maxOf(
+                maxOf(byTmdb ?: 0L, byImdb ?: 0L),
+                maxOf(byTitleTmdb ?: 0L, byTitleImdb ?: 0L),
+            )
             if (deletedAt <= 0L) return@filterNot false
             // Smazané uživatelem: AUTO záznam (backend cache-one/backfill ho po čase klidně vyrobí znovu)
             // zůstane odklizený po celou dobu platnosti náhrobku — jinak by se film vrátil sám od sebe a

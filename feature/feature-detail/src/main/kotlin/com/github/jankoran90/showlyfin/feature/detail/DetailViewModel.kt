@@ -1863,6 +1863,15 @@ class DetailViewModel @Inject constructor(
         } else {
             workingSourceStore.clearShow(item.imdbId, item.tmdbId)
         }
+        // 🔴 2026-08-26 (user: *„stále se vrací zpátky"* u Vetřelce: Země) — samotné zapomenutí
+        // stávajících zdrojů NESTAČÍ. Náhrobky vznikají na identitách, které v tu chvíli existují
+        // (`s1e1`…`s1e7`), ale backend umí i potom dopsat řádek s JINOU identitou — u Vetřelce
+        // sezónní recept `s1` (důkaz v logu serveru: `POST /gems/cache-season` → `written: True`,
+        // 12 minut po odebrání). Ten se pak žádného náhrobku netýkal a titul se vrátil.
+        // „Odebrat z Filmotéky" znamená ODEBRAT TITUL, takže blokuj i BUDOUCÍ zápisy — ruší se až
+        // vědomým vrácením (uložení zdroje / přidání do „Chci vidět").
+        // NEPLATÍ pro „zapomenout zdroje" — to je žádost o JINÝ zdroj, ne o žádný (user 2026-08-02).
+        workingSourceStore.blockTitle(item.imdbId, item.tmdbId)
         _uiState.update {
             it.copy(rememberedSource = null, hasSeasonSource = false, hasAnyShowSource = false)
         }
