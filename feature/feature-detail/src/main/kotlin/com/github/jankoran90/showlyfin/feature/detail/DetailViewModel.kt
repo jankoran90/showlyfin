@@ -1068,8 +1068,27 @@ class DetailViewModel @Inject constructor(
         // SEZONA f3k (user 2026-08-02 13:27): profil BEZ Traktu (dětský) si „Chci vidět" vede lokálně —
         // dřív tu jen vyskočila hláška „přihlas se k Traktu", což dítě nemá jak udělat, takže si o film
         // říkalo přes Oblíbené a ty se staly náhradním watchlistem. Lokální seznam umí i SERIÁLY.
+        // 🔴 2026-08-26 (Vetřelec: Země, profil Dospělý/yellman) — DŮKAZ ze serveru: po „Odebrat z
+        // Filmotéky" zůstal `trakt_watchlist` tombstonovaný (Trakt volání proběhlo a uspělo), ale
+        // `favorites/WANT_SHOW` se o pár minut později samo obnovilo BEZ jakéhokoli volání Traktu —
+        // jediná cesta, která umí zapsat do `favorites` bez zásahu do `trakt_watchlist`, je právě
+        // tahle větev. DOSPĚLÝ profil s Traktem se tedy v momentě, kdy appce došel token (výpadek/
+        // race v obnově, ne trvalá absence), tiše přesmykl na STEJNOU cestu jako dětský profil BEZ
+        // Traktu — a další „Chci vidět"/„Odebrat z Filmotéky" klik pak už jen přepínal lokál tam a
+        // zpátky, takže to „samo vracelo". Lokální fallback smí být TICHÝ jen tam, kde je Trakt
+        // trvale mimo hru designem (dětský profil); dospělý profil čeká Trakt, ne lokál — ukaž mu to
+        // nahlas, ať ho nepřekvapí zdánlivě nesmyslné chování karty.
         if (tokenProvider.getToken() == null) {
-            toggleLocalWantToSee(item)
+            if (isChildProfile()) {
+                toggleLocalWantToSee(item)
+            } else {
+                _uiState.update {
+                    it.copy(
+                        autoCastMessage = "Trakt přihlášení chybí — přihlas se znovu: " +
+                            "Nastavení → Účty → Trakt.",
+                    )
+                }
+            }
             return
         }
         if (_uiState.value.isTogglingWatchlist) return
