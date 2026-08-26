@@ -194,9 +194,20 @@ class WorkingSourceStore @Inject constructor(
      * na celou dobu svého TTL a řada by zůstala špatně až do restartu appky.
      */
     fun isReadyForActiveProfile(): Boolean {
+        if (wipedAwaitingFetch) return false
         val synced = lastSyncedProfile
         return synced == null || synced == profileKey()
     }
+
+    /**
+     * Lokál byl vyčištěn kvůli přepnutí profilu a data nového profilu ještě NEDORAZILA ze serveru.
+     * Odlišuje „vyčištěno" od „naplněno" — [lastSyncedProfile] se nastavuje hned při čištění (drží
+     * izolaci i offline), takže sám o sobě jako signál připravenosti NESTAČÍ.
+     *
+     * Jen v paměti: po restartu appky žádné čekání na fetch neprobíhá (lokál drží data profilu, který
+     * byl aktivní naposled), takže start zůstává offline-first a data se ukážou hned.
+     */
+    @Volatile private var wipedAwaitingFetch = false
 
     /** Persistovaný poslední synchronizovaný profil (detekce přepnutí → izolace). */
     private var lastSyncedProfile: String?
@@ -446,6 +457,14 @@ class WorkingSourceStore @Inject constructor(
         if (switched) {
             replaceLocal(emptyList())
             lastSyncedProfile = key
+            // 🔴 2026-08-26 (user po 1.2.83: *„další díly u dospělých se po přepnutí od dětí staví
+            // jinak, chybí Legion a Yellowstone"*) — `lastSyncedProfile` se nastavuje UŽ TEĎ, tedy
+            // hned po vyčištění a JEŠTĚ PŘED stažením dat nového profilu. Samo o sobě správně
+            // (drží izolaci i offline), jenže [isReadyForActiveProfile] se ptalo jen na něj → vracelo
+            // `true` nad PRÁZDNÝM lokálem. Řady „Další díly" si to prázdno spočítaly jako platný
+            // výsledek a ZACACHOVALY pod klíč nového profilu (od 1.2.83 i na disk) → Legion
+            // a Yellowstone chyběly celé TTL. „Vyčištěno" ≠ „naplněno".
+            wipedAwaitingFetch = true
         }
         if (key.isBlank() || base.isBlank()) return
         runCatching {
@@ -459,6 +478,10 @@ class WorkingSourceStore @Inject constructor(
                 if (cur == null || r.savedAtMs >= cur.savedAtMs) byId[id] = r
             }
             val merged = applyTombstones(byId.values.sortedByDescending { it.savedAtMs })
+            // Data profilu jsou na místě → teprve TEĎ je lokál použitelný pro čtenáře s vlastní cache.
+            // Pořadí: nejdřív zhasnout příznak, pak `replaceLocal` — ten uvnitř emituje `savedKeys`
+            // a konzumenti na tu emisi reagují přenačtením, takže v tu chvíli už musí vidět `true`.
+            wipedAwaitingFetch = false
             replaceLocal(merged)
             // Liší se od serveru (merge přidala, nebo náhrobek ubral) → srovnej i server.
             if (merged.size != server.size) pushNow(key, base, cookie, merged)

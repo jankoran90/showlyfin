@@ -94,8 +94,14 @@ class FilmotekaDiskCache @Inject constructor(
 
     private fun key(profileId: Long?) = "base_${profileId ?: 0L}"
     private fun stampKey(profileId: Long?) = "base_${profileId ?: 0L}_at"
-    private fun nextUpKey(profileId: Long?) = "nextup_${profileId ?: 0L}"
-    private fun nextUpStampKey(profileId: Long?) = "nextup_${profileId ?: 0L}_at"
+    // 🔴 2026-08-26 — VERZE V KLÍČI. 1.2.84 uměla zapsat NEÚPLNOU řadu (spočtenou nad lokálem, který
+    // se po přepnutí profilu teprve plnil ze serveru) → na zařízeních, co tu verzi měly, leží na disku
+    // řada bez části seriálů a našel ji i příští start appky (user: *„chybí Legion a Yellowstone"* +
+    // *„restart app je zpět nedostane"*). Nová verze v klíči ty zápisy jednorázově obchází — stará
+    // hodnota se prostě nepřečte a řada se dopočítá znovu, správně. Levnější a jistější než mazat
+    // konkrétní klíče (nevíme, kolik profilů si to stihlo uložit).
+    private fun nextUpKey(profileId: Long?) = "nextup_v2_${profileId ?: 0L}"
+    private fun nextUpStampKey(profileId: Long?) = "nextup_v2_${profileId ?: 0L}_at"
 
     private companion object {
         /** Filmotéka bývá v řádu stovek titulů; strop drží zápis i čtení levné. */

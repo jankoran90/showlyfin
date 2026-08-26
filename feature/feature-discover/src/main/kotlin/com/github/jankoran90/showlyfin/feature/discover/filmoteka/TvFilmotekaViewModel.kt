@@ -338,7 +338,12 @@ class TvFilmotekaViewModel @Inject constructor(
             // Čerstvá řada na disk pro příští první vykreslení. Zapisuje se i PRÁZDNÁ (dokoukáno =
             // řada má zmizet), ale jen když je přepínač zapnutý — vypnutý vrací prázdno vždy a
             // přepsal by tím poslední platný stav.
-            if (settings.showNextUp.value) {
+            // 🔴 A JEN Z DOROVNANÉHO ÚLOŽIŠTĚ. Hned po přepnutí profilu je lokál prázdný (čeká na
+            // server), takže řada vyjde neúplná — a zapsat ji na disk znamená, že ji tam najde i
+            // příští START appky. Přesně to user nahlásil po 1.2.84: *„chybí Legion a Yellowstone"*
+            // + *„restart app je zpět nedostane"*. Bez tohohle guardu se z dočasné mezery stane
+            // trvalá (můj regres z 1.2.84 — do té doby restart pomáhal).
+            if (settings.showNextUp.value && workingSources.isReadyForActiveProfile()) {
                 diskCache.writeNextUp(profileRepository.activeProfile.value?.id, nextUpItems)
             }
             // ATRIUM (SHW-118): sdružení AŽ po bázi — členy kolekce bereme jen z toho, co prošlo
