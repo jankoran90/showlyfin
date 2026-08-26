@@ -11,6 +11,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -126,6 +128,7 @@ class WorkingSourceStore @Inject constructor(
     private val gson: Gson,
     private val uploaderDs: UploaderRemoteDataSource,
     @param:Named("traktPreferences") private val appPrefs: SharedPreferences,
+    private val profileRepository: com.github.jankoran90.showlyfin.core.data.ProfileRepository,
 ) {
     private val prefs = context.getSharedPreferences("sieve_working_sources", Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -140,8 +143,22 @@ class WorkingSourceStore @Inject constructor(
 
     init {
         refreshSavedKeys()
-        // Per-profil sync (SIEVE follow-up) — dotáhni zapamatované zdroje profilu ze serveru při startu.
-        scope.launch { syncFromServer() }
+        // 🔴 2026-08-26 (user: TV appka po zapamatování NOVÉHO zdroje z telefonu pořád hrála starý) —
+        // DŮKAZ ze serverových logů: TV appka se ptala serveru na profil DĚTI, i když měl user na TV
+        // aktivní Dospělý (viz i "nastaveni se nerefreshne a buhvi co jeste"). Kořen: tenhle store byl
+        // JEDINÝ jednorázový sync PŘI STARTU appky ([syncFromServer] v initu), NEreaktivní na přepnutí
+        // profilu — narozdíl od [FavoritesRepository]/[VideoResumeStoreImpl]/[CtvWatchedStoreImpl], co
+        // reaktivně `collect`ují `profileRepository.activeProfile`. Bez explicitního `syncNow()`
+        // (jen detail karty ho volá) zůstal lokální cache navěky u profilu, co byl aktivní při startu
+        // procesu appky. Fix = stejný vzor jako u těch tří: reaguj na KAŽDOU reálnou změnu profilu, ne
+        // jen na start procesu. Prevence stejného vzorce nalezena i v [RecommendationsStore],
+        // [UserRatingStore], [FavoritesStore] — opraveno tamtéž.
+        scope.launch {
+            profileRepository.activeProfile
+                .map { it?.id }
+                .distinctUntilChanged()
+                .collect { id -> if (id != null) syncFromServer() }
+        }
     }
 
     private fun refreshSavedKeys() {

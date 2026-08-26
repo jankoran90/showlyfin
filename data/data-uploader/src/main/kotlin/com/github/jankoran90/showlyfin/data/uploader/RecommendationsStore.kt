@@ -12,6 +12,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -46,6 +48,7 @@ class RecommendationsStore @Inject constructor(
     private val gson: Gson,
     private val uploaderDs: UploaderRemoteDataSource,
     @param:Named("traktPreferences") private val appPrefs: SharedPreferences,
+    private val profileRepository: com.github.jankoran90.showlyfin.core.data.ProfileRepository,
 ) {
     private val prefs = context.getSharedPreferences("for_you_recommendations", Context.MODE_PRIVATE)
     private val storeKey = "recommendations"
@@ -60,7 +63,15 @@ class RecommendationsStore @Inject constructor(
         set(v) { appPrefs.edit().putString(KEY_LAST_PROFILE, v).apply() }
 
     init {
-        scope.launch { syncFromServer() }
+        // 🔴 2026-08-26 — stejný vzor jako WorkingSourceStore (viz jeho komentář u initu): jednorázový
+        // sync jen při startu procesu appky NEreagoval na přepnutí profilu. Fix = reaktivní sync na
+        // KAŽDOU reálnou změnu aktivního profilu.
+        scope.launch {
+            profileRepository.activeProfile
+                .map { it?.id }
+                .distinctUntilChanged()
+                .collect { id -> if (id != null) syncFromServer() }
+        }
     }
 
     private fun profileKey(): String = appPrefs.getString("jellyfin_user_id", "").orEmpty()

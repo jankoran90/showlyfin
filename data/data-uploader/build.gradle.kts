@@ -17,6 +17,7 @@ android {
 dependencies {
     implementation(project(":core:core-network"))
     implementation(project(":core:core-domain"))
+    implementation(project(":core:core-data"))
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.core.ktx)
