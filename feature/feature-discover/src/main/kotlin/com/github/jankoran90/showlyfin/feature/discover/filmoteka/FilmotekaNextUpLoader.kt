@@ -2,6 +2,8 @@ package com.github.jankoran90.showlyfin.feature.discover.filmoteka
 
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSettingsStore
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaSource
 import com.github.jankoran90.showlyfin.feature.discover.home.CtvNextUpLoader
 import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 import com.github.jankoran90.showlyfin.feature.discover.home.StreamNextUpLoader
@@ -41,6 +43,7 @@ class FilmotekaNextUpLoader @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val streamNextUp: StreamNextUpLoader,
     private val ctvNextUp: CtvNextUpLoader,
+    private val settingsStore: FilmotekaSettingsStore,
     // Tentýž prefs soubor, ze kterého čte Jellyfin session [FilmotekaBaseLoader] (název je
     // historický — drží i jellyfin_* klíče, nejen Trakt).
     @Named("traktPreferences") private val prefs: SharedPreferences,
@@ -69,6 +72,11 @@ class FilmotekaNextUpLoader @Inject constructor(
     // ── Jellyfin ────────────────────────────────────────────────────────────────
 
     private suspend fun jellyfinNextUp(limit: Int): List<HomeRowItem> {
+        // 🔴 2026-08-26 (user: „v appce porad vidim v dalsi dily jf knihovnu ikdyz ji mam vyplou v
+        // nastaveni, na webu je to dobre") — tahle řada dřív ignorovala hlavní vypínač „Jellyfin
+        // knihovna" (FilmotekaSource.JELLYFIN) úplně, respektovala jen výběr KTERÝCH knihoven
+        // (filmotekaJfLibraries) o kus níž. Stejná díra opravená na webu ve stejný den.
+        if (FilmotekaSource.JELLYFIN !in settingsStore.sources.value) return emptyList()
         val session = prepareJellyfin() ?: return emptyList()
         // ORCHARD: Filmotéka respektuje SVŮJ výběr JF knihoven (null = všechny, prázdné = žádná) —
         // řada nad ní se musí držet téhož výběru, jinak by nabízela díly z knihoven, které tu nejsou.
