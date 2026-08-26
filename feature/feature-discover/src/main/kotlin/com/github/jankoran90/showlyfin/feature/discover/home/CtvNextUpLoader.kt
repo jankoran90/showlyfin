@@ -63,6 +63,12 @@ class CtvNextUpLoader @Inject constructor(
         cache?.takeIf { it.profileKey == profileKey && it.watchedStamp == watchedStamp && now - it.atMs < CACHE_TTL_MS }
             ?.let { return it.items.take(limit) }
 
+        // 🔴 2026-08-26 (user: po přepnutí z Děti na Dospělý visely v „Další díly" Bluey a Chaloupka
+        // na vršku až do restartu appky) — dokud [WorkingSourceStore] nedorovná zdroje na nový profil,
+        // NIC NECACHUJ. Dřív se v tom okně přečetly zdroje PŘEDCHOZÍHO profilu a uložily se do cache
+        // pod klíč NOVÉHO (profil se hlídal, ale data přišla cizí) → špatná řada přežila celé TTL.
+        if (!workingSources.isReadyForActiveProfile()) return emptyList()
+
         // Jen POŘADY s díly; ČT film žádné „další díly" nemá (ten patří do Filmotéky jako film).
         val shows = workingSources.getAll().mapNotNull { ws ->
             val sidp = ctvShowSidpOrNull(ws.stream.url) ?: return@mapNotNull null

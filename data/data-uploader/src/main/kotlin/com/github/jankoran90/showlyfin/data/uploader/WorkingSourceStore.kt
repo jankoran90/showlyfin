@@ -185,6 +185,19 @@ class WorkingSourceStore @Inject constructor(
     private fun serverBase(): String = appPrefs.getString("uploader_base_url", "").orEmpty()
     private fun serverCookie(): String = appPrefs.getString("uploader_session_cookie", "").orEmpty()
 
+    /**
+     * Odpovídá lokální paměť AKTIVNÍMU profilu? `false` = profil se právě přepnul a [syncFromServer]
+     * ještě nedoběhl, takže čtení vrací prázdno (viz guard v [allRecords]).
+     *
+     * Konzumenti s VLASTNÍ cache si tím ověří, že to, co si chystají uložit, opravdu patří profilu,
+     * pod jehož klíčem to ukládají — jinak by si zacachovali prázdno (nebo dřív rovnou cizí data)
+     * na celou dobu svého TTL a řada by zůstala špatně až do restartu appky.
+     */
+    fun isReadyForActiveProfile(): Boolean {
+        val synced = lastSyncedProfile
+        return synced == null || synced == profileKey()
+    }
+
     /** Persistovaný poslední synchronizovaný profil (detekce přepnutí → izolace). */
     private var lastSyncedProfile: String?
         get() = appPrefs.getString("sieve_last_profile", null)
@@ -718,12 +731,29 @@ class WorkingSourceStore @Inject constructor(
 
     /** Syrový obsah paměti (filmy i díly), dedup podle identity — záznam je uložen pod tmdb i imdb klíčem. */
     private fun allRecords(): List<WorkingSource> {
+        // 🔴🔴 2026-08-26 (user: *„při přepnutí profilu z dětí na dospělý, dokud neukončím a nenastartuju
+        // app, tak Další díly neukazují správně"* — v řadě visely Bluey a Chaloupka na vršku, tedy
+        // DĚTSKÝ obsah na profilu Dospělý) — **NIKDY NESERVÍRUJ DATA CIZÍHO PROFILU.**
+        // Lokální prefs se čistí až uvnitř asynchronního [syncFromServer]; mezi přepnutím profilu a
+        // doběhnutím té korutiny tu ale pořád leží zdroje PŘEDCHOZÍHO profilu a každý čtenář je bral
+        // jako své. Nejhorší dopad nebyl ten okamžik, ale to, že si je [CtvNextUpLoader] /
+        // [StreamNextUpLoader] v tu chvíli ULOŽILY DO CACHE POD KLÍČ NOVÉHO PROFILU (obě si profil
+        // hlídají, jenže dostaly špatná data se správným klíčem) → špatná řada pak přežila až do
+        // vypršení TTL nebo restartu appky. Přesně to user popsal.
+        // Guard je tady, v jediném choke pointu všech čtení (getAll/get/getSeason/getEpisodes/
+        // savedKeys/…), ne v jednotlivých čtenářích — jinak by ho příští čtenář zase obešel.
+        // Bezpečnost > pohodlí: radši chvíli prázdno než cizí (týž princip, jaký drží
+        // [syncFromServer] u izolace dospělý↔děti).
+        val key = profileKey()
+        val synced = lastSyncedProfile
+        if (synced != null && synced != key) return emptyList()
+
         val seen = HashSet<String>()
         val out = ArrayList<WorkingSource>()
-        for ((key, value) in prefs.all) {
-            if (!key.startsWith("sieve_working_")) continue
-            val rec = parse(value as? String, key) ?: continue
-            val id = identity(rec).takeIf { it != "hash:" } ?: "hash:$key"
+        for ((k, value) in prefs.all) {
+            if (!k.startsWith("sieve_working_")) continue
+            val rec = parse(value as? String, k) ?: continue
+            val id = identity(rec).takeIf { it != "hash:" } ?: "hash:$k"
             if (seen.add(id)) out.add(rec)
         }
         return out.sortedByDescending { it.savedAtMs }

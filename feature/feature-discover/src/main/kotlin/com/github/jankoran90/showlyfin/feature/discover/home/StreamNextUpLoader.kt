@@ -57,6 +57,12 @@ class StreamNextUpLoader @Inject constructor(
         cache?.takeIf { it.profileKey == key && now - it.atMs < CACHE_TTL_MS }
             ?.let { return it.items.take(limit) }
 
+        // 🔴 2026-08-26 — po přepnutí profilu nesmí vzniknout cache z NEDOROVNANÉHO úložiště. Dokud
+        // [WorkingSourceStore] nedotáhl zdroje nového profilu, vrací prázdno (izolace) — kdybychom to
+        // prázdno zacachovali pod klíč nového profilu, řada zůstane prázdná celé TTL, i když se zdroje
+        // mezitím dotáhnou. Nic necachuj a příště se zeptej znovu.
+        if (!workingSources.isReadyForActiveProfile()) return emptyList()
+
         val shows = workingSources.getLibraryEntries()
             .filter { it.isSeasonRecipe() && it.isSavedPlayable() }
             .take(MAX_SHOWS)
