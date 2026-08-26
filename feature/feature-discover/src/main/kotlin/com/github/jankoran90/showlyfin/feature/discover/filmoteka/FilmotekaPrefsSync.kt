@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -42,28 +41,40 @@ class FilmotekaPrefsSync @Inject constructor(
     @Volatile private var activeProfileId: Long? = null
 
     init {
-        // Přepnutí profilu: nejdřív lokální stav profilu, pak přebij tím, co nese synchronizovaný profil.
-        profileRepository.activeProfile
-            .onEach { p ->
+        // 🔴🔴 2026-08-26 (user: „nastavím to znovu rozdílně pro dva profily a jak přepínám, tak se to
+        // přepíše u obou profilů na stejné nastavení" — reprodukoval SAMOTNÝM přepnutím, bez jediného
+        // tlačítka) — KOŘENOVÁ PŘÍČINA: `activeProfile` (→ [FilmotekaSettingsStore.switchProfile], mění
+        // interní `activeId`) a `activeConfig.filmotekaPrefs` (→ [FilmotekaSettingsStore.applySynced],
+        // PÍŠE pod `keyFor(...)` = aktuální `activeId`) byly DVĚ NEZÁVISLÉ korutiny na DVOU RŮZNÝCH
+        // StateFlow. Při přepnutí profilu se mění OBA téměř současně, ale Kotlin Flow negarantuje pořadí
+        // mezi nezávislými collectory — když `activeConfig` (už s daty NOVÉHO profilu) doběhne dřív než
+        // `activeProfile` stihne přepnout `activeId`, `applySynced` zapíše prefs NOVÉHO profilu pod
+        // PREFIXOVANÝ KLÍČ STARÉHO profilu → jeho lokální nastavení se přepíše cizími daty. Nulová
+        // souvislost s obsahem/kódem appky navenek — čistě race dvou coroutines nad sdíleným Singletonem.
+        // Fix: JEDNA kombinovaná korutina — `switchProfile` proběhne VŽDY dřív, než se použije `activeId`
+        // pro `applySynced`, v tomtéž emitu, bez šance na prokládání.
+        combine(profileRepository.activeProfile, profileRepository.activeConfig) { p, cfg -> p to cfg }
+            .onEach { (p, cfg) ->
                 activeProfileId = p?.id
-                store.switchProfile(p?.id)
-            }
-            .launchIn(scope)
-
-        profileRepository.activeConfig
-            .map { it.filmotekaPrefs }
-            .distinctUntilChanged()
-            .onEach { remote ->
-                if (remote == null) {
-                    // Migrace: profil ještě nastavení Filmotéky nemá → vystrč to, co má tohle zařízení.
-                    push(store.snapshot())
-                    return@onEach
-                }
-                if (remote == store.snapshot()) return@onEach
+                // `applying` drží i přes `switchProfile` — ten překlopí store na hodnoty NOVÉHO profilu,
+                // což je změna jako každá jiná a odchozí větev by ji poslala na server. U profilu, co
+                // svoje `filmotekaPrefs` na serveru ještě nemá, by tím lokální DEFAULTY přepsaly jeho
+                // serverový stav dřív, než ho `applySynced` níž stihne nalít.
                 applying = true
-                runCatching { store.applySynced(remote) }
-                    .onFailure { Timber.w(it, "[Filmoteka] apply synced prefs selhal") }
-                applying = false
+                try {
+                    store.switchProfile(p?.id)
+                    val remote = cfg.filmotekaPrefs
+                    if (remote == null) {
+                        // Migrace: profil ještě nastavení Filmotéky nemá → vystrč to, co má tohle zařízení.
+                        push(store.snapshot())
+                        return@onEach
+                    }
+                    if (remote == store.snapshot()) return@onEach
+                    runCatching { store.applySynced(remote) }
+                        .onFailure { Timber.w(it, "[Filmoteka] apply synced prefs selhal") }
+                } finally {
+                    applying = false
+                }
             }
             .launchIn(scope)
 

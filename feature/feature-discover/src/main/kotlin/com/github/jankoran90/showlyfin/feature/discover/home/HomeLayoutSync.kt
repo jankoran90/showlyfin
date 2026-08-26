@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -54,27 +53,33 @@ class HomeLayoutSync @Inject constructor(
     @Volatile private var activeProfileId: Long? = null
 
     init {
-        profileRepository.activeProfile
-            .onEach { p ->
+        // 🔴🔴 2026-08-26 — TÝŽ RACE jako ve [FilmotekaPrefsSync] (tam ho user reprodukoval: „jak
+        // přepínám, tak se to přepíše u obou profilů na stejné nastavení"). `activeProfile`
+        // (→ `switchProfile`, mění interní `activeId` = prefix prefs klíčů) a `activeConfig`
+        // (→ `applySynced`, PÍŠE pod tím prefixem) byly dvě nezávislé korutiny nad dvěma StateFlow;
+        // Kotlin Flow negarantuje jejich pořadí, takže config NOVÉHO profilu mohl dorazit dřív, než se
+        // přepnul `activeId` → zápis pod klíč STARÉHO profilu. Jedna kombinovaná korutina to pořadí
+        // vynutí. `applying` drží i přes `switchProfile` — ten překlopí store na hodnoty nového profilu
+        // a odchozí větev by tu změnu jinak poslala na server (u profilu bez uloženého rozvržení by
+        // lokální defaulty přepsaly jeho serverový stav dřív, než ho `applySynced` níž stihne nalít).
+        combine(profileRepository.activeProfile, profileRepository.activeConfig) { p, cfg -> p to cfg }
+            .onEach { (p, cfg) ->
                 activeProfileId = p?.id
-                store.switchProfile(p?.id)
-            }
-            .launchIn(scope)
-
-        profileRepository.activeConfig
-            .map { if (isTv) it.homeLayoutTv else it.homeLayoutPhone }
-            .distinctUntilChanged()
-            .onEach { remote ->
-                if (remote == null) {
-                    // Profil pro tenhle typ zařízení ještě nic nemá → vystrč, co má tohle zařízení.
-                    push(store.snapshot())
-                    return@onEach
-                }
-                if (remote == store.snapshot()) return@onEach
                 applying = true
-                runCatching { store.applySynced(remote) }
-                    .onFailure { Timber.w(it, "[PUDORYS] apply rozvržení selhal (tv=$isTv)") }
-                applying = false
+                try {
+                    store.switchProfile(p?.id)
+                    val remote = if (isTv) cfg.homeLayoutTv else cfg.homeLayoutPhone
+                    if (remote == null) {
+                        // Profil pro tenhle typ zařízení ještě nic nemá → vystrč, co má tohle zařízení.
+                        push(store.snapshot())
+                        return@onEach
+                    }
+                    if (remote == store.snapshot()) return@onEach
+                    runCatching { store.applySynced(remote) }
+                        .onFailure { Timber.w(it, "[PUDORYS] apply rozvržení selhal (tv=$isTv)") }
+                } finally {
+                    applying = false
+                }
             }
             .launchIn(scope)
 
