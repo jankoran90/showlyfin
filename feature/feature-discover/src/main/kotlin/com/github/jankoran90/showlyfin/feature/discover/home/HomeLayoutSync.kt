@@ -62,7 +62,10 @@ class HomeLayoutSync @Inject constructor(
         // vynutí. `applying` drží i přes `switchProfile` — ten překlopí store na hodnoty nového profilu
         // a odchozí větev by tu změnu jinak poslala na server (u profilu bez uloženého rozvržení by
         // lokální defaulty přepsaly jeho serverový stav dřív, než ho `applySynced` níž stihne nalít).
-        combine(profileRepository.activeProfile, profileRepository.activeConfig) { p, cfg -> p to cfg }
+        // 🔴🔴 DOPLNĚK TÉHOŽ DNE: `combine(activeProfile, activeConfig)` NESTAČILO — mezistav „STARÝ
+        // profil ⊕ NOVÝ config" byl reálná emise ze `setActive()`, takže ho `combine` viděl jako
+        // platnou dvojici. Skutečná oprava je atomická publikace u zdroje (viz FilmotekaPrefsSync).
+        profileRepository.activeProfileWithConfig
             .onEach { (p, cfg) ->
                 activeProfileId = p?.id
                 applying = true

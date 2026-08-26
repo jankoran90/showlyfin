@@ -53,7 +53,12 @@ class FilmotekaPrefsSync @Inject constructor(
         // souvislost s obsahem/kódem appky navenek — čistě race dvou coroutines nad sdíleným Singletonem.
         // Fix: JEDNA kombinovaná korutina — `switchProfile` proběhne VŽDY dřív, než se použije `activeId`
         // pro `applySynced`, v tomtéž emitu, bez šance na prokládání.
-        combine(profileRepository.activeProfile, profileRepository.activeConfig) { p, cfg -> p to cfg }
+        // 🔴🔴 DOPLNĚK TÉHOŽ DNE: `combine(activeProfile, activeConfig)` NESTAČILO. `setActive()`
+        // publikoval config a profil dvěma samostatnými zápisy, takže mezistav „STARÝ profil ⊕ NOVÝ
+        // config" byl REÁLNÁ emise — a `combine` ji věrně vidí jako platnou dvojici. Zúžilo to okno,
+        // nezavřelo (user: „keeps coming off"). Skutečná oprava je atomická publikace u zdroje →
+        // [ProfileRepository.activeProfileWithConfig]; odtud se nekonzistentní dvojice nedá přečíst.
+        profileRepository.activeProfileWithConfig
             .onEach { (p, cfg) ->
                 activeProfileId = p?.id
                 // `applying` drží i přes `switchProfile` — ten překlopí store na hodnoty NOVÉHO profilu,

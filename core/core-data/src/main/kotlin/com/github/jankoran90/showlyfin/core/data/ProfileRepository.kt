@@ -98,6 +98,51 @@ class ProfileRepository @Inject constructor(
     private val _activeConfig = MutableStateFlow(ProfileConfig.DEFAULT)
     val activeConfig: StateFlow<ProfileConfig> = _activeConfig.asStateFlow()
 
+    /**
+     * 🔴🔴 2026-08-26 (user: *„nastavím to rozdílně pro dva profily a jak přepínám, tak se to přepíše
+     * u obou na stejné"*, pak po první opravě *„keeps coming off"*) — **PROFIL A JEHO CONFIG JAKO
+     * JEDEN NEDĚLITELNÝ CELEK.**
+     *
+     * [activeProfile] a [activeConfig] jsou dva SAMOSTATNÉ StateFlow a při přepnutí profilu se
+     * nezveřejňují zároveň — [setActive] zapisuje NEJDŘÍV `_activeConfig` a až potom `_activeProfile`
+     * (záměrně: konzumenti musí číst hotový config, viz komentář tam). Tím ale vzniká krátký
+     * MEZISTAV „STARÝ profil ⊕ NOVÝ config", který kdokoli, kdo si ta dvě čte dohromady, vidí jako
+     * platnou dvojici. Konkrétní škoda: [FilmotekaPrefsSync]/[HomeLayoutSync] podle profilu určují
+     * PREFIX klíče lokálních prefs (`p<id>_…`) a pod ten prefix zapisují config → v mezistavu zapsaly
+     * nastavení NOVÉHO profilu pod klíč STARÉHO a nenávratně mu přepsaly jeho vlastní.
+     *
+     * Sjednotit to na straně konzumenta nejde — `combine()` ten mezistav uvidí taky (je to reálná
+     * emise, ne artefakt). Musí se to zveřejňovat atomicky ZDE, u zdroje. Konzumenti, kterým na
+     * konzistenci dvojice záleží, čtou tenhle tok; [activeProfile] a [activeConfig] zůstávají pro ty,
+     * co potřebují jen jednu polovinu.
+     */
+    private val _activeProfileWithConfig =
+        MutableStateFlow<Pair<ProfileEntity?, ProfileConfig>>(null to ProfileConfig.DEFAULT)
+    val activeProfileWithConfig: StateFlow<Pair<ProfileEntity?, ProfileConfig>> =
+        _activeProfileWithConfig.asStateFlow()
+
+    /**
+     * Zveřejni profil + config ATOMICKY (viz [activeProfileWithConfig]). Vždy volej místo ručního
+     * zápisu do `_activeProfile`/`_activeConfig`, ať dvojice nikdy nerozejde.
+     */
+    private fun publishActive(profile: ProfileEntity?, config: ProfileConfig) {
+        _activeProfileWithConfig.value = profile to config
+        _activeConfig.value = config
+        _activeProfile.value = profile
+    }
+
+    /** Zveřejni JEN config aktivního profilu (profil se nemění) — drží [activeProfileWithConfig] v páru. */
+    private fun publishConfig(config: ProfileConfig) {
+        _activeProfileWithConfig.value = _activeProfileWithConfig.value.first to config
+        _activeConfig.value = config
+    }
+
+    /** Zveřejni JEN profil (config se nemění) — drží [activeProfileWithConfig] v páru. */
+    private fun publishProfile(profile: ProfileEntity?) {
+        _activeProfileWithConfig.value = profile to _activeProfileWithConfig.value.second
+        _activeProfile.value = profile
+    }
+
     fun observeAll(): Flow<List<ProfileEntity>> = dao.observeAll()
 
     suspend fun getAll(): List<ProfileEntity> = dao.getAll()
@@ -196,8 +241,7 @@ class ProfileRepository @Inject constructor(
     suspend fun delete(profile: ProfileEntity) {
         dao.delete(profile)
         if (_activeProfile.value?.id == profile.id) {
-            _activeProfile.value = null
-            _activeConfig.value = ProfileConfig.DEFAULT
+            publishActive(null, ProfileConfig.DEFAULT)
             prefs.edit().remove(PREF_ACTIVE_PROFILE_ID).apply()
         }
     }
@@ -208,8 +252,7 @@ class ProfileRepository @Inject constructor(
      * příští aktivaci profilu).
      */
     fun clearActive() {
-        _activeProfile.value = null
-        _activeConfig.value = ProfileConfig.DEFAULT
+        publishActive(null, ProfileConfig.DEFAULT)
         prefs.edit().remove(PREF_ACTIVE_PROFILE_ID).apply()
     }
 
@@ -217,14 +260,14 @@ class ProfileRepository @Inject constructor(
     suspend fun rename(profileId: Long, newName: String) {
         val profile = dao.getById(profileId) ?: return
         dao.update(profile.copy(name = newName))
-        if (_activeProfile.value?.id == profileId) _activeProfile.value = dao.getById(profileId)
+        if (_activeProfile.value?.id == profileId) publishProfile(dao.getById(profileId))
     }
 
     /** Plan HELM — nastaví/zruší app-login PIN profilu (hash; null = zrušit) + write-through na backend. */
     suspend fun setLoginPinHash(profileId: Long, hash: String?) {
         val profile = dao.getById(profileId) ?: return
         dao.update(profile.copy(loginPinHash = hash))
-        if (_activeProfile.value?.id == profileId) _activeProfile.value = dao.getById(profileId)
+        if (_activeProfile.value?.id == profileId) publishProfile(dao.getById(profileId))
         Timber.i("[PUSH] setLoginPinHash → push key='${profile.backendKey()}' pin=${if (hash==null) "clear" else "set"}")
         configGateway.pushLoginPin(profile.backendKey(), profile.name, profile.isAdmin, profile.jellyfinUserId, hash ?: "")
     }
@@ -233,7 +276,7 @@ class ProfileRepository @Inject constructor(
     suspend fun setAvatarPath(profileId: Long, path: String?) {
         val profile = dao.getById(profileId) ?: return
         dao.update(profile.copy(avatarPath = path))
-        if (_activeProfile.value?.id == profileId) _activeProfile.value = dao.getById(profileId)
+        if (_activeProfile.value?.id == profileId) publishProfile(dao.getById(profileId))
     }
 
     /**
@@ -248,12 +291,12 @@ class ProfileRepository @Inject constructor(
         dao.update(profile.copy(configJson = newJson))
         val updated = dao.getById(profileId)
         if (_activeProfile.value?.id == profileId && updated != null) {
-            _activeProfile.value = updated
             val effective = effectiveConfigFor(updated)
-            // Applier PŘED publikací do _activeConfig — observeři (ListenViewModel…) čtou kanonické
-            // prefs, takže je musí applier stihnout zapsat dřív, než je emise configu probudí.
+            // Applier PŘED publikací configu — observeři (ListenViewModel…) čtou kanonické prefs,
+            // takže je musí applier stihnout zapsat dřív, než je emise configu probudí.
             configApplier.apply(effective, updated.id, updated.isChildAgeRating())
-            _activeConfig.value = effective
+            // Profil i config JEDNÍM zápisem — viz [activeProfileWithConfig].
+            publishActive(updated, effective)
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
         Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
@@ -313,7 +356,7 @@ class ProfileRepository @Inject constructor(
         if (active.templateUuid != uuid) return
         val effective = effectiveConfigFor(active)
         configApplier.apply(effective, active.id, active.isChildAgeRating())
-        _activeConfig.value = effective
+        publishConfig(effective)
     }
 
     /**
@@ -336,10 +379,9 @@ class ProfileRepository @Inject constructor(
         dao.update(profile.copy(templateUuid = templateUuid, configJson = newJson))
         val updated = dao.getById(profileId)
         if (_activeProfile.value?.id == profileId && updated != null) {
-            _activeProfile.value = updated
             val effective = effectiveConfigFor(updated)
             configApplier.apply(effective, updated.id, updated.isChildAgeRating())
-            _activeConfig.value = effective
+            publishActive(updated, effective)   // profil i config JEDNÍM zápisem
         }
         // Plan WARDEN W3c: write-through přiřazení na backend ("" = zrušit → backend uloží "").
         configGateway.pushAssignedTemplate(
@@ -367,7 +409,7 @@ class ProfileRepository @Inject constructor(
         val profile = dao.getById(profileId) ?: return
         dao.update(profile.copy(maxAgeRating = rating))
         if (_activeProfile.value?.id == profileId) {
-            _activeProfile.value = dao.getById(profileId)
+            publishProfile(dao.getById(profileId))
         }
     }
 
@@ -483,9 +525,17 @@ class ProfileRepository @Inject constructor(
         val profileForConfig = dao.getById(profileId) ?: profile
         val config = effectiveConfigFor(profileForConfig)
         configApplier.apply(config, profile.id, profileForConfig.isChildAgeRating())
-        _activeConfig.value = config
-        // Emise profilu AŽ po zápisu prefs + configu → observeři reloadují s korektními creds.
-        _activeProfile.value = profile
+        // 🔴🔴 2026-08-26 — TADY VZNIKALA ZÁMĚNA NASTAVENÍ MEZI PROFILY. Dřív se zapisovalo
+        // `_activeConfig` a AŽ POTOM `_activeProfile` (dva samostatné StateFlow, dvě emise). Mezi nimi
+        // platil MEZISTAV „STARÝ profil ⊕ NOVÝ config" — a konzument, co ty dva čte dohromady, ho vidí
+        // jako platnou dvojici. [FilmotekaPrefsSync]/[HomeLayoutSync] z profilu odvozují PREFIX klíče
+        // lokálních prefs (`p<id>_…`) a pod ten prefix zapisují config → v mezistavu uložily nastavení
+        // NOVÉHO profilu pod klíč STARÉHO a přepsaly mu jeho vlastní (user reprodukoval pouhým
+        // přepínáním sem a tam). Sjednocení na straně konzumenta nestačilo — mezistav je reálná emise,
+        // takže ho `combine()` vidí taky. Publikace obojího JEDNÍM zápisem tu možnost odstraňuje.
+        // Pořadí uvnitř [publishActive] zachovává původní záruku: config je venku dřív než profil,
+        // takže observeři profilu pořád reloadují s korektními creds.
+        publishActive(profile, config)
         // Plan PROFILES Fáze 2: zkus stáhnout aktuální balík z backendu (cache = lokální configJson).
         // Best-effort + timeout, ať přepnutí profilu nevisí offline. Uploader creds aplikované výše
         // → gateway má URL+cookie. Re-aplikuje jen pokud je profil pořád aktivní a balík přišel.
@@ -592,10 +642,9 @@ class ProfileRepository @Inject constructor(
         if (changed && _activeProfile.value?.id == profile.id) {
             val updated = dao.getById(profile.id)
             if (updated != null) {
-                _activeProfile.value = updated
                 val effective = effectiveConfigFor(updated)
                 configApplier.apply(effective, updated.id, updated.isChildAgeRating())
-                _activeConfig.value = effective
+                publishActive(updated, effective)   // profil i config JEDNÍM zápisem
             }
         }
     }
