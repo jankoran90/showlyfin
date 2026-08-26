@@ -323,13 +323,15 @@ class TvFilmotekaViewModel @Inject constructor(
                 // v PRVNÍM vykreslení. Dřív se kreslila jen báze a řada nad ní doskočila o vteřiny
                 // později (síť: Jellyfin nextUp + Trakt na každý seriál + ČT feedy), čímž odsunula
                 // už čtený obsah dolů. Jen když je zapnutá — jinak by se mihla i vypnutá.
+                var fromDisk = false
                 if (settings.showNextUp.value) {
-                    diskCache.readNextUp(profileId)?.let { nextUpItems = it }
+                    diskCache.readNextUp(profileId)?.let { nextUpItems = it; fromDisk = true }
                 }
-                diskCache.read(profileId)?.let { cached ->
-                    baseItems = cached
-                    rebuild(settings.defaultAxis.value)
-                }
+                diskCache.read(profileId)?.let { cached -> baseItems = cached; fromDisk = true }
+                // Překresli, když z disku přišlo COKOLI z toho dvojího. Dřív viselo `rebuild` uvnitř
+                // větve báze, takže když byla na disku jen řada (ale ne báze), zůstala ležet v poli
+                // a vykreslila se až s dopočtem ze sítě — přesně ten skok, který tohle má odstranit.
+                if (fromDisk) rebuild(settings.defaultAxis.value)
             }
             // VESTIBUL: „Další díly" jedou SOUBĚŽNĚ s bází — jsou to jiné zdroje, čekání se nemá sčítat.
             val nextUpJob = async { loadNextUp() }
