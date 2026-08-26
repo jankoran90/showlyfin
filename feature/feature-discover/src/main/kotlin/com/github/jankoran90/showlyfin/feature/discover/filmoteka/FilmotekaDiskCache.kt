@@ -30,6 +30,48 @@ class FilmotekaDiskCache @Inject constructor(
         context.getSharedPreferences("filmoteka_cache", Context.MODE_PRIVATE)
 
     private val type = object : TypeToken<List<MediaItem>>() {}.type
+    private val nextUpType =
+        object : TypeToken<List<com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem>>() {}.type
+
+    /**
+     * 🔴 2026-08-26 (user: *„nejdřív se zobrazí obsah Filmotéky a později Další díly — tím pádem musíš
+     * odrolovat na začátek, protože začátek byl předtím jinde"* + *„rychlost cold načtení Filmotéky je
+     * super, optimalizuj i Další díly"*) — řada „Další díly" na disku, ze stejného důvodu jako báze.
+     *
+     * Báze se kreslila hned z disku, kdežto řada nad ní se dopočítávala až ze sítě (Jellyfin nextUp +
+     * Trakt na každý uložený seriál + ČT feedy) → doskočila o vteřiny později a ODSUNULA už čtený
+     * obsah dolů. Držet ji na disku řeší obojí najednou: první vykreslení ji má v sobě (nic
+     * nepřeskakuje) a cold start je stejně rychlý jako u Filmotéky.
+     *
+     * Per profil, stejně jako báze — jinak by dětskému profilu bliklo „Další díly" dospělého.
+     */
+    fun readNextUp(profileId: Long?): List<com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem>? {
+        val raw = prefs.getString(nextUpKey(profileId), null) ?: return null
+        if (System.currentTimeMillis() - prefs.getLong(nextUpStampKey(profileId), 0L) > NEXT_UP_MAX_AGE_MS) return null
+        return runCatching {
+            gson.fromJson<List<com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem>>(raw, nextUpType)
+        }
+            .onFailure { Timber.w(it, "[Filmotéka] nečitelná disková cache Dalších dílů") }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Ulož řadu „Další díly". Na rozdíl od báze se ukládá i PRÁZDNÁ (jako smazání) — prázdno je tu
+     * legitimní výsledek („nic rozkoukaného"), a kdyby se ignorovalo, držela by cache navždy poslední
+     * neprázdný stav a řada by po dokoukání nešla pryč.
+     */
+    fun writeNextUp(
+        profileId: Long?,
+        items: List<com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem>,
+    ) {
+        runCatching {
+            prefs.edit()
+                .putString(nextUpKey(profileId), gson.toJson(items.take(NEXT_UP_MAX_ITEMS), nextUpType))
+                .putLong(nextUpStampKey(profileId), System.currentTimeMillis())
+                .apply()
+        }.onFailure { Timber.w(it, "[Filmotéka] zápis diskové cache Dalších dílů selhal") }
+    }
 
     fun read(profileId: Long?): List<MediaItem>? {
         val raw = prefs.getString(key(profileId), null) ?: return null
@@ -52,6 +94,8 @@ class FilmotekaDiskCache @Inject constructor(
 
     private fun key(profileId: Long?) = "base_${profileId ?: 0L}"
     private fun stampKey(profileId: Long?) = "base_${profileId ?: 0L}_at"
+    private fun nextUpKey(profileId: Long?) = "nextup_${profileId ?: 0L}"
+    private fun nextUpStampKey(profileId: Long?) = "nextup_${profileId ?: 0L}_at"
 
     private companion object {
         /** Filmotéka bývá v řádu stovek titulů; strop drží zápis i čtení levné. */
@@ -59,5 +103,15 @@ class FilmotekaDiskCache @Inject constructor(
 
         /** Po týdnu radši počkej na čerstvý sběr. */
         const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
+
+        /** „Další díly" je krátká řada — víc než tohle se stejně nevykreslí. */
+        const val NEXT_UP_MAX_ITEMS = 30
+
+        /**
+         * Kratší platnost než u báze: rozkoukaný díl se mění mnohem rychleji než obsah Filmotéky, a
+         * zobrazit den starý „další díl" je horší než ho na okamžik nezobrazit. Slouží jen k prvnímu
+         * vykreslení — čerstvá data ho hned přepíšou.
+         */
+        const val NEXT_UP_MAX_AGE_MS = 12L * 60 * 60 * 1000
     }
 }

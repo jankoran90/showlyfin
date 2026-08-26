@@ -155,6 +155,11 @@ class TvFilmotekaViewModel @Inject constructor(
                 if (p?.id != lastProfileId) {
                     baseItems = emptyList()
                     favoriteItems = emptyList()
+                    // 🔴 2026-08-26 — „Další díly" se tu dřív NEČISTILY, takže po přepnutí profilu
+                    // v řadě dál visel obsah PŘEDCHOZÍHO profilu, dokud nedoběhl nový sběr (user viděl
+                    // dětské pořady na profilu Dospělý). Báze se čistila od 2026-07-29, řada nad ní se
+                    // na to zapomnělo — týž požadavek, jiné pole.
+                    nextUpItems = emptyList()
                     lastProfileId = p?.id
                 }
                 reload()
@@ -312,7 +317,16 @@ class TvFilmotekaViewModel @Inject constructor(
             // by těmhle titulům datum chybělo a spadly by na konec: „řazení ve Filmotéce je rozházené
             // ve smyslu nedávno přidaných" (user 2026-07-29).
             if (baseItems.isEmpty()) {
-                diskCache.read(profileRepository.activeProfile.value?.id)?.let { cached ->
+                val profileId = profileRepository.activeProfile.value?.id
+                // 🔴 2026-08-26 (user: „nejdřív se zobrazí obsah Filmotéky a později Další díly, tím
+                // pádem musíš odrolovat na začátek") — řadu ber z disku ZÁROVEŇ s bází, ať je
+                // v PRVNÍM vykreslení. Dřív se kreslila jen báze a řada nad ní doskočila o vteřiny
+                // později (síť: Jellyfin nextUp + Trakt na každý seriál + ČT feedy), čímž odsunula
+                // už čtený obsah dolů. Jen když je zapnutá — jinak by se mihla i vypnutá.
+                if (settings.showNextUp.value) {
+                    diskCache.readNextUp(profileId)?.let { nextUpItems = it }
+                }
+                diskCache.read(profileId)?.let { cached ->
                     baseItems = cached
                     rebuild(settings.defaultAxis.value)
                 }
@@ -321,6 +335,12 @@ class TvFilmotekaViewModel @Inject constructor(
             val nextUpJob = async { loadNextUp() }
             baseItems = filmotekaBase.loadBase()
             nextUpItems = nextUpJob.await()
+            // Čerstvá řada na disk pro příští první vykreslení. Zapisuje se i PRÁZDNÁ (dokoukáno =
+            // řada má zmizet), ale jen když je přepínač zapnutý — vypnutý vrací prázdno vždy a
+            // přepsal by tím poslední platný stav.
+            if (settings.showNextUp.value) {
+                diskCache.writeNextUp(profileRepository.activeProfile.value?.id, nextUpItems)
+            }
             // ATRIUM (SHW-118): sdružení AŽ po bázi — členy kolekce bereme jen z toho, co prošlo
             // dedupem i věkovým gate, takže se do kolekce nemůže propašovat skrytý titul.
             collectionGroups = resolveCollections()
