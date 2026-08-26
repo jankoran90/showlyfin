@@ -1553,7 +1553,10 @@ class DetailViewModel @Inject constructor(
                 sdilejStreamsWithRetry(mediaTypeStr(item), imdb, item.title, _uiState.value.tmdbCzTitle ?: item.title, item.year, epSeason, epEpisode, origTitle = item.originalTitle.orEmpty())
             }
             // Backend vrací už seřazené (rdSaved → cached → CZ/SK → fallbackOrder) a ořezané dle prefs.
-            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = strict, link = linkHint) }
+            // HARVEST (2026-08-26): strop 50 GB jako poslední záchrana žebříku (viz backend
+            // `lastResortMaxSizeGB`) jen pro dospělý profil — user 2026-08-26 „preferuji kvalitu,
+            // bavíme se čistě o dospělém profilu", RD saved/cached zůstává vždy nahoře beze změny.
+            runCatching { uploaderDs.getStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode, strict = strict, link = linkHint, wideLastResort = !isChildProfile()) }
                 .onSuccess { list ->
                     val saved = savedDeferred?.await().orEmpty()
                     val sdilej = sdilejDeferred.await()

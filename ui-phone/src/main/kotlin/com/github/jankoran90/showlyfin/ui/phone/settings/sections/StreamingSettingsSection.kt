@@ -578,6 +578,19 @@ internal fun StremioFilterSection(
                         onPlus = { onUpdate { it.copy(sizeSweetSpot = it.sizeSweetSpot.copy(max = it.sizeSweetSpot.max + 1)) } })
                     Spacer(Modifier.height(8.dp))
 
+                    // HARVEST (2026-08-26): strop poslední záchrany žebříku — appka ho posílá jen
+                    // pro DOSPĚLÝ profil (`wideLastResort`), když v běžném rozmezí nic nevyjde a
+                    // není jiný 1080p/4K zdroj. RD saved/cached má vždy přednost bez ohledu na velikost.
+                    FilterStepRow("Poslední záchrana (jen dospělý profil): ${"%.0f".format(sf.lastResortMaxSizeGB)} GB",
+                        onMinus = { onUpdate { it.copy(lastResortMaxSizeGB = (it.lastResortMaxSizeGB - 5).coerceAtLeast(it.maxSizeGB)) } },
+                        onPlus = { onUpdate { it.copy(lastResortMaxSizeGB = it.lastResortMaxSizeGB + 5) } })
+                    Text(
+                        "Použije se, jen když v běžném rozmezí velikosti není žádný 1080p/4K zdroj.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+
                     FilterSwitchRow("Přesné hledání (výchozí)", sf.strict) { v -> onUpdate { it.copy(strict = v) } }
                     FilterSwitchRow("Vždy zahrnout CZ/SK", sf.guaranteeCzSk) { v -> onUpdate { it.copy(guaranteeCzSk = v) } }
                     Spacer(Modifier.height(12.dp))

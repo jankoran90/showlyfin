@@ -70,7 +70,9 @@ class RdLibraryViewModel @Inject constructor(
                             overview = rd.overview,
                             rating = null,
                             genres = null,
-                            type = MediaType.MOVIE,
+                            // HARVEST (2026-08-26): backend teď matchuje i seriály/season packy
+                            // (`type: "series"`), dřív bylo natvrdo MOVIE.
+                            type = if (rd.type == "series") MediaType.SHOW else MediaType.MOVIE,
                             posterPath = rd.posterPath,
                         )
                     }

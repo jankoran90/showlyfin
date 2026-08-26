@@ -209,6 +209,9 @@ data class StreamFilterPrefs(
     val audioLanguages: List<String> = emptyList(),
     val minSizeGB: Double = 1.0,
     val maxSizeGB: Double = 20.0,
+    // HARVEST (2026-08-26): strop pro fallback žebřík, KDYŽ v běžném rozmezí (maxSizeGB) nic
+    // nevyjde — jen pro dospělý profil (appka posílá `wideLastResort` jen tam, viz DetailViewModel).
+    val lastResortMaxSizeGB: Double = 50.0,
     val maxResults: Int = 20,
     val guaranteeCzSk: Boolean = true,
     val strict: Boolean = true,
