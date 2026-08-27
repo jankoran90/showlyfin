@@ -254,6 +254,8 @@ fun FilmySettingsScreen(
                 )
                 FilmyCuratorSection()
                 FilmyGemsSection()
+                // SPOTLIGHT (FLM-02): sledování tvůrců + upozornění na jejich nové tituly.
+                FilmySpotlightSection()
             }
 
             // ── DOMOV A MENU (PŮDORYS SHW-112, user 2026-07-31: „v telefonu ani nemam moznost

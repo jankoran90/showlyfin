@@ -2,6 +2,8 @@ package com.github.jankoran90.showlyfin.feature.detail.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -96,6 +98,7 @@ import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
+import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 
@@ -113,7 +116,7 @@ private fun czechDisplayTitle(tmdbCzTitle: String?, csfdTitle: String?, original
         ?: csfdTitle?.takeIf { it.isNotBlank() }
         ?: original
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DetailScreen(
     item: MediaItem,
@@ -763,19 +766,46 @@ fun DetailScreen(
                     }
                     // CELLULOID M2.6 immersive: pod názvem kompaktní meta řádek — Režie + žánry (dosud
                     // viditelné jen v sekci „Tvůrci" níž). Aditivní: nic neubírá, obohacuje hero obou appek.
-                    val directorLine = uiState.directors.mapNotNull { it.name }.filter { it.isNotBlank() }.take(2).joinToString(", ")
-                    val metaParts = buildList {
-                        if (directorLine.isNotBlank()) add("Režie: $directorLine")
-                        genres?.takeIf { it.isNotEmpty() }?.let { add(it.take(3).joinToString(" · ")) }
-                    }
-                    if (metaParts.isNotEmpty()) {
-                        Text(
-                            text = metaParts.joinToString("   ·   "),
-                            style = MaterialTheme.typography.bodyMedium.copy(shadow = heroTextShadow),
-                            color = Color.White.copy(alpha = 0.85f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    // SPOTLIGHT (FLM-02, user 2026-08-27 „Udelej režii proklikavaci"): jména režisérů už
+                    // nejsou mrtvý text — každé je samostatně klikatelné a vede na jeho filmografii
+                    // (tatáž cesta, jakou používá pás v sekci „Tvůrci" níž). Žánry zůstávají textem.
+                    val directorsShown = uiState.directors.filter { !it.name.isNullOrBlank() }.take(2)
+                    val genreLine = genres?.takeIf { it.isNotEmpty() }?.take(3)?.joinToString(" · ").orEmpty()
+                    if (directorsShown.isNotEmpty() || genreLine.isNotBlank()) {
+                        val metaStyle = MaterialTheme.typography.bodyMedium.copy(shadow = heroTextShadow)
+                        // FlowRow se sám zalomí — u dlouhých jmen nebo tří žánrů nic nepřeteče z hera.
+                        FlowRow(verticalArrangement = Arrangement.Center) {
+                            if (directorsShown.isNotEmpty()) {
+                                Text("Režie: ", style = metaStyle, color = Color.White.copy(alpha = 0.85f))
+                                directorsShown.forEachIndexed { index, person ->
+                                    if (index > 0) Text(", ", style = metaStyle, color = Color.White.copy(alpha = 0.85f))
+                                    Text(
+                                        text = person.name.orEmpty(),
+                                        style = metaStyle,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .tvFocusable(shape = RoundedCornerShape(4.dp))
+                                            .clickable { viewModel.openPersonFilmography(person, FavoriteKind.DIRECTOR) },
+                                    )
+                                }
+                                if (genreLine.isNotBlank()) {
+                                    Text("   ·   ", style = metaStyle, color = Color.White.copy(alpha = 0.85f))
+                                }
+                            }
+                            if (genreLine.isNotBlank()) {
+                                Text(
+                                    text = genreLine,
+                                    style = metaStyle,
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
                     }
                 }
             }

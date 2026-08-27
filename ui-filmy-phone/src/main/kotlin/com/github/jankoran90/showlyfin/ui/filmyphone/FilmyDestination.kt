@@ -6,11 +6,13 @@ import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Diamond
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MovieFilter
+import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Recommend
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -29,6 +31,11 @@ enum class FilmySection(val label: String, val icon: ImageVector) {
     HISTORY("Zhlédnuto", Icons.Rounded.History),
     REFERENCE("Podle filmu", Icons.Rounded.MovieFilter),
     FOR_YOU("Pro tebe", Icons.Rounded.Recommend),
+    // SPOTLIGHT (FLM-02, user 2026-08-27): sledovaní tvůrci (taby Herci/Režiséři/…) — tělo je
+    // sdílená OblibeniScreen, do navigace Filmy dosud nezapojená.
+    TVURCI("Tvůrci", Icons.Rounded.Groups),
+    // SPOTLIGHT (FLM-02): nové tituly od sledovaných tvůrců (týdenní kontrola, pátek).
+    NOVINKY("Novinky", Icons.Rounded.NewReleases),
     FILMOTEKA("Filmotéka", Icons.Rounded.Movie),
     GEMS("Vzácné klenoty", Icons.Rounded.Diamond),
     LIBRARY("Knihovna", Icons.Rounded.VideoLibrary),

@@ -23,6 +23,7 @@ import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureGestur
 import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureManager
 import com.github.jankoran90.showlyfin.core.appservices.services.ApkInstaller
 import com.github.jankoran90.showlyfin.core.appservices.services.CuratorCheckWorker
+import com.github.jankoran90.showlyfin.core.appservices.services.SpotlightCheckWorker
 import com.github.jankoran90.showlyfin.core.appservices.services.EXTRA_OPEN_UPDATE_DIALOG
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdateCheckWorker
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdateChecker
@@ -74,10 +75,13 @@ class FilmyMainActivity : ComponentActivity() {
         enableEdgeToEdge()
         UpdateCheckWorker.enqueue(applicationContext)
         CuratorCheckWorker.enqueue(applicationContext)
+        // SPOTLIGHT (FLM-02): týdenní kontrola nových titulů od sledovaných tvůrců.
+        SpotlightCheckWorker.enqueue(applicationContext)
         runStartupUpdateCheck()
         maybeShowUpdateDialogFromIntent(intent)
         handleForYouIntent(intent)
         handleOpenDownloadsIntent(intent)
+        handleOpenNovinkyIntent(intent)
         val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         lifecycleScope.launch {
             // CELLULOID M1.3 — Filmy má 2 PEVNÉ LOKÁLNÍ profily (Dospělý/Děti), NE backend roster
@@ -208,6 +212,7 @@ class FilmyMainActivity : ComponentActivity() {
         maybeShowUpdateDialogFromIntent(intent)
         handleForYouIntent(intent)
         handleOpenDownloadsIntent(intent)
+        handleOpenNovinkyIntent(intent)
     }
 
     // Parity (CELLULOID): proklik notifikace kurátora „nová doporučení" (CuratorCheckWorker míří na tuto
@@ -223,6 +228,13 @@ class FilmyMainActivity : ComponentActivity() {
     private fun handleOpenDownloadsIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(ListenNavSignal.EXTRA_OPEN_DOWNLOADS, false) == true) {
             ListenNavSignal.requestOpenDownloads()
+        }
+    }
+
+    // SPOTLIGHT (FLM-02): proklik notifikace „Novinky od tvůrců" (SpotlightCheckWorker) → sekce „Novinky".
+    private fun handleOpenNovinkyIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(ListenNavSignal.EXTRA_OPEN_NOVINKY, false) == true) {
+            ListenNavSignal.requestOpenNovinky()
         }
     }
 

@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -210,6 +212,9 @@ fun CollectionGrid(
     onPartClick: (CollectionPart) -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(12.dp),
+    // SPOTLIGHT (FLM-02, user 2026-08-27 „Pridej sem možnost switch view grid/list jako mame jinde"):
+    // [ViewMode.LIST] = řádkový seznam místo mřížky. Default GRID → všechna dosavadní volání beze změny.
+    viewMode: ViewMode = ViewMode.GRID,
 ) {
     if (parts.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -218,6 +223,18 @@ fun CollectionGrid(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
+        }
+        return
+    }
+    if (viewMode == ViewMode.LIST) {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = contentPadding,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(parts, key = { it.key }) { part ->
+                CollectionPartRow(part = part, onClick = { onPartClick(part) })
+            }
         }
         return
     }
@@ -230,6 +247,82 @@ fun CollectionGrid(
     ) {
         items(parts, key = { it.key }) { part ->
             CollectionPartCard(part = part, onClick = { onPartClick(part) }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * SPOTLIGHT (FLM-02) — řádek seznamu: malý plakát + název, pod ním rok · hodnocení · žánry.
+ * Nese tytéž signály jako karta v mřížce (v knihovně / zhlédnuto), jen textem, ne odznakem.
+ */
+@Composable
+private fun CollectionPartRow(part: CollectionPart, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .tvFocusable(shape = RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .width(48.dp)
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (part.posterUrl != null) {
+                AsyncImage(
+                    model = part.posterUrl,
+                    contentDescription = part.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Icon(
+                    Icons.Default.Movie,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                )
+            }
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(
+                text = part.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val meta = buildList {
+                part.year?.take(4)?.takeIf { it.isNotBlank() }?.let { add(it) }
+                part.rating?.takeIf { it > 0f }?.let { add("%.1f".format(it)) }
+                part.genres.take(2).forEach { add(it) }
+            }
+            if (meta.isNotEmpty()) {
+                Text(
+                    text = meta.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            val flags = buildList {
+                if (part.jellyfinId != null) add("V knihovně")
+                if (part.watched) add("Zhlédnuto")
+            }
+            if (flags.isNotEmpty()) {
+                Text(
+                    text = flags.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }

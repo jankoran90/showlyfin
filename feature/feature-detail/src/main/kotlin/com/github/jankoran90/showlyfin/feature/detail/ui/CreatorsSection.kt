@@ -20,10 +20,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +55,7 @@ import com.github.jankoran90.showlyfin.core.ui.CollectionGrid
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.tmdb.model.TmdbPerson
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
@@ -265,6 +269,9 @@ fun PersonFilmographySheet(
 ) {
     var sort by remember { mutableStateOf(FilmographySort.YEAR) }
     var descending by remember { mutableStateOf(true) }
+    // SPOTLIGHT (FLM-02, user 2026-08-27): mřížka/seznam jako jinde v appce. `rememberSaveable` →
+    // volba přežije otočení i návrat z detailu filmu (sheet se po Zpět obnovuje ze stashe).
+    var viewMode by rememberSaveable { mutableStateOf(ViewMode.GRID) }
     val parts = remember(collection, sort, descending) {
         val list = collection?.parts.orEmpty()
         val asc = when (sort) {
@@ -294,6 +301,15 @@ fun PersonFilmographySheet(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
+                    IconButton(onClick = {
+                        viewMode = if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID
+                    }) {
+                        if (viewMode == ViewMode.GRID) {
+                            Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = "Zobrazit jako seznam")
+                        } else {
+                            Icon(Icons.Rounded.GridView, contentDescription = "Zobrazit jako mřížku")
+                        }
+                    }
                     if (canFavorite) {
                         IconButton(onClick = onToggleFavorite) {
                             Icon(
@@ -320,6 +336,7 @@ fun PersonFilmographySheet(
                         parts = parts,
                         onPartClick = onPartClick,
                         modifier = Modifier.weight(1f),
+                        viewMode = viewMode,
                     )
                 }
             }

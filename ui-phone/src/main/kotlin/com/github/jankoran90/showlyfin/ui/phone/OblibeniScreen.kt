@@ -57,6 +57,12 @@ private val CATEGORIES = listOf(
 )
 
 /**
+ * SPOTLIGHT (FLM-02) — jen tvůrci, bez filmů. Sekce „Tvůrci" v appce Filmy se tak jmenuje pravdivě;
+ * oblíbené FILMY tam nepatří a nikam se neztrácejí (mají vlastní řadu na Domově i ve Filmotéce).
+ */
+val CREATOR_CATEGORIES = CATEGORIES.filter { it.first != FavoriteKind.MOVIE }
+
+/**
  * COMPASS C2 (SHW-44) — sekce Oblíbení: kategorie (filmy/herci/režiséři/producenti/skladatelé/
  * vydavatelství) + mřížka oblíbených dané kategorie. Tap na film → detail; tap na osobu/vydavatelství
  * → jejich tvorba (sheet). Dlouhý stisk → odebrat.
@@ -66,10 +72,14 @@ fun OblibeniScreen(
     onOpenDetail: (tmdbId: Long, title: String) -> Unit,
     modifier: Modifier = Modifier,
     vm: OblibeniViewModel = hiltViewModel(),
+    // SPOTLIGHT (FLM-02): sekce „Tvůrci" appky Filmy používá tutéž obrazovku, jen bez tabu Filmy a
+    // s vlastní lištou (hamburger + nadpis) nad sebou. Defaulty = dosavadní chování beze změny.
+    categories: List<Pair<FavoriteKind, String>> = CATEGORIES,
+    title: String? = "Oblíbení",
 ) {
     val items by vm.items.collectAsStateWithLifecycle()
     val sheet by vm.sheet.collectAsStateWithLifecycle()
-    var selected by rememberSaveable { mutableStateOf(FavoriteKind.MOVIE) }
+    var selected by rememberSaveable { mutableStateOf(categories.first().first) }
     var pendingRemove by remember { mutableStateOf<FavoriteItem?>(null) }
 
     val shown = remember(items, selected) {
@@ -77,16 +87,18 @@ fun OblibeniScreen(
     }
 
     Column(modifier.fillMaxSize()) {
-        Text(
-            "Oblíbení",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
-        )
+        if (title != null) {
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
+            )
+        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(CATEGORIES) { (kind, label) ->
+            items(categories) { (kind, label) ->
                 val count = items.count { it.kind == kind }
                 FilterChip(
                     selected = selected == kind,

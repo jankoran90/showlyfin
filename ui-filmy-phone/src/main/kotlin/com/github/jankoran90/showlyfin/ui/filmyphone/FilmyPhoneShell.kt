@@ -211,6 +211,19 @@ private fun FilmyShellContent() {
         }
     }
 
+    // SPOTLIGHT (FLM-02): proklik notifikace „Novinky od tvůrců" (FilmyMainActivity →
+    // EXTRA_OPEN_NOVINKY) → přepni na sekci „Novinky". Stejný vzor jako kurátor výše.
+    val openNovinky by ListenNavSignal.openNovinky.collectAsStateWithLifecycle()
+    var lastOpenNovinky by rememberSaveable { mutableStateOf(0L) }
+    LaunchedEffect(openNovinky) {
+        if (openNovinky > 0 && openNovinky != lastOpenNovinky) {
+            lastOpenNovinky = openNovinky
+            current = FilmySection.NOVINKY
+            detailStack = emptyList()
+            player = null
+        }
+    }
+
     // SEZONA-DÁVKA (user 2026-08-21: „stav lišty proklik sem") — proklik notifikace stahování
     // (FilmyMainActivity → EXTRA_OPEN_DOWNLOADS) → přepni na sekci „Stažené", stejný vzor jako výš.
     val openDownloads by ListenNavSignal.openDownloads.collectAsStateWithLifecycle()
@@ -366,6 +379,10 @@ private fun FilmyShellContent() {
                             FilmySection.REFERENCE -> FilmyReferenceScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.5: Pro tebe = kurátor (reuse ForYouViewModel).
                             FilmySection.FOR_YOU -> FilmyForYouScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            // SPOTLIGHT (FLM-02): sledovaní tvůrci — sdílená OblibeniScreen bez tabu Filmy.
+                            FilmySection.TVURCI -> FilmyTvurciScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            // SPOTLIGHT (FLM-02): nové tituly od sledovaných tvůrců (cíl notifikace).
+                            FilmySection.NOVINKY -> FilmyNovinkyScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.4: Filmotéka = mřížka plakátů se sekcemi (reuse TvFilmotekaViewModel).
                             FilmySection.FILMOTEKA -> FilmyFilmotekaScreen(
                                 onMenu = onMenu,
