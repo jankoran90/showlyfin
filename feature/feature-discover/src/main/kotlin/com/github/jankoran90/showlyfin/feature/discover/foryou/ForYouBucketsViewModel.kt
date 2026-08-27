@@ -151,7 +151,8 @@ class ForYouBucketsViewModel @Inject constructor(
         val seen = alreadySeen.toMutableSet()
         val out = mutableListOf<CuratorRail>()
         for (rail in rails) {
-            val items = rail.items.filter { it.tmdbId == null || seen.add(it.tmdbId) }
+            // `tmdbId` je z jiného modulu → smart cast nefunguje, potřebuje lokální kopii.
+            val items = rail.items.filter { item -> item.tmdbId?.let { seen.add(it) } ?: true }
             if (items.isNotEmpty()) out += rail.copy(items = items)
         }
         return out
