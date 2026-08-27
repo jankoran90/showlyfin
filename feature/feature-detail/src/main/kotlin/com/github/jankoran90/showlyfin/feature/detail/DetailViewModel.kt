@@ -9,6 +9,7 @@ import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
 import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.csfd.CsfdScraper
 import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
@@ -39,6 +40,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -54,6 +58,8 @@ import javax.inject.Named
 @HiltViewModel
 class DetailViewModel @Inject constructor(
     private val tmdbApi: TmdbRemoteDataSource,
+    // SPOTLIGHT (FLM-02): perzistentní mřížka/seznam ve filmografii osoby (list je Dialog → stav v něm nepřežije).
+    private val viewModeStore: com.github.jankoran90.showlyfin.data.uploader.ViewModeStore,
     private val csfdScraper: CsfdScraper,
     private val csfdRepository: CsfdRepository,
     private val jellyfinLibraryService: JellyfinLibraryService,
@@ -537,6 +543,22 @@ class DetailViewModel @Inject constructor(
      * ENSEMBLE (SHW-45): klik na osobu (herec/režie/scénář/kamera) → její tvorba jako VALIDNÍ karty.
      * `discoverMoviesByPerson` → `moviesToCollection` (CollectionPart nese tmdbId → karta se otevře správně).
      */
+    /**
+     * SPOTLIGHT (FLM-02, user 2026-08-27 „grid list prepinac se vzdy vraci na grid nezustane na list") —
+     * volba zobrazení filmografie. `rememberSaveable` uvnitř listu nestačí: je to `Dialog`, který se při
+     * každém zavření zahodí. Ukládá se proto do [ViewModeStore] jako u ostatních sekcí (per zařízení).
+     */
+    val filmographyViewMode: StateFlow<ViewMode> = viewModeStore.modes
+        .map { modes ->
+            modes[com.github.jankoran90.showlyfin.data.uploader.ViewModeStore.SECTION_FILMOGRAPHY]
+                ?.let { ViewMode.fromKey(it) } ?: ViewMode.GRID
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
+
+    fun setFilmographyViewMode(mode: ViewMode) = viewModeStore.set(
+        com.github.jankoran90.showlyfin.data.uploader.ViewModeStore.SECTION_FILMOGRAPHY, mode.storeKey,
+    )
+
     fun openPersonFilmography(
         person: TmdbPerson,
         kind: FavoriteKind? = null,
@@ -920,6 +942,10 @@ class DetailViewModel @Inject constructor(
                     rating = m.vote_average,
                     popularity = m.popularity,
                     genres = com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(m.genre_ids, isShow = false),
+                    // SPOTLIGHT (FLM-02): seznamový režim filmografie kreslí kanonický MediaRow,
+                    // který ukazuje i popis a plakát staví ze syrové TMDB cesty (ne z hotové URL).
+                    overview = m.overview,
+                    posterPath = m.poster_path,
                 )
             }
         return if (parts.isEmpty()) null else MediaCollection(name = name, parts = parts)

@@ -485,6 +485,7 @@ fun DetailScreen(
         )
     }
     // Plan ENSEMBLE (SHW-45): tvorba zvolené osoby (klik na herce/režii/scénář/kameru).
+    val filmographyViewMode by viewModel.filmographyViewMode.collectAsStateWithLifecycle()
     if (uiState.showPersonSheet) {
         PersonFilmographySheet(
             name = uiState.personSheetName,
@@ -497,6 +498,11 @@ fun DetailScreen(
             canFavorite = uiState.personSheetKind != null,
             isFavorite = uiState.isPersonFavorite,
             onToggleFavorite = { viewModel.togglePersonFavorite() },
+            // SPOTLIGHT (FLM-02): volba mřížka/seznam se drží v ViewModeStore (list je Dialog).
+            viewMode = filmographyViewMode,
+            onViewMode = { viewModel.setFilmographyViewMode(it) },
+            // Filmografie režiséra by měla v každém řádku týž jméno — tam režiséra nepiš.
+            showDirectorInRows = uiState.personSheetKind != FavoriteKind.DIRECTOR,
         )
     }
     if (uiState.showGallery) {

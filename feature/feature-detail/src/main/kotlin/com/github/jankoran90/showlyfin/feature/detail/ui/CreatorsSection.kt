@@ -38,7 +38,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -266,12 +265,17 @@ fun PersonFilmographySheet(
     canFavorite: Boolean = false,
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
+    // SPOTLIGHT (FLM-02): mřížka/seznam jako jinde v appce. Volba přichází ZVENČÍ (z ViewModelu přes
+    // `ViewModeStore`) — user 2026-08-27: „grid list prepinac se vzdy vraci na grid nezustane na list".
+    // Lokální `remember` tu nestačí: tenhle list je `Dialog`, který se při každém zavření zahodí.
+    viewMode: ViewMode = ViewMode.GRID,
+    onViewMode: (ViewMode) -> Unit = {},
+    // U filmografie REŽISÉRA nemá smysl psát režiséra do každého řádku (byl by tam pořád týž člověk);
+    // u herecké tvorby naopak říká, čí je to film. Rozhoduje volající podle role.
+    showDirectorInRows: Boolean = true,
 ) {
     var sort by remember { mutableStateOf(FilmographySort.YEAR) }
     var descending by remember { mutableStateOf(true) }
-    // SPOTLIGHT (FLM-02, user 2026-08-27): mřížka/seznam jako jinde v appce. `rememberSaveable` →
-    // volba přežije otočení i návrat z detailu filmu (sheet se po Zpět obnovuje ze stashe).
-    var viewMode by rememberSaveable { mutableStateOf(ViewMode.GRID) }
     val parts = remember(collection, sort, descending) {
         val list = collection?.parts.orEmpty()
         val asc = when (sort) {
@@ -302,7 +306,7 @@ fun PersonFilmographySheet(
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = {
-                        viewMode = if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID
+                        onViewMode(if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID)
                     }) {
                         if (viewMode == ViewMode.GRID) {
                             Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = "Zobrazit jako seznam")
@@ -337,6 +341,7 @@ fun PersonFilmographySheet(
                         onPartClick = onPartClick,
                         modifier = Modifier.weight(1f),
                         viewMode = viewMode,
+                        showDirectorInRows = showDirectorInRows,
                     )
                 }
             }

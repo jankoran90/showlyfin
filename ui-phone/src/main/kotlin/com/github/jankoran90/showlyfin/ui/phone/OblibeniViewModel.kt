@@ -3,6 +3,8 @@ package com.github.jankoran90.showlyfin.ui.phone
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
+import com.github.jankoran90.showlyfin.core.ui.ViewMode
+import com.github.jankoran90.showlyfin.data.uploader.ViewModeStore
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
 import com.github.jankoran90.showlyfin.data.tmdb.model.czLabel
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteItem
@@ -11,7 +13,10 @@ import com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -24,9 +29,19 @@ import javax.inject.Inject
 class OblibeniViewModel @Inject constructor(
     private val favorites: FavoritesRepository,
     private val tmdb: TmdbRemoteDataSource,
+    // SPOTLIGHT (FLM-02): perzistentní mřížka/seznam ve filmografii (sdílí sekci s detailem filmu).
+    private val viewModeStore: ViewModeStore,
 ) : ViewModel() {
 
     val items: StateFlow<List<FavoriteItem>> = favorites.items
+
+    /** Volba zobrazení filmografie — tentýž klíč jako v detailu filmu, ať je to všude stejné. */
+    val filmographyViewMode: StateFlow<ViewMode> = viewModeStore.modes
+        .map { modes -> modes[ViewModeStore.SECTION_FILMOGRAPHY]?.let { ViewMode.fromKey(it) } ?: ViewMode.GRID }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
+
+    fun setFilmographyViewMode(mode: ViewMode) =
+        viewModeStore.set(ViewModeStore.SECTION_FILMOGRAPHY, mode.storeKey)
 
     init {
         // DINGO — při otevření obrazovky dotáhni oblíbené aktuálního profilu ze serveru (per-profil sync).
@@ -45,7 +60,9 @@ class OblibeniViewModel @Inject constructor(
         // (režisér → režíroval, herec → hrál, skladatel → hudba …). Vydavatelství = produkce studia.
         // Mapování sdíleno s hledáním (COMPASS C3) přes WorksMapping.kt.
         val role = favoriteKindToRole(item.kind)
-        _sheet.value = WorksSheetState(open = true, name = item.name, loading = true, roleLabel = role.czLabel())
+        _sheet.value = WorksSheetState(
+            open = true, name = item.name, loading = true, roleLabel = role.czLabel(), kind = item.kind,
+        )
         viewModelScope.launch {
             val movies = runCatching {
                 if (item.kind == FavoriteKind.COMPANY) tmdb.discoverMoviesByCompany(item.id)
@@ -66,4 +83,7 @@ data class WorksSheetState(
     val collection: MediaCollection? = null,
     // VANTAGE (SHW-48): rolový titulek listu (Herecká tvorba / Režie / Hudba …).
     val roleLabel: String? = null,
+    // SPOTLIGHT (FLM-02): kategorie otevřeného tvůrce — u režiséra se v řádcích seznamu nepíše
+    // režisér (byl by v každém řádku týž člověk).
+    val kind: FavoriteKind? = null,
 )

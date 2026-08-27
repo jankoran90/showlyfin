@@ -45,6 +45,9 @@ class ViewModeStore @Inject constructor(
         const val SECTION_FILMOTEKA = "filmoteka"
         // QUARRY (user 2026-07-20) — telefonní Hledat: perzistentní přepínač mřížka/seznam.
         const val SECTION_SEARCH = "search"
+        // SPOTLIGHT (FLM-02, user 2026-08-27 „grid list prepinac se vzdy vraci na grid nezustane na list") —
+        // filmografie osoby: volba musí přežít zavření listu (je to Dialog, stav v něm nepřežije).
+        const val SECTION_FILMOGRAPHY = "filmography"
         const val SECTION_WATCHLIST = "watchlist"
         const val SECTION_HISTORY = "history"
         const val SECTION_RD = "rd"

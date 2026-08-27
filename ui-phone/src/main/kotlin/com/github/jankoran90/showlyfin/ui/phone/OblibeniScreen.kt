@@ -76,10 +76,21 @@ fun OblibeniScreen(
     // s vlastní lištou (hamburger + nadpis) nad sebou. Defaulty = dosavadní chování beze změny.
     categories: List<Pair<FavoriteKind, String>> = CATEGORIES,
     title: String? = "Oblíbení",
+    // SPOTLIGHT (FLM-02, user 2026-08-27: „rad tvurce pod poctu položek nejvic bude prvni") —
+    // kategorie seřaď sestupně dle počtu položek. Default false → sekce Oblíbení v `slovo` beze změny.
+    sortByCount: Boolean = false,
 ) {
     val items by vm.items.collectAsStateWithLifecycle()
     val sheet by vm.sheet.collectAsStateWithLifecycle()
-    var selected by rememberSaveable { mutableStateOf(categories.first().first) }
+    val filmographyViewMode by vm.filmographyViewMode.collectAsStateWithLifecycle()
+    val shownCategories = remember(items, categories, sortByCount) {
+        if (sortByCount) categories.sortedByDescending { (kind, _) -> items.count { it.kind == kind } }
+        else categories
+    }
+    // null = uživatel si ještě nevybral → drž se první (tj. při [sortByCount] té NEJPOČETNĚJŠÍ).
+    // Bez toho by po startu svítil prázdný tab, protože seznam dorazí až po prvním složení obrazovky.
+    var picked by rememberSaveable { mutableStateOf<FavoriteKind?>(null) }
+    val selected = picked ?: shownCategories.firstOrNull()?.first ?: categories.first().first
     var pendingRemove by remember { mutableStateOf<FavoriteItem?>(null) }
 
     val shown = remember(items, selected) {
@@ -98,11 +109,11 @@ fun OblibeniScreen(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(categories) { (kind, label) ->
+            items(shownCategories) { (kind, label) ->
                 val count = items.count { it.kind == kind }
                 FilterChip(
                     selected = selected == kind,
-                    onClick = { selected = kind },
+                    onClick = { picked = kind },
                     label = { Text(if (count > 0) "$label ($count)" else label) },
                 )
             }
@@ -157,6 +168,9 @@ fun OblibeniScreen(
                 vm.closeSheet()
             },
             onDismiss = { vm.closeSheet() },
+            viewMode = filmographyViewMode,
+            onViewMode = { vm.setFilmographyViewMode(it) },
+            showDirectorInRows = sheet.kind != FavoriteKind.DIRECTOR,
         )
     }
 }

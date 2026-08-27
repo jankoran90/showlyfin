@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -40,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 
 data class CollectionPart(
@@ -57,6 +58,11 @@ data class CollectionPart(
     val rating: Float? = null,
     val popularity: Float? = null,
     val genres: List<String> = emptyList(),
+    // SPOTLIGHT (FLM-02): seznamový režim kreslí KANONICKÝ [MediaRow] (týž řádek jako Filmotéka),
+    // který chce popis a syrovou TMDB cestu k plakátu. Volitelné → dosavadní tvůrci `CollectionPart`
+    // se nemění; kde chybí, řádek prostě popis/plakát nezobrazí (posterPath se dopočítá z [posterUrl]).
+    val overview: String? = null,
+    val posterPath: String? = null,
 )
 
 data class MediaCollection(
@@ -215,6 +221,8 @@ fun CollectionGrid(
     // SPOTLIGHT (FLM-02, user 2026-08-27 „Pridej sem možnost switch view grid/list jako mame jinde"):
     // [ViewMode.LIST] = řádkový seznam místo mřížky. Default GRID → všechna dosavadní volání beze změny.
     viewMode: ViewMode = ViewMode.GRID,
+    /** Psát do řádku režiséra? U filmografie režiséra ne (byl by v každém řádku týž člověk). */
+    showDirectorInRows: Boolean = true,
 ) {
     if (parts.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -233,7 +241,18 @@ fun CollectionGrid(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(parts, key = { it.key }) { part ->
-                CollectionPartRow(part = part, onClick = { onPartClick(part) })
+                // 🔒 user 2026-08-27: „ten správný už v kódu je" — seznam NEKRESLI vlastní řádek,
+                // použij kanonický [MediaRow] (týž, co Filmotéka/Pro tebe): velký plakát, režisér +
+                // stopáž, rok · žánry, popis, odznaky (v knihovně / uložený zdroj) a hvězdy na dlouhý stisk.
+                MediaRow(
+                    item = part.toMediaItem(),
+                    onClick = { onPartClick(part) },
+                    inLibrary = part.jellyfinId != null,
+                    watched = part.watched,
+                    genreLine = part.genres.filter { it.isNotBlank() }.take(3).joinToString(" · ")
+                        .takeIf { it.isNotBlank() },
+                    showDirector = showDirectorInRows,
+                )
             }
         }
         return
@@ -252,80 +271,22 @@ fun CollectionGrid(
 }
 
 /**
- * SPOTLIGHT (FLM-02) — řádek seznamu: malý plakát + název, pod ním rok · hodnocení · žánry.
- * Nese tytéž signály jako karta v mřížce (v knihovně / zhlédnuto), jen textem, ne odznakem.
+ * SPOTLIGHT (FLM-02) — [CollectionPart] → [MediaItem] pro kanonický [MediaRow].
+ * `posterPath`: preferuj syrovou TMDB cestu; když ji tvůrce partu nevyplnil, odvoď ji z hotové URL
+ * (`…/t/p/w185/abc.jpg` → `/abc.jpg`), ať řádek nezůstane bez plakátu.
  */
-@Composable
-private fun CollectionPartRow(part: CollectionPart, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .tvFocusable(shape = RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 4.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .width(48.dp)
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (part.posterUrl != null) {
-                AsyncImage(
-                    model = part.posterUrl,
-                    contentDescription = part.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Icon(
-                    Icons.Default.Movie,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                )
-            }
-        }
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(
-                text = part.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val meta = buildList {
-                part.year?.take(4)?.takeIf { it.isNotBlank() }?.let { add(it) }
-                part.rating?.takeIf { it > 0f }?.let { add("%.1f".format(it)) }
-                part.genres.take(2).forEach { add(it) }
-            }
-            if (meta.isNotEmpty()) {
-                Text(
-                    text = meta.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            val flags = buildList {
-                if (part.jellyfinId != null) add("V knihovně")
-                if (part.watched) add("Zhlédnuto")
-            }
-            if (flags.isNotEmpty()) {
-                Text(
-                    text = flags.joinToString(" · "),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                )
-            }
-        }
-    }
-}
+private fun CollectionPart.toMediaItem(): MediaItem = MediaItem(
+    traktId = 0L,
+    tmdbId = tmdbId,
+    imdbId = null,
+    title = title,
+    year = year?.take(4)?.toIntOrNull(),
+    overview = overview,
+    rating = rating,
+    genres = genres.ifEmpty { null },
+    type = MediaType.MOVIE,
+    posterPath = posterPath ?: posterUrl?.substringAfterLast('/')?.takeIf { it.isNotBlank() }?.let { "/$it" },
+)
 
 @Composable
 private fun CollectionPartCard(part: CollectionPart, onClick: () -> Unit, modifier: Modifier = Modifier) {

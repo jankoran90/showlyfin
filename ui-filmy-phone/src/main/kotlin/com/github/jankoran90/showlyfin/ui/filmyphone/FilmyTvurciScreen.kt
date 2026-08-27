@@ -47,6 +47,9 @@ fun FilmyTvurciScreen(
             categories = CREATOR_CATEGORIES,
             // Nadpis nese lišta výše — druhý nadpis pod ní by byl duplicitní.
             title = null,
+            // user 2026-08-27: „rad tvurce pod poctu položek nejvic bude prvni" — nejobsazenější
+            // kategorie vlevo a rovnou vybraná, ať obrazovka nezačíná prázdným tabem.
+            sortByCount = true,
         )
     }
 }
