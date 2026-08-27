@@ -189,6 +189,22 @@ fun FilmyBrowseSection(
                 )
             }
         }
+        // 🔴 user 2026-08-27 (výpadek Hetzneru): sběr se nepovedl → na obrazovce je poslední známý
+        // stav z disku, ne čerstvá data. Bez téhle hlášky to vypadá jako vypnuté zdroje.
+        if (state.offlineSnapshot) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Server se neozval — ukazuju poslední známý stav. Jakmile bude zpátky, obsah se dorovná.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
         // ATRIUM (SHW-118, user 2026-08-24 „slouč její děti do jedné mateřské karty kolekce"):
         // žádná extra řada nahoře — karta kolekce sedí PŘÍMO v seznamu na svém abecedním místě a
         // zastupuje své díly (sdružení řeší [FilmotekaGrouping]). Klik ji rozbalí překryvem.

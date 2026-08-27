@@ -222,8 +222,14 @@ fun TvFilmotekaScreen(
                     Centered { Text("Načítám…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else {
                     Centered {
+                        // 🔴 user 2026-08-27 (výpadek Hetzneru, dětský profil): prázdno z NEDOSTUPNÉHO
+                        // serveru se tvářilo jako vypnuté zdroje a posílalo uživatele něco nastavovat,
+                        // ačkoli nastavené bylo všechno. Rozliš obojí — hláška musí říct pravdu.
                         Text(
-                            text = "Zatím nic — zapni zdroje v Nastavení → Filmotéka, nebo přidej tituly do knihovny.",
+                            text = if (state.offlineSnapshot)
+                                "Server se neozval — obsah se načte, jakmile bude zpátky. Nastavení měnit nemusíš."
+                            else
+                                "Zatím nic — zapni zdroje v Nastavení → Filmotéka, nebo přidej tituly do knihovny.",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 48.dp),

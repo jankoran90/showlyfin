@@ -49,6 +49,12 @@ data class FilmotekaUiState(
      * UI to musí říct nahlas, jinak se jen tiše rozhodí pořadí „Nedávno přidané" (user 2026-07-30).
      */
     val traktStale: Boolean = false,
+    /**
+     * 🔴 Server/Jellyfin nedostupný (výpadek Hetzneru 2026-08-27) → na obrazovce je POSLEDNÍ ZNÁMÝ
+     * stav z disku, ne čerstvá data. UI to musí říct nahlas — jinak uživatel netuší, jestli kouká
+     * na aktuální knihovnu, nebo na snímek starý půl dne.
+     */
+    val offlineSnapshot: Boolean = false,
     /** Aktuální řazení osy „Vše" — pro telefonní chip (Nedávno / Abecedně). TV ho ignoruje. */
     val allSort: FilmotekaAllSort = FilmotekaAllSort.RECENT,
     /** Počet unikátních titulů v bázi (po dedup+gate, napříč osami stejný) — pro telefonní ukazatel „N filmů". */
@@ -135,6 +141,9 @@ class TvFilmotekaViewModel @Inject constructor(
 
     /** VESTIBUL — „Další díly" (prázdné při vypnutém přepínači). */
     @Volatile private var nextUpItems: List<HomeRowItem> = emptyList()
+
+    /** Kreslíme poslední známý stav z disku (server nedostupný)? Mimo stav — [rebuild] ho staví znovu. */
+    @Volatile private var offlineSnapshot = false
 
     /** GENRE-FILTER — živý výběr žánrů (viz [FilmotekaUiState.genreFilter]). Drží se napříč přeskupením os. */
     @Volatile private var genreFilter: Set<String> = emptySet()
@@ -335,7 +344,18 @@ class TvFilmotekaViewModel @Inject constructor(
             }
             // VESTIBUL: „Další díly" jedou SOUBĚŽNĚ s bází — jsou to jiné zdroje, čekání se nemá sčítat.
             val nextUpJob = async { loadNextUp() }
-            baseItems = filmotekaBase.loadBase()
+            // 🔴 user 2026-08-27 (výpadek Hetzneru, dětský profil na TV: „Zatím nic — zapni zdroje"):
+            // z disku se obsah vykreslil správně, ale TENHLE řádek ho pak přepsal PRÁZDNEM z neúspěšného
+            // sběru → prázdná obrazovka, která vypadá jako vypnuté zdroje. Týž vzorec „prázdno z chyby
+            // vypadá jako prázdný výsledek", jaký se týž den řešil na webu (disková cache knihovny).
+            // Neúplný sběr (Jellyfin zapnutý, ale nevrátil nic) proto NESMÍ přebít to, co už máme.
+            val fresh = filmotekaBase.loadBase()
+            val complete = filmotekaBase.lastLoadComplete()
+            val keepCached = !complete && baseItems.isNotEmpty() && fresh.size < baseItems.size
+            if (!keepCached) baseItems = fresh
+            // Hlásíme neúplný sběr i tehdy, když z disku nebylo co vzít — jinak by prázdná obrazovka
+            // dál lhala, že jsou vypnuté zdroje (přesně to user viděl při výpadku Hetzneru).
+            offlineSnapshot = !complete
             nextUpItems = nextUpJob.await()
             // Čerstvá řada na disk pro příští první vykreslení. Zapisuje se i PRÁZDNÁ (dokoukáno =
             // řada má zmizet), ale jen když je přepínač zapnutý — vypnutý vrací prázdno vždy a
@@ -354,7 +374,7 @@ class TvFilmotekaViewModel @Inject constructor(
             rebuild(settings.defaultAxis.value)
             // Na disk až hotový obsah (báze ∪ Oblíbené, s dopočtenými daty) a jen z ÚPLNÉHO sběru —
             // neúplný (JF zapnutý, ale knihovna mlčela) by se zafixoval.
-            if (filmotekaBase.lastLoadComplete()) {
+            if (complete) {
                 diskCache.write(
                     profileRepository.activeProfile.value?.id,
                     filmotekaBase.mergeWithFavorites(baseItems, favoriteItems),
@@ -432,6 +452,7 @@ class TvFilmotekaViewModel @Inject constructor(
             collectionGroups = collectionGroups,
             nextUp = nextUpItems,
             traktStale = staleNow,
+            offlineSnapshot = offlineSnapshot,
         )
     }
 
