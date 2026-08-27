@@ -74,17 +74,26 @@ object FilmyShellPrefs {
         if (defaultFilmoteka(ctx)) FilmySection.FILMOTEKA else FilmySection.HOME
 
     /** Pořadí sekcí skupiny „Objevování" v draweru — Filmotéka nahoře, když je výchozí. */
+    /**
+     * 🔴 KANONICKÉ POŘADÍ SEKCÍ MENU — **ruční seznam, NE `FilmySection.entries`.** Kdo přidá novou
+     * sekci do enumu a zapomene ji sem, tomu se v postranním menu NIKDY neukáže: `FilmyMenuConfig`
+     * skládá viditelné položky právě odtud (`canonical` → `merge` → `visibleSections`), takže sekce
+     * mimo tenhle seznam neprojde ani uživatelům s prázdným uloženým menu. (Stálo to hotfix 1.2.90 —
+     * SPOTLIGHT přidal TVURCI/NOVINKY do enumu i do `when` v shellu, ale sem ne, a user je neviděl.)
+     */
     fun discoverOrder(filmotekaFirst: Boolean): List<FilmySection> =
         if (filmotekaFirst)
             listOf(
                 FilmySection.FILMOTEKA, FilmySection.HOME, FilmySection.WANT_TO_SEE,
-                FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.REFERENCE,
+                FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.NOVINKY,
+                FilmySection.TVURCI, FilmySection.REFERENCE,
                 FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
             )
         else
             listOf(
                 FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.HISTORY,
-                FilmySection.FOR_YOU, FilmySection.REFERENCE, FilmySection.FILMOTEKA,
+                FilmySection.FOR_YOU, FilmySection.NOVINKY, FilmySection.TVURCI,
+                FilmySection.REFERENCE, FilmySection.FILMOTEKA,
                 FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
             )
 }
