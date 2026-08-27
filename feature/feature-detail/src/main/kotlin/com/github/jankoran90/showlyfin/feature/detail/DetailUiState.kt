@@ -143,6 +143,9 @@ data class DetailUiState(
     val directorMovies: MediaCollection? = null,
     val studioName: String? = null,
     val studioMovies: MediaCollection? = null,
+    // SIMILAR (user 2026-08-27) — pruh „Podobné". Data ze serveru (Trakt related), ne z TMDB
+    // `similar` (to v průzkumu vracelo nesouvisející tituly).
+    val similarTitles: MediaCollection? = null,
     // Plan ENSEMBLE (SHW-45): sekce „Tvůrci" — pás herců + Režie/Scénář/Kamera. Klik na osobu →
     // její tvorba (filmografie) jako validní karty (`personFilmography`, nese tmdbId).
     val directors: List<TmdbPerson> = emptyList(),
@@ -166,6 +169,9 @@ data class DetailUiState(
     val showDirector: Boolean = true,
     val showStudio: Boolean = true,
     val showCreators: Boolean = true,
+    val showSimilar: Boolean = true,
+    /** Pořadí pruhů pod kartou (klíče [DetailRowKeys]). Nastavení → Detail obsahu. */
+    val rowOrder: List<String> = DETAIL_ROW_ORDER_DEFAULT,
     // Styl karet sekcí detailu (kolekce/režisér/studio): plakát / fanart / fanart+popis. Nastavení → Detail obsahu.
     val sectionStyle: HomeCardStyle = HomeCardStyle.POSTER,
     // TENFOOT WS-C (SHW-87): sekce sezóny/epizody seriálu v detailu.
@@ -220,3 +226,28 @@ fun parseActionOrder(raw: String?): List<String> {
     val saved = raw.split(",").map { it.trim() }.filter { it in DETAIL_ACTION_KEYS }
     return (saved + DETAIL_ACTION_KEYS.filter { it !in saved }).distinct()
 }
+
+/**
+ * SIMILAR (user 2026-08-27: „Musime mit v nastaveni tento pruh, i ostatni jestli visible nebo
+ * non visible a klidne poradi") — klíče pruhů pod kartou detailu.
+ *
+ * 🔴 Kdo přidá nový pruh, musí ho přidat SEM i do [DETAIL_ROW_ORDER_DEFAULT] — jinak se neobjeví
+ * ani v nastavení, ani v pořadí (táž past jako u postranního menu, viz `FilmyShellPrefs`).
+ */
+object DetailRowKeys {
+    const val CREATORS = "creators"
+    const val COLLECTION = "collection"
+    const val SIMILAR = "similar"
+    const val DIRECTOR = "director"
+    const val STUDIO = "studio"
+}
+
+/** Výchozí pořadí — user 2026-08-27: „kolekce jsou samozřejmě první když nějaké jsou a ty podobné
+ *  bych dal přímo pod kolekce aby byly dřív než od režiséra". */
+val DETAIL_ROW_ORDER_DEFAULT: List<String> = listOf(
+    DetailRowKeys.CREATORS,
+    DetailRowKeys.COLLECTION,
+    DetailRowKeys.SIMILAR,
+    DetailRowKeys.DIRECTOR,
+    DetailRowKeys.STUDIO,
+)

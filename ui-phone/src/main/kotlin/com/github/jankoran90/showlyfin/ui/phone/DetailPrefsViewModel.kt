@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import com.github.jankoran90.showlyfin.feature.detail.DETAIL_ROW_ORDER_DEFAULT
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -21,6 +22,8 @@ data class DetailPrefsState(
     val showCollections: Boolean = true,
     val showDirector: Boolean = true,
     val showStudio: Boolean = true,
+    val showSimilar: Boolean = true,    // SIMILAR (user 2026-08-27): pruh Podobne (Trakt related)
+    val rowOrder: List<String> = DETAIL_ROW_ORDER_DEFAULT,  // poradi pruhu pod kartou
     val showCreators: Boolean = true,   // ENSEMBLE (SHW-45): sekce „Tvůrci"
     val showSeasons: Boolean = true,    // TENFOOT WS-C (SHW-87): sezóny/epizody seriálu v detailu
     val sectionStyle: HomeCardStyle = HomeCardStyle.POSTER,   // styl karet sekcí (plakát/fanart/fanart+popis)
@@ -50,6 +53,8 @@ class DetailPrefsViewModel @Inject constructor(
         showDirector = prefs.getBoolean(KEY_DIRECTOR, true),
         showStudio = prefs.getBoolean(KEY_STUDIO, true),
         showCreators = prefs.getBoolean(KEY_CREATORS, true),
+        showSimilar = prefs.getBoolean(KEY_SIMILAR, true),
+        rowOrder = parseRowOrder(prefs.getString(KEY_ROW_ORDER, null)),
         showSeasons = prefs.getBoolean(KEY_SEASONS, true),
         sectionStyle = prefs.getString(KEY_SECTION_STYLE, null)
             ?.let { runCatching { HomeCardStyle.valueOf(it) }.getOrNull() } ?: HomeCardStyle.POSTER,
@@ -70,6 +75,18 @@ class DetailPrefsViewModel @Inject constructor(
     fun setDirector(value: Boolean) = put(KEY_DIRECTOR) { _state.update { s -> s.copy(showDirector = value) }; value }
     fun setStudio(value: Boolean) = put(KEY_STUDIO) { _state.update { s -> s.copy(showStudio = value) }; value }
     fun setCreators(value: Boolean) = put(KEY_CREATORS) { _state.update { s -> s.copy(showCreators = value) }; value }
+    fun setSimilar(value: Boolean) = put(KEY_SIMILAR) { _state.update { s -> s.copy(showSimilar = value) }; value }
+
+    /** Posun pruhu o [delta] (−1 nahoru, +1 dolu). Mimo rozsah = nic (tlacitko je stejne disabled). */
+    fun moveRow(key: String, delta: Int) {
+        val list = _state.value.rowOrder.toMutableList()
+        val i = list.indexOf(key)
+        val j = i + delta
+        if (i < 0 || j !in list.indices) return
+        list[i] = list[j].also { list[j] = list[i] }
+        _state.update { s -> s.copy(rowOrder = list) }
+        prefs.edit().putString(KEY_ROW_ORDER, list.joinToString(",")).apply()
+    }
     fun setSeasons(value: Boolean) = put(KEY_SEASONS) { _state.update { s -> s.copy(showSeasons = value) }; value }
     fun setSectionStyle(value: HomeCardStyle) {
         _state.update { s -> s.copy(sectionStyle = value) }
@@ -102,6 +119,15 @@ class DetailPrefsViewModel @Inject constructor(
         prefs.edit().putString(KEY_ACTIONS_PLACEMENT, value.name).apply()
     }
 
+    /** Ulozene poradi -> platny seznam. Nezname klice zahodi, chybejici doplni na konec, takze
+     *  starsi ulozene poradi nova verze (novy pruh) nerozbije. */
+    private fun parseRowOrder(raw: String?): List<String> {
+        val ulozene = raw?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
+        val out = ulozene.filter { it in DETAIL_ROW_ORDER_DEFAULT }.toMutableList()
+        DETAIL_ROW_ORDER_DEFAULT.forEach { if (it !in out) out += it }
+        return out
+    }
+
     private inline fun put(key: String, block: () -> Boolean) {
         prefs.edit().putBoolean(key, block()).apply()
     }
@@ -112,6 +138,8 @@ class DetailPrefsViewModel @Inject constructor(
         private const val KEY_DIRECTOR = "detail_show_director"
         private const val KEY_STUDIO = "detail_show_studio"
         private const val KEY_CREATORS = "detail_show_creators"
+        private const val KEY_SIMILAR = "detail_show_similar"
+        private const val KEY_ROW_ORDER = "detail_row_order"
         private const val KEY_SEASONS = "detail_show_seasons"
         private const val KEY_SECTION_STYLE = "detail_section_style"
         private const val KEY_SECTION_SORT = "detail_section_sort"

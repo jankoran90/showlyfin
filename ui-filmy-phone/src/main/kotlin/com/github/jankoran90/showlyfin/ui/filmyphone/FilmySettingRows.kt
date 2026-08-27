@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -119,5 +124,47 @@ internal fun SettingPercentSlider(label: String, subtitle: String? = null, value
             Text("${(value * 100).roundToInt()} %", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Slider(value = value, onValueChange = onValue, valueRange = 0f..1f)
+    }
+}
+
+/**
+ * SIMILAR (user 2026-08-27: „i ostatni jestli visible nebo non visible a klidne poradi") — seznam
+ * pruhů se šipkami na přeskládání. Vypnutý pruh v seznamu ZŮSTÁVÁ (zešedlý, popsaný jako skrytý):
+ * kdyby zmizel, uživatel by po zapnutí netušil, kam se zařadí.
+ */
+@Composable
+internal fun SettingRowOrder(
+    label: String,
+    order: List<String>,
+    hidden: Set<String>,
+    onMove: (String, Int) -> Unit,
+) {
+    val popisky = mapOf(
+        "creators" to "Tvůrci",
+        "collection" to "Kolekce",
+        "similar" to "Podobné",
+        "director" to "Od stejného režiséra",
+        "studio" to "Od stejného studia",
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        order.forEachIndexed { index, klic ->
+            val skryty = klic in hidden
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = (popisky[klic] ?: klic) + if (skryty) " (skryto)" else "",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (skryty) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                    else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { onMove(klic, -1) }, enabled = index > 0) {
+                    Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Posunout nahoru")
+                }
+                IconButton(onClick = { onMove(klic, 1) }, enabled = index < order.lastIndex) {
+                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Posunout dolů")
+                }
+            }
+        }
     }
 }

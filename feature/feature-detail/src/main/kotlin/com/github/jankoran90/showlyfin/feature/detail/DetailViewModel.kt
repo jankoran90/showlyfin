@@ -60,6 +60,8 @@ class DetailViewModel @Inject constructor(
     private val tmdbApi: TmdbRemoteDataSource,
     // SPOTLIGHT (FLM-02): perzistentní mřížka/seznam ve filmografii osoby (list je Dialog → stav v něm nepřežije).
     private val viewModeStore: com.github.jankoran90.showlyfin.data.uploader.ViewModeStore,
+    // SIMILAR (user 2026-08-27): pruh Podobne — data ze serveru (Trakt related).
+    private val similarRepository: com.github.jankoran90.showlyfin.data.uploader.SimilarRepository,
     private val csfdScraper: CsfdScraper,
     private val csfdRepository: CsfdRepository,
     private val jellyfinLibraryService: JellyfinLibraryService,
@@ -353,6 +355,9 @@ class DetailViewModel @Inject constructor(
                 showDirector = prefs.getBoolean("detail_show_director", true),
                 showStudio = prefs.getBoolean("detail_show_studio", true),
                 showCreators = prefs.getBoolean("detail_show_creators", true),
+                showSimilar = prefs.getBoolean("detail_show_similar", true),
+                rowOrder = readRowOrder(),
+                similarTitles = null,
                 sectionStyle = readSectionStyle(),
                 showSeasons = prefs.getBoolean("detail_show_seasons", true),
                 askRemoveAfterRating = prefs.getBoolean(KEY_ASK_REMOVE_AFTER_RATING, true),
@@ -864,6 +869,9 @@ class DetailViewModel @Inject constructor(
 
     /** Sekce „Od stejného režiséra" + „Od stejného studia" (TMDB, jen filmy). Univerzální (v knihovně i mimo). */
     private suspend fun loadRelated(item: MediaItem) {
+        // Pruh Podobne jede i u SERIALU (Trakt related zna show i movie), na rozdil od rezisera
+        // a studia nize, ktere jsou z TMDB jen pro filmy — proto je mimo tuhle podminku.
+        loadSimilar(item)
         if (item.type != MediaType.MOVIE) return
         val tmdbId = item.tmdbId ?: return
         coroutineScope {
@@ -983,6 +991,45 @@ class DetailViewModel @Inject constructor(
             ?: HomeCardStyle.POSTER
 
     /** COUCH (SHW-88): řazení sekcí režisér/studio z prefs (neznámé/žádné → DEFAULT = pořadí z API). */
+    /** Poradi pruhu z Nastaveni. Nezname klice zahodi, chybejici doplni na konec — starsi ulozene
+     *  poradi tak novou verzi (novy pruh) nerozbije. */
+    private fun readRowOrder(): List<String> {
+        val ulozene = prefs.getString(KEY_ROW_ORDER, null)
+            ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
+        val zname = DETAIL_ROW_ORDER_DEFAULT
+        val out = ulozene.filter { it in zname }.toMutableList()
+        zname.forEach { if (it !in out) out += it }
+        return out
+    }
+
+    /**
+     * Nacti pruh Podobne. Vola se az kdyz zname identitu titulu — endpoint bere IMDb (preferovano,
+     * Trakt na nem stavi) nebo TMDB id. Selhani je TICHE: pruh je bonus, ne podminka funkcnosti karty.
+     */
+    private fun loadSimilar(item: MediaItem) {
+        if (!_uiState.value.showSimilar) return
+        val ident = item.imdbId?.takeIf { it.isNotBlank() } ?: item.tmdbId?.takeIf { it > 0 }?.toString()
+        if (ident.isNullOrBlank()) return
+        viewModelScope.launch {
+            val tituly = similarRepository.similar(ident, isShow = item.type != MediaType.MOVIE) ?: return@launch
+            if (tituly.isEmpty()) return@launch
+            val parts = tituly.map { t ->
+                CollectionPart(
+                    key = "sim_" + (if (t.isShow) "tv_" else "movie_") + t.tmdbId,
+                    tmdbId = t.tmdbId,
+                    jellyfinId = _uiState.value.ownedTmdbToJellyfin[t.tmdbId],
+                    title = t.title,
+                    posterUrl = t.posterUrl,
+                    year = t.year?.toString(),
+                    watched = _uiState.value.watchedTmdbIds.contains(t.tmdbId),
+                    rating = t.rating,
+                    posterPath = t.posterUrl?.substringAfterLast('/')?.takeIf { it.isNotBlank() }?.let { "/" + it },
+                )
+            }
+            _uiState.update { it.copy(similarTitles = MediaCollection(name = "Podobné", parts = parts)) }
+        }
+    }
+
     private fun readSectionSort(): com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort =
         prefs.getString("detail_section_sort", null)
             ?.let { runCatching { com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort.valueOf(it) }.getOrNull() }
@@ -3742,6 +3789,7 @@ class DetailViewModel @Inject constructor(
 
         /** „Po ohodnocení nabídnout odebrání z Filmotéky" (default zap, user 2026-08-24). */
         const val KEY_ASK_REMOVE_AFTER_RATING = "ask_remove_after_rating"
+        const val KEY_ROW_ORDER = "detail_row_order"
         // D-c: applicationId Filmy TV appky (release) na boxu — kterou probouzí wake scéna do popředí.
         const val FILMY_TV_PACKAGE = "com.github.jankoran90.filmy"
         // REPACK (SEZONA f3e): jak často se ptát na průběh přebalu a kdy to vzdát. Anime díl (~240 MB)

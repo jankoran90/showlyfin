@@ -97,6 +97,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
 import com.github.jankoran90.showlyfin.core.ui.CollectionSection
 import com.github.jankoran90.showlyfin.core.ui.MediaCollection
+import com.github.jankoran90.showlyfin.feature.detail.DetailRowKeys
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.uploader.FavoriteKind
 import com.github.jankoran90.showlyfin.core.ui.isTvFormFactor
@@ -879,21 +880,9 @@ fun DetailScreen(
             // CANVAS A: akce (Galerie přes cover, ČSFD recenze přes badge, Přehrát/Na TV/Stremio/
             // Stáhnout/Oblíbené/Chci vidět) jsou v kompaktní kulaté liště v hero (viz DetailActionBar výše).
 
-            // Plan ENSEMBLE (SHW-45): sekce „Tvůrci" (pás herců + Režie/Scénář/Kamera) NAD kolekcemi.
-            if (uiState.showCreators) {
-                CreatorsSection(
-                    cast = uiState.cast,
-                    directors = uiState.directors,
-                    writers = uiState.writers,
-                    cinematographers = uiState.cinematographers,
-                    onPersonClick = { person, kind -> viewModel.openPersonFilmography(person, kind) },
-                    // VANTAGE D4: žánry z fanartu sem jako druhý sloupec (proklik žánr×režisér = později).
-                    genres = genres.orEmpty(),
-                    // VANTAGE (SHW-48): Scénář/Kamera + žánry skryté, odhalí je rozbalení popisu.
-                    detailsVisible = plotExpanded,
-                )
-            }
-
+            // SIMILAR (user 2026-08-27: „Musime mit v nastaveni tento pruh, i ostatni jestli visible
+            // nebo non visible a klidne poradi") — pruhy se kreslí v POŘADÍ z Nastavení, ne napevno.
+            // Neznámý klíč se přeskočí (starší uložené pořadí novou verzi nerozbije).
             val mergedCollection = uiState.mergedCollection ?: uiState.collection?.let { coll ->
                 MediaCollection(
                     name = coll.name ?: "Kolekce",
@@ -910,31 +899,55 @@ fun DetailScreen(
                     },
                 )
             }
-            if (uiState.showCollections) {
-                mergedCollection?.let { coll ->
-                    CollectionSection(
-                        collection = coll,
-                        excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
-                        onPartClick = { part -> onCollectionPartClick?.invoke(part) },
-                    )
-                }
-            }
-            if (uiState.showDirector) {
-                uiState.directorMovies?.let { coll ->
-                    CollectionSection(
-                        collection = coll,
-                        excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
-                        onPartClick = { part -> onCollectionPartClick?.invoke(part) },
-                    )
-                }
-            }
-            if (uiState.showStudio) {
-                uiState.studioMovies?.let { coll ->
-                    CollectionSection(
-                        collection = coll,
-                        excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
-                        onPartClick = { part -> onCollectionPartClick?.invoke(part) },
-                    )
+            uiState.rowOrder.forEach { klic ->
+                when (klic) {
+                    DetailRowKeys.CREATORS -> if (uiState.showCreators) {
+                        CreatorsSection(
+                            cast = uiState.cast,
+                            directors = uiState.directors,
+                            writers = uiState.writers,
+                            cinematographers = uiState.cinematographers,
+                            onPersonClick = { person, kind -> viewModel.openPersonFilmography(person, kind) },
+                            genres = genres.orEmpty(),
+                            detailsVisible = plotExpanded,
+                        )
+                    }
+                    DetailRowKeys.COLLECTION -> if (uiState.showCollections) {
+                        mergedCollection?.let { coll ->
+                            CollectionSection(
+                                collection = coll,
+                                excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                                onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                            )
+                        }
+                    }
+                    DetailRowKeys.SIMILAR -> if (uiState.showSimilar) {
+                        uiState.similarTitles?.let { coll ->
+                            CollectionSection(
+                                collection = coll,
+                                excludeKey = null,
+                                onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                            )
+                        }
+                    }
+                    DetailRowKeys.DIRECTOR -> if (uiState.showDirector) {
+                        uiState.directorMovies?.let { coll ->
+                            CollectionSection(
+                                collection = coll,
+                                excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                                onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                            )
+                        }
+                    }
+                    DetailRowKeys.STUDIO -> if (uiState.showStudio) {
+                        uiState.studioMovies?.let { coll ->
+                            CollectionSection(
+                                collection = coll,
+                                excludeKey = displayItem.tmdbId?.let { "tmdb_$it" },
+                                onPartClick = { part -> onCollectionPartClick?.invoke(part) },
+                            )
+                        }
+                    }
                 }
             }
 

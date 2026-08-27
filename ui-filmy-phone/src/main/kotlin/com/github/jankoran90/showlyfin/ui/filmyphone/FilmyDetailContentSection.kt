@@ -9,6 +9,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.domain.home.HomeRowSort
+import com.github.jankoran90.showlyfin.feature.detail.DetailRowKeys
 import com.github.jankoran90.showlyfin.ui.phone.DetailPrefsViewModel
 
 /**
@@ -67,6 +68,26 @@ fun FilmyDetailContentSection(vm: DetailPrefsViewModel = hiltViewModel()) {
             title = "Od stejného studia",
             checked = detail.showStudio,
             onCheckedChange = vm::setStudio,
+        )
+        // SIMILAR (user 2026-08-27): pruh Podobne z Trakt related — viz routes/similar.py.
+        SettingSwitchRow(
+            title = "Podobné",
+            subtitle = "Tituly podobné tomuhle (podle toho, co k sobě řadí diváci na Traktu)",
+            checked = detail.showSimilar,
+            onCheckedChange = vm::setSimilar,
+        )
+        // user 2026-08-27: „i ostatni jestli visible nebo non visible a klidne poradi"
+        SettingRowOrder(
+            label = "Pořadí pruhů pod kartou",
+            order = detail.rowOrder,
+            hidden = buildSet {
+                if (!detail.showCreators) add(DetailRowKeys.CREATORS)
+                if (!detail.showCollections) add(DetailRowKeys.COLLECTION)
+                if (!detail.showSimilar) add(DetailRowKeys.SIMILAR)
+                if (!detail.showDirector) add(DetailRowKeys.DIRECTOR)
+                if (!detail.showStudio) add(DetailRowKeys.STUDIO)
+            },
+            onMove = vm::moveRow,
         )
         SettingChips(
             label = "Styl karet sekcí",
