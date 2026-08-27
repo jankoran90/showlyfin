@@ -40,6 +40,8 @@ class CuratorLoader @Inject constructor(
     private val enricher: MediaEnricher,
     private val parental: ParentalControlsRepository,
     private val uploaderDs: UploaderRemoteDataSource,
+    // user 2026-08-27 (Tohle mi nenabizej) — cerna listina: do promptu (avoid) i jako filtr vysledku.
+    private val blocklist: com.github.jankoran90.showlyfin.data.uploader.CuratorBlocklistStore,
     private val profileRepository: ProfileRepository,
     @param:Named("traktPreferences") private val appPrefs: SharedPreferences,
 ) {
@@ -125,7 +127,13 @@ class CuratorLoader @Inject constructor(
      * Doporučení JEDNÉ kategorie ([CuratorBucket]) — do mozku jde jen ta výseč vkusu, která kategorii
      * definuje, takže řada umí říct PROČ. `bucket` posíláme i na server (je součástí cache klíče).
      */
-    suspend fun forYouBucket(bucket: CuratorBucket, limit: Int, pollUntilReady: Boolean = false): List<MediaItem> {
+    suspend fun forYouBucket(
+        bucket: CuratorBucket,
+        limit: Int,
+        pollUntilReady: Boolean = false,
+        /** Rucni Vybrat znovu — zahod serverovou cache a nech mozek vybrat znovu. */
+        force: Boolean = false,
+    ): List<MediaItem> {
         val prefs = prefs()
         if (!prefs.enabled) return emptyList()
         val base = serverBase(); val cookie = serverCookie(); val key = profileKey()
@@ -146,7 +154,9 @@ class CuratorLoader @Inject constructor(
         }
         if (!hasSignal) { Log.i(TAG, "forYouBucket(${bucket.wire}): žádný signál → přeskočeno"); return emptyList() }
         val json = JSONObject(buildRequestJson(key, limit.coerceIn(1, 60), taste, prefs))
-            .put("bucket", bucket.wire).toString()
+            .put("bucket", bucket.wire)
+            .apply { if (force) put("force", true) }
+            .toString()
         return fetchRecommendations(json, taste, pollUntilReady, "forYouBucket(${bucket.wire})") { body ->
             uploaderDs.curatorRecommend(base, cookie, body)
         }
@@ -162,7 +172,8 @@ class CuratorLoader @Inject constructor(
         limit: Int,
         isShow: Boolean = false,
         pollUntilReady: Boolean = false,
-    ): List<MediaItem> = similarToSplit(seedTitle, seedYear, limit, isShow, pollUntilReady).fresh
+        force: Boolean = false,
+    ): List<MediaItem> = similarToSplit(seedTitle, seedYear, limit, isShow, pollUntilReady, force).fresh
 
     /** [similarTo] s výsledkem rozděleným na nové a už známé — viz [fetchRecommendationsSplit]. */
     suspend fun similarToSplit(
@@ -171,6 +182,7 @@ class CuratorLoader @Inject constructor(
         limit: Int,
         isShow: Boolean = false,
         pollUntilReady: Boolean = false,
+        force: Boolean = false,
     ): CuratorRecs {
         val prefs = prefs()
         if (!prefs.enabled || seedTitle.isBlank()) return CuratorRecs()
@@ -190,6 +202,7 @@ class CuratorLoader @Inject constructor(
             .also { o -> seedYear?.takeIf { it > 0 }?.let { o.put("year", it) } }
             .also { o -> prefs.model?.trim()?.takeIf { it.isNotEmpty() }?.let { o.put("model", it) } }
             .also { o -> capAge()?.let { o.put("ageCap", it) } }
+            .apply { if (force) put("force", true) }
             .toString()
         return fetchRecommendationsSplit(json, taste, pollUntilReady, "similarTo($seedTitle)") { body ->
             uploaderDs.curatorSimilar(base, cookie, body)
@@ -264,8 +277,14 @@ class CuratorLoader @Inject constructor(
         call: suspend (String) -> String?,
     ): CuratorRecs {
         var attempt = 0
+        // 🔴 force smi jit JEN v prvnim pokusu. Server na nej zahodi ulozenou odpoved — kdyby ho
+        // nesl i kazdy poll, smazal by si prave dopocitany vysledek a smycka by cekala donekonecna.
+        val pollJson by lazy {
+            runCatching { JSONObject(requestJson).apply { remove("force") }.toString() }.getOrDefault(requestJson)
+        }
         while (true) {
-            val raw = runCatching { call(requestJson) }
+            val body = if (attempt == 0) requestJson else pollJson
+            val raw = runCatching { call(body) }
                 .onFailure { Log.w(TAG, "$logTag: volání backendu selhalo", it) }
                 .getOrNull() ?: return CuratorRecs()
             val source = runCatching { JSONObject(raw).optString("source") }.getOrNull().orEmpty()
@@ -308,6 +327,8 @@ class CuratorLoader @Inject constructor(
             .mapNotNull { it.tmdbId }.toSet()
         return ContentAgeGate.filter(capAge(), enriched, hideUnrated())
             .filterNot { it.tmdbId != null && it.tmdbId in disliked }
+            // Cerna listina — pojistka pro pripad, ze to mozek navrhne i pres avoid.
+            .filterNot { it.tmdbId != null && it.tmdbId in blocklist.blockedIds() }
     }
 
     /** User 2026-07-17: nedoporučuj, co už uživatel zná (zhlédnuté ∪ watchlist ∪ hodnocené). */
@@ -398,7 +419,9 @@ class CuratorLoader @Inject constructor(
             top = top,
             recent = recent,
             watchlist = watchlist,
-            avoid = avoid.distinct().take(AVOID_CAP),
+            // Zablokovane tituly patri do avoid — mozek je pak vubec nenavrhne a nespotrebuje
+            // jimi sloty odpovedi. Pojistka filtrem vysledku je v postProcessKeepKnown.
+            avoid = (blocklist.blockedTitles() + avoid).distinct().take(AVOID_CAP),
             knownIds = knownIds,
             knownTitles = knownTitles,
         )

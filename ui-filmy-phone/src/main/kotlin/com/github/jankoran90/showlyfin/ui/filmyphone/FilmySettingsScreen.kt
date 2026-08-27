@@ -256,6 +256,8 @@ fun FilmySettingsScreen(
                 FilmyGemsSection()
                 // SPOTLIGHT (FLM-02): sledování tvůrců + upozornění na jejich nové tituly.
                 FilmySpotlightSection()
+                // SPOTLIGHT+ (user 2026-08-27): co kurátor nesmí nabízet + vrácení zpět.
+                FilmyBlocklistSection()
             }
 
             // ── DOMOV A MENU (PŮDORYS SHW-112, user 2026-07-31: „v telefonu ani nemam moznost

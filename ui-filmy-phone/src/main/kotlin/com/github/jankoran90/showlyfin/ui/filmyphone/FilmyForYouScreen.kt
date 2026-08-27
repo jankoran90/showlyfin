@@ -1,6 +1,8 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +15,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Recommend
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.ViewModule
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,12 +32,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.ui.MediaCard
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
+import com.github.jankoran90.showlyfin.feature.discover.foryou.CuratorRail
 import com.github.jankoran90.showlyfin.feature.discover.foryou.ForYouBucketsViewModel
 import com.github.jankoran90.showlyfin.feature.discover.foryou.ForYouViewModel
 
@@ -115,11 +121,31 @@ private fun FilmyForYouCategories(
     categoryToggle: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     vm: ForYouBucketsViewModel = hiltViewModel(),
+    blocklistVm: FilmyBlocklistViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
     Column(modifier.fillMaxSize()) {
-        FilmySectionBar(onMenu = onMenu, trailing = { categoryToggle() }) {
+        FilmySectionBar(
+            onMenu = onMenu,
+            trailing = {
+                // user 2026-08-27 („Jak tohle aktualizuji?") — do dneška to nešlo nijak. Tlačítko
+                // vědomě obchází serverovou paměť, jinak by vrátilo tytéž tituly (v týdnu je výběr
+                // stabilní). Stará dávka se nezahazuje, sesune se do historie pod čerstvou.
+                IconButton(
+                    enabled = !state.loading && !state.refreshing,
+                    onClick = { vm.load(force = true) },
+                ) {
+                    Icon(
+                        Icons.Rounded.Refresh,
+                        contentDescription = "Vybrat znovu",
+                        tint = if (state.refreshing) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                categoryToggle()
+            },
+        ) {
             Column {
                 Text(
                     text = "Pro tebe — po kategoriích",
@@ -127,8 +153,10 @@ private fun FilmyForYouCategories(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 val sub = when {
+                    state.refreshing -> "Vybírám znovu… ${state.done}/${state.total}"
                     state.loading && state.total > 0 -> "Počítám… ${state.done}/${state.total} kategorií"
                     state.rails.isNotEmpty() -> "${state.rails.size} kategorií"
+                    state.history.isNotEmpty() -> "dřívější výběr"
                     else -> null
                 }
                 if (sub != null) {
@@ -142,8 +170,8 @@ private fun FilmyForYouCategories(
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
-                state.rails.isEmpty() && state.loading -> CircularProgressIndicator()
-                state.rails.isEmpty() -> FilmyEmpty(
+                state.rails.isEmpty() && state.history.isEmpty() && state.loading -> CircularProgressIndicator()
+                state.rails.isEmpty() && state.history.isEmpty() -> FilmyEmpty(
                     icon = Icons.Rounded.Recommend,
                     title = "Kategorie zatím nemají z čeho vyjít",
                     text = "Každá řada potřebuje svůj signál — něco zhlédnutého, ohodnoceného nebo často přehrávaného. " +
@@ -154,26 +182,21 @@ private fun FilmyForYouCategories(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     items(state.rails, key = { it.id }) { rail ->
-                        Text(
-                            text = rail.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
-                        )
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 12.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            items(rail.items, key = { it.stableKey() }) { mi ->
-                                Box(
-                                    Modifier
-                                        .padding(horizontal = 4.dp)
-                                        .width(118.dp)
-                                        .height(215.dp),
-                                ) {
-                                    MediaCard(item = mi, onClick = { onOpenDetail(mi) })
-                                }
-                            }
+                        CuratorRailRow(rail = rail, onOpenDetail = onOpenDetail, onBlock = blocklistVm::block)
+                    }
+                    // user 2026-08-27 („ale ukladejme historii") — dřívější dávky nezmizí, jen se
+                    // sesunou sem pod čerstvou. Tituly, co jsou právě nahoře, se tu už neopakují.
+                    if (state.history.isNotEmpty()) {
+                        item(key = "history_header") {
+                            Text(
+                                text = "Dřívější výběr",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 2.dp),
+                            )
+                        }
+                        items(state.history, key = { it.id }) { rail ->
+                            CuratorRailRow(rail = rail, onOpenDetail = onOpenDetail, onBlock = blocklistVm::block)
                         }
                     }
                     if (state.loading) {
@@ -182,6 +205,56 @@ private fun FilmyForYouCategories(
                                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Jedna řada doporučení. Křížek v rohu karty = „tohle mi nenabízej" (user 2026-08-27).
+ * ZÁMĚRNĚ křížek, ne dlouhý stisk: ten už na kartě znamená hodnocení hvězdami a přebít ho by
+ * uživateli sebral zavedené gesto.
+ */
+@Composable
+private fun CuratorRailRow(
+    rail: CuratorRail,
+    onOpenDetail: (MediaItem) -> Unit,
+    onBlock: (MediaItem) -> Unit,
+) {
+    Text(
+        text = rail.title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
+    )
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        items(rail.items, key = { it.stableKey() }) { mi ->
+            Box(
+                Modifier
+                    .padding(horizontal = 4.dp)
+                    .width(118.dp)
+                    .height(215.dp),
+            ) {
+                MediaCard(item = mi, onClick = { onOpenDetail(mi) })
+                if (mi.tmdbId != null) {
+                    IconButton(
+                        onClick = { onBlock(mi) },
+                        modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Tohle mi nenabízej",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                                .padding(3.dp)
+                                .size(16.dp),
+                        )
                     }
                 }
             }
