@@ -126,6 +126,12 @@ private fun FilmyShellContent() {
     var player by remember { mutableStateOf<FilmyPlayer?>(null) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    // RAMPA (SHW-121) — tah od kraje otevírající boční menu si bral přejetí mezi stránkami Filmotéky
+    // (user 2026-08-28: „Mozna bude nutne vypnout pro telefon swipe to view sidebar, nechame jen na
+    // klik."). Výchozí = vypnuto; kdo gesto chce zpátky, zapne si ho v Nastavení → Vzhled.
+    val drawerSwipeEnabled = androidx.compose.ui.platform.LocalContext.current
+        .getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE)
+        .getBoolean(KEY_DRAWER_SWIPE, false)
     // Obohacení karet/řádků (ČSFD %, český popis, režisér) — líně z TMDB/ČSFD + cache. Filmy má vlastní
     // shell (ne ShowlyfinPhoneApp), proto providery zapojujeme tady, jinak by režie/ČSFD/popis byly null.
     val cardCsfd: CardCsfdViewModel = hiltViewModel()
@@ -322,6 +328,10 @@ private fun FilmyShellContent() {
             val onMenu: () -> Unit = { scope.launch { drawerState.open() } }
             ModalNavigationDrawer(
                 drawerState = drawerState,
+                // RAMPA (SHW-121), user 2026-08-28: „Mozna bude nutne vypnout pro telefon swipe to
+                // view sidebar, nechame jen na klik." — tah od kraje si bral přejetí mezi stránkami
+                // Filmotéky. Menu otevírá ☰; přepínatelné v Nastavení → Vzhled.
+                gesturesEnabled = drawerSwipeEnabled || drawerState.isOpen,
                 drawerContent = {
                     FilmyDrawer(current = current) { section ->
                         // Ruční výběr sekce v draweru = úmyslný reset scrollu té sekce na vrch (i re-klik na aktuální).
@@ -384,7 +394,8 @@ private fun FilmyShellContent() {
                             // SPOTLIGHT (FLM-02): nové tituly od sledovaných tvůrců (cíl notifikace).
                             FilmySection.NOVINKY -> FilmyNovinkyScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.4: Filmotéka = mřížka plakátů se sekcemi (reuse TvFilmotekaViewModel).
-                            FilmySection.FILMOTEKA -> FilmyFilmotekaScreen(
+                            // RAMPA (SHW-121): nově DVĚ vodorovné stránky — Filmotéka + fronta „K přehrání".
+                            FilmySection.FILMOTEKA -> FilmyFilmotekaPager(
                                 onMenu = onMenu,
                                 onOpenDetail = openDetail,
                                 onOpenJellyfinDetail = openJfDetail,
@@ -422,3 +433,8 @@ private fun FilmyShellContent() {
     }
 }
 
+/**
+ * RAMPA (SHW-121) — „Otevírat menu tahem od kraje". VÝCHOZÍ VYPNUTO: gesto kolidovalo s přejetím mezi
+ * stránkami Filmotéky (user 2026-08-28: „nechame jen na klik"). Klíč sdílí Nastavení → Vzhled.
+ */
+internal const val KEY_DRAWER_SWIPE = "drawer_swipe_enabled"

@@ -36,6 +36,8 @@ fun FilmyFilmotekaScreen(
     // VESTIBUL (SHW-120) — karta „Další díly" je Jellyfin epizoda / uložený zdroj; klik řeší shell
     // stejným způsobem jako u řad domova (přehrát, jinak detail).
     onOpenJellyfinDetail: (String) -> Unit = {},
+    /** RAMPA (SHW-121) — názvy stránek do lišty (Filmotéka / K přehrání); kreslí je pager. */
+    titleContent: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
     vm: TvFilmotekaViewModel = hiltViewModel(),
 ) {
@@ -65,6 +67,7 @@ fun FilmyFilmotekaScreen(
         viewMode = viewMode,
         onToggleView = { vm.setBrowseViewMode(if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID) },
         emptyContent = { FilmotekaEmpty() },
+        titleContent = titleContent,
         modifier = modifier,
     )
 }

@@ -88,15 +88,22 @@ fun FilmyBrowseSection(
     onToggleView: () -> Unit,
     emptyContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * RAMPA (SHW-121) — co je v liště místo dřívějších chipů os: u Filmotéky názvy stránek
+     * (Filmotéka / K přehrání), jinde prostý název sekce. Default = nic (lišta zůstane holá).
+     */
+    titleContent: @Composable () -> Unit = {},
     /** Volitelné akce navíc vlevo v liště (Pro tebe = přepínač kategorií). Default nic → Filmotéka beze změny. */
     extraActions: (@Composable () -> Unit)? = null,
 ) {
     // GENRE/COUNTRY-FILTER — spodní sheety výběru. Otevřou se klikem na tab „Žánr"/„Země" (user 07-20).
     var showGenreFilter by remember { mutableStateOf(false) }
     var showCountryFilter by remember { mutableStateOf(false) }
-    // SEARCH (user 07-19) — lupa → rozbalí input → živý fulltext filtr (case/diakritika insensitive) přes
-    // název + popisek + REŽIE. Filtruje se render-time nad railama (bez fetch). Prázdný dotaz = beze změny.
-    var searchOpen by remember { mutableStateOf(false) }
+    // SEARCH (user 07-19) — živý fulltext filtr (case/diakritika insensitive) přes název + popisek +
+    // REŽIE. Filtruje se render-time nad railama (bez fetch). Prázdný dotaz = beze změny.
+    // RAMPA (SHW-121): pole už není samostatná lupa v liště, ale první kategorie v panelu ovladačů —
+    // proto tu zůstává jen dotaz a příznak otevřeného panelu.
+    var controlsOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     // ATRIUM (SHW-118) — otevřená kolekce (překryv s jejími díly); null = zavřeno.
     var openCollection by remember { mutableStateOf<FilmotekaCollectionGroup?>(null) }
@@ -106,8 +113,9 @@ fun FilmyBrowseSection(
 
     // Při otevřeném hledání dotáhni režiséry VŠECH položek do procesní cache (bounded souběh), ať jde hledat
     // i podle režiséra napříč celou plochou, ne jen podle už zobrazených karet.
-    LaunchedEffect(searchOpen, state.rails, directorProvider) {
-        if (!searchOpen || directorProvider == null) return@LaunchedEffect
+    val searching = query.isNotBlank()
+    LaunchedEffect(searching, state.rails, directorProvider) {
+        if (!searching || directorProvider == null) return@LaunchedEffect
         val items = state.rails.asSequence().flatMap { it.items.asSequence() }
             .mapNotNull { it.mediaItem }
             .filter { it.tmdbId != null || !it.imdbId.isNullOrBlank() }
@@ -146,32 +154,39 @@ fun FilmyBrowseSection(
 
     Column(modifier.fillMaxSize()) {
         FilmotekaChips(
-            axis = state.axis,
-            allSort = state.allSort,
-            viewMode = viewMode,
-            total = state.total,
             genreFilter = state.genreFilter,
             countryFilter = state.countryFilter,
+            query = query,
             onMenu = onMenu,
-            onAxis = { a ->
-                // user 07-20 — klik na „Žánr"/„Země" přepne osu A rovnou otevře picker filtru (výběr → chip s křížkem).
-                onAxis(a)
-                when (a) {
-                    FilmotekaAxis.GENRE -> showGenreFilter = true
-                    FilmotekaAxis.COUNTRY -> showCountryFilter = true
-                    else -> {}
-                }
-            },
-            onAllSort = onAllSort,
-            onToggleView = onToggleView,
-            onRemoveGenre = onToggleGenre,
-            onRemoveCountry = onToggleCountry,
-            searchOpen = searchOpen,
-            onToggleSearch = { searchOpen = !searchOpen; if (!searchOpen) query = "" },
+            titleContent = titleContent,
+            onOpenControls = { controlsOpen = true },
             extraActions = extraActions,
         )
-        if (searchOpen) {
-            FilmotekaSearchField(query = query, onQuery = { query = it }, onClose = { searchOpen = false; query = "" })
+        if (controlsOpen) {
+            FilmyBrowseControlsSheet(
+                axis = state.axis,
+                allSort = state.allSort,
+                viewMode = viewMode,
+                total = state.total,
+                query = query,
+                genreFilter = state.genreFilter,
+                countryFilter = state.countryFilter,
+                onQuery = { query = it },
+                onAxis = { a ->
+                    // user 07-20 — klik na „Žánr"/„Země" přepne osu A rovnou otevře výběr filtru.
+                    onAxis(a)
+                    when (a) {
+                        FilmotekaAxis.GENRE -> showGenreFilter = true
+                        FilmotekaAxis.COUNTRY -> showCountryFilter = true
+                        else -> {}
+                    }
+                },
+                onAllSort = onAllSort,
+                onToggleView = onToggleView,
+                onRemoveGenre = onToggleGenre,
+                onRemoveCountry = onToggleCountry,
+                onDismiss = { controlsOpen = false },
+            )
         }
         // Vypršelé přihlášení k Traktu se dřív projevilo JEN tím, že se tiše rozhodilo pořadí „Nedávno
         // přidané" (data „kdy jsem si film přidal do Chci vidět" prostě nedorazila). Řekni to nahlas.
@@ -285,84 +300,48 @@ fun FilmyBrowseSection(
 }
 
 /**
- * Lišta os splynulá s horní lištou (☰ + chipy os + přepínač zobrazení vpravo) a — jen pro osu „Vše" —
- * druhá lišta řazení pod ní. Max 2 lišty (přání usera). Vzor ovladačů = princip „lišta v každé sekci".
+ * Horní lišta procházení — JEDINÉ patro: ☰ + [titleContent] (názvy stránek) + ikona ovladačů úplně
+ * vpravo. Chipy os, řazení, lupa i počet titulů se přestěhovaly do [FilmyBrowseControlsSheet]
+ * (RAMPA SHW-121, user 2026-08-28) — dřív to byly dvě lišty a přetékaly.
  */
 @Composable
 private fun FilmotekaChips(
-    axis: FilmotekaAxis,
-    allSort: FilmotekaAllSort,
-    viewMode: ViewMode,
-    total: Int,
     genreFilter: Set<String>,
     countryFilter: Set<CinematographyRegion>,
+    query: String,
     onMenu: () -> Unit,
-    onAxis: (FilmotekaAxis) -> Unit,
-    onAllSort: (FilmotekaAllSort) -> Unit,
-    onToggleView: () -> Unit,
-    onRemoveGenre: (String) -> Unit,
-    onRemoveCountry: (CinematographyRegion) -> Unit,
-    searchOpen: Boolean,
-    onToggleSearch: () -> Unit,
+    /** Co se kreslí místo dřívějších chipů os — názvy stránek (Filmotéka / K přehrání) nebo titulek sekce. */
+    titleContent: @Composable () -> Unit,
+    /** Otevře panel se VŠEMI ovladači (hledání → zobrazení → řazení → osa → filtry). */
+    onOpenControls: () -> Unit,
     extraActions: (@Composable () -> Unit)? = null,
 ) {
     Column(
         Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // ☰ + chipy os (scroll) + počet titulů + přepínač zobrazení vpravo — jeden pruh (splynutí s lištou).
+        // RAMPA (SHW-121) — JEDNO patro lišty: ☰ + názvy stránek + jediná ikona ovladačů úplně vpravo
+        // (user 2026-08-28: „komplet prepinace presun do jedne ikony… tim padem se tam vejde nazev tabu"
+        // + „ikonu filtru dej uplne doprava, kdybych chtel pridat sekci do filmoteky dalsi").
+        // Dřív se tu tísnily osy, počet titulů, lupa i přepínač zobrazení a POD tím druhá řada s řazením
+        // — na userově snímku se chip „Země" překrýval s textem „127 filmů". Všechno je teď v panelu.
         FilmySectionBar(
             onMenu = onMenu,
             trailing = {
                 extraActions?.invoke()
-                if (total > 0) {
-                    Text(
-                        text = "$total filmů",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        modifier = Modifier.padding(end = 4.dp),
-                    )
-                }
-                IconButton(onClick = onToggleSearch) {
+                // Aktivní hledání/filtr musí být poznat i se zavřeným panelem — jinak by uživatel
+                // koukal na osekaný seznam a nevěděl proč.
+                val tuned = query.isNotBlank() || genreFilter.isNotEmpty() || countryFilter.isNotEmpty()
+                IconButton(onClick = onOpenControls) {
                     Icon(
-                        if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search,
-                        contentDescription = if (searchOpen) "Zavřít hledání" else "Hledat",
-                        tint = if (searchOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        Icons.Rounded.Tune,
+                        contentDescription = "Ovladače (hledání, zobrazení, řazení, filtry)",
+                        tint = if (tuned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                IconButton(onClick = onToggleView) {
-                    if (viewMode == ViewMode.GRID) {
-                        Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = "Zobrazit jako seznam")
-                    } else {
-                        Icon(Icons.Rounded.GridView, contentDescription = "Zobrazit jako mřížku")
-                    }
                 }
             },
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilmotekaAxis.entries.forEach { a ->
-                    FilterChip(selected = axis == a, onClick = { onAxis(a) }, label = { Text(a.chipLabel) })
-                }
-            }
-        }
-        if (axis == FilmotekaAxis.ALL) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilmotekaAllSort.entries.forEach { s ->
-                    FilterChip(selected = allSort == s, onClick = { onAllSort(s) }, label = { Text(s.chipLabel) })
-                }
-            }
+            titleContent()
         }
         // GENRE-FILTER (user 07-20) — druhý řádek u osy Žánr: JEN pojmenované chipy vybraných žánrů s křížkem
         // (klik = zrušit ten žánr). Vstup do výběru = klik na tab „Žánr" (otevře picker). Prázdný výběr = žádný řádek.
@@ -423,14 +402,14 @@ internal fun SectionHeader(title: String) {
     )
 }
 
-private val FilmotekaAxis.chipLabel: String
+internal val FilmotekaAxis.chipLabel: String
     get() = when (this) {
         FilmotekaAxis.ALL -> "Vše"
         FilmotekaAxis.GENRE -> "Žánr"
         FilmotekaAxis.COUNTRY -> "Země"
     }
 
-private val FilmotekaAllSort.chipLabel: String
+internal val FilmotekaAllSort.chipLabel: String
     get() = when (this) {
         FilmotekaAllSort.RECENT -> "Nedávno přidané"
         FilmotekaAllSort.ALPHABETICAL -> "Abecedně"
@@ -557,29 +536,6 @@ private fun normalizeSearch(s: String): String =
     java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
         .replace("\\p{Mn}+".toRegex(), "")
         .trim()
-
-/** SEARCH — rozbalený input pro fulltext filtr (auto-fokus, klávesnice hned). Filtruje živě přes onQuery. */
-@Composable
-private fun FilmotekaSearchField(query: String, onQuery: (String) -> Unit, onClose: () -> Unit) {
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQuery,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .focusRequester(focus),
-        singleLine = true,
-        placeholder = { Text("Hledat v názvu, popisu i režii…") },
-        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-        trailingIcon = {
-            IconButton(onClick = { if (query.isEmpty()) onClose() else onQuery("") }) {
-                Icon(Icons.Rounded.Close, contentDescription = "Vymazat")
-            }
-        },
-    )
-}
 
 /** SEARCH — prázdný výsledek hledání. */
 @Composable

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -74,6 +75,21 @@ fun FilmyAppearanceSection(
         SettingPercentSlider("Tónování prvků", value = theme.containerTint, onValue = themePrefs::setContainerTint)
         SettingPercentSlider("Kontrast textu", value = theme.textContrast, onValue = themePrefs::setTextContrast)
         SettingPercentSlider("Sytost barev", value = theme.accentChroma, onValue = themePrefs::setAccentChroma)
+
+        // RAMPA (SHW-121) — gesto bočního menu. Vypnuté je výchozí: tah od kraje si bral přejetí mezi
+        // stránkami Filmotéky (user 2026-08-28: „nechame jen na klik"). Kdo ho chce zpět, zapne tady.
+        var drawerSwipe by remember {
+            mutableStateOf(ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE).getBoolean(KEY_DRAWER_SWIPE, false))
+        }
+        SettingSwitchRow(
+            title = "Otevírat menu tahem od kraje",
+            subtitle = "Vypnuto = menu jen přes ☰. Zapnuté gesto si bere přejetí mezi Filmotékou a frontou K přehrání. Projeví se po restartu obrazovky.",
+            checked = drawerSwipe,
+            onCheckedChange = { v ->
+                drawerSwipe = v
+                ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE).edit().putBoolean(KEY_DRAWER_SWIPE, v).apply()
+            },
+        )
 
         SettingSectionTitle("Písmo")
         SettingSwitchRow(
