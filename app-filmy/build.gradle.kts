@@ -30,8 +30,8 @@ android {
         applicationId = "com.github.jankoran90.filmy"
         minSdk = 23
         targetSdk = 36
-        versionCode = 207
-        versionName = "1.2.96"
+        versionCode = 208
+        versionName = "1.2.97"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

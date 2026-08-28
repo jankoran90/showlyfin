@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Movie
@@ -71,6 +72,8 @@ fun MediaRow(
 ) {
     // CINEMATHEQUE (user 2026-07-18) — decentní odznak „má uložený zdroj" za názvem (reaktivní přes provider).
     val hasSource = rememberHasSource(item.tmdbId, item.imdbId)
+    // RAMPA (SHW-121) — „ve frontě K přehrání"; týž provider jako u karty (self-serve, bez VM).
+    val inQueue = rememberInQueue(item.tmdbId, item.type != MediaType.MOVIE)
     val lazyRating = rememberCsfdCardRating(item.imdbId, item.tmdbId, item.title, item.year)
     val rating = csfdRating ?: (if (enableCsfd) lazyRating else null)
     val director = if (showDirector)
@@ -151,6 +154,18 @@ fun MediaRow(
                     Icon(
                         imageVector = Icons.Default.CloudDone,
                         contentDescription = "Má uložený zdroj",
+                        modifier = Modifier.padding(top = 3.dp).size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                // RAMPA (SHW-121), user 2026-08-28: „kde uvidim znacku ze je v seznamu k prehrani
+                // muzes to dat vedle znacky zdroje?" — v seznamu byla značka jen na plakátu (mřížka),
+                // tady chyběla. Stojí HNED VEDLE mráčku „má uložený zdroj", jak si přál.
+                if (inQueue) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
+                        contentDescription = "Ve frontě K přehrání",
                         modifier = Modifier.padding(top = 3.dp).size(16.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )

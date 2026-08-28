@@ -1,19 +1,8 @@
 package com.github.jankoran90.showlyfin.core.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.StateFlow
 
@@ -45,25 +34,4 @@ fun rememberInQueue(tmdbId: Long?, isShow: Boolean): Boolean {
     val keys by provider.queuedKeys.collectAsStateWithLifecycle()
     val key = playQueueKey(tmdbId, isShow) ?: return false
     return key in keys
-}
-
-/**
- * Značka „ve frontě" na obalu. User 2026-08-28: *„znacku zvol jinou zadnou zdobenou proste ikonu
- * fronty"* — tedy žádné kolečko s křížkem jako v ukázce, jen ikona fronty na tmavém podkladu.
- */
-@Composable
-fun InQueueBadge(modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .padding(4.dp)
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f), CircleShape)
-            .padding(4.dp),
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
-            contentDescription = "Ve frontě K přehrání",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(16.dp),
-        )
-    }
 }
