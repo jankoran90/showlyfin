@@ -385,10 +385,10 @@ class DetailViewModel @Inject constructor(
             launch { loadWatchlistMembership(item) }
             launch { loadCast(item) }
             launch { loadRelated(item) }
+            launch { loadCsfdAuto(item) }
             launch {
             try {
                 val tmdbId = item.tmdbId
-                var resolvedCzTitle: String? = item.titleCz?.takeIf { it.isNotBlank() }
                 if (tmdbId != null) {
                     if (item.type == MediaType.MOVIE) {
                         coroutineScope {
@@ -397,7 +397,6 @@ class DetailViewModel @Inject constructor(
                             val details = detailsDeferred.await()
                             val translation = translationDeferred.await()
                             val tmdbCzTitle = translation?.title?.takeIf { it.isNotBlank() }
-                            if (tmdbCzTitle != null) resolvedCzTitle = tmdbCzTitle
                             // VISTA V4: pojistka proti micro-window — pokud uživatel mezitím
                             // překlikl na jiný film, NEpřepisuj (nepřevracej detail na původní).
                             _uiState.update { st ->
@@ -441,7 +440,6 @@ class DetailViewModel @Inject constructor(
                             val translation = translationDeferred.await()
                             val showImdb = imdbDeferred.await()
                             val tmdbCzTitle = translation?.name?.takeIf { it.isNotBlank() }
-                            if (tmdbCzTitle != null) resolvedCzTitle = tmdbCzTitle
                             _uiState.update { st ->
                                 if (st.item?.isSameAs(item) != true) st
                                 else st.copy(
@@ -483,7 +481,6 @@ class DetailViewModel @Inject constructor(
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
                 }
-                if (!item.isCtvTitle) loadCsfd(item, resolvedCzTitle)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e   // překlik na jiný film → zrušený load, NEhlas jako chybu
             } catch (e: Throwable) {
@@ -3667,21 +3664,58 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(mergedCollection = merged) }
     }
 
-    /** „Zkusit ČSFD znovu" (⋮ menu, user 2026-08-20 — obrázky/recenze u ČSFD ukazovaly jiný titul):
-     * zahodí appkou lokálně vyřešené (a jednou třeba špatně) ČSFD id a vynutí čerstvé hledání. */
-    fun retryCsfd() {
-        val item = _uiState.value.item ?: return
-        val czTitle = _uiState.value.tmdbCzTitle
-        viewModelScope.launch {
-            csfdRepository.forceRefreshCsfdId(
-                item.imdbId.orEmpty(), item.tmdbId,
-                czTitle?.takeIf { it.isNotBlank() } ?: item.title, item.year ?: 0,
-            )
-            _uiState.update {
-                it.copy(isCsfdLoading = true, csfdId = null, csfdRating = null, csfdPlot = null, csfdReviews = emptyList(), csfdGallery = emptyList())
+    /**
+     * AUTOMATICKÉ načtení ČSFD (user 2026-08-28: „netahaj se sami data csfd, je na klik «zkusit
+     * csfd znovu»"). Dřív viselo na ÚPLNÉM KONCI bloku, který stahuje TMDB — když TMDB kdekoli
+     * hráblo (síť, timeout), skočilo se do catch a `loadCsfd` se NEZAVOLAL VŮBEC: spinner zhasl a
+     * sekce zůstala prázdná. Ruční klik fungoval, protože volá `loadCsfd` napřímo.
+     * Proto tu ČSFD běží jako VLASTNÍ coroutina vedle ostatních — pád TMDB ho nesmí sebrat.
+     * Druhý rozdíl proti kliku: ten bere titul ze stavu obrazovky, tedy UŽ s doplněným `imdbId`
+     * (Wikidata přes IMDb je nejspolehlivější cesta k ČSFD id), kdežto automatika dostávala titul
+     * v té podobě, v jaké přišel ze seznamu. Tady si na tu identitu krátce počkáme.
+     */
+    private suspend fun loadCsfdAuto(item: MediaItem) {
+        // ČT tituly nesou syntetickou identitu (`ctvid:…`) a na ČSFD nejsou — nepředstírej načítání.
+        if (item.isCtvTitle) return
+        val enriched = awaitCsfdIdentity(item)
+        val czTitle = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() }
+            ?: item.titleCz?.takeIf { it.isNotBlank() }
+        loadCsfd(enriched, czTitle)
+        // Překlik na jiný titul → tenhle výsledek už nikoho nezajímá.
+        if (_uiState.value.item?.isSameAs(item) != true) return
+        if (_uiState.value.csfdId != null) return
+        // Nic se nenašlo → udělej TOTÉŽ co ruční klik: zahoď (třeba jednou špatně) uložené id
+        // a hledej nanovo. Jednou, ne ve smyčce — titul na ČSFD prostě být nemusí.
+        csfdRepository.forceRefreshCsfdId(
+            enriched.imdbId.orEmpty(), enriched.tmdbId,
+            czTitle ?: enriched.title, enriched.year ?: 0,
+        )
+        _uiState.update { if (it.item?.isSameAs(item) == true) it.copy(isCsfdLoading = true) else it }
+        loadCsfd(enriched, czTitle)
+    }
+
+    /**
+     * `imdbId` doplňuje do titulu až dotaz na TMDB, takže automatika startuje dřív, než ho má.
+     * Krátce si na něj počkáme (bez něj se ČSFD id hledá přes tmdbId — jde to, ale hůř).
+     * Čekání je stropované: když TMDB mlčí, radši hledej s tím, co máme, než nedělej nic.
+     */
+    private suspend fun awaitCsfdIdentity(item: MediaItem): MediaItem {
+        if (!item.imdbId.isNullOrBlank()) return item
+        val enriched = withTimeoutOrNull(CSFD_IDENTITY_WAIT_MS) {
+            var found: MediaItem? = null
+            while (true) {
+                val st = _uiState.value
+                val current = st.item
+                if (current == null || !current.isSameAs(item)) break   // překliknuto jinam
+                if (!current.imdbId.isNullOrBlank()) { found = current; break }
+                // TMDB doběhlo a `imdbId` stejně nepřineslo (nebo spadlo) → nečekej zbytečně dál,
+                // ať se u titulu bez IMDb nedrží spinner celý časový strop.
+                if (!st.isLoading) break
+                delay(100)
             }
-            loadCsfd(item, czTitle)
+            found
         }
+        return enriched ?: item
     }
 
     private suspend fun loadCsfd(item: MediaItem, czTitle: String?) {
@@ -3770,6 +3804,8 @@ class DetailViewModel @Inject constructor(
     }
 
     private companion object {
+        // Jak dlouho automatika čeká na `imdbId` z TMDB, než se pustí do ČSFD s tím, co má.
+        const val CSFD_IDENTITY_WAIT_MS = 4000L
         // Jak dlouho nechat svítit „Hledám zdroj…", než to vzdáme (auto-hledání běží na serveru).
         const val AUTO_SEARCH_MAX_MS = 5 * 60 * 1000L
         // Kolik titulkových kandidátů poslat na TV (MPV je nasideloaduje, výběr na TV = F3).

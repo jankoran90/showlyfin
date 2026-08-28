@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 // SEZONA (SHW-113) f2 — přepínač zvukové stopy v ⋮ menu.
 import androidx.compose.material.icons.filled.Translate
@@ -587,10 +586,6 @@ fun DetailScreen(
                         // user 2026-08-24: „jak odeberu z Filmotéky … aby se znova nehledaly zdroje"
                         onRemoveFromFilmoteka = { viewModel.removeFromFilmoteka() },
                         castInOverflow = castInOverflow,
-                        onRetryCsfd = uiState.item?.let { m ->
-                            if (m.imdbId.isNullOrBlank() && m.tmdbId == null) null
-                            else { { viewModel.retryCsfd() } }
-                        },
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -1021,7 +1016,6 @@ private fun DetailActionBar(
     castInOverflow: Boolean = false,
     // user 2026-08-20 ("Zločin je extrémní sport" — obrázky/recenze jiného titulu): jednou špatně
     // vyřešené ČSFD id se dřív v appce drželo natrvalo bez opravy. null = skryto (chybí imdb/tmdb).
-    onRetryCsfd: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     // BESPOKE F3 — vlastní hvězdičkové hodnocení (sdílený dialog přes LocalUserRatingProvider).
@@ -1187,16 +1181,6 @@ private fun DetailActionBar(
                         text = { Text("Odebrat z Filmotéky") },
                         leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                         onClick = { menuOpen = false; onRemoveFromFilmoteka() },
-                    )
-                }
-                // user 2026-08-20: obrázky/recenze u ČSFD ukazovaly jiný titul — dřív vyřešené (a
-                // třeba jednou špatně) ČSFD id appka držela navždy, bez cesty ven. Teď jde vynutit
-                // nové hledání (zahodí lokální cache i případný override).
-                if (onRetryCsfd != null) {
-                    DropdownMenuItem(
-                        text = { Text("Zkusit ČSFD znovu") },
-                        leadingIcon = { Icon(Icons.Default.Refresh, null) },
-                        onClick = { menuOpen = false; onRetryCsfd() },
                     )
                 }
             }

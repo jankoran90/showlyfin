@@ -150,8 +150,10 @@ class CsfdRepository @Inject constructor(
         }
     }
 
-    /** „Zkusit ČSFD znovu" (⋮ menu, user 2026-08-20 — obrázky/recenze ukazovaly jiný titul): zahodí
-     * override i všechny 3 varianty cache klíče (imdb/tmdb/title), ať se příště vyřeší úplně nanovo. */
+    /** Zahodí override i všechny 3 varianty cache klíče (imdb/tmdb/title), ať se ČSFD id vyřeší
+     * úplně nanovo. Vzniklo 2026-08-20 pro ruční „Zkusit ČSFD znovu" (obrázky/recenze ukazovaly jiný
+     * titul); od 2026-08-28 tlačítko není a volá to SAMA automatika (`DetailViewModel.loadCsfdAuto`),
+     * když první hledání nic nenajde — user: „ten button dej pryc kdyz to budes mit opravene". */
     fun forceRefreshCsfdId(imdbId: String, tmdbId: Long?, title: String, year: Int) {
         val keys = buildList {
             if (imdbId.isNotBlank()) { add("CSFD_ID_$imdbId"); add("CSFD_OVERRIDE_$imdbId") }
