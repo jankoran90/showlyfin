@@ -66,6 +66,14 @@ enum class HomeRowSourceType(val label: String) {
     FAVORITES("Oblíbené"),
 
     /**
+     * RAMPA (SHW-121) — fronta „K přehrání" (user 2026-08-28: *„tuto sekci chci na na domov jako
+     * sekci"*). Prázdná se řada NEKRESLÍ (*„pokud bude prázdný tak autonezobrazuj"*).
+     * 🔴 Nová hodnota musí přibýt i do RUČNÍCH seznamů: `TvAddRowPicker`, `FilmyAddRowDialog`,
+     * mapování v `TvHomeScreen` a načtení v `TvHomeViewModel` — enum sám nestačí.
+     */
+    PLAY_QUEUE("K přehrání"),
+
+    /**
      * FOYER (SHW-107, user 2026-07-26): NEDÁVNO PŘIDANÉ z celé Filmotéky — tatáž báze, jakou ukazuje sekce
      * Filmotéka (Jellyfin knihovna ∪ zapamatované zdroje ∪ Trakt „Chci vidět" ∪ Oblíbené, dedup + věkový
      * gate), seřazená podle data přidání. NEPLÉST s [RECENTLY_ADDED] = jen `getLatestMedia` JEDNÉ Jellyfin

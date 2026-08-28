@@ -86,6 +86,8 @@ class TvHomeViewModel @Inject constructor(
     private val enricher: MediaEnricher,
     private val parentalControls: ParentalControlsRepository,
     private val favorites: FavoritesRepository,
+    // RAMPA (SHW-121): řada „K přehrání" na domově (per-profil fronta, sdílená s telefonem i webem).
+    private val playQueue: com.github.jankoran90.showlyfin.core.db.repository.PlayQueueRepository,
     private val workingSources: WorkingSourceStore,
     // FOYER (SHW-107) — řada „Filmotéka — nedávno přidané" čte TUTÉŽ bázi jako sekce Filmotéka.
     private val filmotekaBase: com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaBaseLoader,
@@ -354,6 +356,24 @@ class TvHomeViewModel @Inject constructor(
                                 posterUrl = fav.imageUrl,
                                 landscapeUrl = null,
                                 mediaItem = stub(fav.id, fav.name, fav.year, isShow = false),
+                            )
+                        }
+                        emit(config, applyOps(items, config))
+                    }
+                }
+                // RAMPA (SHW-121) — fronta „K přehrání". Taky reaktivní: přidání na kartě se musí
+                // na domově projevit hned, bez obnovení obrazovky.
+                HomeRowSourceType.PLAY_QUEUE -> {
+                    playQueue.observe().collect { list ->
+                        val items = list.map { q ->
+                            val isShow = q.kind == FavoriteKind.QUEUE_SHOW
+                            HomeRowItem(
+                                key = "queue_${q.kind.name}_${q.id}",
+                                title = q.name,
+                                year = q.year,
+                                posterUrl = q.imageUrl,
+                                landscapeUrl = null,
+                                mediaItem = stub(q.id, q.name, q.year, isShow = isShow),
                             )
                         }
                         emit(config, applyOps(items, config))

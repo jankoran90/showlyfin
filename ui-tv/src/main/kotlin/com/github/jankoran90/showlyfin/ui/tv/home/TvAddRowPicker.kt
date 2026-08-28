@@ -111,6 +111,8 @@ fun TvAddRowPicker(
                     simpleSource(newId, HomeRowSourceType.NEXT_UP, HomeCardStyle.LANDSCAPE, onPick)
                     simpleSource(newId, HomeRowSourceType.CONTINUE_WATCHING_COMBINED, HomeCardStyle.LANDSCAPE, onPick)
                     simpleSource(newId, HomeRowSourceType.FAVORITES, HomeCardStyle.POSTER, onPick)
+                    // RAMPA (SHW-121) — fronta „K přehrání" (ruční seznam, enum sám by se sem nedostal).
+                    simpleSource(newId, HomeRowSourceType.PLAY_QUEUE, HomeCardStyle.POSTER, onPick)
                     simpleSource(newId, HomeRowSourceType.SAVED_FOR_PLAYBACK, HomeCardStyle.POSTER, onPick)
                     // COUCH T1/T2 — Trakt řady (prázdné bez přihlášení → řada se nezobrazí). Konkrétní seznam
                     // se přidává z Trakt sekce „Moje seznamy" (má kontext listů), sem patří jen bezparametrové.

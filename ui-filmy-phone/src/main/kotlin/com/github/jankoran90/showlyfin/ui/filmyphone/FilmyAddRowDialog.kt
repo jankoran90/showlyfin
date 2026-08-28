@@ -152,6 +152,8 @@ private val SIMPLE_SOURCES: List<Pair<HomeRowSourceType, HomeCardStyle>> = listO
     HomeRowSourceType.CONTINUE_WATCHING_COMBINED to HomeCardStyle.LANDSCAPE,
     HomeRowSourceType.FILMOTEKA_RECENT to HomeCardStyle.POSTER,
     HomeRowSourceType.FAVORITES to HomeCardStyle.POSTER,
+    // RAMPA (SHW-121) — fronta „K přehrání".
+    HomeRowSourceType.PLAY_QUEUE to HomeCardStyle.POSTER,
     HomeRowSourceType.SAVED_FOR_PLAYBACK to HomeCardStyle.POSTER,
     HomeRowSourceType.TRAKT_WATCHLIST to HomeCardStyle.POSTER,
     HomeRowSourceType.TRAKT_HISTORY to HomeCardStyle.LANDSCAPE,

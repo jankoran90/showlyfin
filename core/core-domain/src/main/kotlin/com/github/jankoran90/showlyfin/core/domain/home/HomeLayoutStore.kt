@@ -472,6 +472,14 @@ class HomeLayoutStore @Inject constructor(
                 title = "Oblíbené",
                 cardStyle = HomeCardStyle.POSTER,
             ),
+            // RAMPA (SHW-121, user 2026-08-28: „tuto sekci chci na na domov jako sekci") — prázdná
+            // se řada nevykreslí (render bere jen neprázdné), takže než něco přidá, nic nepřekáží.
+            HomeRowConfig(
+                id = "play_queue",
+                source = HomeRowSourceType.PLAY_QUEUE,
+                title = "K přehrání",
+                cardStyle = HomeCardStyle.POSTER,
+            ),
             // Zapamatované zdroje — když prázdné, render řadu vynechá (buildList jen neprázdné).
             HomeRowConfig(
                 id = "saved_for_playback",
