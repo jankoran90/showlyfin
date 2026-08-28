@@ -30,6 +30,12 @@ data class ShareCardData(
     val genres: List<String>,
     val description: String?,
     val reviews: List<ShareReview>,
+    /**
+     * SUMÁŘ (SHW-122) — [description] je kurátorský text (ČSFD recenze + Trakt komentáře shrnuté
+     * mozkem), ne oficiální popis. Nahrazuje popis I citace recenzí (user 2026-08-28: „ano má
+     * nahradit"), takže dostane víc řádků — ~1000 znaků se do devíti nevejde.
+     */
+    val curated: Boolean = false,
 )
 
 object ShareCardRenderer {
@@ -99,7 +105,8 @@ object ShareCardRenderer {
 
         // Obsah pod headerem
         val dirText = data.directors.take(2).joinToString(", ")
-        val descL = data.description?.takeIf { it.isNotBlank() }?.let { layout(it, descPaint, CONTENT_W, 9) }
+        val descRadku = if (data.curated) 18 else 9
+        val descL = data.description?.takeIf { it.isNotBlank() }?.let { layout(it, descPaint, CONTENT_W, descRadku) }
 
         // Recenze karty
         val revCardW = CONTENT_W

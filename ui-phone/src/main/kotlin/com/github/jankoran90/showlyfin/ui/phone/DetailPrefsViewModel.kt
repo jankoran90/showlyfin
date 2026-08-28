@@ -23,6 +23,9 @@ data class DetailPrefsState(
     val showDirector: Boolean = true,
     val showStudio: Boolean = true,
     val showSimilar: Boolean = true,    // SIMILAR (user 2026-08-27): pruh Podobne (Trakt related)
+    // SUMÁŘ (SHW-122, user 2026-08-28): kurátorský popis z ohlasů diváků + jestli je HLAVNÍ stránkou.
+    val showCurated: Boolean = true,
+    val curatedFirst: Boolean = true,
     val rowOrder: List<String> = DETAIL_ROW_ORDER_DEFAULT,  // poradi pruhu pod kartou
     val showCreators: Boolean = true,   // ENSEMBLE (SHW-45): sekce „Tvůrci"
     val showSeasons: Boolean = true,    // TENFOOT WS-C (SHW-87): sezóny/epizody seriálu v detailu
@@ -54,6 +57,8 @@ class DetailPrefsViewModel @Inject constructor(
         showStudio = prefs.getBoolean(KEY_STUDIO, true),
         showCreators = prefs.getBoolean(KEY_CREATORS, true),
         showSimilar = prefs.getBoolean(KEY_SIMILAR, true),
+        showCurated = prefs.getBoolean(KEY_CURATED, true),
+        curatedFirst = prefs.getBoolean(KEY_CURATED_FIRST, true),
         rowOrder = parseRowOrder(prefs.getString(KEY_ROW_ORDER, null)),
         showSeasons = prefs.getBoolean(KEY_SEASONS, true),
         sectionStyle = prefs.getString(KEY_SECTION_STYLE, null)
@@ -76,6 +81,8 @@ class DetailPrefsViewModel @Inject constructor(
     fun setStudio(value: Boolean) = put(KEY_STUDIO) { _state.update { s -> s.copy(showStudio = value) }; value }
     fun setCreators(value: Boolean) = put(KEY_CREATORS) { _state.update { s -> s.copy(showCreators = value) }; value }
     fun setSimilar(value: Boolean) = put(KEY_SIMILAR) { _state.update { s -> s.copy(showSimilar = value) }; value }
+    fun setCurated(value: Boolean) = put(KEY_CURATED) { _state.update { s -> s.copy(showCurated = value) }; value }
+    fun setCuratedFirst(value: Boolean) = put(KEY_CURATED_FIRST) { _state.update { s -> s.copy(curatedFirst = value) }; value }
 
     /** Posun pruhu o [delta] (−1 nahoru, +1 dolu). Mimo rozsah = nic (tlacitko je stejne disabled). */
     fun moveRow(key: String, delta: Int) {
@@ -139,6 +146,10 @@ class DetailPrefsViewModel @Inject constructor(
         private const val KEY_STUDIO = "detail_show_studio"
         private const val KEY_CREATORS = "detail_show_creators"
         private const val KEY_SIMILAR = "detail_show_similar"
+
+        // SUMÁŘ (SHW-122) — musí sedět s DetailViewModel.KEY_CURATED_* (jiný modul, sdílený string).
+        private const val KEY_CURATED = "detail_curated_enabled"
+        private const val KEY_CURATED_FIRST = "detail_curated_first"
         private const val KEY_ROW_ORDER = "detail_row_order"
         private const val KEY_SEASONS = "detail_show_seasons"
         private const val KEY_SECTION_STYLE = "detail_section_style"

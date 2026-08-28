@@ -83,6 +83,9 @@ interface UploaderService {
     @GET suspend fun getCsfdReviews(@Url url: String, @Header("Cookie") cookie: String): CsfdReviewsResponse
     @GET suspend fun getCsfdGallery(@Url url: String, @Header("Cookie") cookie: String): CsfdGalleryResponse
 
+    // SUMÁŘ (SHW-122): kurátorský text sdílecí karty (ČSFD recenze + Trakt komentáře → mozek).
+    @GET suspend fun getShareText(@Url url: String, @Header("Cookie") cookie: String): ShareTextResponse
+
     // TMM Pipeline
     @GET suspend fun getTmmSession(@Url url: String, @Header("Cookie") cookie: String): TmmSession
     @POST suspend fun tmmSearch(@Url url: String, @Header("Cookie") cookie: String, @Body request: TmmSearchRequest): TmmSearchResponse

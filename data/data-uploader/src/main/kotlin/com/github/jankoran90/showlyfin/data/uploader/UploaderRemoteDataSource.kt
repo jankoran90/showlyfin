@@ -178,6 +178,12 @@ interface UploaderRemoteDataSource {
     suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem>
     suspend fun getCsfdGallery(baseUrl: String, sessionCookie: String, csfdId: Long): List<String>
 
+    /**
+     * SUMÁŘ (SHW-122) — kurátorský text sdílecí karty. `warm = true` jen nastartuje výpočet na serveru
+     * a hned se vrátí (počítá se 16–20 s), `warm = false` vyzvedne hotový text z trvalé cache.
+     */
+    suspend fun getShareText(baseUrl: String, sessionCookie: String, isShow: Boolean, imdbId: String, title: String, year: Int, warm: Boolean): ShareTextResponse
+
     // TUNER (SHW-62) — YouTube podcast (streaming): feed + samonosné stream URL (?key=, jako sdilej/titulky)
     suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int = 30): YtChannelFeed
     /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio".

@@ -300,6 +300,9 @@ class DetailViewModel @Inject constructor(
                 csfdTitle = null,
                 csfdReviews = emptyList(),
                 csfdGallery = emptyList(),
+                // SUMÁŘ (SHW-122): bez resetu by na nové kartě chvíli visel text PŘEDCHOZÍHO titulu
+                // (peče se 16–20 s) — táž past, jaká kdysi držela cizí `csfdTitle` v hero.
+                curatedText = null,
                 isGalleryLoading = false,
                 showGallery = false,
                 collection = null,
@@ -360,6 +363,9 @@ class DetailViewModel @Inject constructor(
                 showDirector = prefs.getBoolean("detail_show_director", true),
                 showStudio = prefs.getBoolean("detail_show_studio", true),
                 showCreators = prefs.getBoolean("detail_show_creators", true),
+                // SUMÁŘ (SHW-122) — kurátorský popis: ukazovat vůbec + jestli má být první.
+                showCuratedText = prefs.getBoolean(KEY_CURATED_ENABLED, true),
+                curatedFirst = prefs.getBoolean(KEY_CURATED_FIRST, true),
                 showSimilar = prefs.getBoolean("detail_show_similar", true),
                 rowOrder = readRowOrder(),
                 similarTitles = null,
@@ -391,6 +397,7 @@ class DetailViewModel @Inject constructor(
             launch { loadCast(item) }
             launch { loadRelated(item) }
             launch { loadCsfdAuto(item) }
+            launch { loadShareText(item) }
             launch {
             try {
                 val tmdbId = item.tmdbId
@@ -3743,6 +3750,87 @@ class DetailViewModel @Inject constructor(
         return enriched ?: item
     }
 
+    /**
+     * SUMÁŘ (SHW-122) — kurátorský text (ČSFD recenze + Trakt komentáře → mozek), user 2026-08-28:
+     * *„dat dohromady informace o filmu/seriálu a zároveň nejvěrnější komentáře z traktu
+     * a inteligentnejsi vecne a pravdivé z csfd a udelat z toho jeden text"*.
+     *
+     * NAMĚŘENO: výroba trvá 16–20 s (z toho model ~17 s), takže se na ni **nečeká**. Otevření karty
+     * jen řekne serveru „začni péct" (`warm`) a pak se pár krát zeptáme, jestli je hotovo. Hotový text
+     * má server uložený natrvalo → podruhé je okamžitě.
+     */
+    private suspend fun loadShareText(item: MediaItem) {
+        val imdb = item.imdbId?.takeIf { it.isNotBlank() && !item.isCtvTitle }
+            ?: awaitCsfdIdentity(item).imdbId?.takeIf { it.isNotBlank() }
+            ?: return
+        if (uploaderBaseUrl.isBlank()) return
+        // user 2026-08-28: „budeme ho generovat jen ve chvíli kdy film, seriál bude ve chci videt
+        // nebo filmotece nebo v oblibenych nebo se stiskne sdilet kartu" — u ostatních titulů se
+        // text jen VYZVEDNE, když už náhodou existuje, ale výpočet se nespouští (stojí ~17 s modelu).
+        val smiSePect = patriDoMychTitulu()
+        val isShow = item.type != MediaType.MOVIE
+        val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: item.title
+        val year = item.year ?: 0
+
+        suspend fun zeptejSe(warm: Boolean) = runCatching {
+            uploaderDs.getShareText(uploaderBaseUrl, uploaderCookie, isShow, imdb, title, year, warm)
+        }.getOrNull()
+
+        // První dotaz — `warm` jen u „mých" titulů; jinak se ptáme čistě na hotový text.
+        var odpoved = zeptejSe(warm = smiSePect) ?: return
+        var pokus = 0
+        while (odpoved.text.isNullOrBlank() && odpoved.pending && pokus < SHARE_TEXT_POKUSU) {
+            delay(SHARE_TEXT_INTERVAL_MS)
+            // Překlik na jiný titul → tenhle text už nikoho nezajímá.
+            if (_uiState.value.item?.isSameAs(item) != true) return
+            odpoved = zeptejSe(warm = false) ?: return
+            pokus++
+        }
+        val text = odpoved.text?.takeIf { it.isNotBlank() } ?: return
+        _uiState.update { if (it.item?.isSameAs(item) == true) it.copy(curatedText = text) else it }
+    }
+
+    /**
+     * Je tenhle titul „můj"? = v Oblíbených, v „Chci vidět", ve Filmotéce (Jellyfin knihovna nebo
+     * uložený zdroj) nebo ve frontě „K přehrání". Jen u nich se kurátorský text peče sám
+     * (user 2026-08-28) — u náhodně proklikaného titulu by to zbytečně pálilo model.
+     */
+    private fun patriDoMychTitulu(): Boolean = with(_uiState.value) {
+        isFavorite || isInWatchlist || isQueued || isOwnedInLibrary ||
+            rememberedSource != null || hasAnyShowSource
+    }
+
+    /**
+     * „Sdílet kartu" u titulu, který se sám neupeče (user: *„nebo se stiskne sdilet kartu"*).
+     * Vrací text, když se stihl vyrobit — volající na něj SMÍ počkat, protože si o sdílení řekl sám.
+     */
+    suspend fun pripravShareText(): String? {
+        _uiState.value.curatedText?.takeIf { it.isNotBlank() }?.let { return it }
+        val item = _uiState.value.item ?: return null
+        loadShareTextVynuceně(item)
+        return _uiState.value.curatedText
+    }
+
+    private suspend fun loadShareTextVynuceně(item: MediaItem) {
+        val imdb = item.imdbId?.takeIf { it.isNotBlank() && !item.isCtvTitle } ?: return
+        if (uploaderBaseUrl.isBlank()) return
+        val isShow = item.type != MediaType.MOVIE
+        val title = _uiState.value.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: item.title
+        val year = item.year ?: 0
+        repeat(SHARE_TEXT_POKUSU + 1) { pokus ->
+            val odpoved = runCatching {
+                uploaderDs.getShareText(uploaderBaseUrl, uploaderCookie, isShow, imdb, title, year, warm = pokus == 0)
+            }.getOrNull() ?: return
+            odpoved.text?.takeIf { it.isNotBlank() }?.let { text ->
+                _uiState.update { if (it.item?.isSameAs(item) == true) it.copy(curatedText = text) else it }
+                return
+            }
+            if (!odpoved.pending) return
+            delay(SHARE_TEXT_INTERVAL_MS)
+            if (_uiState.value.item?.isSameAs(item) != true) return
+        }
+    }
+
     private suspend fun loadCsfd(item: MediaItem, czTitle: String?) {
         val titles = buildList {
             czTitle?.takeIf { it.isNotBlank() }?.let { add(it) }
@@ -3831,6 +3919,14 @@ class DetailViewModel @Inject constructor(
     private companion object {
         // Jak dlouho automatika čeká na `imdbId` z TMDB, než se pustí do ČSFD s tím, co má.
         const val CSFD_IDENTITY_WAIT_MS = 4000L
+
+        /** SUMÁŘ (SHW-122) — musí sedět s klíči v Nastavení → Vzhled → Detail obsahu (jiný modul). */
+        const val KEY_CURATED_ENABLED = "detail_curated_enabled"
+        const val KEY_CURATED_FIRST = "detail_curated_first"
+
+        /** SUMÁŘ (SHW-122): server text peče 16–20 s → ptej se po 6 s, nejvýš pětkrát (~30 s). */
+        const val SHARE_TEXT_INTERVAL_MS = 6000L
+        const val SHARE_TEXT_POKUSU = 5
         // Jak dlouho nechat svítit „Hledám zdroj…", než to vzdáme (auto-hledání běží na serveru).
         const val AUTO_SEARCH_MAX_MS = 5 * 60 * 1000L
         // Kolik titulkových kandidátů poslat na TV (MPV je nasideloaduje, výběr na TV = F3).

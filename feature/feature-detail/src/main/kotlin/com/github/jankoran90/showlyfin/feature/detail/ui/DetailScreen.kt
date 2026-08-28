@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.detail.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -79,6 +80,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -210,15 +212,20 @@ fun DetailScreen(
             !tmdbCz.isNullOrBlank() -> tmdbCz
             else -> tmdbOv?.takeIf { it.isNotBlank() }
         }
+        // SUMÁŘ (SHW-122), user 2026-08-28 („1-ano ma nahradit"): když je hotový kurátorský text,
+        // jde na kartu MÍSTO oficiálního popisu i místo citací recenzí — jinak by se to na jednu
+        // stránku nevešlo. Než se text upeče (16–20 s), karta vypadá jako dosud.
+        val curated = uiState.curatedText?.takeIf { it.isNotBlank() }
         val data = com.github.jankoran90.showlyfin.core.ui.ShareCardData(
             title = displayTitle,
             year = displayItem.year,
             csfdPct = uiState.csfdRating,
             directors = uiState.directors.mapNotNull { it.name },
             genres = shareGenres.orEmpty(),
-            description = sharePlot,
-            reviews = uiState.csfdReviews.filter { (it.rating ?: 0) >= 70 }.take(2)
+            description = curated ?: sharePlot,
+            reviews = if (curated != null) emptyList() else uiState.csfdReviews.filter { (it.rating ?: 0) >= 70 }.take(2)
                 .map { com.github.jankoran90.showlyfin.core.ui.ShareReview(it.username, it.rating, it.text) },
+            curated = curated != null,
         )
         shareScope.launch {
             try {
@@ -840,23 +847,76 @@ fun DetailScreen(
             val hasRevealableDetails = uiState.showCreators &&
                 (uiState.writers.isNotEmpty() || uiState.cinematographers.isNotEmpty() || !genres.isNullOrEmpty())
             if (!plot.isNullOrBlank()) {
-                if (plotSource != null) {
-                    Text(
-                        text = "Popis ($plotSource)",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                    Spacer(Modifier.height(4.dp))
+                // SUMÁŘ (SHW-122), user 2026-08-28: „das mi to jako popisek scrollovatelny s tim
+                // oficialnim do strany - udelas maly indikator kdyz popisek existuje". Kurátorský
+                // text tedy NENÍ další sekce, ale DRUHÁ STRÁNKA popisu; dokud není upečený,
+                // vypadá karta přesně jako dosud (žádné prázdné místo, žádný spinner).
+                val shrnuti = uiState.curatedText?.takeIf { it.isNotBlank() && uiState.showCuratedText }
+                // user 2026-08-28: „v tu chvíli dejme ten generovany jako hlavní a ten původní jako
+                // druhy" — pořadí jde přehodit v Nastavení → Detail obsahu.
+                val stranky = when {
+                    shrnuti == null -> listOf(plot to plotSource)
+                    uiState.curatedFirst -> listOf(shrnuti to "diváci", plot to plotSource)
+                    else -> listOf(plot to plotSource, shrnuti to "diváci")
                 }
+                var stranka by remember(plot, shrnuti) { mutableStateOf(0) }
+                val aktivni = stranka.coerceIn(0, stranky.lastIndex)
+                val (textStranky, zdrojStranky) = stranky[aktivni]
+
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (zdrojStranky != null) {
+                        Text(
+                            text = if (zdrojStranky == "diváci") "Co na to diváci" else "Popis ($zdrojStranky)",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    // Malý indikátor — tečka za stránku; ukáže se, JEN když je co listovat.
+                    if (stranky.size > 1) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            stranky.indices.forEach { i ->
+                                Box(
+                                    Modifier
+                                        .size(if (i == aktivni) 7.dp else 5.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (i == aktivni) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                        )
+                                        .clickable { stranka = i },
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
                 val collapsedLines = uiState.plotCollapsedLines
                 val limitActive = collapsedLines > 0 && !plotExpanded
                 Text(
-                    text = plot,
+                    text = textStranky,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = if (limitActive) collapsedLines else Int.MAX_VALUE,
                     overflow = if (limitActive) TextOverflow.Ellipsis else TextOverflow.Clip,
                     onTextLayout = { if (limitActive) plotOverflow = it.hasVisualOverflow },
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .then(
+                            if (stranky.size > 1) {
+                                Modifier.pointerInput(stranky.size) {
+                                    // Přejetí do strany mezi popisem a shrnutím. Práh 60 px, ať se
+                                    // gesto nepere se svislým rolováním karty.
+                                    detectHorizontalDragGestures { _, drag ->
+                                        if (drag < -60f && stranka < stranky.lastIndex) stranka++
+                                        else if (drag > 60f && stranka > 0) stranka--
+                                    }
+                                }
+                            } else Modifier
+                        ),
                 )
             }
             if (plotOverflow || plotExpanded || hasRevealableDetails) {
@@ -875,6 +935,7 @@ fun DetailScreen(
                 }
             }
             if (!plot.isNullOrBlank()) Spacer(Modifier.height(4.dp))
+
 
             // CANVAS A: akce (Galerie přes cover, ČSFD recenze přes badge, Přehrát/Na TV/Stremio/
             // Stáhnout/Oblíbené/Chci vidět) jsou v kompaktní kulaté liště v hero (viz DetailActionBar výše).

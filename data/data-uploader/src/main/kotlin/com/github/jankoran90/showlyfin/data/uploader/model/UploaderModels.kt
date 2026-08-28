@@ -186,6 +186,16 @@ data class CsfdPlotResponse(
     val rating: Int? = null,
     val title: String? = null,
 )
+/**
+ * SUMÁŘ (SHW-122) — kurátorský text pro sdílecí kartu (/api/sharetext). `text` = hotový souvislý
+ * text, `pending` = server ho právě peče (trvá 16–20 s, z toho model ~17 s — proto se na něj nečeká).
+ */
+data class ShareTextResponse(
+    val text: String? = null,
+    val pending: Boolean = false,
+    val cached: Boolean = false,
+)
+
 /** Jedna ČSFD recenze (/api/csfd/reviews). rating je 0–100 % (stars×20). */
 data class CsfdReviewItem(
     val username: String = "",

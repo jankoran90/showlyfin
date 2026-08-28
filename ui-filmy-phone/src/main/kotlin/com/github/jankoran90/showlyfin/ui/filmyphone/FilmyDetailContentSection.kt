@@ -76,6 +76,23 @@ fun FilmyDetailContentSection(vm: DetailPrefsViewModel = hiltViewModel()) {
             checked = detail.showSimilar,
             onCheckedChange = vm::setSimilar,
         )
+        // SUMÁŘ (SHW-122, user 2026-08-28) — kurátorský popis: shrnutí ČSFD recenzí a Trakt komentářů
+        // od mozku. Peče se jen u titulů, které máš v Oblíbených / Chci vidět / Filmotéce / frontě,
+        // a při sdílení karty; jinde by to zbytečně pálilo model (~17 s na text).
+        SettingSwitchRow(
+            title = "Popis od diváků",
+            subtitle = "Shrnutí recenzí z ČSFD a komentářů z Traktu do jednoho textu. Na kartě se listuje do strany vedle oficiálního popisu.",
+            checked = detail.showCurated,
+            onCheckedChange = vm::setCurated,
+        )
+        if (detail.showCurated) {
+            SettingSwitchRow(
+                title = "Popis od diváků jako první",
+                subtitle = "Zapnuto = otevře se rovnou shrnutí, oficiální popis je druhý. Vypnuto = obráceně.",
+                checked = detail.curatedFirst,
+                onCheckedChange = vm::setCuratedFirst,
+            )
+        }
         // user 2026-08-27: „i ostatni jestli visible nebo non visible a klidne poradi"
         SettingRowOrder(
             label = "Pořadí pruhů pod kartou",

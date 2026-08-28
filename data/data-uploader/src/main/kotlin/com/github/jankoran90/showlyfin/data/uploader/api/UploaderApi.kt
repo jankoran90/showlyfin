@@ -133,6 +133,21 @@ internal class UploaderApi(
         return service.getCsfdPlot("$base/api/csfd/plot?csfd_id=$csfdId", cookie)
     }
 
+    override suspend fun getShareText(
+        baseUrl: String, sessionCookie: String, isShow: Boolean, imdbId: String,
+        title: String, year: Int, warm: Boolean,
+    ): ShareTextResponse {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val kind = if (isShow) "show" else "movie"
+        val q = buildString {
+            append("?title=").append(java.net.URLEncoder.encode(title, "UTF-8"))
+            if (year > 0) append("&year=").append(year)
+            if (warm) append("&warm=1")
+        }
+        return service.getShareText("$base/api/sharetext/$kind/$imdbId$q", cookie)
+    }
+
     override suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem> {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

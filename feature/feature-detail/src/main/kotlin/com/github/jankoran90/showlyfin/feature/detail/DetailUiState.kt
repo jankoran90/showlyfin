@@ -213,6 +213,15 @@ data class DetailUiState(
     val actionsPlacement: DetailActionsPlacement = DetailActionsPlacement.BELOW_PLOT,
     // CANVAS (SHW-47) A: pořadí akčních tlačítek na detailu (konfigurovatelné v Nastavení).
     val actionOrder: List<String> = DETAIL_ACTION_KEYS,
+    /**
+     * SUMÁŘ (SHW-122) — kurátorský text z ČSFD recenzí a Trakt komentářů. null = ještě se peče
+     * (16–20 s) nebo pro titul není z čeho psát; UI ho pak prostě neukáže.
+     */
+    val curatedText: String? = null,
+    /** Nastavení → Detail obsahu: ukazovat kurátorský popis vůbec (user 2026-08-28: „v nastaveni je moznost to konfigurovat vice"). */
+    val showCuratedText: Boolean = true,
+    /** Když kurátorský text existuje, je HLAVNÍ (první stránka) a oficiální popis druhý — user 2026-08-28. */
+    val curatedFirst: Boolean = true,
     // RAMPA (SHW-121): je tenhle titul ve frontě „K přehrání"? Řídí ikonu akce i značku na obalu.
     val isQueued: Boolean = false,
     // NOMAD (SHW-60): stav offline stažení TOHOTO titulu do telefonu (jen filmy z knihovny — slice).
