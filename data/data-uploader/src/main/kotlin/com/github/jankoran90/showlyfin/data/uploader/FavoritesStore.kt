@@ -116,14 +116,35 @@ class FavoritesStore @Inject constructor(
 
     private fun load(): List<FavoriteItem> {
         val raw = prefs.getString(storeKey, null) ?: return emptyList()
-        return runCatching {
+        val parsed = runCatching {
             gson.fromJson<List<FavoriteItem>>(raw, object : TypeToken<List<FavoriteItem>>() {}.type)
         }.onFailure { Timber.w(it, "[COMPASS] favorites parse failed") }.getOrNull() ?: emptyList()
+        // Vyčisti i STARÝ blob z disku — na instalacích odsud psaných PŘED SUBSTRATE F2b (2026-08-28)
+        // mohou ležet zamrzlé WANT_*/QUEUE_* položky z doby, kdy tenhle store byl jejich jediný domov.
+        return parsed.stripNewStoreKinds()
+    }
+
+    /**
+     * SUBSTRATE (SHW-99) rozštěpilo doménu „favorites" na dvě NEZÁVISLÁ úložiště nad stejnými
+     * serverovými řádky: [FavoriteKind.WANT_MOVIE]/[WANT_SHOW]/[QUEUE_MOVIE]/[QUEUE_SHOW] teď píše a
+     * čte výhradně `core.db.repository.FavoritesRepository` (Room, tombstone-aware delta sync) —
+     * tenhle starší store (prostý SharedPrefs blob + full-list PUT bez náhrobků) o smazáních udělaných
+     * tou cestou vůbec neví. Když ho cokoli zavolá (`refresh()` z `FilmyMainActivity.onCreate`,
+     * OblibeniViewModel, TvFavoritesViewModel…), jeho stará UNION logika smazaný titul znovu přimíchá
+     * do lokálu a `pushNow` ho i s čerstvým razítkem vrátí na server — tak se titul „sám" vracel do
+     * „Chci vidět"/fronty „K přehrání" (user 2026-08-28, Happy Hour + Survival Family, potvrzeno živě
+     * v serverových logách: DB řádek smazán, o 28 s později PUSH z tohohle store ho oživil zpátky).
+     * Fix: tenhle store ty čtyři druhy vůbec nedrží ani nepushuje — na KAŽDÉM zápisu je odfiltruje.
+     */
+    private fun List<FavoriteItem>.stripNewStoreKinds(): List<FavoriteItem> = filterNot {
+        it.kind == FavoriteKind.WANT_MOVIE || it.kind == FavoriteKind.WANT_SHOW ||
+            it.kind == FavoriteKind.QUEUE_MOVIE || it.kind == FavoriteKind.QUEUE_SHOW
     }
 
     private fun persist(list: List<FavoriteItem>) {
-        _items.value = list
-        prefs.edit().putString(storeKey, gson.toJson(list)).apply()
+        val filtered = list.stripNewStoreKinds()
+        _items.value = filtered
+        prefs.edit().putString(storeKey, gson.toJson(filtered)).apply()
     }
 
     /** Dotáhni oblíbené aktuálního profilu ze serveru; server = zdroj pravdy. Volá se z UI (screen open). */
@@ -151,6 +172,11 @@ class FavoritesStore @Inject constructor(
                 persist(server)
             } else {
                 // Stejný profil / první běh → UNION (lokál první = přednost při shodě klíče).
+                // 🔴 `merged` pro PUSH se NESMÍ prosívat skrz [stripNewStoreKinds] — `pushNow` jde na
+                // full-blob PUT (`_sub.full_replace`), který cokoli CHYBĚJÍCÍ ve snapshotu tombstonuje.
+                // Kdyby `merged` neneslo WANT_*/QUEUE_* položky stažené ze serveru, tenhle PUSH by je
+                // aktivně SMAZAL na serveru — mnohem horší regrese, než kterou opravujeme. `persist()`
+                // filtruje jen to, co si tenhle store nechá LOKÁLNĚ; server dostává vždy plný snapshot.
                 val merged = (_items.value + server).distinctBy { it.kind to it.id }
                 persist(merged)
                 if (merged.size != server.size) pushNow(key, base, cookie, merged) // seedni/dorovnej server
