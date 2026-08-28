@@ -251,7 +251,7 @@ internal fun DetailModeSection(
             Text("Pořadí akčních tlačítek na detailu:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             val actionLabels = mapOf(
-                "favorite" to "Oblíbené", "play" to "Přehrát zde", "tv" to "Na TV",
+                "favorite" to "Oblíbené", "queue" to "K přehrání", "play" to "Přehrát zde", "tv" to "Na TV",
                 "stremio" to "Stremio", "download" to "Stáhnout", "watchlist" to "Chci vidět",
             )
             s.actionOrder.forEachIndexed { i, key ->

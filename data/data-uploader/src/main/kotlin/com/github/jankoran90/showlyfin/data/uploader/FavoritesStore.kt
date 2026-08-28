@@ -31,7 +31,18 @@ import javax.inject.Singleton
  * jednou usera stála cizí kartu ve Filmotéce). Oddělený `kind` je to, co identity drží od sebe.
  * Skladují se ve stejné tabulce jako Oblíbené, takže dědí hotový per-profil sync i tombstony.
  */
-enum class FavoriteKind { MOVIE, ACTOR, DIRECTOR, WRITER, PRODUCER, COMPOSER, COMPANY, WANT_MOVIE, WANT_SHOW }
+enum class FavoriteKind {
+    MOVIE, ACTOR, DIRECTOR, WRITER, PRODUCER, COMPOSER, COMPANY, WANT_MOVIE, WANT_SHOW,
+    /**
+     * RAMPA (SHW-121) — fronta „K přehrání" (user 2026-08-28: *„presne taková aktualni nebo budouci
+     * fronta prehrani"*). TŘETÍ seznam vedle Oblíbených a „Chci vidět", ruční a čistě náš — na Trakt
+     * se NEPOSÍLÁ. Veze se stejnou tabulkou jako Oblíbené, takže dědí hotový per-profil sync
+     * (telefon ↔ TV ↔ web) i tombstony; server `kind` nevaliduje, takže nepotřeboval zásah.
+     * 🔴 Opět DVA druhy, ne jeden s příznakem — tmdb id filmu a seriálu se překrývají (viz komentář
+     * u [WANT_MOVIE] výše: tmdb 30984 je seriál Bleach i film „Dissection").
+     */
+    QUEUE_MOVIE, QUEUE_SHOW,
+}
 
 /**
  * COMPASS C2 (SHW-44) — jedna položka v Oblíbených. [id] = tmdbId (film / osoba / vydavatelství),

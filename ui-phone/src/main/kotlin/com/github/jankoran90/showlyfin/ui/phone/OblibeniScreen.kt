@@ -294,6 +294,10 @@ private fun EmptyState(kind: FavoriteKind, modifier: Modifier = Modifier) {
         // obrazovky se nedostane, ale `when` je vyčerpávající, takže text raději dává smysl.
         FavoriteKind.WANT_MOVIE, FavoriteKind.WANT_SHOW ->
             "Do „Chci vidět\" přidáš titul na jeho detailu — appka pak sama hledá zdroj."
+        // RAMPA (SHW-121): fronta „K přehrání" má taky vlastní sekci, sem se nedostane — ale `when`
+        // je vyčerpávající, tak ať text nelže.
+        FavoriteKind.QUEUE_MOVIE, FavoriteKind.QUEUE_SHOW ->
+            "Do fronty „K přehrání\" přidáš titul na jeho detailu nebo z menu dlaždice."
     }
     Box(modifier.padding(32.dp), contentAlignment = Alignment.Center) {
         Text(

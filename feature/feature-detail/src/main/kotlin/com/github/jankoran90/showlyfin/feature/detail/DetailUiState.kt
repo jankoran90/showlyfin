@@ -213,12 +213,16 @@ data class DetailUiState(
     val actionsPlacement: DetailActionsPlacement = DetailActionsPlacement.BELOW_PLOT,
     // CANVAS (SHW-47) A: pořadí akčních tlačítek na detailu (konfigurovatelné v Nastavení).
     val actionOrder: List<String> = DETAIL_ACTION_KEYS,
+    // RAMPA (SHW-121): je tenhle titul ve frontě „K přehrání"? Řídí ikonu akce i značku na obalu.
+    val isQueued: Boolean = false,
     // NOMAD (SHW-60): stav offline stažení TOHOTO titulu do telefonu (jen filmy z knihovny — slice).
     val offlineState: com.github.jankoran90.showlyfin.data.offline.OfflineState = com.github.jankoran90.showlyfin.data.offline.OfflineState(),
 )
 
-/** CANVAS (SHW-47) A: klíče akčních tlačítek na detailu (kulatá lišta nahoře) + výchozí pořadí. */
-val DETAIL_ACTION_KEYS = listOf("favorite", "play", "tv", "stremio", "download", "watchlist")
+/** CANVAS (SHW-47) A: klíče akčních tlačítek na detailu (kulatá lišta nahoře) + výchozí pořadí.
+ *  🔴 Nová akce musí přibýt SEM (jinak ji `parseActionOrder` zahodí jako neznámou), do vykreslení
+ *  v `DetailScreen` a do popisků v Nastavení — enum/seznam sám nestačí. */
+val DETAIL_ACTION_KEYS = listOf("favorite", "queue", "play", "tv", "stremio", "download", "watchlist")
 
 /** Parsuj uložené pořadí (CSV) → doplň chybějící klíče na konec, zahoď neznámé. */
 fun parseActionOrder(raw: String?): List<String> {

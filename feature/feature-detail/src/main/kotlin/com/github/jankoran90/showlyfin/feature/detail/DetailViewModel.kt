@@ -75,6 +75,8 @@ class DetailViewModel @Inject constructor(
     private val repackNeededStore: com.github.jankoran90.showlyfin.data.uploader.RepackNeededStore,
     private val traktSyncSignal: com.github.jankoran90.showlyfin.data.uploader.TraktSyncSignal,
     private val favoritesStore: com.github.jankoran90.showlyfin.core.db.repository.FavoritesRepository,
+    // RAMPA (SHW-121): fronta „K přehrání" — tenká fasáda nad toutéž sync cestou jako Oblíbené.
+    private val playQueue: com.github.jankoran90.showlyfin.core.db.repository.PlayQueueRepository,
     // SEZONA f3k: lokální „Chci vidět" pro profily bez Traktu (dětské) — filmy i seriály.
     private val wantToSee: com.github.jankoran90.showlyfin.core.db.repository.WantToSeeRepository,
     // DINGO — per-zařízení preset přehrávání (preferuj H.264 pro slabé HEVC dekodéry v autě). Re-rank seznamu zdrojů.
@@ -325,6 +327,9 @@ class DetailViewModel @Inject constructor(
                 isFavorite = item.tmdbId?.let {
                     favoritesStore.isFavorite(com.github.jankoran90.showlyfin.data.uploader.FavoriteKind.MOVIE, it)
                 } ?: false,
+                // RAMPA (SHW-121): je ve frontě „K přehrání"? U seriálu se ptáme na seriálový druh —
+                // tmdb id filmu a seriálu se překrývají, jeden dotaz pro obojí by lhal.
+                isQueued = item.tmdbId?.let { playQueue.isQueued(it, item.type != MediaType.MOVIE) } ?: false,
                 pendingWorkingConfirm = null,
                 streamError = null,
                 isResolvingStream = false,
@@ -823,6 +828,26 @@ class DetailViewModel @Inject constructor(
     }
 
     /** COMPASS C2 (SHW-44): přidat/odebrat tento film do/z Oblíbených. */
+    /**
+     * RAMPA (SHW-121) — „Přidat k přehrání" / „Odebrat z fronty".
+     * Seriál se přidává CELÝ (ne konkrétní díl) a ve frontě se ukazuje jako „pokračovat SxxExx"
+     * (user 2026-08-28: *„serial ok muzem to tak udelat jak rikas"*).
+     */
+    fun toggleQueue() {
+        val item = _uiState.value.item ?: return
+        val tmdb = item.tmdbId ?: return
+        val raw = _uiState.value.movieDetails?.poster_path ?: item.posterPath
+        val poster = raw?.let { if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w185$it" }
+        val now = playQueue.toggle(
+            tmdbId = tmdb,
+            isShow = item.type != MediaType.MOVIE,
+            name = _uiState.value.tmdbCzTitle ?: item.title,
+            imageUrl = poster,
+            year = item.year,
+        )
+        _uiState.update { it.copy(isQueued = now) }
+    }
+
     fun toggleFavorite() {
         val item = _uiState.value.item ?: return
         val tmdb = item.tmdbId ?: return

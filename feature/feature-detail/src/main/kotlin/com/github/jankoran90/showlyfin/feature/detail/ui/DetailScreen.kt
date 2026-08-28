@@ -34,6 +34,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Check
@@ -550,6 +552,8 @@ fun DetailScreen(
                         isMovie = uiState.item?.type == MediaType.MOVIE,
                         isFavorite = uiState.isFavorite,
                         onFavorite = { viewModel.toggleFavorite() },
+                        isQueued = uiState.isQueued,
+                        onQueue = uiState.item?.tmdbId?.let { { viewModel.toggleQueue() } },
                         ratingTarget = uiState.item?.let { m ->
                             com.github.jankoran90.showlyfin.core.ui.RatingTarget(
                                 tmdbId = m.tmdbId, imdbId = m.imdbId, traktId = m.traktId,
@@ -999,6 +1003,9 @@ private fun DetailActionBar(
     inWatchlist: Boolean,
     isTogglingWatchlist: Boolean,
     onWatchlist: () -> Unit,
+    /** RAMPA (SHW-121) — fronta „K přehrání". null = skryto (titul bez tmdb id). */
+    isQueued: Boolean = false,
+    onQueue: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     /** „Doporuč podobné" — tenhle titul jako reference pro kurátora (user 2026-08-01). null = skryto. */
     onSimilar: (() -> Unit)? = null,
@@ -1088,6 +1095,18 @@ private fun DetailActionBar(
                         text = { Text(if (isFavorite) "V oblíbených" else "Přidat do oblíbených") },
                         leadingIcon = { Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, null) },
                         onClick = { menuOpen = false; onFavorite() },
+                    )
+                }
+                // RAMPA (SHW-121) — fronta „K přehrání". ZÁMĚRNĚ hned pod Oblíbenými a NAD „Chci vidět":
+                // je to pořadník na teď, kdežto „Chci vidět" je dlouhodobý watchlist (a jde na Trakt).
+                if (onQueue != null) {
+                    DropdownMenuItem(
+                        text = { Text(if (isQueued) "Odebrat z fronty" else "Přidat k přehrání") },
+                        leadingIcon = {
+                            // user 2026-08-28: „znacku zvol jinou zadnou zdobenou proste ikonu fronty"
+                            Icon(if (isQueued) Icons.AutoMirrored.Filled.PlaylistAddCheck else Icons.AutoMirrored.Filled.PlaylistAdd, null)
+                        },
+                        onClick = { menuOpen = false; onQueue() },
                     )
                 }
                 DropdownMenuItem(
