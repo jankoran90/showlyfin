@@ -1954,8 +1954,8 @@ class DetailViewModel @Inject constructor(
      *
      * Rozdíl proti „Zapomenout zdroje": tam je odebrání ŽÁDOST O JINÝ ZDROJ, a proto hned startuje
      * nové hledání (jeho vlastní přání z 2026-08-02). Tohle je opak — žádost, ať titul zmizí. Sundá
-     * proto obojí, co ho ve Filmotéce drží: zdroje (i s náhrobkem, aby je auto-cache neobnovila)
-     * a „Chci vidět" u Traktu i u nás. Nové hledání se NESPOUŠTÍ.
+     * proto vše, co ho ve Filmotéce drží: zdroje (i s náhrobkem, aby je auto-cache neobnovila),
+     * „Chci vidět" u Traktu i u nás, a frontu „K přehrání". Nové hledání se NESPOUŠTÍ.
      *
      * Oblíbené ani Jellyfin knihovnu NESAHÁ — to jsou samostatné vědomé volby a mazat je potichu by
      * bylo přepadení. Když titul drží dál, appka to ROVNOU ŘEKNE; jinak by to vypadalo, že se akce
@@ -1987,6 +1987,14 @@ class DetailViewModel @Inject constructor(
             toggleWatchlist()
         } else {
             item.tmdbId?.let { wantToSee.remove(it, item.type == MediaType.SHOW) }
+        }
+        // RAMPA (SHW-121) fronta „K přehrání" vznikla AŽ PO téhle funkci (2026-08-24) — do dneška ji
+        // neuměla, takže titul zůstal ve frontě napořád a „Odebrat z Filmotéky" vypadalo, že nefunguje
+        // (user 2026-08-28: „jsou odebrani z chci videt a filmoteky, ale stale se vracejí" — Happy
+        // Hour + Survival Family měly aktivní QUEUE_MOVIE řádek, který tahle funkce nikdy nesundala).
+        if (_uiState.value.isQueued) {
+            item.tmdbId?.let { playQueue.remove(it, item.type != MediaType.MOVIE) }
+            _uiState.update { it.copy(isQueued = false) }
         }
         val holds = buildList {
             if (_uiState.value.isOwnedInLibrary) add("je v Jellyfin knihovně")
