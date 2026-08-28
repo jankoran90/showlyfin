@@ -398,6 +398,8 @@ private fun FilmyShellContent() {
                             FilmySection.TVURCI -> FilmyTvurciScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // SPOTLIGHT (FLM-02): nové tituly od sledovaných tvůrců (cíl notifikace).
                             FilmySection.NOVINKY -> FilmyNovinkyScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            // MUZA (SHW-123): tematické doporučení s historií a navázáním.
+                            FilmySection.MUZA -> FilmyMuzaScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // M2.4: Filmotéka = mřížka plakátů se sekcemi (reuse TvFilmotekaViewModel).
                             // RAMPA (SHW-121): nově DVĚ vodorovné stránky — Filmotéka + fronta „K přehrání".
                             FilmySection.FILMOTEKA -> FilmyFilmotekaPager(

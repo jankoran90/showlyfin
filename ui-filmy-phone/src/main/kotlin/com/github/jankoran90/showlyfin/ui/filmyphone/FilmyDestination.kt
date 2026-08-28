@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.ui.filmyphone
 import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Diamond
 import androidx.compose.material.icons.rounded.Download
@@ -36,6 +37,8 @@ enum class FilmySection(val label: String, val icon: ImageVector) {
     TVURCI("Tvůrci", Icons.Rounded.Groups),
     // SPOTLIGHT (FLM-02): nové tituly od sledovaných tvůrců (týdenní kontrola, pátek).
     NOVINKY("Novinky", Icons.Rounded.NewReleases),
+    // MUZA (SHW-123, user 2026-08-28): tematické doporučení — napíšeš téma, appka navrhne+ověří+okurátoruje.
+    MUZA("Podle tématu", Icons.Rounded.AutoAwesome),
     FILMOTEKA("Filmotéka", Icons.Rounded.Movie),
     GEMS("Vzácné klenoty", Icons.Rounded.Diamond),
     LIBRARY("Knihovna", Icons.Rounded.VideoLibrary),
@@ -86,13 +89,13 @@ object FilmyShellPrefs {
             listOf(
                 FilmySection.FILMOTEKA, FilmySection.HOME, FilmySection.WANT_TO_SEE,
                 FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.NOVINKY,
-                FilmySection.TVURCI, FilmySection.REFERENCE,
+                FilmySection.MUZA, FilmySection.TVURCI, FilmySection.REFERENCE,
                 FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
             )
         else
             listOf(
                 FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.HISTORY,
-                FilmySection.FOR_YOU, FilmySection.NOVINKY, FilmySection.TVURCI,
+                FilmySection.FOR_YOU, FilmySection.NOVINKY, FilmySection.MUZA, FilmySection.TVURCI,
                 FilmySection.REFERENCE, FilmySection.FILMOTEKA,
                 FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
             )
