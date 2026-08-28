@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
