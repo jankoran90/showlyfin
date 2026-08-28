@@ -32,7 +32,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAllSort
 import com.github.jankoran90.showlyfin.core.domain.filmoteka.FilmotekaAxis
-import com.github.jankoran90.showlyfin.core.domain.CinematographyRegion
+import com.github.jankoran90.showlyfin.core.domain.filmoteka.CinematographyRegion
 import com.github.jankoran90.showlyfin.core.ui.ViewMode
 
 /**

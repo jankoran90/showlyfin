@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -185,6 +187,15 @@ internal fun TvDetailActions(
                     onClick = { viewModel.toggleFavorite() },
                 )
             }
+            // RAMPA (SHW-121) — fronta „K přehrání" i na TV: co si přidáš na telefonu, vidíš tady
+            // (per-profil), a naopak. Platí pro film i seriál, proto mimo `if (isMovie)` výš.
+            TvActionButton(
+                icon = if (uiState.isQueued) Icons.AutoMirrored.Filled.PlaylistAddCheck else Icons.AutoMirrored.Filled.PlaylistAdd,
+                label = if (uiState.isQueued) "Ve frontě" else "K přehrání",
+                primary = false,
+                active = uiState.isQueued,
+                onClick = { viewModel.toggleQueue() },
+            )
             TvActionButton(
                 icon = if (uiState.isInWatchlist) Icons.Filled.Check else Icons.Filled.Add,
                 label = if (uiState.isInWatchlist) "V seznamu" else "Chci vidět",

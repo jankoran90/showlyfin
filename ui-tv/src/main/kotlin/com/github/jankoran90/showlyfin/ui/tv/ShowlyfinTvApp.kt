@@ -72,12 +72,18 @@ fun ShowlyfinTvApp() {
             // LocalDensity. fontScale ponechán beze změny (text řeší už typografie přes FontPrefs.scale) →
             // žádné dvojí škálování textu. Telefon (ShowlyfinPhoneApp) tímto obalem neprochází → nedotčen.
             val base = LocalDensity.current
+            // RAMPA (SHW-121) — zdroj značky „ve frontě" (sdílený s telefonem, feature vrstva).
+            val queueBadgeVm: com.github.jankoran90.showlyfin.feature.discover.queue.PlayQueueBadgeViewModel =
+                androidx.hilt.navigation.compose.hiltViewModel()
             CompositionLocalProvider(
                 LocalDensity provides Density(base.density * font.uiScale, base.fontScale),
                 LocalCsfdRatingProvider provides cardCsfd,
                 LocalCzechOverviewProvider provides cardCsfd,
                 LocalDirectorProvider provides cardCsfd,
                 com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider provides ratingVm,
+                // RAMPA (SHW-121): značka „ve frontě K přehrání" na kartách i na TV — týž provider
+                // jako na telefonu, takže se obě appky chovají stejně.
+                com.github.jankoran90.showlyfin.core.ui.LocalPlayQueueProvider provides queueBadgeVm,
                 // COUCH DA4: globální šířka/rozestupy karet mřížky (všechny TV řady + Objevovat).
                 LocalTvCardScale provides TvCardScale(widthScale = font.gridWidth, spacingScale = font.gridSpacing),
             ) {
