@@ -119,18 +119,26 @@ class FilmyMuzaViewModel @Inject constructor(
         loadHistory()
     }
 
-    /** @return MediaItem pro otevření karty detailu (odkud se dá „+ Chci vidět" / uložit zdroj apod.). */
-    fun toMediaItem(r: MuzaRepository.TopicResult): MediaItem = MediaItem(
-        traktId = 0L,
-        tmdbId = r.tmdbId,
-        imdbId = r.imdbId.takeIf { it.isNotBlank() },
-        title = r.title,
-        year = r.year.takeIf { it > 0 },
-        overview = null,
-        rating = null,
-        genres = null,
-        type = if (r.isShow) MediaType.SHOW else MediaType.MOVIE,
-    )
+    /**
+     * @return MediaItem pro otevření karty detailu (odkud se dá „+ Chci vidět" / uložit zdroj apod.).
+     * user 2026-08-28 21:28 („dej ten kuratorsky text i jako sdileci kartu... kdyz dam sdilet z
+     * karty filmu") — MUZA text se předá přes [MuzaBlurbHandoff], ať ho detail použije jako
+     * „Co na to diváci" i pro sdílení, místo aby si dopekl vlastní obecný SUMÁŘ text.
+     */
+    fun toMediaItem(r: MuzaRepository.TopicResult): MediaItem {
+        r.blurb?.let { com.github.jankoran90.showlyfin.core.domain.MuzaBlurbHandoff.stash(r.tmdbId, r.isShow, it) }
+        return MediaItem(
+            traktId = 0L,
+            tmdbId = r.tmdbId,
+            imdbId = r.imdbId.takeIf { it.isNotBlank() },
+            title = r.title,
+            year = r.year.takeIf { it > 0 },
+            overview = null,
+            rating = null,
+            genres = null,
+            type = if (r.isShow) MediaType.SHOW else MediaType.MOVIE,
+        )
+    }
 
     /**
      * Rychlé „+ Chci vidět" přímo z karty výsledků, bez otevření detailu (user: „pokracuj s

@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
+import com.github.jankoran90.showlyfin.core.domain.MuzaBlurbHandoff
 import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.ui.CollectionPart
@@ -262,6 +263,9 @@ class DetailViewModel @Inject constructor(
             val sameTmdb = current.tmdbId != null && item.tmdbId != null && current.tmdbId == item.tmdbId
             if (sameTrakt || sameTmdb) return
         }
+        // MUZA (SHW-123): karta otevřená z tématu má vlastní kurátorský text — spotřebuj seed HNED,
+        // ať ho níž `curatedText = ...` zachytí ještě před resetem na null.
+        val muzaSeed = MuzaBlurbHandoff.take(item.tmdbId, item.type != MediaType.MOVIE)
         // VISTA V4: zruš rozdělaný load předchozího filmu → jeho pozdě doběhlé coroutiny
         // nepřepíšou stav nově otevřeného (konec race „visí na původním").
         loadJob?.cancel()
@@ -302,7 +306,9 @@ class DetailViewModel @Inject constructor(
                 csfdGallery = emptyList(),
                 // SUMÁŘ (SHW-122): bez resetu by na nové kartě chvíli visel text PŘEDCHOZÍHO titulu
                 // (peče se 16–20 s) — táž past, jaká kdysi držela cizí `csfdTitle` v hero.
-                curatedText = null,
+                // MUZA (SHW-123): pokud přicházíme z tématu, `muzaSeed` ho rovnou nahradí za tématem
+                // cílený text (viz `muzaSeed` výš + guard u `loadShareText` níž).
+                curatedText = muzaSeed,
                 isGalleryLoading = false,
                 showGallery = false,
                 collection = null,
@@ -397,7 +403,9 @@ class DetailViewModel @Inject constructor(
             launch { loadCast(item) }
             launch { loadRelated(item) }
             launch { loadCsfdAuto(item) }
-            launch { loadShareText(item) }
+            // MUZA: máme-li už tématem cílený text (`muzaSeed`), obecné SUMÁŘ dopékání se přeskočí —
+            // jinak by za pár vteřin přepsalo `curatedText` obecným (necíleným) textem.
+            if (muzaSeed == null) launch { loadShareText(item) }
             launch {
             try {
                 val tmdbId = item.tmdbId
