@@ -343,54 +343,12 @@ private fun FilmotekaChips(
         ) {
             titleContent()
         }
-        // GENRE-FILTER (user 07-20) — druhý řádek u osy Žánr: JEN pojmenované chipy vybraných žánrů s křížkem
-        // (klik = zrušit ten žánr). Vstup do výběru = klik na tab „Žánr" (otevře picker). Prázdný výběr = žádný řádek.
-        if (axis == FilmotekaAxis.GENRE && genreFilter.isNotEmpty()) {
-            SelectedFilterChips(
-                labels = genreFilter.map { it to it },
-                onRemove = { onRemoveGenre(it) },
-            )
-        }
-        // COUNTRY-FILTER (user 07-20) — analogicky u osy Země: pojmenované chipy vybraných regionů s křížkem.
-        if (axis == FilmotekaAxis.COUNTRY && countryFilter.isNotEmpty()) {
-            SelectedFilterChips(
-                labels = countryFilter.map { it.label to it },
-                onRemove = onRemoveCountry,
-            )
-        }
+        // RAMPA (SHW-121): chipy aktivního filtru tu bývaly jako DRUHÝ řádek pod lištou. Teď jsou
+        // v panelu (kategorie „Filtry") a že je něco zapnuté, hlásí obarvená ikona ovladačů výš —
+        // lišta tak zůstane jednopatrová, jak si user přál.
     }
 }
 
-/**
- * SELECTED-FILTER (user 07-20) — řádek pojmenovaných chipů aktivního filtru (žánr/země) s křížkem na zrušení.
- * [labels] = dvojice (popisek → hodnota); klik na chip (i křížek) zavolá [onRemove] s hodnotou. Generický pro
- * žánr (String) i region (CinematographyRegion).
- */
-@Composable
-private fun <T> SelectedFilterChips(labels: List<Pair<String, T>>, onRemove: (T) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        labels.forEach { (label, value) ->
-            FilterChip(
-                selected = true,
-                onClick = { onRemove(value) },
-                label = { Text(label) },
-                trailingIcon = {
-                    Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = "Zrušit filtr $label",
-                        modifier = Modifier.size(16.dp),
-                    )
-                },
-            )
-        }
-    }
-}
 
 @Composable
 internal fun SectionHeader(title: String) {

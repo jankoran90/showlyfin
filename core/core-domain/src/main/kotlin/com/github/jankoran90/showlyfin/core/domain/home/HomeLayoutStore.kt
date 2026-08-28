@@ -339,9 +339,34 @@ class HomeLayoutStore @Inject constructor(
         val merged = stored + DEFAULT_ROWS.filter { it.id !in storedIds }
         // FOYER (SHW-107) — jednorázové přeskládání na nový výchozí začátek domova (user 2026-07-26 volba „a").
         // Běží JEDNOU per profil (`layout_version`), pak si user pořadí přehazuje sám v editoru řady.
-        if (prefs.getInt(keyFor(KEY_LAYOUT_VERSION), 0) >= LAYOUT_VERSION_FOYER) return merged
-        prefs.edit().putInt(keyFor(KEY_LAYOUT_VERSION), LAYOUT_VERSION_FOYER).apply()
-        return migrateToFoyerOrder(merged)
+        val version = prefs.getInt(keyFor(KEY_LAYOUT_VERSION), 0)
+        if (version < LAYOUT_VERSION_FOYER) {
+            prefs.edit().putInt(keyFor(KEY_LAYOUT_VERSION), LAYOUT_VERSION_RAMPA).apply()
+            return migrateQueueUnderNextUp(migrateToFoyerOrder(merged))
+        }
+        // RAMPA (SHW-121): kdo už FOYER migraci má, dostane jen zařazení fronty pod „Další díly" —
+        // bez tohohle by nová řada spadla merge-em na KONEC domova, kam ji user nechtěl.
+        if (version < LAYOUT_VERSION_RAMPA) {
+            prefs.edit().putInt(keyFor(KEY_LAYOUT_VERSION), LAYOUT_VERSION_RAMPA).apply()
+            return migrateQueueUnderNextUp(merged)
+        }
+        return merged
+    }
+
+    /**
+     * RAMPA (SHW-121) — postav řadu „K přehrání" HNED ZA „Další díly" (user 2026-08-28: *„taky na web
+     * nebo tv app pod dalsi dily jako pruh"*). Uživatelovo pořadí zbytku zůstává; skrytou řadu přesun
+     * NEodkrývá. Idempotentní.
+     */
+    private fun migrateQueueUnderNextUp(rows: List<HomeRowConfig>): List<HomeRowConfig> {
+        val queue = rows.firstOrNull { it.id == PLAY_QUEUE_ROW_ID }
+            ?: DEFAULT_ROWS.firstOrNull { it.id == PLAY_QUEUE_ROW_ID }
+            ?: return rows
+        val rest = rows.filterNot { it.id == PLAY_QUEUE_ROW_ID }
+        val at = rest.indexOfFirst { it.id == "next_up" }
+        val result = if (at < 0) listOf(queue) + rest else rest.take(at + 1) + queue + rest.drop(at + 1)
+        persistRowsList(result)
+        return result
     }
 
     /**
@@ -395,6 +420,10 @@ class HomeLayoutStore @Inject constructor(
         private const val KEY_LAYOUT_VERSION = "layout_version"
         private const val LAYOUT_VERSION_FOYER = 2
 
+        /** RAMPA (SHW-121) — verze rozvržení, která zná řadu „K přehrání" a její místo pod „Další díly". */
+        private const val LAYOUT_VERSION_RAMPA = 3
+        const val PLAY_QUEUE_ROW_ID = "play_queue"
+
         /** Id řady „Filmotéka — nedávno přidané" (drill „Celá filmotéka" ji pozná i z UI). */
         const val FILMOTEKA_RECENT_ROW_ID = "filmoteka_recent"
 
@@ -426,6 +455,15 @@ class HomeLayoutStore @Inject constructor(
                 cardStyle = HomeCardStyle.LANDSCAPE,
                 // KOLO2 (M): z výroby jen první řada má immersive hlavičku zapnutou.
                 immersiveHeader = true,
+            ),
+            // RAMPA (SHW-121, user 2026-08-28: „taky na web nebo tv app pod dalsi dily jako pruh") —
+            // proto HNED pod „Další díly". Prázdná se řada nevykreslí (render bere jen neprázdné),
+            // takže dokud si nic nepřidá, nic nepřekáží („pokud bude prázdný tak autonezobrazuj").
+            HomeRowConfig(
+                id = PLAY_QUEUE_ROW_ID,
+                source = HomeRowSourceType.PLAY_QUEUE,
+                title = "K přehrání",
+                cardStyle = HomeCardStyle.POSTER,
             ),
             HomeRowConfig(
                 id = FILMOTEKA_RECENT_ROW_ID,
@@ -470,14 +508,6 @@ class HomeLayoutStore @Inject constructor(
                 id = "favorites",
                 source = HomeRowSourceType.FAVORITES,
                 title = "Oblíbené",
-                cardStyle = HomeCardStyle.POSTER,
-            ),
-            // RAMPA (SHW-121, user 2026-08-28: „tuto sekci chci na na domov jako sekci") — prázdná
-            // se řada nevykreslí (render bere jen neprázdné), takže než něco přidá, nic nepřekáží.
-            HomeRowConfig(
-                id = "play_queue",
-                source = HomeRowSourceType.PLAY_QUEUE,
-                title = "K přehrání",
                 cardStyle = HomeCardStyle.POSTER,
             ),
             // Zapamatované zdroje — když prázdné, render řadu vynechá (buildList jen neprázdné).
