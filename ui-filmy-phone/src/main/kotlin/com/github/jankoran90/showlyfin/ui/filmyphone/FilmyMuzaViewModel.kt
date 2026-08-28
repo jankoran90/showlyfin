@@ -1,9 +1,16 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.PREF_ACTIVE_PROFILE_IS_CHILD
+import com.github.jankoran90.showlyfin.core.db.repository.WantToSeeRepository
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
 import com.github.jankoran90.showlyfin.core.domain.MediaType
+import com.github.jankoran90.showlyfin.data.trakt.AuthorizedTraktRemoteDataSource
+import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportItem
+import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportRequest
+import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
 import com.github.jankoran90.showlyfin.data.uploader.MuzaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -14,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * MUZA (SHW-123, user 2026-08-28 20:38) — „řeknu o jaky tema mi jde a ty projedes pruzkumem
@@ -26,6 +34,10 @@ import javax.inject.Inject
 @HiltViewModel
 class FilmyMuzaViewModel @Inject constructor(
     private val repo: MuzaRepository,
+    private val wantToSee: WantToSeeRepository,
+    private val authorizedTrakt: AuthorizedTraktRemoteDataSource,
+    private val tokenProvider: TokenProvider,
+    @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     data class UiState(
@@ -35,6 +47,9 @@ class FilmyMuzaViewModel @Inject constructor(
         val historyLoading: Boolean = true,
         val activeTopic: MuzaRepository.TopicDetail? = null,
         val error: String? = null,
+        /** user 2026-08-28 21:24 („pokracuj s tlacitkem") — rychlé „+ Chci vidět" přímo z karty MUZA,
+         * bez nutnosti otevřít detail. Klíč = "tmdbId_isShow", stejně jako klíč karty ve výsledcích. */
+        val addedKeys: Set<String> = emptySet(),
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -116,6 +131,31 @@ class FilmyMuzaViewModel @Inject constructor(
         genres = null,
         type = if (r.isShow) MediaType.SHOW else MediaType.MOVIE,
     )
+
+    /**
+     * Rychlé „+ Chci vidět" přímo z karty výsledků, bez otevření detailu (user: „pokracuj s
+     * tlacitkem"). Vždy zapíše do MÍSTNÍHO seznamu (stejný sdílený `WantToSeeRepository` jako
+     * detail karty — SUBSTRATE, dědí per-profil sync+tombstone, viz dnešní oprava split-brainu).
+     * Dospělý profil s Traktem navíc dostane best-effort přímý zápis do Trakt watchlistu (fire-
+     * and-forget) — chybí-li token nebo volání selže, lokální „Chci vidět" v appce platí i tak
+     * (přesně jako `keptLocally()` fallback v DetailViewModel), jen se to Traktu nedozví hned.
+     */
+    fun quickAddToWantToSee(r: MuzaRepository.TopicResult) {
+        val key = "${r.tmdbId}_${r.isShow}"
+        if (key in _state.value.addedKeys) return
+        _state.value = _state.value.copy(addedKeys = _state.value.addedKeys + key)
+        wantToSee.add(r.tmdbId, r.isShow, r.title, r.posterUrl, r.year.takeIf { it > 0 })
+        val isChild = prefs.getBoolean(PREF_ACTIVE_PROFILE_IS_CHILD, false)
+        if (isChild || tokenProvider.getToken() == null) return
+        viewModelScope.launch {
+            runCatching {
+                val item = SyncExportItem.fromIds(0L, r.tmdbId, r.imdbId.takeIf { it.isNotBlank() })
+                    ?: return@launch
+                if (r.isShow) authorizedTrakt.postSyncWatchlist(SyncExportRequest(shows = listOf(item)))
+                else authorizedTrakt.postSyncWatchlist(SyncExportRequest(movies = listOf(item)))
+            }
+        }
+    }
 
     private fun pollTopic(topicId: String) {
         pollJob?.cancel()

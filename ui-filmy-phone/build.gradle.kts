@@ -46,6 +46,8 @@ dependencies {
     implementation(project(":data:data-jellyfin"))
     // M2.6 přehrávání: SubtitleQuery typ v callbacku onPlayStreamUrl (data-uploader je jen `implementation` ve feature-detail → není tranzitivní).
     implementation(project(":data:data-uploader"))
+    // MUZA (SHW-123): rychlé „+ Chci vidět" přímo z karty — Trakt add, stejně jako data-uploader netranzitivní.
+    implementation(project(":data:data-trakt"))
     // Motiv (ShowlyfinPhoneTheme) + telefonní VM pro reuse. Gap Fáze 4 (viz hlavička).
     implementation(project(":ui-phone"))
     // SEZONA-DÁVKA (2026-08-21): FilmyDownloadsScreen čte OfflineDownload/OfflineRequest/OfflineStatus

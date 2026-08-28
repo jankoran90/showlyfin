@@ -18,7 +18,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Tv
@@ -79,7 +81,7 @@ fun FilmyMuzaScreen(
         if (topic == null) {
             MuzaHome(state, vm)
         } else {
-            MuzaTopicResults(topic, state.searching, state.error, onOpenDetail, vm)
+            MuzaTopicResults(topic, state.searching, state.error, state.addedKeys, onOpenDetail, vm)
         }
     }
 }
@@ -179,6 +181,7 @@ private fun MuzaTopicResults(
     topic: MuzaRepository.TopicDetail,
     searching: Boolean,
     error: String?,
+    addedKeys: Set<String>,
     onOpenDetail: (MediaItem) -> Unit,
     vm: FilmyMuzaViewModel,
 ) {
@@ -206,7 +209,12 @@ private fun MuzaTopicResults(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(topic.results, key = { "${it.tmdbId}_${it.isShow}" }) { r ->
-                    MuzaResultCard(r, onClick = { onOpenDetail(vm.toMediaItem(r)) })
+                    MuzaResultCard(
+                        r,
+                        added = "${r.tmdbId}_${r.isShow}" in addedKeys,
+                        onClick = { onOpenDetail(vm.toMediaItem(r)) },
+                        onAdd = { vm.quickAddToWantToSee(r) },
+                    )
                 }
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
@@ -229,7 +237,12 @@ private fun MuzaTopicResults(
 }
 
 @Composable
-private fun MuzaResultCard(r: MuzaRepository.TopicResult, onClick: () -> Unit) {
+private fun MuzaResultCard(
+    r: MuzaRepository.TopicResult,
+    added: Boolean,
+    onClick: () -> Unit,
+    onAdd: () -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -256,18 +269,32 @@ private fun MuzaResultCard(r: MuzaRepository.TopicResult, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                "${r.title}${if (r.year > 0) " (${r.year})" else ""}",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    "${r.title}${if (r.year > 0) " (${r.year})" else ""}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(4.dp))
+                // user 2026-08-28 21:24 („pokracuj s tlacitkem") — rychlé přidání do „Chci vidět"
+                // přímo z karty, bez nutnosti otevřít detail.
+                IconButton(onClick = onAdd, enabled = !added, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        imageVector = if (added) Icons.Rounded.Check else Icons.Rounded.Add,
+                        contentDescription = if (added) "V Chci vidět" else "Přidat do Chci vidět",
+                        tint = if (added) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Spacer(Modifier.height(4.dp))
+            // user 2026-08-28 21:25: „mam usekly text nejde ho videt celý... na seznamu ho chci
+            // videt taky cely" — žádný strop řádků, ať se text nikdy neuřízne uprostřed věty.
             Text(
                 r.blurb ?: "Popis se nepodařilo napsat — u titulu chybí dostatek ohlasů.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 6,
             )
         }
     }
