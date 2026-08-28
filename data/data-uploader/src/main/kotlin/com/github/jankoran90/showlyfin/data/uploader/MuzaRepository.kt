@@ -101,7 +101,7 @@ class MuzaRepository @Inject constructor(
 
     private fun parseDetail(json: JSONObject): TopicDetail {
         val arr = json.optJSONArray("results")
-        val results = if (arr == null) emptyList() else (0 until arr.length()).mapNotNull { i ->
+        val results: List<TopicResult> = if (arr == null) emptyList() else (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val tmdbId = o.optLong("tmdbId", 0L)
             if (tmdbId <= 0L) return@mapNotNull null
@@ -113,7 +113,7 @@ class MuzaRepository @Inject constructor(
                 posterUrl = posterPath?.let { "https://image.tmdb.org/t/p/w342$it" },
                 blurb = o.optString("blurb").takeIf { it.isNotBlank() },
             )
-        } else emptyList()
+        }
         return TopicDetail(
             id = json.optString("id"), query = json.optString("query"),
             status = json.optString("status"), results = results, dropped = json.optInt("dropped", 0),
