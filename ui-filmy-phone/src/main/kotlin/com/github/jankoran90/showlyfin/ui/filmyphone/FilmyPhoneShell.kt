@@ -139,6 +139,8 @@ private fun FilmyShellContent() {
     // (★ odznak na kartách + spouštěč hodnocení v detailu) + dialog host níže. Bez toho telefon hodnotit neuměl
     // a kurátorův „palec dolů" filtr nedostával telefonem nastavená hodnocení.
     val ratingVm: RatingViewModel = hiltViewModel()
+    // RAMPA (SHW-121) — zdroj značky „ve frontě" pro karty (sdílený s TV, leží ve feature vrstvě).
+    val queueBadgeVm: com.github.jankoran90.showlyfin.feature.discover.queue.PlayQueueBadgeViewModel = hiltViewModel()
     // CINEMATHEQUE: odznak „má uložený zdroj" na kartách/řádcích — provider napojený na WorkingSourceStore.
     val sourceAvailVm: FilmySourceAvailabilityViewModel = hiltViewModel()
     // CASCADE: stejná (Activity-scoped) instance DetailViewModelu jako uvnitř DetailScreen — drží candidate
@@ -249,6 +251,9 @@ private fun FilmyShellContent() {
         LocalDirectorProvider provides cardCsfd,
         LocalUserRatingProvider provides ratingVm,
         LocalSourceAvailabilityProvider provides sourceAvailVm,
+        // RAMPA (SHW-121): značka „ve frontě K přehrání" na obalech — jeden provider nad celý shell,
+        // takže ji umí každá karta bez zásahu do jednotlivých obrazovek.
+        com.github.jankoran90.showlyfin.core.ui.LocalPlayQueueProvider provides queueBadgeVm,
     ) {
         val activePlayer = player
         val detailEntry = detailStack.lastOrNull()

@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":core:core-theme"))   // EXCISE (SHW-103): sdílený motiv
     implementation(project(":core:core-ui"))
     implementation(project(":core:core-data"))
+    implementation(project(":core:core-db"))      // RAMPA (SHW-121): PlayQueueRepository (fronta „K přehrání")
     // M2.2 domov: TvHomeViewModel + HomeRowItem (data mozek domova, bez TV závislosti).
     implementation(project(":feature:feature-discover"))
     // M2.2 domov: LibraryRowsViewModel + LibraryRowItem (JF knihovní řady domova) + JellyfinDetailScreen (JF-only fallback).

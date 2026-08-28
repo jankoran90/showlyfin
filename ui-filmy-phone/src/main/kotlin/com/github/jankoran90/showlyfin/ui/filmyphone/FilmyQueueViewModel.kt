@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Řazení fronty „K přehrání" (user 2026-08-28: *„urcite dej razeni"*). */
@@ -39,7 +40,14 @@ enum class QueueSort(val chipLabel: String) {
 class FilmyQueueViewModel @Inject constructor(
     private val queue: PlayQueueRepository,
     private val viewModeStore: ViewModeStore,
+    private val watchedCleaner: com.github.jankoran90.showlyfin.feature.discover.queue.QueueWatchedCleaner,
 ) : ViewModel() {
+
+    init {
+        // „Po shlédnutí odebrat ze seznamu" — ptáme se Traktu, ne přehrávače (user kouká i přes cast
+        // na Zenbook a přes web; hák v našem přehrávači by to minul). Neúspěch nemaže nic.
+        viewModelScope.launch { watchedCleaner.cleanup() }
+    }
 
     private val _sort = MutableStateFlow(QueueSort.ADDED)
     val sort: StateFlow<QueueSort> = _sort.asStateFlow()
