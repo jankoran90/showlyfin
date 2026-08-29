@@ -472,7 +472,9 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                     overview = null,
                     rating = null,
                     genres = null,
-                    type = MediaType.MOVIE,
+                    // 🔴 2026-08-29: typ z part — „Podobné" u seriálu jinak otvírala cizí titul
+                    // (TMDB movie/TV id jsou oddělené řady). Parita s FilmyPhoneShell/TvNavigator.
+                    type = if (part.isShow) MediaType.SHOW else MediaType.MOVIE,
                     posterPath = null,
                     backdropPath = null,
                 )

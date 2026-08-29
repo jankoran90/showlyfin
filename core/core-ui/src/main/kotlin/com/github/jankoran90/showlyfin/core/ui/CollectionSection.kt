@@ -63,6 +63,11 @@ data class CollectionPart(
     // se nemění; kde chybí, řádek prostě popis/plakát nezobrazí (posterPath se dopočítá z [posterUrl]).
     val overview: String? = null,
     val posterPath: String? = null,
+    // 🔴 2026-08-29 (user TG 13:20): „Podobné" u SERIÁLU otvírala cizí titul — klik-handlery stavěly
+    // stub detailu s natvrdo `MediaType.MOVIE`, ale TMDB má movie/TV id oddělené → seriálové ID v
+    // filmovém endpointu vrátí úplně jiný titul. Tvůrci parts, kteří typ znají (SimilarRepository),
+    // ho sem propíší; default false = dosavadní chování všech ostatních řad (kolekce/režisér/studio).
+    val isShow: Boolean = false,
 )
 
 data class MediaCollection(

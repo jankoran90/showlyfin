@@ -377,12 +377,19 @@ fun DetailScreen(
     uiState.pendingWorkingConfirm?.let { stream ->
         val srcName = (stream.name ?: stream.description)?.replace("\n", " ")?.trim()?.ifBlank { null } ?: "tento zdroj"
         val isSeasonPack = uiState.selectedSeason != null && stream.quality.seasonPack
+        // user 2026-08-29 08:42: „…na celou sezónu A CELÝ SERIÁL" — druhá možnost jen u multi-season
+        // seriálů (u jedno-sezónního by byla redundatní s „celou sezónou").
+        val multiSeason = uiState.seasons.count { it.season_number >= 1 } > 1
         AlertDialog(
             onDismissRequest = { viewModel.dismissWorkingConfirm() },
             title = { Text("Fungoval tenhle zdroj?") },
             text = {
                 Text(
-                    if (isSeasonPack) {
+                    if (isSeasonPack && multiSeason) {
+                        "Byl to správný díl? Je to balík sezóny — zapamatuju si ho pro tenhle díl, " +
+                            "pro celou sezónu, nebo rovnou pro celý seriál (každou sezónu dohledám " +
+                            "podle stejného release).\n\n$srcName"
+                    } else if (isSeasonPack) {
                         "Byl to správný díl? Je to balík celé sezóny — zapamatuju si ho pro tenhle díl, " +
                             "nebo rovnou pro celou sezónu, ať další díly hrají bez ptaní.\n\n$srcName"
                     } else {
@@ -392,7 +399,12 @@ fun DetailScreen(
             },
             confirmButton = {
                 if (isSeasonPack) {
-                    TextButton(onClick = { viewModel.confirmWorkingSource(forSeason = true) }) { Text("Pro celou sezónu ⭐📦") }
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = { viewModel.confirmWorkingSource(forSeason = true) }) { Text("Pro celou sezónu ⭐📦") }
+                        if (multiSeason) {
+                            TextButton(onClick = { viewModel.confirmWorkingSource(forSeries = true) }) { Text("Pro celý seriál ⭐📦") }
+                        }
+                    }
                 } else {
                     TextButton(onClick = { viewModel.confirmWorkingSource() }) { Text("Ano, zapamatovat ⭐") }
                 }

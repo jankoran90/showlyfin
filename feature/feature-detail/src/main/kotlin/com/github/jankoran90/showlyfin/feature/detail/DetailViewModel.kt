@@ -1061,6 +1061,9 @@ class DetailViewModel @Inject constructor(
                     watched = _uiState.value.watchedTmdbIds.contains(t.tmdbId),
                     rating = t.rating,
                     posterPath = t.posterUrl?.substringAfterLast('/')?.takeIf { it.isNotBlank() }?.let { "/" + it },
+                    // 🔴 2026-08-29: typ musí dojít až ke klik-handleru — bez toho se seriál otevře
+                    // jako film (TMDB movie/TV id jsou oddělené řady → jiný titul).
+                    isShow = t.isShow,
                 )
             }
             _uiState.update { it.copy(similarTitles = MediaCollection(name = "Podobné", parts = parts)) }
@@ -1721,7 +1724,7 @@ class DetailViewModel @Inject constructor(
      * ať dialog "Fungoval tenhle zdroj?" rovnou nabídne "pro celou sezónu" — dřív to šlo jen
      * přes samostatné (skryté) `pinSeasonSource`, které nikdo neobjevil bez návodu.
      */
-    fun confirmWorkingSource(forSeason: Boolean = false) {
+    fun confirmWorkingSource(forSeason: Boolean = false, forSeries: Boolean = false) {
         val st = _uiState.value
         val stream = st.pendingWorkingConfirm ?: return
         val imdb = st.item?.imdbId
@@ -1734,7 +1737,11 @@ class DetailViewModel @Inject constructor(
         rememberSeasonRecipeFrom(stream)
         _uiState.update { it.copy(rememberedSource = stream, pendingWorkingConfirm = null) }
         cleanupRdKeepingSource(stream)
-        if (forSeason) pinSeasonSource(stream)
+        // user 2026-08-29 08:42: „celou sezónu A CELÝ SERIÁL" — seriál má přednost (superset sezóny).
+        when {
+            forSeries -> pinSeriesSource(stream)
+            forSeason -> pinSeasonSource(stream)
+        }
     }
 
     fun openManualUrlDialog() = _uiState.update { it.copy(showManualUrlDialog = true) }
@@ -1877,6 +1884,31 @@ class DetailViewModel @Inject constructor(
         val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
         workingSourceStore.saveSeason(st.item?.imdbId, st.item?.tmdbId, title, stream, season)
         _uiState.update { it.copy(hasSeasonSource = true, captureMessage = "Zdroj platí pro celou $season. sezónu.") }
+    }
+
+    /**
+     * user 2026-08-29 08:42 (SPYGLASS, Big Mouth „Joy" balík): *„…abych po ověření prvního dílu
+     * rozšířil celý balík Joy release na celou sezónu A CELÝ SERIÁL"* — release skupiny obvykle
+     * vydávají každou sezónu stejnou recepturou (grupa+kvalita), takže zapíšeme tutéž recepturu
+     * rovnou pro VŠECHNY sezóny seriálu. Přehrávání ji dohledá přes [SeasonSourceMatcher]
+     * úroveň RECIPE (addon+grupa+rozlišení+audio neparuje číslo sezóny) — v sezóně, kde daná
+     * skupina balík nemá, matcher vrátí null a otevře se normální výběr zdrojů (fail-open,
+     * nepodstrčí se cizí release). Sezóny bereme z načteného detailu (TMDB), jen reálné (≥1).
+     */
+    fun pinSeriesSource(stream: UploaderStream) {
+        val st = _uiState.value
+        val seasonNumbers = st.seasons.map { it.season_number }.filter { it >= 1 }.distinct()
+        if (seasonNumbers.isEmpty()) return pinSeasonSource(stream)
+        val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
+        seasonNumbers.forEach { season ->
+            workingSourceStore.saveSeason(st.item?.imdbId, st.item?.tmdbId, title, stream, season)
+        }
+        _uiState.update {
+            it.copy(
+                hasSeasonSource = true,
+                captureMessage = "Zdroj platí pro celý seriál (${seasonNumbers.size} sezón).",
+            )
+        }
     }
 
     /** SEZONA f2 — zruš recepturu sezóny (zdroje jednotlivých dílů zůstanou). */

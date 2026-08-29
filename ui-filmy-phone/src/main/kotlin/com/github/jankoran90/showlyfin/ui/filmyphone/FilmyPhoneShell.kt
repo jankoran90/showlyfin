@@ -169,13 +169,15 @@ private fun FilmyShellContent() {
     }
 
     // Klik na část kolekce s tmdbId → další (bohatý) detail na stacku.
+    // 🔴 2026-08-29 (user TG 13:20): typ z part, ne natvrdo MOVIE — „Podobné" u seriálu jinak
+    // otvírala cizí titul (TMDB movie/TV id jsou oddělené řady).
     val pushCollectionPart: (CollectionPart) -> Unit = { part ->
         part.tmdbId?.let { tmdb ->
             detailStack = detailStack + FilmyDetailEntry.Media(
                 MediaItem(
                     traktId = 0L, tmdbId = tmdb, imdbId = null, title = part.title,
                     year = part.year?.toIntOrNull(), overview = null, rating = null,
-                    genres = null, type = MediaType.MOVIE,
+                    genres = null, type = if (part.isShow) MediaType.SHOW else MediaType.MOVIE,
                 )
             )
         }
