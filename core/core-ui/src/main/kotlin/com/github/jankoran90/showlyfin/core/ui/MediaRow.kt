@@ -141,7 +141,11 @@ fun MediaRow(
         Column(modifier = Modifier.heightIn(min = RowCoverHeight).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.Top) {
                 Text(
-                    text = item.displayTitle,
+                    // 🔴 2026-08-29: položka bez titleCz spadla na originál („Three Times" /
+                    // 夜明けのすべて) zatímco karta ukazovala česky/anglicky — líné dorovnání
+                    // přes provider (TMDB cs → en), dokud nedojde, drží displayTitle.
+                    text = rememberRowTitle(item.imdbId, item.tmdbId, item.titleCz, item.type != MediaType.MOVIE)
+                        ?: item.displayTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,

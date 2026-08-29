@@ -6,6 +6,7 @@ import com.github.jankoran90.showlyfin.core.domain.MediaType
 import com.github.jankoran90.showlyfin.core.ui.CsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.CzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.DirectorProvider
+import com.github.jankoran90.showlyfin.core.ui.RowTitleProvider
 import com.github.jankoran90.showlyfin.core.ui.looksCzech
 import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
@@ -29,10 +30,28 @@ class CardCsfdViewModel @Inject constructor(
     private val tmdb: TmdbRemoteDataSource,
     private val uploaderDs: UploaderRemoteDataSource,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
-) : ViewModel(), CsfdRatingProvider, CzechOverviewProvider, DirectorProvider {
+) : ViewModel(), CsfdRatingProvider, CzechOverviewProvider, DirectorProvider, RowTitleProvider {
 
     override suspend fun rating(imdbId: String?, tmdbId: Long?, title: String, year: Int?): Int? =
         csfd.getRating(imdbId.orEmpty(), tmdbId, title, year ?: 0)
+
+    /**
+     * 🔴 2026-08-29 (user): „na kartě Tři časy, v seznamu Three Times" / „夜明けのすべて v seznamu" —
+     * položky seznamů nemají titleCz. Líné dorovnání: TMDB cs titulek; když čeština není (asijské
+     * tituly), EN titulek. Volá se jen pro řádky bez titleCz a výsledek se kešuje v core-ui.
+     */
+    override suspend fun rowTitle(imdbId: String?, tmdbId: Long?, isShow: Boolean): String? {
+        val id = tmdbId ?: return null
+        val tr = runCatching {
+            if (isShow) tmdb.fetchShowTranslation(id, "cs") else tmdb.fetchMovieTranslation(id, "cs")
+        }.getOrNull()
+        val cz = tr?.title?.takeIf { it.isNotBlank() }
+        if (cz != null) return cz
+        val en = runCatching {
+            if (isShow) tmdb.fetchShowTranslation(id, "en") else tmdb.fetchMovieTranslation(id, "en")
+        }.getOrNull()
+        return en?.title?.takeIf { it.isNotBlank() }
+    }
 
     /**
      * TENFOOT: líné jméno režiséra pro immersive header (jen pro fokusovaný titul). Stejný zdroj
@@ -91,7 +110,12 @@ class CardCsfdViewModel @Inject constructor(
         val csfdPlot = csfdId?.let { fetchCsfdPlot(it) }?.takeIf { it.isNotBlank() }
         // Priorita jako detail: český TMDB → ČSFD → jakýkoli TMDB → fallback.
         if (csfdPlot != null) return csfdPlot
-        return tmdbCz ?: fallback
+        // 🔴 2026-08-29 (user): u titulů bez češtiny (asijské arthouse) radši ANGLICKÝ popis
+        // TMDB než prázdný řádek — CZ → ČSFD → EN → fallback z položky.
+        val en = tmdbId?.let {
+            runCatching { tmdb.fetchMovieTranslation(it, "en") }.getOrNull()
+        }?.overview?.takeIf { it.isNotBlank() }
+        return tmdbCz ?: en ?: fallback
     }
 
     /**

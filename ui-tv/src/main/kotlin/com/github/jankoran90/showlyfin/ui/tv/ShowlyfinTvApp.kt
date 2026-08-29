@@ -14,6 +14,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalRowTitleProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalTvCardScale
 import com.github.jankoran90.showlyfin.core.ui.TvCardScale
@@ -79,6 +80,7 @@ fun ShowlyfinTvApp() {
                 LocalDensity provides Density(base.density * font.uiScale, base.fontScale),
                 LocalCsfdRatingProvider provides cardCsfd,
                 LocalCzechOverviewProvider provides cardCsfd,
+                LocalRowTitleProvider provides cardCsfd,
                 LocalDirectorProvider provides cardCsfd,
                 com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider provides ratingVm,
                 // RAMPA (SHW-121): značka „ve frontě K přehrání" na kartách i na TV — týž provider
