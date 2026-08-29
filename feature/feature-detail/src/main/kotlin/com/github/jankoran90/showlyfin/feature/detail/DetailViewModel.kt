@@ -2690,8 +2690,21 @@ class DetailViewModel @Inject constructor(
                 // věcí RECEPTURY SEZÓNY, kterou si automatika drží sama (f3d), a ptát se u každého dílu
                 // je jen otrava. Uložení proto proběhne potichu (viz níže), ne dialogem.
                 val isEpisode = episodeSelector != null
+                // user 2026-08-29 (SPYGLASS, Big Mouth „Joy" balík): silent-save u dílu výše NIKDY
+                // nezaloží novou recepturu sezóny (`rememberSeasonRecipeFrom` jen REFRESHUJE
+                // existující) — bez dotazu by appka bez vědomí usera "propásla" právě tenhle balík
+                // navždy. Výjimka z pravidla "u dílu se neptáme" (to platí pro OPAKOVANÉ ptaní na
+                // stejnou věc): tohle je JEDNORÁZOVÁ nabídka, jen když sezóna ještě žádnou recepturu
+                // nemá a zdroj je season pack — přesně stav, kdy se automatika sama nespustí.
+                val sel = episodeSelector
+                val item = _uiState.value.item
+                val isNewSeasonPackOffer = isEpisode && sel != null &&
+                    lastPlayedStream?.quality?.seasonPack == true &&
+                    workingSourceStore.getSeason(item?.imdbId, item?.tmdbId, sel.season) == null
                 val confirm = lastPlayedStream
-                    ?.takeIf { !isEpisode && !sameSource(it, _uiState.value.rememberedSource) }
+                    ?.takeIf {
+                        (!isEpisode && !sameSource(it, _uiState.value.rememberedSource)) || isNewSeasonPackOffer
+                    }
                 if (isEpisode) rememberEpisodeSourceSilently()
                 _uiState.update {
                     it.copy(
