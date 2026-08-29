@@ -91,6 +91,9 @@ class OpsHeartbeatReporter @Inject constructor(
                 videoBitrateBps = t.videoBitrateBps,
                 videoHeight = t.videoHeight,
                 videoCodec = t.videoCodec,
+                // 🔴 2026-08-29: přetočení zvlášť — načítání po seeku není zádrhel.
+                seeks = t.seeks,
+                seekMs = t.seekMs,
             ),
         )
         return true

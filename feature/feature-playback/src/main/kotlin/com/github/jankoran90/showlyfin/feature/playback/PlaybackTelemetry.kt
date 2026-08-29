@@ -19,6 +19,9 @@ package com.github.jankoran90.showlyfin.feature.playback
  */
 object PlaybackTelemetry {
 
+    /** Načítání, které začne do této doby po seeku, je dojezd na nové místo — ne zádrhel. */
+    private const val SEEK_GRACE_MS = 1_500L
+
     @Volatile private var bandwidthBps: Long = 0
     @Volatile private var stalls: Int = 0
     @Volatile private var stalledMs: Long = 0
@@ -27,6 +30,13 @@ object PlaybackTelemetry {
     @Volatile private var videoHeight: Int = 0
     @Volatile private var videoCodec: String = ""
     @Volatile private var stallStartedAt: Long = 0
+    // 🔴 2026-08-29 (user: „to 3× 53 s nebylo sekání, seekoval jsem, kde děti přestaly"):
+    // buffering hned po SEEK je legitimní dojezd na novou pozici, ne zádrhel — bez tohohle
+    // se každé přetočení (typicky návrat na místo, kde se skončilo) počítalo jako síťový problém.
+    @Volatile private var seeks: Int = 0
+    @Volatile private var seekMs: Long = 0
+    @Volatile private var lastSeekAt: Long = 0
+    @Volatile private var activeIsSeekFill: Boolean = false
 
     /** Nová relace (jiný titul / nový start přehrávače). */
     fun reset() {
@@ -38,6 +48,10 @@ object PlaybackTelemetry {
         videoHeight = 0
         videoCodec = ""
         stallStartedAt = 0
+        seeks = 0
+        seekMs = 0
+        lastSeekAt = 0
+        activeIsSeekFill = false
     }
 
     /** Odhad propustnosti z ExoPlayeru (`BandwidthMeter`) — platí pro jakýkoli zdroj. */
@@ -46,19 +60,37 @@ object PlaybackTelemetry {
     }
 
     /**
+     * Uživatel (nebo UI) přetočil pozici — `onPositionDiscontinuity(DISCONTINUITY_REASON_SEEK)`.
+     * Načítání, které teď následuje, je dojezd na nové místo; i běžící zádrhel se seekem mění
+     * kategorii (divák přetočil právě proto, že to stálo — pokračování čekání už není jeho metrika).
+     */
+    fun onSeek() {
+        val now = System.currentTimeMillis()
+        lastSeekAt = now
+        seeks++
+        if (stallStartedAt != 0L) activeIsSeekFill = true
+    }
+
+    /**
      * Přehrávač se zastavil a čeká na data. `buffering` = právě se dobírá.
      * První buffering po startu se NEPOČÍTÁ jako zádrhel — to je normální rozjezd, ne zakolísání.
+     * Buffering v [SEEK_GRACE_MS] po seeku se počítá jako PŘETOČENÍ (seekMs), ne zádrhel.
      */
     fun onBuffering(buffering: Boolean, isFirstStart: Boolean) {
         val now = System.currentTimeMillis()
         if (buffering) {
             if (stallStartedAt == 0L) {
                 stallStartedAt = now
-                if (!isFirstStart) stalls++
+                activeIsSeekFill = now - lastSeekAt <= SEEK_GRACE_MS
+                if (!isFirstStart && !activeIsSeekFill) stalls++
             }
         } else if (stallStartedAt != 0L) {
-            if (!isFirstStart) stalledMs += now - stallStartedAt
+            if (!isFirstStart) {
+                if (activeIsSeekFill) seekMs += now - stallStartedAt
+                else stalledMs += now - stallStartedAt
+            }
             stallStartedAt = 0
+            activeIsSeekFill = false
         }
     }
 
@@ -76,11 +108,19 @@ object PlaybackTelemetry {
     fun snapshot(): Snapshot = Snapshot(
         bandwidthBps = bandwidthBps,
         stalls = stalls,
-        stalledMs = stalledMs + (if (stallStartedAt != 0L) System.currentTimeMillis() - stallStartedAt else 0),
+        stalledMs = stalledMs + (
+            if (stallStartedAt != 0L && !activeIsSeekFill)
+                System.currentTimeMillis() - stallStartedAt else 0
+        ),
         droppedFrames = droppedFrames,
         videoBitrateBps = videoBitrateBps,
         videoHeight = videoHeight,
         videoCodec = videoCodec,
+        seeks = seeks,
+        seekMs = seekMs + (
+            if (stallStartedAt != 0L && activeIsSeekFill)
+                System.currentTimeMillis() - stallStartedAt else 0
+        ),
     )
 
     data class Snapshot(
@@ -91,5 +131,7 @@ object PlaybackTelemetry {
         val videoBitrateBps: Long,
         val videoHeight: Int,
         val videoCodec: String,
+        val seeks: Int = 0,
+        val seekMs: Long = 0,
     )
 }

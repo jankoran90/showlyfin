@@ -44,6 +44,10 @@ data class OpsPlaying(
     val videoBitrateBps: Long = 0,
     val videoHeight: Int = 0,
     val videoCodec: String = "",
+    // 🔴 2026-08-29 (user: „seekoval jsem, to nebylo sekání"): přetočení zvlášť, ať se
+    // dojezd na novou pozici nepočítá jako zádrhel kvůli datům.
+    val seeks: Int = 0,
+    val seekMs: Long = 0,
 )
 
 /** Souhrn naší vyrovnávací paměti (sdilej proxy) — rychlost, zásoba, kolikrát se čekalo. */
@@ -171,6 +175,10 @@ data class OpsHeartbeatBody(
     val videoBitrateBps: Long = 0,
     val videoHeight: Int = 0,
     val videoCodec: String = "",
+    // 🔴 2026-08-29 (user: „seekoval jsem, to nebylo sekání"): přetočení se hlásí zvlášť,
+    // aby načítání po seeku nekalilo zádrhely (dojezd na novou pozici ≠ síťový problém).
+    val seeks: Int = 0,
+    val seekMs: Long = 0,
 )
 
 data class OpsSweepResponse(
@@ -219,6 +227,9 @@ data class OpsHistoryItem(
     val videoBitrateBps: Long = 0,
     val videoHeight: Int = 0,
     val videoCodec: String = "",
+    // 🔴 2026-08-29: přetočení zvlášť od zádrhelů (viz OpsHeartbeatBody).
+    val seeks: Int = 0,
+    val seekMs: Long = 0,
 )
 
 /**

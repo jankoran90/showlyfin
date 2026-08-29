@@ -215,6 +215,12 @@ private fun DevicePerformance(p: OpsPlaying, showHeader: Boolean) {
         value = if (p.stalls == 0) "žádné"
         else "${p.stalls}× · celkem ${FilmyOpsFormat.duration(p.stalledMs)}",
     )
+    // 🔴 2026-08-29 (user: „seekoval jsem, to nebylo sekání"): přetočení zvlášť — načítání
+    // po seeku je dojezd na novou pozici, ne síťový problém; bez rozlišení by si divák
+    // (i já z dat) myslel, že stream stojí, jen protože se vracel, kde skončil.
+    if (p.seeks > 0) {
+        OpsStat("Přetočeno (seek)", "${p.seeks}× · čekání ${FilmyOpsFormat.duration(p.seekMs)}")
+    }
     if (p.droppedFrames > 0) OpsStat("Zahozené snímky", "${p.droppedFrames}")
 }
 

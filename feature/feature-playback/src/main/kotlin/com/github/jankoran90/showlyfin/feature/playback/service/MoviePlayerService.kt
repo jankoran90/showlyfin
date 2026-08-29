@@ -200,6 +200,13 @@ class MoviePlayerService : MediaSessionService() {
                 if (state == Player.STATE_READY) everPlayed = true
             }
 
+            // 🔴 2026-08-29 (user: seek se počítal jako zádrhel): přetočení má VLASTNÍ událost s
+            // důvodem SEEK — telemetrie díky ní zařadí následující načítání jako dojezd na nové
+            // místo, ne jako síťový problém. AUTO_TRANSITION (přechod epizod) zádrhelem není taky.
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) PlaybackTelemetry.onSeek()
+            }
+
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
                 val f = (session?.player as? ExoPlayer)?.videoFormat
                 PlaybackTelemetry.onVideoFormat(f?.bitrate ?: 0, videoSize.height, f?.codecs)
