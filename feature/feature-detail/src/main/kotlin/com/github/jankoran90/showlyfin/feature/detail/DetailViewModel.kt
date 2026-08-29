@@ -1716,7 +1716,12 @@ class DetailViewModel @Inject constructor(
     }
 
     /** Uživatel potvrdil „tohle sedí 👍" → ulož zdroj jako fungující pro tento film + připni ho. */
-    fun confirmWorkingSource() {
+    /**
+     * [forSeason] = user 2026-08-29 (SPYGLASS, Big Mouth „Joy" balík): u season-pack zdroje
+     * ať dialog "Fungoval tenhle zdroj?" rovnou nabídne "pro celou sezónu" — dřív to šlo jen
+     * přes samostatné (skryté) `pinSeasonSource`, které nikdo neobjevil bez návodu.
+     */
+    fun confirmWorkingSource(forSeason: Boolean = false) {
         val st = _uiState.value
         val stream = st.pendingWorkingConfirm ?: return
         val imdb = st.item?.imdbId
@@ -1729,6 +1734,7 @@ class DetailViewModel @Inject constructor(
         rememberSeasonRecipeFrom(stream)
         _uiState.update { it.copy(rememberedSource = stream, pendingWorkingConfirm = null) }
         cleanupRdKeepingSource(stream)
+        if (forSeason) pinSeasonSource(stream)
     }
 
     fun openManualUrlDialog() = _uiState.update { it.copy(showManualUrlDialog = true) }

@@ -372,14 +372,39 @@ fun DetailScreen(
         )
     }
     // SIEVE S2: po lokálním přehrání Stremio zdroje se zeptej, jestli sedl → zapamatuj fungující zdroj.
+    // user 2026-08-29 (SPYGLASS, Big Mouth „Joy" balík): u season-packu nabídni rovnou i "pro celou
+    // sezónu" v tomhle dialogu, ať to nezůstane skryté v samostatném ovladači.
     uiState.pendingWorkingConfirm?.let { stream ->
         val srcName = (stream.name ?: stream.description)?.replace("\n", " ")?.trim()?.ifBlank { null } ?: "tento zdroj"
+        val isSeasonPack = uiState.selectedSeason != null && stream.quality.seasonPack
         AlertDialog(
             onDismissRequest = { viewModel.dismissWorkingConfirm() },
             title = { Text("Fungoval tenhle zdroj?") },
-            text = { Text("Byl to správný film? Zapamatuju si ho a příště ti ho u tohoto filmu nabídnu rovnou nahoře — i pro přehrání na TV.\n\n$srcName") },
-            confirmButton = { TextButton(onClick = { viewModel.confirmWorkingSource() }) { Text("Ano, zapamatovat ⭐") } },
-            dismissButton = { TextButton(onClick = { viewModel.dismissWorkingConfirm() }) { Text("Ne") } },
+            text = {
+                Text(
+                    if (isSeasonPack) {
+                        "Byl to správný díl? Je to balík celé sezóny — zapamatuju si ho pro tenhle díl, " +
+                            "nebo rovnou pro celou sezónu, ať další díly hrají bez ptaní.\n\n$srcName"
+                    } else {
+                        "Byl to správný film? Zapamatuju si ho a příště ti ho u tohoto filmu nabídnu rovnou nahoře — i pro přehrání na TV.\n\n$srcName"
+                    },
+                )
+            },
+            confirmButton = {
+                if (isSeasonPack) {
+                    TextButton(onClick = { viewModel.confirmWorkingSource(forSeason = true) }) { Text("Pro celou sezónu ⭐📦") }
+                } else {
+                    TextButton(onClick = { viewModel.confirmWorkingSource() }) { Text("Ano, zapamatovat ⭐") }
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (isSeasonPack) {
+                        TextButton(onClick = { viewModel.confirmWorkingSource() }) { Text("Jen tenhle díl") }
+                    }
+                    TextButton(onClick = { viewModel.dismissWorkingConfirm() }) { Text("Ne") }
+                }
+            },
         )
     }
     // Plan WINNOW (SHW-41, item 1): titul blokovaný na RD (DMCA) → jasný dialog místo tichého skoku.
