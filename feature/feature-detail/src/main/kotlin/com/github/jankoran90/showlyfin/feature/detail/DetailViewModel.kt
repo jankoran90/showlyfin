@@ -414,16 +414,24 @@ class DetailViewModel @Inject constructor(
                         coroutineScope {
                             val detailsDeferred = async { tmdbApi.fetchMovieDetails(tmdbId, "cs-CZ") }
                             val translationDeferred = async { tmdbApi.fetchMovieTranslation(tmdbId, "cs") }
+                            // 🔴 2026-08-29 (user: „karta nemá anglický titulek"): u titulů BEZ českého
+                            // překladu na TMDB (typicky arthouse/asijské) spadl řetězec rovnou na
+                            // původní název (夜明けのすべて…) a popisek zmizel úplně. Vzorec: CZ → EN →
+                            // originál — EN překlad taháme paralelně s CZ, stojí jedno rychlé volání.
+                            val enDeferred = async { tmdbApi.fetchMovieTranslation(tmdbId, "en") }
                             val details = detailsDeferred.await()
                             val translation = translationDeferred.await()
+                            val en = enDeferred.await()
                             val tmdbCzTitle = translation?.title?.takeIf { it.isNotBlank() }
+                                ?: en?.title?.takeIf { it.isNotBlank() }
                             // VISTA V4: pojistka proti micro-window — pokud uživatel mezitím
                             // překlikl na jiný film, NEpřepisuj (nepřevracej detail na původní).
                             _uiState.update { st ->
                                 if (st.item?.isSameAs(item) != true) st
                                 else st.copy(
                                     movieDetails = details,
-                                    tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
+                                    tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() }
+                                        ?: en?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
                                     // Backfill IMDB z TMDB → Stremio/Sdílej fungují i u filmů z knihovny
                                     // matchnutých jen přes TMDB (např. arthouse bez imdb v Jellyfinu).
@@ -449,6 +457,8 @@ class DetailViewModel @Inject constructor(
                         coroutineScope {
                             val detailsDeferred = async { tmdbApi.fetchShowDetails(tmdbId, "cs-CZ") }
                             val translationDeferred = async { tmdbApi.fetchShowTranslation(tmdbId, "cs") }
+                            // 🔴 2026-08-29: CZ → EN → originál i u seriálů (viz movie větev).
+                            val enDeferred = async { tmdbApi.fetchShowTranslation(tmdbId, "en") }
                             // SEZONA (SHW-113): imdb id seriálu. `tv/{id}` ho NENESE (film ano) → seriál
                             // otevřený z Hledat zůstal bez `imdbId` a stream flow ho odmítl hláškou
                             // „Uploader není nastaven nebo film nemá IMDB ID" (user, screenshot 11:11),
@@ -459,7 +469,9 @@ class DetailViewModel @Inject constructor(
                             val details = detailsDeferred.await()
                             val translation = translationDeferred.await()
                             val showImdb = imdbDeferred.await()
+                            val en = enDeferred.await()
                             val tmdbCzTitle = translation?.name?.takeIf { it.isNotBlank() }
+                                ?: en?.name?.takeIf { it.isNotBlank() }
                             _uiState.update { st ->
                                 if (st.item?.isSameAs(item) != true) st
                                 else st.copy(
@@ -467,7 +479,8 @@ class DetailViewModel @Inject constructor(
                                     // TENFOOT WS-C: souhrn sezón (bez speciálů 0 nahoře — necháme, ale řadíme).
                                     seasons = details?.seasons?.filter { s -> s.season_number >= 0 }
                                         ?.sortedBy { s -> s.season_number }.orEmpty(),
-                                    tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() },
+                                    tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() }
+                                        ?: en?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
                                     // TENFOOT: u seriálu otevřeného z resume/next-up je item.title název EPIZODY.
                                     // Přepiš na název seriálu (TMDB `name`), aby detail neukazoval epizodu. Dedup je
@@ -3993,7 +4006,10 @@ class DetailViewModel @Inject constructor(
 
         /** SUMÁŘ (SHW-122): server text peče 16–20 s → ptej se po 6 s, nejvýš pětkrát (~30 s). */
         const val SHARE_TEXT_INTERVAL_MS = 6000L
-        const val SHARE_TEXT_POKUSU = 5
+        // 🔴 2026-08-29 (user: „k tomuto filmu nemám popis diváků"): 5 pokusů (30 s) končilo těsně
+        // před dopékáním — model ve frontě (titulky/MUZA souběžně) trvá i minutu; text pak v cache
+        // JE, ale karta ho už nezvedla. 15 pokusů = 90 s okno, znovuotevření karty zvedne cache hned.
+        const val SHARE_TEXT_POKUSU = 15
         // Jak dlouho nechat svítit „Hledám zdroj…", než to vzdáme (auto-hledání běží na serveru).
         const val AUTO_SEARCH_MAX_MS = 5 * 60 * 1000L
         // Kolik titulkových kandidátů poslat na TV (MPV je nasideloaduje, výběr na TV = F3).
