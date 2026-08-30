@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Column
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
@@ -127,7 +129,7 @@ private fun SejfSourceToggle() {
     val prefs = remember(ctx) { ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE) }
     var show by remember { mutableStateOf(prefs.getBoolean("sejf_show_source", true)) }
     SettingSwitchRow(
-        title = "Zdroj „dellhome" (vlastní filmotéka)",
+        title = "Zdroj dellhome (vlastní filmotéka)",
         subtitle = "Filmy uložené na tvém dellhome se ve výběru zdrojů objeví nahoře jako „dellhome — " +
             "vlastní filmotéka“ (přehratelné na domácí síti). Ukládání přes ⋮ na kartě filmu funguje vždy.",
         checked = show,
