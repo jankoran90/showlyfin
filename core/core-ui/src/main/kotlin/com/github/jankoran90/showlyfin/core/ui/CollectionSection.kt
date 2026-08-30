@@ -176,7 +176,12 @@ private fun CollectionLandscapeCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = part.title,
+                            // KANON (user 2026-08-30): tatáž politika názvů i v scrimu landscape
+                            // karty pruhu (česky → anglicky → originál, líně přes provider).
+                            text = rememberRowTitle(
+                                null, part.tmdbId, titleCz = null, isShow = part.isShow,
+                                title = part.title, year = year,
+                            ) ?: part.title,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White,
@@ -297,7 +302,14 @@ private fun CollectionPart.toMediaItem(): MediaItem = MediaItem(
 private fun CollectionPartCard(part: CollectionPart, onClick: () -> Unit, modifier: Modifier = Modifier) {
     PosterCard(
         posterUrl = part.posterUrl,
-        title = part.title,
+        // KANON (user 2026-08-30): pruhy pod kartou (kolekce/podobné/režisér/studio) mají tutéž
+        // politiku názvů jako seznamy — česky → anglicky → originál. Zdroje pruhů (TMDB discover
+        // v cs-CZ) dávají u nepřeložených titulů cizopísmný originál; provider ho líně dorovná
+        // (TMDB cs → ČSFD → TMDB en), než dorazí drží titul z partu.
+        title = rememberRowTitle(
+            null, part.tmdbId, titleCz = null, isShow = part.isShow,
+            title = part.title, year = part.year?.take(4)?.toIntOrNull(),
+        ) ?: part.title,
         year = part.year,
         onClick = onClick,
         modifier = modifier,

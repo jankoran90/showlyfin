@@ -20,9 +20,11 @@ import javax.inject.Singleton
  *
  * Řeší:
  * 1. **poster/backdrop** z TMDB details,
- * 2. **CZ titulek + popis** — preferuje explicitní `cs` translations, jinak `details` volané v `cs-CZ`
- *    (TMDB vrací česky-NEBO-originál, nikdy prázdné — opravuje niche/foreign tituly, kde `cs` translations
- *    má prázdný title a dřív padly do angličtiny),
+ * 2. **CZ titulek + popis (KANON 2026-08-30: česky → anglicky → originál)** — `titleCz` jen reálná
+ *    čeština: explicitní `cs` translation, nebo `details` v `cs-CZ` POUZE u českého originálu
+ *    (`original_language == "cs"`). U nepřeložených titulů TMDB vrací v cs-CZ cizopísmný originál
+ *    (夜明けのすべて) — ten jde do `titleEn` rungu: EN překlad z `translations.en` (dotah jen když
+ *    čeština chybí). Popis dál CZ→EN→fallback jako dřív.
  * 3. **žánry** (pro žánrovou pojistku věkového filtru),
  * 4. **věková certifikace** ([withCertification] = true, jen když je aktivní věkový strop profilu — jinak
  *    zbytečné síťové volání navíc).
@@ -58,11 +60,25 @@ class MediaEnricher @Inject constructor(
             val ageD = async { if (withCertification) runCatching { tmdb.fetchShowCertificationAge(tmdbId) }.getOrNull() else null }
             val details = detailsD.await(); val tr = trD.await()
             val czOverview = firstNonBlank(tr?.overview, details?.overview)
+            // KANON (user 2026-08-30): titleCz = POUZE reálná čeština. Dřív tady byl fallback
+            // `details?.name` (cs-CZ) — u nepřeložených titulů TMDB vrací CIZOPISMÝ originál, který
+            // se uložil do titleCz, zablokoval líné dorovnávání řádků (guard „titleCz znám") a v seznamech
+            // svítilo 夜明けのすべて místo All the Long Nights. Details rung zůstává JEN pro české originály
+            // (český seriál nemusí mít „cs translation" — jeho originál česky je ten správný název).
+            val csTitle = tr?.name?.takeIf { it.isNotBlank() }
+                ?: details?.name?.takeIf { it.isNotBlank() && details.original_language.equals("cs", true) }
+            // EN rung politiky „česky → anglicky → originál": tahá se JEN když čeština chybí
+            // (u přeložených titulů vyhrává CZ a dotaz by byl zbytečný).
+            val enTitle = if (csTitle == null) {
+                runCatching { tmdb.fetchShowTranslation(tmdbId, "en") }.getOrNull()
+                    ?.name?.takeIf { it.isNotBlank() }
+            } else null
             item.copy(
                 year = item.year ?: details?.first_air_date?.take(4)?.toIntOrNull(),
                 posterPath = details?.poster_path ?: item.posterPath,
                 backdropPath = details?.backdrop_path ?: item.backdropPath,
-                titleCz = firstNonBlank(tr?.name, details?.name) ?: item.titleCz,
+                titleCz = csTitle ?: item.titleCz,
+                titleEn = enTitle ?: item.titleEn,
                 overviewCz = czOverview ?: item.overviewCz,
                 genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
                 certificationAge = ageD.await() ?: item.certificationAge,
@@ -78,11 +94,20 @@ class MediaEnricher @Inject constructor(
             val ageD = async { if (withCertification) runCatching { tmdb.fetchMovieCertificationAge(tmdbId) }.getOrNull() else null }
             val details = detailsD.await(); val tr = trD.await()
             val czOverview = firstNonBlank(tr?.overview, details?.overview)
+            // KANON — viz SHOW větev: titleCz jen reálná čeština (cs translation, nebo cs-CZ details
+            // u českého originálu), jinak EN překlad do titleEn. Cizopísmný originál do titleCz NESMÍ.
+            val csTitle = tr?.title?.takeIf { it.isNotBlank() }
+                ?: details?.title?.takeIf { it.isNotBlank() && details.original_language.equals("cs", true) }
+            val enTitle = if (csTitle == null) {
+                runCatching { tmdb.fetchMovieTranslation(tmdbId, "en") }.getOrNull()
+                    ?.title?.takeIf { it.isNotBlank() }
+            } else null
             item.copy(
                 year = item.year ?: details?.release_date?.take(4)?.toIntOrNull(),
                 posterPath = details?.poster_path ?: item.posterPath,
                 backdropPath = details?.backdrop_path ?: item.backdropPath,
-                titleCz = firstNonBlank(tr?.title, details?.title) ?: item.titleCz,
+                titleCz = csTitle ?: item.titleCz,
+                titleEn = enTitle ?: item.titleEn,
                 overviewCz = czOverview ?: item.overviewCz,
                 genres = details?.genres?.mapNotNull { it.name }?.takeIf { it.isNotEmpty() } ?: item.genres,
                 certificationAge = ageD.await() ?: item.certificationAge,

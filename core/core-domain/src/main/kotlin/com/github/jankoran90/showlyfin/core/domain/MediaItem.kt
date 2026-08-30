@@ -52,6 +52,13 @@ data class MediaItem(
      * (`episode_run_time`). null = neznámá (titul se pak v řazení dle délky řadí na konec).
      */
     val runtimeMinutes: Int? = null,
+    /**
+     * KANON (user 2026-08-30 12:11) — ANGLICKÝ název z TMDB `translations.en`. Plní [enrich] jen u titulů
+     * BEZ českého překladu (u ostatních čeština vyhrává a EN se netáhne). Druhá runga politiky názvů
+     * „česky → anglicky → originál": u nepřeložených asijských titulů TMDB vrací v cs-CZ details
+     * cizopísmný originál, EN překlad je jediná latinková záchrana před 夜明けのすべて v řádcích.
+     */
+    val titleEn: String? = null,
 ) {
     fun posterUrl(size: String = "w342") =
         posterPath?.let { "https://image.tmdb.org/t/p/$size$it" } ?: fallbackPosterUrl
@@ -70,16 +77,21 @@ data class MediaItem(
     fun backdropUrl(size: String = "w780") = backdropPath?.let { "https://image.tmdb.org/t/p/$size$it" }
 
     /**
-     * PASSPORT (SHW-93) A1 — název k ZOBRAZENÍ: první ČITELNÝ (latinkový) kandidát v pořadí
-     * CZ překlad → raw (Trakt, obv. anglický) → originál. Když je vše ne-latinka (žádný latinkový kandidát
-     * není), vrátí aspoň CZ/raw (lepší než prázdno). Sjednocuje dřív roztroušené `titleCz ?: title`.
+     * PASSPORT (SHW-93) A1 — název k ZOBRAZENÍ, KANON (user 2026-08-30): **česky → anglicky → originál**,
+     * první ČITELNÝ (latinkový) kandidát vyhrává (CZ má ale přednost i bez diakritiky — je to vždy
+     * reálný překlad, ne cizopísmný fallback). Když je vše ne-latinka, vrátí aspoň CZ/EN/raw (lepší
+     * než prázdno). Sjednocuje dřív roztroušené `titleCz ?: title`; řádky/karty/pruhy k tomu ještě
+     * líně doťahují ČSFD češtinu přes [RowTitleProvider] (core-ui), tady je jen základ z dat položky.
      */
     val displayTitle: String
         get() {
             val cz = titleCz?.takeIf { it.isNotBlank() }
+            val en = titleEn?.takeIf { it.isNotBlank() }
             val raw = title.takeIf { it.isNotBlank() }
             val orig = originalTitle?.takeIf { it.isNotBlank() }
-            return sequenceOf(cz, raw, orig).filterNotNull().firstOrNull { !it.looksNonLatin() }
-                ?: cz ?: title
+            if (cz != null) return cz
+            if (en != null) return en
+            return sequenceOf(raw, orig).filterNotNull().firstOrNull { !it.looksNonLatin() }
+                ?: raw ?: orig ?: title
         }
 }

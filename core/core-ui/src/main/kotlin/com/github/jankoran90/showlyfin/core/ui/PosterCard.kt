@@ -121,10 +121,15 @@ val LocalCzechOverviewProvider = staticCompositionLocalOf<CzechOverviewProvider?
 // 🔴 2026-08-29 (user, dvě hlášky): „na kartě Tři časy, v seznamu Three Times" + „All the Long
 // Nights na kartě, ale 夜明けのすべて v seznamu". Položky seznamů často NEMAJÍ titleCz (doplňuje
 // se jen na detailu) → řádek spadne na originální název. Líné dorovnání stejným vzorem jako
-// [CzechOverviewProvider]: TMDB cs titulek, u titulů bez češtiny EN (CZ → EN → originál).
-/** Líný per-řádek poskytovatel ZOBRAZOVACÍHO titulku (TMDB cs → en). */
+// [CzechOverviewProvider]. KANON (user 2026-08-30 12:11): **česky → anglicky → originál** — stejná
+// politika jako karta detailu, tedy i s ČSFD rungem (Tři časy/Dvě sezóny dva cizinci mají češtinu
+// JEN na ČSFD, TMDB cs překlad nemají).
+/** Líný per-řádek/karta poskytovatel ZOBRAZOVACÍHO titulku (TMDB cs → ČSFD název → TMDB en). */
 interface RowTitleProvider {
-    suspend fun rowTitle(imdbId: String?, tmdbId: Long?, isShow: Boolean): String?
+    /** [title]/[year] = název z položky (pro ČSFD title-search, u cizojazyčných titulů nutné). */
+    suspend fun rowTitle(
+        imdbId: String?, tmdbId: Long?, title: String, year: Int?, isShow: Boolean,
+    ): String?
 }
 
 val LocalRowTitleProvider = staticCompositionLocalOf<RowTitleProvider?> { null }
@@ -160,17 +165,20 @@ private val rowTitleCache = ConcurrentHashMap<String, String>()
  * → volající pak použije [com.github.jankoran90.showlyfin.core.domain.MediaItem.displayTitle].
  */
 @Composable
-fun rememberRowTitle(imdbId: String?, tmdbId: Long?, titleCz: String?, isShow: Boolean): String? {
+fun rememberRowTitle(
+    imdbId: String?, tmdbId: Long?, titleCz: String?, isShow: Boolean,
+    title: String = "", year: Int? = null,
+): String? {
     if (!titleCz.isNullOrBlank()) return null
     val key = csfdKey(tmdbId, imdbId) ?: return null
     val provider = LocalRowTitleProvider.current
     var text by remember(key) {
         mutableStateOf(rowTitleCache[key]?.takeIf { it != ROW_TITLE_NONE })
     }
-    LaunchedEffect(key, provider) {
+    LaunchedEffect(key, provider, title, year) {
         if (provider == null) return@LaunchedEffect
         rowTitleCache[key]?.let { c -> text = c.takeIf { it != ROW_TITLE_NONE }; return@LaunchedEffect }
-        val r = runCatching { provider.rowTitle(imdbId, tmdbId, isShow) }.getOrNull()
+        val r = runCatching { provider.rowTitle(imdbId, tmdbId, title, year, isShow) }.getOrNull()
             ?.takeIf { it.isNotBlank() }
         rowTitleCache[key] = r ?: ROW_TITLE_NONE
         text = r

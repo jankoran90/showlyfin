@@ -70,19 +70,52 @@ class CardCsfdViewModel @Inject constructor(
 
     /**
      * 🔴 2026-08-29 (user): „na kartě Tři časy, v seznamu Three Times" / „夜明けのすべて v seznamu" —
-     * položky seznamů nemají titleCz. Líné dorovnání: TMDB cs titulek; když čeština není (asijské
-     * tituly), EN titulek. Volá se jen pro řádky bez titleCz a výsledek se kešuje v core-ui.
+     * položky seznamů nemají titleCz. Líné dorovnání. KANON (user 2026-08-30 12:11), STEJNÁ politika
+     * jako karta detailu: **česky → anglicky → originál**, kde čeština = TMDB cs překlad, NEBO název
+     * z ČSFD (Tři časy / Dvě sezóny dva cizinci mají češtinu jen na ČSFD, TMDB cs nemají vůbec).
+     * ČSFD rung jede přes backend `/api/csfd/plot` (vrací i title), jako detail karty. Volá se jen
+     * pro položky bez titleCz a výsledek se kešuje v core-ui.
      */
-    override suspend fun rowTitle(imdbId: String?, tmdbId: Long?, isShow: Boolean): String? {
-        val id = tmdbId ?: return null
-        val tr = runCatching {
-            if (isShow) tmdb.fetchShowTranslation(id, "cs") else tmdb.fetchMovieTranslation(id, "cs")
-        }.getOrNull()
+    override suspend fun rowTitle(
+        imdbId: String?, tmdbId: Long?, title: String, year: Int?, isShow: Boolean,
+    ): String? {
+        val id = tmdbId
+        val tr = id?.let {
+            runCatching {
+                if (isShow) tmdb.fetchShowTranslation(it, "cs") else tmdb.fetchMovieTranslation(it, "cs")
+            }.getOrNull()
+        }
+        // 1) česky z TMDB
         val cz = tr?.title?.takeIf { it.isNotBlank() }
         if (cz != null) return cz
-        val en = runCatching {
-            if (isShow) tmdb.fetchShowTranslation(id, "en") else tmdb.fetchMovieTranslation(id, "en")
-        }.getOrNull()
+        // 2) česky z ČSFD (jen přes backend — on-device scraper titulek neumí, viz fetchCsfdPlot).
+        //    csfdId resolvuj stejně jako overview(): cs title → název z položky → holé imdb/tmdb.
+        val titles = listOfNotNull(
+            tr?.title?.takeIf { it.isNotBlank() },
+            title.takeIf { it.isNotBlank() },
+        )
+        val base = prefs.getString("uploader_base_url", "").orEmpty()
+        if (base.isNotBlank()) {
+            val cookie = prefs.getString("uploader_session_cookie", "").orEmpty()
+            var csfdId: Long? = null
+            for (t in titles) {
+                csfdId = runCatching { csfd.getCsfdId(imdbId.orEmpty(), tmdbId, t, year ?: 0) }.getOrNull()
+                if (csfdId != null) break
+            }
+            if (csfdId == null) {
+                csfdId = runCatching { csfd.getCsfdId(imdbId.orEmpty(), tmdbId, "", year ?: 0) }.getOrNull()
+            }
+            val csfdName = csfdId?.let {
+                runCatching { uploaderDs.getCsfdPlot(base, cookie, it) }.getOrNull()
+            }?.title?.takeIf { it.isNotBlank() && looksCzech(it) }
+            if (csfdName != null) return csfdName
+        }
+        // 3) anglicky z TMDB (poslední rung před originálem z položky)
+        val en = id?.let {
+            runCatching {
+                if (isShow) tmdb.fetchShowTranslation(it, "en") else tmdb.fetchMovieTranslation(it, "en")
+            }.getOrNull()
+        }
         return en?.title?.takeIf { it.isNotBlank() }
     }
 

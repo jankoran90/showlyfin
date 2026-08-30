@@ -20,7 +20,13 @@ fun MediaCard(
 ) {
     PosterCard(
         posterUrl = item.posterUrl(),
-        title = item.displayTitle,
+        // KANON (user 2026-08-30): tatáž politika názvů jako řádky seznamů a karta detailu —
+        // česky → anglicky → originál. Líně přes provider (TMDB cs → ČSFD → TMDB en), než dorazí
+        // drží displayTitle položky (cz → en → latinka → originál).
+        title = rememberRowTitle(
+            item.imdbId, item.tmdbId, item.titleCz, item.type != MediaType.MOVIE,
+            title = item.title, year = item.year,
+        ) ?: item.displayTitle,
         year = item.year?.toString(),
         onClick = onClick,
         modifier = modifier,

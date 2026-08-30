@@ -144,9 +144,13 @@ fun MediaRow(
                 Text(
                     // 🔴 2026-08-29: položka bez titleCz spadla na originál („Three Times" /
                     // 夜明けのすべて) zatímco karta ukazovala česky/anglicky — líné dorovnání
-                    // přes provider (TMDB cs → en), dokud nedojde, drží displayTitle.
-                    text = rememberRowTitle(item.imdbId, item.tmdbId, item.titleCz, item.type != MediaType.MOVIE)
-                        ?: item.displayTitle,
+                    // přes provider. KANON 2026-08-30: TMDB cs → ČSFD název → TMDB en; než
+                    // dorazí (a u položek s vlastní češtinou/EN z enricheru), drží displayTitle
+                    // (cz → en → latinka → originál).
+                    text = rememberRowTitle(
+                        item.imdbId, item.tmdbId, item.titleCz, item.type != MediaType.MOVIE,
+                        title = item.title, year = item.year,
+                    ) ?: item.displayTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,

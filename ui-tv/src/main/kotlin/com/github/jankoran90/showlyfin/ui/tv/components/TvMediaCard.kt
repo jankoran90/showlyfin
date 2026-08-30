@@ -43,6 +43,7 @@ import com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.RatingTarget
 import com.github.jankoran90.showlyfin.core.ui.UserRatingBadge
 import com.github.jankoran90.showlyfin.core.ui.rememberCardRating
+import com.github.jankoran90.showlyfin.core.ui.rememberRowTitle
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 
 /**
@@ -58,7 +59,12 @@ fun TvMediaCard(
 ) {
     TvPosterCard(
         posterUrl = item.posterUrl("w342"),
-        title = item.title,
+        // KANON (user 2026-08-30): česky → anglicky → originál i na TV kartách (dřív syrový
+        // item.title = cizopísmo u nepřeložených titulů). Líně přes provider jako MediaRow/MediaCard.
+        title = rememberRowTitle(
+            item.imdbId, item.tmdbId, item.titleCz, item.type != MediaType.MOVIE,
+            title = item.title, year = item.year,
+        ) ?: item.displayTitle,
         year = item.year,
         // VLTAVA F6b — ČT titul bez svislého plakátu nese 16:9 grafiku → vykresli ji celou (parita
         // s telefonem, viz PosterCard.wideArtwork). Název je na TV pod kartou, takže zůstane čitelný.
