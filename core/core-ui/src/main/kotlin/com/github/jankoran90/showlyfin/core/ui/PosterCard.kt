@@ -133,18 +133,20 @@ val LocalRowTitleProvider = staticCompositionLocalOf<RowTitleProvider?> { null }
 // pro ŘÁDKY — provider jednou natáhne index složek z dellhome (TTL cache ve VM) a řádek se
 // jen zeptá „je můj <titul> (<rok>) mezi nimi?" (match na CZ i originální variantu názvu).
 interface SejfArchiveProvider {
-    suspend fun isArchived(variantDirs: List<String>): Boolean
+    /** variantDirs = "<titul> (<rok>)" varianty z položky; imdb/tmdb pro dohledání EN názvu,
+     *  když místní titul nesedí (japonský originál vs EN název složky — user 10:49 „Není tam"). */
+    suspend fun isArchived(imdbId: String?, tmdbId: Long?, isShow: Boolean, year: Int?, variantDirs: List<String>): Boolean
 }
 
 val LocalSejfArchiveProvider = staticCompositionLocalOf<SejfArchiveProvider?> { null }
 
 @Composable
-fun rememberSejfArchived(variantDirs: List<String>): Boolean {
+fun rememberSejfArchived(imdbId: String?, tmdbId: Long?, isShow: Boolean, year: Int?, variantDirs: List<String>): Boolean {
     val provider = LocalSejfArchiveProvider.current
     var archived by remember(variantDirs) { mutableStateOf(false) }
     LaunchedEffect(provider, variantDirs) {
         if (provider == null || variantDirs.isEmpty()) return@LaunchedEffect
-        archived = runCatching { provider.isArchived(variantDirs) }.getOrDefault(false)
+        archived = runCatching { provider.isArchived(imdbId, tmdbId, isShow, year, variantDirs) }.getOrDefault(false)
     }
     return archived
 }

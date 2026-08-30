@@ -38,7 +38,9 @@ class CardCsfdViewModel @Inject constructor(
     private var sejfIndex: List<String>? = null
     private var sejfIndexAt = 0L
 
-    override suspend fun isArchived(variantDirs: List<String>): Boolean {
+    override suspend fun isArchived(
+        imdbId: String?, tmdbId: Long?, isShow: Boolean, year: Int?, variantDirs: List<String>,
+    ): Boolean {
         val now = System.currentTimeMillis()
         val idx = sejfIndex?.takeIf { now - sejfIndexAt < 300_000 } ?: run {
             val base = prefs.getString("uploader_base_url", "").orEmpty().ifBlank { return false }
@@ -46,7 +48,20 @@ class CardCsfdViewModel @Inject constructor(
             runCatching { uploaderDs.sejfItems(base, cookie) }.getOrNull()
                 ?.also { sejfIndex = it; sejfIndexAt = now } ?: return false
         }
-        return idx.any { it in variantDirs }
+        if (idx.any { it in variantDirs }) return true
+        // 🔴 složka nese EN název z TMDB (Filmotéka ukládá EN kromě CZ filmů), položka seznamu
+        // třeba jen japonský originál → dohled EN/CS překlad a zkus i tu variantu (cache per tmdb).
+        if (tmdbId == null || year == null) return false
+        val tr = runCatching {
+            if (isShow) tmdb.fetchShowTranslation(tmdbId, "cs") else tmdb.fetchMovieTranslation(tmdbId, "cs")
+        }.getOrNull()
+        val csTitle = tr?.title?.takeIf { it.isNotBlank() }
+        if (csTitle != null && "$csTitle ($year)" in idx) return true
+        val en = runCatching {
+            if (isShow) tmdb.fetchShowTranslation(tmdbId, "en") else tmdb.fetchMovieTranslation(tmdbId, "en")
+        }.getOrNull()
+        val enTitle = (en?.title ?: en?.name)?.takeIf { it.isNotBlank() } ?: return false
+        return "$enTitle ($year)" in idx
     }
 
 

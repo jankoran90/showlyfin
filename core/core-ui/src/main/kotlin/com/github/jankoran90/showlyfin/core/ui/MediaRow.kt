@@ -159,7 +159,7 @@ fun MediaRow(
                     item.titleCz?.takeIf { it.isNotBlank() }?.let { "$it (${item.year ?: 0})" },
                     item.title?.takeIf { it.isNotBlank() }?.let { "$it (${item.year ?: 0})" },
                 )
-                if (rememberSejfArchived(sejfDirs)) {
+                if (rememberSejfArchived(item.imdbId, item.tmdbId, item.type != MediaType.MOVIE, item.year, sejfDirs)) {
                     Spacer(Modifier.width(6.dp))
                     Icon(
                         imageVector = Icons.Default.Home,
