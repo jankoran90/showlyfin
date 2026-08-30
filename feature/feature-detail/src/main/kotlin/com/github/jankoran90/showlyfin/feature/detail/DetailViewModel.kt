@@ -31,6 +31,7 @@ import com.github.jankoran90.showlyfin.data.trakt.model.SyncExportRequest
 import com.github.jankoran90.showlyfin.data.trakt.token.TokenProvider
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.CsfdPlotResponse
+import com.github.jankoran90.showlyfin.data.uploader.model.SejfArchiveRequest
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderCaptureRequest
 import com.github.jankoran90.showlyfin.data.uploader.model.UploaderStream
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -433,6 +434,8 @@ class DetailViewModel @Inject constructor(
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() }
                                         ?: en?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
+                                    // SEJF (FLM-03): EN název pro složku na dellhome.
+                                    tmdbEnTitle = en?.title?.takeIf { it.isNotBlank() },
                                     // Backfill IMDB z TMDB → Stremio/Sdílej fungují i u filmů z knihovny
                                     // matchnutých jen přes TMDB (např. arthouse bez imdb v Jellyfinu).
                                     item = item.copy(
@@ -482,6 +485,8 @@ class DetailViewModel @Inject constructor(
                                     tmdbCzOverview = translation?.overview?.takeIf { o -> o.isNotBlank() }
                                         ?: en?.overview?.takeIf { o -> o.isNotBlank() },
                                     tmdbCzTitle = tmdbCzTitle,
+                                    // SEJF (FLM-03): EN název pro složku na dellhome.
+                                    tmdbEnTitle = en?.title?.takeIf { it.isNotBlank() },
                                     // TENFOOT: u seriálu otevřeného z resume/next-up je item.title název EPIZODY.
                                     // Přepiš na název seriálu (TMDB `name`), aby detail neukazoval epizodu. Dedup je
                                     // přes trakt/tmdb id (ne title), takže je to bezpečné.
@@ -1693,6 +1698,26 @@ class DetailViewModel @Inject constructor(
                     // (hraje přes proxy hned), zbytek se reálně testuje (addMagnet) → po probu nahradíme.
                     val instantNow = combined.filter { it.quality.rdSaved || it.quality.rdReady } + sdilej
                     _uiState.update { it.copy(isLoadingStreams = false, isProbingStreams = true, streams = streamPresetStore.orderStreams(instantNow), streamError = null) }
+                    // SEJF (FLM-03): zdroj „dellhome 🏠" = uložená kopie ve vlastní filmotéce (LAN).
+                    // RUČNÍ volba, nikdy ne auto-výběr (user 2026-08-29). Objeví se, jakmile ji
+                    // server najde — hledá se pod tímtéž názvem složky, pod kterým se ukládalo.
+                    if (prefs.getBoolean("sejf_show_source", true)) {
+                        viewModelScope.launch {
+                            runCatching {
+                                uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
+                            }.getOrNull()?.url?.let { u ->
+                                val s = UploaderStream(
+                                    name = "dellhome — vlastní filmotéka",
+                                    description = "Uložená kopie na tvém dellhome (domácí síť)",
+                                    url = u, addon = "Vlastní filmotéka",
+                                )
+                                _uiState.update { st2 ->
+                                    if (st2.streams.any { it.url == u }) st2
+                                    else st2.copy(streams = listOf(s) + st2.streams)
+                                }
+                            }
+                        }
+                    }
                     viewModelScope.launch {
                         runCatching { uploaderDs.getProbedStreams(uploaderBaseUrl, uploaderCookie, mediaTypeStr(item), imdb, season = epSeason, episode = epEpisode) }
                             .onSuccess { probed ->
@@ -1897,6 +1922,130 @@ class DetailViewModel @Inject constructor(
         val title = st.tmdbCzTitle?.takeIf { it.isNotBlank() } ?: st.item?.title.orEmpty()
         workingSourceStore.saveSeason(st.item?.imdbId, st.item?.tmdbId, title, stream, season)
         _uiState.update { it.copy(hasSeasonSource = true, captureMessage = "Zdroj platí pro celou $season. sezónu.") }
+    }
+
+    // ══ SEJF (FLM-03): uložit film do vlastní filmotéky na dellhome ═════════════════════════
+    // user (2026-08-29 18:31): raritní filmy pro sebe — release + titulky (i s ruční korekcí
+    // z přehrávače, tu server ZAPEČE do souboru) + NFO s metadaty. Složka = EN název (české filmy
+    // česky). Přehrávání pak přes zdroj „dellhome" (LAN, RUČNÍ volba) — viz openStreamPicker.
+
+    /** Mirror PlaybackViewModel.sourceKey: imdb + _sNeN + #hash(release) — klíč per-zdrojových
+     *  nastavení titulků (offset/selection), ať archivace pošle tutéž korekci, kterou viděl hráč. */
+    private fun subtitleSourceKey(): String {
+        val st = _uiState.value
+        val item = st.item
+        val se = episodeSelector?.let { "_s${it.season}e${it.episode}" } ?: ""
+        val release = st.rememberedSource?.name ?: lastPlayedStream?.name
+        val norm = release?.lowercase()?.filter { it.isLetterOrDigit() }?.takeIf { it.isNotBlank() }
+        return "${item?.imdbId.orEmpty()}$se${if (norm != null) "#" + Integer.toHexString(norm.hashCode()) else ""}"
+    }
+
+    /** SEJF: název složky na dellhome — české filmy česky, ostatní anglicky (user 18:31). */
+    private fun sejfFolderTitle(): String {
+        val st = _uiState.value
+        val item = st.item ?: return ""
+        val isCzech = movieDetails?.original_language == "cs" || showDetails?.original_language == "cs"
+        return if (isCzech) (st.tmdbCzTitle ?: item.title) else (st.tmdbEnTitle ?: item.title)
+    }
+
+    /** SEJF: veřejný odkaz ke stažení složky filmu (.zip, token), když je film na dellhome. */
+    suspend fun sejfDownloadLink(): String? {
+        val item = _uiState.value.item ?: return null
+        if (uploaderBaseUrl.isBlank()) return null
+        return runCatching {
+            uploaderDs.sejfShareLink(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
+        }.getOrNull()?.url
+    }
+
+    /** „Uložit do vlastní filmotéky 🏠" (⋮ na kartě). Dellhome si release stáhne SAM z přímé URL. */
+    fun archiveToOwnLibrary() {
+        val st = _uiState.value
+        val item = st.item ?: return
+        if (uploaderBaseUrl.isBlank()) {
+            _uiState.update { it.copy(sejfState = "Server není nastaven") }
+            return
+        }
+        // URL releasu: poslední skutečně přehraná, nebo uložený zdroj, pokud je už přímá adresa
+        // (rd/elfhosted/archive.org odkazy ano; tor ID/infoHash ne — ty je nutné přehrát/resolvnout).
+        val url = lastDeliveredUrl
+            ?: st.rememberedSource?.url?.takeIf { it.startsWith("http") }
+        if (url == null) {
+            _uiState.update {
+                it.copy(sejfState = "Nejdřív film přehraj (nebo použij zdroj s přímým odkazem) — potřebuju adresu releasu.")
+            }
+            return
+        }
+        // české filmy česky, ostatní anglicky (user: „vždy anglicky s výjimkou českého filmu")
+        val folderTitle = sejfFolderTitle()
+
+        // titulky: id stopy, kterou hráč reálně použil (+ posun), ať se uloží přesně takové, jaké viděl
+        val key = subtitleSourceKey()
+        val cfg = profileRepository.activeConfig.value
+        val subId = cfg.subtitleSelections[key]
+        val shiftMs = cfg.subtitleOffsets[key] ?: 0L
+        val subUrl = subId?.takeIf { it.isNotBlank() }?.let {
+            "${uploaderBaseUrl.trimEnd('/')}/api/subtitles/download/$it?key=" +
+                java.net.URLEncoder.encode(uploaderCookie, "UTF-8")
+        }
+
+        val nfo = buildMap {
+            put("title", st.tmdbCzTitle ?: item.title)
+            put("originaltitle", item.originalTitle ?: item.title)
+            item.year?.let { put("year", it.toString()) }
+            (st.tmdbCzOverview ?: item.overview)?.let { put("plot", it.take(1200)) }
+            item.imdbId?.let { put("imdbid", it) }
+            item.tmdbId?.let { put("tmdbid", it.toString()) }
+            movieDetails?.genres?.mapNotNull { g -> g.name }?.take(5)?.let { gs ->
+                if (gs.isNotEmpty()) put("genres", gs.joinToString(", "))
+            }
+            put("releaseName", st.rememberedSource?.name ?: lastPlayedStream?.name ?: "")
+            put("subtitleName", if (subId != null) "titulky.cs.srt" else "")
+            st.curatedText?.let { put("viewerText", it.take(1500)) }
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(sejfState = "Ukládám na dellhome…") }
+            val started = runCatching {
+                uploaderDs.sejfArchive(uploaderBaseUrl, uploaderCookie, SejfArchiveRequest(
+                    title = folderTitle,
+                    year = item.year ?: 0,
+                    kind = if (item.type == MediaType.MOVIE) "movie" else "show",
+                    releaseUrl = url,
+                    releaseName = st.rememberedSource?.name ?: lastPlayedStream?.name ?: "",
+                    nfo = nfo,
+                    subtitleUrl = subUrl,
+                    subtitleShiftMs = shiftMs,
+                ))
+            }.getOrNull()
+            val jobId = started?.jobId?.takeIf { it.isNotBlank() }
+            if (jobId == null) {
+                _uiState.update { it.copy(sejfState = "Uložení se nepovedlo startovat (server dostupný?)") }
+                return@launch
+            }
+            // poll: dellhome stahuje sám; status ukazuje kb staženo. Vzdát po 30 min.
+            var tries = 0
+            while (tries++ < 360) {
+                delay(5_000)
+                if (_uiState.value.item?.isSameAs(item) != true) return@launch   // překlikl jinam
+                val job = runCatching { uploaderDs.sejfStatus(uploaderBaseUrl, uploaderCookie, jobId) }.getOrNull()
+                when (job?.state) {
+                    "done" -> {
+                        val mb = job.bytes / 1_048_576
+                        _uiState.update {
+                            it.copy(sejfState = null, captureMessage = "Uloženo na dellhome ✓ (${mb} MB)")
+                        }
+                        return@launch
+                    }
+                    "error" -> {
+                        _uiState.update { it.copy(sejfState = null, captureMessage = "Uložení selhalo: ${job.error ?: "?"}") }
+                        return@launch
+                    }
+                    else -> _uiState.update {
+                        it.copy(sejfState = "Ukládám na dellhome… ${((job?.bytes ?: 0) / 1_048_576)} MB")
+                    }
+                }
+            }
+        }
     }
 
     /**

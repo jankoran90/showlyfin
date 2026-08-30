@@ -148,6 +148,29 @@ internal class UploaderApi(
         return service.getShareText("$base/api/sharetext/$kind/$imdbId$q", cookie)
     }
 
+    // SEJF (FLM-03): vlastní filmotéka na dellhome — ruční ukládání, LAN přehrání, veřejní sdílení.
+    override suspend fun sejfArchive(baseUrl: String, sessionCookie: String, request: SejfArchiveRequest): SejfArchiveResponse {
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.sejfArchive("${baseUrl.trimEnd('/')}/api/sejf/archive", cookie, request)
+    }
+
+    override suspend fun sejfStatus(baseUrl: String, sessionCookie: String, jobId: String): SejfJobResponse {
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.sejfStatus("${baseUrl.trimEnd('/')}/api/sejf/status?id=$jobId", cookie)
+    }
+
+    override suspend fun sejfStream(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse {
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val q = "?title=" + java.net.URLEncoder.encode(title, "UTF-8") + if (year > 0) "&year=$year" else ""
+        return service.sejfStream("${baseUrl.trimEnd('/')}/api/sejf/stream$q", cookie)
+    }
+
+    override suspend fun sejfShareLink(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse {
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val q = "?title=" + java.net.URLEncoder.encode(title, "UTF-8") + if (year > 0) "&year=$year" else ""
+        return service.sejfShareLink("${baseUrl.trimEnd('/')}/api/sejf/share-link$q", cookie)
+    }
+
     override suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem> {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

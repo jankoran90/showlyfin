@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MovieFilter
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.ExpandLess
@@ -229,8 +230,12 @@ fun DetailScreen(
         )
         shareScope.launch {
             try {
+                // SEJF (FLM-03): je film uložený na dellhome? → k odkaz ke stažení celé složky
+                // (release+titulky+NFO v .zip). Neuložený → karta beze změny.
+                val sejfLink = runCatching { viewModel.sejfDownloadLink() }.getOrNull()
                 com.github.jankoran90.showlyfin.core.ui.ShareCard.shareFilm(
                     context, data, displayItem.posterUrl("w500"), displayItem.backdropUrl("w1280"),
+                    extraText = sejfLink?.let { "Stažení (vlastní filmotéka): $it" },
                 )
             } catch (e: Exception) {
                 Toast.makeText(context, "Sdílení karty se nepovedlo", Toast.LENGTH_SHORT).show()
@@ -616,6 +621,9 @@ fun DetailScreen(
                         // REPRISE: přímý vstup do pickeru (strict=false → všechny zdroje s chipy) i když už zdroj máme.
                         onPickSource = { viewModel.openStreamPicker() },
                         onDownload = { viewModel.openDownloadMenu() },
+                        onArchiveToSejf = if (uiState.uploaderConfigured) {
+                            { viewModel.archiveToOwnLibrary() }
+                        } else null,
                         // FILMYCAST — „Přehrát na Filmy TV" (poslat zapamatovaný zdroj do Filmy appky na TV).
                         onCastToFilmyTv = { viewModel.castToFilmyTv() },
                         inWatchlist = uiState.isInWatchlist,
@@ -649,6 +657,21 @@ fun DetailScreen(
             return@Scaffold
         }
 
+        // SEJF (FLM-03): proužek průběhu ukládání do vlastní filmotéky (dellhome stahuje release).
+        uiState.sejfState?.let { msg ->
+            Row(
+                Modifier.fillMaxWidth().padding(
+                    top = paddingValues.calculateTopPadding() + 6.dp,
+                    start = 16.dp, end = 16.dp, bottom = 6.dp,
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text(msg, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         // VISTA V4: detail se nenačetl (typicky výpadek sítě) → srozumitelná hláška + „Zkusit znovu",
         // místo prázdného/zaseknutého detailu (dřív se ukázal i starý film z race).
         if (uiState.error != null && uiState.movieDetails == null && uiState.showDetails == null && !uiState.isLoading) {
@@ -1097,6 +1120,7 @@ private fun DetailActionBar(
     onStremio: () -> Unit,
     onPickSource: (() -> Unit)? = null,
     onDownload: () -> Unit,
+    onArchiveToSejf: (() -> Unit)? = null,
     onCastToFilmyTv: (() -> Unit)? = null,
     inWatchlist: Boolean,
     isTogglingWatchlist: Boolean,
@@ -1217,6 +1241,15 @@ private fun DetailActionBar(
                     leadingIcon = { Icon(Icons.Default.Download, null) },
                     onClick = { menuOpen = false; onDownload() },
                 )
+                // SEJF (FLM-03, user 2026-08-29): vlastní filmotéka na dellhome — release+titulky
+                // (i s korekcí) + NFO. Složka EN názvem; přehrávání pak přes zdroj „dellhome".
+                if (onArchiveToSejf != null) {
+                    DropdownMenuItem(
+                        text = { Text("Uložit do vlastní filmotéky 🏠") },
+                        leadingIcon = { Icon(Icons.Default.Home, null) },
+                        onClick = { menuOpen = false; onArchiveToSejf() },
+                    )
+                }
                 // SEZONA (SHW-113) f2 — profilový přepínač zvukové stopy PŘESUNUT do Nastavení →
                 // Obraz a zvuk (user 2026-08-18: „zapnul jsem ho na jednom filmu a teď je všude" —
                 // v menu karty vedle per-titul volby matl a hrozilo omylem přepnout VŠECHNY filmy).

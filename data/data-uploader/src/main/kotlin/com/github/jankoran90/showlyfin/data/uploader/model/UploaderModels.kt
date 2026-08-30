@@ -203,6 +203,38 @@ data class CsfdReviewItem(
     val text: String = "",
     val date: String = "",
 )
+
+// ── SEJF (FLM-03): vlastní filmotéka na dellhome (user 2026-08-29) ────────────────
+
+/** POST /api/sejf/archive — tělo požadavku na uložení filmu na dellhome. */
+data class SejfArchiveRequest(
+    val title: String,
+    val year: Int = 0,
+    val kind: String = "movie",
+    val releaseUrl: String,
+    val releaseName: String = "",
+    val nfo: Map<String, String> = emptyMap(),
+    val subtitleUrl: String? = null,
+    val subtitleName: String = "titulky.cs.srt",
+    // 🔴 user 2026-08-29 19:02: korekce titulků z přehrávače (±ms) → server ji ZAPEČE do souboru
+    val subtitleShiftMs: Long = 0,
+)
+
+/** POST /api/sejf/archive odpověď. */
+data class SejfArchiveResponse(val ok: Boolean = false, val jobId: String = "")
+
+/** GET /api/sejf/status — stav jobu archivace (bytes = kolik už dellhome stáhl). */
+data class SejfJobResponse(
+    val id: String = "",
+    val state: String = "",          // running | downloading | done | error
+    val steps: List<String> = emptyList(),
+    val bytes: Long = 0,
+    val dir: String? = null,
+    val error: String? = null,
+)
+
+/** GET /api/sejf/stream i /share-link — url null = film uložen není / server nedostupný. */
+data class SejfStreamResponse(val url: String? = null, val dir: String? = null)
 data class CsfdReviewsResponse(val reviews: List<CsfdReviewItem> = emptyList())
 /** Odpověď /api/csfd/gallery — URL fotek z galerie ČSFD (stránkované na backendu). */
 data class CsfdGalleryResponse(val urls: List<String> = emptyList())

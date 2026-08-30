@@ -184,6 +184,12 @@ interface UploaderRemoteDataSource {
      */
     suspend fun getShareText(baseUrl: String, sessionCookie: String, isShow: Boolean, imdbId: String, title: String, year: Int, warm: Boolean): ShareTextResponse
 
+    // SEJF (FLM-03) — vlastní filmotéka na dellhome: archivace (job), stav, LAN přehrání, veřejný odkaz.
+    suspend fun sejfArchive(baseUrl: String, sessionCookie: String, request: SejfArchiveRequest): SejfArchiveResponse
+    suspend fun sejfStatus(baseUrl: String, sessionCookie: String, jobId: String): SejfJobResponse
+    suspend fun sejfStream(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse
+    suspend fun sejfShareLink(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse
+
     // TUNER (SHW-62) — YouTube podcast (streaming): feed + samonosné stream URL (?key=, jako sdilej/titulky)
     suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int = 30): YtChannelFeed
     /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio".

@@ -2,7 +2,11 @@ package com.github.jankoran90.showlyfin.ui.filmyphone
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -110,6 +114,25 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
             onToggle = vm::setRegion,
         )
     }
+    SettingSectionTitle("Vlastní filmotéka (dellhome)")
+    SejfSourceToggle()
+
+}
+
+// SEJF (FLM-03, user 2026-08-29): vlastní filmotéka na dellhome — zdroj „dellhome" ve výběru.
+// Ukládání zůstává vždy dostupné (⋮ na kartě filmu); tahle volba jen skryje/zobrazí ZDROJ v pickeru.
+@Composable
+private fun SejfSourceToggle() {
+    val ctx = LocalContext.current
+    val prefs = remember(ctx) { ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE) }
+    var show by remember { mutableStateOf(prefs.getBoolean("sejf_show_source", true)) }
+    SettingSwitchRow(
+        title = "Zdroj „dellhome" (vlastní filmotéka)",
+        subtitle = "Filmy uložené na tvém dellhome se ve výběru zdrojů objeví nahoře jako „dellhome — " +
+            "vlastní filmotéka“ (přehratelné na domácí síti). Ukládání přes ⋮ na kartě filmu funguje vždy.",
+        checked = show,
+        onCheckedChange = { show = it; prefs.edit().putBoolean("sejf_show_source", it).apply() },
+    )
 }
 
 private fun axisLabel(axis: FilmotekaAxis): String = when (axis) {

@@ -68,6 +68,10 @@ data class DetailUiState(
     val showGallery: Boolean = false,
     val tmdbCzOverview: String? = null,
     val tmdbCzTitle: String? = null,
+    // SEJF (FLM-03): EN název z TMDB (pro pojmenování složky na dellhome: EN, kromě českých filmů)
+    // + stav ukládání do vlastní filmotéky (null = neaktivní, text zobrazuje captureMessage).
+    val tmdbEnTitle: String? = null,
+    val sejfState: String? = null,
     val collection: TmdbCollection? = null,
     val ownedImdbToJellyfin: Map<String, String> = emptyMap(),
     val ownedTmdbToJellyfin: Map<Long, String> = emptyMap(),

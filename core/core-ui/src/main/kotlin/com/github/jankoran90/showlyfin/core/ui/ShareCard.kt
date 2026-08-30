@@ -26,6 +26,9 @@ object ShareCard {
         data: ShareCardData,
         posterUrl: String?,
         backdropUrl: String?,
+        // SEJF (FLM-03, user 2026-08-29 19:08): odkaz ke STAŽENÍ složky filmu z vlastní filmotéky
+        // (dellhome přes server, token v odkazu) — přibalený v textu u sdílené karty.
+        extraText: String? = null,
     ) {
         // Zdroje ber ve vyšším rozlišení (supersamplovaný canvas jinak upscaluje malé náhledy).
         val poster = loadBitmap(upscaleTmdb(posterUrl, "w780"))
@@ -42,6 +45,7 @@ object ShareCard {
             append(data.title)
             data.year?.let { append(" (").append(it).append(")") }
             data.csfdPct?.let { append(" · ČSFD ").append(it).append(" %") }
+            extraText?.let { append("\n\n").append(it) }
         }
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "image/*"

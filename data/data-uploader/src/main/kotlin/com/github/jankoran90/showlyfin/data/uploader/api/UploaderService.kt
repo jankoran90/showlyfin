@@ -86,6 +86,12 @@ interface UploaderService {
     // SUMÁŘ (SHW-122): kurátorský text sdílecí karty (ČSFD recenze + Trakt komentáře → mozek).
     @GET suspend fun getShareText(@Url url: String, @Header("Cookie") cookie: String): ShareTextResponse
 
+    // SEJF (FLM-03): vlastní filmotéka na dellhome (archivace job + stav + přehrání + sdílení).
+    @POST suspend fun sejfArchive(@Url url: String, @Header("Cookie") cookie: String, @Body request: SejfArchiveRequest): SejfArchiveResponse
+    @GET suspend fun sejfStatus(@Url url: String, @Header("Cookie") cookie: String): SejfJobResponse
+    @GET suspend fun sejfStream(@Url url: String, @Header("Cookie") cookie: String): SejfStreamResponse
+    @GET suspend fun sejfShareLink(@Url url: String, @Header("Cookie") cookie: String): SejfStreamResponse
+
     // TMM Pipeline
     @GET suspend fun getTmmSession(@Url url: String, @Header("Cookie") cookie: String): TmmSession
     @POST suspend fun tmmSearch(@Url url: String, @Header("Cookie") cookie: String, @Body request: TmmSearchRequest): TmmSearchResponse
