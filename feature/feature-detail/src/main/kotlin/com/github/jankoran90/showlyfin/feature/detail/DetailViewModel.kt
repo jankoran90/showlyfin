@@ -1741,6 +1741,13 @@ class DetailViewModel @Inject constructor(
                             runCatching {
                                 uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
                             }.getOrNull()?.url?.let { u ->
+                                // Do pickeru zdroj patří JEN když je dellhome reálně dosažitelný
+                                // (rychlá TCP zkouška) — mimo domácí síť by ho ruční volba jen
+                                // zatočila (user 13:43 2026-08-30 „z dellhome nejde přehrát").
+                                if (!lanHostReachable(u)) {
+                                    timber.log.Timber.i("[sejf-lan] dellhome nedosažitelný → zdroj se nezobrazí")
+                                    return@let
+                                }
                                 val s = UploaderStream(
                                     name = "dellhome — vlastní filmotéka",
                                     description = "Uložená kopie na tvém dellhome (domácí síť)",
@@ -3035,7 +3042,12 @@ class DetailViewModel @Inject constructor(
                     ?.takeIf {
                         (!isEpisode && !sameSource(it, _uiState.value.rememberedSource)) || isNewSeasonPackOffer
                     }
-                if (isEpisode) rememberEpisodeSourceSilently()
+                    // SEJF (user 13:43 2026-08-30: „po zrušení se mě zeptá na zapamatování zdroje
+                    // dellhome — to by neměl"): kopie z dellhome je dosažitelná JEN na domácí síti —
+                    // uložit si ji jako „fungující zdroj" by pak venku blokovalo přehrávání. Nikdy
+                    // nenabízet k zapamatování (ani silent-save u dílu níž).
+                    ?.takeIf { it.addon != "Vlastní filmotéka" }
+                if (isEpisode && lastPlayedStream?.addon != "Vlastní filmotéka") rememberEpisodeSourceSilently()
                 _uiState.update {
                     it.copy(
                         isResolvingStream = false, showStreamPicker = false,

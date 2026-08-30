@@ -26,7 +26,12 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Filmy">
+        android:theme="@style/Theme.Filmy"
+        android:usesCleartextTraffic="true">
+        <!-- SEJF (user 2026-08-30 13:43: „z dellhome nejde přehrát, prostě se načítá"):
+             zdroj vlastní filmotéky je PŘÍMÁ http adresa na LAN (http://192.168.x.x:8099).
+             Android 9+ defaultně cleartext BLOKUJE → přehrávač se donekonečna točil.
+             Self-hosted appka legitě streamuje z lokálních http serverů (dellhome, JF na LAN). -->
 
         <activity
             android:name=".FilmyMainActivity"
