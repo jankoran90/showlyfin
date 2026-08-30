@@ -1989,7 +1989,7 @@ class DetailViewModel @Inject constructor(
                 java.net.URLEncoder.encode(uploaderCookie, "UTF-8")
         }
 
-        val nfo = buildMap {
+        val nfo = buildMap<String, String> {
             put("title", st.tmdbCzTitle ?: item.title)
             put("originaltitle", item.originalTitle ?: item.title)
             item.year?.let { put("year", it.toString()) }
