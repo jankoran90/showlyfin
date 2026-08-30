@@ -2766,6 +2766,13 @@ class DetailViewModel @Inject constructor(
             // zdroje bez ruční změny zdroje?"): doma a s dosažitelným dellhome přehraj ULOŽENOU kopii
             // rovnou; jinak pokračuj běžnou cestou (zapamatovaný zdroj / menší varianta venku).
             sejfLanStream()?.let { playStream(it); return@launch }
+            // Uložený dellhome mimo domácí síť (user 13:57): URL na LAN není dosažitelná — nenech
+            // přehrávač padat, rovnou otevři výběr zdrojů (RD aj. se dohledají).
+            if (isSejfSource(src)) {
+                timber.log.Timber.i("[sejf-lan] uložený dellhome zdroj mimo LAN → otevírám výběr zdrojů")
+                openStreamPicker()
+                return@launch
+            }
             val mode = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.effectiveMode(
                 prefs, connectivity.currentLinkKind(),
             )
@@ -2776,6 +2783,11 @@ class DetailViewModel @Inject constructor(
             }
         }
     }
+
+    /** Zdroj = kopie z vlastní filmotéky (dellhome)? Detekce po addonu i názvu (uložený zdroj
+     *  serializuje hlavně name/description, addon radši nevěříme jen jedné podobě). */
+    private fun isSejfSource(s: UploaderStream?): Boolean =
+        s?.addon == "Vlastní filmotéka" || s?.name?.contains("dellhome") == true
 
     /** URL přehrávatelné kopie z dellhome (z detekce badge / čerstvý dotaz). null = není / nelze. */
     private var sejfPlayUrl: String? = null
@@ -3045,11 +3057,13 @@ class DetailViewModel @Inject constructor(
                     ?.takeIf {
                         (!isEpisode && !sameSource(it, _uiState.value.rememberedSource)) || isNewSeasonPackOffer
                     }
-                    // SEJF (user 13:43 2026-08-30: „po zrušení se mě zeptá na zapamatování zdroje
-                    // dellhome — to by neměl"): kopie z dellhome je dosažitelná JEN na domácí síti —
-                    // uložit si ji jako „fungující zdroj" by pak venku blokovalo přehrávání. Nikdy
-                    // nenabízet k zapamatování (ani silent-save u dílu níž).
-                    ?.takeIf { it.addon != "Vlastní filmotéka" }
+                    // SEJF (user 13:57 2026-08-30: „vždy se má ptát na zapamatování zdroje, pokud
+                    // není žádný uložený"): i dellhome se smí zapamatovat, ALE jen jako PRVNÍ
+                    // uložený zdroj (jinak bychom přepsali fungující RD zdroj). Mimo domácí síť
+                    // uložený dellhome playRemembered rovnou přeskočí (viz _sejfSkipText níž).
+                    ?.takeIf {
+                        it.addon != "Vlastní filmotéka" || _uiState.value.rememberedSource == null
+                    }
                 if (isEpisode && lastPlayedStream?.addon != "Vlastní filmotéka") rememberEpisodeSourceSilently()
                 _uiState.update {
                     it.copy(
