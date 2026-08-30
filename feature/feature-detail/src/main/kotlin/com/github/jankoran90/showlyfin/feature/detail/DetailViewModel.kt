@@ -301,6 +301,9 @@ class DetailViewModel @Inject constructor(
                 // držel true z PŘEDCHOZÍHO filmu (archivace All the Long Nights) a svítil na všech
                 // kartách po řadě. Táž past, jaká kdysi visela u csfdTitle (viz komentář níž).
                 sejfArchived = false,
+                // SEJF LAN: URL kopie je VM field (ne uiState) — reset ručně, jinak by se
+                // při přepnutí na jiný film hrál cizí soubor (táž sticky past jako sejfArchived).
+                sejfPlayUrl = null,
                 csfdId = null,
                 csfdRating = null,
                 csfdPlot = null,
@@ -418,7 +421,11 @@ class DetailViewModel @Inject constructor(
                 val hit = runCatching {
                     uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
                 }.getOrNull()
-                if (hit?.url != null) _uiState.update { it.copy(sejfArchived = true) }
+                if (hit?.url != null) {
+                    // URL si schováme — SEJF LAN (user 13:23) ji pak použije k přehrání bez dalšího dotazu.
+                    sejfPlayUrl = hit.url
+                    _uiState.update { it.copy(sejfArchived = true) }
+                }
             }
             launch {
             try {
@@ -2745,15 +2752,65 @@ class DetailViewModel @Inject constructor(
     /** Play-gate: na mobilních datech nahraď uložený velký zdroj menší alternativou, jinak hraj rovnou. */
     fun playRemembered() {
         val src = _uiState.value.rememberedSource ?: return
+        viewModelScope.launch {
+            // SEJF LAN (user 13:23 2026-08-30: „když jsem doma na wifi, dokážeme hrát rovnou z dell
+            // zdroje bez ruční změny zdroje?"): doma a s dosažitelným dellhome přehraj ULOŽENOU kopii
+            // rovnou; jinak pokračuj běžnou cestou (zapamatovaný zdroj / menší varianta venku).
+            sejfLanStream()?.let { playStream(it); return@launch }
+            val mode = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.effectiveMode(
+                prefs, connectivity.currentLinkKind(),
+            )
+            if (mode == com.github.jankoran90.showlyfin.core.network.LinkMode.AWAY && isTooBigForAway(src)) {
+                seekSmallerAlternative(src)
+            } else {
+                playStream(src)
+            }
+        }
+    }
+
+    /** URL přehrávatelné kopie z dellhome (z detekce badge / čerstvý dotaz). null = není / nelze. */
+    private var sejfPlayUrl: String? = null
+
+    /**
+     * SEJF LAN: když je zapnuto „Doma přehrát rovnou z dellhome", jsme na domácí síti (LinkMode HOME)
+     * a film je na dellhome uložený → vrať tenhle zdroj k PŘÍMÉMU přehrání. Před použitím se ověří,
+     * že je dellhome DOSAŽITELNÝ (rychlá TCP zkouška ~0,6 s) — cizí WiFi sice hlásí HOME, ale kopie
+     * by stejně nehrála; tehdy vrátí null a jde se normální cestou.
+     */
+    private suspend fun sejfLanStream(): UploaderStream? {
+        if (!prefs.getBoolean("sejf_play_on_lan", true)) return null
+        if (uploaderBaseUrl.isBlank()) return null
         val mode = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.effectiveMode(
             prefs, connectivity.currentLinkKind(),
         )
-        if (mode == com.github.jankoran90.showlyfin.core.network.LinkMode.AWAY && isTooBigForAway(src)) {
-            seekSmallerAlternative(src)
-        } else {
-            playStream(src)
-        }
+        if (mode != com.github.jankoran90.showlyfin.core.network.LinkMode.HOME) return null
+        val item = _uiState.value.item ?: return null
+        val url = sejfPlayUrl ?: runCatching {
+            uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
+        }.getOrNull()?.url
+        sejfPlayUrl = url
+        if (url.isNullOrBlank() || !lanHostReachable(url)) return null
+        timber.log.Timber.i("[sejf-lan] doma → přehrávám uloženou kopii z dellhome: %s", url)
+        return UploaderStream(
+            name = "dellhome — vlastní filmotéka",
+            description = "Doma na LAN: přehrávám uloženou kopii z tvého dellhome",
+            url = url, addon = "Vlastní filmotéka",
+        )
     }
+
+    /** Dosáhneme host z URL po TCP do ~0,6 s? (LAN adresa dellhome je odpovědná jen doma.)
+     *  Blokující socket → povinně Dispatchers.IO. */
+    private suspend fun lanHostReachable(url: String): Boolean = runCatching {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val u = java.net.URI(url)
+            val host = u.host ?: return@withContext false
+            val port = if (u.port > 0) u.port else 80
+            java.net.Socket().use { s ->
+                s.connect(java.net.InetSocketAddress(host, port), 600)
+                true
+            }
+        }
+    }.getOrDefault(false)
 
     /** Je uložený zdroj nad prahem „venkovského" režimu? (bitrate, fallback velikost; neznámé = fail-open). */
     private fun isTooBigForAway(stream: UploaderStream): Boolean {

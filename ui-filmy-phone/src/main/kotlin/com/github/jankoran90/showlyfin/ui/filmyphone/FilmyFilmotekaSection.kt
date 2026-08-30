@@ -118,6 +118,7 @@ fun FilmyFilmotekaSection(vm: TvFilmotekaSettingsViewModel = hiltViewModel()) {
     }
     SettingSectionTitle("Vlastní filmotéka (dellhome)")
     SejfSourceToggle()
+    SejfLanPlayToggle()
 
 }
 
@@ -134,6 +135,24 @@ private fun SejfSourceToggle() {
             "vlastní filmotéka“ (přehratelné na domácí síti). Ukládání přes ⋮ na kartě filmu funguje vždy.",
         checked = show,
         onCheckedChange = { show = it; prefs.edit().putBoolean("sejf_show_source", it).apply() },
+    )
+}
+
+// SEJF LAN (user 13:23 2026-08-30: „když jsem doma na wifi, dokážeme hrát rovnou z dell zdroje
+// bez ruční změny zdroje?"): tlačítko Přehrát doma spustí ULOŽENOU kopii z dellhome místo
+// hledání/vybírání zdroje. Platí jen když je dellhome dosažitelný (rychlá síťová zkouška),
+// takže cizí WiFi ani mobilní data nic nezmění.
+@Composable
+private fun SejfLanPlayToggle() {
+    val ctx = LocalContext.current
+    val prefs = remember(ctx) { ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE) }
+    var play by remember { mutableStateOf(prefs.getBoolean("sejf_play_on_lan", true)) }
+    SettingSwitchRow(
+        title = "Doma přehrát rovnou z dellhome",
+        subtitle = "Na domácí síti tlačítko Přehrát spustí uloženou kopii z tvého dellhome " +
+            "(nejrychlejší cesta, bez výběru zdroje). Jinde se chová běžně.",
+        checked = play,
+        onCheckedChange = { play = it; prefs.edit().putBoolean("sejf_play_on_lan", it).apply() },
     )
 }
 
