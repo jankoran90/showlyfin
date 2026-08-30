@@ -297,6 +297,10 @@ class DetailViewModel @Inject constructor(
                 showDetails = null,
                 tmdbCzOverview = null,
                 tmdbCzTitle = null,
+                // SEJF (user 13:15 2026-08-30: „na všech kartách filmu domeček natvrdo"): bez resetu
+                // držel true z PŘEDCHOZÍHO filmu (archivace All the Long Nights) a svítil na všech
+                // kartách po řadě. Táž past, jaká kdysi visela u csfdTitle (viz komentář níž).
+                sejfArchived = false,
                 csfdId = null,
                 csfdRating = null,
                 csfdPlot = null,

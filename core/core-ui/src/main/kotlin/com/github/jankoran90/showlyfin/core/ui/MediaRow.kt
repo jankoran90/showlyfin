@@ -169,7 +169,9 @@ fun MediaRow(
                         imageVector = Icons.Default.Home,
                         contentDescription = "Ve vlastní filmotéce (dellhome)",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
+                        // user 13:16 2026-08-30: „domeček stoupá výš" — Home glyph sedí jinak než
+                        // CloudDone; stejný top offset jako u mráčku/fronty níž = zarovnáno do řádku.
+                        modifier = Modifier.padding(top = 3.dp).size(16.dp),
                     )
                 }
                 if (hasSource) {
