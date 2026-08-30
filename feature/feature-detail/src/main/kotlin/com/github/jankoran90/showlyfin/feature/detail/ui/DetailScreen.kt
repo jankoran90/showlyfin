@@ -256,6 +256,17 @@ fun DetailScreen(
             viewModel.consumeStremioFallback()
         }
     }
+    // SEJF (FLM-03, user 07:39): průběh ukládání do vlastní filmotéky v SYSTÉMOVÉ liště oznámení.
+    LaunchedEffect(uiState.sejfState) {
+        uiState.sejfState?.let { SejfNotifier.progress(context, it) }
+    }
+    LaunchedEffect(uiState.sejfResult) {
+        uiState.sejfResult?.let { r ->
+            val (kind, rest) = r.split("|", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+            SejfNotifier.result(context, kind == "hotovo", rest)
+            viewModel.consumeSejfResult()
+        }
+    }
     // Sdílej.cz capture → toast
     LaunchedEffect(uiState.captureMessage) {
         uiState.captureMessage?.let {

@@ -72,6 +72,8 @@ data class DetailUiState(
     // + stav ukládání do vlastní filmotéky (null = neaktivní, text zobrazuje captureMessage).
     val tmdbEnTitle: String? = null,
     val sejfState: String? = null,
+    // SEJF: výsledek uložení (po dokončení/error) — k notifikaci do lišty; null = nic
+    val sejfResult: String? = null,
     val collection: TmdbCollection? = null,
     val ownedImdbToJellyfin: Map<String, String> = emptyMap(),
     val ownedTmdbToJellyfin: Map<Long, String> = emptyMap(),

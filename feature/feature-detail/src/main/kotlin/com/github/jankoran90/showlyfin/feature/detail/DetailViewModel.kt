@@ -1949,6 +1949,9 @@ class DetailViewModel @Inject constructor(
         return if (isCzech) (st.tmdbCzTitle ?: item.title) else (st.tmdbEnTitle ?: item.title)
     }
 
+    /** SEJF: spotrebuj výsledek uložení (po zobrazení notifikace). */
+    fun consumeSejfResult() = _uiState.update { it.copy(sejfResult = null) }
+
     /** SEJF: veřejný odkaz ke stažení složky filmu (.zip, token), když je film na dellhome. */
     suspend fun sejfDownloadLink(): String? {
         val item = _uiState.value.item ?: return null
@@ -2030,22 +2033,36 @@ class DetailViewModel @Inject constructor(
             var tries = 0
             while (tries++ < 360) {
                 delay(5_000)
-                if (_uiState.value.item?.isSameAs(item) != true) return@launch   // překlikl jinam
+                // NErušíme při překliku na jiný titul (user 07:39 chce průběh v liště) — polling
+                // je levný a download běží na dellhome dál; banner se ukáže jen na téže kartě.
                 val job = runCatching { uploaderDs.sejfStatus(uploaderBaseUrl, uploaderCookie, jobId) }.getOrNull()
                 when (job?.state) {
                     "done" -> {
                         val mb = job.bytes / 1_048_576
                         _uiState.update {
-                            it.copy(sejfState = null, captureMessage = "Uloženo na dellhome ✓ (${mb} MB)")
+                            it.copy(
+                                sejfState = null,
+                                // sází i captureMessage (toast) i sejfResult (systémová notifikace)
+                                captureMessage = "Uloženo na dellhome ✓ (${mb} MB)",
+                                sejfResult = "hotovo|${mb} MB",
+                            )
                         }
                         return@launch
                     }
                     "error" -> {
-                        _uiState.update { it.copy(sejfState = null, captureMessage = "Uložení selhalo: ${job.error ?: "?"}") }
+                        _uiState.update {
+                            it.copy(
+                                sejfState = null,
+                                captureMessage = "Uložení selhalo: ${job.error ?: "?"}",
+                                sejfResult = "chyba|${job.error ?: "?"}",
+                            )
+                        }
                         return@launch
                     }
-                    else -> _uiState.update {
-                        it.copy(sejfState = "Ukládám na dellhome… ${((job?.bytes ?: 0) / 1_048_576)} MB")
+                    else -> _uiState.update { st2 ->
+                        if (st2.item?.isSameAs(item) == true)
+                            st2.copy(sejfState = "Ukládám na dellhome… ${((job?.bytes ?: 0) / 1_048_576)} MB")
+                        else st2   // jiný titul otevřen → banner ne, ale poll pokračuje
                     }
                 }
             }
