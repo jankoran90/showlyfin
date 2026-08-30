@@ -2000,7 +2000,7 @@ class DetailViewModel @Inject constructor(
                 ?: st.showDetails?.genres?.map { g -> g.id }
             genreIds?.takeIf { it.isNotEmpty() }?.let { ids ->
                 val names = com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(ids, isShow = item.type != MediaType.MOVIE)
-                if (names.isNotEmpty()) put("genres", names)
+                if (names.isNotEmpty()) put("genres", names.joinToString(", "))
             }
             put("releaseName", st.rememberedSource?.name ?: lastPlayedStream?.name ?: "")
             put("subtitleName", if (subId != null) "titulky.cs.srt" else "")
