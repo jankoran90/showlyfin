@@ -282,6 +282,9 @@ class DetailViewModel @Inject constructor(
         autoCastPending = false
         voiceCastActive = false
         voiceCastDeviceId = null
+        // SEJF LAN: VM field (mimo uiState) — reset ručně, jinak by se po přepnutí na jiný
+        // film hrál cizí soubor (táž sticky past jako sejfArchived níž).
+        sejfPlayUrl = null
         _uiState.update {
             it.copy(
                 item = item,
@@ -301,9 +304,6 @@ class DetailViewModel @Inject constructor(
                 // držel true z PŘEDCHOZÍHO filmu (archivace All the Long Nights) a svítil na všech
                 // kartách po řadě. Táž past, jaká kdysi visela u csfdTitle (viz komentář níž).
                 sejfArchived = false,
-                // SEJF LAN: URL kopie je VM field (ne uiState) — reset ručně, jinak by se
-                // při přepnutí na jiný film hrál cizí soubor (táž sticky past jako sejfArchived).
-                sejfPlayUrl = null,
                 csfdId = null,
                 csfdRating = null,
                 csfdPlot = null,
