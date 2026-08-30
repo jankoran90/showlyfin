@@ -668,21 +668,6 @@ fun DetailScreen(
             return@Scaffold
         }
 
-        // SEJF (FLM-03): proužek průběhu ukládání do vlastní filmotéky (dellhome stahuje release).
-        uiState.sejfState?.let { msg ->
-            Row(
-                Modifier.fillMaxWidth().padding(
-                    top = paddingValues.calculateTopPadding() + 6.dp,
-                    start = 16.dp, end = 16.dp, bottom = 6.dp,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(10.dp))
-                Text(msg, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
         // VISTA V4: detail se nenačetl (typicky výpadek sítě) → srozumitelná hláška + „Zkusit znovu",
         // místo prázdného/zaseknutého detailu (dřív se ukázal i starý film z race).
         if (uiState.error != null && uiState.movieDetails == null && uiState.showDetails == null && !uiState.isLoading) {
@@ -713,6 +698,20 @@ fun DetailScreen(
                 .padding(paddingValues)
                 .verticalScroll(scrollState),
         ) {
+            // SEJF (FLM-03, user 2026-08-30 07:40 „na kartě by byl taky dobrý"): průběh ukládání do
+            // vlastní filmotéky NA KARTĚ (systémová notifikace jede souběžně — SejfNotifier).
+            // 🔴 Uvnitř scroll Column: jako sibling PRED obsahem ho překreslil fanart (bug 1.2.109).
+            uiState.sejfState?.let { msg ->
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(msg, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             // 🔴 „Hledám zdroj…" MUSÍ být vidět po celou dobu hledání, ne jen jako bliknutí v liště.
             // User 2026-08-03 13:11: *„Promazáno. Asi hledá. Nevidím nikde progress."* Auto-hledání
             // běží na serveru desítky vteřin a mezitím u dětského profilu zmizí i karta z Filmotéky
