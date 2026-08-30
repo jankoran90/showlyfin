@@ -1661,10 +1661,23 @@ class DetailViewModel @Inject constructor(
         loadStreams()
     }
 
+    // SEJF (user 13:17 2026-08-30: „dellhome zdroj se objeví na konci a pak úplně zmizí — dej ho
+    // vždy úplně na začátek"): zdroj „vlastní filmotéka" se dohledává SAMOSTATNÝM (pomalým) dotazem
+    // a dřív se PŘEPSAL seznamem z probu (ten ho neznal → zmizel). Drží se tady pro celý cyklus
+    // loadStreams a předřazuje se do KAŽDÉ aktualizace seznamu (i po řazení presetem = vždy první).
+    private var sejfStreamEntry: UploaderStream? = null
+
+    private fun withSejf(list: List<UploaderStream>): List<UploaderStream> {
+        val e = sejfStreamEntry ?: return list
+        if (list.any { it.url != null && it.url == e.url }) return list
+        return listOf(e) + list
+    }
+
     private fun loadStreams() {
         val item = _uiState.value.item ?: return
         val imdb = item.imdbId ?: return
         val strict = _uiState.value.streamStrict
+        sejfStreamEntry = null
         // TENFOOT WS-C: pro epizodu seriálu předej season/episode do všech dotazů (uploader je podporuje).
         val epSeason = episodeSelector?.season
         val epEpisode = episodeSelector?.episode
@@ -1710,10 +1723,12 @@ class DetailViewModel @Inject constructor(
                     // Plan CASCADE Fáze 3: během probu ukaž JEN ověřené instant (rdSaved/rdReady) + sdílej
                     // (hraje přes proxy hned), zbytek se reálně testuje (addMagnet) → po probu nahradíme.
                     val instantNow = combined.filter { it.quality.rdSaved || it.quality.rdReady } + sdilej
-                    _uiState.update { it.copy(isLoadingStreams = false, isProbingStreams = true, streams = streamPresetStore.orderStreams(instantNow), streamError = null) }
+                    _uiState.update { it.copy(isLoadingStreams = false, isProbingStreams = true, streams = withSejf(streamPresetStore.orderStreams(instantNow)), streamError = null) }
                     // SEJF (FLM-03): zdroj „dellhome 🏠" = uložená kopie ve vlastní filmotéce (LAN).
                     // RUČNÍ volba, nikdy ne auto-výběr (user 2026-08-29). Objeví se, jakmile ji
                     // server najde — hledá se pod tímtéž názvem složky, pod kterým se ukládalo.
+                    // Výsledek se drží v [sejfStreamEntry] a předřazuje se do každé další
+                    // aktualizace seznamu (probe ho dřív smazal — user 13:17 2026-08-30).
                     if (prefs.getBoolean("sejf_show_source", true)) {
                         viewModelScope.launch {
                             runCatching {
@@ -1724,9 +1739,10 @@ class DetailViewModel @Inject constructor(
                                     description = "Uložená kopie na tvém dellhome (domácí síť)",
                                     url = u, addon = "Vlastní filmotéka",
                                 )
+                                sejfStreamEntry = s
                                 _uiState.update { st2 ->
                                     if (st2.streams.any { it.url == u }) st2
-                                    else st2.copy(streams = listOf(s) + st2.streams)
+                                    else st2.copy(streams = withSejf(st2.streams))
                                 }
                             }
                         }
@@ -1738,13 +1754,13 @@ class DetailViewModel @Inject constructor(
                                 // CONDUIT: sdílej (instant, přes proxy) drž v seznamu i po probu — probe vrací jen torrent/RD.
                                 val finalList = (if (probed.isNotEmpty()) probed else combined) + sdilej
                                 val err = if (finalList.isEmpty()) "Žádný funkční zdroj nenalezen." else null
-                                _uiState.update { it.copy(isProbingStreams = false, streams = streamPresetStore.orderStreams(finalList), streamError = err) }
+                                _uiState.update { it.copy(isProbingStreams = false, streams = withSejf(streamPresetStore.orderStreams(finalList)), streamError = err) }
                             }
                             .onFailure { e ->
                                 timber.log.Timber.w(e, "[Stremio] probe FAILED imdb=$imdb → fallback na neprobnuty seznam")
                                 val fb = combined + sdilej
                                 val err = if (fb.isEmpty()) "Žádné streamy nenalezeny." else null
-                                _uiState.update { it.copy(isProbingStreams = false, streams = streamPresetStore.orderStreams(fb), streamError = err) }
+                                _uiState.update { it.copy(isProbingStreams = false, streams = withSejf(streamPresetStore.orderStreams(fb)), streamError = err) }
                             }
                     }
                 }
@@ -1753,7 +1769,7 @@ class DetailViewModel @Inject constructor(
                     val saved = savedDeferred?.await().orEmpty()
                     val sdilej = sdilejDeferred.await()
                     val fb = saved + sdilej
-                    if (fb.isNotEmpty()) _uiState.update { it.copy(isLoadingStreams = false, streams = streamPresetStore.orderStreams(fb), streamError = null) }
+                    if (fb.isNotEmpty()) _uiState.update { it.copy(isLoadingStreams = false, streams = withSejf(streamPresetStore.orderStreams(fb)), streamError = null) }
                     else _uiState.update { it.copy(isLoadingStreams = false, streamError = e.message ?: "Chyba načtení streamů") }
                 }
         }

@@ -111,6 +111,9 @@ internal fun streamHealth(stream: UploaderStream, runtimeMin: Int?): StreamHealt
     }
     // CONDUIT: přímo přehrávatelný file-host (sdílej přes náš proxy) hraje hned = READY.
     if (stream.url?.startsWith("sdilej://") == true) return StreamHealth.READY
+    // SEJF: kopie z vlastní filmotéky (dellhome, LAN http) hraje hned — bez toho spadla mezi
+    // „ke stažení" na konec pickeru (user 13:17 2026-08-30 „objeví se na konci seznamu").
+    if (stream.addon == "Vlastní filmotéka") return StreamHealth.READY
     return if (q.rdReady || q.rdSaved) StreamHealth.READY else StreamHealth.DOWNLOAD
 }
 
