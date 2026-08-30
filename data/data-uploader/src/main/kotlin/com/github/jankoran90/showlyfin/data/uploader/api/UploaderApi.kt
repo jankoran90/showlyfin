@@ -171,6 +171,12 @@ internal class UploaderApi(
         return service.sejfShareLink("${baseUrl.trimEnd('/')}/api/sejf/share-link$q", cookie)
     }
 
+    override suspend fun sejfActive(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfJobResponse {
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val q = "?title=" + java.net.URLEncoder.encode(title, "UTF-8") + if (year > 0) "&year=$year" else ""
+        return service.sejfActive("${baseUrl.trimEnd('/')}/api/sejf/active$q", cookie)
+    }
+
     override suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem> {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

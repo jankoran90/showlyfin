@@ -91,6 +91,7 @@ interface UploaderService {
     @GET suspend fun sejfStatus(@Url url: String, @Header("Cookie") cookie: String): SejfJobResponse
     @GET suspend fun sejfStream(@Url url: String, @Header("Cookie") cookie: String): SejfStreamResponse
     @GET suspend fun sejfShareLink(@Url url: String, @Header("Cookie") cookie: String): SejfStreamResponse
+    @GET suspend fun sejfActive(@Url url: String, @Header("Cookie") cookie: String): SejfJobResponse
 
     // TMM Pipeline
     @GET suspend fun getTmmSession(@Url url: String, @Header("Cookie") cookie: String): TmmSession

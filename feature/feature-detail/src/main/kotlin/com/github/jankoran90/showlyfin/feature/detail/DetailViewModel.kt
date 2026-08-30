@@ -407,6 +407,8 @@ class DetailViewModel @Inject constructor(
             // MUZA: máme-li už tématem cílený text (`muzaSeed`), obecné SUMÁŘ dopékání se přeskočí —
             // jinak by za pár vteřin přepsalo `curatedText` obecným (necíleným) textem.
             if (muzaSeed == null) launch { loadShareText(item) }
+            // SEJF reattach: počkej na hydrataci EN/CZ titulku (název složky), pak se navázat
+            launch { delay(2500); attachSejfIfRunning() }
             launch {
             try {
                 val tmdbId = item.tmdbId
@@ -2029,12 +2031,20 @@ class DetailViewModel @Inject constructor(
                 _uiState.update { it.copy(sejfState = "Uložení se nepovedlo startovat (server dostupný?)") }
                 return@launch
             }
-            // poll: dellhome stahuje sám; status ukazuje kb staženo. Vzdát po 30 min.
+            pollSejfJob(jobId, item)
+        }
+    }
+
+    /**
+     * Poll stavu archivace (společné pro nové uložení i reattach po zavření appky —
+     * user 08:19: *„musí běžet i když appku zavřu"*: download běží NA dellhome nezávisle;
+     * tahle smyčka jen hlásí průběh, banner jen na téže kartě, notifikace vždy).
+     */
+    private fun pollSejfJob(jobId: String, item: MediaItem) {
+        viewModelScope.launch {
             var tries = 0
-            while (tries++ < 360) {
+            while (tries++ < 720) {                      // 5 s × 720 = 60 min strop
                 delay(5_000)
-                // NErušíme při překliku na jiný titul (user 07:39 chce průběh v liště) — polling
-                // je levný a download běží na dellhome dál; banner se ukáže jen na téže kartě.
                 val job = runCatching { uploaderDs.sejfStatus(uploaderBaseUrl, uploaderCookie, jobId) }.getOrNull()
                 when (job?.state) {
                     "done" -> {
@@ -2042,7 +2052,6 @@ class DetailViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 sejfState = null,
-                                // sází i captureMessage (toast) i sejfResult (systémová notifikace)
                                 captureMessage = "Uloženo na dellhome ✓ (${mb} MB)",
                                 sejfResult = "hotovo|${mb} MB",
                             )
@@ -2062,9 +2071,30 @@ class DetailViewModel @Inject constructor(
                     else -> _uiState.update { st2 ->
                         if (st2.item?.isSameAs(item) == true)
                             st2.copy(sejfState = "Ukládám na dellhome… ${((job?.bytes ?: 0) / 1_048_576)} MB")
-                        else st2   // jiný titul otevřen → banner ne, ale poll pokračuje
+                        else st2
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * SEJF reattach (user 08:19): po znovuotevření appky/karty se naváži na BĚŽÍCÍ archivaci
+     * tohoto filmu (download mezitím klidně běžel na dellhome sám). Voláno z load() s malým
+     * zpožděním — složka se jmenuje EN/CZ titulem, který hydratuje až detail z TMDB.
+     */
+    fun attachSejfIfRunning() {
+        val item = _uiState.value.item ?: return
+        if (uploaderBaseUrl.isBlank()) return
+        viewModelScope.launch {
+            val active = runCatching {
+                uploaderDs.sejfActive(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
+            }.getOrNull() ?: return@launch
+            if (active.state == "running" || active.state == "downloading") {
+                _uiState.update {
+                    it.copy(sejfState = "Ukládám na dellhome… ${(active.bytes / 1_048_576)} MB (navázáno)")
+                }
+                pollSejfJob(active.id, item)
             }
         }
     }
