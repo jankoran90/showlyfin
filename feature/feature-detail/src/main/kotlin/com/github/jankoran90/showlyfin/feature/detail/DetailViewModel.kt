@@ -407,8 +407,15 @@ class DetailViewModel @Inject constructor(
             // MUZA: máme-li už tématem cílený text (`muzaSeed`), obecné SUMÁŘ dopékání se přeskočí —
             // jinak by za pár vteřin přepsalo `curatedText` obecným (necíleným) textem.
             if (muzaSeed == null) launch { loadShareText(item) }
-            // SEJF reattach: počkej na hydrataci EN/CZ titulku (název složky), pak se navázat
-            launch { delay(2500); attachSejfIfRunning() }
+            // SEJF reattach + detekce „už uloženo" (badge/skrytí Uložit): čeká na EN/CZ titulek
+            launch {
+                delay(2500)
+                attachSejfIfRunning()
+                val hit = runCatching {
+                    uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
+                }.getOrNull()
+                if (hit?.url != null) _uiState.update { it.copy(sejfArchived = true) }
+            }
             launch {
             try {
                 val tmdbId = item.tmdbId
@@ -2054,6 +2061,7 @@ class DetailViewModel @Inject constructor(
                                 sejfState = null,
                                 captureMessage = "Uloženo na dellhome ✓ (${mb} MB)",
                                 sejfResult = "hotovo|${mb} MB",
+                                sejfArchived = true,
                             )
                         }
                         return@launch

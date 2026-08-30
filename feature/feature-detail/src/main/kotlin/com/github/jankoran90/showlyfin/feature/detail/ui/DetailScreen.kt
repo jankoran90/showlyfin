@@ -635,6 +635,7 @@ fun DetailScreen(
                         onArchiveToSejf = if (uiState.uploaderConfigured) {
                             { viewModel.archiveToOwnLibrary() }
                         } else null,
+                        inSejf = uiState.sejfArchived,
                         // FILMYCAST — „Přehrát na Filmy TV" (poslat zapamatovaný zdroj do Filmy appky na TV).
                         onCastToFilmyTv = { viewModel.castToFilmyTv() },
                         inWatchlist = uiState.isInWatchlist,
@@ -823,6 +824,16 @@ fun DetailScreen(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false),
                         )
+                        // SEJF (user 08:57): minimální amber znak „ve vlastní filmotéce" u názvu.
+                        if (uiState.sejfArchived) {
+                            Spacer(Modifier.width(8.dp))
+                            Icon(
+                                Icons.Default.Home,
+                                contentDescription = "Ve vlastní filmotéce (dellhome)",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                         displayItem.year?.let {
                             Text("$it", style = MaterialTheme.typography.titleMedium.copy(shadow = heroTextShadow), color = Color.White.copy(alpha = 0.85f))
                         }
@@ -1131,6 +1142,7 @@ private fun DetailActionBar(
     onPickSource: (() -> Unit)? = null,
     onDownload: () -> Unit,
     onArchiveToSejf: (() -> Unit)? = null,
+    inSejf: Boolean = false,
     onCastToFilmyTv: (() -> Unit)? = null,
     inWatchlist: Boolean,
     isTogglingWatchlist: Boolean,
@@ -1253,7 +1265,7 @@ private fun DetailActionBar(
                 )
                 // SEJF (FLM-03, user 2026-08-29): vlastní filmotéka na dellhome — release+titulky
                 // (i s korekcí) + NFO. Složka EN názvem; přehrávání pak přes zdroj „dellhome".
-                if (onArchiveToSejf != null) {
+                if (onArchiveToSejf != null && !inSejf) {
                     DropdownMenuItem(
                         text = { Text("Uložit do vlastní filmotéky 🏠") },
                         leadingIcon = { Icon(Icons.Default.Home, null) },

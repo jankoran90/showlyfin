@@ -74,6 +74,8 @@ data class DetailUiState(
     val sejfState: String? = null,
     // SEJF: výsledek uložení (po dokončení/error) — k notifikaci do lišty; null = nic
     val sejfResult: String? = null,
+    // SEJF: film je už uložený na dellhome (badge na kartě + skrýt „Uložit" v menu)
+    val sejfArchived: Boolean = false,
     val collection: TmdbCollection? = null,
     val ownedImdbToJellyfin: Map<String, String> = emptyMap(),
     val ownedTmdbToJellyfin: Map<Long, String> = emptyMap(),
