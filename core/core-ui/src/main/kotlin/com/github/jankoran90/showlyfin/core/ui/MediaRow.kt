@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Tv
@@ -153,6 +154,20 @@ fun MediaRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
+                // SEJF (user 09:52): domeček „ve vlastní filmotéce" vedle znaku zdroje.
+                val sejfDirs = listOfNotNull(
+                    item.titleCz?.takeIf { it.isNotBlank() }?.let { "$it (${item.year ?: 0})" },
+                    item.title?.takeIf { it.isNotBlank() }?.let { "$it (${item.year ?: 0})" },
+                )
+                if (rememberSejfArchived(sejfDirs)) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Default.Home,
+                        contentDescription = "Ve vlastní filmotéce (dellhome)",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
                 if (hasSource) {
                     Spacer(Modifier.width(6.dp))
                     Icon(

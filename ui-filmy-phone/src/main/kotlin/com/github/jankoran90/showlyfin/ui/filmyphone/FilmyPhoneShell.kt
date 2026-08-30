@@ -32,6 +32,7 @@ import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalRowTitleProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalSejfArchiveProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalSourceAvailabilityProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider
@@ -252,6 +253,7 @@ private fun FilmyShellContent() {
         LocalCsfdRatingProvider provides cardCsfd,
         LocalCzechOverviewProvider provides cardCsfd,
         LocalRowTitleProvider provides cardCsfd,
+        LocalSejfArchiveProvider provides cardCsfd,
         LocalDirectorProvider provides cardCsfd,
         LocalUserRatingProvider provides ratingVm,
         LocalSourceAvailabilityProvider provides sourceAvailVm,

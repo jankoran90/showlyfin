@@ -177,6 +177,12 @@ internal class UploaderApi(
         return service.sejfActive("${baseUrl.trimEnd('/')}/api/sejf/active$q", cookie)
     }
 
+    override suspend fun sejfItems(baseUrl: String, sessionCookie: String): List<String> {
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching { service.sejfItems("${baseUrl.trimEnd('/')}/api/sejf/items", cookie).items.map { it.dir } }
+            .getOrDefault(emptyList())
+    }
+
     override suspend fun getCsfdReviews(baseUrl: String, sessionCookie: String, csfdId: Long): List<CsfdReviewItem> {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""

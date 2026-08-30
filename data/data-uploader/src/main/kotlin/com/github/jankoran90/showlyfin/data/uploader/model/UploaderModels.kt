@@ -235,6 +235,10 @@ data class SejfJobResponse(
 
 /** GET /api/sejf/stream i /share-link — url null = film uložen není / server nedostupný. */
 data class SejfStreamResponse(val url: String? = null, val dir: String? = null)
+
+/** GET /api/sejf/items — složky vlastní filmotéky na dellhome (badge v seznamech). */
+data class SejfItemResponse(val dir: String = "", val files: List<String> = emptyList())
+data class SejfItemsResponse(val items: List<SejfItemResponse> = emptyList())
 data class CsfdReviewsResponse(val reviews: List<CsfdReviewItem> = emptyList())
 /** Odpověď /api/csfd/gallery — URL fotek z galerie ČSFD (stránkované na backendu). */
 data class CsfdGalleryResponse(val urls: List<String> = emptyList())

@@ -129,6 +129,26 @@ interface RowTitleProvider {
 
 val LocalRowTitleProvider = staticCompositionLocalOf<RowTitleProvider?> { null }
 
+// SEJF (FLM-03, user 09:52 „udělej to taky do všech seznamů"): badge „ve vlastní filmotéce"
+// pro ŘÁDKY — provider jednou natáhne index složek z dellhome (TTL cache ve VM) a řádek se
+// jen zeptá „je můj <titul> (<rok>) mezi nimi?" (match na CZ i originální variantu názvu).
+interface SejfArchiveProvider {
+    suspend fun isArchived(variantDirs: List<String>): Boolean
+}
+
+val LocalSejfArchiveProvider = staticCompositionLocalOf<SejfArchiveProvider?> { null }
+
+@Composable
+fun rememberSejfArchived(variantDirs: List<String>): Boolean {
+    val provider = LocalSejfArchiveProvider.current
+    var archived by remember(variantDirs) { mutableStateOf(false) }
+    LaunchedEffect(provider, variantDirs) {
+        if (provider == null || variantDirs.isEmpty()) return@LaunchedEffect
+        archived = runCatching { provider.isArchived(variantDirs) }.getOrDefault(false)
+    }
+    return archived
+}
+
 private const val ROW_TITLE_NONE = " "
 private val rowTitleCache = ConcurrentHashMap<String, String>()
 

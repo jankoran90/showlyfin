@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.core.ui.CsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.CzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.DirectorProvider
 import com.github.jankoran90.showlyfin.core.ui.RowTitleProvider
+import com.github.jankoran90.showlyfin.core.ui.SejfArchiveProvider
 import com.github.jankoran90.showlyfin.core.ui.looksCzech
 import com.github.jankoran90.showlyfin.data.csfd.CsfdRepository
 import com.github.jankoran90.showlyfin.data.tmdb.TmdbRemoteDataSource
@@ -30,7 +31,24 @@ class CardCsfdViewModel @Inject constructor(
     private val tmdb: TmdbRemoteDataSource,
     private val uploaderDs: UploaderRemoteDataSource,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
-) : ViewModel(), CsfdRatingProvider, CzechOverviewProvider, DirectorProvider, RowTitleProvider {
+) : ViewModel(), CsfdRatingProvider, CzechOverviewProvider, DirectorProvider, RowTitleProvider,
+    SejfArchiveProvider {
+
+    // SEJF index: jedno natážení složek za 5 minut (šetří SSH i mobilní data).
+    private var sejfIndex: List<String>? = null
+    private var sejfIndexAt = 0L
+
+    override suspend fun isArchived(variantDirs: List<String>): Boolean {
+        val now = System.currentTimeMillis()
+        val idx = sejfIndex?.takeIf { now - sejfIndexAt < 300_000 } ?: run {
+            val base = prefs.getString("uploader_base_url", "").orEmpty().ifBlank { return false }
+            val cookie = prefs.getString("uploader_session_cookie", "").orEmpty()
+            runCatching { uploaderDs.sejfItems(base, cookie) }.getOrNull()
+                ?.also { sejfIndex = it; sejfIndexAt = now } ?: return false
+        }
+        return idx.any { it in variantDirs }
+    }
+
 
     override suspend fun rating(imdbId: String?, tmdbId: Long?, title: String, year: Int?): Int? =
         csfd.getRating(imdbId.orEmpty(), tmdbId, title, year ?: 0)

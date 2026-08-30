@@ -67,6 +67,7 @@ import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.core.ui.LocalCsfdRatingProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalCzechOverviewProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalRowTitleProvider
+import com.github.jankoran90.showlyfin.core.ui.LocalSejfArchiveProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalDirectorProvider
 import com.github.jankoran90.showlyfin.core.ui.tvFocusable
 import com.github.jankoran90.showlyfin.data.uploader.model.LibraryItem
@@ -608,6 +609,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
             LocalCsfdRatingProvider provides cardCsfd,
             LocalCzechOverviewProvider provides cardCsfd,
             LocalRowTitleProvider provides cardCsfd,
+            LocalSejfArchiveProvider provides cardCsfd,
             LocalDirectorProvider provides cardCsfd,
             com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider provides ratingVm,
         ) {

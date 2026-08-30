@@ -190,6 +190,7 @@ interface UploaderRemoteDataSource {
     suspend fun sejfStream(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse
     suspend fun sejfShareLink(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse
     suspend fun sejfActive(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfJobResponse
+    suspend fun sejfItems(baseUrl: String, sessionCookie: String): List<String>
 
     // TUNER (SHW-62) — YouTube podcast (streaming): feed + samonosné stream URL (?key=, jako sdilej/titulky)
     suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int = 30): YtChannelFeed
