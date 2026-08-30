@@ -419,7 +419,8 @@ class DetailViewModel @Inject constructor(
                 delay(2500)
                 attachSejfIfRunning()
                 val hit = runCatching {
-                    uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
+                    uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0,
+                    imdb = item.imdbId.orEmpty(), tmdb = item.tmdbId?.toString().orEmpty())
                 }.getOrNull()
                 if (hit?.url != null) {
                     // URL si schováme — SEJF LAN (user 13:23) ji pak použije k přehrání bez dalšího dotazu.
@@ -1739,7 +1740,8 @@ class DetailViewModel @Inject constructor(
                     if (prefs.getBoolean("sejf_show_source", true)) {
                         viewModelScope.launch {
                             runCatching {
-                                uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
+                                uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0,
+                    imdb = item.imdbId.orEmpty(), tmdb = item.tmdbId?.toString().orEmpty())
                             }.getOrNull()?.url?.let { u ->
                                 // Do pickeru zdroj patří JEN když je dellhome reálně dosažitelný
                                 // (rychlá TCP zkouška) — mimo domácí síť by ho ruční volba jen
@@ -2793,7 +2795,8 @@ class DetailViewModel @Inject constructor(
         if (mode != com.github.jankoran90.showlyfin.core.network.LinkMode.HOME) return null
         val item = _uiState.value.item ?: return null
         val url = sejfPlayUrl ?: runCatching {
-            uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0)
+            uploaderDs.sejfStream(uploaderBaseUrl, uploaderCookie, sejfFolderTitle(), item.year ?: 0,
+                    imdb = item.imdbId.orEmpty(), tmdb = item.tmdbId?.toString().orEmpty())
         }.getOrNull()?.url
         sejfPlayUrl = url
         if (url.isNullOrBlank() || !lanHostReachable(url)) return null

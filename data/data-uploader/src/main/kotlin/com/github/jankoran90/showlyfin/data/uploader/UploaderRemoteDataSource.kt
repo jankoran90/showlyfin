@@ -187,7 +187,10 @@ interface UploaderRemoteDataSource {
     // SEJF (FLM-03) — vlastní filmotéka na dellhome: archivace (job), stav, LAN přehrání, veřejný odkaz.
     suspend fun sejfArchive(baseUrl: String, sessionCookie: String, request: SejfArchiveRequest): SejfArchiveResponse
     suspend fun sejfStatus(baseUrl: String, sessionCookie: String, jobId: String): SejfJobResponse
-    suspend fun sejfStream(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse
+    // RODY identity (user 13:50 2026-08-30 „id je absolutní trefa"): imdb/tmdb nese přesnou shodu
+    // bez ohledu na podobu názvu složky; default = dosavadní chování ostatních volajících.
+    suspend fun sejfStream(baseUrl: String, sessionCookie: String, title: String, year: Int,
+                           imdb: String = "", tmdb: String = ""): SejfStreamResponse
     suspend fun sejfShareLink(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse
     suspend fun sejfActive(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfJobResponse
     suspend fun sejfItems(baseUrl: String, sessionCookie: String): List<String>

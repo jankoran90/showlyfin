@@ -159,9 +159,13 @@ internal class UploaderApi(
         return service.sejfStatus("${baseUrl.trimEnd('/')}/api/sejf/status?id=$jobId", cookie)
     }
 
-    override suspend fun sejfStream(baseUrl: String, sessionCookie: String, title: String, year: Int): SejfStreamResponse {
+    override suspend fun sejfStream(baseUrl: String, sessionCookie: String, title: String, year: Int,
+                                   imdb: String, tmdb: String): SejfStreamResponse {
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        val q = "?title=" + java.net.URLEncoder.encode(title, "UTF-8") + if (year > 0) "&year=$year" else ""
+        val q = "?title=" + java.net.URLEncoder.encode(title, "UTF-8") +
+            (if (year > 0) "&year=$year" else "") +
+            (if (imdb.isNotBlank()) "&imdb=" + java.net.URLEncoder.encode(imdb, "UTF-8") else "") +
+            (if (tmdb.isNotBlank()) "&tmdb=" + java.net.URLEncoder.encode(tmdb, "UTF-8") else "")
         return service.sejfStream("${baseUrl.trimEnd('/')}/api/sejf/stream$q", cookie)
     }
 
