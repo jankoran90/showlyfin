@@ -1944,7 +1944,8 @@ class DetailViewModel @Inject constructor(
     private fun sejfFolderTitle(): String {
         val st = _uiState.value
         val item = st.item ?: return ""
-        val isCzech = movieDetails?.original_language == "cs" || showDetails?.original_language == "cs"
+        val s = _uiState.value
+        val isCzech = s.movieDetails?.original_language == "cs" || s.showDetails?.original_language == "cs"
         return if (isCzech) (st.tmdbCzTitle ?: item.title) else (st.tmdbEnTitle ?: item.title)
     }
 
@@ -1995,8 +1996,11 @@ class DetailViewModel @Inject constructor(
             (st.tmdbCzOverview ?: item.overview)?.let { put("plot", it.take(1200)) }
             item.imdbId?.let { put("imdbid", it) }
             item.tmdbId?.let { put("tmdbid", it.toString()) }
-            movieDetails?.genres?.mapNotNull { g -> g.name }?.take(5)?.let { gs ->
-                if (gs.isNotEmpty()) put("genres", gs.joinToString(", "))
+            val genreIds = st.movieDetails?.genres?.map { g -> g.id }
+                ?: st.showDetails?.genres?.map { g -> g.id }
+            genreIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+                val names = com.github.jankoran90.showlyfin.data.tmdb.model.TmdbGenres.names(ids, isShow = item.type != MediaType.MOVIE)
+                if (names.isNotEmpty()) put("genres", names)
             }
             put("releaseName", st.rememberedSource?.name ?: lastPlayedStream?.name ?: "")
             put("subtitleName", if (subId != null) "titulky.cs.srt" else "")
