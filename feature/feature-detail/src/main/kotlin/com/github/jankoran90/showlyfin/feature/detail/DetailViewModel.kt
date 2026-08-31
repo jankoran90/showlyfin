@@ -187,6 +187,10 @@ class DetailViewModel @Inject constructor(
     // LAPIDARY S4b — one-click z řady „Uloženo k přehrání": po hydrataci detailu přehraj zapamatovaný
     // zdroj rovnou (jednou). Guard proti dvojímu spuštění (rekompozice / návrat na tentýž titul).
     private var autoplayRememberedPending = false
+    // SEJF LAN: playRemembered() teď před playStream() čeká na async dellhome dosažitelnost
+    // (sejfLanStream) — playStream()'s vlastní isResolvingStream guard se během TOHOTO čekání
+    // ještě nenastaví, takže dvojtap/dvojí OK na dálkovém by prošel oběma větvemi souběžně.
+    private var playRememberedPending = false
     private var voiceCastActive = false
     private var voiceCastDeviceId: String? = null
 
@@ -303,7 +307,12 @@ class DetailViewModel @Inject constructor(
                 // SEJF (user 13:15 2026-08-30: „na všech kartách filmu domeček natvrdo"): bez resetu
                 // držel true z PŘEDCHOZÍHO filmu (archivace All the Long Nights) a svítil na všech
                 // kartách po řadě. Táž past, jaká kdysi visela u csfdTitle (viz komentář níž).
+                // Reviduji: sejfState/sejfResult/tmdbEnTitle mají tutéž past (pollSejfJob dopisuje
+                // do aktuálního uiState, i když mezitím user přepnul kartu) — reset všech čtyř spolu.
                 sejfArchived = false,
+                sejfState = null,
+                sejfResult = null,
+                tmdbEnTitle = null,
                 csfdId = null,
                 csfdRating = null,
                 csfdPlot = null,
@@ -1750,6 +1759,10 @@ class DetailViewModel @Inject constructor(
                                     timber.log.Timber.i("[sejf-lan] dellhome nedosažitelný → zdroj se nezobrazí")
                                     return@let
                                 }
+                                // Past jako u pollSejfJob výš: dotaz doběhne asynchronně, mezitím
+                                // uživatel mohl picker zavřít a otevřít jiný film — bez guardu by se
+                                // sem podstrčil zdroj FILMU A do pickeru FILMU B.
+                                if (_uiState.value.item?.isSameAs(item) != true) return@let
                                 val s = UploaderStream(
                                     name = "dellhome — vlastní filmotéka",
                                     description = "Uložená kopie na tvém dellhome (domácí síť)",
@@ -1980,7 +1993,12 @@ class DetailViewModel @Inject constructor(
         val st = _uiState.value
         val item = st.item
         val se = episodeSelector?.let { "_s${it.season}e${it.episode}" } ?: ""
-        val release = st.rememberedSource?.name ?: lastPlayedStream?.name
+        val src = st.rememberedSource ?: lastPlayedStream
+        // Musí sedět s PlaybackViewModel.sourceKey()/releaseTag(): release je name+description
+        // (SEZONA f3b — u AIOStreams nese skutečný název releasu description, name je jen odznak),
+        // ne jen name. Jinak archivace hledá korekci pod jiným klíčem, než pod kterým ji uložil hráč.
+        val release = src?.let { listOfNotNull(it.name, it.description).joinToString(" ").trim().take(300) }
+            ?.takeIf { it.isNotBlank() }
         val norm = release?.lowercase()?.filter { it.isLetterOrDigit() }?.takeIf { it.isNotBlank() }
         return "${item?.imdbId.orEmpty()}$se${if (norm != null) "#" + Integer.toHexString(norm.hashCode()) else ""}"
     }
@@ -2092,23 +2110,29 @@ class DetailViewModel @Inject constructor(
                 when (job?.state) {
                     "done" -> {
                         val mb = job.bytes / 1_048_576
-                        _uiState.update {
-                            it.copy(
-                                sejfState = null,
-                                captureMessage = "Uloženo na dellhome ✓ (${mb} MB)",
-                                sejfResult = "hotovo|${mb} MB",
-                                sejfArchived = true,
-                            )
+                        // Past jako v else větvi níž: job běží dál i po přepnutí karty (dellhome download
+                        // je nezávislý na appce) — bez guardu by "hotovo" dopsalo do uiState JINÉHO filmu.
+                        _uiState.update { st2 ->
+                            if (st2.item?.isSameAs(item) == true)
+                                st2.copy(
+                                    sejfState = null,
+                                    captureMessage = "Uloženo na dellhome ✓ (${mb} MB)",
+                                    sejfResult = "hotovo|${mb} MB",
+                                    sejfArchived = true,
+                                )
+                            else st2
                         }
                         return@launch
                     }
                     "error" -> {
-                        _uiState.update {
-                            it.copy(
-                                sejfState = null,
-                                captureMessage = "Uložení selhalo: ${job.error ?: "?"}",
-                                sejfResult = "chyba|${job.error ?: "?"}",
-                            )
+                        _uiState.update { st2 ->
+                            if (st2.item?.isSameAs(item) == true)
+                                st2.copy(
+                                    sejfState = null,
+                                    captureMessage = "Uložení selhalo: ${job.error ?: "?"}",
+                                    sejfResult = "chyba|${job.error ?: "?"}",
+                                )
+                            else st2
                         }
                         return@launch
                     }
@@ -2761,25 +2785,31 @@ class DetailViewModel @Inject constructor(
     /** Play-gate: na mobilních datech nahraď uložený velký zdroj menší alternativou, jinak hraj rovnou. */
     fun playRemembered() {
         val src = _uiState.value.rememberedSource ?: return
+        if (playRememberedPending) return
+        playRememberedPending = true
         viewModelScope.launch {
-            // SEJF LAN (user 13:23 2026-08-30: „když jsem doma na wifi, dokážeme hrát rovnou z dell
-            // zdroje bez ruční změny zdroje?"): doma a s dosažitelným dellhome přehraj ULOŽENOU kopii
-            // rovnou; jinak pokračuj běžnou cestou (zapamatovaný zdroj / menší varianta venku).
-            sejfLanStream()?.let { playStream(it); return@launch }
-            // Uložený dellhome mimo domácí síť (user 13:57): URL na LAN není dosažitelná — nenech
-            // přehrávač padat, rovnou otevři výběr zdrojů (RD aj. se dohledají).
-            if (isSejfSource(src)) {
-                timber.log.Timber.i("[sejf-lan] uložený dellhome zdroj mimo LAN → otevírám výběr zdrojů")
-                openStreamPicker()
-                return@launch
-            }
-            val mode = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.effectiveMode(
-                prefs, connectivity.currentLinkKind(),
-            )
-            if (mode == com.github.jankoran90.showlyfin.core.network.LinkMode.AWAY && isTooBigForAway(src)) {
-                seekSmallerAlternative(src)
-            } else {
-                playStream(src)
+            try {
+                // SEJF LAN (user 13:23 2026-08-30: „když jsem doma na wifi, dokážeme hrát rovnou z dell
+                // zdroje bez ruční změny zdroje?"): doma a s dosažitelným dellhome přehraj ULOŽENOU kopii
+                // rovnou; jinak pokračuj běžnou cestou (zapamatovaný zdroj / menší varianta venku).
+                sejfLanStream()?.let { playStream(it); return@launch }
+                // Uložený dellhome mimo domácí síť (user 13:57): URL na LAN není dosažitelná — nenech
+                // přehrávač padat, rovnou otevři výběr zdrojů (RD aj. se dohledají).
+                if (isSejfSource(src)) {
+                    timber.log.Timber.i("[sejf-lan] uložený dellhome zdroj mimo LAN → otevírám výběr zdrojů")
+                    openStreamPicker()
+                    return@launch
+                }
+                val mode = com.github.jankoran90.showlyfin.core.network.LinkModePrefs.effectiveMode(
+                    prefs, connectivity.currentLinkKind(),
+                )
+                if (mode == com.github.jankoran90.showlyfin.core.network.LinkMode.AWAY && isTooBigForAway(src)) {
+                    seekSmallerAlternative(src)
+                } else {
+                    playStream(src)
+                }
+            } finally {
+                playRememberedPending = false
             }
         }
     }

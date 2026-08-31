@@ -59,7 +59,12 @@ class MediaEnricher @Inject constructor(
             val trD = async { runCatching { tmdb.fetchShowTranslation(tmdbId, "cs") }.getOrNull() }
             val ageD = async { if (withCertification) runCatching { tmdb.fetchShowCertificationAge(tmdbId) }.getOrNull() else null }
             val details = detailsD.await(); val tr = trD.await()
-            val czOverview = firstNonBlank(tr?.overview, details?.overview)
+            // Stejná past jako u titleCz níž: cs-CZ `details.overview` u nepřeloženého titulu umí
+            // vrátit popis v PŮVODNÍM jazyce (ne češtině) — fallback jen u českého originálu.
+            val czOverview = firstNonBlank(
+                tr?.overview,
+                details?.overview?.takeIf { details.original_language.equals("cs", true) },
+            )
             // KANON (user 2026-08-30): titleCz = POUZE reálná čeština. Dřív tady byl fallback
             // `details?.name` (cs-CZ) — u nepřeložených titulů TMDB vrací CIZOPISMÝ originál, který
             // se uložil do titleCz, zablokoval líné dorovnávání řádků (guard „titleCz znám") a v seznamech
@@ -93,7 +98,10 @@ class MediaEnricher @Inject constructor(
             val trD = async { runCatching { tmdb.fetchMovieTranslation(tmdbId, "cs") }.getOrNull() }
             val ageD = async { if (withCertification) runCatching { tmdb.fetchMovieCertificationAge(tmdbId) }.getOrNull() else null }
             val details = detailsD.await(); val tr = trD.await()
-            val czOverview = firstNonBlank(tr?.overview, details?.overview)
+            val czOverview = firstNonBlank(
+                tr?.overview,
+                details?.overview?.takeIf { details.original_language.equals("cs", true) },
+            )
             // KANON — viz SHOW větev: titleCz jen reálná čeština (cs translation, nebo cs-CZ details
             // u českého originálu), jinak EN překlad do titleEn. Cizopísmný originál do titleCz NESMÍ.
             val csTitle = tr?.title?.takeIf { it.isNotBlank() }

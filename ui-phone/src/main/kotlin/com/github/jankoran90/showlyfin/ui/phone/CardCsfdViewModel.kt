@@ -38,6 +38,11 @@ class CardCsfdViewModel @Inject constructor(
     private var sejfIndex: List<String>? = null
     private var sejfIndexAt = 0L
 
+    // TmdbTranslation.Data dělí název na .title (film) / .name (seriál) — `.title` samo o sobě
+    // je u seriálu vždy null. Jedno místo, ať se past nevrátí do dalšího rungu.
+    private fun com.github.jankoran90.showlyfin.data.tmdb.model.TmdbTranslation.Data?.localized(isShow: Boolean) =
+        if (isShow) this?.name else this?.title
+
     override suspend fun isArchived(
         imdbId: String?, tmdbId: Long?, isShow: Boolean, year: Int?, variantDirs: List<String>,
     ): Boolean {
@@ -55,12 +60,12 @@ class CardCsfdViewModel @Inject constructor(
         val tr = runCatching {
             if (isShow) tmdb.fetchShowTranslation(tmdbId, "cs") else tmdb.fetchMovieTranslation(tmdbId, "cs")
         }.getOrNull()
-        val csTitle = tr?.title?.takeIf { it.isNotBlank() }
+        val csTitle = tr.localized(isShow)?.takeIf { it.isNotBlank() }
         if (csTitle != null && "$csTitle ($year)" in idx) return true
         val en = runCatching {
             if (isShow) tmdb.fetchShowTranslation(tmdbId, "en") else tmdb.fetchMovieTranslation(tmdbId, "en")
         }.getOrNull()
-        val enTitle = (en?.title ?: en?.name)?.takeIf { it.isNotBlank() } ?: return false
+        val enTitle = en.localized(isShow)?.takeIf { it.isNotBlank() } ?: return false
         return "$enTitle ($year)" in idx
     }
 
@@ -86,12 +91,12 @@ class CardCsfdViewModel @Inject constructor(
             }.getOrNull()
         }
         // 1) česky z TMDB
-        val cz = tr?.title?.takeIf { it.isNotBlank() }
+        val cz = tr.localized(isShow)?.takeIf { it.isNotBlank() }
         if (cz != null) return cz
         // 2) česky z ČSFD (jen přes backend — on-device scraper titulek neumí, viz fetchCsfdPlot).
         //    csfdId resolvuj stejně jako overview(): cs title → název z položky → holé imdb/tmdb.
         val titles = listOfNotNull(
-            tr?.title?.takeIf { it.isNotBlank() },
+            cz,
             title.takeIf { it.isNotBlank() },
         )
         val base = prefs.getString("uploader_base_url", "").orEmpty()
@@ -116,7 +121,7 @@ class CardCsfdViewModel @Inject constructor(
                 if (isShow) tmdb.fetchShowTranslation(it, "en") else tmdb.fetchMovieTranslation(it, "en")
             }.getOrNull()
         }
-        return en?.title?.takeIf { it.isNotBlank() }
+        return en.localized(isShow)?.takeIf { it.isNotBlank() }
     }
 
     /**
