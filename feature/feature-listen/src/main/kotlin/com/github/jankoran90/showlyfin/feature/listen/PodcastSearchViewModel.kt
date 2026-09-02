@@ -1,0 +1,163 @@
+package com.github.jankoran90.showlyfin.feature.listen
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.domain.normalizeForSearch
+import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
+import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
+import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
+import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
+import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
+import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import timber.log.Timber
+import javax.inject.Inject
+
+/**
+ * TRAWL (Slovo, 2026-09-02, user „fulltext vč. celé historie, napříč zdroji"): fulltext hledání
+ * epizod přes VŠECHNY sledované zdroje (YouTube+RSS+NaVýbornou) najednou, hledá i v popisu ("hosté"
+ * = text v popisu), diakritika/case-insensitive ([com.github.jankoran90.showlyfin.core.domain.SearchUtil]).
+ * Datová vrstva [PodcastSourcesRepository.searchEpisodes] dělá práci (YouTube = živé server-side
+ * hledání v CELÉ historii kanálu, RSS/NaVýbornou = velký lokální fetch + klientský filtr) — tahle
+ * VM jen debounce dotazu + řazení výsledků.
+ */
+@HiltViewModel
+class PodcastSearchViewModel @Inject constructor(
+    private val repo: PodcastSourcesRepository,
+    private val connection: AudiobookPlayerConnection,
+    private val offline: OfflineDownloadManager,
+) : ViewModel() {
+
+    enum class SortMode(val label: String) {
+        RELEVANCE("Relevance"), DATE("Datum"), NAME("Název"), VIEWS("Zhlédnutí"),
+    }
+
+    data class UiState(
+        val query: String = "",
+        val loading: Boolean = false,
+        val searched: Boolean = false,
+        val results: List<SourceEpisode> = emptyList(),
+        val sort: SortMode = SortMode.RELEVANCE,
+    )
+
+    private val _state = MutableStateFlow(UiState())
+    val state = _state.asStateFlow()
+
+    /** Stav přehrávače → zvýraznění právě hrané epizody v řádku. */
+    val playerState = connection.state
+
+    /** Stav offline stahování epizod (badge / akce Stáhnout). Klíč = `resumeKey`. */
+    val offlineStates = offline.states
+
+    private var searchJob: Job? = null
+    private var lastResults: List<SourceEpisode> = emptyList()
+
+    /** Volá se při KAŽDÉM stisku v poli — debounce ať se nehledá po každém písmenu. */
+    fun setQuery(text: String) {
+        _state.update { it.copy(query = text) }
+        searchJob?.cancel()
+        if (text.isBlank()) {
+            lastResults = emptyList()
+            _state.update { it.copy(results = emptyList(), loading = false, searched = false) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(500)
+            runSearch(text)
+        }
+    }
+
+    /** Znovu spustí PRÁVĚ zadaný dotaz (např. po chybě / obnovení připojení). */
+    fun retry() {
+        val q = _state.value.query
+        if (q.isBlank()) return
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch { runSearch(q) }
+    }
+
+    private suspend fun runSearch(query: String) {
+        _state.update { it.copy(loading = true) }
+        val results = runCatching { repo.searchEpisodes(query) }
+            .onFailure { Timber.w(it, "[TRAWL] hledání selhalo") }
+            .getOrDefault(emptyList())
+        lastResults = results
+        _state.update { it.copy(loading = false, searched = true, results = sorted(results, it.sort, query)) }
+    }
+
+    fun setSort(mode: SortMode) {
+        _state.update { it.copy(sort = mode, results = sorted(lastResults, mode, it.query)) }
+    }
+
+    private fun sorted(list: List<SourceEpisode>, mode: SortMode, query: String): List<SourceEpisode> = when (mode) {
+        SortMode.DATE -> list.sortedByDescending { parseEpisodeDateMs(it.date) ?: Long.MIN_VALUE }
+        SortMode.NAME -> list.sortedBy { it.title.normalizeForSearch() }
+        SortMode.VIEWS -> list.sortedByDescending { it.viewCount ?: -1L }
+        SortMode.RELEVANCE -> list.sortedByDescending { relevanceScore(it, query) }
+    }
+
+    /** Titulek > začátek titulku > titulek obsahuje > jen v popisu (YouTube popis matchuje přes
+     *  vlastní server-side hledání, appka to nedokáže odlišit od 0, proto malý bonus i za samotnou
+     *  přítomnost ve výsledcích YouTube — řadí se za textové shody, ne před ně). */
+    private fun relevanceScore(ep: SourceEpisode, query: String): Int {
+        val q = query.normalizeForSearch()
+        val title = ep.title.normalizeForSearch()
+        return when {
+            q.isBlank() -> 0
+            title == q -> 100
+            title.startsWith(q) -> 80
+            title.contains(q) -> 60
+            ep.description?.normalizeForSearch()?.contains(q) == true -> 30
+            else -> 10 // YouTube server-side shoda mimo název/popis (např. přepis/metadata, co appka nevidí)
+        }
+    }
+
+    private fun toQueued(ep: SourceEpisode): QueuedEpisode {
+        val key = ep.resumeKey ?: ep.id
+        val localUrl = offline.localVideo(key)?.let { android.net.Uri.fromFile(it).toString() }
+        return QueuedEpisode(
+            itemId = ep.sourceKey?.substringAfter(':') ?: ep.subtitle ?: "search",
+            episodeId = key,
+            title = ep.title,
+            coverUrl = ep.imageUrl,
+            description = ep.description,
+            podcastTitle = ep.subtitle,
+            direct = DirectAudio(url = localUrl ?: ep.streamUrl, durationSec = ep.durationSec, author = ep.subtitle),
+        )
+    }
+
+    /** Přehraj výsledek přes poslechový přehrávač (sdílený resume klíč s per-zdroj obrazovkami). */
+    fun play(ep: SourceEpisode) = connection.playDirectEpisode(toQueued(ep))
+
+    /** Přidej výsledek do fronty (další/na konec). */
+    fun enqueue(ep: SourceEpisode, atFront: Boolean = false) = connection.enqueue(toQueued(ep), atFront = atFront)
+
+    /** Stáhni výsledek do telefonu (offline poslech). */
+    fun download(ep: SourceEpisode) {
+        if (ep.streamUrl.isBlank()) return
+        offline.enqueue(
+            OfflineRequest(
+                key = ep.resumeKey ?: ep.id,
+                title = ep.title.ifBlank { ep.subtitle.orEmpty() },
+                subtitle = ep.subtitle,
+                type = OfflineRequest.TYPE_PODCAST,
+                sourceLabel = if (ep.resumeKey?.startsWith("yt:") == true) "YouTube" else "Podcast",
+                videoUrl = ep.streamUrl,
+                posterUrl = ep.imageUrl,
+                durationSec = ep.durationSec,
+                description = ep.description,
+                publishedAt = parseEpisodeDateMs(ep.date),
+                sourceKey = ep.sourceKey,
+            ),
+        )
+    }
+
+    fun deleteOffline(ep: SourceEpisode) = offline.delete(ep.resumeKey ?: ep.id)
+}

@@ -197,6 +197,9 @@ interface UploaderRemoteDataSource {
 
     // TUNER (SHW-62) — YouTube podcast (streaming): feed + samonosné stream URL (?key=, jako sdilej/titulky)
     suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int = 30): YtChannelFeed
+    /** TRAWL (Slovo, 2026-09-02): fulltext hledání v CELÉ historii kanálu (YouTube 'Search this
+     *  channel', ne jen lokálně načtený feed) — vrací i `viewCount`, `uploadDate` best-effort/null. */
+    suspend fun searchYtFeed(baseUrl: String, sessionCookie: String, channel: String, query: String, limit: Int = 30): YtChannelFeed
     /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio".
      *  CLARITY: quality jen pro video. Pro audio + progresivní 360p video. */
     fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720"): String

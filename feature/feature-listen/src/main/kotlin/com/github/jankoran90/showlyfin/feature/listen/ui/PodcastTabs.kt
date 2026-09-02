@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -48,6 +49,8 @@ fun PodcastTabRow(
     selected: PodcastTab,
     onSelect: (PodcastTab) -> Unit,
     onOpenFilter: () -> Unit,
+    /** TRAWL (Slovo, 2026-09-02): fulltext hledání napříč zdroji — druhá ikona v řadě, hned za filtrem. */
+    onOpenSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -64,7 +67,12 @@ fun PodcastTabRow(
             Icon(Icons.Default.Tune, contentDescription = "Filtr podcastů")
         }
 
-        // 2) Timeline · Sledované · Objev
+        // 2) Hledat — TRAWL, MUSTR (ovladače do lišty, ne schované v menu).
+        FilledTonalIconButton(onClick = onOpenSearch, modifier = Modifier.size(40.dp)) {
+            Icon(Icons.Default.Search, contentDescription = "Hledat v podcastech")
+        }
+
+        // 3) Timeline · Sledované · Objev
         val tabs = PodcastTab.entries
         SingleChoiceSegmentedButtonRow(Modifier.weight(1f)) {
             tabs.forEachIndexed { i, tab ->

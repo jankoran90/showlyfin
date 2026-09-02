@@ -1,11 +1,15 @@
 package com.github.jankoran90.showlyfin.data.uploader
 
 import android.content.SharedPreferences
+import com.github.jankoran90.showlyfin.core.domain.matchesQuery
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.RssFeed
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceCategory
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
@@ -174,6 +178,46 @@ class PodcastSourcesRepository @Inject constructor(
             }
         }.onFailure { Timber.w(it, "[CRUISE] načtení epizod zdroje '%s' selhalo", source.title) }
             .getOrDefault(emptyList())
+    }
+
+    /**
+     * TRAWL (Slovo, 2026-09-02, user „fulltext vč. celé historie, napříč zdroji"): hledá SOUČASNĚ
+     * přes VŠECHNY sledované zdroje. YouTube = živé `/feed_search` (YouTube VLASTNÍ „Search this
+     * channel", indexuje i popis, NENÍ omezené na lokálně načtenou cache — viz INCIDENT 2026-08-22,
+     * proč appka NEstahuje celou historii sama). RSS/NaVýbornou/ČT nemají fulltext endpoint na
+     * serveru → [loadEpisodes] s velkým limitem (feed se stejně stahuje celý, viz `/api/rss/feed`
+     * strop 200→1000) + klientský [matchesQuery] (diakritika/case-insensitive) na název+popis.
+     */
+    suspend fun searchEpisodes(query: String, limitPerSource: Int = 30): List<SourceEpisode> = coroutineScope {
+        if (baseUrl.isBlank() || query.isBlank()) return@coroutineScope emptyList()
+        _sources.value.map { source ->
+            async {
+                runCatching {
+                    if (source.type == "youtube") {
+                        remote.searchYtFeed(baseUrl, cookie, source.ref, query, limitPerSource).entries.map { ep ->
+                            SourceEpisode(
+                                id = ep.id,
+                                title = ep.title,
+                                subtitle = source.title,
+                                streamUrl = remote.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                                imageUrl = (ep.thumbnail ?: source.thumbnail).httpsUrl(),
+                                date = ep.uploadDate,
+                                resumeKey = "yt:${ep.id}",
+                                description = ep.description,
+                                durationSec = ep.duration ?: 0.0,
+                                viewCount = ep.viewCount,
+                                sourceKey = "${source.type}:${source.ref}",
+                            )
+                        }
+                    } else {
+                        loadEpisodes(source, limit = 500)
+                            .filter { matchesQuery(query, it.title, it.description) }
+                            .map { it.copy(sourceKey = "${source.type}:${source.ref}") }
+                    }
+                }.onFailure { Timber.w(it, "[TRAWL] hledání ve zdroji '%s' selhalo", source.title) }
+                    .getOrDefault(emptyList())
+            }
+        }.awaitAll().flatten()
     }
 }
 

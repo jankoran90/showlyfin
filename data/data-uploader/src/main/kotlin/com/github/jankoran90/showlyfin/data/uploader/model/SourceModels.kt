@@ -145,4 +145,9 @@ data class SourceEpisode(
     val description: String? = null,
     /** AGORA (Timeline): délka epizody v sekundách (0 = neznámá) — pro download request i případný štítek. */
     val durationSec: Double = 0.0,
+    /** TRAWL (Slovo, 2026-09-02): počet zhlédnutí — jen YouTube fulltext hledání ho posílá, jinak null. */
+    val viewCount: Long? = null,
+    /** TRAWL: `"$type:$ref"` zdroje (parita s [PodcastTimelineViewModel] `sourceKey`) — jen z
+     *  [PodcastSourcesRepository.searchEpisodes], pro filtr skrytých pořadů při stažení z výsledků. */
+    val sourceKey: String? = null,
 )

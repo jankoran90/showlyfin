@@ -305,8 +305,15 @@ private fun PodcastsContent(
         mutableStateOf(PodcastTab.fromPref(viewModel.podcastDefaultTab))
     }
     var showFilter by remember { mutableStateOf(false) }
+    // TRAWL (Slovo, 2026-09-02): fulltext hledání jako overlay nad taby, bez zásahu do nav grafu.
+    var showSearch by remember { mutableStateOf(false) }
     // Bump po zavření filtru → Timeline přepočítá feed dle nového rozsahu/typu.
     var filterEpoch by remember { mutableStateOf(0) }
+
+    if (showSearch) {
+        PodcastSearchScreen(onBack = { showSearch = false }, modifier = Modifier.fillMaxSize())
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         // Offline: online taby (Timeline/Sledované/Objev) nemají data → zobraz rovnou stažené epizody
@@ -318,6 +325,7 @@ private fun PodcastsContent(
             selected = tab,
             onSelect = { tab = it },
             onOpenFilter = { showFilter = true },
+            onOpenSearch = { showSearch = true },
         )
 
         // „Stažené" chip přesunut z řady do filtru (ikona Filtr) — viz PodcastFilterSheet.

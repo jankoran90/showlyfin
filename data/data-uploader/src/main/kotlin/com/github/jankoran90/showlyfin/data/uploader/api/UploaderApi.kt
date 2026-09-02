@@ -932,6 +932,16 @@ internal class UploaderApi(
         return service.getYtFeed("$base/api/yt/feed?channel=$ch&limit=$limit", cookie)
     }
 
+    // TRAWL (Slovo, 2026-09-02) — fulltext hledání v CELÉ historii kanálu (proxy antenna /feed_search).
+    // Stejný response tvar jako getYtFeed → reuse `service.getYtFeed` (generický @Url endpoint).
+    override suspend fun searchYtFeed(baseUrl: String, sessionCookie: String, channel: String, query: String, limit: Int): YtChannelFeed {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val ch = URLEncoder.encode(channel, "UTF-8")
+        val q = URLEncoder.encode(query, "UTF-8")
+        return service.getYtFeed("$base/api/yt/search?channel=$ch&q=$q&limit=$limit", cookie)
+    }
+
     override fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String): String {
         val base = baseUrl.trimEnd('/')
         val key = URLEncoder.encode(sessionCookie, "UTF-8")

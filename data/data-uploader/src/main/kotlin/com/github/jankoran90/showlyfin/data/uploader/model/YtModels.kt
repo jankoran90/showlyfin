@@ -18,4 +18,6 @@ data class YtEpisode(
     val duration: Double? = null,
     @SerializedName("upload_date") val uploadDate: String? = null,
     val description: String? = null,
+    // TRAWL (Slovo, 2026-09-02): jen z `/feed_search` (fulltext hledání) — `/feed` ho neposílá (null).
+    @SerializedName("view_count") val viewCount: Long? = null,
 )
