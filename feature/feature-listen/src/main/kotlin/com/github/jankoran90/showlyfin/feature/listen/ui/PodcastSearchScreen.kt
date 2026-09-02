@@ -214,9 +214,10 @@ private fun SearchResultRow(
                 }
             }
         }
-        if (!episode.description.isNullOrBlank()) {
+        val description = episode.description
+        if (!description.isNullOrBlank()) {
             Text(
-                episode.description,
+                description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = if (expanded) Int.MAX_VALUE else 3,
