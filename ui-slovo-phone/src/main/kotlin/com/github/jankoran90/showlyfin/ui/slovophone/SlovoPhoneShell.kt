@@ -322,7 +322,12 @@ private fun SlovoShellContent() {
                                 ) {
                                     FloatingActionButton(
                                         onClick = { showGlobalSearch = true },
-                                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                                        // BUG (2026-09-03, user screenshot): MiniPlayer se kreslí AŽ PO
+                                        // téhle sekci (outer Box, BottomCenter, skoro celá šířka) → bez
+                                        // odsazení FAB při hraní úplně zmizel pod ním. 96.dp = stejná
+                                        // rezerva, jakou LazyColumn obrazovky (YoutubeChannelScreen aj.)
+                                        // dávají do `contentPadding` pro mini-player, vždy (ne jen když hraje).
+                                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 96.dp),
                                     ) {
                                         Icon(Icons.Default.Search, contentDescription = "Hledat ve všech podcastech")
                                     }
