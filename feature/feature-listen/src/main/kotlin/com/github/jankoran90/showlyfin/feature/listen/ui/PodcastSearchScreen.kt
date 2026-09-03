@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -88,7 +89,10 @@ fun PodcastSearchScreen(
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     LaunchedEffect(scopeSource) { viewModel.setScope(scopeSource) }
 
-    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    // BUG (2026-09-03, user screenshot): obrazovka běží bez Scaffoldu (overlay přes celou plochu,
+    // ne přes topBar) → bez vlastního odsazení lišta kolidovala se stavovým řádkem Androidu a
+    // zpětná šipka/zavřít nešly ovládat. Stejná konvence jako ui-phone/SearchScreen.kt.
+    Column(modifier.fillMaxSize().statusBarsPadding().background(MaterialTheme.colorScheme.background)) {
         // Vyhledávací pole + zpět — stejný vzor jako SearchScreen (Filmy TMDB hledání).
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
