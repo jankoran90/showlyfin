@@ -19,11 +19,13 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
+import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -118,6 +120,19 @@ class MoviePlayerService : MediaSessionService() {
                 // adjustPeriodTimeOffsets=true (start synced) + clipDurations=true (menší rozdíl délky
                 // video/audio proudu neuseká konec dřív u jednoho z nich).
                 return MergingMediaSource(true, true, videoSource, audioSource)
+            }
+            // Delegace na obě vnitřní factory, ať se DRM/retry politika (kdyby ji ExoPlayer.Builder
+            // někdy nastavil i tudy) neztratí pro žádnou z cest — YouTube DASH pár DRM nepoužívá,
+            // jen dodržujeme kontrakt MediaSource.Factory (jinak abstraktní metody bez těla).
+            override fun setDrmSessionManagerProvider(p: DrmSessionManagerProvider): MediaSource.Factory {
+                default.setDrmSessionManagerProvider(p)
+                progressive.setDrmSessionManagerProvider(p)
+                return this
+            }
+            override fun setLoadErrorHandlingPolicy(p: LoadErrorHandlingPolicy): MediaSource.Factory {
+                default.setLoadErrorHandlingPolicy(p)
+                progressive.setLoadErrorHandlingPolicy(p)
+                return this
             }
         }
     }
