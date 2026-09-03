@@ -17,6 +17,21 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
+/** TRELLIS (2026-09-03): oddělovač video/audio DASH proudu v [youtubeVideoUrl] — netisknutelný znak,
+ *  v URL se nikdy nevyskytne. Rozděluje `PlaybackScreen.buildMediaItem`. */
+val YOUTUBE_DASH_URL_DELIMITER: String = 1.toChar().toString()
+
+/** TRELLIS: sestaví přehrávací URL YouTube videa z [UploaderRemoteDataSource] — sdíleno mezi
+ *  [PodcastSourcesRepository.youtubeVideoUrl] a [YoutubeChannelViewModel] (ten jede přímo přes
+ *  `uploaderDs`, ne přes repo), ať kombinovací logika (delimiter) nežije na dvou místech odděleně.
+ *  360 = jeden progresivní proud. 720/max = video proud + [YOUTUBE_DASH_URL_DELIMITER] + audio proud —
+ *  starý kombinovaný HLS (itag 95/96) YouTube přestalo vydávat, appka je spojuje sama v ExoPlayeru. */
+fun UploaderRemoteDataSource.youtubeVideoUrl(baseUrl: String, cookie: String, videoId: String, quality: String): String {
+    val video = ytVideoUrl(baseUrl, cookie, videoId, quality)
+    val audio = ytVideoAudioUrl(baseUrl, cookie, videoId, quality)
+    return if (audio != null) "$video$YOUTUBE_DASH_URL_DELIMITER$audio" else video
+}
+
 /**
  * PRESET (SHW-65): sdílený seznam ZDROJŮ Poslechu (YouTube kanály + RSS podcasty) uložený NA SERVERU
  * (přidám na jednom telefonu → vidí celá rodina). Jeden zdroj pravdy pro appku = [sources] StateFlow,
@@ -107,9 +122,9 @@ class PodcastSourcesRepository @Inject constructor(
             .getOrDefault(emptyList())
     }
 
-    /** Přehrávací URL YouTube videa. CLARITY: 360 progresiv / 720·max HLS (video+audio, i pro TV). */
+    /** Přehrávací URL YouTube videa — viz [UploaderRemoteDataSource.youtubeVideoUrl]. */
     fun youtubeVideoUrl(videoId: String, quality: String = "720"): String =
-        remote.ytVideoUrl(baseUrl, cookie, videoId, quality)
+        remote.youtubeVideoUrl(baseUrl, cookie, videoId, quality)
 
     /** Epizody RSS podcastu (přímé audio enclosure URL). */
     suspend fun loadRss(feedUrl: String, limit: Int = 50): RssFeed =

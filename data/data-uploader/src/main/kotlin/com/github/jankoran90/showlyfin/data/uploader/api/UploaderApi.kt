@@ -951,10 +951,18 @@ internal class UploaderApi(
     override fun ytVideoUrl(baseUrl: String, sessionCookie: String, videoId: String, quality: String): String {
         val base = baseUrl.trimEnd('/')
         val key = URLEncoder.encode(sessionCookie, "UTF-8")
-        // 360 = progresivní mp4 (byte-proxy); 720/max = HLS (itag 95/96, video+audio), hraje i na TV.
-        // .m3u8 přípona → ExoPlayer (telefon i TV) sám pozná HLS i bez nastaveného mime typu.
+        // TRELLIS: 360 = progresivní mp4 (video+audio v jednom, byte-proxy). 720/max = jen VIDEO proud
+        // (viz ytVideoAudioUrl pro zvuk) — starý kombinovaný HLS (itag 95/96) YouTube přestalo vydávat
+        // (ověřeno živě 2026-09-03), appka teď oba proudy spojuje sama v ExoPlayeru.
         return if (quality == "360") "$base/api/yt/stream/$videoId?kind=video&quality=360&key=$key"
-        else "$base/api/yt/hls/$videoId.m3u8?quality=$quality&key=$key"
+        else "$base/api/yt/stream/$videoId?kind=video_track&quality=$quality&key=$key"
+    }
+
+    override fun ytVideoAudioUrl(baseUrl: String, sessionCookie: String, videoId: String, quality: String): String? {
+        if (quality == "360") return null
+        val base = baseUrl.trimEnd('/')
+        val key = URLEncoder.encode(sessionCookie, "UTF-8")
+        return "$base/api/yt/stream/$videoId?kind=audio_track&quality=$quality&key=$key"
     }
 
     override suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String) {

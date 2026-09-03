@@ -9,15 +9,20 @@ import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
@@ -26,6 +31,7 @@ import com.github.jankoran90.showlyfin.core.domain.InstallGuard
 import com.github.jankoran90.showlyfin.core.domain.audio.AudioBoost
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.feature.playback.PlaybackTelemetry
+import com.github.jankoran90.showlyfin.feature.playback.ui.EXTRA_DASH_AUDIO_URL
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import javax.inject.Inject
@@ -88,6 +94,35 @@ class MoviePlayerService : MediaSessionService() {
     }
 
     /**
+     * TRELLIS (2026-09-03): YouTube 720p/„max" nemá kombinovaný proud (starý HLS itag 95/96 YouTube
+     * přestalo vydávat) — appka dostane video-only + audio-only DASH proud zvlášť (viz
+     * [com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository.youtubeVideoUrl]) a MUSÍ
+     * je spojit sama, stejný princip jako NewPipe/jiní YouTube klienti (`MergingMediaSource` dvou
+     * progresivních zdrojů — funguje i bez DASH manifestu/sidx, seek řeší moov box v každém souboru).
+     * [MediaController] umí předat jen jeden [MediaItem] přes IPC → druhé URI cestuje v
+     * [MediaMetadata.extras] ([EXTRA_DASH_AUDIO_URL]) a tahle factory ho tu čte a sestaví merge sama.
+     * Pro všechno ostatní (Jellyfin/RD/ČT/360p) beze změny — deleguje na [DefaultMediaSourceFactory].
+     */
+    private fun dashPairMediaSourceFactory(dataSourceFactory: DataSource.Factory): MediaSource.Factory {
+        val default = DefaultMediaSourceFactory(dataSourceFactory)
+            .setLoadErrorHandlingPolicy(RobustStreamHttp.loadErrorHandlingPolicy())
+        val progressive = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .setLoadErrorHandlingPolicy(RobustStreamHttp.loadErrorHandlingPolicy())
+        return object : MediaSource.Factory {
+            override fun getSupportedTypes(): IntArray = default.supportedTypes
+            override fun createMediaSource(mediaItem: MediaItem): MediaSource {
+                val audioUrl = mediaItem.mediaMetadata.extras?.getString(EXTRA_DASH_AUDIO_URL)
+                if (audioUrl.isNullOrBlank()) return default.createMediaSource(mediaItem)
+                val videoSource = progressive.createMediaSource(mediaItem)
+                val audioSource = progressive.createMediaSource(MediaItem.fromUri(audioUrl))
+                // adjustPeriodTimeOffsets=true (start synced) + clipDurations=true (menší rozdíl délky
+                // video/audio proudu neuseká konec dřív u jednoho z nich).
+                return MergingMediaSource(true, true, videoSource, audioSource)
+            }
+        }
+    }
+
+    /**
      * Postaví ExoPlayer. [forceSwVideo] = preferovat NextLib FFmpeg video renderer (spolehlivé HEVC při
      * selhání HW dekodéru). Volá se v [onCreate] i při auto-fallbacku (ACTION_FORCE_SW) — proto reuse
      * [audioSessionId] (DRC drží), vlastní listener [InstallGuard], vypnutý text renderer (titulky kreslíme sami).
@@ -123,10 +158,7 @@ class MoviePlayerService : MediaSessionService() {
             .setRenderersFactory(renderersFactory)
             // RELAY-CORE: robustní OkHttp zdroj (reconnect + pooling) + trpělivá/diferencovaná retry
             // politika (viz RobustStreamHttp) — místo DefaultHttpDataSource s výchozí impatient policy.
-            .setMediaSourceFactory(
-                DefaultMediaSourceFactory(RobustStreamHttp.dataSourceFactory(applicationContext))
-                    .setLoadErrorHandlingPolicy(RobustStreamHttp.loadErrorHandlingPolicy()),
-            )
+            .setMediaSourceFactory(dashPairMediaSourceFactory(RobustStreamHttp.dataSourceFactory(applicationContext)))
             .setLoadControl(
                 DefaultLoadControl.Builder()
                     .setBufferDurationsMs(60_000, 300_000, 5_000, 10_000)

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -103,6 +104,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.github.jankoran90.showlyfin.data.uploader.YOUTUBE_DASH_URL_DELIMITER
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.playback.service.MoviePlayerService
 import com.google.common.util.concurrent.MoreExecutors
@@ -189,15 +191,29 @@ private val SUBTITLE_COLORS = listOf(
  */
 private const val CTV_WIDEVINE_LICENSE = "https://ivys-wvproxy.o2tv.cz/license"
 
-private fun buildMediaItem(url: String, title: String, posterUrl: String?): MediaItem =
-    MediaItem.Builder()
-        .setUri(url)
+/** TRELLIS (2026-09-03): klíč do [MediaMetadata.extras] pro doplňkový audio proud u YouTube 720p/„max"
+ *  (viz [PodcastSourcesRepository.youtubeVideoUrl]) — [MoviePlayerService] ho čte a proudy spojí
+ *  vlastní `MediaSource.Factory` (MergingMediaSource), stejný princip jako NewPipe/jiní YT klienti. */
+const val EXTRA_DASH_AUDIO_URL = "dash_audio_url"
+
+private fun buildMediaItem(url: String, title: String, posterUrl: String?): MediaItem {
+    // TRELLIS: url = "videoUrl<delimiter>audioUrl" jen u YouTube 720p/„max" (starý kombinovaný HLS
+    // 95/96 YouTube přestalo vydávat) — jinde (Jellyfin/RD/ČT/360p) delimiter nikdy není, beze změny.
+    val dashAudioUrl = url.substringAfter(YOUTUBE_DASH_URL_DELIMITER, "").ifBlank { null }
+    val videoUrl = if (dashAudioUrl != null) url.substringBefore(YOUTUBE_DASH_URL_DELIMITER) else url
+    return MediaItem.Builder()
+        .setUri(videoUrl)
         // MARQUEE: název + plakát do systémové notifikace / na zámek (MediaController je předá službě;
         // remote plakát natáhne média notifikace sama přes svůj bitmap loader).
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title.ifBlank { "Přehrávání" })
                 .setArtworkUri(posterUrl?.let(Uri::parse))
+                .apply {
+                    if (dashAudioUrl != null) {
+                        setExtras(Bundle().apply { putString(EXTRA_DASH_AUDIO_URL, dashAudioUrl) })
+                    }
+                }
                 .build(),
         )
         // CLARITY (SHW-75): HLS podcast proxy (/api/yt/hls/…) nemá příponu .m3u8 → ExoPlayer by typ
@@ -207,13 +223,13 @@ private fun buildMediaItem(url: String, title: String, posterUrl: String?): Medi
             // VLTAVA (SHW-110): ČT resolvovaná PŘÍMO ZAŘÍZENÍM vrací token adresu o2tv CDN, která teprve
             // přesměruje na manifest — v URL tedy `.mpd` být nemusí. Poznáme ji podle CDN hostitele.
             when {
-                url.contains("/api/yt/hls/") -> setMimeType(MimeTypes.APPLICATION_M3U8)
-                url.contains("/api/ctv/manifest/") -> setMimeType(MimeTypes.APPLICATION_MPD)
-                url.contains("o2tv.cz") || url.contains("o2-tv.cz") || url.endsWith(".mpd") ->
+                videoUrl.contains("/api/yt/hls/") -> setMimeType(MimeTypes.APPLICATION_M3U8)
+                videoUrl.contains("/api/ctv/manifest/") -> setMimeType(MimeTypes.APPLICATION_MPD)
+                videoUrl.contains("o2tv.cz") || videoUrl.contains("o2-tv.cz") || videoUrl.endsWith(".mpd") ->
                     setMimeType(MimeTypes.APPLICATION_MPD)
             }
             // VLTAVA: šifrovaný ČT stream → Widevine session proti jejich licenčnímu serveru.
-            if (url.contains("encryption=wv")) {
+            if (videoUrl.contains("encryption=wv")) {
                 setDrmConfiguration(
                     MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
                         .setLicenseUri(CTV_WIDEVINE_LICENSE)
@@ -223,6 +239,7 @@ private fun buildMediaItem(url: String, title: String, posterUrl: String?): Medi
             }
         }
         .build()
+}
 
 @OptIn(UnstableApi::class)
 @Composable

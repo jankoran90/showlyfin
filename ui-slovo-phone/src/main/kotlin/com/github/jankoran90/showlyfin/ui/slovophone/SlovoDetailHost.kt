@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.data.uploader.YOUTUBE_DASH_URL_DELIMITER
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
@@ -98,15 +99,15 @@ private fun youtubeIdFromProxyUrl(url: String): String? =
     Regex("""/yt/(?:stream|hls)/([^/?.]+)""").find(url)?.groupValues?.get(1)
 
 /**
- * 720p HLS proxy URL → progresivní 360p záložka (stejný base+key, jiná cesta/kvalita). Backend
- * `/api/yt/hls/…` schválně 404uje, když video HLS formát nemá (jen itag 18 progresiv) — 360p
- * přes `/api/yt/stream/…?kind=video&quality=360` funguje prakticky vždy. `null` = url nesedí na
- * očekávaný HLS proxy tvar (žádná záložka, ať se nic nerozbije na neznámém formátu URL).
+ * TRELLIS: 720p/„max" DASH pár (video proud + [YOUTUBE_DASH_URL_DELIMITER] + audio proud) → progresivní
+ * 360p záložka (stejný base+key, jiná cesta/kvalita). 360p přes `/api/yt/stream/…?kind=video&quality=360`
+ * funguje prakticky vždy (progresivní itag 18, univerzální). `null` = url nesedí na očekávaný tvar
+ * (žádná záložka, ať se nic nerozbije na neznámém formátu URL).
  */
-private fun youtube360Fallback(hlsUrl: String): String? {
-    val m = Regex("""^(.*)/api/yt/hls/([^/?.]+)\.m3u8\?(.*)$""").find(hlsUrl) ?: return null
-    val (base, id, query) = m.destructured
-    val key = Regex("""key=([^&]+)""").find(query)?.value ?: return null
+private fun youtube360Fallback(dashUrl: String): String? {
+    val videoPart = dashUrl.substringBefore(YOUTUBE_DASH_URL_DELIMITER)
+    val m = Regex("""^(.*)/api/yt/stream/([^/?.]+)\?kind=video_track&quality=[^&]+&(key=[^&]+)$""").find(videoPart) ?: return null
+    val (base, id, key) = m.destructured
     return "$base/api/yt/stream/$id?kind=video&quality=360&$key"
 }
 

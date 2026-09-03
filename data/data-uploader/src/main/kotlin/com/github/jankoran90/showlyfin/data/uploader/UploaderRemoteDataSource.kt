@@ -204,9 +204,13 @@ interface UploaderRemoteDataSource {
      *  CLARITY: quality jen pro video. Pro audio + progresivní 360p video. */
     fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720"): String
 
-    /** CLARITY: přehrávací URL VIDEA dle kvality. 360 = progresivní byte-proxy; 720/max = HLS proxy
-     *  (itag 95/96 = video+audio, ExoPlayer hraje nativně, segmenty přes /api/yt/seg). Funguje i pro TV. */
+    /** TRELLIS (2026-09-03): přehrávací URL VIDEA dle kvality. 360 = progresivní byte-proxy (video+audio
+     *  v jednom). 720/max = video-only DASH proud (viz [ytVideoAudioUrl] pro doplňkový audio proud) —
+     *  starý kombinovaný HLS (itag 95/96) YouTube přestalo vydávat. Funguje i pro TV. */
     fun ytVideoUrl(baseUrl: String, sessionCookie: String, videoId: String, quality: String = "720"): String
+    /** TRELLIS: audio proud k [ytVideoUrl] pro quality 720/max (appka je spojí v ExoPlayeru,
+     *  MergingMediaSource). `null` u quality="360" (progresiv už zvuk obsahuje). */
+    fun ytVideoAudioUrl(baseUrl: String, sessionCookie: String, videoId: String, quality: String = "720"): String?
     /** Pre-warm resolve cache (best-effort) — rychlejší start přehrávání. */
     suspend fun warmYt(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720")
 

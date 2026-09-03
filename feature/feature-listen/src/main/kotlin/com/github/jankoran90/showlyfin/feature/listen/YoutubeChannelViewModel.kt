@@ -11,6 +11,7 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
+import com.github.jankoran90.showlyfin.data.uploader.youtubeVideoUrl
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
@@ -110,8 +111,10 @@ class YoutubeChannelViewModel @Inject constructor(
         }
     }
 
-    /** URL pro video přehrávač i cast na TV. CLARITY: 360 progresiv / 720·max HLS (video+audio). */
-    fun videoUrl(ep: YtEpisode): String = uploaderDs.ytVideoUrl(baseUrl, cookie, ep.id, streamQuality)
+    /** URL pro video přehrávač i cast na TV. TRELLIS: přes sdílenou extension (ne holé ytVideoUrl) —
+     *  jinak by 720p/„max" chyběl zvuk (starý kombinovaný HLS YouTube přestalo vydávat, appka teď
+     *  spojuje video+audio proud sama, viz [UploaderRemoteDataSource.youtubeVideoUrl]). */
+    fun videoUrl(ep: YtEpisode): String = uploaderDs.youtubeVideoUrl(baseUrl, cookie, ep.id, streamQuality)
 
     /** Stabilní klíč epizody pro frontu i offline index (audio). */
     fun episodeKey(ep: YtEpisode): String = "yt:${ep.id}"
