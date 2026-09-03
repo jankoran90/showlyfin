@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
@@ -63,6 +64,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.CtvProgramViewModel
 
 /**
@@ -97,6 +99,9 @@ fun CtvProgramScreen(
     val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var actionEpisode by remember { mutableStateOf<CtvEpisode?>(null) }
+    // FOCUS (2026-09-03, user „hlavně bych měl hledat na jedním zdrojem, ne plošně") — lupa v TopAppBar
+    // otevře fulltext hledání SCOPED jen na tenhle pořad (parita s YoutubeChannelScreen/RssPodcastScreen).
+    var showSearch by remember { mutableStateOf(false) }
 
     LaunchedEffect(ctvId) { viewModel.load(ctvId) }
 
@@ -142,6 +147,17 @@ fun CtvProgramScreen(
         }
     }
 
+    if (showSearch) {
+        val chTitle = state.showTitle ?: title
+        PodcastSearchScreen(
+            onBack = { showSearch = false },
+            scopeSource = PodcastSource(id = sourceKey, type = "ctv", ref = ctvId, title = chTitle),
+            scopeLabel = chTitle,
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -161,6 +177,12 @@ fun CtvProgramScreen(
                                 contentDescription = if (seriesOnly) "Zobrazit vše" else "Jen série",
                                 tint = if (seriesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+                    // FOCUS (2026-09-03) — hledání scoped na tenhle pořad.
+                    if (seriesFilter == null) {
+                        IconButton(onClick = { showSearch = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Hledat v tomto pořadu")
                         }
                     }
                 },

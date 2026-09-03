@@ -190,35 +190,45 @@ class PodcastSourcesRepository @Inject constructor(
      */
     suspend fun searchEpisodes(query: String, limitPerSource: Int = 30): List<SourceEpisode> = coroutineScope {
         if (baseUrl.isBlank() || query.isBlank()) return@coroutineScope emptyList()
-        _sources.value.map { source ->
-            async {
-                runCatching {
-                    if (source.type == "youtube") {
-                        remote.searchYtFeed(baseUrl, cookie, source.ref, query, limitPerSource).entries.map { ep ->
-                            SourceEpisode(
-                                id = ep.id,
-                                title = ep.title,
-                                subtitle = source.title,
-                                streamUrl = remote.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
-                                imageUrl = (ep.thumbnail ?: source.thumbnail).httpsUrl(),
-                                date = ep.uploadDate,
-                                resumeKey = "yt:${ep.id}",
-                                description = ep.description,
-                                durationSec = ep.duration ?: 0.0,
-                                viewCount = ep.viewCount,
-                                sourceKey = "${source.type}:${source.ref}",
-                            )
-                        }
-                    } else {
-                        loadEpisodes(source, limit = 500)
-                            .filter { matchesQuery(query, it.title, it.description) }
-                            .map { it.copy(sourceKey = "${source.type}:${source.ref}") }
-                    }
-                }.onFailure { Timber.w(it, "[TRAWL] hledání ve zdroji '%s' selhalo", source.title) }
-                    .getOrDefault(emptyList())
-            }
-        }.awaitAll().flatten()
+        _sources.value.map { source -> async { searchOneSource(source, query, limitPerSource) } }.awaitAll().flatten()
     }
+
+    /**
+     * TRAWL/FOCUS (Slovo, 2026-09-03, user „hlavně bych měl hledat na jedním zdrojem, ne plošně —
+     * kor když to prohledá vše od počátku věků"): hledání jen v JEDNOM zdroji (lupa v obrazovce
+     * YouTube kanálu / RSS / Na Výbornou), nahrazuje starý pevný textový filtr. Stejná datová cesta
+     * jako [searchEpisodes], bez fan-outu přes všechny sledované zdroje → rychlejší, levnější.
+     */
+    suspend fun searchInSource(source: PodcastSource, query: String, limit: Int = 50): List<SourceEpisode> {
+        if (baseUrl.isBlank() || query.isBlank()) return emptyList()
+        return searchOneSource(source, query, limit)
+    }
+
+    private suspend fun searchOneSource(source: PodcastSource, query: String, limitPerSource: Int): List<SourceEpisode> =
+        runCatching {
+            if (source.type == "youtube") {
+                remote.searchYtFeed(baseUrl, cookie, source.ref, query, limitPerSource).entries.map { ep ->
+                    SourceEpisode(
+                        id = ep.id,
+                        title = ep.title,
+                        subtitle = source.title,
+                        streamUrl = remote.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                        imageUrl = (ep.thumbnail ?: source.thumbnail).httpsUrl(),
+                        date = ep.uploadDate,
+                        resumeKey = "yt:${ep.id}",
+                        description = ep.description,
+                        durationSec = ep.duration ?: 0.0,
+                        viewCount = ep.viewCount,
+                        sourceKey = "${source.type}:${source.ref}",
+                    )
+                }
+            } else {
+                loadEpisodes(source, limit = 500)
+                    .filter { matchesQuery(query, it.title, it.description) }
+                    .map { it.copy(sourceKey = "${source.type}:${source.ref}") }
+            }
+        }.onFailure { Timber.w(it, "[TRAWL] hledání ve zdroji '%s' selhalo", source.title) }
+            .getOrDefault(emptyList())
 }
 
 /**

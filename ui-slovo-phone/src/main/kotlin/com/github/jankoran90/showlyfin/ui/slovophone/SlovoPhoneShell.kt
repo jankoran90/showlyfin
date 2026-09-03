@@ -15,8 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
@@ -53,6 +57,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastSearchScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.TimelinePage
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
@@ -90,6 +95,8 @@ private fun SlovoShellContent() {
     val sectionStateHolder = rememberSaveableStateHolder()
     // Lehký back-stack detailů (push na klik, pop na back). Prázdný = shell sekcí.
     var detailStack by remember { mutableStateOf<List<SlovoDetailEntry>>(emptyList()) }
+    // FOCUS (2026-09-03) — FAB doplněk: hledání napříč VŠEMI zdroji (Timeline/Sledované).
+    var showGlobalSearch by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     // Activity-scoped → tytéž instance jako uvnitř ListenScreen/přehrávače (jednotný stav poslechu).
@@ -305,6 +312,26 @@ private fun SlovoShellContent() {
                                             )
                                         }
                                     }
+                                }
+                                // FOCUS (2026-09-03, doplněk k per-zdroj hledání): FAB napříč VŠEMI
+                                // zdroji najednou, jen na Timeline/Sledované (user primárně chce
+                                // per-zdroj lupu v YoutubeChannel/Rss/CtvProgram, tohle je záloha
+                                // „nevím, ve kterém zdroji epizoda je").
+                                if (!isKidsProfile && !showGlobalSearch &&
+                                    (domuPager.currentPage == 1 || domuPager.currentPage == 2)
+                                ) {
+                                    FloatingActionButton(
+                                        onClick = { showGlobalSearch = true },
+                                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                                    ) {
+                                        Icon(Icons.Default.Search, contentDescription = "Hledat ve všech podcastech")
+                                    }
+                                }
+                                if (showGlobalSearch) {
+                                    PodcastSearchScreen(
+                                        onBack = { showGlobalSearch = false },
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
                                 }
                             }
                         }

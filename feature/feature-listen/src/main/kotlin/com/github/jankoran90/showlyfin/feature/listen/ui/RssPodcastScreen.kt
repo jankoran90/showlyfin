@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
@@ -70,6 +71,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.EpisodeVideo
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.RssPodcastViewModel
 
@@ -125,6 +127,9 @@ fun RssPodcastScreen(
     // AGORA (F5): epizoda, pro kterou je otevřený picker video verze (drží kontext pro play/cast).
     var videoForEpisode by remember { mutableStateOf<RssEpisode?>(null) }
     val fallbackTitle = state.title ?: title
+    // FOCUS (2026-09-03, user „hlavně bych měl hledat na jedním zdrojem, ne plošně") — lupa v TopAppBar
+    // otevře fulltext hledání SCOPED jen na tenhle feed (parita s YoutubeChannelScreen).
+    var showSearch by remember { mutableStateOf(false) }
 
     // SLOVO-KIDS-EPISODE — [seriesFilter] != null: dětská cesta, jen epizody DANÉ série, plochý seznam
     // (žádné další seskupování). Jinak (admin): AUTO seskupení do sérií + samostatné epizody.
@@ -231,6 +236,16 @@ fun RssPodcastScreen(
         )
     }
 
+    if (showSearch) {
+        PodcastSearchScreen(
+            onBack = { showSearch = false },
+            scopeSource = PodcastSource(id = sourceKey, type = "rss", ref = feedUrl, title = fallbackTitle),
+            scopeLabel = fallbackTitle,
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -250,6 +265,12 @@ fun RssPodcastScreen(
                                 contentDescription = if (seriesOnly) "Zobrazit vše" else "Jen série",
                                 tint = if (seriesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+                    // FOCUS (2026-09-03) — hledání scoped na tenhle feed.
+                    if (seriesFilter == null) {
+                        IconButton(onClick = { showSearch = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Hledat v tomto podcastu")
                         }
                     }
                 },

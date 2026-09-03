@@ -6,6 +6,7 @@ import com.github.jankoran90.showlyfin.core.domain.normalizeForSearch
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
@@ -60,6 +61,14 @@ class PodcastSearchViewModel @Inject constructor(
     private var searchJob: Job? = null
     private var lastResults: List<SourceEpisode> = emptyList()
 
+    // FOCUS (2026-09-03, user „hlavně bych měl hledat na jedním zdrojem, ne plošně"): non-null =
+    // hledání scoped jen na tenhle jeden zdroj (lupa v YoutubeChannel/Rss/CtvProgram obrazovce),
+    // null = původní chování (napříč VŠEMI sledovanými zdroji, FAB na Timeline/Sledované).
+    private var scopeSource: PodcastSource? = null
+
+    /** Nastav scope PŘED prvním hledáním (voláno z obrazovky přes LaunchedEffect). */
+    fun setScope(source: PodcastSource?) { scopeSource = source }
+
     /** Volá se při KAŽDÉM stisku v poli — debounce ať se nehledá po každém písmenu. */
     fun setQuery(text: String) {
         _state.update { it.copy(query = text) }
@@ -85,7 +94,9 @@ class PodcastSearchViewModel @Inject constructor(
 
     private suspend fun runSearch(query: String) {
         _state.update { it.copy(loading = true) }
-        val results = runCatching { repo.searchEpisodes(query) }
+        val results = runCatching {
+            scopeSource?.let { repo.searchInSource(it, query) } ?: repo.searchEpisodes(query)
+        }
             .onFailure { Timber.w(it, "[TRAWL] hledání selhalo") }
             .getOrDefault(emptyList())
         lastResults = results

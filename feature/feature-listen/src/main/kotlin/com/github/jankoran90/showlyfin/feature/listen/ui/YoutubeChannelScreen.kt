@@ -31,7 +31,7 @@ import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
@@ -43,7 +43,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -68,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.ui.ShareLinks
 import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
 import com.github.jankoran90.showlyfin.feature.listen.YoutubeChannelViewModel
 
@@ -101,27 +101,23 @@ fun YoutubeChannelScreen(
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
     val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
-    val channelFilter by viewModel.channelFilter.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var actionEpisode by remember { mutableStateOf<YtEpisode?>(null) }
+    // FOCUS (2026-09-03, user „hlavně bych měl hledat na jedním zdrojem, ne plošně") — nahrazuje
+    // starý pevný textový filtr (ChannelFilterField): lupa v TopAppBar otevře fulltext hledání SCOPED
+    // jen na tenhle kanál (celá historie živě přes YouTube-side search, ne jen načtené epizody).
+    var showSearch by remember { mutableStateOf(false) }
 
     LaunchedEffect(channel) { viewModel.load(channel) }
 
     // SLOVO-KIDS-EPISODE / WATCHDOG — série stejným vzorem jako RssPodcastScreen.
     val sourceKey = "youtube:$channel"
-    val seriesFiltered = remember(state.episodes, seriesFilter) {
+    val filteredEpisodes = remember(state.episodes, seriesFilter) {
         if (seriesFilter == null) state.episodes
         else state.episodes.filter {
             PodcastEpisodeSeriesGrouping.detectSeriesTitle(it.title)
                 ?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
         }
-    }
-    // User (2026-08-22, „pevný filtr, ne vyhledávání") — trvalý textový filtr na titulek (per kanál,
-    // uložený ve VM). Na rozdíl od `seriesFilter` výše (AUTO-detekovaná série, dětská cesta) je tohle
-    // ruční text, který si admin sám zapne/vypne u libovolného kanálu (např. jméno konkrétního hosta).
-    val filteredEpisodes = remember(seriesFiltered, channelFilter) {
-        if (channelFilter.isBlank()) seriesFiltered
-        else seriesFiltered.filter { it.title.contains(channelFilter, ignoreCase = true) }
     }
     val shelfItems = remember(filteredEpisodes, seriesFilter) {
         if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
@@ -142,10 +138,8 @@ fun YoutubeChannelScreen(
     LaunchedEffect(highlightEpisodeKey, filteredEpisodes) {
         if (!scrolledToHighlight && highlightEpisodeKey != null && filteredEpisodes.isNotEmpty()) {
             val idx = filteredEpisodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
-            // Filtr pole (item "channel_filter") je před epizodami, jen když seriesFilter == null (viz níže).
-            val headerOffset = if (seriesFilter == null) 1 else 0
             if (idx >= 0) {
-                listState.scrollToItem(idx + headerOffset)
+                listState.scrollToItem(idx)
                 scrolledToHighlight = true
             }
         }
@@ -157,6 +151,17 @@ fun YoutubeChannelScreen(
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
             viewModel.consumeCastMessage()
         }
+    }
+
+    if (showSearch) {
+        val chTitle = state.channelTitle ?: channelTitle
+        PodcastSearchScreen(
+            onBack = { showSearch = false },
+            scopeSource = PodcastSource(id = sourceKey, type = "youtube", ref = channel, title = chTitle),
+            scopeLabel = chTitle,
+            modifier = modifier.fillMaxSize(),
+        )
+        return
     }
 
     Scaffold(
@@ -179,6 +184,12 @@ fun YoutubeChannelScreen(
                                 contentDescription = if (seriesOnly) "Zobrazit vše" else "Jen série",
                                 tint = if (seriesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+                    // FOCUS (2026-09-03) — hledání scoped na tenhle kanál, nahrazuje starý textový filtr.
+                    if (seriesFilter == null) {
+                        IconButton(onClick = { showSearch = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Hledat v tomto kanálu")
                         }
                     }
                     IconButton(onClick = {
@@ -270,25 +281,6 @@ fun YoutubeChannelScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // User (2026-08-22) — trvalý filtr na titulek, ne jednorázové vyhledávání (kids-cesta
-                // s jedinou sérií filtr nepotřebuje, seriesFilter tam řeší úplně jiný účel).
-                if (seriesFilter == null) {
-                    item(key = "channel_filter") {
-                        ChannelFilterField(
-                            value = channelFilter,
-                            onValueChange = viewModel::setChannelFilter,
-                        )
-                    }
-                    if (channelFilter.isNotBlank() && filteredEpisodes.isEmpty() && state.episodes.isNotEmpty()) {
-                        item(key = "channel_filter_empty") {
-                            Text(
-                                "Žádná epizoda nesedí na filtr \"$channelFilter\".",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
                 if (shelfItems == null) {
                     items(filteredEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
                 } else if (seriesOnly) {
@@ -519,29 +511,6 @@ private fun EpisodeRow(
             }
         }
     }
-}
-
-/**
- * User (2026-08-22) — „pevný filtr, ne vyhledávání": políčko nahoře u kanálu, text se ukládá per
- * kanál (VM) a zůstává, dokud ho admin sám nesmaže. Filtruje jen podle titulku (substring).
- */
-@Composable
-private fun ChannelFilterField(value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("Filtr (např. jméno hosta)") },
-        leadingIcon = { Icon(Icons.Default.FilterAlt, contentDescription = null) },
-        trailingIcon = {
-            if (value.isNotEmpty()) {
-                IconButton(onClick = { onValueChange("") }) {
-                    Icon(Icons.Default.Close, contentDescription = "Zrušit filtr")
-                }
-            }
-        },
-        singleLine = true,
-    )
 }
 
 private fun formatDuration(sec: Double): String {

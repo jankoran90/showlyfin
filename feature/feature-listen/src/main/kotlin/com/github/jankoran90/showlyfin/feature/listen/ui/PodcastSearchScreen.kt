@@ -58,22 +58,27 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.PodcastSearchViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 /**
- * TRAWL (Slovo, 2026-09-02): fulltext hledání epizod napříč VŠEMI sledovanými zdroji (YouTube = živě
- * celá historie kanálu, RSS/NaVýbornou = velký fetch + klientský filtr). Otevírá se jako overlay nad
- * sekcí Podcasty (ikona lupy v [PodcastTabRow]) — bez zásahu do navigačního grafu appky, tap na
- * výsledek rovnou PŘEHRAJE (audio, sdílený resume klíč se zdrojovou obrazovkou).
+ * TRAWL (Slovo, 2026-09-02): fulltext hledání epizod. FOCUS (2026-09-03, user „hlavně bych měl hledat
+ * na jedním zdrojem, ne plošně") — primárně otevíráno SCOPED na jeden zdroj (lupa v obrazovce YouTube
+ * kanálu / RSS / Na Výbornou, nahrazuje starý pevný textový filtr); [scopeSource] = null zachovává
+ * původní chování (napříč VŠEMI sledovanými zdroji, FAB na Timeline/Sledované jako doplněk).
+ * YouTube = živě celá historie kanálu, RSS/NaVýbornou = velký fetch + klientský filtr. Tap na výsledek
+ * rovnou PŘEHRAJE (audio, sdílený resume klíč se zdrojovou obrazovkou).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PodcastSearchScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    scopeSource: PodcastSource? = null,
+    scopeLabel: String? = null,
     viewModel: PodcastSearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -81,6 +86,7 @@ fun PodcastSearchScreen(
     val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(scopeSource) { viewModel.setScope(scopeSource) }
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Vyhledávací pole + zpět — stejný vzor jako SearchScreen (Filmy TMDB hledání).
@@ -95,7 +101,7 @@ fun PodcastSearchScreen(
                 value = state.query,
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                placeholder = { Text("Hledat v podcastech…") },
+                placeholder = { Text(if (scopeLabel != null) "Hledat v $scopeLabel…" else "Hledat v podcastech…") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
@@ -134,7 +140,10 @@ fun PodcastSearchScreen(
         Box(Modifier.fillMaxSize()) {
             when {
                 state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                state.query.isBlank() -> CenteredHint("Hledej napříč YouTube i RSS podcasty — i v popisu epizody.")
+                state.query.isBlank() -> CenteredHint(
+                    if (scopeLabel != null) "Hledej v $scopeLabel — celá historie, i v popisu epizody."
+                    else "Hledej napříč YouTube i RSS podcasty — i v popisu epizody.",
+                )
                 state.searched && state.results.isEmpty() -> CenteredHint("Nic nenalezeno pro dotaz: ${state.query}")
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValuesVertical) {
                     items(state.results, key = { it.resumeKey ?: it.id }) { ep ->
