@@ -153,6 +153,8 @@ fun CtvProgramScreen(
             onBack = { showSearch = false },
             scopeSource = PodcastSource(id = sourceKey, type = "ctv", ref = ctvId, title = chTitle),
             scopeLabel = chTitle,
+            audioOnly = audioOnly,
+            onPlayVideo = onPlayVideo,
             modifier = modifier.fillMaxSize(),
         )
         return

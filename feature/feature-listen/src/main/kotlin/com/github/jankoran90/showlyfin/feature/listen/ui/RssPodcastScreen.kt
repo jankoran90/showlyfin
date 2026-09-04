@@ -241,6 +241,8 @@ fun RssPodcastScreen(
             onBack = { showSearch = false },
             scopeSource = PodcastSource(id = sourceKey, type = "rss", ref = feedUrl, title = fallbackTitle),
             scopeLabel = fallbackTitle,
+            audioOnly = audioOnly,
+            onPlayVideo = onPlayYoutubeVideo,
             modifier = modifier.fillMaxSize(),
         )
         return

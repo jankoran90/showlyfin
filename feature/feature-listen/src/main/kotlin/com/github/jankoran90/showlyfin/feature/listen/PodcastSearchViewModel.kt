@@ -1,11 +1,13 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.normalizeForSearch
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * TRAWL (Slovo, 2026-09-02, user „fulltext vč. celé historie, napříč zdroji"): fulltext hledání
@@ -33,8 +36,10 @@ import javax.inject.Inject
 @HiltViewModel
 class PodcastSearchViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
+    private val uploaderDs: UploaderRemoteDataSource,
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
+    @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     enum class SortMode(val label: String) {
@@ -60,6 +65,9 @@ class PodcastSearchViewModel @Inject constructor(
 
     private var searchJob: Job? = null
     private var lastResults: List<SourceEpisode> = emptyList()
+
+    private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     // FOCUS (2026-09-03, user „hlavně bych měl hledat na jedním zdrojem, ne plošně"): non-null =
     // hledání scoped jen na tenhle jeden zdroj (lupa v YoutubeChannel/Rss/CtvProgram obrazovce),
@@ -146,6 +154,16 @@ class PodcastSearchViewModel @Inject constructor(
 
     /** Přehraj výsledek přes poslechový přehrávač (sdílený resume klíč s per-zdroj obrazovkami). */
     fun play(ep: SourceEpisode) = connection.playDirectEpisode(toQueued(ep))
+
+    /** BUG (2026-09-04, user screenshot „Nezobrazí se video pri hledání"): hledání nabízelo jen
+     *  audio „Poslech", video volba chyběla úplně — parita se zdrojovou obrazovkou (YoutubeChannel/
+     *  CtvProgram mají tlačítko „Video" u každé epizody). RSS nemá video URL v [SourceEpisode]
+     *  (jen výjimečně přes jfItemId, ten hledání nenese) → null, tlačítko se v UI nezobrazí. */
+    fun videoUrl(ep: SourceEpisode): String? = when {
+        ep.resumeKey?.startsWith("yt:") == true -> repo.youtubeVideoUrl(ep.id, PodcastVideoQuality.stream(prefs))
+        ep.resumeKey?.startsWith("ctv:") == true -> uploaderDs.ctvVideoUrl(baseUrl, cookie, ep.id)
+        else -> null
+    }
 
     /** Přidej výsledek do fronty (další/na konec). */
     fun enqueue(ep: SourceEpisode, atFront: Boolean = false) = connection.enqueue(toQueued(ep), atFront = atFront)

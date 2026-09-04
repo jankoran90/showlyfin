@@ -70,8 +70,10 @@ import java.util.Locale
  * na jedním zdrojem, ne plošně") — primárně otevíráno SCOPED na jeden zdroj (lupa v obrazovce YouTube
  * kanálu / RSS / Na Výbornou, nahrazuje starý pevný textový filtr); [scopeSource] = null zachovává
  * původní chování (napříč VŠEMI sledovanými zdroji, FAB na Timeline/Sledované jako doplněk).
- * YouTube = živě celá historie kanálu, RSS/NaVýbornou = velký fetch + klientský filtr. Tap na výsledek
- * rovnou PŘEHRAJE (audio, sdílený resume klíč se zdrojovou obrazovkou).
+ * YouTube = živě celá historie kanálu, RSS/NaVýbornou = velký fetch + klientský filtr. „Poslech"
+ * PŘEHRAJE audio (sdílený resume klíč se zdrojovou obrazovkou); „Video" (2026-09-04, user screenshot
+ * — chybělo, hledání nabízelo jen audio) se zobrazí jen u YouTube/ČT výsledků, parita se zdrojovou
+ * obrazovkou (RSS video jde jen přes jfItemId, ten hledání nenese).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +82,11 @@ fun PodcastSearchScreen(
     modifier: Modifier = Modifier,
     scopeSource: PodcastSource? = null,
     scopeLabel: String? = null,
+    /** SLOVO-KIDS-EPISODE: dětský profil = video volba se v hledání ani nenabídne (parita se
+     *  zdrojovou obrazovkou YoutubeChannel/CtvProgram, `showVideo = !audioOnly`). */
+    audioOnly: Boolean = false,
+    /** BUG (2026-09-04, user screenshot): chybělo úplně, hledání nabízelo jen audio. */
+    onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit = { _, _, _ -> },
     viewModel: PodcastSearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -152,12 +159,14 @@ fun PodcastSearchScreen(
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValuesVertical) {
                     items(state.results, key = { it.resumeKey ?: it.id }) { ep ->
                         val key = ep.resumeKey ?: ep.id
+                        val videoUrl = if (audioOnly) null else viewModel.videoUrl(ep)
                         SearchResultRow(
                             episode = ep,
                             isCurrent = player.currentEpisodeId == key,
                             isPlaying = player.isPlaying && player.currentEpisodeId == key,
                             offlineStatus = offlineStates[key]?.status ?: OfflineStatus.NONE,
                             onPlay = { viewModel.play(ep) },
+                            onVideo = videoUrl?.let { url -> { onPlayVideo(url, ep.title, ep.imageUrl) } },
                             onEnqueue = { viewModel.enqueue(ep) },
                             onDownload = { viewModel.download(ep) },
                             onDeleteOffline = { viewModel.deleteOffline(ep) },
@@ -185,6 +194,8 @@ private fun SearchResultRow(
     isPlaying: Boolean,
     offlineStatus: OfflineStatus,
     onPlay: () -> Unit,
+    /** null = zdroj video vůbec nenabízí (RSS bez jfItemId) — tlačítko se pak nezobrazí. */
+    onVideo: (() -> Unit)?,
     onEnqueue: () -> Unit,
     onDownload: () -> Unit,
     onDeleteOffline: () -> Unit,
@@ -247,6 +258,12 @@ private fun SearchResultRow(
             FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
                 Icon(playIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(playLabel, Modifier.padding(start = 6.dp))
+            }
+            if (onVideo != null) {
+                FilledTonalButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("Video", Modifier.padding(start = 6.dp))
+                }
             }
             IconButton(onClick = onEnqueue) {
                 Icon(Icons.Default.PlaylistAdd, contentDescription = "Přidat do fronty")

@@ -311,7 +311,10 @@ private fun PodcastsContent(
     var filterEpoch by remember { mutableStateOf(0) }
 
     if (showSearch) {
-        PodcastSearchScreen(onBack = { showSearch = false }, modifier = Modifier.fillMaxSize())
+        // SLOVO-KIDS-EPISODE: tahle obrazovka je reachable jen z dětského profilu (SlovoPhoneShell
+        // kids větev) — audioOnly natvrdo true, ať se v hledání (BUG 2026-09-04) nezobrazí mrtvé
+        // tlačítko Video (onPlayVideo tu žádný chytač nemá, callback by beztak nikam nevedl).
+        PodcastSearchScreen(onBack = { showSearch = false }, audioOnly = true, modifier = Modifier.fillMaxSize())
         return
     }
 

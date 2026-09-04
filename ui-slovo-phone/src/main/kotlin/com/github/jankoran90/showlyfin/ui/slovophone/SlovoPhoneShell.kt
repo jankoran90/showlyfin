@@ -333,8 +333,15 @@ private fun SlovoShellContent() {
                                     }
                                 }
                                 if (showGlobalSearch) {
+                                    // BUG (2026-09-04, user screenshot „Nezobrazí se video pri hledání"):
+                                    // hledání nemělo video volbu vůbec zapojenou, ani tady. Sekce je
+                                    // reachable jen pro !isKidsProfile (podmínka FAB výš), audioOnly
+                                    // default false je tu správně.
                                     PodcastSearchScreen(
                                         onBack = { showGlobalSearch = false },
+                                        onPlayVideo = { url, title, poster ->
+                                            onPush(SlovoDetailEntry.VideoPlayer(externalUrl = url, title = title, posterUrl = poster))
+                                        },
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }

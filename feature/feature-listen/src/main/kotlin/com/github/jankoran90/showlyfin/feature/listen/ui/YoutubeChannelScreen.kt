@@ -159,6 +159,8 @@ fun YoutubeChannelScreen(
             onBack = { showSearch = false },
             scopeSource = PodcastSource(id = sourceKey, type = "youtube", ref = channel, title = chTitle),
             scopeLabel = chTitle,
+            audioOnly = audioOnly,
+            onPlayVideo = onPlayVideo,
             modifier = modifier.fillMaxSize(),
         )
         return
