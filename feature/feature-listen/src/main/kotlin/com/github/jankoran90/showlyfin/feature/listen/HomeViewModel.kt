@@ -63,7 +63,9 @@ class HomeViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val audiobookOwnership: AudiobookOwnershipRepository,
     private val absPrefs: AbsPreferences,
-    connection: AudiobookPlayerConnection,
+    // BUG (2026-09-04): musí být `private val` (property), ne jen konstruktorový parametr — playEpisode
+    // ho potřebuje volat mimo primární konstruktor.
+    private val connection: AudiobookPlayerConnection,
 ) : ViewModel() {
 
     /** User (2026-08-15 16:49) — odznak „hraje" na dlaždici, když je zrovna aktivní v přehrávači. */
