@@ -109,4 +109,27 @@ internal object PodcastEpisodeSeriesGrouping {
         if (pipeIdx < 0) return null
         return ParsedSeriesKey(sourceKey, rest.substring(0, pipeIdx), rest.substring(pipeIdx + 1))
     }
+
+    /**
+     * BUG (2026-09-04, user screenshot „Líbilo by se mi kdyby ty rozposlouchané byly pinned at the
+     * top"): rozkoukané/rozposlouchané epizody napřed (stabilní pořadí mezi sebou navzájem — [isPinned]
+     * samo o sobě neurčuje řazení uvnitř přišpendlené skupiny, jen KDO tam patří), zbytek beze změny
+     * pořadí za nimi. Skupina (SeriesGroup) se přišpendlí, pokud je rozkoukaný KTERÝKOLI člen — sbalená
+     * karta série tak pozná, že je uvnitř něco rozečteného, aniž bych rozbaloval.
+     */
+    fun <T> pinInProgress(items: List<EpisodeShelfItem<T>>, isPinned: (T) -> Boolean): List<EpisodeShelfItem<T>> {
+        val (pinned, rest) = items.partition { item ->
+            when (item) {
+                is EpisodeShelfItem.Standalone -> isPinned(item.item)
+                is EpisodeShelfItem.SeriesGroup -> item.members.any(isPinned)
+            }
+        }
+        return if (pinned.isEmpty()) items else pinned + rest
+    }
+
+    /** Flat-list varianta [pinInProgress] pro obrazovky bez shelf groupingu (seriesFilter scope). */
+    fun <T> pinInProgressFlat(items: List<T>, isPinned: (T) -> Boolean): List<T> {
+        val (pinned, rest) = items.partition(isPinned)
+        return if (pinned.isEmpty()) items else pinned + rest
+    }
 }

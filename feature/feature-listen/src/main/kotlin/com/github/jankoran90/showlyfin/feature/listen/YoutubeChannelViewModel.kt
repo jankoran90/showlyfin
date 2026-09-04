@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
 import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
@@ -43,6 +44,10 @@ class YoutubeChannelViewModel @Inject constructor(
     private val offline: OfflineDownloadManager,
     private val naTv: NaTvService,
     private val resumeStore: DirectResumeStore,
+    // BUG (2026-09-04, user „uvidím to video z hledání i na kartě... jako rozposlouchané?"): video
+    // (PlaybackViewModel.saveExternalPosition, REWIND SHW-68 store) — parita s RssPodcastScreen,
+    // co videoResumeMarks už dřív četlo pro svoje jfItemId video.
+    private val videoResumeStore: VideoResumeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -54,6 +59,10 @@ class YoutubeChannelViewModel @Inject constructor(
 
     /** L2b: uložené pozice direct epizod (mediaId=[episodeKey]) → progres + „Pokračovat" u nehrané. */
     val resumeMarks = resumeStore.marks
+
+    /** BUG (2026-09-04): video watch pozice (stejný klíč `yt:<id>`, jiný store — video nemá `isFinished`,
+     *  viz [com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore] dokumentace). */
+    val videoResumeMarks = videoResumeStore.marks
 
     /** L4: jednorázová hláška po pokusu o cast na TV (Toast v obrazovce, pak [consumeCastMessage]). */
     private val _castMessage = MutableStateFlow<String?>(null)
@@ -119,11 +128,23 @@ class YoutubeChannelViewModel @Inject constructor(
     /** Stabilní klíč epizody pro frontu i offline index (audio). */
     fun episodeKey(ep: YtEpisode): String = "yt:${ep.id}"
 
-    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
-    fun resetPosition(ep: YtEpisode) = resumeStore.clear(episodeKey(ep))
+    /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu).
+     *  BUG (2026-09-04): smaž i video pozici (jiný store) — jinak by "Reset poslechu" nechal video
+     *  mark stát a epizoda by dál vypadala rozkoukaná (video má v UI přednost). */
+    fun resetPosition(ep: YtEpisode) {
+        val key = episodeKey(ep)
+        resumeStore.clear(key)
+        videoResumeStore.clear(key)
+    }
 
     /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
-    fun markFinished(ep: YtEpisode) = resumeStore.markFinished(episodeKey(ep))
+    fun markFinished(ep: YtEpisode) {
+        val key = episodeKey(ep)
+        resumeStore.markFinished(key)
+        // BUG (2026-09-04): video mark nemá isFinished a v UI má přednost — bez smazání by "Označit
+        // jako poslechnuté" na rozkoukaném videu zůstalo tiše bez efektu.
+        videoResumeStore.clear(key)
+    }
 
     /**
      * Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session.

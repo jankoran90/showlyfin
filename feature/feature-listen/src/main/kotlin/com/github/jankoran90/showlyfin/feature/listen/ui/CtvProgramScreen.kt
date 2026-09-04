@@ -96,6 +96,8 @@ fun CtvProgramScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
+    // BUG (2026-09-04): video watch pozice — parita s RssPodcastScreen/YoutubeChannelScreen.
+    val videoResumeMarks by viewModel.videoResumeMarks.collectAsStateWithLifecycle()
     val castMessage by viewModel.castMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var actionEpisode by remember { mutableStateOf<CtvEpisode?>(null) }
@@ -116,6 +118,14 @@ fun CtvProgramScreen(
     }
     val shelfItems = remember(filteredEpisodes, seriesFilter) {
         if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
+    }
+    // BUG (2026-09-04, user screenshot): rozposlouchané/rozkoukané epizody nahoru, parita s YoutubeChannelScreen.
+    val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.keys
+    val orderedEpisodes = remember(filteredEpisodes, inProgressIds) {
+        PodcastEpisodeSeriesGrouping.pinInProgressFlat(filteredEpisodes) { viewModel.episodeKey(it) in inProgressIds }
+    }
+    val orderedShelfItems = remember(shelfItems, inProgressIds) {
+        shelfItems?.let { PodcastEpisodeSeriesGrouping.pinInProgress(it) { ep -> viewModel.episodeKey(ep) in inProgressIds } }
     }
     var expandedSeries by remember { mutableStateOf(setOf<String>()) }
     var seriesForAction by remember {
@@ -196,17 +206,21 @@ fun CtvProgramScreen(
             val key = viewModel.episodeKey(ep)
             val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
             val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
+            // BUG (2026-09-04): video má přednost (sdílený klíč = „poslední vyhrává"), jinak audio.
+            val videoMark = videoResumeMarks[key]
             val mark = resumeMarks[key]
-            val isFinished = mark?.isFinished == true
+            val markPos = videoMark?.posMs ?: mark?.posMs
+            val markDur = videoMark?.durMs ?: mark?.durMs
+            val isFinished = videoMark == null && mark?.isFinished == true
             val progress: Float? = when {
                 isCurrent && playerState.durationMs > 0 ->
                     (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)
-                mark != null && mark.durMs > 0 -> (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f)
+                markPos != null && markDur != null && markDur > 0 -> (markPos.toFloat() / markDur).coerceIn(0f, 1f)
                 else -> null
             }
-            val canResume = !isCurrent && mark != null && !isFinished
-            val remainingLabel = if (canResume && mark.durMs > 0)
-                "zbývá ${formatDuration((mark.durMs - mark.posMs).coerceAtLeast(0L) / 1000.0)}" else null
+            val canResume = !isCurrent && markPos != null && !isFinished
+            val remainingLabel = if (canResume && markDur != null && markDur > 0)
+                "zbývá ${formatDuration((markDur - markPos!!).coerceAtLeast(0L) / 1000.0)}" else null
             EpisodeRow(
                 title = ep.title,
                 thumbnail = ep.image,
@@ -269,7 +283,7 @@ fun CtvProgramScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (shelfItems == null) {
-                    items(filteredEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
+                    items(orderedEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
                 } else if (seriesOnly) {
                     seriesOnlyGroups.orEmpty().forEach { group ->
                         item(key = "series_${group.slug}") { SeriesRowFor(group) }
@@ -278,7 +292,7 @@ fun CtvProgramScreen(
                         }
                     }
                 } else {
-                    shelfItems.forEach { shelfItem ->
+                    orderedShelfItems.orEmpty().forEach { shelfItem ->
                         when (shelfItem) {
                             is PodcastEpisodeSeriesGrouping.EpisodeShelfItem.Standalone ->
                                 item(key = shelfItem.item.id) { EpisodeRowFor(shelfItem.item) }

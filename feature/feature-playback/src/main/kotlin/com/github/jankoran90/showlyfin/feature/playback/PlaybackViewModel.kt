@@ -408,6 +408,15 @@ class PlaybackViewModel @Inject constructor(
      *  Ukládá jen smysluplný úsek (od ~5 s); v posledních 30 s = dokoukáno → resume zahodí. */
     fun saveExternalPosition(positionMs: Long, durationMs: Long) {
         val key = resumeKey ?: return
+        // BUG (Slovo, 2026-09-04, user „uvidím to video z hledání i na kartě... a na domov obrazovce
+        // jako rozposlouchané?"): `yt:`/`rss:`/`ctv:` = přímá podcastová epizoda appky Slovo (viz
+        // youtubeSubtitleQuery/explicitResumeKey) — zrcadli i do [videoResumeStore] (stejný store, co
+        // REWIND SHW-68 už používá pro JF-item video, `core-domain`/`core-db`, feature-listen ho čte).
+        // Dřív žila video pozice YouTube/ČT jen v lokálních `prefs` níž, feature-listen o ní nevěděl.
+        // Filmy (imdb/`t:`-klíče, obecné externí streamy) beze změny — jen tenhle 3-prefix filtr.
+        if (key.startsWith("yt:") || key.startsWith("rss:") || key.startsWith("ctv:")) {
+            videoResumeStore.save(key, positionMs, durationMs)
+        }
         when {
             durationMs > 0L && positionMs >= durationMs - 30_000L ->
                 prefs.edit().remove("resume_$key").apply().also { prefs.edit().remove("resume_at_$key").apply() }

@@ -83,9 +83,10 @@ fun HomeScreen(
                             progress = item.progress,
                             isPlaying = playerState.isActive &&
                                 playerState.currentEpisodeId == (item.episode.resumeKey ?: item.episode.id),
-                            onClick = {
-                                onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.episode.resumeKey ?: item.episode.id)
-                            },
+                            // BUG (2026-09-04, user „dej možnost zobrazit je a rovnou naskočit"): ťuk
+                            // rovnou přehraje, dřív otvíral jen zdrojovou obrazovku (parita s knihami
+                            // zůstává jinde — epizoda na rozdíl od knihy nepotřebuje kapitolní kontext).
+                            onClick = { vm.playEpisode(item) },
                             onLongClick = if (otherAdultProfiles.isNotEmpty()) ({ shareEpisode = item }) else null,
                             onEndListening = { vm.resetEpisodeProgress(item) },
                         )

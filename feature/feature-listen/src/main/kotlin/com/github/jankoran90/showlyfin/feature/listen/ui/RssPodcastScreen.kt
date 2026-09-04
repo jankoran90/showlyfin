@@ -144,6 +144,14 @@ fun RssPodcastScreen(
     val shelfItems = remember(filteredEpisodes, seriesFilter) {
         if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
     }
+    // BUG (2026-09-04, user screenshot): rozposlouchané/rozkoukané epizody nahoru, parita s YoutubeChannelScreen/CtvProgramScreen.
+    val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.keys
+    val orderedEpisodes = remember(filteredEpisodes, inProgressIds) {
+        PodcastEpisodeSeriesGrouping.pinInProgressFlat(filteredEpisodes) { viewModel.episodeKey(it) in inProgressIds }
+    }
+    val orderedShelfItems = remember(shelfItems, inProgressIds) {
+        shelfItems?.let { PodcastEpisodeSeriesGrouping.pinInProgress(it) { ep -> viewModel.episodeKey(ep) in inProgressIds } }
+    }
     var expandedSeries by remember { mutableStateOf(setOf<String>()) }
     var seriesForAction by remember {
         mutableStateOf<PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup<RssEpisode>?>(null)
@@ -302,7 +310,7 @@ fun RssPodcastScreen(
             ) {
                 if (shelfItems == null) {
                     // Dětská cesta (seriesFilter) NEBO fallback — plochý seznam, žádné seskupení.
-                    items(filteredEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
+                    items(orderedEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
                 } else if (seriesOnly) {
                     // WATCHDOG — „Jen série": jen sbalené série, řazené sestupně dle data posledního dílu.
                     seriesOnlyGroups.orEmpty().forEach { group ->
@@ -312,8 +320,8 @@ fun RssPodcastScreen(
                         }
                     }
                 } else {
-                    // Admin — AUTO seskupené série (SLOVO-KIDS-EPISODE) + samostatné epizody, feed pořadí.
-                    shelfItems.forEach { shelfItem ->
+                    // Admin — AUTO seskupené série (SLOVO-KIDS-EPISODE) + samostatné epizody, rozposlouchané nahoře.
+                    orderedShelfItems.orEmpty().forEach { shelfItem ->
                         when (shelfItem) {
                             is PodcastEpisodeSeriesGrouping.EpisodeShelfItem.Standalone ->
                                 item(key = shelfItem.item.id) { EpisodeRowFor(shelfItem.item) }

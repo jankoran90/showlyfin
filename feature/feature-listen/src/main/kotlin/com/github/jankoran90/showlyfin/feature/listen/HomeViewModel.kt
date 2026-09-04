@@ -15,7 +15,9 @@ import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
+import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -51,6 +53,13 @@ class HomeViewModel @Inject constructor(
     private val audiobookDownloads: AudiobookDownloadManager,
     private val sourcesRepo: PodcastSourcesRepository,
     private val directResume: DirectResumeStore,
+    // BUG (2026-09-04, user „na domov sekci rozposlouchané epizody podcastu nejsou"): video (YouTube/
+    // ČT) watch pozice žila jen v [com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore],
+    // Domů o ní vůbec nevěděla — rozkoukané video se tu nikdy neobjevilo, i teď zapisuje do stejného klíče.
+    private val videoResume: com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore,
+    // BUG (2026-09-04): stažená epizoda ať hraje z lokálního souboru i po ťuku z Domů (parita s
+    // PodcastSearchViewModel.toQueued/YoutubeChannelViewModel).
+    private val offline: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
     private val profileRepository: ProfileRepository,
     private val audiobookOwnership: AudiobookOwnershipRepository,
     private val absPrefs: AbsPreferences,
@@ -143,9 +152,32 @@ class HomeViewModel @Inject constructor(
     }
 
     /** Vzor [ListenViewModel.resetPosition] pro direct epizody — smaže mark, mizí z Domů OKAMŽITĚ. */
+    /** BUG (2026-09-04, user „dej možnost zobrazit je a rovnou naskočit"): ťuk na rozposlouchanou
+     *  epizodu na Domů rovnou přehraje (audio poslechový přehrávač), místo aby jen otevřel zdrojovou
+     *  obrazovku. Video-tracked pozice (viz [videoResume]) žije v jiném uložišti než audio, takže
+     *  „naskočit" tu vždy znamená poslech — video-přesná návaznost je Known gap. */
+    fun playEpisode(item: ContinueItem.Episode) {
+        val ep = item.episode
+        val key = ep.resumeKey ?: ep.id
+        val localUrl = offline.localVideo(key)?.let { android.net.Uri.fromFile(it).toString() }
+        connection.playDirectEpisode(
+            QueuedEpisode(
+                itemId = ep.sourceKey?.substringAfter(':') ?: ep.subtitle ?: item.sourceRef,
+                episodeId = key,
+                title = ep.title,
+                coverUrl = ep.imageUrl,
+                description = ep.description,
+                podcastTitle = item.sourceTitle,
+                direct = DirectAudio(url = localUrl ?: ep.streamUrl, durationSec = ep.durationSec, author = item.sourceTitle),
+            ),
+        )
+    }
+
     fun resetEpisodeProgress(item: ContinueItem.Episode) {
         _items.update { list -> list - item }
-        item.episode.resumeKey?.let { directResume.clear(it) }
+        // BUG (2026-09-04): smaž i video pozici — jinak by karta „skončit poslech" na rozkoukaném
+        // videu zmizela z Domů jen na chvíli (video mark ji další refresh vrátí zpátky).
+        item.episode.resumeKey?.let { directResume.clear(it); videoResume.clear(it) }
         refresh()
     }
 
@@ -390,12 +422,16 @@ class HomeViewModel @Inject constructor(
     private suspend fun continueDirectEpisodes(): List<ContinueItem.Episode> {
         // User (2026-08-16, „doposlouchané zmizí z Domů") — od té doby, co [DirectResumeStore] mark
         // při dohrání NEMAŽE (jen ho nechá na isFinished), musí Domů dohrané výslovně vyfiltrovat.
-        val marks = directResume.marks.value.filterValues { !it.isFinished }
-        if (marks.isEmpty()) return emptyList()
+        val audioMarks = directResume.marks.value.filterValues { !it.isFinished }
+        // BUG (2026-09-04): video ([VideoResumeStore]) nemá isFinished — store se sám smaže při
+        // dohrání (viz jeho dokumentace), takže přítomnost marky = rozkoukáno, žádný filtr netřeba.
+        val videoMarks = videoResume.marks.value
+        val keys = audioMarks.keys + videoMarks.keys
+        if (keys.isEmpty()) return emptyList()
         sourcesRepo.refresh()
         // Klíč markay má prefix "yt:"/"rss:"/"ctv:" ([DirectResumeStore]), ale PodcastSource.type je
         // "youtube"/"rss"/"ctv" (viz [SourceCard]) — NEJSOU stejné stringy, nutná explicitní mapa.
-        val neededTypes = marks.keys.mapNotNullTo(mutableSetOf()) {
+        val neededTypes = keys.mapNotNullTo(mutableSetOf()) {
             when (it.substringBefore(':', missingDelimiterValue = "")) {
                 "yt" -> "youtube"
                 "rss" -> "rss"
@@ -423,10 +459,17 @@ class HomeViewModel @Inject constructor(
             episodes.forEach { ep -> ep.resumeKey?.let { acc[it] = ep to src } }
             acc
         }
-        return marks.entries.mapNotNull { (key, mark) ->
+        // BUG (2026-09-04): video má přednost (sdílený klíč = „poslední vyhrává", stejná konvence jako
+        // v obrazovkách zdrojů — RssPodcastScreen/YoutubeChannelScreen/CtvProgramScreen).
+        return keys.mapNotNull { key ->
             byKey[key]?.let { (ep, src) ->
-                val progress = if (mark.durMs > 0) (mark.posMs.toFloat() / mark.durMs).coerceIn(0f, 1f) else 0f
-                ContinueItem.Episode(src.type, src.ref, src.title, ep, progress, mark.updatedAt)
+                val vm = videoMarks[key]
+                val am = audioMarks[key]
+                val posMs = vm?.posMs ?: am?.posMs ?: return@let null
+                val durMs = vm?.durMs ?: am?.durMs ?: 0L
+                val updatedAt = vm?.updatedAt ?: am?.updatedAt ?: 0L
+                val progress = if (durMs > 0) (posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f
+                ContinueItem.Episode(src.type, src.ref, src.title, ep, progress, updatedAt)
             }
         }
     }

@@ -37,6 +37,9 @@ class CtvProgramViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val naTv: NaTvService,
     private val resumeStore: DirectResumeStore,
+    // BUG (2026-09-04): parita s YoutubeChannelViewModel/RssPodcastScreen — video (PlaybackViewModel.
+    // saveExternalPosition, REWIND SHW-68 store) se dřív do „poslechového" resume vůbec nepromítlo.
+    private val videoResumeStore: com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -45,6 +48,9 @@ class CtvProgramViewModel @Inject constructor(
 
     /** Uložené pozice direct epizod (mediaId=[episodeKey]) → progres + „Pokračovat" u nehrané. */
     val resumeMarks = resumeStore.marks
+
+    /** BUG (2026-09-04): video watch pozice (stejný klíč `ctv:<id>`, jiný store bez `isFinished`). */
+    val videoResumeMarks = videoResumeStore.marks
 
     /** Jednorázová hláška po pokusu o cast na TV (Toast v obrazovce, pak [consumeCastMessage]). */
     private val _castMessage = MutableStateFlow<String?>(null)
@@ -97,10 +103,19 @@ class CtvProgramViewModel @Inject constructor(
     fun episodeKey(ep: CtvEpisode): String = "ctv:${ep.id}"
 
     /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
-    fun resetPosition(ep: CtvEpisode) = resumeStore.clear(episodeKey(ep))
+    // BUG (2026-09-04): smaž i video pozici (jiný store, jinak zůstane epizoda vypadat rozkoukaná).
+    fun resetPosition(ep: CtvEpisode) {
+        val key = episodeKey(ep)
+        resumeStore.clear(key)
+        videoResumeStore.clear(key)
+    }
 
     /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
-    fun markFinished(ep: CtvEpisode) = resumeStore.markFinished(episodeKey(ep))
+    fun markFinished(ep: CtvEpisode) {
+        val key = episodeKey(ep)
+        resumeStore.markFinished(key)
+        videoResumeStore.clear(key)
+    }
 
     /** Mapování ČT dílu na položku fronty: audio přes audio-only DASH manifest (poslech). */
     private fun toQueued(ep: CtvEpisode): QueuedEpisode {
