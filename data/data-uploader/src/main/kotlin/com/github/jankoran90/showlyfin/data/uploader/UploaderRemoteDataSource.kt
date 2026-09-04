@@ -200,6 +200,11 @@ interface UploaderRemoteDataSource {
     /** TRAWL (Slovo, 2026-09-02): fulltext hledání v CELÉ historii kanálu (YouTube 'Search this
      *  channel', ne jen lokálně načtený feed) — vrací i `viewCount`, `uploadDate` best-effort/null. */
     suspend fun searchYtFeed(baseUrl: String, sessionCookie: String, channel: String, query: String, limit: Int = 30): YtChannelFeed
+    /** BUG (2026-09-04, user „starší díl se nezobrazí na kartě/Domů, chci plnou podporu"): metadata
+     *  JEDNOHO videa (drahá plná extrakce) — pro rozposlouchanou/rozkoukanou epizodu MIMO normálně
+     *  načtené okno (`getYtFeed`/`searchYtFeed` mají limit). Volat JEN pro jednotlivé konkrétní
+     *  video_id (resume marky), nikdy plošně/pro procházení. */
+    suspend fun getYtVideoInfo(baseUrl: String, sessionCookie: String, videoId: String): YtEpisode
     /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio".
      *  CLARITY: quality jen pro video. Pro audio + progresivní 360p video. */
     fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720"): String

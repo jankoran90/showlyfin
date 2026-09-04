@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.normalizeForSearch
+import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
@@ -12,6 +13,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,6 +41,10 @@ class PodcastSearchViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
+    // BUG (2026-09-04, user „nevidím pokračovat"): hledání nemělo ŽÁDNÝ resume stav — ani progress
+    // bar, ani „Pokračovat" — parita se zdrojovými obrazovkami (YoutubeChannelScreen aj.).
+    private val resumeStore: DirectResumeStore,
+    private val videoResumeStore: VideoResumeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -62,6 +68,11 @@ class PodcastSearchViewModel @Inject constructor(
 
     /** Stav offline stahování epizod (badge / akce Stáhnout). Klíč = `resumeKey`. */
     val offlineStates = offline.states
+
+    /** BUG (2026-09-04): progres poslechu ve výsledcích hledání — dřív úplně chyběl. */
+    val resumeMarks = resumeStore.marks
+    /** BUG (2026-09-04): progres rozkoukání videa — video má přednost (sdílený klíč), nemá isFinished. */
+    val videoResumeMarks = videoResumeStore.marks
 
     private var searchJob: Job? = null
     private var lastResults: List<SourceEpisode> = emptyList()

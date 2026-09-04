@@ -942,6 +942,14 @@ internal class UploaderApi(
         return service.getYtFeed("$base/api/yt/search?channel=$ch&q=$q&limit=$limit", cookie)
     }
 
+    // BUG (2026-09-04) — metadata JEDNOHO videa mimo normální feed okno (proxy antenna /yt_video_info).
+    override suspend fun getYtVideoInfo(baseUrl: String, sessionCookie: String, videoId: String): YtEpisode {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val vid = URLEncoder.encode(videoId, "UTF-8")
+        return service.getYtVideoInfo("$base/api/yt/video_info?video_id=$vid", cookie)
+    }
+
     override fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String): String {
         val base = baseUrl.trimEnd('/')
         val key = URLEncoder.encode(sessionCookie, "UTF-8")

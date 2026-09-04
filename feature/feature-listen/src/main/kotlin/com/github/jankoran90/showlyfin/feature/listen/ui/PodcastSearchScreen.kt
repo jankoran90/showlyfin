@@ -92,6 +92,9 @@ fun PodcastSearchScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val player by viewModel.playerState.collectAsStateWithLifecycle()
     val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
+    // BUG (2026-09-04, user „nevidím pokračovat"): hledání nemělo žádný resume stav vůbec.
+    val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
+    val videoResumeMarks by viewModel.videoResumeMarks.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     LaunchedEffect(scopeSource) { viewModel.setScope(scopeSource) }
@@ -160,10 +163,20 @@ fun PodcastSearchScreen(
                     items(state.results, key = { it.resumeKey ?: it.id }) { ep ->
                         val key = ep.resumeKey ?: ep.id
                         val videoUrl = if (audioOnly) null else viewModel.videoUrl(ep)
+                        // BUG (2026-09-04): video má přednost (sdílený klíč = „poslední vyhrává"),
+                        // parita s RssPodcastScreen/YoutubeChannelScreen/CtvProgramScreen.
+                        val videoMark = videoResumeMarks[key]
+                        val mark = resumeMarks[key]
+                        val markPos = videoMark?.posMs ?: mark?.posMs
+                        val markDur = videoMark?.durMs ?: mark?.durMs
+                        val isFinished = videoMark == null && mark?.isFinished == true
                         SearchResultRow(
                             episode = ep,
                             isCurrent = player.currentEpisodeId == key,
                             isPlaying = player.isPlaying && player.currentEpisodeId == key,
+                            markPos = markPos,
+                            markDur = markDur,
+                            isFinished = isFinished,
                             offlineStatus = offlineStates[key]?.status ?: OfflineStatus.NONE,
                             onPlay = { viewModel.play(ep) },
                             onVideo = videoUrl?.let { url -> { onPlayVideo(url, ep.title, ep.imageUrl) } },
@@ -192,6 +205,10 @@ private fun SearchResultRow(
     episode: SourceEpisode,
     isCurrent: Boolean,
     isPlaying: Boolean,
+    /** BUG (2026-09-04): resume pozice (audio nebo video, „poslední vyhrává") — null = nikdy nespuštěno. */
+    markPos: Long?,
+    markDur: Long?,
+    isFinished: Boolean,
     offlineStatus: OfflineStatus,
     onPlay: () -> Unit,
     /** null = zdroj video vůbec nenabízí (RSS bez jfItemId) — tlačítko se pak nezobrazí. */
@@ -202,6 +219,15 @@ private fun SearchResultRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
+    // BUG (2026-09-04): canResume/progress/remainingLabel — parita s YoutubeChannelScreen/CtvProgramScreen.
+    val canResume = !isCurrent && markPos != null && !isFinished
+    val progress: Float? = when {
+        isCurrent -> null // aktuální řádek nemá vlastní progress bar — má ho MiniPlayer/přehrávač.
+        markPos != null && markDur != null && markDur > 0 -> (markPos.toFloat() / markDur).coerceIn(0f, 1f)
+        else -> null
+    }
+    val remainingLabel = if (canResume && markDur != null && markDur > 0)
+        "zbývá ${formatSearchDuration((markDur - markPos!!).coerceAtLeast(0L) / 1000.0)}" else null
     Column(
         Modifier
             .fillMaxWidth()
@@ -210,12 +236,22 @@ private fun SearchResultRow(
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = episode.imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.width(72.dp).height(72.dp).clip(RoundedCornerShape(8.dp)),
-            )
+            Box(Modifier.width(72.dp).height(72.dp)) {
+                AsyncImage(
+                    model = episode.imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                )
+                if (progress != null) {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
+                        color = accent,
+                        trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                    )
+                }
+            }
             Column(Modifier.padding(start = 12.dp)) {
                 Text(
                     episode.title,
@@ -227,6 +263,7 @@ private fun SearchResultRow(
                     formatSearchDate(episode.date),
                     formatSearchDuration(episode.durationSec),
                     formatViewCount(episode.viewCount),
+                    remainingLabel,
                 ).joinToString(" · ")
                 if (meta.isNotBlank()) {
                     Text(
@@ -254,7 +291,13 @@ private fun SearchResultRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val (playIcon, playLabel) = if (isCurrent && isPlaying) Icons.Default.GraphicEq to "Hraje" else Icons.Default.Headphones to "Poslech"
+            val (playIcon, playLabel) = when {
+                isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
+                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"
+                canResume -> Icons.Default.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
+                else -> Icons.Default.Headphones to "Poslech"
+            }
             FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
                 Icon(playIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(playLabel, Modifier.padding(start = 6.dp))

@@ -126,6 +126,41 @@ class PodcastSourcesRepository @Inject constructor(
     fun youtubeVideoUrl(videoId: String, quality: String = "720"): String =
         remote.youtubeVideoUrl(baseUrl, cookie, videoId, quality)
 
+    // BUG (2026-09-04, user „starší díl se nezobrazí na kartě/Domů, chci plnou podporu"): cache pro
+    // [resolveYoutubeEpisode] — drahá plná extrakce (~1-2s+), volá se jen pro pár konkrétních
+    // rozposlouchaných video_id mimo normálně načtené okno, ale KAŽDÝ Domů refresh by jinak zaplatil
+    // znovu. `Singleton` repo → cache přežije mezi obrazovkami/refreshi, jen ne restart appky.
+    private val ytVideoInfoCache = java.util.concurrent.ConcurrentHashMap<String, SourceEpisode?>()
+
+    /** Metadata + přehratelný [SourceEpisode] JEDNOHO YouTube videa MIMO normálně načtené okno kanálu
+     *  (rozposlouchaná/rozkoukaná epizoda starší než `getYtFeed`/`searchYtFeed` limit) — viz
+     *  [UploaderRemoteDataSource.getYtVideoInfo]. `null` = video nenalezeno/smazané/chyba. NEvolat
+     *  plošně pro procházení — jen pro jednotlivé konkrétní resume marky. */
+    suspend fun resolveYoutubeEpisode(videoId: String, sourceTitle: String? = null): SourceEpisode? {
+        ytVideoInfoCache[videoId]?.let { return it }
+        if (!isConfigured) return null
+        val result = runCatching { remote.getYtVideoInfo(baseUrl, cookie, videoId) }
+            .onFailure { Timber.w(it, "[TUNER] getYtVideoInfo($videoId) selhalo") }
+            .getOrNull()
+            ?.takeIf { !it.title.isNullOrBlank() }
+            ?.let { ep ->
+                SourceEpisode(
+                    id = ep.id,
+                    title = ep.title,
+                    subtitle = sourceTitle ?: ep.uploader,
+                    streamUrl = remote.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                    imageUrl = ep.thumbnail.httpsUrl(),
+                    date = ep.uploadDate,
+                    resumeKey = "yt:${ep.id}",
+                    description = ep.description,
+                    durationSec = ep.duration ?: 0.0,
+                    viewCount = ep.viewCount,
+                )
+            }
+        ytVideoInfoCache[videoId] = result
+        return result
+    }
+
     /** Epizody RSS podcastu (přímé audio enclosure URL). */
     suspend fun loadRss(feedUrl: String, limit: Int = 50): RssFeed =
         remote.getRssFeed(baseUrl, cookie, feedUrl, limit).let { feed ->

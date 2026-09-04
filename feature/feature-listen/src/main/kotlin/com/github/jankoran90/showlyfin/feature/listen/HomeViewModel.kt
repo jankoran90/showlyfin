@@ -461,18 +461,32 @@ class HomeViewModel @Inject constructor(
             episodes.forEach { ep -> ep.resumeKey?.let { acc[it] = ep to src } }
             acc
         }
+        // BUG (2026-09-04, user „starší díl se nezobrazí na kartě/Domů, chci plnou podporu"): epizoda
+        // starší než normálně načtené okno (`loadEpisodes` limit) chybí v `byKey` úplně a tiše zmizí
+        // z Domů. Fallback: dohledej metadata JEN pro takové marky (drahé, ale málo jich najednou —
+        // pár rozposlouchaných věcí, ne procházení). SLOVO-KIDS-EPISODE: dětský profil NE — fallback
+        // nezná/neobchází schválené zdroje, video by mohlo být z nepovoleného kanálu.
+        val isKids = active?.isAdmin == false
+        val missingYt = keys.filter { it !in byKey && !isKids && it.startsWith("yt:") }
+        val resolvedExtra = if (missingYt.isEmpty()) emptyMap() else coroutineScope {
+            missingYt.map { key ->
+                async { key to sourcesRepo.resolveYoutubeEpisode(key.removePrefix("yt:")) }
+            }.awaitAll()
+        }.mapNotNull { (key, ep) -> ep?.let { key to it } }.toMap()
         // BUG (2026-09-04): video má přednost (sdílený klíč = „poslední vyhrává", stejná konvence jako
         // v obrazovkách zdrojů — RssPodcastScreen/YoutubeChannelScreen/CtvProgramScreen).
         return keys.mapNotNull { key ->
-            byKey[key]?.let { (ep, src) ->
-                val vm = videoMarks[key]
-                val am = audioMarks[key]
-                val posMs = vm?.posMs ?: am?.posMs ?: return@let null
-                val durMs = vm?.durMs ?: am?.durMs ?: 0L
-                val updatedAt = vm?.updatedAt ?: am?.updatedAt ?: 0L
-                val progress = if (durMs > 0) (posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f
-                ContinueItem.Episode(src.type, src.ref, src.title, ep, progress, updatedAt)
-            }
+            val ep = byKey[key]?.first ?: resolvedExtra[key] ?: return@mapNotNull null
+            val sourceType = byKey[key]?.second?.type ?: "youtube"
+            val sourceRef = byKey[key]?.second?.ref ?: ""
+            val sourceTitle = byKey[key]?.second?.title ?: ep.subtitle ?: "YouTube"
+            val vm = videoMarks[key]
+            val am = audioMarks[key]
+            val posMs = vm?.posMs ?: am?.posMs ?: return@mapNotNull null
+            val durMs = vm?.durMs ?: am?.durMs ?: 0L
+            val updatedAt = vm?.updatedAt ?: am?.updatedAt ?: 0L
+            val progress = if (durMs > 0) (posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f
+            ContinueItem.Episode(sourceType, sourceRef, sourceTitle, ep, progress, updatedAt)
         }
     }
 }

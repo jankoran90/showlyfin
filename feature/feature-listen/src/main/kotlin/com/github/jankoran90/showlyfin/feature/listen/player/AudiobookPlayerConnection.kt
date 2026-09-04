@@ -11,6 +11,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
@@ -46,6 +47,10 @@ class AudiobookPlayerConnection @Inject constructor(
     private val downloads: EpisodeDownloadManager,
     private val audiobookDownloads: AudiobookDownloadManager,
     private val resumeStore: DirectResumeStore,
+    // BUG (2026-09-04, user „ve frontě když obnovím přehrávání tak se pustí jen audio a od začátku
+    // vůbec nenavaže"): epizoda sledovaná jako VIDEO má pozici jen tady, `resumeStore` (audio) o ní
+    // nevěděl — poslech proto vždycky startoval od 0. Viz [VideoResumeStore] dokumentace.
+    private val videoResumeStore: VideoResumeStore,
     private val profileRepository: ProfileRepository,
 ) {
     // Internal (ne private) = čtou/píší je extension funkce fronty v AudiobookPlayerQueue.kt.
@@ -534,8 +539,17 @@ class AudiobookPlayerConnection @Inject constructor(
                 durationSec = d.durationSec,
                 mediaId = episode.episodeId,
                 // L2b: navázat na uloženou pozici — DOHRANOU (2026-08-16, isFinished) epizodu spusť
-                // znovu od začátku, ne od uloženého konce.
-                startMs = resumeStore.get(episode.episodeId)?.takeUnless { it.isFinished }?.posMs ?: 0L,
+                // znovu od začátku, ne od uloženého konce. BUG (2026-09-04): audio i video pozice —
+                // stejný klíč, jiné úložiště (video nemá isFinished, sám se maže při dohrání) —
+                // „poslední vyhrává" stejně jako v obrazovkách zdrojů (RssPodcastScreen aj.).
+                startMs = run {
+                    val audio = resumeStore.get(episode.episodeId)?.takeUnless { it.isFinished }
+                    val video = videoResumeStore.get(episode.episodeId)
+                    when {
+                        video != null && (audio == null || video.updatedAt >= audio.updatedAt) -> video.posMs
+                        else -> audio?.posMs ?: 0L
+                    }
+                },
                 episode = episode,
             )
             return

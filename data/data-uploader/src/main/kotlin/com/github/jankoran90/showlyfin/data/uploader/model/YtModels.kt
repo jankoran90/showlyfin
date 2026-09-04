@@ -20,4 +20,7 @@ data class YtEpisode(
     val description: String? = null,
     // TRAWL (Slovo, 2026-09-02): jen z `/feed_search` (fulltext hledání) — `/feed` ho neposílá (null).
     @SerializedName("view_count") val viewCount: Long? = null,
+    // BUG (2026-09-04): jen z `/yt_video_info` (metadata jednoho videa mimo okno) — `/feed`/`/feed_search`
+    // ho neposílají (channel název appka zná z vlastního zdroje, ne z feedu).
+    val uploader: String? = null,
 )
