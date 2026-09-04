@@ -217,6 +217,22 @@ private fun SlovoShellContent() {
                 val onOpenSourceEpisode: (String, String, String, String) -> Unit = { type, ref, srcTitle, epKey ->
                     onPush(linkedOrPlain(podcastLinkLookup, type, ref, srcTitle, epKey))
                 }
+                // ADAPT (2026-09-04): sdílený video launcher (YouTube/ČT externí URL) — přidává AI
+                // titulky (jen YouTube, viz [youtubeSubtitleQuery]) + 360p záložku (viz [youtube360Fallback]),
+                // parita s [SlovoDetailHost.playYoutubeVideo]. Použito z Domů „Pokračovat" (video vede)
+                // i z fulltext hledání (dřív bez titulků/fallbacku — drobná mezera navíc opravena zde).
+                val playExternalVideo: (url: String, title: String, poster: String?) -> Unit = { url, title, poster ->
+                    onPush(
+                        SlovoDetailEntry.VideoPlayer(
+                            externalUrl = url, title = title, posterUrl = poster,
+                            subtitleQuery = youtubeSubtitleQuery(url, title),
+                            fallbackUrl = youtube360Fallback(url),
+                        ),
+                    )
+                }
+                val playJfVideo: (jfItemId: String, title: String, resumeKey: String) -> Unit = { jfItemId, title, resumeKey ->
+                    onPush(SlovoDetailEntry.VideoPlayer(itemId = jfItemId, title = title, resumeKey = resumeKey))
+                }
                 sectionStateHolder.SaveableStateProvider(current) {
                     when (current) {
                         // POSLECH se vykreslí stejně (redirect výš ho hned přepne na DOMU+stranu 1,
@@ -272,6 +288,8 @@ private fun SlovoShellContent() {
                                         HomeScreen(
                                             onOpenBook = onOpenBook,
                                             onOpenSourceEpisode = onOpenSourceEpisode,
+                                            onPlayVideo = playExternalVideo,
+                                            onPlayJfVideo = playJfVideo,
                                             modifier = Modifier.fillMaxSize(),
                                         )
                                     } else if (!listenState.isConfigured) {
@@ -339,9 +357,7 @@ private fun SlovoShellContent() {
                                     // default false je tu správně.
                                     PodcastSearchScreen(
                                         onBack = { showGlobalSearch = false },
-                                        onPlayVideo = { url, title, poster ->
-                                            onPush(SlovoDetailEntry.VideoPlayer(externalUrl = url, title = title, posterUrl = poster))
-                                        },
+                                        onPlayVideo = playExternalVideo,
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }

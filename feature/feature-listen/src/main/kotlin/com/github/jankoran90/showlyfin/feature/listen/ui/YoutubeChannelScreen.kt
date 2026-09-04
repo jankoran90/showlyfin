@@ -70,6 +70,7 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
 import com.github.jankoran90.showlyfin.feature.listen.YoutubeChannelViewModel
+import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 
 /**
  * TUNER (SHW-62): obrazovka YouTube kanálu jako podcast. Seznam epizod, u každé VIDEO / AUDIO.
@@ -221,13 +222,14 @@ fun YoutubeChannelScreen(
             val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
             // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
             val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
-            // BUG (2026-09-04): video má přednost (sdílený klíč = „poslední vyhrává"), jinak audio —
-            // parita s RssPodcastScreen. Video mark nemá isFinished (store ho při dohrání sám smaže).
+            // ADAPT (2026-09-04): vyhrává POKROČILEJŠÍ pozice, ne poslední zápis — parita s RssPodcastScreen.
+            // Video mark nemá isFinished (store ho při dohrání sám smaže).
             val videoMark = videoResumeMarks[key]
             val mark = resumeMarks[key]
-            val markPos = videoMark?.posMs ?: mark?.posMs
-            val markDur = videoMark?.durMs ?: mark?.durMs
-            val isFinished = videoMark == null && mark?.isFinished == true
+            val choice = choosePlaybackResume(mark?.posMs, mark?.durMs, mark?.isFinished == true, videoMark?.posMs, videoMark?.durMs)
+            val markPos = choice?.posMs
+            val markDur = choice?.durMs
+            val isFinished = choice?.isFinished == true
             val progress: Float? = when {
                 isCurrent && playerState.durationMs > 0 ->
                     (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)

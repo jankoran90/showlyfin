@@ -150,4 +150,8 @@ data class SourceEpisode(
     /** TRAWL: `"$type:$ref"` zdroje (parita s [PodcastTimelineViewModel] `sourceKey`) — jen z
      *  [PodcastSourcesRepository.searchEpisodes], pro filtr skrytých pořadů při stažení z výsledků. */
     val sourceKey: String? = null,
+    /** EXODUS (SHW-67) E2 / ADAPT (2026-09-04): RSS video epizody v JF knihovně (NaVýbornou) — jen z
+     *  [PodcastSourcesRepository.loadEpisodes] (RSS větev, z [RssEpisode.jfItemId]); umožňuje spustit
+     *  VIDEO verzi epizody i mimo zdrojovou obrazovku (Domů „Pokračovat"). Null = RSS bez videa / jiný zdroj. */
+    val jfItemId: String? = null,
 )

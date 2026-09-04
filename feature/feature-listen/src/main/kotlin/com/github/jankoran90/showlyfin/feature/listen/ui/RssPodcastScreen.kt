@@ -74,6 +74,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.EpisodeVideo
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.RssPodcastViewModel
+import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 
 /**
  * PRESET (SHW-65): obrazovka RSS podcastu jako zdroj Poslechu. Seznam epizod, u každé „Poslech"
@@ -184,14 +185,15 @@ fun RssPodcastScreen(
         val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
         // NAVIGATE: epizoda, ze které se uživatel proklikl (Timeline/cover) — zvýrazni i když nehraje.
         val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
-        // REWIND (SHW-68): video resume má přednost (sdílený klíč = „poslední vyhrává"),
-        // jinak audio resume → progres + „Pokračovat" funguje i u VIDEO epizody.
-        val markPos = videoResumeMarks[key]?.posMs ?: resumeMarks[key]?.posMs
-        val markDur = videoResumeMarks[key]?.durMs ?: resumeMarks[key]?.durMs
+        // ADAPT (2026-09-04): vyhrává POKROČILEJŠÍ pozice mezi audio/video markem (ne poslední zápis) —
+        // progres + „Pokračovat" funguje i u VIDEO epizody.
+        val rssAudioMark = resumeMarks[key]
+        val rssVideoMark = videoResumeMarks[key]
+        val rssChoice = choosePlaybackResume(rssAudioMark?.posMs, rssAudioMark?.durMs, rssAudioMark?.isFinished == true, rssVideoMark?.posMs, rssVideoMark?.durMs)
+        val markPos = rssChoice?.posMs
+        val markDur = rssChoice?.durMs
         // User (2026-08-16) — dohraná epizoda (mark na konci) = „poslechnuto", ne rozposlouchaná.
-        // Jen audio ([resumeMarks], `DirectResumeStore.Mark`) — video ([videoResumeMarks],
-        // `VideoResumeStore.Mark`) je jiný typ bez `isFinished` a řeší se jinde (Filmy).
-        val isFinished = resumeMarks[key]?.isFinished == true
+        val isFinished = rssChoice?.isFinished == true
         val progress: Float? = when {
             isCurrent && playerState.durationMs > 0 ->
                 (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)

@@ -45,6 +45,8 @@ class RssPodcastViewModel @Inject constructor(
     private val naTv: NaTvService,
     private val resumeStore: DirectResumeStore,
     videoResumeStore: VideoResumeStore,
+    // EPHEMERON (2026-09-04): epizody manuálně připojené ke kartě přes scoped hledání (i mimo okno feedu).
+    private val attachedStore: com.github.jankoran90.showlyfin.feature.listen.player.AttachedEpisodeStore,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -86,8 +88,19 @@ class RssPodcastViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { repo.loadRss(feedUrl) }
                 .onSuccess { feed ->
+                    // EPHEMERON (2026-09-04): připojené epizody mimo běžně načtené okno.
+                    val knownIds = feed.episodes.mapTo(mutableSetOf()) { it.id }
+                    val attached = attachedStore.episodesFor("rss:$feedUrl")
+                        .filter { it.id !in knownIds }
+                        .map { ep ->
+                            RssEpisode(
+                                id = ep.id, title = ep.title, audioUrl = ep.streamUrl, date = ep.date,
+                                description = ep.description, duration = formatRssDuration(ep.durationSec),
+                                image = ep.imageUrl, jfItemId = ep.jfItemId,
+                            )
+                        }
                     _state.update {
-                        it.copy(isLoading = false, title = feed.title, image = feed.image, episodes = feed.episodes)
+                        it.copy(isLoading = false, title = feed.title, image = feed.image, episodes = attached + feed.episodes)
                     }
                     // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod (staré stažení bez
                     // těchto polí) → offline detail je ukáže i u „Divokých kár". Ignoruje ne-stažené.
@@ -325,4 +338,15 @@ private fun parseDurationSec(d: String?): Double {
         }
     }
     return t.toDoubleOrNull() ?: 0.0
+}
+
+/** EPHEMERON (2026-09-04) — opak [parseDurationSec]: [AttachedEpisodeStore] drží sekundy (sjednocený
+ *  [SourceEpisode] tvar), RSS zdrojová obrazovka čeká itunes:duration string. 0 = neznámá (prázdný string). */
+private fun formatRssDuration(sec: Double): String {
+    if (sec <= 0.0) return ""
+    val total = sec.toLong()
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }

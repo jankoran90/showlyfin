@@ -37,6 +37,12 @@ fun HomeScreen(
     onOpenBook: (String) -> Unit,
     onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit,
     modifier: Modifier = Modifier,
+    // ADAPT (2026-09-04, user „když spustím video a ukončím to, návratem z Domů se na video
+    // nenaváže, jakoby náš přehrávač fronty neuměl spouštět video"): dřív „Pokračovat" VŽDY pustilo
+    // jen audio frontu, i když video vedlo (delší pozice). Teď [HomeViewModel.videoLaunch] rozhodne
+    // podle [HomeViewModel.ContinueItem.Episode.mode] — externí URL (YouTube/ČT) nebo JF video (RSS).
+    onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit = { _, _, _ -> },
+    onPlayJfVideo: (jfItemId: String, title: String, resumeKey: String) -> Unit = { _, _, _ -> },
 ) {
     val vm: HomeViewModel = hiltViewModel()
     val items by vm.items.collectAsStateWithLifecycle()
@@ -86,7 +92,14 @@ fun HomeScreen(
                             // BUG (2026-09-04, user „dej možnost zobrazit je a rovnou naskočit"): ťuk
                             // rovnou přehraje, dřív otvíral jen zdrojovou obrazovku (parita s knihami
                             // zůstává jinde — epizoda na rozdíl od knihy nepotřebuje kapitolní kontext).
-                            onClick = { vm.playEpisode(item) },
+                            // ADAPT (2026-09-04): spustí SPRÁVNÝ režim (video, pokud vede) — dřív vždy jen audio.
+                            onClick = {
+                                when (val launch = vm.videoLaunch(item)) {
+                                    is HomeViewModel.VideoLaunch.External -> onPlayVideo(launch.url, launch.title, launch.posterUrl)
+                                    is HomeViewModel.VideoLaunch.Jellyfin -> onPlayJfVideo(launch.jfItemId, launch.title, launch.resumeKey)
+                                    null -> vm.playEpisode(item)
+                                }
+                            },
                             onLongClick = if (otherAdultProfiles.isNotEmpty()) ({ shareEpisode = item }) else null,
                             onEndListening = { vm.resetEpisodeProgress(item) },
                         )

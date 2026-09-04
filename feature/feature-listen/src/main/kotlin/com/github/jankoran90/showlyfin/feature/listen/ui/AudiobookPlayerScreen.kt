@@ -73,6 +73,11 @@ fun AudiobookPlayerScreen(
     episodeId: String? = null,
     // PERCH (SHW-69): klik na cover → seznam dílů rodičovského pořadu/knihy (cíl odvodí VM ze zdroje).
     onOpenSource: (com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget) -> Unit = {},
+    // SLOVO-KIDS-EPISODE: dětský profil = žádný přepínač na video (parita se zdrojovými obrazovkami).
+    audioOnly: Boolean = false,
+    // ADAPT (2026-09-04, user screenshot „chybí mi tam přepínač na verzi audio/video přímo ve
+    // frontě"): přepnutí PRÁVĚ HRANÉ epizody z poslechu na video, se zachováním pozice.
+    onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit = { _, _, _ -> },
     viewModel: AudiobookPlayerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -208,6 +213,20 @@ fun AudiobookPlayerScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp),
                 )
+            }
+
+            // ADAPT (2026-09-04): přepínač na video verzi PRÁVĚ HRANÉ epizody — jen YouTube/ČT
+            // (RSS video jde přes jfItemId, ten fronta nenese), jen dospělý profil.
+            if (!audioOnly && viewModel.hasVideoOption()) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = {
+                        viewModel.switchToVideo()?.let { url -> onPlayVideo(url, state.title, state.coverUrl) }
+                    },
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("Přepnout na video", Modifier.padding(start = 6.dp))
+                }
             }
 
             Spacer(Modifier.height(10.dp))

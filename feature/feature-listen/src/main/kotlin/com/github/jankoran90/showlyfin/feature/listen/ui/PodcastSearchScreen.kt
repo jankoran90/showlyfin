@@ -62,6 +62,7 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.PodcastSearchViewModel
+import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -163,13 +164,14 @@ fun PodcastSearchScreen(
                     items(state.results, key = { it.resumeKey ?: it.id }) { ep ->
                         val key = ep.resumeKey ?: ep.id
                         val videoUrl = if (audioOnly) null else viewModel.videoUrl(ep)
-                        // BUG (2026-09-04): video má přednost (sdílený klíč = „poslední vyhrává"),
-                        // parita s RssPodcastScreen/YoutubeChannelScreen/CtvProgramScreen.
+                        // ADAPT (2026-09-04): vyhrává POKROČILEJŠÍ pozice (ne poslední zápis, ne pouhá
+                        // přítomnost videa) — parita s RssPodcastScreen/YoutubeChannelScreen/CtvProgramScreen.
                         val videoMark = videoResumeMarks[key]
                         val mark = resumeMarks[key]
-                        val markPos = videoMark?.posMs ?: mark?.posMs
-                        val markDur = videoMark?.durMs ?: mark?.durMs
-                        val isFinished = videoMark == null && mark?.isFinished == true
+                        val choice = choosePlaybackResume(mark?.posMs, mark?.durMs, mark?.isFinished == true, videoMark?.posMs, videoMark?.durMs)
+                        val markPos = choice?.posMs
+                        val markDur = choice?.durMs
+                        val isFinished = choice?.isFinished == true
                         SearchResultRow(
                             episode = ep,
                             isCurrent = player.currentEpisodeId == key,
@@ -179,7 +181,7 @@ fun PodcastSearchScreen(
                             isFinished = isFinished,
                             offlineStatus = offlineStates[key]?.status ?: OfflineStatus.NONE,
                             onPlay = { viewModel.play(ep) },
-                            onVideo = videoUrl?.let { url -> { onPlayVideo(url, ep.title, ep.imageUrl) } },
+                            onVideo = videoUrl?.let { url -> { viewModel.onVideoTap(ep); onPlayVideo(url, ep.title, ep.imageUrl) } },
                             onEnqueue = { viewModel.enqueue(ep) },
                             onDownload = { viewModel.download(ep) },
                             onDeleteOffline = { viewModel.deleteOffline(ep) },

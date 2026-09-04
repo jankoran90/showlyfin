@@ -1,11 +1,15 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.youtubeVideoUrl
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.clearQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.moveQueueItem
@@ -18,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * Most fullscreen/mini playeru na sdílený [AudiobookPlayerConnection]. `open()` otevře ABS
@@ -30,6 +35,12 @@ class AudiobookPlayerViewModel @Inject constructor(
     private val downloadManager: EpisodeDownloadManager,
     private val audiobookDownloads: AudiobookDownloadManager,
     private val absPrefs: com.github.jankoran90.showlyfin.data.abs.AbsPreferences,
+    // ADAPT (2026-09-04, user screenshot „chybí mi tam přepínač na verzi audio/video přímo ve
+    // frontě... v tu chvíli zůstane čas poslechu jak je při přepínání"): přepnutí AUDIO→VIDEO
+    // uprostřed poslechu, se zachováním pozice.
+    private val uploaderDs: UploaderRemoteDataSource,
+    private val videoResumeStore: VideoResumeStore,
+    @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     val state = connection.state
@@ -72,6 +83,46 @@ class AudiobookPlayerViewModel @Inject constructor(
             s.isPodcastEpisode -> ListenSourceTarget.Podcast(itemId)
             else -> ListenSourceTarget.Audiobook(itemId)
         }
+    }
+
+    private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+
+    /** ADAPT — true jen pro YouTube/ČT direct epizody (`yt:`/`ctv:` klíč); RSS video jde jen přes
+     *  jfItemId, ten fronta nenese, přepínač se proto u RSS nenabízí (zůstává jen na zdrojové obrazovce). */
+    fun hasVideoOption(): Boolean {
+        val key = state.value.currentEpisodeId ?: return false
+        return key.startsWith("yt:") || key.startsWith("ctv:")
+    }
+
+    /**
+     * ADAPT (2026-09-04): přepni PRÁVĚ HRANOU direct epizodu z poslechu na video, se zachováním
+     * pozice. Zapíše aktuální pozici do LOKÁLNÍHO resume (stejný klíč `resume_$key`/`resume_at_$key`,
+     * jaký čte [com.github.jankoran90.showlyfin.feature.playback.PlaybackViewModel.loadExternal] —
+     * čerstvý zápis spadá do jeho „stillWatching" okna, video tak naskočí TICHO přesně tam, kde audio
+     * skončilo, bez dialogu Pokračovat/Od začátku) + do [videoResumeStore] (badge parita jinde v appce).
+     * Pauzne poslech (fronta zůstává, jen se nehraje souběžně s videem). Vrací URL k přehrání, nebo
+     * `null` když aktuální epizoda video vůbec nemá ([hasVideoOption]).
+     */
+    fun switchToVideo(): String? {
+        val key = state.value.currentEpisodeId ?: return null
+        val id = key.substringAfter(':')
+        val url = when {
+            key.startsWith("yt:") -> uploaderDs.youtubeVideoUrl(baseUrl, cookie, id, PodcastVideoQuality.stream(prefs))
+            key.startsWith("ctv:") -> uploaderDs.ctvVideoUrl(baseUrl, cookie, id)
+            else -> return null
+        }
+        val posMs = state.value.positionMs
+        val durMs = state.value.durationMs
+        if (posMs > 0L) {
+            prefs.edit()
+                .putLong("resume_$key", posMs)
+                .putLong("resume_at_$key", System.currentTimeMillis())
+                .apply()
+            videoResumeStore.save(key, posMs, durMs)
+        }
+        connection.pause()
+        return url
     }
 
     /**

@@ -95,7 +95,7 @@ internal fun SlovoDetailEntry.isFullscreenPlayer(): Boolean =
  * sdílený `feature-listen` kód (stejný modul používá i app-filmy). Slouží k sestavení syntetického
  * "yt:<id>" klíče pro AI překlad titulků (viz [youtubeSubtitleQuery]).
  */
-private fun youtubeIdFromProxyUrl(url: String): String? =
+internal fun youtubeIdFromProxyUrl(url: String): String? =
     Regex("""/yt/(?:stream|hls)/([^/?.]+)""").find(url)?.groupValues?.get(1)
 
 /**
@@ -104,7 +104,7 @@ private fun youtubeIdFromProxyUrl(url: String): String? =
  * funguje prakticky vždy (progresivní itag 18, univerzální). `null` = url nesedí na očekávaný tvar
  * (žádná záložka, ať se nic nerozbije na neznámém formátu URL).
  */
-private fun youtube360Fallback(dashUrl: String): String? {
+internal fun youtube360Fallback(dashUrl: String): String? {
     val videoPart = dashUrl.substringBefore(YOUTUBE_DASH_URL_DELIMITER)
     val m = Regex("""^(.*)/api/yt/stream/([^/?.]+)\?kind=video_track&quality=[^&]+&(key=[^&]+)$""").find(videoPart) ?: return null
     val (base, id, key) = m.destructured
@@ -118,7 +118,7 @@ private fun youtube360Fallback(dashUrl: String): String? {
  * `/api/subtitles/translate/{imdb}` (anglické titulky z YouTube místo OpenSubtitles) reaguje zvlášť.
  * Bez rozpoznatelného id (neproxovaná/cizí URL) vrací null → přehraje se beze titulků, beze pádu.
  */
-private fun youtubeSubtitleQuery(url: String, title: String): SubtitleQuery? =
+internal fun youtubeSubtitleQuery(url: String, title: String): SubtitleQuery? =
     youtubeIdFromProxyUrl(url)?.let { id -> SubtitleQuery(imdb = "yt:$id", title = title, origTitle = title) }
 
 internal fun linkedOrPlain(
@@ -209,6 +209,8 @@ internal fun SlovoDetail(
             episodeId = entry.episodeId,
             onBack = onPop,
             onOpenSource = onOpenSource,
+            audioOnly = audioOnly,
+            onPlayVideo = playYoutubeVideo,
             modifier = Modifier.fillMaxSize(),
         )
         is SlovoDetailEntry.YoutubeChannel -> YoutubeChannelScreen(

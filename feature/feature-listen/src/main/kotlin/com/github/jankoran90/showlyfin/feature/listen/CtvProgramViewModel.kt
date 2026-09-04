@@ -40,6 +40,8 @@ class CtvProgramViewModel @Inject constructor(
     // BUG (2026-09-04): parita s YoutubeChannelViewModel/RssPodcastScreen — video (PlaybackViewModel.
     // saveExternalPosition, REWIND SHW-68 store) se dřív do „poslechového" resume vůbec nepromítlo.
     private val videoResumeStore: com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore,
+    // EPHEMERON (2026-09-04): epizody manuálně připojené ke kartě přes scoped hledání (i mimo okno feedu).
+    private val attachedStore: com.github.jankoran90.showlyfin.feature.listen.player.AttachedEpisodeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -80,8 +82,18 @@ class CtvProgramViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, show, limit = 100) }
                 .onSuccess { feed ->
+                    // EPHEMERON (2026-09-04): připojené díly mimo běžně načtené okno.
+                    val knownIds = feed.episodes.mapTo(mutableSetOf()) { it.id }
+                    val attached = attachedStore.episodesFor("ctv:$show")
+                        .filter { it.id !in knownIds }
+                        .map { ep ->
+                            CtvEpisode(
+                                id = ep.id, title = ep.title, description = ep.description,
+                                duration = ep.durationSec.takeIf { it > 0.0 }, date = ep.date, image = ep.imageUrl,
+                            )
+                        }
                     _state.update {
-                        it.copy(isLoading = false, showTitle = feed.title, episodes = feed.episodes)
+                        it.copy(isLoading = false, showTitle = feed.title, episodes = attached + feed.episodes)
                     }
                     // Pre-warm: resolvni nejnovější pár dílů → start přehrávání pak ~okamžitý.
                     feed.episodes.take(2).forEach { ep ->

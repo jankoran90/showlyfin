@@ -12,12 +12,16 @@ import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
 import com.github.jankoran90.showlyfin.data.abs.model.toAudiobook
 import com.github.jankoran90.showlyfin.data.uploader.AudiobookOwnershipRepository
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
+import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
+import com.github.jankoran90.showlyfin.data.uploader.youtubeVideoUrl
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
+import com.github.jankoran90.showlyfin.feature.listen.player.PlaybackMode
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -39,6 +43,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * Obrazovka „Domů" (user 2026-08-15: „naposledy přehráno a pokračovat, hezky v mřížce, vždy první").
@@ -66,7 +71,35 @@ class HomeViewModel @Inject constructor(
     // BUG (2026-09-04): musí být `private val` (property), ne jen konstruktorový parametr — playEpisode
     // ho potřebuje volat mimo primární konstruktor.
     private val connection: AudiobookPlayerConnection,
+    // ADAPT (2026-09-04): sestavení video URL (YouTube/ČT) pro [videoLaunch].
+    private val uploaderDs: UploaderRemoteDataSource,
+    @Named("traktPreferences") private val prefs: android.content.SharedPreferences,
 ) : ViewModel() {
+
+    private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
+    private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
+
+    sealed interface VideoLaunch {
+        data class External(val url: String, val title: String, val posterUrl: String?) : VideoLaunch
+        data class Jellyfin(val jfItemId: String, val title: String, val resumeKey: String) : VideoLaunch
+    }
+
+    /**
+     * ADAPT (2026-09-04): `null` = pokračuj audiem ([playEpisode]) — buď video nevede, nebo ho z Domů
+     * neumíme spustit (RSS video bez [SourceEpisode.jfItemId], starší fallback epizoda apod.).
+     */
+    fun videoLaunch(item: ContinueItem.Episode): VideoLaunch? {
+        if (item.mode != PlaybackMode.VIDEO) return null
+        val ep = item.episode
+        return when (item.sourceType) {
+            "youtube" -> VideoLaunch.External(
+                uploaderDs.youtubeVideoUrl(baseUrl, cookie, ep.id, PodcastVideoQuality.stream(prefs)), ep.title, ep.imageUrl,
+            )
+            "ctv" -> VideoLaunch.External(uploaderDs.ctvVideoUrl(baseUrl, cookie, ep.id), ep.title, ep.imageUrl)
+            "rss" -> ep.jfItemId?.let { VideoLaunch.Jellyfin(it, ep.title, ep.resumeKey ?: ep.id) }
+            else -> null
+        }
+    }
 
     /** User (2026-08-15 16:49) — odznak „hraje" na dlaždici, když je zrovna aktivní v přehrávači. */
     val playerState = connection.state
@@ -207,6 +240,8 @@ class HomeViewModel @Inject constructor(
             val episode: SourceEpisode,
             val progress: Float,
             override val updatedAt: Long,
+            /** ADAPT (2026-09-04) — kterou verzí pokračovat („kde se přestalo dál"), viz [choosePlaybackResume]. */
+            val mode: PlaybackMode = PlaybackMode.AUDIO,
         ) : ContinueItem
     }
 
@@ -473,8 +508,8 @@ class HomeViewModel @Inject constructor(
                 async { key to sourcesRepo.resolveYoutubeEpisode(key.removePrefix("yt:")) }
             }.awaitAll()
         }.mapNotNull { (key, ep) -> ep?.let { key to it } }.toMap()
-        // BUG (2026-09-04): video má přednost (sdílený klíč = „poslední vyhrává", stejná konvence jako
-        // v obrazovkách zdrojů — RssPodcastScreen/YoutubeChannelScreen/CtvProgramScreen).
+        // ADAPT (2026-09-04, user „ať nezáleží, jestli audio nebo video, vždy pokračování tam, kde se
+        // přestalo dál"): vyhrává POKROČILEJŠÍ pozice mezi audio/video markem, ne poslední zápis.
         return keys.mapNotNull { key ->
             val ep = byKey[key]?.first ?: resolvedExtra[key] ?: return@mapNotNull null
             val sourceType = byKey[key]?.second?.type ?: "youtube"
@@ -482,11 +517,10 @@ class HomeViewModel @Inject constructor(
             val sourceTitle = byKey[key]?.second?.title ?: ep.subtitle ?: "YouTube"
             val vm = videoMarks[key]
             val am = audioMarks[key]
-            val posMs = vm?.posMs ?: am?.posMs ?: return@mapNotNull null
-            val durMs = vm?.durMs ?: am?.durMs ?: 0L
-            val updatedAt = vm?.updatedAt ?: am?.updatedAt ?: 0L
-            val progress = if (durMs > 0) (posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f
-            ContinueItem.Episode(sourceType, sourceRef, sourceTitle, ep, progress, updatedAt)
+            val choice = choosePlaybackResume(am?.posMs, am?.durMs, false, vm?.posMs, vm?.durMs) ?: return@mapNotNull null
+            val updatedAt = if (choice.mode == PlaybackMode.VIDEO) vm?.updatedAt ?: 0L else am?.updatedAt ?: 0L
+            val progress = if (choice.durMs > 0) (choice.posMs.toFloat() / choice.durMs).coerceIn(0f, 1f) else 0f
+            ContinueItem.Episode(sourceType, sourceRef, sourceTitle, ep, progress, updatedAt, choice.mode)
         }
     }
 }

@@ -434,6 +434,9 @@ class AudiobookPlayerConnection @Inject constructor(
     /** L2b: navázat přehrávání PRÁVĚ NAČTENÉ epizody (resume bez reloadu streamu). Idempotentní. */
     fun play() = withController { it.play() }
 
+    /** ADAPT (2026-09-04): zastav poslech beze ztráty fronty/pozice — např. při přepnutí na video verzi. */
+    fun pause() = withController { it.pause() }
+
     /** [ms] je v čase celé knihy. */
     fun seekTo(ms: Long) = withController { seekBook(it, ms) }
 
@@ -539,16 +542,15 @@ class AudiobookPlayerConnection @Inject constructor(
                 durationSec = d.durationSec,
                 mediaId = episode.episodeId,
                 // L2b: navázat na uloženou pozici — DOHRANOU (2026-08-16, isFinished) epizodu spusť
-                // znovu od začátku, ne od uloženého konce. BUG (2026-09-04): audio i video pozice —
-                // stejný klíč, jiné úložiště (video nemá isFinished, sám se maže při dohrání) —
-                // „poslední vyhrává" stejně jako v obrazovkách zdrojů (RssPodcastScreen aj.).
+                // znovu od začátku, ne od uloženého konce. ADAPT (2026-09-04): audio i video pozice —
+                // stejný klíč, jiné úložiště — vyhrává POKROČILEJŠÍ pozice, ne poslední zápis (viz
+                // [choosePlaybackResume]). Fronta hraje vždy audio proud, takže i když „vede" video
+                // (delší pozice), navazuje se aspoň zvukem ze SPRÁVNÉHO místa — skutečné přepnutí na
+                // video přehrávač řeší volající mimo frontu (Domů „Pokračovat", viz [HomeViewModel]).
                 startMs = run {
                     val audio = resumeStore.get(episode.episodeId)?.takeUnless { it.isFinished }
                     val video = videoResumeStore.get(episode.episodeId)
-                    when {
-                        video != null && (audio == null || video.updatedAt >= audio.updatedAt) -> video.posMs
-                        else -> audio?.posMs ?: 0L
-                    }
+                    choosePlaybackResume(audio?.posMs, audio?.durMs, false, video?.posMs, video?.durMs)?.posMs ?: 0L
                 },
                 episode = episode,
             )

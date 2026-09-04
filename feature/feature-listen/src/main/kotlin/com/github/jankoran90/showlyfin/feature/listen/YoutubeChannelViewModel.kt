@@ -48,6 +48,8 @@ class YoutubeChannelViewModel @Inject constructor(
     // (PlaybackViewModel.saveExternalPosition, REWIND SHW-68 store) — parita s RssPodcastScreen,
     // co videoResumeMarks už dřív četlo pro svoje jfItemId video.
     private val videoResumeStore: VideoResumeStore,
+    // EPHEMERON (2026-09-04): epizody manuálně připojené ke kartě přes scoped hledání (i mimo okno feedu).
+    private val attachedStore: com.github.jankoran90.showlyfin.feature.listen.player.AttachedEpisodeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -94,8 +96,21 @@ class YoutubeChannelViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { uploaderDs.getYtFeed(baseUrl, cookie, channel, limit = YoutubeFeedPrefs.limit(prefs)) }
                 .onSuccess { feed ->
+                    // EPHEMERON (2026-09-04): připojené epizody mimo běžně načtené okno (starší díl
+                    // nalezený přes scoped hledání na téhle kartě) — dopln, ať je jde znovu najít i po
+                    // odposlouchání/zrušení pozice, ne jen dokud běží resume mark.
+                    val knownIds = feed.entries.mapTo(mutableSetOf()) { it.id }
+                    val attached = attachedStore.episodesFor("youtube:$channel")
+                        .filter { it.id !in knownIds }
+                        .map { ep ->
+                            YtEpisode(
+                                id = ep.id, title = ep.title, thumbnail = ep.imageUrl,
+                                duration = ep.durationSec.takeIf { it > 0.0 }, uploadDate = ep.date,
+                                description = ep.description, viewCount = ep.viewCount, uploader = ep.subtitle,
+                            )
+                        }
                     _state.update {
-                        it.copy(isLoading = false, channelTitle = feed.channel, episodes = feed.entries)
+                        it.copy(isLoading = false, channelTitle = feed.channel, episodes = attached + feed.entries)
                     }
                     // Pre-warm: resolvni audio nejnovějších pár epizod → start přehrávání pak ~okamžitý.
                     feed.entries.take(3).forEach { ep ->

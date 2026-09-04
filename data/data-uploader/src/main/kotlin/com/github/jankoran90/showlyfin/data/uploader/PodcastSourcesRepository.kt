@@ -222,6 +222,9 @@ class PodcastSourcesRepository @Inject constructor(
                             resumeKey = "rss:${ep.id}",   // shoda s RssPodcastViewModel.episodeKey
                             description = ep.description,
                             durationSec = parseDurationSec(ep.duration),
+                            // ADAPT (2026-09-04): nese se dál, ať Domů umí spustit VIDEO verzi RSS
+                            // epizody (NaVýbornou), ne jen poslech — viz [HomeViewModel.videoLaunch].
+                            jfItemId = ep.jfItemId,
                         )
                     }
                 }

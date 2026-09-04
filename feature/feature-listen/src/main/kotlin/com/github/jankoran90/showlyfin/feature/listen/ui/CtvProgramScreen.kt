@@ -66,6 +66,7 @@ import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.CtvProgramViewModel
+import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 
 /**
  * KAVKA (SHW-76): obrazovka ČT pořadu jako podcast. Seznam dílů, u každého VIDEO (DASH) nebo AUDIO
@@ -206,12 +207,13 @@ fun CtvProgramScreen(
             val key = viewModel.episodeKey(ep)
             val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
             val isHighlighted = highlightEpisodeKey != null && key == highlightEpisodeKey
-            // BUG (2026-09-04): video má přednost (sdílený klíč = „poslední vyhrává"), jinak audio.
+            // ADAPT (2026-09-04): vyhrává POKROČILEJŠÍ pozice, ne poslední zápis.
             val videoMark = videoResumeMarks[key]
             val mark = resumeMarks[key]
-            val markPos = videoMark?.posMs ?: mark?.posMs
-            val markDur = videoMark?.durMs ?: mark?.durMs
-            val isFinished = videoMark == null && mark?.isFinished == true
+            val choice = choosePlaybackResume(mark?.posMs, mark?.durMs, mark?.isFinished == true, videoMark?.posMs, videoMark?.durMs)
+            val markPos = choice?.posMs
+            val markDur = choice?.durMs
+            val isFinished = choice?.isFinished == true
             val progress: Float? = when {
                 isCurrent && playerState.durationMs > 0 ->
                     (playerState.positionMs.toFloat() / playerState.durationMs).coerceIn(0f, 1f)

@@ -45,6 +45,8 @@ class PodcastSearchViewModel @Inject constructor(
     // bar, ani „Pokračovat" — parita se zdrojovými obrazovkami (YoutubeChannelScreen aj.).
     private val resumeStore: DirectResumeStore,
     private val videoResumeStore: VideoResumeStore,
+    // EPHEMERON (2026-09-04): trvalé připojení scoped-hledáním nalezené epizody ke kartě zdroje.
+    private val attachedStore: com.github.jankoran90.showlyfin.feature.listen.player.AttachedEpisodeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -163,8 +165,19 @@ class PodcastSearchViewModel @Inject constructor(
         )
     }
 
+    /** EPHEMERON (2026-09-04): scoped hledání (karta konkrétního zdroje) → epizoda se poznala v
+     *  okamžiku hledání, žádné dohledávání není třeba, stačí si to zapamatovat. Cross-source hledání
+     *  ([scopeSource] == null) nemá jednoznačný zdroj, netýká se ho to. */
+    private fun attachIfScoped(ep: SourceEpisode) {
+        val src = scopeSource ?: return
+        attachedStore.attach("${src.type}:${src.ref}", ep.copy(sourceKey = "${src.type}:${src.ref}"))
+    }
+
     /** Přehraj výsledek přes poslechový přehrávač (sdílený resume klíč s per-zdroj obrazovkami). */
-    fun play(ep: SourceEpisode) = connection.playDirectEpisode(toQueued(ep))
+    fun play(ep: SourceEpisode) {
+        attachIfScoped(ep)
+        connection.playDirectEpisode(toQueued(ep))
+    }
 
     /** BUG (2026-09-04, user screenshot „Nezobrazí se video pri hledání"): hledání nabízelo jen
      *  audio „Poslech", video volba chyběla úplně — parita se zdrojovou obrazovkou (YoutubeChannel/
@@ -176,12 +189,20 @@ class PodcastSearchViewModel @Inject constructor(
         else -> null
     }
 
+    /** EPHEMERON — Screen volá při tapu na tlačítko „Video" (videoUrl() samo se čte i při každém
+     *  vykreslení řádku, přípojení nesmí viset na tom, jen na SKUTEČNÉM stisku). */
+    fun onVideoTap(ep: SourceEpisode) = attachIfScoped(ep)
+
     /** Přidej výsledek do fronty (další/na konec). */
-    fun enqueue(ep: SourceEpisode, atFront: Boolean = false) = connection.enqueue(toQueued(ep), atFront = atFront)
+    fun enqueue(ep: SourceEpisode, atFront: Boolean = false) {
+        attachIfScoped(ep)
+        connection.enqueue(toQueued(ep), atFront = atFront)
+    }
 
     /** Stáhni výsledek do telefonu (offline poslech). */
     fun download(ep: SourceEpisode) {
         if (ep.streamUrl.isBlank()) return
+        attachIfScoped(ep)
         offline.enqueue(
             OfflineRequest(
                 key = ep.resumeKey ?: ep.id,
