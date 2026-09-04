@@ -21,7 +21,11 @@ import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,7 +84,30 @@ class YoutubeChannelViewModel @Inject constructor(
     )
 
     private val _state = MutableStateFlow(UiState())
-    val state = _state.asStateFlow()
+    // EPHEMERON (2026-09-04, user 20:51 „pořád nevidím připíchlou tuhle epizodu na kartě podcastu"):
+    // `state.episodes` dřív psal JEN jednorázově `load()` úspěch — `hiltViewModel()` bez klíče žije
+    // po celou dobu Activity (manuální backstack, ne NavBackStackEntry), takže návrat na tuhle
+    // obrazovku PO připojení epizody (jiná obrazovka, scoped hledání) narazil na `loadedFor == channel
+    // && episodes.isNotEmpty()` guard a NIKDY se znovu nesloučil s [attachedStore]. Teď REAKTIVNÍ —
+    // `state` je `combine` čerstvého feedu s live [AttachedEpisodeStore.bySource], projeví se okamžitě
+    // i beze změny obrazovky.
+    private val _rawEpisodes = MutableStateFlow<List<YtEpisode>>(emptyList())
+    val state: StateFlow<UiState> = combine(_state, _rawEpisodes, attachedStore.bySource) { base, raw, attachedMap ->
+        val channel = loadedFor
+        val knownIds = raw.mapTo(mutableSetOf()) { it.id }
+        val attached = if (channel != null) {
+            attachedMap["youtube:$channel"].orEmpty()
+                .filter { it.id !in knownIds }
+                .map { ep ->
+                    YtEpisode(
+                        id = ep.id, title = ep.title, thumbnail = ep.imageUrl,
+                        duration = ep.durationSec.takeIf { it > 0.0 }, uploadDate = ep.date,
+                        description = ep.description, viewCount = ep.viewCount, uploader = ep.subtitle,
+                    )
+                }
+        } else emptyList()
+        base.copy(episodes = attached + raw)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
     private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
@@ -90,28 +117,14 @@ class YoutubeChannelViewModel @Inject constructor(
     private var loadedFor: String? = null
 
     fun load(channel: String) {
-        if (loadedFor == channel && _state.value.episodes.isNotEmpty()) return
+        if (loadedFor == channel && _rawEpisodes.value.isNotEmpty()) return
         loadedFor = channel
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             runCatching { uploaderDs.getYtFeed(baseUrl, cookie, channel, limit = YoutubeFeedPrefs.limit(prefs)) }
                 .onSuccess { feed ->
-                    // EPHEMERON (2026-09-04): připojené epizody mimo běžně načtené okno (starší díl
-                    // nalezený přes scoped hledání na téhle kartě) — dopln, ať je jde znovu najít i po
-                    // odposlouchání/zrušení pozice, ne jen dokud běží resume mark.
-                    val knownIds = feed.entries.mapTo(mutableSetOf()) { it.id }
-                    val attached = attachedStore.episodesFor("youtube:$channel")
-                        .filter { it.id !in knownIds }
-                        .map { ep ->
-                            YtEpisode(
-                                id = ep.id, title = ep.title, thumbnail = ep.imageUrl,
-                                duration = ep.durationSec.takeIf { it > 0.0 }, uploadDate = ep.date,
-                                description = ep.description, viewCount = ep.viewCount, uploader = ep.subtitle,
-                            )
-                        }
-                    _state.update {
-                        it.copy(isLoading = false, channelTitle = feed.channel, episodes = attached + feed.entries)
-                    }
+                    _rawEpisodes.value = feed.entries
+                    _state.update { it.copy(isLoading = false, channelTitle = feed.channel) }
                     // Pre-warm: resolvni audio nejnovějších pár epizod → start přehrávání pak ~okamžitý.
                     feed.entries.take(3).forEach { ep ->
                         viewModelScope.launch { runCatching { uploaderDs.warmYt(baseUrl, cookie, ep.id, "audio") } }

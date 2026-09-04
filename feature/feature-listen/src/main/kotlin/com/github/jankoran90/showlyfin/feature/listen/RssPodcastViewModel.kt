@@ -21,7 +21,11 @@ import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -77,31 +81,38 @@ class RssPodcastViewModel @Inject constructor(
     )
 
     private val _state = MutableStateFlow(UiState())
-    val state = _state.asStateFlow()
+    // EPHEMERON (2026-09-04): REAKTIVNÍ merge s [AttachedEpisodeStore] — viz shodná oprava a
+    // zdůvodnění v [YoutubeChannelViewModel.state] (`hiltViewModel()` bez klíče přežívá návrat na
+    // obrazovku, jednorázový merge v `load()` se bez toho nikdy neprojevil po připojení epizody jinde).
+    private val _rawEpisodes = MutableStateFlow<List<RssEpisode>>(emptyList())
+    val state: StateFlow<UiState> = combine(_state, _rawEpisodes, attachedStore.bySource) { base, raw, attachedMap ->
+        val feedUrl = loadedFor
+        val knownIds = raw.mapTo(mutableSetOf()) { it.id }
+        val attached = if (feedUrl != null) {
+            attachedMap["rss:$feedUrl"].orEmpty()
+                .filter { it.id !in knownIds }
+                .map { ep ->
+                    RssEpisode(
+                        id = ep.id, title = ep.title, audioUrl = ep.streamUrl, date = ep.date,
+                        description = ep.description, duration = formatRssDuration(ep.durationSec),
+                        image = ep.imageUrl, jfItemId = ep.jfItemId,
+                    )
+                }
+        } else emptyList()
+        base.copy(episodes = attached + raw)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
     private var loadedFor: String? = null
 
     fun load(feedUrl: String) {
-        if (loadedFor == feedUrl && _state.value.episodes.isNotEmpty()) return
+        if (loadedFor == feedUrl && _rawEpisodes.value.isNotEmpty()) return
         loadedFor = feedUrl
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             runCatching { repo.loadRss(feedUrl) }
                 .onSuccess { feed ->
-                    // EPHEMERON (2026-09-04): připojené epizody mimo běžně načtené okno.
-                    val knownIds = feed.episodes.mapTo(mutableSetOf()) { it.id }
-                    val attached = attachedStore.episodesFor("rss:$feedUrl")
-                        .filter { it.id !in knownIds }
-                        .map { ep ->
-                            RssEpisode(
-                                id = ep.id, title = ep.title, audioUrl = ep.streamUrl, date = ep.date,
-                                description = ep.description, duration = formatRssDuration(ep.durationSec),
-                                image = ep.imageUrl, jfItemId = ep.jfItemId,
-                            )
-                        }
-                    _state.update {
-                        it.copy(isLoading = false, title = feed.title, image = feed.image, episodes = attached + feed.episodes)
-                    }
+                    _rawEpisodes.value = feed.episodes
+                    _state.update { it.copy(isLoading = false, title = feed.title, image = feed.image) }
                     // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod (staré stažení bez
                     // těchto polí) → offline detail je ukáže i u „Divokých kár". Ignoruje ne-stažené.
                     // PERF (2026-08-15, WATCHDOG incident): [OfflineDownloadManager.backfillMeta] serializuje

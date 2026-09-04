@@ -15,7 +15,11 @@ import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -68,7 +72,25 @@ class CtvProgramViewModel @Inject constructor(
     )
 
     private val _state = MutableStateFlow(UiState())
-    val state = _state.asStateFlow()
+    // EPHEMERON (2026-09-04): REAKTIVNÍ merge s [AttachedEpisodeStore] — viz shodná oprava a
+    // zdůvodnění v [YoutubeChannelViewModel.state] (`hiltViewModel()` bez klíče přežívá návrat na
+    // obrazovku, jednorázový merge v `load()` se bez toho nikdy neprojevil po připojení epizody jinde).
+    private val _rawEpisodes = MutableStateFlow<List<CtvEpisode>>(emptyList())
+    val state: StateFlow<UiState> = combine(_state, _rawEpisodes, attachedStore.bySource) { base, raw, attachedMap ->
+        val show = loadedFor
+        val knownIds = raw.mapTo(mutableSetOf()) { it.id }
+        val attached = if (show != null) {
+            attachedMap["ctv:$show"].orEmpty()
+                .filter { it.id !in knownIds }
+                .map { ep ->
+                    CtvEpisode(
+                        id = ep.id, title = ep.title, description = ep.description,
+                        duration = ep.durationSec.takeIf { it > 0.0 }, date = ep.date, image = ep.imageUrl,
+                    )
+                }
+        } else emptyList()
+        base.copy(episodes = attached + raw)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
     private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
     private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
@@ -76,25 +98,14 @@ class CtvProgramViewModel @Inject constructor(
     private var loadedFor: String? = null
 
     fun load(show: String) {
-        if (loadedFor == show && _state.value.episodes.isNotEmpty()) return
+        if (loadedFor == show && _rawEpisodes.value.isNotEmpty()) return
         loadedFor = show
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, show, limit = 100) }
                 .onSuccess { feed ->
-                    // EPHEMERON (2026-09-04): připojené díly mimo běžně načtené okno.
-                    val knownIds = feed.episodes.mapTo(mutableSetOf()) { it.id }
-                    val attached = attachedStore.episodesFor("ctv:$show")
-                        .filter { it.id !in knownIds }
-                        .map { ep ->
-                            CtvEpisode(
-                                id = ep.id, title = ep.title, description = ep.description,
-                                duration = ep.durationSec.takeIf { it > 0.0 }, date = ep.date, image = ep.imageUrl,
-                            )
-                        }
-                    _state.update {
-                        it.copy(isLoading = false, showTitle = feed.title, episodes = attached + feed.episodes)
-                    }
+                    _rawEpisodes.value = feed.episodes
+                    _state.update { it.copy(isLoading = false, showTitle = feed.title) }
                     // Pre-warm: resolvni nejnovější pár dílů → start přehrávání pak ~okamžitý.
                     feed.episodes.take(2).forEach { ep ->
                         viewModelScope.launch { runCatching { uploaderDs.warmCtv(baseUrl, cookie, ep.id) } }
