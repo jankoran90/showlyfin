@@ -6,7 +6,6 @@ import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,7 +46,6 @@ class AttachedEpisodeStore @Inject constructor(
 
     @Volatile private var activeProfileKey: String? = null
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     init {
         scope.launch {
             profileRepository.activeProfile
