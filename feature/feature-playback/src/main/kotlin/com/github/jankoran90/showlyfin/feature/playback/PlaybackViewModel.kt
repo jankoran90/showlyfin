@@ -282,6 +282,17 @@ class PlaybackViewModel @Inject constructor(
         // bude otázkou nastavení."* Volba je v Nastavení → Přehrávání; výchozí je OD ZAČÁTKU.
         val resumeMode = prefs.getString(PlayerPrefs.RESUME_MODE_KEY, PlayerPrefs.DEFAULT_RESUME_MODE)
             ?: PlayerPrefs.DEFAULT_RESUME_MODE
+        // ADAPT (Slovo, 2026-09-05, user „1:22, dám zpět a Pokračovat, ale vrací mě to na začátek"):
+        // `yt:`/`ctv:`/`rss:` resumeKey = direct podcast/YouTube epizoda (JEN appka Slovo — Filmy
+        // takové klíče negeneruje, viz LINGUA-YT dokumentace). Filmový výchozí režim „od začátku, bez
+        // ptaní" (2026-08-03) dává smysl u filmů, ale u epizody/podcastu ne — nikdo nechce 3hodinový
+        // podcast omylem restartovat jen proto, že se od pauzy stihlo 90s okno [RESUME_SILENT_WINDOW_MS].
+        // Epizoda VŽDY pokračuje tam, kde skončila, bez ohledu na `resumeMode`/uplynulý čas — stejný
+        // princip jako [choosePlaybackResume] (feature-listen) pro audio/video pozici. Filmy (skutečné
+        // `tt…` imdb) beze změny — resumeMode/ASK dialog jim zůstává přesně jak bylo rozhodnuto.
+        val isDirectEpisode = resumeKey?.let {
+            it.startsWith("yt:") || it.startsWith("ctv:") || it.startsWith("rss:")
+        } == true
         timber.log.Timber.i("[PICKUP] loadExternal resumeKey=%s saved=%d (ext=%d local=%d) autoSearch=%s url=%s", resumeKey, savedResume, externalResumeMs, localResume, subtitleQuery?.autoSearch, url.take(70))
         // Nový stream → VŽDY vyhoď titulky z předchozího filmu. Bez tohohle by film bez vlastních
         // titulků (0 kandidátů / prázdné imdb → loadSubtitles se brzy vrátí) dál promítal cues
@@ -291,9 +302,11 @@ class PlaybackViewModel @Inject constructor(
             it.copy(
                 isLoading = false, title = title, streamUrl = url, posterUrl = posterUrl,
                 positionMs = 0L,
-                // Ptáme se JEN v režimu ASK a jen když se právě nedokoukává (viz `stillWatching`).
-                resumePositionMs = if (stillWatching || resumeMode != PlayerPrefs.RESUME_MODE_ASK) 0L else savedResume,
+                // Ptáme se JEN v režimu ASK a jen když se právě nedokoukává (viz `stillWatching`);
+                // direct epizoda (ADAPT) se nikdy neptá, vždy tiše pokračuje.
+                resumePositionMs = if (isDirectEpisode || stillWatching || resumeMode != PlayerPrefs.RESUME_MODE_ASK) 0L else savedResume,
                 silentResumeMs = when {
+                    isDirectEpisode -> savedResume     // ADAPT: epizoda vždy pokračuje, bez ohledu na čas/nastavení.
                     stillWatching -> savedResume
                     resumeMode == PlayerPrefs.RESUME_MODE_RESUME -> savedResume
                     else -> 0L          // RESUME_MODE_START → od začátku, bez ptaní
