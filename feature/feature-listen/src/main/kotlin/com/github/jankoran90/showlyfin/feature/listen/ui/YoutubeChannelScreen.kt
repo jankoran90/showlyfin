@@ -71,6 +71,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
 import com.github.jankoran90.showlyfin.feature.listen.YoutubeChannelViewModel
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
+import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
 
 /**
  * TUNER (SHW-62): obrazovka YouTube kanálu jako podcast. Seznam epizod, u každé VIDEO / AUDIO.
@@ -128,7 +129,7 @@ fun YoutubeChannelScreen(
     // BUG (2026-09-04, user screenshot): rozposlouchané/rozkoukané epizody nahoru. Klíč jen na
     // MNOŽINU rozečtených id (ne na `resumeMarks` samotné) — nepřeuspořádá se s každým tikem pozice
     // právě hrané epizody, jen když se do/ze skupiny rozečtených něco přidá/ubere.
-    val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.keys
+    val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.filterValues { !it.isNearEnd() }.keys
     val orderedEpisodes = remember(filteredEpisodes, inProgressIds) {
         PodcastEpisodeSeriesGrouping.pinInProgressFlat(filteredEpisodes) { viewModel.episodeKey(it) in inProgressIds }
     }

@@ -75,6 +75,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.RssPodcastViewModel
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
+import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
 
 /**
  * PRESET (SHW-65): obrazovka RSS podcastu jako zdroj Poslechu. Seznam epizod, u každé „Poslech"
@@ -146,7 +147,7 @@ fun RssPodcastScreen(
         if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
     }
     // BUG (2026-09-04, user screenshot): rozposlouchané/rozkoukané epizody nahoru, parita s YoutubeChannelScreen/CtvProgramScreen.
-    val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.keys
+    val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.filterValues { !it.isNearEnd() }.keys
     val orderedEpisodes = remember(filteredEpisodes, inProgressIds) {
         PodcastEpisodeSeriesGrouping.pinInProgressFlat(filteredEpisodes) { viewModel.episodeKey(it) in inProgressIds }
     }

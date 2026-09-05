@@ -29,8 +29,8 @@ android {
         applicationId = "com.github.jankoran90.slovo"
         minSdk = 23
         targetSdk = 36
-        versionCode = 69
-        versionName = "1.0.69"
+        versionCode = 70
+        versionName = "1.0.70"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

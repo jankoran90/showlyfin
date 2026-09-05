@@ -67,6 +67,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.CtvProgramViewModel
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
+import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
 
 /**
  * KAVKA (SHW-76): obrazovka ČT pořadu jako podcast. Seznam dílů, u každého VIDEO (DASH) nebo AUDIO
@@ -121,7 +122,7 @@ fun CtvProgramScreen(
         if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
     }
     // BUG (2026-09-04, user screenshot): rozposlouchané/rozkoukané epizody nahoru, parita s YoutubeChannelScreen.
-    val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.keys
+    val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.filterValues { !it.isNearEnd() }.keys
     val orderedEpisodes = remember(filteredEpisodes, inProgressIds) {
         PodcastEpisodeSeriesGrouping.pinInProgressFlat(filteredEpisodes) { viewModel.episodeKey(it) in inProgressIds }
     }

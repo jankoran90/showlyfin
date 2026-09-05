@@ -22,6 +22,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.PlaybackMode
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
+import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -460,9 +461,11 @@ class HomeViewModel @Inject constructor(
         // User (2026-08-16, „doposlouchané zmizí z Domů") — od té doby, co [DirectResumeStore] mark
         // při dohrání NEMAŽE (jen ho nechá na isFinished), musí Domů dohrané výslovně vyfiltrovat.
         val audioMarks = directResume.marks.value.filterValues { !it.isFinished }
-        // BUG (2026-09-04): video ([VideoResumeStore]) nemá isFinished — store se sám smaže při
-        // dohrání (viz jeho dokumentace), takže přítomnost marky = rozkoukáno, žádný filtr netřeba.
-        val videoMarks = videoResume.marks.value
+        // BUG (2026-09-05, user „Hotové taky zmizí z Domů" — Cukrfree #99/#93 zůstávaly viset i
+        // doposlechnuté): video store SE MÁ sám smazat těsně před koncem, ale spoléhat na to
+        // výhradně je křehké (viz [choosePlaybackResume] `isNearEnd` dokumentace) — defenzivně
+        // vyfiltruj i video marky těsně u konce, stejná parita jako audio `!it.isFinished`.
+        val videoMarks = videoResume.marks.value.filterValues { !it.isNearEnd() }
         val keys = audioMarks.keys + videoMarks.keys
         if (keys.isEmpty()) return emptyList()
         sourcesRepo.refresh()
