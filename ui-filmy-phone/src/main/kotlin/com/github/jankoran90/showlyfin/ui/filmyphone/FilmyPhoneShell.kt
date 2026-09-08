@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DrawerValue
@@ -45,6 +46,7 @@ import com.github.jankoran90.showlyfin.feature.detail.rating.RatingViewModel
 import com.github.jankoran90.showlyfin.feature.detail.ui.DetailScreen
 import com.github.jankoran90.showlyfin.feature.playback.ui.PlaybackScreen
 import com.github.jankoran90.showlyfin.ui.phone.CardCsfdViewModel
+import com.github.jankoran90.showlyfin.ui.phone.OvladacScreen
 import com.github.jankoran90.showlyfin.core.theme.FontPrefsViewModel
 import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
 import com.github.jankoran90.showlyfin.core.theme.ShowlyfinPhoneTheme
@@ -431,6 +433,13 @@ private fun FilmyShellContent() {
                             FilmySection.DOWNLOADS -> FilmyDownloadsScreen(onMenu = onMenu, onOpenDetail = openDetail)
                             // PROVOZ (SHW-114): co hraje kde, výkon přenosu, stav zdrojů + akce nad nimi.
                             FilmySection.OPS -> FilmyOpsScreen(onMenu = onMenu)
+                            // MAESTRO (SHW-27): ovládání AVR + TV boxu z telefonu — portováno z yellyfinu
+                            // 2026-09-08. OvladacScreen nemá vlastní ☰ lištu (sdílený soubor, jiné appky
+                            // mají persistentní bottom nav) → obalen FilmySectionBar jako ostatní sekce Filmy.
+                            FilmySection.OVLADAC -> Column(Modifier.fillMaxSize()) {
+                                FilmySectionBar(title = "Ovladač", onMenu = onMenu)
+                                OvladacScreen(onOpenDetail = openJfDetail, modifier = Modifier.weight(1f))
+                            }
                             // M2.3b: Nastavení = uploader login (ČSFD) + vypínač živého logu.
                             FilmySection.SETTINGS -> FilmySettingsScreen(onMenu = onMenu)
                             // M2.5: Profil = 2 pevné profily + PIN (reuse SettingsViewModel/ProfileRepository).

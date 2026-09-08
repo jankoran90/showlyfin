@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Recommend
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SettingsRemote
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -47,6 +48,9 @@ enum class FilmySection(val label: String, val icon: ImageVector) {
     SEARCH("Hledat", Icons.Rounded.Search),
     // PROVOZ (SHW-114): co se právě hraje, jak to jede, stav zdrojů. Jen telefon (zadání usera).
     OPS("Provoz", Icons.Rounded.MonitorHeart),
+    // MAESTRO (SHW-27) — portováno z yellyfinu 2026-09-08 (user: "na ovladac ano dotahni to na filmy").
+    // Ovládání domácí AV sestavy (AVR + TV box) z telefonu.
+    OVLADAC("Ovladač", Icons.Rounded.SettingsRemote),
     SETTINGS("Nastavení", Icons.Rounded.Settings),
     PROFILE("Profil", Icons.Rounded.AccountCircle),
 }
@@ -91,6 +95,7 @@ object FilmyShellPrefs {
                 FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.NOVINKY,
                 FilmySection.MUZA, FilmySection.TVURCI, FilmySection.REFERENCE,
                 FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
+                FilmySection.OVLADAC,
             )
         else
             listOf(
@@ -98,5 +103,6 @@ object FilmyShellPrefs {
                 FilmySection.FOR_YOU, FilmySection.NOVINKY, FilmySection.MUZA, FilmySection.TVURCI,
                 FilmySection.REFERENCE, FilmySection.FILMOTEKA,
                 FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
+                FilmySection.OVLADAC,
             )
 }

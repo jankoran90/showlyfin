@@ -100,10 +100,13 @@ class BoxController @Inject constructor(
     }
 
     /**
-     * Přes ADB probudí box (`KEYCODE_WAKEUP`) a spustí balíček [packageName] (Yellyfin).
-     * Vrátí true, pokud se příkazy podařilo odeslat.
+     * Přes ADB probudí box (`KEYCODE_WAKEUP`) a spustí balíček [packageName]. Default = balíček
+     * appky, ve který tohle běží (`context.packageName`) — sdílený modul, používá ho filmy i
+     * yellyfin, každá appka tak z výroby spustí SAMA SEBE na boxu, ne natvrdo Yellyfin
+     * (nález 2026-09-08: OvladacViewModel.wakeAndLaunch() volal bez parametru → i ve filmy
+     * appce vždycky spouštěl Yellyfin). Vrátí true, pokud se příkazy podařilo odeslat.
      */
-    suspend fun wakeAndLaunch(host: String, packageName: String = YELLYFIN_PACKAGE): Boolean =
+    suspend fun wakeAndLaunch(host: String, packageName: String = context.packageName): Boolean =
         runAdb(host, "wake+launch $packageName") { dadb ->
             dadb.shell("input keyevent KEYCODE_WAKEUP")
             dadb.shell("monkey -p $packageName -c android.intent.category.LAUNCHER 1")
