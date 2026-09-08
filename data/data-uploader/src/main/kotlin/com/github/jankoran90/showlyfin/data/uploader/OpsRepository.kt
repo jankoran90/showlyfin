@@ -5,6 +5,7 @@ import com.github.jankoran90.showlyfin.data.uploader.api.OpsService
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsHeartbeatBody
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsHistoryResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsOverviewResponse
+import com.github.jankoran90.showlyfin.data.uploader.model.OpsRemoteCommand
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsSourcesResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsSweepResponse
 import timber.log.Timber
@@ -90,11 +91,14 @@ class OpsRepository @Inject constructor(
         return runCatching { service.setPolicy(url, cookie()).isSuccessful }.getOrDefault(false)
     }
 
-    /** Tep přehrávače. Tichý — selhání hlášení nesmí mít vliv na přehrávání. */
-    suspend fun heartbeat(deviceId: String, body: OpsHeartbeatBody) {
-        val b = base().ifBlank { return }
-        runCatching { service.heartbeat("$b/api/ops/playing?device=${enc(deviceId)}", cookie(), body) }
+    /** Tep přehrávače. Tichý — selhání hlášení nesmí mít vliv na přehrávání.
+     * PILOT-NATIVE: vrací čekající dálkový příkaz (pokud telefon nějaký poslal), ať ho volající
+     * (přehrávač) rovnou provede — jediná cesta, jak se k němu bez vlastního serveru na boxu dostat. */
+    suspend fun heartbeat(deviceId: String, body: OpsHeartbeatBody): OpsRemoteCommand? {
+        val b = base().ifBlank { return null }
+        return runCatching { service.heartbeat("$b/api/ops/playing?device=${enc(deviceId)}", cookie(), body).command }
             .onFailure { Timber.d("[PROVOZ] tep neodeslán: %s", it.message) }
+            .getOrNull()
     }
 
     /** Konec přehrávání. Nepovinné — bez tepu záznam na serveru stejně vyprší. */
@@ -102,5 +106,14 @@ class OpsRepository @Inject constructor(
         val b = base().ifBlank { return }
         val url = "$b/api/ops/playing/stop?device=${enc(deviceId)}&reason=${enc(reason)}"
         runCatching { service.stop(url, cookie()) }
+    }
+
+    /** PILOT-NATIVE (2026-09-08): pošli dálkový příkaz pro `deviceId` — vyzvedne si ho jeho příští tep. */
+    suspend fun sendCommand(deviceId: String, action: String, value: Long = 0): Boolean {
+        val b = base().ifBlank { return false }
+        val body = mapOf("device" to deviceId, "action" to action, "value" to value)
+        return runCatching { service.command("$b/api/ops/command", cookie(), body).isSuccessful }
+            .onFailure { Timber.w(it, "[PILOT] příkaz $action pro $deviceId neodeslán") }
+            .getOrDefault(false)
     }
 }

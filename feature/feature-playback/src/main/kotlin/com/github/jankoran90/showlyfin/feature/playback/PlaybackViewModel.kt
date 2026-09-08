@@ -384,23 +384,36 @@ class PlaybackViewModel @Inject constructor(
      * PROVOZ (SHW-114) — tep do přehledu „co se právě hraje". Volá se z téže smyčky jako ukládání
      * pozice; reportér si sám hlídá, aby neposílal častěji než jednou za 20 s. Tiché — výpadek
      * hlášení nesmí sáhnout na přehrávání.
+     *
+     * PILOT-NATIVE (2026-09-08): vrací čekající dálkový příkaz z Ovladače (telefon) — volající
+     * (PlaybackScreen, má přímý přístup k [androidx.media3.session.MediaController]) ho provede.
+     * Jediná cesta, jak se k boxu bez vlastního serveru dostat i u NATIVNÍHO přehrávání.
      */
-    fun reportPlaybackHeartbeat(positionMs: Long, durationMs: Long, bufferedMs: Long, paused: Boolean) {
+    suspend fun reportPlaybackHeartbeat(
+        positionMs: Long,
+        durationMs: Long,
+        bufferedMs: Long,
+        paused: Boolean,
+    ): com.github.jankoran90.showlyfin.data.uploader.model.OpsRemoteCommand? {
         val s = _state.value
-        if (s.title.isBlank()) return
-        viewModelScope.launch {
-            runCatching {
-                opsHeartbeat.tick(
-                    title = s.title,
-                    subtitle = "",
-                    streamUrl = s.streamUrl,
-                    positionMs = positionMs,
-                    durationMs = durationMs,
-                    bufferedMs = bufferedMs,
-                    paused = paused,
-                )
-            }
-        }
+        if (s.title.isBlank()) return null
+        return runCatching {
+            opsHeartbeat.tick(
+                title = s.title,
+                subtitle = "",
+                streamUrl = s.streamUrl,
+                positionMs = positionMs,
+                durationMs = durationMs,
+                bufferedMs = bufferedMs,
+                paused = paused,
+                subtitleTracks = s.subtitleCandidates.mapIndexed { i, c ->
+                    com.github.jankoran90.showlyfin.data.uploader.model.OpsTrackInfo(
+                        i, c.title.ifBlank { "${c.lang} · ${c.release}".trim(' ', '·') },
+                    )
+                },
+                currentSubtitleIndex = s.selectedSubtitleIndex,
+            )
+        }.getOrNull()
     }
 
     /** Přehrávač se zavírá → ať v přehledu nevisí duch. */

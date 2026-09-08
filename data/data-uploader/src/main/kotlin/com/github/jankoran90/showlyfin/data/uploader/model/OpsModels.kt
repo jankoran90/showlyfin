@@ -48,6 +48,16 @@ data class OpsPlaying(
     // dojezd na novou pozici nepočítá jako zádrhel kvůli datům.
     val seeks: Int = 0,
     val seekMs: Long = 0,
+    // PILOT-NATIVE (2026-09-08): dostupné titulky u NATIVNÍHO přehrávání (ne appkou-castovaného) —
+    // Ovladač na telefonu z nich postaví výběr, i když appka na boxu nehraje přes FERRY/JF.
+    val subtitleTracks: List<OpsTrackInfo> = emptyList(),
+    val currentSubtitleIndex: Int = -1,
+)
+
+/** Jedna titulková stopa u nativního přehrávání (viz [OpsPlaying.subtitleTracks]). */
+data class OpsTrackInfo(
+    val index: Int = -1,
+    val label: String = "",
 )
 
 /** Souhrn naší vyrovnávací paměti (sdilej proxy) — rychlost, zásoba, kolikrát se čekalo. */
@@ -179,6 +189,23 @@ data class OpsHeartbeatBody(
     // aby načítání po seeku nekalilo zádrhely (dojezd na novou pozici ≠ síťový problém).
     val seeks: Int = 0,
     val seekMs: Long = 0,
+    // PILOT-NATIVE (2026-09-08): titulky u tepu, ať je Ovladač na telefonu umí nabídnout k výběru
+    // i u nativního přehrávání (appka na boxu tenhle titul nespustila přes cast).
+    val subtitleTracks: List<OpsTrackInfo> = emptyList(),
+    val currentSubtitleIndex: Int = -1,
+)
+
+/** PILOT-NATIVE (2026-09-08) — odpověď na tep nese i čekající dálkový příkaz z Ovladače (pokud nějaký
+ * telefon poslal); přehrávač ho po tomhle tepu rovnou provede, i u nativního (ne appkou-castovaného)
+ * přehrávání. `command` = null, když nikdo nic neposlal. */
+data class OpsHeartbeatResponse(
+    val ok: Boolean = false,
+    val command: OpsRemoteCommand? = null,
+)
+
+data class OpsRemoteCommand(
+    val action: String = "",   // playPause | seek | stop
+    val value: Long = 0,       // cílová pozice v ms (jen u seek)
 )
 
 data class OpsSweepResponse(

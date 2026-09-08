@@ -1,6 +1,7 @@
 package com.github.jankoran90.showlyfin.data.uploader.api
 
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsHeartbeatBody
+import com.github.jankoran90.showlyfin.data.uploader.model.OpsHeartbeatResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsHistoryResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsOverviewResponse
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsSourcesResponse
@@ -37,7 +38,14 @@ interface OpsService {
         @Url url: String,
         @Header("Cookie") cookie: String,
         @Body body: OpsHeartbeatBody,
-    ): Response<ResponseBody>
+    ): OpsHeartbeatResponse
 
     @POST suspend fun stop(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+
+    /** PILOT-NATIVE: pošli dálkový příkaz pro `device` (JSON tělo {device, action, value}). */
+    @POST suspend fun command(
+        @Url url: String,
+        @Header("Cookie") cookie: String,
+        @Body body: Map<String, @JvmSuppressWildcards Any>,
+    ): Response<ResponseBody>
 }

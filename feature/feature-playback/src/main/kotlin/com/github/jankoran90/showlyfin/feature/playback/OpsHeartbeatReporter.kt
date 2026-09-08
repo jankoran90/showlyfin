@@ -6,6 +6,8 @@ import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.data.uploader.OpsPrefs
 import com.github.jankoran90.showlyfin.data.uploader.OpsRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.OpsHeartbeatBody
+import com.github.jankoran90.showlyfin.data.uploader.model.OpsRemoteCommand
+import com.github.jankoran90.showlyfin.data.uploader.model.OpsTrackInfo
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Named
@@ -43,7 +45,8 @@ class OpsHeartbeatReporter @Inject constructor(
 
     /**
      * Tik z přehrávače. `force` obejde interval (start a konec chceme nahlásit hned).
-     * Vrací true, když se tep opravdu odeslal.
+     * Vrací čekající dálkový příkaz z Ovladače (PILOT-NATIVE, null = žádný nebo tep se neodeslal) —
+     * volající (přehrávač) ho hned provede; jinak by k boxu bez vlastního serveru nešlo dostat.
      */
     suspend fun tick(
         title: String,
@@ -54,18 +57,20 @@ class OpsHeartbeatReporter @Inject constructor(
         bufferedMs: Long,
         paused: Boolean,
         force: Boolean = false,
-    ): Boolean {
-        if (title.isBlank()) return false
+        subtitleTracks: List<OpsTrackInfo> = emptyList(),
+        currentSubtitleIndex: Int = -1,
+    ): OpsRemoteCommand? {
+        if (title.isBlank()) return null
         // Vypínač z Nastavení — uživatel má právo říct „tohle zařízení ať se nehlásí".
-        if (!OpsPrefs.reportPlayback(prefs)) return false
+        if (!OpsPrefs.reportPlayback(prefs)) return null
         val now = System.currentTimeMillis()
         val titleChanged = title != lastTitle
-        if (!force && !titleChanged && now - lastSentAt < MIN_INTERVAL_MS) return false
+        if (!force && !titleChanged && now - lastSentAt < MIN_INTERVAL_MS) return null
         lastSentAt = now
         lastTitle = title
         val t = PlaybackTelemetry.snapshot()
         val profile = profileRepository.activeProfile.value
-        ops.heartbeat(
+        return ops.heartbeat(
             deviceId(),
             OpsHeartbeatBody(
                 profile = profile?.let { it.jellyfinUserId.ifBlank { it.profileUuid } }.orEmpty(),
@@ -94,9 +99,10 @@ class OpsHeartbeatReporter @Inject constructor(
                 // 🔴 2026-08-29: přetočení zvlášť — načítání po seeku není zádrhel.
                 seeks = t.seeks,
                 seekMs = t.seekMs,
+                subtitleTracks = subtitleTracks,
+                currentSubtitleIndex = currentSubtitleIndex,
             ),
         )
-        return true
     }
 
     /** Přehrávač se zavřel. */

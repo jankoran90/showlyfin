@@ -530,12 +530,20 @@ fun PlaybackScreen(
             // nedokoukají. Hlášení je idempotentní (guard ve WatchedReporteru), takže tik nevadí.
             viewModel.notePlaybackProgress(c.currentPosition, c.duration)
             // PROVOZ (SHW-114): tep do přehledu „co se právě hraje" (reportér si škrtí frekvenci sám).
-            viewModel.reportPlaybackHeartbeat(
+            // PILOT-NATIVE: tep může vrátit čekající dálkový příkaz z telefonního Ovladače — proveď
+            // ho rovnou na tomhle MediaControlleru (jediná cesta, appka na boxu nemá vlastní server).
+            val cmd = viewModel.reportPlaybackHeartbeat(
                 positionMs = c.currentPosition,
                 durationMs = c.duration,
                 bufferedMs = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0L),
                 paused = !c.isPlaying,
             )
+            when (cmd?.action) {
+                "playPause" -> if (c.isPlaying) c.pause() else c.play()
+                "seek" -> c.seekTo(cmd.value)
+                "stop" -> c.stop()
+                "subtitleTrack" -> viewModel.selectSubtitle(cmd.value.toInt())
+            }
         }
     }
     // auto-hide controls (ne když je otevřený panel titulků/zvuku). TENFOOT F2c: timeout konfigurovatelný

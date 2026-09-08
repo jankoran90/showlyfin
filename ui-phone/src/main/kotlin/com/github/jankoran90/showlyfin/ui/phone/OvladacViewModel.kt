@@ -3,13 +3,16 @@ package com.github.jankoran90.showlyfin.ui.phone
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.ui.ListenNavSignal
 import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.FerryAudioOut
 import com.github.jankoran90.showlyfin.data.jellyfin.JellyfinSessionSummary
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
+import com.github.jankoran90.showlyfin.data.jellyfin.StreamTrack
 import com.github.jankoran90.showlyfin.data.maestro.AvrController
 import com.github.jankoran90.showlyfin.data.maestro.BoxController
+import com.github.jankoran90.showlyfin.data.uploader.OpsRepository
 import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrBoxHostOrDefault
 import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrBoxMacOrDefault
 import com.github.jankoran90.showlyfin.ui.phone.HomeSystemDefaults.avrEnabledOrDefault
@@ -39,6 +42,11 @@ class OvladacViewModel @Inject constructor(
     private val naTv: NaTvService,
     private val avr: AvrController,
     private val box: BoxController,
+    // PILOT-NATIVE (2026-09-08): "co hraje kdekoliv" bez ohledu na zdroj (sdilej/RD/JF/CT) — user
+    // chtěl ovládat i tituly spuštěné PŘÍMO na boxu, ne jen appkou-castované/JF. Ops telemetrie
+    // (stejná jako sekce Provoz) je jediný zdroj, co tohle vidí.
+    private val ops: OpsRepository,
+    private val profileRepository: ProfileRepository,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -168,9 +176,36 @@ class OvladacViewModel @Inject constructor(
             _state.update { it.copy(loading = false, noCreds = true, sessions = emptyList(), current = null, coverUrl = null) }
             return
         }
-        val sessions = naTv.getSessions(c.url, c.token)
+        val jfSessions = naTv.getSessions(c.url, c.token)
+        // PILOT-NATIVE: cokoli appka na kterémkoli zařízení hlásí do Provozu (sdilej/RD/CT i JF),
+        // NE jen JF vlastní session — jinak Ovladač o nativním přehrávání (spuštěném přímo na boxu,
+        // ne castnutém z appky) vůbec nevěděl. Zařízení, které JF session UŽ pokrývá, se nezdvojí.
+        val jfDeviceNames = jfSessions.mapNotNull { it.deviceName.takeIf { n -> n.isNotBlank() } }.toSet()
+        val nativeSessions = runCatching { ops.overview(profileKey())?.playing ?: emptyList() }
+            .getOrDefault(emptyList())
+            .filter { it.title.isNotBlank() && it.deviceName !in jfDeviceNames }
+            .map { p ->
+                JellyfinSessionSummary(
+                    sessionId = "$NATIVE_PREFIX${p.deviceId}",
+                    deviceName = p.deviceName,
+                    deviceId = p.deviceId,
+                    client = "native:${p.source}",
+                    isActive = true,
+                    nowPlayingTitle = p.title,
+                    nowPlayingSubtitle = p.subtitle.takeIf { it.isNotBlank() },
+                    isPlaying = !p.paused,
+                    isPaused = p.paused,
+                    positionTicks = p.positionMs * TICKS_PER_MS,
+                    runtimeTicks = p.durationMs * TICKS_PER_MS,
+                    canSeek = p.durationMs > 0L,
+                    currentSubtitleIndex = p.currentSubtitleIndex,
+                    subtitleTracks = p.subtitleTracks.map { StreamTrack(it.index, it.label) },
+                )
+            }
+        val sessions = jfSessions + nativeSessions
         var current = sessions.firstOrNull { it.sessionId == userSelectedId }
-            ?: naTv.pickWatchSession(sessions)
+            ?: naTv.pickWatchSession(jfSessions)
+            ?: nativeSessions.firstOrNull()
         // BATON: externí stream (FERRY) — box nehlásí JF NowPlaying. Když na boxu běží náš cast,
         // dotáhni pozici/délku/stav z `/api/ferry/state` a vlož do `current` → posuvník + scrub fungují.
         val fc = activeFerryCastFor(current)
@@ -273,6 +308,12 @@ class OvladacViewModel @Inject constructor(
         fc.tmdbId?.let { ListenNavSignal.requestOpenDetail(it, fc.title) }
     }
 
+    /** PILOT-NATIVE: profilový klíč pro `ops.overview()` — stejný vzor jako [OpsHeartbeatReporter]. */
+    private fun profileKey(): String {
+        val p = profileRepository.activeProfile.value ?: return ""
+        return p.jellyfinUserId.ifBlank { p.profileUuid }
+    }
+
     /** Vrátí host AVR pokud je ovládání hlasitosti přes AVR povolené (default zapnuto + předvyplněná IP). */
     private fun avrConfig(): String? {
         if (!prefs.avrEnabledOrDefault()) return null
@@ -354,10 +395,28 @@ class OvladacViewModel @Inject constructor(
     /** Krok hlasitosti +/- (jednotky AVR), default 3. */
     private fun avrVolumeStepPref(): Int = prefs.avrVolumeStepOrDefault()
 
-    fun playPause() = command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "PlayPause") }
+    fun playPause() {
+        nativeDeviceId()?.let { did -> nativeCommand(did, "playPause"); return }
+        command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "PlayPause") }
+    }
     fun stopPlayback() {
         ListenNavSignal.clearFerryCast()
+        nativeDeviceId()?.let { did -> nativeCommand(did, "stop"); return }
         command { c, id -> naTv.sendPlaystateCommand(c.url, c.token, id, "Stop") }
+    }
+
+    // --- PILOT-NATIVE (2026-09-08): current je "native:<deviceId>" session (bez JF sessionId) →
+    // přehrávání spuštěné PŘÍMO na boxu (Legion ze sdilej apod.), ne appkou-castovaný FERRY/JF stream.
+    // Příkaz jde přes ops/command frontu — box si ho vyzvedne příští tep (~20 s latence).
+    private fun nativeDeviceId(): String? =
+        _state.value.current?.sessionId?.takeIf { it.startsWith(NATIVE_PREFIX) }?.removePrefix(NATIVE_PREFIX)
+
+    private fun nativeCommand(deviceId: String, action: String, value: Long = 0) {
+        viewModelScope.launch {
+            ops.sendCommand(deviceId, action, value)
+            delay(COMMAND_SETTLE_MS)
+            refresh()
+        }
     }
 
     // --- PILOT: virtuální D-pad — navigace nativním UI na TV přes Jellyfin GeneralCommand.
@@ -379,18 +438,20 @@ class OvladacViewModel @Inject constructor(
         if (isTvOn()) powerOffSystem() else powerOnSystem()
     }
 
-    fun seekBy(deltaMs: Long) = command { c, id ->
-        val cur = _state.value.current ?: return@command false
-        val newPos = (cur.positionTicks + deltaMs * TICKS_PER_MS).coerceAtLeast(0L)
-        naTv.sendSeek(c.url, c.token, id, newPos)
+    fun seekBy(deltaMs: Long) {
+        val cur = _state.value.current ?: return
+        val newPosMs = ((cur.positionTicks + deltaMs * TICKS_PER_MS) / TICKS_PER_MS).coerceAtLeast(0L)
+        nativeDeviceId()?.let { did -> nativeCommand(did, "seek", newPosMs); return }
+        command { c, id -> naTv.sendSeek(c.url, c.token, id, newPosMs * TICKS_PER_MS) }
     }
 
     /** Absolutní seek z posuvníku (0f..1f frakce runtime). */
-    fun seekToFraction(fraction: Float) = command { c, id ->
-        val cur = _state.value.current ?: return@command false
-        if (cur.runtimeTicks <= 0L) return@command false
-        val target = (cur.runtimeTicks * fraction.coerceIn(0f, 1f)).toLong()
-        naTv.sendSeek(c.url, c.token, id, target)
+    fun seekToFraction(fraction: Float) {
+        val cur = _state.value.current ?: return
+        if (cur.runtimeTicks <= 0L) return
+        val targetMs = (cur.runtimeTicks * fraction.coerceIn(0f, 1f) / TICKS_PER_MS).toLong()
+        nativeDeviceId()?.let { did -> nativeCommand(did, "seek", targetMs); return }
+        command { c, id -> naTv.sendSeek(c.url, c.token, id, targetMs * TICKS_PER_MS) }
     }
 
     /** JF fallback (bez AVR): absolutní hlasitost na session. AVR jede přes [avrVolumeStep]. */
@@ -427,7 +488,10 @@ class OvladacViewModel @Inject constructor(
             refreshAvrOnly(host)
         }
     }
-    fun setSubtitle(index: Int) = command { c, id -> naTv.setSubtitleIndex(c.url, c.token, id, index) }
+    fun setSubtitle(index: Int) {
+        nativeDeviceId()?.let { did -> nativeCommand(did, "subtitleTrack", index.toLong()); return }
+        command { c, id -> naTv.setSubtitleIndex(c.url, c.token, id, index) }
+    }
     fun setAudio(index: Int) = command { c, id -> naTv.setAudioIndex(c.url, c.token, id, index) }
 
     // --- REVERB (SHW-82): zvukový výstup přehrávače na docku (Zenbook ↔ AV receiver) + lip-sync.
@@ -576,6 +640,7 @@ class OvladacViewModel @Inject constructor(
         const val POWER_ON_VOL_DELAY_MS = 800L
         const val SCENE_RESULT_MS = 3_500L
         const val TICKS_PER_MS = 10_000L
+        const val NATIVE_PREFIX = "native:"
         const val EXTERNAL_TTL_MS = 6 * 60 * 60 * 1000L // 6 h — externí stream může běžet dlouho
         // WINNOW item 4: prefs klíče pro perzistenci stylu titulků/obrazu (mimo barevné sloty).
         const val PK_RESIZE = "console_resize_mode"
