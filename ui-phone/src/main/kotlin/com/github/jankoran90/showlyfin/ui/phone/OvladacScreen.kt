@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PauseCircleFilled
 import androidx.compose.material.icons.filled.PlayCircleFilled
-import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Stop
@@ -107,25 +106,28 @@ fun OvladacScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text(
-            text = "Ovladač",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(12.dp))
+        // KOMPAKTNÍ (2026-09-08): titulek + přepínač zařízení + stav scény na jeden řádek — dřív
+        // samostatná "Domácí sestava" karta se Zapnout/Vypnout dublovala s power tlačítkem v
+        // RemotePadu (stejná akce, `vm.togglePower()` == `powerOnSystem/powerOffSystem`).
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Ovladač",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            state.sceneStatus?.let {
+                Spacer(Modifier.width(10.dp))
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
 
         // Přepínač zařízení (když je víc remote-control TV session).
         if (state.sessions.size > 1) {
             DeviceSwitcher(state.sessions, state.selectedId, vm::selectDevice)
-            Spacer(Modifier.height(12.dp))
-        }
-
-        // Napájení domácí sestavy (zapnout/vypnout receiver + box) — vždy, když je sestava povolená.
-        if (state.avrEnabled) {
-            SystemPowerCard(state.sceneStatus, vm)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
         }
 
         when {
@@ -169,35 +171,6 @@ fun OvladacScreen(
                 isPlaying = state.current?.isPlaying == true,
                 vm = vm,
             )
-        }
-    }
-}
-
-@Composable
-private fun SystemPowerCard(sceneStatus: String?, vm: OvladacViewModel) {
-    val busy = sceneStatus != null
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text("Domácí sestava", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(
-                    onClick = { vm.powerOnSystem() },
-                    enabled = !busy,
-                    label = { Text("Zapnout") },
-                    leadingIcon = { Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(18.dp)) },
-                )
-                AssistChip(
-                    onClick = { vm.powerOffSystem() },
-                    enabled = !busy,
-                    label = { Text("Vypnout") },
-                    leadingIcon = { Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(18.dp)) },
-                )
-            }
-            if (sceneStatus != null) {
-                Spacer(Modifier.height(6.dp))
-                Text(sceneStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
         }
     }
 }

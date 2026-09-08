@@ -19,6 +19,8 @@ import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -33,6 +35,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +60,10 @@ import kotlin.math.abs
  * Akce jdou přes [OvladacViewModel] → Jellyfin `GeneralCommand` (`MoveUp`…/`Select`/`Back`/`GoHome`);
  * Yellyfin na boxu je přeloží na injektnuté D-pad klávesy. Power tlačítko = MAESTRO zapnout/vypnout
  * sestavu (červené když TV vypnutá, zelené když běží ovladatelná session).
+ *
+ * KOMPAKTNÍ (2026-09-08, user: appka se musela moc scrollovat) — samotný gesto-kříž (232dp) +
+ * Play/Pauza řádek jsou sbalené za výchozí stav; horní řada (Power/Zpět/Domů/rozbalit) zůstává
+ * vždy vidět, ať je power tlačítko po ruce bez rozbalování. Žádná funkce nezmizela, jen defaultně skrytá.
  */
 @Composable
 fun RemotePad(
@@ -66,6 +76,7 @@ fun RemotePad(
     val haptic = LocalHapticFeedback.current
     fun tick() = haptic.performHapticFeedback(HapticFeedbackType.LongPress)
     fun act(enabled: Boolean, block: () -> Unit) { if (enabled) { tick(); block() } }
+    var expanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -73,7 +84,7 @@ fun RemotePad(
         shape = RoundedCornerShape(24.dp),
     ) {
         Column(Modifier.padding(12.dp)) {
-            // Horní řada: Power (červená/zelená) | Zpět | Domů.
+            // Horní řada: Power (červená/zelená) | Zpět | Domů | rozbalit D-pad.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PowerButton(tvOn) { tick(); vm.togglePower() }
                 Spacer(Modifier.weight(1f))
@@ -83,7 +94,14 @@ fun RemotePad(
                 IconButton(onClick = { act(hasSession) { vm.navHome() } }, enabled = hasSession) {
                     Icon(Icons.Filled.Home, contentDescription = "Domů")
                 }
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (expanded) "Skrýt dálkáč" else "Zobrazit dálkáč",
+                    )
+                }
             }
+            if (!expanded) return@Column
 
             Spacer(Modifier.height(8.dp))
 
