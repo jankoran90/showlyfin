@@ -36,6 +36,7 @@ import com.github.jankoran90.showlyfin.feature.playback.PlaybackTelemetry
 import com.github.jankoran90.showlyfin.feature.playback.ui.EXTRA_DASH_AUDIO_URL
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -72,6 +73,12 @@ class MoviePlayerService : MediaSessionService() {
     /** True = přehrávač aktuálně jede na SOFTWAROVÉM (FFmpeg) video dekodéru (pref nebo auto-fallback). */
     private var swVideoActive = false
 
+    /** OBZOR mirror-FISSION: True = přehrávač byl PŘÍNUCEN na čistě platformní video (FFmpeg video renderer předtím padl na Surface zápisu). */
+    private var platformOnlyVideoActive = false
+
+    /** OBZOR audio mirror-FISSION: True = přehrávač byl přenucen na FFmpeg audio (platformní audio dekodér padl, typicky AAC). */
+    private var ffmpegAudioActive = false
+
     override fun onCreate() {
         super.onCreate()
         // Plan EVEN — pinneme stabilní audio session id pro připojení filmového DRC (jen telefon).
@@ -81,7 +88,13 @@ class MoviePlayerService : MediaSessionService() {
         val forceSw = prefs.getBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, PlayerPrefs.DEFAULT_FORCE_SW_DECODER)
         swVideoActive = forceSw
         val player = buildPlayer(forceSwVideo = forceSw)
-        val drcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0)
+        // OBZOR (2026-09-09, user): normalizér hlasitosti (DRC) má být DEFAULT ZAPNUTÝ na telefonu/tabletu
+        // (Venue zvuk potichu) — parita s "Poslechem", který má stejný default (viz AbsPreferences.listenDrcLevel,
+        // "explicitní přání usera"). Na TV zůstává default VYPNUTO (obvykle hraje box/AVR = passthrough, klientský
+        // boost by se buď netýkal, nebo kolidoval s AVR vlastním DRC). Nastavení je pořád ruční volba na obou
+        // platformách (Nastavení → Přehrávání) — mění se jen výchozí hodnota pro nikdy-nenastaveného uživatele.
+        val isTvForDrcDefault = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        val drcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, if (isTvForDrcDefault) 0 else 2)
         if (drcLevel > 0) {
             audioBoost = AudioBoost(audioSessionId).also { it.apply(drcLevel, AudioBoost.Profile.MOVIE) }
         }
@@ -139,10 +152,20 @@ class MoviePlayerService : MediaSessionService() {
 
     /**
      * Postaví ExoPlayer. [forceSwVideo] = preferovat NextLib FFmpeg video renderer (spolehlivé HEVC při
-     * selhání HW dekodéru). Volá se v [onCreate] i při auto-fallbacku (ACTION_FORCE_SW) — proto reuse
-     * [audioSessionId] (DRC drží), vlastní listener [InstallGuard], vypnutý text renderer (titulky kreslíme sami).
+     * selhání HW dekodéru). [forcePlatformOnlyVideo] = opačný směr (OBZOR mirror-FISSION, Waydroid) —
+     * FFmpeg video renderer padl při zápisu do Surface, vynutit čistě platformní. [preferFfmpegAudio] =
+     * platformní AUDIO dekodér (typicky AAC) padl při runtime configu (Waydroid/Mesa `OMX.google.aac.decoder`
+     * error 0x80001001, ověřeno spolehlivé, ne race) → FFmpeg audio PREFEROVANÝ místo jen fallback kandidáta
+     * (capability-based výběr by platformní i tak zvolil první, protože na papíře "podporuje"). [forcePlatformOnlyVideo]
+     * a [preferFfmpegAudio] SE MOHOU kombinovat (oba pozorované bugy na Waydroidu nastávají zároveň), [forceSwVideo]
+     * je s nimi vzájemně vylučující (volající zajistí). Volá se v [onCreate] i při všech auto-fallbacích — proto
+     * reuse [audioSessionId] (DRC drží), vlastní listener [InstallGuard], vypnutý text renderer.
      */
-    private fun buildPlayer(forceSwVideo: Boolean): ExoPlayer {
+    private fun buildPlayer(
+        forceSwVideo: Boolean,
+        forcePlatformOnlyVideo: Boolean = false,
+        preferFfmpegAudio: Boolean = false,
+    ): ExoPlayer {
         // F2d (A/V lip-sync): na TV boxu s AVR (eARC, 5.1 passthrough) NEsmí do audio cesty NextLib FFmpeg SW
         // dekodér — mění latenci passthrough → video napřed. Na TV proto čistý DefaultRenderersFactory (bitstream
         // passthrough do AVR) + audio offload (jako yellyfin, který sync problém nemá). Telefon BEZE ZMĚNY
@@ -150,15 +173,49 @@ class MoviePlayerService : MediaSessionService() {
         val isTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         val boxAudio = isTv &&
             prefs.getBoolean(PlayerPrefs.TV_AUDIO_PASSTHROUGH_KEY, PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH)
+        // 🔴 2026-09-08 DIAGNOSTIKA (user: passthrough na Xiaomi TV boxu umlčí stereo filmy, auto-detekce
+        // formátu zase hraje 5.1 jako PCM) — zjisti, co box PŘES ANDROID API reálně hlásí za podporovaná
+        // kódování na HDMI výstupu. Media3 audio offload (níž) na tomhle rozhodnutí staví — pokud box
+        // hlásí špatně/staticky, offload to nemůže opravit. Log jde přes "Živé logování" na server.
+        if (isTv) {
+            runCatching {
+                val am = getSystemService(android.media.AudioManager::class.java)
+                val devices = am?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS) ?: emptyArray()
+                for (d in devices) {
+                    Timber.i(
+                        "[AUDIO-CAPS] type=%d id=%d encodings=%s channelCounts=%s",
+                        d.type, d.id,
+                        d.encodings.joinToString { encodingName(it) },
+                        d.channelCounts.joinToString(),
+                    )
+                }
+            }.onFailure { Timber.w(it, "[AUDIO-CAPS] dotaz selhal") }
+        }
         // forceSwVideo → FFmpeg jako PREFEROVANÝ video renderer (i na TV; user si vynutil SW, lip-sync ustoupí).
         val renderersFactory: RenderersFactory = if (boxAudio && !forceSwVideo) {
             DefaultRenderersFactory(applicationContext).setEnableDecoderFallback(true)
-        } else {
+        } else if (forceSwVideo) {
             NextRenderersFactory(applicationContext)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                .setEnableDecoderFallback(true)
+        } else if (forcePlatformOnlyVideo || preferFfmpegAudio) {
+            // OBZOR mirror-FISSION (2026-09-09, Venue/Waydroid) — dva NEZÁVISLÉ pozorované bugy na
+            // Waydroidu, oba se mohou spustit na tomtéž zdroji: (1) FFmpeg video renderer padl při
+            // zápisu do Surface (`FfmpegDecoderException`, minigbm/Mesa neplatný pixel formát) →
+            // [forcePlatformOnlyVideo] vynutí platformní video (funguje, ověřeno živě). (2) platformní
+            // AUDIO dekodér (typicky AAC) padá SPOLEHLIVĚ na configu (`OMX.google.aac.decoder` error
+            // 0x80001001, ne race — ověřeno na 3+ zdrojích) → [preferFfmpegAudio] dá FFmpeg audio před
+            // platformní (PREFER mód, ne jen fallback kandidát — capability-based výběr by platformní
+            // zvolil první i tak, na papíře "podporuje"). Viz [VideoPlatformOnlyRenderersFactory].
+            VideoPlatformOnlyRenderersFactory(applicationContext)
                 .setExtensionRendererMode(
-                    if (forceSwVideo) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                    if (preferFfmpegAudio) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
                     else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON,
                 )
+                .setEnableDecoderFallback(true)
+        } else {
+            NextRenderersFactory(applicationContext)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setEnableDecoderFallback(true)
         }
         // PROVOZ (SHW-114): vlastní měřič propustnosti, ať jde odhad rychlosti vytáhnout pro KAŽDÝ
@@ -293,6 +350,51 @@ class MoviePlayerService : MediaSessionService() {
         android.util.Log.i("MoviePlayer", "[FISSION] auto-fallback na SW dekodér, resume @${pos}ms")
     }
 
+    /**
+     * OBZOR mirror-FISSION (2026-09-09, Venue/Waydroid): FFmpeg video renderer padl při zápisu do
+     * Surface (`FfmpegDecoderException`, ne decode chyba) → opačný směr než [switchToSoftwareDecoder] —
+     * přestav na ČISTĚ platformní video (FFmpeg audio necháme, viz [VideoPlatformOnlyRenderersFactory]).
+     * Idempotentní (`platformOnlyVideoActive`), stejný swap-přes-MediaSession vzor.
+     */
+    private fun switchToPlatformOnlyVideo() {
+        val s = session ?: return
+        val old = s.player
+        if (platformOnlyVideoActive || old.currentMediaItem == null) return
+        platformOnlyVideoActive = true
+        val item = old.currentMediaItem!!
+        val pos = old.currentPosition.coerceAtLeast(0L)
+        // ffmpegAudioActive se PŘENÁŠÍ — pokud audio fallback už proběhl dřív, ten stav se rebuildem nesmí ztratit.
+        val newPlayer = buildPlayer(forceSwVideo = false, forcePlatformOnlyVideo = true, preferFfmpegAudio = ffmpegAudioActive)
+        newPlayer.setMediaItem(item, pos)
+        newPlayer.prepare()
+        newPlayer.playWhenReady = true
+        s.setPlayer(newPlayer)
+        (old as? ExoPlayer)?.release()
+        android.util.Log.i("MoviePlayer", "[OBZOR] auto-fallback na platformní video (FFmpeg Surface selhal), resume @${pos}ms")
+    }
+
+    /**
+     * OBZOR audio mirror-FISSION (2026-09-09, Venue/Waydroid): platformní audio dekodér (typicky AAC)
+     * padá SPOLEHLIVĚ na configu (`OMX.google.aac.decoder` error 0x80001001, ověřeno na 3+ zdrojích,
+     * ne race) → přestav na FFmpeg audio PREFEROVANÝ. Idempotentní (`ffmpegAudioActive`), stejný
+     * swap-přes-MediaSession vzor. Zachovává [platformOnlyVideoActive], pokud už byl aktivní.
+     */
+    private fun switchToFfmpegPreferredAudio() {
+        val s = session ?: return
+        val old = s.player
+        if (ffmpegAudioActive || old.currentMediaItem == null) return
+        ffmpegAudioActive = true
+        val item = old.currentMediaItem!!
+        val pos = old.currentPosition.coerceAtLeast(0L)
+        val newPlayer = buildPlayer(forceSwVideo = false, forcePlatformOnlyVideo = platformOnlyVideoActive, preferFfmpegAudio = true)
+        newPlayer.setMediaItem(item, pos)
+        newPlayer.prepare()
+        newPlayer.playWhenReady = true
+        s.setPlayer(newPlayer)
+        (old as? ExoPlayer)?.release()
+        android.util.Log.i("MoviePlayer", "[OBZOR] auto-fallback na FFmpeg audio (platformní audio dekodér selhal), resume @${pos}ms")
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -305,6 +407,14 @@ class MoviePlayerService : MediaSessionService() {
         }
         if (intent?.action == ACTION_FORCE_SW) {
             switchToSoftwareDecoder()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_FORCE_PLATFORM_VIDEO) {
+            switchToPlatformOnlyVideo()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_FORCE_FFMPEG_AUDIO) {
+            switchToFfmpegPreferredAudio()
             return START_NOT_STICKY
         }
         return super.onStartCommand(intent, flags, startId)
@@ -346,5 +456,25 @@ class MoviePlayerService : MediaSessionService() {
 
         /** Intent akce: UI hlásí decode chybu → přestav přehrávač na SW dekodér a nasaď stejný zdroj. */
         const val ACTION_FORCE_SW = "com.github.jankoran90.showlyfin.MOVIE_FORCE_SW"
+
+        /** OBZOR mirror-FISSION: UI hlásí, že FFmpeg video renderer padl na Surface zápisu → přestav na platformní. */
+        const val ACTION_FORCE_PLATFORM_VIDEO = "com.github.jankoran90.showlyfin.MOVIE_FORCE_PLATFORM_VIDEO"
+
+        /** OBZOR audio mirror-FISSION: UI hlásí, že platformní audio dekodér padl (typicky AAC) → přestav na FFmpeg audio. */
+        const val ACTION_FORCE_FFMPEG_AUDIO = "com.github.jankoran90.showlyfin.MOVIE_FORCE_FFMPEG_AUDIO"
     }
+}
+
+/** [AUDIO-CAPS] diagnostika — čitelný název kódování z `AudioFormat.ENCODING_*`. */
+private fun encodingName(encoding: Int): String = when (encoding) {
+    android.media.AudioFormat.ENCODING_PCM_16BIT -> "PCM_16BIT"
+    android.media.AudioFormat.ENCODING_PCM_8BIT -> "PCM_8BIT"
+    android.media.AudioFormat.ENCODING_PCM_FLOAT -> "PCM_FLOAT"
+    android.media.AudioFormat.ENCODING_AC3 -> "AC3"
+    android.media.AudioFormat.ENCODING_E_AC3 -> "E_AC3"
+    android.media.AudioFormat.ENCODING_E_AC3_JOC -> "E_AC3_JOC"
+    android.media.AudioFormat.ENCODING_DTS -> "DTS"
+    android.media.AudioFormat.ENCODING_DTS_HD -> "DTS_HD"
+    android.media.AudioFormat.ENCODING_DOLBY_TRUEHD -> "DOLBY_TRUEHD"
+    else -> "encoding_$encoding"
 }

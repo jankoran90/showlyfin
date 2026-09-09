@@ -302,6 +302,12 @@ fun PlaybackScreen(
     var failureReported by remember { mutableStateOf(false) }
     // FISSION: decode chyba (HW dekodér padl na HEVC) → zkusíme JEDNOU tentýž zdroj SW dekodérem.
     var triedSwDecoder by remember { mutableStateOf(false) }
+    // OBZOR mirror-FISSION (2026-09-09, Venue/Waydroid): FFmpeg video renderer padl na Surface zápisu
+    // (ne decode chyba) → opačný směr, zkusíme JEDNOU tentýž zdroj čistě platformním dekodérem.
+    var triedPlatformOnlyVideo by remember { mutableStateOf(false) }
+    // OBZOR audio mirror-FISSION (2026-09-09, Venue/Waydroid): platformní audio dekodér (typicky AAC)
+    // padl → zkusíme JEDNOU tentýž zdroj s FFmpeg audio preferovaným.
+    var triedFfmpegAudio by remember { mutableStateOf(false) }
     // Po SW přepnutí (MediaSession.setPlayer) je nutné ZNOVU připnout video plochu k novému přehrávači —
     // PlayerView nepozná swap (controller je táž instance) → surface zůstane u zahozeného přehrávače = černý
     // obraz (zvuk/titulky jedou). Přepneme, až nový přehrávač doběhne prepare (STATE_READY).
@@ -385,9 +391,15 @@ fun PlaybackScreen(
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 timber.log.Timber.e(error, "[Playback] ExoPlayer error code=${error.errorCodeName} cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}")
+                // Rozliš AUDIO vs VIDEO renderer podle formátu, co selhal — errorCode/cause typ se mezi
+                // nimi můž(e) přesahovat (obojí ho typicky reportuje stejně), rendererFormat.sampleMimeType ne.
+                val failedMime = (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat?.sampleMimeType
+                val isVideoRendererError = failedMime?.startsWith("video/") == true
+                val isAudioRendererError = failedMime?.startsWith("audio/") == true
                 // FISSION: HW video dekodér padl (typicky HEVC na Exynos/Tensor, ERROR_CODE_DECODING_FAILED)
                 // → přestav službu na SW (FFmpeg) dekodér a nasaď tentýž zdroj. Jen JEDNOU (necyklit).
-                if (error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FAILED &&
+                if (isVideoRendererError &&
+                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FAILED &&
                     !triedSwDecoder && (externalUrl != null || localVideoPath != null)
                 ) {
                     triedSwDecoder = true
@@ -395,6 +407,33 @@ fun PlaybackScreen(
                     context.startService(
                         android.content.Intent(context, MoviePlayerService::class.java)
                             .setAction(MoviePlayerService.ACTION_FORCE_SW),
+                    )
+                    return
+                }
+                // OBZOR mirror-FISSION: FFmpeg (nextlib) video renderer padl při ZÁPISU do Surface (ne při
+                // dekódování — typicky Waydroid/minigbm gbm buffery, "Buffer render error") → zkus JEDNOU
+                // tentýž zdroj čistě platformním dekodérem. Zrcadlí FISSION výš (opačný směr).
+                if (isVideoRendererError &&
+                    error.cause is io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegDecoderException &&
+                    !triedPlatformOnlyVideo && (externalUrl != null || localVideoPath != null)
+                ) {
+                    triedPlatformOnlyVideo = true
+                    pendingSwReattach = true
+                    context.startService(
+                        android.content.Intent(context, MoviePlayerService::class.java)
+                            .setAction(MoviePlayerService.ACTION_FORCE_PLATFORM_VIDEO),
+                    )
+                    return
+                }
+                // OBZOR audio mirror-FISSION (2026-09-09, Venue/Waydroid): platformní audio dekodér padl
+                // (ověřeno spolehlivě na AAC — `OMX.google.aac.decoder` error 0x80001001, ne race) → zkus
+                // JEDNOU tentýž zdroj s FFmpeg audio preferovaným (video se nemění).
+                if (isAudioRendererError && !triedFfmpegAudio && (externalUrl != null || localVideoPath != null)) {
+                    triedFfmpegAudio = true
+                    pendingSwReattach = true
+                    context.startService(
+                        android.content.Intent(context, MoviePlayerService::class.java)
+                            .setAction(MoviePlayerService.ACTION_FORCE_FFMPEG_AUDIO),
                     )
                     return
                 }
@@ -456,7 +495,9 @@ fun PlaybackScreen(
     // RELAY (2026-07-19): a taky zas povol hlášení chyby — jiná URL (re-resolve / další zdroj z CASCADE) je
     // NOVÝ pokus, ať se případný pád zas propíše do auto-advance (jinak `failureReported` zůstane true po 1. chybě
     // a víc zdrojů / re-resolve by se už nikdy neohlásilo). Ukončení hlídá VM (gate `ioRetriedKeys` + advance vpřed).
-    LaunchedEffect(state.streamUrl) { triedSwDecoder = false; failureReported = false }
+    LaunchedEffect(state.streamUrl) {
+        triedSwDecoder = false; triedPlatformOnlyVideo = false; triedFfmpegAudio = false; failureReported = false
+    }
 
     // Media prepare — jen video. Titulky kreslíme sami (overlay), takže se MediaItem
     // už nikdy nepřestavuje kvůli titulkům (žádný rebuffer při posunu / přepnutí stopy).

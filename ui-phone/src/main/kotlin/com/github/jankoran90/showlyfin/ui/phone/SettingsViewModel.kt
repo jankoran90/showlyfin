@@ -326,10 +326,14 @@ class SettingsViewModel @Inject constructor(
     init {
         refreshJellyfinState()
         refreshTraktAccountLabel()
+        // OBZOR (2026-09-09, user): filmový DRC normalizér default ZAPNUTÝ na telefonu/tabletu (parita
+        // s Poslechem, AbsPreferences.listenDrcLevel), na TV default VYPNUTO (box/AVR passthrough).
+        // Sdílený ViewModel (TvSettingsScreen i tenhle) — musí se rozhodnout podle form factoru zařízení.
+        val isTvDefaultDrc = appContext.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
         _uiState.update {
             it.copy(
                 traktLoggedIn = traktAuthManager.isLoggedIn(),
-                movieDrcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, 0),
+                movieDrcLevel = prefs.getInt(AudioBoost.MOVIE_DRC_KEY, if (isTvDefaultDrc) 0 else 2),
                 playerControlsHideSec = prefs.getInt(PlayerPrefs.CONTROLS_HIDE_SEC_KEY, PlayerPrefs.DEFAULT_CONTROLS_HIDE_SEC),
                 playerSeekStepSec = prefs.getInt(PlayerPrefs.SEEK_STEP_SEC_KEY, PlayerPrefs.DEFAULT_SEEK_STEP_SEC),
                 playerTvAudioPassthrough = prefs.getBoolean(PlayerPrefs.TV_AUDIO_PASSTHROUGH_KEY, PlayerPrefs.DEFAULT_TV_AUDIO_PASSTHROUGH),

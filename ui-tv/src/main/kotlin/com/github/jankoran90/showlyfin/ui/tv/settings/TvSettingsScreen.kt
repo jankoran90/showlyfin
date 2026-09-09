@@ -288,6 +288,36 @@ fun TvSettingsScreen(
                     checked = sys.playerTvAudioPassthrough,
                     onCheckedChange = settings::setPlayerTvAudioPassthrough,
                 )
+                // Parita s telefonem (ui-phone StreamingSettingsSection) — appka výběr stopy podle
+                // téhle preference už umí (MoviePlayerService.kt), na TV jen chyběl přepínač.
+                val audioCtx = LocalContext.current
+                val audioPrefs = remember { audioCtx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+                var preferBitstream by remember {
+                    mutableStateOf(audioPrefs.getBoolean(PlayerPrefs.TV_PREFER_BITSTREAM_KEY, PlayerPrefs.DEFAULT_TV_PREFER_BITSTREAM))
+                }
+                TvToggleRow(
+                    label = "Preferovat bitstream zvuk (Dolby/DTS)",
+                    subtitle = "Má-li film víc zvukových stop a jedna je Dolby Digital/DD+/DTS/TrueHD, vyber ji " +
+                        "přednostně → AVR dostane bitstream místo dekódované PCM. Projeví se při příštím přehrání",
+                    checked = preferBitstream,
+                    onCheckedChange = {
+                        preferBitstream = it
+                        audioPrefs.edit().putBoolean(PlayerPrefs.TV_PREFER_BITSTREAM_KEY, it).apply()
+                    },
+                )
+                var preferMostChannels by remember {
+                    mutableStateOf(audioPrefs.getBoolean(PlayerPrefs.PREFER_MOST_CHANNELS_KEY, PlayerPrefs.DEFAULT_PREFER_MOST_CHANNELS))
+                }
+                TvToggleRow(
+                    label = "Preferovat 5.1 před stereo",
+                    subtitle = "Má-li film víc stop ve stejném jazyce (např. českou stereo i českou 5.1), vyber " +
+                        "tu s víc kanály. Projeví se při příštím přehrání",
+                    checked = preferMostChannels,
+                    onCheckedChange = {
+                        preferMostChannels = it
+                        audioPrefs.edit().putBoolean(PlayerPrefs.PREFER_MOST_CHANNELS_KEY, it).apply()
+                    },
+                )
             }
         }
 

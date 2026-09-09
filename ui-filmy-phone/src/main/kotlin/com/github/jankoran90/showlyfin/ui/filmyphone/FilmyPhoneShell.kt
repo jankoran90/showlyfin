@@ -348,7 +348,14 @@ private fun FilmyShellContent() {
                 drawerContent = {
                     FilmyDrawer(current = current) { section ->
                         // Ruční výběr sekce v draweru = úmyslný reset scrollu té sekce na vrch (i re-klik na aktuální).
-                        sectionStateHolder.removeState(section)
+                        // 🔴 OBZOR fix (2026-09-09, user nahlásil): Nastavení a Provoz nemají scrollovatelný
+                        // obsah, který by se resetovat měl — mají SBALOVACÍ karty (FilmyCollapsibleSection),
+                        // co si stav drží přes rememberSaveable. Reset na těchhle dvou sekcích tenhle stav
+                        // smaže spolu se scrollem (viditelné jen u „Účet", jediné karty s initiallyExpanded=true
+                        // — u ostatních, defaultně sbalených, reset vypadal jako perzistence). Vynechat je.
+                        if (section != FilmySection.SETTINGS && section != FilmySection.OPS) {
+                            sectionStateHolder.removeState(section)
+                        }
                         current = section
                         scope.launch { drawerState.close() }
                     }
