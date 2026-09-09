@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.core.ui
 import android.content.Context
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
@@ -18,12 +19,16 @@ fun rememberGridColumnPref(): Int {
 
 /**
  * [GridCells] pro daný [mode] a uživatelský počet sloupců [colPref] (0 = auto). Landscape karty jsou
- * širší → počet sloupců se ořízne (max 3), s auto-hodnotou default 2.
+ * širší → počet sloupců se ořízne (telefon max 3), s auto-hodnotou default 2. OBZOR (2026-09-09,
+ * tablet landscape): na širokém displeji (≥840dp, Material "expanded") strop uvolněn na 6, jinak by
+ * "Na šířku" karty na tabletu zbytečně plýtvaly místem.
  */
+@Composable
 fun gridCellsFor(mode: ViewMode, colPref: Int): GridCells {
     val cols = if (colPref in 2..5) colPref else 0
+    val landscapeCap = if (LocalConfiguration.current.screenWidthDp >= 840) 6 else 3
     return when (mode) {
-        ViewMode.LANDSCAPE -> GridCells.Fixed((if (cols > 0) cols else 2).coerceAtMost(3))
+        ViewMode.LANDSCAPE -> GridCells.Fixed((if (cols > 0) cols else 2).coerceAtMost(landscapeCap))
         else -> if (cols > 0) GridCells.Fixed(cols) else GridCells.Adaptive(110.dp)
     }
 }

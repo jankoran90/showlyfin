@@ -36,8 +36,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
-        // Stejné ABI omezení jako :app (NextLib nativní FFmpeg .so, x86 emu vynecháno).
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // OBZOR (2026-09-09): + x86_64 kvůli Waydroidu na Dell Venue 11 Pro (Intel Core M, čistě
+        // x86_64, žádná ARM translation vrstva) — jinak PackageManager appku rovnou odmítne
+        // (INSTALL_FAILED_NO_MATCHING_ABIS). NextLib AAR má x86_64 .so hotové, x86 (32bit emu) dál
+        // vynecháno, netřeba.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
 
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"${System.getenv("TRAKT_CLIENT_ID") ?: ""}\"")
         buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"${System.getenv("TRAKT_CLIENT_SECRET") ?: ""}\"")
