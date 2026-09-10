@@ -12,6 +12,7 @@ import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.domain.putCappedLru
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.uploaderHttpStatusOrNull
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleCandidate
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.data.uploader.subtitle.SubtitleTranslationStore
@@ -559,6 +560,27 @@ class PlaybackViewModel @Inject constructor(
                 // potichu doběhnout (žádná hláška), ne se tvářit jako skutečná chyba.
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 timber.log.Timber.w(e, "[Titulky] download selhal id=${cand.id}")
+                // OKAPI (2026-09-10, "All the Long Nights" — appka opakovaně 404 na AI titulek,
+                // který sama persistovaně považuje za "hotovo"): server o cache souboru AI
+                // překladu přišel (migrace úložiště) — appka to ale nepozná a stahuje navěky
+                // mrtvé `ai_<hash>` ID, aniž by kdy nabídla překlad znovu. 404 na `ai_` id =
+                // server jistě prohlásí "AI překlad ještě není hotový" (viz `subtitles_download`),
+                // což u ID, které appka SAMA označila jako Done, znamená jen "ztraceno" —
+                // zapomeň persistovaný výsledek a nabídni tlačítko znovu, místo tiché smyčky.
+                if (cand.id.startsWith("ai_") && e.uploaderHttpStatusOrNull() == 404) {
+                    val key = q?.let { translateStore.keyOf(it.imdb, it.season, it.episode) }
+                    if (key != null) {
+                        translateStore.clearDone(key)
+                        timber.log.Timber.w("[Lingua] AI titulek $key (${cand.id}) server ztratil → nabízím překlad znovu")
+                    }
+                    _state.update {
+                        it.copy(
+                            subtitlesLoading = false, canTranslateAi = true,
+                            subtitleError = "AI překlad se na serveru ztratil (úložiště) — přelož znovu.",
+                        )
+                    }
+                    return@launch
+                }
                 // DIAGNOSTIKA (2026-08-15): server je prokazatelně zdravý (200 OK, čisté ASCII hlavičky,
                 // plné tělo i přes veřejnou HTTPS cestu — ověřeno curlem), přesto klient hlásí selhání.
                 // Bez logcatu (Zenbook offline) je tohle jediný způsob, jak zjistit SKUTEČNOU výjimku:

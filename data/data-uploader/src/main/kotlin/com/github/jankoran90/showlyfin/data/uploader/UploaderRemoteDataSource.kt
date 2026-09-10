@@ -268,3 +268,11 @@ interface UploaderRemoteDataSource {
     ): SourceBrowseResponse
     suspend fun getCategories(baseUrl: String, sessionCookie: String, country: String): CategoriesResponse
 }
+
+/**
+ * OKAPI (2026-09-10) — HTTP status z výjimky vyhozené implementací (retrofit `HttpException`),
+ * nebo null u jiných chyb. `retrofit2` je jen `implementation` závislost tohohle modulu (ne `api`),
+ * takže volající feature moduly (ty s `HttpException` do classpath nevidí) potřebují tuhle
+ * tenkou fasádu místo přímého `is retrofit2.HttpException` castu.
+ */
+fun Throwable.uploaderHttpStatusOrNull(): Int? = (this as? retrofit2.HttpException)?.code()

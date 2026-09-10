@@ -53,6 +53,18 @@ class SubtitleTranslationStore @Inject constructor(
     fun doneSubId(key: String): String? =
         prefs.getString(PREFIX + key, null)?.takeIf { it.isNotBlank() }
 
+    /**
+     * OKAPI (2026-09-10, user: "All the Long Nights" — appka x62 zopakovala stažení AI titulku
+     * s HTTP 404, nikdy nenabídla překlad znovu): server ztratil cache souboru AI překladu
+     * (potvrzeno migrací `/upload_temp` storage — appka si ale pořád myslí "hotovo" a stahuje
+     * navěky mrtvé ID. Zapomeň persistovaný výsledek → příští otevření filmu nabídne překlad
+     * znovu (nový, funkční `ai_<hash>` soubor).
+     */
+    fun clearDone(key: String) {
+        prefs.edit { remove(PREFIX + key) }
+        _jobs.update { it - key }
+    }
+
     /** Zařadí překlad na pozadí. Drží WorkManager (androidx.work) uvnitř `data-uploader`, aby se
      *  typy workeru neprolínaly do feature modulů — ty volají jen tohle. */
     fun enqueueTranslate(
