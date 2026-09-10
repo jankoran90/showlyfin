@@ -37,6 +37,7 @@ import com.github.jankoran90.showlyfin.core.domain.home.LibrarySummary
 import com.github.jankoran90.showlyfin.core.domain.home.SidebarEntry
 import com.github.jankoran90.showlyfin.core.domain.home.SidebarItem
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
+import com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore
 import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.feature.discover.home.TvHomeViewModel
@@ -363,6 +364,20 @@ fun TvSettingsScreen(
                     subtitle = "Když hardware dekodér selže (černý obraz u HEVC apod.), zkus softwarový. Pomalejší, ale spolehlivější",
                     checked = forceSw,
                     onCheckedChange = { forceSw = it; rdPrefs.edit().putBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, it).apply() },
+                )
+                // OKAPI (2026-09-10, Venue/Waydroid HEVC bug) — parita s telefonem (FilmyPlayerSection),
+                // DINGO preset existoval jen v showlyfin `ui-phone`, appka filmy (telefon i TV) ho
+                // nikdy nedostala do vlastního Nastavení. Raw trakt_prefs, stejný klíč jako StreamPresetStore.
+                var codecPref by remember {
+                    mutableStateOf(rdPrefs.getString(StreamPresetStore.KEY_CODEC, StreamPresetStore.CODEC_ANY) ?: StreamPresetStore.CODEC_ANY)
+                }
+                TvOptionStepperRow(
+                    label = "Preferovaný kodek zdroje",
+                    subtitle = "Box se slabým/chybějícím HEVC dekodérem zvol H.264 — appka pak preferuje H.264 verzi filmu, když existuje",
+                    options = listOf(StreamPresetStore.CODEC_ANY, StreamPresetStore.CODEC_AVC, StreamPresetStore.CODEC_HEVC),
+                    selected = codecPref,
+                    labelOf = ::codecPrefLabel,
+                    onSelect = { codecPref = it; rdPrefs.edit().putString(StreamPresetStore.KEY_CODEC, it).apply() },
                 )
                 // CURTAIN (SHW-109) — konec přehrávání. Parita s telefonem (FilmyPlayerSection).
                 TvOptionStepperRow(
@@ -701,6 +716,12 @@ private fun drcLabel(level: Int): String = when (level) {
 }
 
 private fun hideDelayLabel(sec: Int): String = if (sec <= 0) "Nikdy" else "$sec s"
+
+private fun codecPrefLabel(codec: String): String = when (codec) {
+    StreamPresetStore.CODEC_AVC -> "H.264"
+    StreamPresetStore.CODEC_HEVC -> "HEVC"
+    else -> "Auto"
+}
 
 /** CATALOGUE — český popisek sekce pro výběr „Výchozí sekce" (parita s telefonem). */
 private fun tvSectionLabel(s: TvSection): String = when (s) {

@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
+import com.github.jankoran90.showlyfin.data.uploader.StreamPresetStore
 import com.github.jankoran90.showlyfin.ui.phone.SettingsViewModel
 
 /**
@@ -35,6 +36,12 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
     }
     // Opt-in auto-přehrát u karty se zapamatovaným zdrojem (řada „Uloženo k přehrání"). Default OFF.
     var autoplayRemembered by remember { mutableStateOf(rdPrefs.getBoolean("autoplay_remembered_enabled", false)) }
+    // OKAPI (2026-09-10, Venue/Waydroid Broadwell — appka nezvládá 10bit HEVC): DINGO preset
+    // existoval v kódu (StreamPresetStore, `orderStreams()` v DetailViewModel ho reálně používá
+    // při výběru zdroje), ale nikdy nedostal ovladač v appce filmy po CELLULOID splitu 2026-08-14
+    // (žil jen v showlyfin `ui-phone` StreamingSettingsSection, kterou appka filmy nevolá) —
+    // zjištěno při ladění HEVC bugu na Venue. Raw trakt_prefs, stejný klíč jako StreamPresetStore.
+    var codecPref by remember { mutableStateOf(rdPrefs.getString(StreamPresetStore.KEY_CODEC, StreamPresetStore.CODEC_ANY) ?: StreamPresetStore.CODEC_ANY) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SettingSectionTitle("Přehrávač")
@@ -69,6 +76,16 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
                 "softwarový dekodér sama až při chybě.",
             checked = forceSw,
             onCheckedChange = { forceSw = it; rdPrefs.edit().putBoolean(PlayerPrefs.FORCE_SW_DECODER_KEY, it).apply() },
+        )
+        SettingChips(
+            label = "Preferovaný kodek zdroje",
+            subtitle = "Zařízení se slabým/chybějícím HEVC dekodérem (starší tablety, auto head unit) zvol " +
+                "H.264 — appka pak při výběru zdroje preferuje H.264 verzi filmu, když existuje. " +
+                "Nastav jednou pro tohle zařízení, ostatní se nezmění.",
+            options = listOf(StreamPresetStore.CODEC_ANY, StreamPresetStore.CODEC_AVC, StreamPresetStore.CODEC_HEVC),
+            selected = codecPref,
+            labelOf = ::codecPrefLabel,
+            onSelect = { codecPref = it; rdPrefs.edit().putString(StreamPresetStore.KEY_CODEC, it).apply() },
         )
         // CURTAIN (SHW-109) — konec přehrávání. Parita s TV `TvSettingsScreen` blok Přehrávač.
         SettingChips(
@@ -105,3 +122,9 @@ fun FilmyPlayerSection(vm: SettingsViewModel = hiltViewModel()) {
 }
 
 private fun hideDelayLabel(sec: Int): String = if (sec <= 0) "Nikdy" else "$sec s"
+
+private fun codecPrefLabel(codec: String): String = when (codec) {
+    StreamPresetStore.CODEC_AVC -> "H.264"
+    StreamPresetStore.CODEC_HEVC -> "HEVC"
+    else -> "Auto"
+}
