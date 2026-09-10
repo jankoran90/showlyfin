@@ -134,6 +134,21 @@ class WorkingSourceStore @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
+     * OKAPI (2026-09-10, user: Venue/Waydroid tablet po chybě dekódování jednoho releasu CASCADE
+     * auto-advance přeskočil na horší zdroj a ten se TICHO uložil jako nová sdílená paměť dílu —
+     * TV i telefon, kde původní FullHD zdroj hrál bez potíží, pak zdědily zkaženou volbu jednoho
+     * zařízení. User: „udělej ať Venue nebo obecně tablet zařízení testují a nemohli přepisovat
+     * uložené zdroje, protože pak to rozhodí TV a telefon". Tablet (Waydroid emulace na sdíleném
+     * hostitelském GPU/HW dekodéru) je nespolehlivější v dekódování než telefon/TV → smí zdroje
+     * jen ČÍST a lokálně přehrávat, NIKDY nepřepisovat SDÍLENOU (cross-device, server-synced)
+     * paměť — i explicitní „Zapamatovat zdroj 👍" na tabletu proto musí být no-op (viz [save]/
+     * [saveSeason]). `smallestScreenWidthDp >= 600` = Android standardní práh pro tablet
+     * (`sw600dp` resource qualifier), spočítáno jednou při vytvoření (nemění se za běhu).
+     */
+    private val isReadOnlyTestDevice: Boolean =
+        context.resources.configuration.smallestScreenWidthDp >= 600
+
+    /**
      * LAPIDARY (SHW-96) — reaktivní množina klíčů titulů s uloženým zdrojem ("tmdb:<id>" + "imdb:<id>"),
      * pro odznak „hraje hned" na poster kartách napříč appkou. Aktualizuje se při každé změně lokální paměti
      * (save/clear/sync). Eventuálně konzistentní: auto-zdroj zapsaný backendem se projeví po nejbližším [syncFromServer].
@@ -594,6 +609,10 @@ class WorkingSourceStore @Inject constructor(
         episode: Int? = null,
     ) {
         if (imdb.isNullOrBlank() && (tmdb == null || tmdb <= 0L)) return
+        if (isReadOnlyTestDevice) {
+            Timber.i("[SIEVE] tablet/test zařízení → zdroj se sdíleně NEukládá (jen lokální test), imdb=%s tmdb=%s", imdb, tmdb)
+            return
+        }
         val now = System.currentTimeMillis()
         val ep = epKeyOf(season, episode)
         // neměnné datum prvního uložení — při re-save (změna zdroje) ho zachovej z existujícího záznamu,
@@ -723,6 +742,10 @@ class WorkingSourceStore @Inject constructor(
         imdb: String?, tmdb: Long?, title: String, stream: UploaderStream, season: Int,
     ) {
         if (imdb.isNullOrBlank() && (tmdb == null || tmdb <= 0L)) return
+        if (isReadOnlyTestDevice) {
+            Timber.i("[SEZONA] tablet/test zařízení → zdroj sezóny se sdíleně NEukládá, imdb=%s tmdb=%s", imdb, tmdb)
+            return
+        }
         val ep = seasonKeyOf(season) ?: return
         val now = System.currentTimeMillis()
         val existingFirst = getSeason(imdb, tmdb, season)
