@@ -394,6 +394,11 @@ class PlaybackViewModel @Inject constructor(
         durationMs: Long,
         bufferedMs: Long,
         paused: Boolean,
+        // PILOT-NATIVE audio (2026-09-10): ExoPlayer audio stopy žijí v PlaybackScreen composable
+        // (per-instance Player.Tracks), ne ve ViewModel state jako titulky (vlastní SRT overlay) —
+        // volající je proto musí dodat, VM je jen protéká dál k [opsHeartbeat].
+        audioTracks: List<com.github.jankoran90.showlyfin.data.uploader.model.OpsTrackInfo> = emptyList(),
+        currentAudioIndex: Int = -1,
     ): com.github.jankoran90.showlyfin.data.uploader.model.OpsRemoteCommand? {
         val s = _state.value
         if (s.title.isBlank()) return null
@@ -412,6 +417,8 @@ class PlaybackViewModel @Inject constructor(
                     )
                 },
                 currentSubtitleIndex = s.selectedSubtitleIndex,
+                audioTracks = audioTracks,
+                currentAudioIndex = currentAudioIndex,
             )
         }.getOrNull()
     }

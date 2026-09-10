@@ -200,6 +200,10 @@ class OvladacViewModel @Inject constructor(
                     canSeek = p.durationMs > 0L,
                     currentSubtitleIndex = p.currentSubtitleIndex,
                     subtitleTracks = p.subtitleTracks.map { StreamTrack(it.index, it.label) },
+                    // PILOT-NATIVE audio (2026-09-10): zrcadlo titulků výše — appka na boxu teď
+                    // hlásí i zvukové stopy, dřív se tep na ně jen neptal.
+                    currentAudioIndex = p.currentAudioIndex,
+                    audioTracks = p.audioTracks.map { StreamTrack(it.index, it.label) },
                 )
             }
         val sessions = jfSessions + nativeSessions
@@ -492,7 +496,13 @@ class OvladacViewModel @Inject constructor(
         nativeDeviceId()?.let { did -> nativeCommand(did, "subtitleTrack", index.toLong()); return }
         command { c, id -> naTv.setSubtitleIndex(c.url, c.token, id, index) }
     }
-    fun setAudio(index: Int) = command { c, id -> naTv.setAudioIndex(c.url, c.token, id, index) }
+    fun setAudio(index: Int) {
+        // PILOT-NATIVE audio (2026-09-10): stejná chybějící větev jako u [setSubtitle] výš —
+        // nativní přehrávání (spuštěné přímo na boxu, ne appkou-castované) nemá JF sessionId,
+        // příkaz musí jít přes ops/command frontu, ne Jellyfin PlaystateCommand.
+        nativeDeviceId()?.let { did -> nativeCommand(did, "audioTrack", index.toLong()); return }
+        command { c, id -> naTv.setAudioIndex(c.url, c.token, id, index) }
+    }
 
     // --- REVERB (SHW-82): zvukový výstup přehrávače na docku (Zenbook ↔ AV receiver) + lip-sync.
     /**

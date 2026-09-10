@@ -59,6 +59,8 @@ class OpsHeartbeatReporter @Inject constructor(
         force: Boolean = false,
         subtitleTracks: List<OpsTrackInfo> = emptyList(),
         currentSubtitleIndex: Int = -1,
+        audioTracks: List<OpsTrackInfo> = emptyList(),
+        currentAudioIndex: Int = -1,
     ): OpsRemoteCommand? {
         if (title.isBlank()) return null
         // Vypínač z Nastavení — uživatel má právo říct „tohle zařízení ať se nehlásí".
@@ -101,6 +103,8 @@ class OpsHeartbeatReporter @Inject constructor(
                 seekMs = t.seekMs,
                 subtitleTracks = subtitleTracks,
                 currentSubtitleIndex = currentSubtitleIndex,
+                audioTracks = audioTracks,
+                currentAudioIndex = currentAudioIndex,
             ),
         )
     }

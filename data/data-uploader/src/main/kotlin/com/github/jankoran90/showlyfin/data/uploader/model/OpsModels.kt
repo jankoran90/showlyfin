@@ -52,6 +52,10 @@ data class OpsPlaying(
     // Ovladač na telefonu z nich postaví výběr, i když appka na boxu nehraje přes FERRY/JF.
     val subtitleTracks: List<OpsTrackInfo> = emptyList(),
     val currentSubtitleIndex: Int = -1,
+    // PILOT-NATIVE audio (2026-09-10): totéž pro zvukové stopy — Ovladač uměl přepínat titulky
+    // u nativního přehrávání, zvuk ne (chyběl hook, appka na boxu ho ale posílá stejně jako titulky).
+    val audioTracks: List<OpsTrackInfo> = emptyList(),
+    val currentAudioIndex: Int = -1,
 )
 
 /** Jedna titulková stopa u nativního přehrávání (viz [OpsPlaying.subtitleTracks]). */
@@ -193,6 +197,9 @@ data class OpsHeartbeatBody(
     // i u nativního přehrávání (appka na boxu tenhle titul nespustila přes cast).
     val subtitleTracks: List<OpsTrackInfo> = emptyList(),
     val currentSubtitleIndex: Int = -1,
+    // PILOT-NATIVE audio (2026-09-10): zrcadlo výše pro zvukové stopy.
+    val audioTracks: List<OpsTrackInfo> = emptyList(),
+    val currentAudioIndex: Int = -1,
 )
 
 /** PILOT-NATIVE (2026-09-08) — odpověď na tep nese i čekající dálkový příkaz z Ovladače (pokud nějaký
@@ -204,8 +211,8 @@ data class OpsHeartbeatResponse(
 )
 
 data class OpsRemoteCommand(
-    val action: String = "",   // playPause | seek | stop
-    val value: Long = 0,       // cílová pozice v ms (jen u seek)
+    val action: String = "",   // playPause | seek | stop | subtitleTrack | audioTrack
+    val value: Long = 0,       // cílová pozice v ms (seek) nebo index stopy (subtitleTrack/audioTrack)
 )
 
 data class OpsSweepResponse(

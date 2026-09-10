@@ -557,6 +557,17 @@ fun PlaybackScreen(
             delay(100)
         }
     }
+    // TEMPO: vyber audio stopu (override) — telefon ji pak hraje, pokud ji umí dekódovat.
+    // (Deklarováno PŘED heartbeat LaunchedEffectem níž — ten na `applyAudio` odkazuje kvůli
+    // PILOT-NATIVE audio dálkovému příkazu, Kotlin `val` musí být viditelný už při použití.)
+    val applyAudio: (AudioTrackOption) -> Unit = { opt ->
+        controller?.let { c ->
+            c.trackSelectionParameters = c.trackSelectionParameters.buildUpon()
+                .setOverrideForType(TrackSelectionOverride(opt.group, opt.trackIndex))
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                .build()
+        }
+    }
     // PICKUP/REWIND: průběžně ukládej pozici pro pozdější „Pokračovat" — externí/offline streamy lokálně
     // přes saveExternalPosition; JF-item VIDEO přes saveVideoPosition (showlyfin nereportuje JF progress
     // na server → resume videa děláme lokálně; no-op u filmu bez resumeKey). Save i v onDispose.
@@ -578,12 +589,19 @@ fun PlaybackScreen(
                 durationMs = c.duration,
                 bufferedMs = (c.bufferedPosition - c.currentPosition).coerceAtLeast(0L),
                 paused = !c.isPlaying,
+                audioTracks = audioTracks.mapIndexed { i, t ->
+                    com.github.jankoran90.showlyfin.data.uploader.model.OpsTrackInfo(i, t.label)
+                },
+                currentAudioIndex = audioTracks.indexOfFirst { it.selected },
             )
             when (cmd?.action) {
                 "playPause" -> if (c.isPlaying) c.pause() else c.play()
                 "seek" -> c.seekTo(cmd.value)
                 "stop" -> c.stop()
                 "subtitleTrack" -> viewModel.selectSubtitle(cmd.value.toInt())
+                // PILOT-NATIVE audio (2026-09-10): Ovladač na telefonu vybral zvukovou stopu u
+                // nativního (ne appkou-castovaného) přehrávání — proveď stejný override jako lokální menu.
+                "audioTrack" -> audioTracks.getOrNull(cmd.value.toInt())?.let(applyAudio)
             }
         }
     }
@@ -617,15 +635,6 @@ fun PlaybackScreen(
         }
     }
 
-    // TEMPO: vyber audio stopu (override) — telefon ji pak hraje, pokud ji umí dekódovat.
-    val applyAudio: (AudioTrackOption) -> Unit = { opt ->
-        controller?.let { c ->
-            c.trackSelectionParameters = c.trackSelectionParameters.buildUpon()
-                .setOverrideForType(TrackSelectionOverride(opt.group, opt.trackIndex))
-                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-                .build()
-        }
-    }
     // SEZONA (SHW-113) f2 — řekni přehrávači, JAKÝ JAZYK má hrát. Bez toho bere Media3 první stopu
     // v pořadí (u Breaking Bad německou — česká tam není a locale zařízení se netrefí). Detail spočítal
     // pořadí podle jazykového chipu profilu a původního jazyka titulu. Nechává se to jako PREFERENCE,
