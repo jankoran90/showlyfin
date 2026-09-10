@@ -418,12 +418,32 @@ fun PlaybackScreen(
                     !triedPlatformOnlyVideo && (externalUrl != null || localVideoPath != null)
                 ) {
                     triedPlatformOnlyVideo = true
-                    pendingSwReattach = true
-                    context.startService(
-                        android.content.Intent(context, MoviePlayerService::class.java)
-                            .setAction(MoviePlayerService.ACTION_FORCE_PLATFORM_VIDEO),
-                    )
-                    return
+                    // OKAPI (2026-09-10, Venue/Waydroid Broadwell, logcat-ověřeno): platformní dekodér
+                    // (`OMX.google.hevc.decoder`, čistě SW na tomhle zařízení) neumí 10bit HEVC Main10
+                    // Level 4.0/5.0 — MediaCodecInfo to sám umí říct PŘEDEM (`NoSupport` v logu), appka
+                    // to ale nekontrolovala a rovnou přepnula → druhé selhání (`NO_EXCEEDS_CAPABILITIES`)
+                    // padne jako ExoPlaybackException, ale k `onPlayerError` se prokazatelně NIKDY nedostane
+                    // (0 výskytů `[Playback] ExoPlayer error` v logcatu přes celý repro) → appka tiše zamrzne
+                    // na 0:00 navždy (i po vlastním ~68s auto-reinitu session, co narazí do téže zdi). Ověř
+                    // podporu PŘEDEM stejným API, které Media3 interně používá k tomu závěru samo — ať
+                    // beznadějný pokus vůbec neproběhne a rovnou padneme na CASCADE/dialog níž.
+                    val fmt = (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat
+                    val platformCanDecode = fmt?.sampleMimeType?.let { mime ->
+                        runCatching {
+                            androidx.media3.exoplayer.mediacodec.MediaCodecUtil
+                                .getDecoderInfos(mime, false, false)
+                                .any { it.isFormatSupported(context, fmt) }
+                        }.getOrDefault(true) // dotaz na capabilities selhal → nebraň pokusu jako dřív
+                    } ?: true
+                    if (platformCanDecode) {
+                        pendingSwReattach = true
+                        context.startService(
+                            android.content.Intent(context, MoviePlayerService::class.java)
+                                .setAction(MoviePlayerService.ACTION_FORCE_PLATFORM_VIDEO),
+                        )
+                        return
+                    }
+                    timber.log.Timber.w("[OKAPI] platformní dekodér %s nepodporuje formát (profil/level) → přeskakuji beznadějný pokus, jdu na CASCADE/dialog", fmt?.sampleMimeType)
                 }
                 // OBZOR audio mirror-FISSION (2026-09-09, Venue/Waydroid): platformní audio dekodér padl
                 // (ověřeno spolehlivě na AAC — `OMX.google.aac.decoder` error 0x80001001, ne race) → zkus
