@@ -104,7 +104,7 @@ class SubtitleTranslateWorker(
         }
 
         if (status == "running") {
-            store.updateRunningProgress(key, subId.ifBlank { null }, started.okCount, started.totalChunks)
+            store.updateRunningProgress(key, subId.ifBlank { null }, started.okCount, started.totalChunks, started.quotaPct, started.avgWavePct)
         }
 
         var waitedMs = 0L
@@ -122,7 +122,7 @@ class SubtitleTranslateWorker(
             // hotová), VM smí rozpracovaný obsah stahovat/přenačítat živě. Auto-chain vln pod
             // limitem kvóty jede celé uvnitř tohohle "running" bez další akce appky.
             if (status == "running") {
-                store.updateRunningProgress(key, subId.ifBlank { null }, s.okCount, s.totalChunks)
+                store.updateRunningProgress(key, subId.ifBlank { null }, s.okCount, s.totalChunks, s.quotaPct, s.avgWavePct)
             }
         }
 

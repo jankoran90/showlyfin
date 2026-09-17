@@ -1423,14 +1423,18 @@ private fun SubtitleSettingsPanel(
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFFFFBF00))
                     Spacer(Modifier.width(10.dp))
                     Column {
-                        // VLNY: reálný progress, když ho server hlásí (jen LINGUA-YT).
+                        // VLNY: reálný progress, když ho server hlásí (jen LINGUA-YT). "Stav:" prefix
+                        // explicitně (user 2026-09-17: chtěl vidět jasný stav spuštěno/pozastaveno,
+                        // ne to jen odvozovat z toho, který řádek se zrovna vykresluje).
                         val progressText = if (state.aiProgressTotal > 0)
-                            "Překládám titulky… (${state.aiProgressOk}/${state.aiProgressTotal} dávek)"
-                        else "Překládám titulky… (chvíli to potrvá)"
+                            "Stav: Spuštěno (${state.aiProgressOk}/${state.aiProgressTotal} dávek)"
+                        else "Stav: Spuštěno (chvíli to potrvá)"
                         Text(progressText, color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                        state.aiQuotaPct?.let {
+                        if (state.aiQuotaPct != null || state.aiAvgWavePct != null) {
+                            val quotaTxt = state.aiQuotaPct?.let { "kvóta (5h) ${it.roundToInt()} %" }
+                            val avgTxt = state.aiAvgWavePct?.let { "odhad ~${it.roundToInt()} %/vlna" }
                             Text(
-                                "Mozek kvóta (5h): ${it.roundToInt()} %",
+                                listOfNotNull(quotaTxt, avgTxt).joinToString(" · "),
                                 color = Color.White.copy(alpha = 0.5f),
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -1480,7 +1484,7 @@ private fun SubtitleSettingsPanel(
                     val quotaTxt = state.aiQuotaPct?.let { "kvóta ${it.roundToInt()} %" } ?: "kvóta plná"
                     val avgTxt = state.aiAvgWavePct?.let { " · odhad ~${it.roundToInt()} %/vlna" } ?: ""
                     Text(
-                        "Pozastaveno na limitu z Nastavení — $quotaTxt$avgTxt",
+                        "Stav: Pozastaveno (limit z Nastavení) — $quotaTxt$avgTxt",
                         color = Color.White.copy(alpha = 0.5f),
                         style = MaterialTheme.typography.bodySmall,
                     )

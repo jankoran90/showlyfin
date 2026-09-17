@@ -617,6 +617,12 @@ class PlaybackViewModel @Inject constructor(
         val key = translateStore.keyOf(q.imdb, q.season, q.episode)
         translateKey = key
         val isYoutube = q.imdb.startsWith("yt:", ignoreCase = true)
+        // 🔴 BUG (2026-09-17, živě nalezeno): [aiIsYoutube] se dřív nastavovalo JEN uvnitř "paused
+        // z dřívějška" větve — model picker (jen LINGUA-YT) se tak neukázal, když epizoda měla
+        // persistovaný `doneId`, ale NEBYLA paused (běžný "už přeloženo" případ, nebo i po OKAPI
+        // recovery z ai_ 404 — ta taky jen `canTranslateAi=true` nastaví, `aiIsYoutube` ne). Musí se
+        // nastavit VŽDY, bez ohledu na větev, protože picker se rozhoduje podle NĚJ, ne podle doneId.
+        _state.update { it.copy(aiIsYoutube = isYoutube) }
         val doneId = translateStore.doneSubId(key)
         if (doneId != null) {
             timber.log.Timber.i("[Lingua] film už přeložen ($key) → nasazuji AI češtinu automaticky")
@@ -624,12 +630,12 @@ class PlaybackViewModel @Inject constructor(
             // VLNY: pauza z dřívější session — nabídni "Pokračovat i přes riziko" a dál poslouchej
             // store, ať se po odsouhlasení UI samo přenačte na Done.
             if (translateStore.isPausedForQuota(key)) {
-                _state.update { it.copy(aiPausedForQuota = true, aiIsYoutube = isYoutube) }
+                _state.update { it.copy(aiPausedForQuota = true) }
                 observeTranslation(key)
             }
             return
         }
-        _state.update { it.copy(canTranslateAi = true, aiIsYoutube = isYoutube) }
+        _state.update { it.copy(canTranslateAi = true) }
         observeTranslation(key)
     }
 
@@ -671,7 +677,8 @@ class PlaybackViewModel @Inject constructor(
                             }
                             _state.update {
                                 it.copy(aiTranslating = true, aiTranslateError = null, aiPausedForQuota = false,
-                                    aiProgressOk = st.ok, aiProgressTotal = st.total)
+                                    aiProgressOk = st.ok, aiProgressTotal = st.total,
+                                    aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
                             }
                         }
                         // VLNY: server sám přeložil, kolik šlo, obsah je hned nasazený, ale NEpokračuje
@@ -735,7 +742,11 @@ class PlaybackViewModel @Inject constructor(
             }
             return
         }
-        _state.update { it.copy(aiTranslating = true, aiTranslateError = null) }
+        // 🔴 BUG (2026-09-17, živě nalezeno): `subtitleError` (OKAPI recovery hláška "AI překlad se
+        // ztratil") se dřív nemazala při novém startu → appka ukazovala starou chybu SOUČASNĚ se
+        // spinnerem "Překládám…", matoucí. `subtitleError` a `aiTranslateError` jsou dvě různá pole
+        // (jedno pro výběr stopy, druhé pro překlad) — nový start musí čistit OBĚ.
+        _state.update { it.copy(aiTranslating = true, aiTranslateError = null, subtitleError = null) }
         translateStore.setRunning(key)
         observeTranslation(key)
         // VLNY: jen LINGUA-YT (podcast bez IMDb) — vlnový překlad s kvótovou brzdou místo jednoho

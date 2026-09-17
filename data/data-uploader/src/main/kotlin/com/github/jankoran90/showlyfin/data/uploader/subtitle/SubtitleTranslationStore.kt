@@ -30,8 +30,16 @@ class SubtitleTranslationStore @Inject constructor(
         /** [jobId]/[ok]/[total] (PROGRESSIVE, 2026-09-16): server ukládá po KAŽDÉ dávce průběžně,
          *  takže [jobId] je stažitelné (rozpracovaný obsah) i během "running" — VM z toho dělá
          *  živý progress text a speculativně nasazuje/přenačítá stopu, ať se přeložené řádky
-         *  objevují v přehrávači průběžně, ne až na dvou pevných zastávkách. */
-        data class Running(val jobId: String? = null, val ok: Int = 0, val total: Int = 0) : State
+         *  objevují v přehrávači průběžně, ne až na dvou pevných zastávkách. [quotaPct]/[avgWavePct]
+         *  (VLNY, 2026-09-18) — 🔴 BUG nalezen živě: server je posílá i za "running" (ověřeno API),
+         *  ale appka je dřív ukazovala JEN u [PausedQuota] — user viděl progress bez kvóty vůbec. */
+        data class Running(
+            val jobId: String? = null,
+            val ok: Int = 0,
+            val total: Int = 0,
+            val quotaPct: Float? = null,
+            val avgWavePct: Float? = null,
+        ) : State
         /** VLNY (2026-09-18): server sám přeložil, kolik šlo pod limitem kvóty (auto-chain vln),
          *  obsah je stažitelný HNED — teď čeká na explicitní potvrzení pokračování i přes riziko
          *  ([SubtitleTranslationStore.enqueueContinueTranslate]), protože 5h mozek kvóta je na/nad
@@ -53,8 +61,8 @@ class SubtitleTranslationStore @Inject constructor(
     /** Živý progress tik během "running" (PROGRESSIVE) — [jobId] = subId, jakmile server nahlásí
      *  aspoň 1 hotovou dávku (dřív je null, nic ke stažení). Volá [SubtitleTranslateWorker] po
      *  každém pollu, dokud status zůstává "running". */
-    fun updateRunningProgress(key: String, jobId: String?, ok: Int, total: Int) =
-        _jobs.update { it + (key to State.Running(jobId, ok, total)) }
+    fun updateRunningProgress(key: String, jobId: String?, ok: Int, total: Int, quotaPct: Float?, avgWavePct: Float?) =
+        _jobs.update { it + (key to State.Running(jobId, ok, total, quotaPct, avgWavePct)) }
 
     fun setError(key: String, message: String) = _jobs.update { it + (key to State.Error(message)) }
 
