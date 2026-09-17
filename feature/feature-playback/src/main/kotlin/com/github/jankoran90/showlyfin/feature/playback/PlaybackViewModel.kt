@@ -12,7 +12,6 @@ import com.github.jankoran90.showlyfin.core.domain.player.PlayerPrefs
 import com.github.jankoran90.showlyfin.core.domain.putCappedLru
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
-import com.github.jankoran90.showlyfin.data.uploader.uploaderHttpStatusOrNull
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleCandidate
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.data.uploader.subtitle.SubtitleTranslationStore
@@ -563,11 +562,13 @@ class PlaybackViewModel @Inject constructor(
                 // OKAPI (2026-09-10, "All the Long Nights" — appka opakovaně 404 na AI titulek,
                 // který sama persistovaně považuje za "hotovo"): server o cache souboru AI
                 // překladu přišel (migrace úložiště) — appka to ale nepozná a stahuje navěky
-                // mrtvé `ai_<hash>` ID, aniž by kdy nabídla překlad znovu. 404 na `ai_` id =
-                // server jistě prohlásí "AI překlad ještě není hotový" (viz `subtitles_download`),
-                // což u ID, které appka SAMA označila jako Done, znamená jen "ztraceno" —
-                // zapomeň persistovaný výsledek a nabídni tlačítko znovu, místo tiché smyčky.
-                if (cand.id.startsWith("ai_") && e.uploaderHttpStatusOrNull() == 404) {
+                // mrtvé `ai_<hash>` ID, aniž by kdy nabídla překlad znovu. `ai_` id nemá ŽÁDNÝ jiný
+                // zdroj než naši vlastní server cache, takže JAKÁKOLI chyba stažení (2026-09-17 nález:
+                // ne vždy je to čistě `HttpException` s kódem 404 — u `@Streaming` odpovědi na TV/`?key=`
+                // cestě to uživatel viděl jako obecné "HTTP 404" hlášené jinudy, `uploaderHttpStatusOrNull`
+                // striktní match nechytil) znamená totéž: přeložený obsah je pryč/nedůvěryhodný —
+                // zapomeň persistovaný výsledek a nabídni tlačítko znovu, místo tiché smyčky/matoucí chyby.
+                if (cand.id.startsWith("ai_")) {
                     val key = q?.let { translateStore.keyOf(it.imdb, it.season, it.episode) }
                     if (key != null) {
                         translateStore.clearDone(key)

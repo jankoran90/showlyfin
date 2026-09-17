@@ -10,8 +10,10 @@ import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
+import com.github.jankoran90.showlyfin.data.jellyfin.FerrySubtitle
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
+import com.github.jankoran90.showlyfin.data.uploader.subtitle.SubtitleTranslationStore
 import com.github.jankoran90.showlyfin.data.uploader.youtubeVideoUrl
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
@@ -54,6 +56,9 @@ class YoutubeChannelViewModel @Inject constructor(
     private val videoResumeStore: VideoResumeStore,
     // EPHEMERON (2026-09-04): epizody manuálně připojené ke kartě přes scoped hledání (i mimo okno feedu).
     private val attachedStore: com.github.jankoran90.showlyfin.feature.listen.player.AttachedEpisodeStore,
+    // VLNY follow-up (2026-09-17, user „pošlu to na TV, budou tam titulky?"): AI překlad (LINGUA-YT)
+    // persistovaný stav — cast na TV pošle CZ stopu, pokud už existuje.
+    private val translateStore: SubtitleTranslationStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -231,7 +236,11 @@ class YoutubeChannelViewModel @Inject constructor(
 
     /**
      * L4 (LEVER): pošle VIDEO verzi epizody na běžící yellyfin session na TV/boxu (FERRY cast),
-     * stejně jako film z Detailu. Bez titulků (YouTube video), bez „telefon = ovladač" (polish).
+     * stejně jako film z Detailu. Bez „telefon = ovladač" (polish).
+     * VLNY follow-up (2026-09-17): pokud pro epizodu existuje persistovaný AI překlad (LINGUA-YT,
+     * [SubtitleTranslationStore.doneSubId]), pošle se s videem i CZ stopa (viz [buildTvSubtitle]) —
+     * 🔴 TV si soubor stáhne JEN JEDNOU při startu, takže dodá to, co je přeložené V TU CHVÍLI, ne
+     * živě po vlnách jako na telefonu (žádný mechanismus, jak by TV klient re-fetchoval za běhu).
      * Výsledek → jednorázová [castMessage] (Toast v obrazovce).
      */
     fun castVideoToTv(ep: YtEpisode) {
@@ -241,7 +250,7 @@ class YoutubeChannelViewModel @Inject constructor(
             val reportUrl = if (baseUrl.isNotBlank() && cookie.isNotBlank()) {
                 "${baseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
             } else null
-            val result = naTv.castFerry(jfUrl, jfToken, videoUrl(ep), ep.title, emptyList(), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
+            val result = naTv.castFerry(jfUrl, jfToken, videoUrl(ep), ep.title, buildTvSubtitle(ep), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
             Timber.i("[LEVER] cast YouTube video → TV: %s result=%s", ep.title, result)
             _castMessage.value = when (result) {
                 CastResult.SENT -> "Spuštěno na TV: ${ep.title}"
@@ -250,5 +259,23 @@ class YoutubeChannelViewModel @Inject constructor(
                 CastResult.FAILED -> "Nepodařilo se spustit na TV."
             }
         }
+    }
+
+    /** VLNY follow-up (2026-09-17): persistovaný AI překlad epizody (pokud existuje) jako samonosná
+     *  `?key=` URL pro TV — stejný vzor jako [com.github.jankoran90.showlyfin.feature.detail.DetailViewModel.buildTvSubtitles]
+     *  u filmů. Bez CZ titulky.com/OpenSubtitles hledání — YouTube epizoda nemá jiný zdroj CZ stopy
+     *  než náš vlastní LINGUA-YT překlad. */
+    private fun buildTvSubtitle(ep: YtEpisode): List<FerrySubtitle> {
+        if (baseUrl.isBlank()) return emptyList()
+        val key = translateStore.keyOf("yt:${ep.id}", null, null)
+        val subId = translateStore.doneSubId(key) ?: return emptyList()
+        val keyParam = java.net.URLEncoder.encode(cookie, "UTF-8")
+        return listOf(
+            FerrySubtitle(
+                url = "${baseUrl.trimEnd('/')}/api/subtitles/download/$subId?key=$keyParam",
+                language = "cs",
+                label = "AI překlad (čeština)",
+            ),
+        )
     }
 }
