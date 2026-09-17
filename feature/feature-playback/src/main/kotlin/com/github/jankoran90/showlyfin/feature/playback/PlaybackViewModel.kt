@@ -226,6 +226,9 @@ class PlaybackViewModel @Inject constructor(
     // LINGUA Fáze 3: klíč běžícího/dřívějšího AI překladu + observer sdíleného store (worker na pozadí).
     private var translateKey: String? = null
     private var translateObserveJob: Job? = null
+    // Aktuálně běžící LINGUA-YT job_id (VLNY) — pro ruční pauzu (user 2026-09-17). Deterministické
+    // (job_id = sub_id, viz backend), takže se dá poslat na `/translate/pause/{jobId}` přímo.
+    private var translateRunningJobId: String? = null
     private var subtitleSelectJob: Job? = null
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
@@ -672,30 +675,34 @@ class PlaybackViewModel @Inject constructor(
                         // false → hned potom ho vrať zpět (překlad dál běží).
                         is SubtitleTranslationStore.State.Running -> {
                             val runningJobId = st.jobId
+                            if (!runningJobId.isNullOrBlank()) translateRunningJobId = runningJobId
                             if (st.ok >= 1 && !runningJobId.isNullOrBlank()) {
                                 applyAiSubtitle(runningJobId, forceRefresh = true)
                             }
                             _state.update {
                                 it.copy(aiTranslating = true, aiTranslateError = null, aiPausedForQuota = false,
-                                    aiProgressOk = st.ok, aiProgressTotal = st.total,
+                                    aiPausedManual = false, aiProgressOk = st.ok, aiProgressTotal = st.total,
                                     aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
                             }
                         }
                         // VLNY: server sám přeložil, kolik šlo, obsah je hned nasazený, ale NEpokračuje
                         // sám nad limitem kvóty — čeká na explicitní potvrzení (viz dialog v UI).
+                        // [manual] (user 2026-09-17): true = user ťukl "Pauzni", ne automatická brzda.
                         is SubtitleTranslationStore.State.PausedQuota -> {
                             applyAiSubtitle(st.subId)
                             _state.update {
-                                it.copy(aiPausedForQuota = true, aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
+                                it.copy(aiPausedForQuota = !st.manual, aiPausedManual = st.manual,
+                                    aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
                             }
                         }
                         // Done může přijít i PO PausedQuota (stejné subId, plný obsah) → vynuceně přenačti.
                         is SubtitleTranslationStore.State.Done -> {
                             applyAiSubtitle(st.subId, forceRefresh = true)
-                            _state.update { it.copy(aiPausedForQuota = false) }
+                            _state.update { it.copy(aiPausedForQuota = false, aiPausedManual = false) }
                         }
                         is SubtitleTranslationStore.State.Error ->
-                            _state.update { it.copy(aiTranslating = false, aiTranslateError = st.message, aiPausedForQuota = false) }
+                            _state.update { it.copy(aiTranslating = false, aiTranslateError = st.message,
+                                aiPausedForQuota = false, aiPausedManual = false) }
                         null -> Unit
                     }
                 }
@@ -715,6 +722,22 @@ class PlaybackViewModel @Inject constructor(
         observeTranslation(key)
         translateStore.enqueueContinueTranslate(appContext, base, uploaderCookie, jobId, key, _state.value.title)
         timber.log.Timber.i("[Lingua] pokračování (potvrzeno přes kvótu) zařazeno na pozadí job=$jobId")
+    }
+
+    /** Uživatel ťukl na „Pauzni" (user 2026-09-17) — jednorázové volání PŘÍMO (ne přes worker, ten
+     *  jen polluje status a stav zjistí sám do pár vteřin). Efekt do ~pár dávek, ne okamžitě — server
+     *  vlnu už rozeběhnutou nezahazuje uprostřed. Jen pro LINGUA-YT (jediná cesta s vlnovou smyčkou,
+     *  co příznak vůbec kontroluje — u filmů by pauza jen nic nedělala). */
+    fun pauseAiTranslation() {
+        val jobId = translateRunningJobId ?: return
+        if (!_state.value.aiTranslating || !_state.value.aiIsYoutube) return
+        val base = uploaderBaseUrl
+        if (base.isBlank()) return
+        viewModelScope.launch {
+            runCatching { uploaderDs.pauseSubtitleTranslate(base, uploaderCookie, jobId) }
+                .onFailure { timber.log.Timber.w(it, "[Lingua] ruční pauza selhala job=$jobId") }
+        }
+        timber.log.Timber.i("[Lingua] ruční pauza vyžádána job=$jobId")
     }
 
     /** Uživatel ťukl na „Přeložit do češtiny (AI)" → zařadí překlad NA POZADÍ (přežije odchod

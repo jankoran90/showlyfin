@@ -37,6 +37,9 @@ data class PlaybackUiState(
     // VLNY (2026-09-18, jen LINGUA-YT): server sám přeložil, kolik šlo pod limitem kvóty (auto-chain
     // vln), teď čeká na potvrzení pokračování i přes riziko vyčerpání — nabídni dialog s odhadem.
     val aiPausedForQuota: Boolean = false,
+    // Ruční pauza (user 2026-09-17, "Pauzni") — na rozdíl od [aiPausedForQuota] ji vyvolal user
+    // tlačítkem, ne automatická kvótová brzda. UI z toho dělá jiný popisek, chování (Pokračovat) stejné.
+    val aiPausedManual: Boolean = false,
     // Živá kvóta (5h okno) a odhad spotřeby na další vlnu — null, dokud server nic nenahlásí.
     val aiQuotaPct: Float? = null,
     val aiAvgWavePct: Float? = null,

@@ -182,6 +182,11 @@ interface UploaderRemoteDataSource {
     suspend fun continueSubtitleTranslate(
         baseUrl: String, sessionCookie: String, jobId: String, confirm: Boolean = false,
     ): SubtitleTranslateJob
+    // Ruční pauza LINGUA-YT vln (user 2026-09-17: appka uměla jen automatickou kvótovou brzdu,
+    // ne zastavit rozjetý překlad na požádání). Efekt do ~pár dávek (vlna už rozeběhnutá doběhne).
+    suspend fun pauseSubtitleTranslate(
+        baseUrl: String, sessionCookie: String, jobId: String,
+    ): SubtitleTranslateJob
 
     // ČSFD popis + recenze přes backend (server zvládá Anubis anti-bot; csfdId se páruje on-device přes Wikidata)
     suspend fun getCsfdPlot(baseUrl: String, sessionCookie: String, csfdId: Long): CsfdPlotResponse

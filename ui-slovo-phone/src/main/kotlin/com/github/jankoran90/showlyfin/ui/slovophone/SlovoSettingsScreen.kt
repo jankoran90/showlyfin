@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Palette
@@ -84,6 +85,11 @@ fun SlovoSettingsScreen(
             }
             SlovoCollapsibleSection("Přehrávání na TV/Zenbooku", Icons.Rounded.Cast) {
                 CastTargetSettingsSection()
+            }
+            // user 2026-09-17: appka neměla ŽÁDNOU Jellyfin login obrazovku, takže cast na TV z YouTube
+            // kanálů nešel spustit vůbec (appka hlásila "Chybí přihlášení k Jellyfinu" bez možnosti to řešit).
+            SlovoCollapsibleSection("Jellyfin (pro TV cast)", Icons.Rounded.LiveTv) {
+                SlovoJellyfinSection()
             }
             SlovoCollapsibleSection("O aplikaci", Icons.Rounded.Info) {
                 SlovoAboutSection()

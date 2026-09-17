@@ -94,12 +94,12 @@ class SubtitleTranslateWorker(
         var subId = started.subId
         var error = started.error
 
-        // paused_quota (VLNY) = klidový, ne chybový stav — server sám přeložil, kolik šlo pod
-        // limitem kvóty (auto-chain vln), obsah je stažitelný. Jen zapiš a skonči, NEpolluj donekonečna
-        // (appka sama nic dalšího nedostane, dokud user neodsouhlasí pokračování).
-        if (status == "paused_quota" && subId.isNotBlank()) {
-            store.markPausedQuota(key, subId, started.quotaPct, started.avgWavePct)
-            Timber.i("[Lingua] pauza na kvótě (čeká na potvrzení) → $subId")
+        // paused_quota (VLNY) / paused_manual (user 2026-09-17, ruční "Pauzni") = klidový, ne chybový
+        // stav — obsah přeložený doteď je stažitelný. Jen zapiš a skonči, NEpolluj donekonečna
+        // (appka sama nic dalšího nedostane, dokud user neodsouhlasí/nezmáčkne pokračovat).
+        if ((status == "paused_quota" || status == "paused_manual") && subId.isNotBlank()) {
+            store.markPausedQuota(key, subId, started.quotaPct, started.avgWavePct, manual = status == "paused_manual")
+            Timber.i("[Lingua] pauza (${status}, čeká na potvrzení) → $subId")
             return Result.success()
         }
 
@@ -113,9 +113,9 @@ class SubtitleTranslateWorker(
             waitedMs += POLL_MS
             val s = runCatching { ds.getSubtitleTranslateStatus(base, cookie, jobId) }.getOrNull() ?: continue
             status = s.status; subId = s.subId; error = s.error
-            if (status == "paused_quota" && subId.isNotBlank()) {
-                store.markPausedQuota(key, subId, s.quotaPct, s.avgWavePct)
-                Timber.i("[Lingua] pauza na kvótě (čeká na potvrzení) → $subId")
+            if ((status == "paused_quota" || status == "paused_manual") && subId.isNotBlank()) {
+                store.markPausedQuota(key, subId, s.quotaPct, s.avgWavePct, manual = status == "paused_manual")
+                Timber.i("[Lingua] pauza (${status}, čeká na potvrzení) → $subId")
                 return Result.success()
             }
             // VLNY: server ukládá po každé dávce, i za "running" — jakmile má subId (aspoň 1 dávka

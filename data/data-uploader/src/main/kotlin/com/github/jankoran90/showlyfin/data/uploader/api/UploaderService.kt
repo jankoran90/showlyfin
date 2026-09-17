@@ -79,6 +79,8 @@ interface UploaderService {
     @GET suspend fun getSubtitleTranslateStatus(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
     // PROGRESSIVE (2026-09-16) — pokračování rozděleného LINGUA-YT jobu (2. půlka), viz UploaderRemoteDataSource
     @POST suspend fun continueSubtitleTranslate(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
+    // Ruční pauza LINGUA-YT vln (user 2026-09-17), viz UploaderRemoteDataSource
+    @POST suspend fun pauseSubtitleTranslate(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
 
     // ČSFD popis + recenze (scrape na backendu, server zvládá Anubis)
     @GET suspend fun getCsfdPlot(@Url url: String, @Header("Cookie") cookie: String): CsfdPlotResponse

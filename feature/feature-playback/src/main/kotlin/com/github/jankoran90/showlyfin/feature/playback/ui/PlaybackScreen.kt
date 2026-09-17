@@ -1162,6 +1162,7 @@ fun PlaybackScreen(
                             onWeight = { viewModel.setWeight(it) },
                             onTranslateAi = { model -> viewModel.translateSubtitlesAi(model) },
                             onContinueAiTranslate = { viewModel.continueAiTranslation() },
+                            onPauseAiTranslate = { viewModel.pauseAiTranslation() },
                             onClose = { showSubtitleMenu = false },
                             firstItemFocusRequester = if (isTv) menuFocusRequester else null,
                             modifier = Modifier.align(Alignment.CenterEnd),
@@ -1297,6 +1298,7 @@ private fun SubtitleSettingsPanel(
     onWeight: (Int) -> Unit,
     onTranslateAi: (String?) -> Unit,
     onContinueAiTranslate: () -> Unit,
+    onPauseAiTranslate: () -> Unit,
     onClose: () -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
@@ -1422,7 +1424,7 @@ private fun SubtitleSettingsPanel(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFFFFBF00))
                     Spacer(Modifier.width(10.dp))
-                    Column {
+                    Column(Modifier.weight(1f)) {
                         // VLNY: reálný progress, když ho server hlásí (jen LINGUA-YT). "Stav:" prefix
                         // explicitně (user 2026-09-17: chtěl vidět jasný stav spuštěno/pozastaveno,
                         // ne to jen odvozovat z toho, který řádek se zrovna vykresluje).
@@ -1439,6 +1441,18 @@ private fun SubtitleSettingsPanel(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
+                    }
+                    // Ruční pauza (user 2026-09-17) — jen LINGUA-YT, u filmů (jedna dávka = celý běh)
+                    // by pauza neměla co zachytit. Efekt do ~pár dávek, ne okamžitě.
+                    if (state.aiIsYoutube) {
+                        Text(
+                            "⏸ Pauzni",
+                            color = Color(0xFFFFBF00), style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .tvFocusBorder(RoundedCornerShape(6.dp))
+                                .clickable(onClick = onPauseAiTranslate)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
                     }
                 }
             } else {
@@ -1468,7 +1482,9 @@ private fun SubtitleSettingsPanel(
 
         // VLNY (2026-09-18, jen LINGUA-YT): server sám přeložil, kolik šlo pod limitem kvóty
         // (auto-chain vln), teď čeká na potvrzení pokračování i přes riziko vyčerpání.
-        if (state.aiPausedForQuota && !state.aiTranslating) {
+        // [aiPausedManual] (user 2026-09-17): stejný "Pokračovat" flow, jen jiný popisek — user
+        // pauzu vyvolal sám tlačítkem "Pauzni", ne automatická kvótová brzda.
+        if ((state.aiPausedForQuota || state.aiPausedManual) && !state.aiTranslating) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1480,11 +1496,15 @@ private fun SubtitleSettingsPanel(
                 Text("🌐", color = Color.White)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Pokračovat i přes riziko (AI)", color = Color(0xFFFFBF00), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (state.aiPausedManual) "Pokračovat v překladu (AI)" else "Pokračovat i přes riziko (AI)",
+                        color = Color(0xFFFFBF00), style = MaterialTheme.typography.bodyMedium,
+                    )
                     val quotaTxt = state.aiQuotaPct?.let { "kvóta ${it.roundToInt()} %" } ?: "kvóta plná"
                     val avgTxt = state.aiAvgWavePct?.let { " · odhad ~${it.roundToInt()} %/vlna" } ?: ""
+                    val label = if (state.aiPausedManual) "Stav: Pozastaveno (ručně)" else "Stav: Pozastaveno (limit z Nastavení)"
                     Text(
-                        "Stav: Pozastaveno (limit z Nastavení) — $quotaTxt$avgTxt",
+                        "$label — $quotaTxt$avgTxt",
                         color = Color.White.copy(alpha = 0.5f),
                         style = MaterialTheme.typography.bodySmall,
                     )

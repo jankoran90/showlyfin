@@ -196,7 +196,7 @@ class MergedPodcastViewModel @Inject constructor(
             _castMessage.value = when (result) {
                 CastResult.SENT -> "Spuštěno na TV: ${item.title}"
                 CastResult.NO_SESSION -> "Na TV nikdo nehraje — otevři Showlyfin/Jellyfin na televizi a zkus znovu."
-                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Připojení a účty)."
+                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Jellyfin pro TV cast)."
                 CastResult.FAILED -> "Nepodařilo se spustit na TV."
             }
         }

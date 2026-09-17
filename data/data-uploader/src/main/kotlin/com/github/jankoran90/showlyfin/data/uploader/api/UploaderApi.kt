@@ -938,6 +938,14 @@ internal class UploaderApi(
         return service.continueSubtitleTranslate(url, cookie)
     }
 
+    override suspend fun pauseSubtitleTranslate(
+        baseUrl: String, sessionCookie: String, jobId: String,
+    ): SubtitleTranslateJob {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.pauseSubtitleTranslate("$base/api/subtitles/translate/pause/$jobId", cookie)
+    }
+
     // TUNER (SHW-62) — YouTube podcast streaming
     override suspend fun getYtFeed(baseUrl: String, sessionCookie: String, channel: String, limit: Int): YtChannelFeed {
         val base = baseUrl.trimEnd('/')

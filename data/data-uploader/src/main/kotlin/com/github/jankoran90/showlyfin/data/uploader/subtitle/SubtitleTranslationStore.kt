@@ -44,7 +44,9 @@ class SubtitleTranslationStore @Inject constructor(
          *  obsah je stažitelný HNED — teď čeká na explicitní potvrzení pokračování i přes riziko
          *  ([SubtitleTranslationStore.enqueueContinueTranslate]), protože 5h mozek kvóta je na/nad
          *  limitem z Nastavení. [quotaPct]/[avgWavePct] = živá kvóta a odhad spotřeby na další vlnu. */
-        data class PausedQuota(val subId: String, val quotaPct: Float?, val avgWavePct: Float?) : State
+        /** [manual] (user 2026-09-17): true = user ťukl na "Pauzni" (ruční pauza), false = automatická
+         *  kvótová brzda — appka jinak zobrazuje jen popisek, chování (resume přes `continue`) je stejné. */
+        data class PausedQuota(val subId: String, val quotaPct: Float?, val avgWavePct: Float?, val manual: Boolean = false) : State
         data class Done(val subId: String) : State
         data class Error(val message: String) : State
     }
@@ -76,9 +78,9 @@ class SubtitleTranslationStore @Inject constructor(
      *  existující kandidát v přehrávači se při dokončení jen vynuceně přenačte, ne nahradí. Persistuje
      *  se stejně jako `markDone` (obsah je stažitelný hned) + příznak [isPausedForQuota], ať appka po
      *  návratu na obrazovku ví nabídnout „Pokračovat i přes riziko". */
-    fun markPausedQuota(key: String, subId: String, quotaPct: Float?, avgWavePct: Float?) {
+    fun markPausedQuota(key: String, subId: String, quotaPct: Float?, avgWavePct: Float?, manual: Boolean = false) {
         prefs.edit { putString(PREFIX + key, subId); putBoolean(PARTIAL_PREFIX + key, true) }
-        _jobs.update { it + (key to State.PausedQuota(subId, quotaPct, avgWavePct)) }
+        _jobs.update { it + (key to State.PausedQuota(subId, quotaPct, avgWavePct, manual)) }
     }
 
     /** Persistovaný výsledek dřívějšího překladu (přežije restart appky) — null = ještě nepřeloženo. */
