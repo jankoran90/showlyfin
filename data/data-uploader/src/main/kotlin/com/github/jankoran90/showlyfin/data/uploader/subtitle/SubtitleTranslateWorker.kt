@@ -15,6 +15,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
+import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleTranslateJob
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -50,47 +51,88 @@ class SubtitleTranslateWorker(
 
         val base = inputData.getString(K_BASE).orEmpty()
         val cookie = inputData.getString(K_COOKIE).orEmpty()
-        val imdb = inputData.getString(K_IMDB).orEmpty()
         val title = inputData.getString(K_TITLE).orEmpty()
-        val season = inputData.getInt(K_SEASON, -1).takeIf { it >= 0 }
-        val episode = inputData.getInt(K_EPISODE, -1).takeIf { it >= 0 }
-        if (base.isBlank() || imdb.isBlank()) return Result.failure()
+        val continueJobId = inputData.getString(K_CONTINUE_JOB_ID)
+        if (base.isBlank()) return Result.failure()
 
-        val key = store.keyOf(imdb, season, episode)
-        store.setRunning(key)
-
-        val started = runCatching {
-            ds.startSubtitleTranslate(base, cookie, imdb, season, episode)
-        }.getOrElse { e ->
-            Timber.w(e, "[Lingua] start překladu na pozadí selhal imdb=$imdb")
-            store.setError(key, e.message ?: "Překlad se nepodařilo spustit")
-            notify(ctx, title, ok = false)
-            return Result.success()
+        val key: String
+        val started: SubtitleTranslateJob
+        if (continueJobId != null) {
+            // PROGRESSIVE pokračování (2026-09-16): user si explicitně vyžádal 2. půlku — klíč jde
+            // rovnou v datech (žádné imdb/season/episode tady, ty zná jen VM co job odstartoval).
+            key = inputData.getString(K_KEY).orEmpty()
+            if (key.isBlank()) return Result.failure()
+            started = runCatching { ds.continueSubtitleTranslate(base, cookie, continueJobId) }
+                .getOrElse { e ->
+                    Timber.w(e, "[Lingua] pokračování překladu selhalo job=$continueJobId")
+                    store.setError(key, e.message ?: "Pokračování překladu se nepodařilo spustit")
+                    notify(ctx, title, ok = false)
+                    return Result.success()
+                }
+        } else {
+            val imdb = inputData.getString(K_IMDB).orEmpty()
+            val season = inputData.getInt(K_SEASON, -1).takeIf { it >= 0 }
+            val episode = inputData.getInt(K_EPISODE, -1).takeIf { it >= 0 }
+            val progressive = inputData.getBoolean(K_PROGRESSIVE, false)
+            if (imdb.isBlank()) return Result.failure()
+            key = store.keyOf(imdb, season, episode)
+            store.setRunning(key)
+            started = runCatching { ds.startSubtitleTranslate(base, cookie, imdb, season, episode, progressive) }
+                .getOrElse { e ->
+                    Timber.w(e, "[Lingua] start překladu na pozadí selhal imdb=$imdb")
+                    store.setError(key, e.message ?: "Překlad se nepodařilo spustit")
+                    notify(ctx, title, ok = false)
+                    return Result.success()
+                }
         }
 
         val jobId = started.jobId.ifBlank { started.subId }
         var status = started.status
         var subId = started.subId
         var error = started.error
+
+        // PARTIAL (PROGRESSIVE) = klidový, ne chybový stav — první půlka je hotová a stažitelná,
+        // druhá čeká na uživatelův pokyn ([enqueueContinue]). Jen zapiš a skonči, NEpolluj donekonečna
+        // (na "partial" už appka sama nic dalšího nedostane, dokud nepřijde continue).
+        if (status == "partial" && subId.isNotBlank()) {
+            store.markPartial(key, subId)
+            Timber.i("[Lingua] první půlka hotová (čeká na pokyn) → $subId")
+            return Result.success()
+        }
+
+        if (status == "running") {
+            store.updateRunningProgress(key, subId.ifBlank { null }, started.okCount, started.totalChunks)
+        }
+
         var waitedMs = 0L
         while (status == "running" && jobId.isNotBlank() && waitedMs < MAX_WAIT_MS) {
             delay(POLL_MS)
             waitedMs += POLL_MS
             val s = runCatching { ds.getSubtitleTranslateStatus(base, cookie, jobId) }.getOrNull() ?: continue
             status = s.status; subId = s.subId; error = s.error
+            if (status == "partial" && subId.isNotBlank()) {
+                store.markPartial(key, subId)
+                Timber.i("[Lingua] první půlka hotová (čeká na pokyn) → $subId")
+                return Result.success()
+            }
+            // PRŮBĚŽNĚ (2026-09-16): server ukládá po každé dávce, i za "running" — jakmile má
+            // subId (aspoň 1 dávka hotová), VM smí rozpracovaný obsah stahovat/přenačítat živě.
+            if (status == "running") {
+                store.updateRunningProgress(key, subId.ifBlank { null }, s.okCount, s.totalChunks)
+            }
         }
 
         return if (status == "done" && subId.isNotBlank()) {
             store.markDone(key, subId)
             notify(ctx, title, ok = true)
-            Timber.i("[Lingua] překlad na pozadí hotový imdb=$imdb → $subId")
+            Timber.i("[Lingua] překlad na pozadí hotový → $subId")
             Result.success()
         } else {
             val msg = error
                 ?: if (status == "running") "Překlad trvá déle než obvykle — zkus to znovu" else "Překlad se nezdařil"
             store.setError(key, msg)
             notify(ctx, title, ok = false)
-            Timber.w("[Lingua] překlad na pozadí neúspěšný imdb=$imdb status=$status err=$error")
+            Timber.w("[Lingua] překlad na pozadí neúspěšný status=$status err=$error")
             Result.success()
         }
     }
@@ -137,8 +179,13 @@ class SubtitleTranslateWorker(
         private const val K_TITLE = "title"
         private const val K_SEASON = "season"
         private const val K_EPISODE = "episode"
+        private const val K_PROGRESSIVE = "progressive"
+        private const val K_CONTINUE_JOB_ID = "continue_job_id"
+        private const val K_KEY = "key"
 
-        /** Zařadí překlad na pozadí. Unikátní per film (KEEP) → dvojí ťuknutí nespustí dva běhy. */
+        /** Zařadí překlad na pozadí. Unikátní per film (KEEP) → dvojí ťuknutí nespustí dva běhy.
+         *  [progressive] (2026-09-16, jen LINGUA-YT) — server smí vrátit "partial" (1. půlka),
+         *  viz [SubtitleTranslationStore.State.Partial]. */
         fun enqueue(
             context: Context,
             base: String,
@@ -147,6 +194,7 @@ class SubtitleTranslateWorker(
             title: String,
             season: Int?,
             episode: Int?,
+            progressive: Boolean = false,
         ) {
             val data = workDataOf(
                 K_BASE to base,
@@ -155,6 +203,7 @@ class SubtitleTranslateWorker(
                 K_TITLE to title,
                 K_SEASON to (season ?: -1),
                 K_EPISODE to (episode ?: -1),
+                K_PROGRESSIVE to progressive,
             )
             val request = OneTimeWorkRequestBuilder<SubtitleTranslateWorker>()
                 .setConstraints(
@@ -166,6 +215,33 @@ class SubtitleTranslateWorker(
                 if (season != null && episode != null) "${imdb}_s${season}e$episode" else imdb
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(workName, ExistingWorkPolicy.KEEP, request)
+        }
+
+        /** PROGRESSIVE pokračování — 2. půlka na explicitní pokyn usera (řídí spotřebu mozek kvóty).
+         *  [jobId] = subId z [SubtitleTranslationStore.State.Partial], [key] stejný jako u [enqueue]. */
+        fun enqueueContinue(
+            context: Context,
+            base: String,
+            cookie: String,
+            jobId: String,
+            key: String,
+            title: String,
+        ) {
+            val data = workDataOf(
+                K_BASE to base,
+                K_COOKIE to cookie,
+                K_TITLE to title,
+                K_CONTINUE_JOB_ID to jobId,
+                K_KEY to key,
+            )
+            val request = OneTimeWorkRequestBuilder<SubtitleTranslateWorker>()
+                .setConstraints(
+                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
+                )
+                .setInputData(data)
+                .build()
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork("lingua_translate_continue_$jobId", ExistingWorkPolicy.KEEP, request)
         }
     }
 }

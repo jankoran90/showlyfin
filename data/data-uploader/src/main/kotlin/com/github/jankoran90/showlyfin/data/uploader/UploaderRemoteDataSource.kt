@@ -165,11 +165,16 @@ interface UploaderRemoteDataSource {
         imdbId: String? = null,
     ): SubtitleDownload
     // Plan LINGUA Fáze 2 — async AI překlad EN→CS (poslední záloha když 0 CZ titulků)
+    // progressive (2026-09-16): jen LINGUA-YT (imdbId = "yt:<id>") — rozdělí dlouhý podcast na
+    // 2 půlky, ať uživatel řídí spotřebu 5h mozek kvóty (viz PROGRESSIVE v routes/subtitles.py).
     suspend fun startSubtitleTranslate(
         baseUrl: String, sessionCookie: String, imdbId: String,
-        season: Int? = null, episode: Int? = null,
+        season: Int? = null, episode: Int? = null, progressive: Boolean = false,
     ): SubtitleTranslateJob
     suspend fun getSubtitleTranslateStatus(
+        baseUrl: String, sessionCookie: String, jobId: String,
+    ): SubtitleTranslateJob
+    suspend fun continueSubtitleTranslate(
         baseUrl: String, sessionCookie: String, jobId: String,
     ): SubtitleTranslateJob
 

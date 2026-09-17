@@ -27,7 +27,14 @@ class SubtitleTranslationStore @Inject constructor(
     @Named("subtitlePreferences") private val prefs: SharedPreferences,
 ) {
     sealed interface State {
-        data object Running : State
+        /** [jobId]/[ok]/[total] (PROGRESSIVE, 2026-09-16): server ukládá po KAŽDÉ dávce průběžně,
+         *  takže [jobId] je stažitelné (rozpracovaný obsah) i během "running" — VM z toho dělá
+         *  živý progress text a speculativně nasazuje/přenačítá stopu, ať se přeložené řádky
+         *  objevují v přehrávači průběžně, ne až na dvou pevných zastávkách. */
+        data class Running(val jobId: String? = null, val ok: Int = 0, val total: Int = 0) : State
+        /** PROGRESSIVE: první půlka hotová a stažitelná HNED, druhá čeká na explicitní pokyn
+         *  ([continueSubtitleTranslate]) — user řídí spotřebu mozek kvóty. */
+        data class Partial(val subId: String) : State
         data class Done(val subId: String) : State
         data class Error(val message: String) : State
     }
@@ -39,14 +46,29 @@ class SubtitleTranslationStore @Inject constructor(
     fun keyOf(imdb: String, season: Int?, episode: Int?): String =
         if (season != null && episode != null) "${imdb}_s${season}e$episode" else imdb
 
-    fun setRunning(key: String) = _jobs.update { it + (key to State.Running) }
+    fun setRunning(key: String) = _jobs.update { it + (key to State.Running()) }
+
+    /** Živý progress tik během "running" (PROGRESSIVE) — [jobId] = subId, jakmile server nahlásí
+     *  aspoň 1 hotovou dávku (dřív je null, nic ke stažení). Volá [SubtitleTranslateWorker] po
+     *  každém pollu, dokud status zůstává "running". */
+    fun updateRunningProgress(key: String, jobId: String?, ok: Int, total: Int) =
+        _jobs.update { it + (key to State.Running(jobId, ok, total)) }
 
     fun setError(key: String, message: String) = _jobs.update { it + (key to State.Error(message)) }
 
     /** Hotovo: zapiš subId trvale (auto-nasazení po návratu) + vystav v živém flow. */
     fun markDone(key: String, subId: String) {
-        prefs.edit { putString(PREFIX + key, subId) }
+        prefs.edit { putString(PREFIX + key, subId); putBoolean(PARTIAL_PREFIX + key, false) }
         _jobs.update { it + (key to State.Done(subId)) }
+    }
+
+    /** První půlka hotová (PROGRESSIVE) — subId je stejné jako u pozdějšího `markDone` (job_id se
+     *  nemění), takže existující kandidát v přehrávači se při dokončení druhé půlky jen vynuceně
+     *  přenačte, ne nahradí. Persistuje se stejně jako `markDone` (obsah je stažitelný hned) + navíc
+     *  příznak [isPartial], ať appka po návratu na obrazovku ví nabídnout „Přeložit zbytek". */
+    fun markPartial(key: String, subId: String) {
+        prefs.edit { putString(PREFIX + key, subId); putBoolean(PARTIAL_PREFIX + key, true) }
+        _jobs.update { it + (key to State.Partial(subId)) }
     }
 
     /** Persistovaný výsledek dřívějšího překladu (přežije restart appky) — null = ještě nepřeloženo. */
@@ -65,6 +87,9 @@ class SubtitleTranslationStore @Inject constructor(
         _jobs.update { it - key }
     }
 
+    /** True = [doneSubId] existuje, ale je to jen první půlka (PROGRESSIVE) — druhá čeká na pokyn. */
+    fun isPartial(key: String): Boolean = prefs.getBoolean(PARTIAL_PREFIX + key, false)
+
     /** Zařadí překlad na pozadí. Drží WorkManager (androidx.work) uvnitř `data-uploader`, aby se
      *  typy workeru neprolínaly do feature modulů — ty volají jen tohle. */
     fun enqueueTranslate(
@@ -75,9 +100,22 @@ class SubtitleTranslationStore @Inject constructor(
         title: String,
         season: Int?,
         episode: Int?,
-    ) = SubtitleTranslateWorker.enqueue(context, base, cookie, imdb, title, season, episode)
+        progressive: Boolean = false,
+    ) = SubtitleTranslateWorker.enqueue(context, base, cookie, imdb, title, season, episode, progressive)
+
+    /** PROGRESSIVE (2026-09-16): pokračování rozděleného LINGUA-YT jobu (2. půlka), na explicitní
+     *  pokyn usera (řídí spotřebu 5h mozek kvóty). [jobId] = subId z [State.Partial]. */
+    fun enqueueContinueTranslate(
+        context: Context,
+        base: String,
+        cookie: String,
+        jobId: String,
+        key: String,
+        title: String,
+    ) = SubtitleTranslateWorker.enqueueContinue(context, base, cookie, jobId, key, title)
 
     private companion object {
         const val PREFIX = "ai_sub_"
+        const val PARTIAL_PREFIX = "ai_sub_partial_"
     }
 }

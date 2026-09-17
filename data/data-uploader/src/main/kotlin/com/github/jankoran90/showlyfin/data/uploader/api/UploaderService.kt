@@ -77,6 +77,8 @@ interface UploaderService {
     // Plan LINGUA Fáze 2 — async AI překlad EN→CS (start + poll status)
     @POST suspend fun startSubtitleTranslate(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
     @GET suspend fun getSubtitleTranslateStatus(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
+    // PROGRESSIVE (2026-09-16) — pokračování rozděleného LINGUA-YT jobu (2. půlka), viz UploaderRemoteDataSource
+    @POST suspend fun continueSubtitleTranslate(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
 
     // ČSFD popis + recenze (scrape na backendu, server zvládá Anubis)
     @GET suspend fun getCsfdPlot(@Url url: String, @Header("Cookie") cookie: String): CsfdPlotResponse

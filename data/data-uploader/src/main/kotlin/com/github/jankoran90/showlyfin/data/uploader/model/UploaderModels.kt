@@ -575,13 +575,19 @@ data class SubtitlesResponse(
     @SerializedName("best") val best: Int = -1,
 )
 
-/** Plan LINGUA Fáze 2 — async AI překlad titulků EN→CS. status: running|done|error|unknown.
- *  subId (= ai_<hash>) je při `done` rovnou download id (`/api/subtitles/download/{subId}`). */
+/** Plan LINGUA Fáze 2 — async AI překlad titulků EN→CS. status: running|partial|done|error|unknown.
+ *  subId (= ai_<hash>) je při `done`/`partial` rovnou download id (`/api/subtitles/download/{subId}`).
+ *  `partial` (2026-09-16, jen LINGUA-YT s `progressive=1`) = první půlka hotová a stažitelná HNED,
+ *  druhá čeká na `continueSubtitleTranslate` (user řídí spotřebu 5h mozek kvóty). */
 data class SubtitleTranslateJob(
     @SerializedName("job_id") val jobId: String = "",
     @SerializedName("status") val status: String = "",
     @SerializedName("sub_id") val subId: String = "",
     @SerializedName("error") val error: String? = null,
+    // PROGRESSIVE (2026-09-16, jen LINGUA-YT): živé počítadlo dávek, i během "running" — server
+    // ukládá po každé dávce průběžně, takže subId je stažitelné (rozpracovaný obsah) dřív než "partial".
+    @SerializedName("ok_count") val okCount: Int = 0,
+    @SerializedName("total_chunks") val totalChunks: Int = 0,
 )
 
 /** Stažený .srt (UTF-8) + ověření délky proti filmu (z hlaviček backendu). Ne-síťový holder. */

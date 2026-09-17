@@ -1155,6 +1155,7 @@ fun PlaybackScreen(
                             onFont = { viewModel.setFont(it) },
                             onWeight = { viewModel.setWeight(it) },
                             onTranslateAi = { viewModel.translateSubtitlesAi() },
+                            onContinueAiTranslate = { viewModel.continueAiTranslation() },
                             onClose = { showSubtitleMenu = false },
                             firstItemFocusRequester = if (isTv) menuFocusRequester else null,
                             modifier = Modifier.align(Alignment.CenterEnd),
@@ -1289,6 +1290,7 @@ private fun SubtitleSettingsPanel(
     onFont: (SubtitleFont) -> Unit,
     onWeight: (Int) -> Unit,
     onTranslateAi: () -> Unit,
+    onContinueAiTranslate: () -> Unit,
     onClose: () -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
@@ -1375,7 +1377,11 @@ private fun SubtitleSettingsPanel(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFFFFBF00))
                     Spacer(Modifier.width(10.dp))
-                    Text("Překládám titulky… (chvíli to potrvá)", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    // PROGRESSIVE (2026-09-16): reálný progress, když ho server hlásí (jen LINGUA-YT).
+                    val progressText = if (state.aiProgressTotal > 0)
+                        "Překládám titulky… (${state.aiProgressOk}/${state.aiProgressTotal} dávek)"
+                    else "Překládám titulky… (chvíli to potrvá)"
+                    Text(progressText, color = Color.White, style = MaterialTheme.typography.bodyMedium)
                 }
             } else {
                 Row(
@@ -1398,6 +1404,30 @@ private fun SubtitleSettingsPanel(
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
+                }
+            }
+        }
+
+        // PROGRESSIVE (2026-09-16, jen LINGUA-YT): 1. půlka je hotová a nasazená, 2. čeká na tap —
+        // user řídí spotřebu 5h mozek kvóty, žádné auto-pokračování.
+        if (state.aiPartialPending && !state.aiTranslating) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tvFocusBorder(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onContinueAiTranslate)
+                    .padding(vertical = 8.dp, horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("🌐", color = Color.White)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Přeložit i zbytek epizody (AI)", color = Color(0xFFFFBF00), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Zatím přeložena jen první půlka",
+                        color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }

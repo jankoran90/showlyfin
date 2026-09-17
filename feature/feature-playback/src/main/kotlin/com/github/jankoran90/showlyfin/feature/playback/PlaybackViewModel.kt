@@ -619,18 +619,26 @@ class PlaybackViewModel @Inject constructor(
         if (doneId != null) {
             timber.log.Timber.i("[Lingua] film už přeložen ($key) → nasazuji AI češtinu automaticky")
             applyAiSubtitle(doneId)
+            // PROGRESSIVE (2026-09-16): první půlka z dřívější session — nabídni "Přeložit zbytek"
+            // a dál poslouchej store, ať se po vyžádání 2. půlky UI samo přenačte na Done.
+            if (translateStore.isPartial(key)) {
+                _state.update { it.copy(aiPartialPending = true) }
+                observeTranslation(key)
+            }
             return
         }
         _state.update { it.copy(canTranslateAi = true) }
         observeTranslation(key)
     }
 
-    /** Přidá AI českou stopu mezi kandidáty (není-li už) a vybere ji. Idempotentní. */
-    private fun applyAiSubtitle(subId: String) {
+    /** Přidá AI českou stopu mezi kandidáty (není-li už) a vybere ji. Idempotentní.
+     *  [forceRefresh] (PROGRESSIVE): i když je stopa už vybraná, vynuť nové stažení — používá se při
+     *  přechodu Partial→Done, kdy server přepsal cache soubor plným překladem pod STEJNÝM subId. */
+    private fun applyAiSubtitle(subId: String, forceRefresh: Boolean = false) {
         val existing = _state.value.subtitleCandidates.indexOfFirst { it.id == subId }
         if (existing >= 0) {
             _state.update { it.copy(aiTranslating = false, canTranslateAi = false) }
-            if (_state.value.selectedSubtitleIndex != existing) selectSubtitle(existing)
+            if (forceRefresh || _state.value.selectedSubtitleIndex != existing) selectSubtitle(existing)
             return
         }
         val aiCand = SubtitleCandidate(id = subId, title = "AI překlad (čeština)", lang = "cs", imdbMatch = true)
@@ -650,15 +658,50 @@ class PlaybackViewModel @Inject constructor(
                 .collect { st ->
                     if (translateKey != key) return@collect
                     when (st) {
-                        is SubtitleTranslationStore.State.Running ->
-                            _state.update { it.copy(aiTranslating = true, aiTranslateError = null) }
-                        is SubtitleTranslationStore.State.Done -> applyAiSubtitle(st.subId)
+                        // PROGRESSIVE (2026-09-16): jakmile server nahlásí ok>=1, obsah je stažitelný
+                        // I BĚHEM "running" — nasaď/přenačti hned, ať se přeložené řádky objevují
+                        // živě v přehrávači, ne až na "partial"/"done" zastávce. applyAiSubtitle
+                        // shodí aiTranslating na false → hned potom ho vrať zpět (překlad dál běží).
+                        is SubtitleTranslationStore.State.Running -> {
+                            val runningJobId = st.jobId
+                            if (st.ok >= 1 && !runningJobId.isNullOrBlank()) {
+                                applyAiSubtitle(runningJobId, forceRefresh = true)
+                            }
+                            _state.update {
+                                it.copy(aiTranslating = true, aiTranslateError = null, aiPartialPending = false,
+                                    aiProgressOk = st.ok, aiProgressTotal = st.total)
+                            }
+                        }
+                        // PROGRESSIVE: 1. půlka hotová a hned nasazená, ale NEpokračuj sám — čekej na tap.
+                        is SubtitleTranslationStore.State.Partial -> {
+                            applyAiSubtitle(st.subId)
+                            _state.update { it.copy(aiPartialPending = true) }
+                        }
+                        // Done může přijít i PO Partial (stejné subId, plný obsah) → vynuceně přenačti.
+                        is SubtitleTranslationStore.State.Done -> {
+                            applyAiSubtitle(st.subId, forceRefresh = true)
+                            _state.update { it.copy(aiPartialPending = false) }
+                        }
                         is SubtitleTranslationStore.State.Error ->
-                            _state.update { it.copy(aiTranslating = false, aiTranslateError = st.message) }
+                            _state.update { it.copy(aiTranslating = false, aiTranslateError = st.message, aiPartialPending = false) }
                         null -> Unit
                     }
                 }
         }
+    }
+
+    /** Uživatel ťukl na „Přeložit i zbytek" (PROGRESSIVE) — zařadí 2. půlku NA POZADÍ. User řídí,
+     *  kdy utratit další mozek kvótu, proto se tohle nikdy nespouští automaticky. */
+    fun continueAiTranslation() {
+        val key = translateKey ?: return
+        val jobId = translateStore.doneSubId(key) ?: return
+        if (!translateStore.isPartial(key) || _state.value.aiTranslating) return
+        val base = uploaderBaseUrl
+        if (base.isBlank()) return
+        _state.update { it.copy(aiTranslating = true, aiTranslateError = null, aiPartialPending = false) }
+        observeTranslation(key)
+        translateStore.enqueueContinueTranslate(appContext, base, uploaderCookie, jobId, key, _state.value.title)
+        timber.log.Timber.i("[Lingua] pokračování (2. půlka) zařazeno na pozadí job=$jobId")
     }
 
     /** Uživatel ťukl na „Přeložit do češtiny (AI)" → zařadí překlad NA POZADÍ (přežije odchod
@@ -677,13 +720,21 @@ class PlaybackViewModel @Inject constructor(
         // šetří čas i kvótu voice-bridge). Jinak zařadit nový překlad na pozadí.
         translateStore.doneSubId(key)?.let { doneId ->
             timber.log.Timber.i("[Lingua] AI už hotové ($key) → nasazuji hned")
-            applyAiSubtitle(doneId); return
+            applyAiSubtitle(doneId)
+            if (translateStore.isPartial(key)) {
+                _state.update { it.copy(aiPartialPending = true) }
+                observeTranslation(key)
+            }
+            return
         }
         _state.update { it.copy(aiTranslating = true, aiTranslateError = null) }
         translateStore.setRunning(key)
         observeTranslation(key)
-        translateStore.enqueueTranslate(appContext, base, uploaderCookie, q.imdb, _state.value.title, q.season, q.episode)
-        timber.log.Timber.i("[Lingua] překlad zařazen na pozadí ${q.imdb}")
+        // PROGRESSIVE: jen LINGUA-YT (podcast bez IMDb) — dlouhé epizody rozdělíme na 2 půlky,
+        // ať uživatel řídí spotřebu 5h mozek kvóty místo jednoho velkého nekontrolovaného běhu.
+        val progressive = q.imdb.startsWith("yt:", ignoreCase = true)
+        translateStore.enqueueTranslate(appContext, base, uploaderCookie, q.imdb, _state.value.title, q.season, q.episode, progressive)
+        timber.log.Timber.i("[Lingua] překlad zařazen na pozadí ${q.imdb} progressive=$progressive")
     }
 
     // ── Styl titulků ─────────────────────────────────────────────────────────

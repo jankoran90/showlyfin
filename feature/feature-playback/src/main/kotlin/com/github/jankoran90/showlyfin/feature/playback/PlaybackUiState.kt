@@ -34,6 +34,12 @@ data class PlaybackUiState(
     val canTranslateAi: Boolean = false,         // 0 CZ kandidátů + máme imdb → nabídni tlačítko
     val aiTranslating: Boolean = false,          // běží async překlad (spinner)
     val aiTranslateError: String? = null,
+    // PROGRESSIVE (2026-09-16, jen LINGUA-YT): 1. půlka hotová/nasazená, 2. čeká na tap uživatele
+    // (řídí spotřebu 5h mozek kvóty) — nabídni "Přeložit i zbytek" místo auto-pokračování.
+    val aiPartialPending: Boolean = false,
+    // Živý progress ("12/40 dávek") během aktivního překladu — 0/0 = zatím žádná data.
+    val aiProgressOk: Int = 0,
+    val aiProgressTotal: Int = 0,
     // ── Styl / nastavení titulků (persistované) ──────────────────────────────
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
     // ── TENFOOT F2c: TV transport lišta (konfigurovatelné, načteno z prefs při vzniku VM) ─────
