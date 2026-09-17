@@ -314,7 +314,7 @@ class PlaybackViewModel @Inject constructor(
                 },
                 subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                 subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
-                canTranslateAi = false, aiTranslating = false, aiTranslateError = null,
+                canTranslateAi = false, aiTranslating = false, aiTranslateError = null, aiPausedForQuota = false,
             )
         }
         // Nový film → zruš observer překladu z minulého (ať jeho Done/Error nepřepíše tenhle film).
@@ -344,7 +344,7 @@ class PlaybackViewModel @Inject constructor(
                 positionMs = 0L, resumePositionMs = savedResume,
                 subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                 subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
-                canTranslateAi = false, aiTranslating = false, aiTranslateError = null,
+                canTranslateAi = false, aiTranslating = false, aiTranslateError = null, aiPausedForQuota = false,
             )
         }
         if (subtitlePath != null) {
@@ -615,19 +615,20 @@ class PlaybackViewModel @Inject constructor(
     private fun setupAiTranslation(q: SubtitleQuery) {
         val key = translateStore.keyOf(q.imdb, q.season, q.episode)
         translateKey = key
+        val isYoutube = q.imdb.startsWith("yt:", ignoreCase = true)
         val doneId = translateStore.doneSubId(key)
         if (doneId != null) {
             timber.log.Timber.i("[Lingua] film už přeložen ($key) → nasazuji AI češtinu automaticky")
             applyAiSubtitle(doneId)
-            // PROGRESSIVE (2026-09-16): první půlka z dřívější session — nabídni "Přeložit zbytek"
-            // a dál poslouchej store, ať se po vyžádání 2. půlky UI samo přenačte na Done.
-            if (translateStore.isPartial(key)) {
-                _state.update { it.copy(aiPartialPending = true) }
+            // VLNY: pauza z dřívější session — nabídni "Pokračovat i přes riziko" a dál poslouchej
+            // store, ať se po odsouhlasení UI samo přenačte na Done.
+            if (translateStore.isPausedForQuota(key)) {
+                _state.update { it.copy(aiPausedForQuota = true, aiIsYoutube = isYoutube) }
                 observeTranslation(key)
             }
             return
         }
-        _state.update { it.copy(canTranslateAi = true) }
+        _state.update { it.copy(canTranslateAi = true, aiIsYoutube = isYoutube) }
         observeTranslation(key)
     }
 
@@ -658,55 +659,61 @@ class PlaybackViewModel @Inject constructor(
                 .collect { st ->
                     if (translateKey != key) return@collect
                     when (st) {
-                        // PROGRESSIVE (2026-09-16): jakmile server nahlásí ok>=1, obsah je stažitelný
-                        // I BĚHEM "running" — nasaď/přenačti hned, ať se přeložené řádky objevují
-                        // živě v přehrávači, ne až na "partial"/"done" zastávce. applyAiSubtitle
-                        // shodí aiTranslating na false → hned potom ho vrať zpět (překlad dál běží).
+                        // VLNY: jakmile server nahlásí ok>=1, obsah je stažitelný I BĚHEM "running" —
+                        // nasaď/přenačti hned, ať se přeložené řádky objevují živě v přehrávači, ne až
+                        // na "paused_quota"/"done" zastávce. applyAiSubtitle shodí aiTranslating na
+                        // false → hned potom ho vrať zpět (překlad dál běží).
                         is SubtitleTranslationStore.State.Running -> {
                             val runningJobId = st.jobId
                             if (st.ok >= 1 && !runningJobId.isNullOrBlank()) {
                                 applyAiSubtitle(runningJobId, forceRefresh = true)
                             }
                             _state.update {
-                                it.copy(aiTranslating = true, aiTranslateError = null, aiPartialPending = false,
+                                it.copy(aiTranslating = true, aiTranslateError = null, aiPausedForQuota = false,
                                     aiProgressOk = st.ok, aiProgressTotal = st.total)
                             }
                         }
-                        // PROGRESSIVE: 1. půlka hotová a hned nasazená, ale NEpokračuj sám — čekej na tap.
-                        is SubtitleTranslationStore.State.Partial -> {
+                        // VLNY: server sám přeložil, kolik šlo, obsah je hned nasazený, ale NEpokračuje
+                        // sám nad limitem kvóty — čeká na explicitní potvrzení (viz dialog v UI).
+                        is SubtitleTranslationStore.State.PausedQuota -> {
                             applyAiSubtitle(st.subId)
-                            _state.update { it.copy(aiPartialPending = true) }
+                            _state.update {
+                                it.copy(aiPausedForQuota = true, aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
+                            }
                         }
-                        // Done může přijít i PO Partial (stejné subId, plný obsah) → vynuceně přenačti.
+                        // Done může přijít i PO PausedQuota (stejné subId, plný obsah) → vynuceně přenačti.
                         is SubtitleTranslationStore.State.Done -> {
                             applyAiSubtitle(st.subId, forceRefresh = true)
-                            _state.update { it.copy(aiPartialPending = false) }
+                            _state.update { it.copy(aiPausedForQuota = false) }
                         }
                         is SubtitleTranslationStore.State.Error ->
-                            _state.update { it.copy(aiTranslating = false, aiTranslateError = st.message, aiPartialPending = false) }
+                            _state.update { it.copy(aiTranslating = false, aiTranslateError = st.message, aiPausedForQuota = false) }
                         null -> Unit
                     }
                 }
         }
     }
 
-    /** Uživatel ťukl na „Přeložit i zbytek" (PROGRESSIVE) — zařadí 2. půlku NA POZADÍ. User řídí,
-     *  kdy utratit další mozek kvótu, proto se tohle nikdy nespouští automaticky. */
+    /** Uživatel ťukl na „Pokračovat i přes riziko" (VLNY) po kvótovém varování — zařadí další vlnu(y)
+     *  NA POZADÍ s explicitním potvrzením. Server po jedné vlně brzdu zase vrátí, pokud kvóta pořád
+     *  sedí nad limitem — appka to znovu ukáže jako [PausedQuota]. */
     fun continueAiTranslation() {
         val key = translateKey ?: return
         val jobId = translateStore.doneSubId(key) ?: return
-        if (!translateStore.isPartial(key) || _state.value.aiTranslating) return
+        if (!translateStore.isPausedForQuota(key) || _state.value.aiTranslating) return
         val base = uploaderBaseUrl
         if (base.isBlank()) return
-        _state.update { it.copy(aiTranslating = true, aiTranslateError = null, aiPartialPending = false) }
+        _state.update { it.copy(aiTranslating = true, aiTranslateError = null, aiPausedForQuota = false) }
         observeTranslation(key)
         translateStore.enqueueContinueTranslate(appContext, base, uploaderCookie, jobId, key, _state.value.title)
-        timber.log.Timber.i("[Lingua] pokračování (2. půlka) zařazeno na pozadí job=$jobId")
+        timber.log.Timber.i("[Lingua] pokračování (potvrzeno přes kvótu) zařazeno na pozadí job=$jobId")
     }
 
     /** Uživatel ťukl na „Přeložit do češtiny (AI)" → zařadí překlad NA POZADÍ (přežije odchod
-     *  z přehrávače) + dá vědět notifikací, až je hotovo. UI převezme výsledek přes [observeTranslation]. */
-    fun translateSubtitlesAi() {
+     *  z přehrávače) + dá vědět notifikací, až je hotovo. UI převezme výsledek přes [observeTranslation].
+     *  [model] (VLNY, jen LINGUA-YT — appka nabídne picker Sonnet/Haiku PŘED voláním) — null = server
+     *  default (Sonnet). Limit kvóty se čte vždy z Nastavení ([PlayerPrefs.LINGUA_QUOTA_LIMIT_KEY]). */
+    fun translateSubtitlesAi(model: String? = null) {
         val q = query ?: return
         if (q.imdb.isBlank() || _state.value.aiTranslating) return
         val base = uploaderBaseUrl
@@ -721,8 +728,8 @@ class PlaybackViewModel @Inject constructor(
         translateStore.doneSubId(key)?.let { doneId ->
             timber.log.Timber.i("[Lingua] AI už hotové ($key) → nasazuji hned")
             applyAiSubtitle(doneId)
-            if (translateStore.isPartial(key)) {
-                _state.update { it.copy(aiPartialPending = true) }
+            if (translateStore.isPausedForQuota(key)) {
+                _state.update { it.copy(aiPausedForQuota = true) }
                 observeTranslation(key)
             }
             return
@@ -730,11 +737,17 @@ class PlaybackViewModel @Inject constructor(
         _state.update { it.copy(aiTranslating = true, aiTranslateError = null) }
         translateStore.setRunning(key)
         observeTranslation(key)
-        // PROGRESSIVE: jen LINGUA-YT (podcast bez IMDb) — dlouhé epizody rozdělíme na 2 půlky,
-        // ať uživatel řídí spotřebu 5h mozek kvóty místo jednoho velkého nekontrolovaného běhu.
+        // VLNY: jen LINGUA-YT (podcast bez IMDb) — vlnový překlad s kvótovou brzdou místo jednoho
+        // velkého nekontrolovaného běhu. Limit z Nastavení, default když user nikdy neměnil.
         val progressive = q.imdb.startsWith("yt:", ignoreCase = true)
-        translateStore.enqueueTranslate(appContext, base, uploaderCookie, q.imdb, _state.value.title, q.season, q.episode, progressive)
-        timber.log.Timber.i("[Lingua] překlad zařazen na pozadí ${q.imdb} progressive=$progressive")
+        val quotaLimit = if (progressive) {
+            prefs.getInt(PlayerPrefs.LINGUA_QUOTA_LIMIT_KEY, PlayerPrefs.DEFAULT_LINGUA_QUOTA_LIMIT).toFloat()
+        } else null
+        translateStore.enqueueTranslate(
+            appContext, base, uploaderCookie, q.imdb, _state.value.title, q.season, q.episode,
+            progressive, if (progressive) model else null, quotaLimit,
+        )
+        timber.log.Timber.i("[Lingua] překlad zařazen na pozadí ${q.imdb} progressive=$progressive model=$model")
     }
 
     // ── Styl titulků ─────────────────────────────────────────────────────────
@@ -966,7 +979,7 @@ class PlaybackViewModel @Inject constructor(
                         resumePositionMs = resumeMs,
                         subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                         subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
-                        canTranslateAi = false, aiTranslating = false, aiTranslateError = null,
+                        canTranslateAi = false, aiTranslating = false, aiTranslateError = null, aiPausedForQuota = false,
                         preferredAudioLanguages = preferredAudioLanguages,
                     )
                 }

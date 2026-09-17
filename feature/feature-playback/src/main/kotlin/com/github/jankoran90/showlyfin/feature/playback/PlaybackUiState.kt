@@ -34,9 +34,14 @@ data class PlaybackUiState(
     val canTranslateAi: Boolean = false,         // 0 CZ kandidátů + máme imdb → nabídni tlačítko
     val aiTranslating: Boolean = false,          // běží async překlad (spinner)
     val aiTranslateError: String? = null,
-    // PROGRESSIVE (2026-09-16, jen LINGUA-YT): 1. půlka hotová/nasazená, 2. čeká na tap uživatele
-    // (řídí spotřebu 5h mozek kvóty) — nabídni "Přeložit i zbytek" místo auto-pokračování.
-    val aiPartialPending: Boolean = false,
+    // VLNY (2026-09-18, jen LINGUA-YT): server sám přeložil, kolik šlo pod limitem kvóty (auto-chain
+    // vln), teď čeká na potvrzení pokračování i přes riziko vyčerpání — nabídni dialog s odhadem.
+    val aiPausedForQuota: Boolean = false,
+    // Živá kvóta (5h okno) a odhad spotřeby na další vlnu — null, dokud server nic nenahlásí.
+    val aiQuotaPct: Float? = null,
+    val aiAvgWavePct: Float? = null,
+    // Jen LINGUA-YT (YouTube video bez IMDb) nabízí model picker (Sonnet/Haiku) a vlnovou brzdu.
+    val aiIsYoutube: Boolean = false,
     // Živý progress ("12/40 dávek") během aktivního překladu — 0/0 = zatím žádná data.
     val aiProgressOk: Int = 0,
     val aiProgressTotal: Int = 0,

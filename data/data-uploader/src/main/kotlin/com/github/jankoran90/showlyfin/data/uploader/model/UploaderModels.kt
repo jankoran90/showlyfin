@@ -575,19 +575,24 @@ data class SubtitlesResponse(
     @SerializedName("best") val best: Int = -1,
 )
 
-/** Plan LINGUA Fáze 2 — async AI překlad titulků EN→CS. status: running|partial|done|error|unknown.
- *  subId (= ai_<hash>) je při `done`/`partial` rovnou download id (`/api/subtitles/download/{subId}`).
- *  `partial` (2026-09-16, jen LINGUA-YT s `progressive=1`) = první půlka hotová a stažitelná HNED,
- *  druhá čeká na `continueSubtitleTranslate` (user řídí spotřebu 5h mozek kvóty). */
+/** Plan LINGUA Fáze 2 — async AI překlad titulků EN→CS. status: running|paused_quota|done|error|unknown.
+ *  subId (= ai_<hash>) je při `done`/`paused_quota` rovnou download id (`/api/subtitles/download/{subId}`).
+ *  `paused_quota` (VLNY, 2026-09-18, jen LINGUA-YT s `progressive=1`) = server sám přeložil, kolik šlo
+ *  (auto-chain vln pod limitem kvóty), a teď čeká na explicitní potvrzení uživatele
+ *  (`continueSubtitleTranslate(confirm=true)`), protože 5h mozek kvóta je na/nad limitem z Nastavení. */
 data class SubtitleTranslateJob(
     @SerializedName("job_id") val jobId: String = "",
     @SerializedName("status") val status: String = "",
     @SerializedName("sub_id") val subId: String = "",
     @SerializedName("error") val error: String? = null,
-    // PROGRESSIVE (2026-09-16, jen LINGUA-YT): živé počítadlo dávek, i během "running" — server
-    // ukládá po každé dávce průběžně, takže subId je stažitelné (rozpracovaný obsah) dřív než "partial".
+    // VLNY (2026-09-18, jen LINGUA-YT): živé počítadlo dávek, i během "running" — server ukládá po
+    // každé dávce průběžně, takže subId je stažitelné (rozpracovaný obsah) dřív než "paused_quota".
     @SerializedName("ok_count") val okCount: Int = 0,
     @SerializedName("total_chunks") val totalChunks: Int = 0,
+    // VLNY: aktuální % z 5h mozek okna a průměrná spotřeba na jednu vlnu (null, dokud není známo) —
+    // pro živý dialog v appce (kvóta + odhad, ne až po vyčerpání).
+    @SerializedName("quota_pct") val quotaPct: Float? = null,
+    @SerializedName("avg_wave_pct") val avgWavePct: Float? = null,
 )
 
 /** Stažený .srt (UTF-8) + ověření délky proti filmu (z hlaviček backendu). Ne-síťový holder. */

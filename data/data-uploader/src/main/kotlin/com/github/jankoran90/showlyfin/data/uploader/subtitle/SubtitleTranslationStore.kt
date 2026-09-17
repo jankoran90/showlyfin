@@ -32,9 +32,11 @@ class SubtitleTranslationStore @Inject constructor(
          *  živý progress text a speculativně nasazuje/přenačítá stopu, ať se přeložené řádky
          *  objevují v přehrávači průběžně, ne až na dvou pevných zastávkách. */
         data class Running(val jobId: String? = null, val ok: Int = 0, val total: Int = 0) : State
-        /** PROGRESSIVE: první půlka hotová a stažitelná HNED, druhá čeká na explicitní pokyn
-         *  ([continueSubtitleTranslate]) — user řídí spotřebu mozek kvóty. */
-        data class Partial(val subId: String) : State
+        /** VLNY (2026-09-18): server sám přeložil, kolik šlo pod limitem kvóty (auto-chain vln),
+         *  obsah je stažitelný HNED — teď čeká na explicitní potvrzení pokračování i přes riziko
+         *  ([SubtitleTranslationStore.enqueueContinueTranslate]), protože 5h mozek kvóta je na/nad
+         *  limitem z Nastavení. [quotaPct]/[avgWavePct] = živá kvóta a odhad spotřeby na další vlnu. */
+        data class PausedQuota(val subId: String, val quotaPct: Float?, val avgWavePct: Float?) : State
         data class Done(val subId: String) : State
         data class Error(val message: String) : State
     }
@@ -62,13 +64,13 @@ class SubtitleTranslationStore @Inject constructor(
         _jobs.update { it + (key to State.Done(subId)) }
     }
 
-    /** První půlka hotová (PROGRESSIVE) — subId je stejné jako u pozdějšího `markDone` (job_id se
-     *  nemění), takže existující kandidát v přehrávači se při dokončení druhé půlky jen vynuceně
-     *  přenačte, ne nahradí. Persistuje se stejně jako `markDone` (obsah je stažitelný hned) + navíc
-     *  příznak [isPartial], ať appka po návratu na obrazovku ví nabídnout „Přeložit zbytek". */
-    fun markPartial(key: String, subId: String) {
+    /** Pauza na kvótě (VLNY) — subId je stejné jako u pozdějšího `markDone` (job_id se nemění), takže
+     *  existující kandidát v přehrávači se při dokončení jen vynuceně přenačte, ne nahradí. Persistuje
+     *  se stejně jako `markDone` (obsah je stažitelný hned) + příznak [isPausedForQuota], ať appka po
+     *  návratu na obrazovku ví nabídnout „Pokračovat i přes riziko". */
+    fun markPausedQuota(key: String, subId: String, quotaPct: Float?, avgWavePct: Float?) {
         prefs.edit { putString(PREFIX + key, subId); putBoolean(PARTIAL_PREFIX + key, true) }
-        _jobs.update { it + (key to State.Partial(subId)) }
+        _jobs.update { it + (key to State.PausedQuota(subId, quotaPct, avgWavePct)) }
     }
 
     /** Persistovaný výsledek dřívějšího překladu (přežije restart appky) — null = ještě nepřeloženo. */
@@ -87,8 +89,8 @@ class SubtitleTranslationStore @Inject constructor(
         _jobs.update { it - key }
     }
 
-    /** True = [doneSubId] existuje, ale je to jen první půlka (PROGRESSIVE) — druhá čeká na pokyn. */
-    fun isPartial(key: String): Boolean = prefs.getBoolean(PARTIAL_PREFIX + key, false)
+    /** True = [doneSubId] existuje, ale zbytek čeká na potvrzení pokračování přes kvótu (VLNY). */
+    fun isPausedForQuota(key: String): Boolean = prefs.getBoolean(PARTIAL_PREFIX + key, false)
 
     /** Zařadí překlad na pozadí. Drží WorkManager (androidx.work) uvnitř `data-uploader`, aby se
      *  typy workeru neprolínaly do feature modulů — ty volají jen tohle. */
@@ -101,10 +103,13 @@ class SubtitleTranslationStore @Inject constructor(
         season: Int?,
         episode: Int?,
         progressive: Boolean = false,
-    ) = SubtitleTranslateWorker.enqueue(context, base, cookie, imdb, title, season, episode, progressive)
+        model: String? = null,
+        quotaLimit: Float? = null,
+    ) = SubtitleTranslateWorker.enqueue(context, base, cookie, imdb, title, season, episode, progressive, model, quotaLimit)
 
-    /** PROGRESSIVE (2026-09-16): pokračování rozděleného LINGUA-YT jobu (2. půlka), na explicitní
-     *  pokyn usera (řídí spotřebu 5h mozek kvóty). [jobId] = subId z [State.Partial]. */
+    /** VLNY (2026-09-18): pokračování pozastaveného LINGUA-YT jobu po odsouhlasení kvótového varování
+     *  usera (VŽDY confirm=true — appka tuhle cestu volá jen z toho dialogu, nikdy automaticky).
+     *  [jobId] = subId z [State.PausedQuota]. */
     fun enqueueContinueTranslate(
         context: Context,
         base: String,

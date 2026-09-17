@@ -905,13 +905,15 @@ internal class UploaderApi(
 
     override suspend fun startSubtitleTranslate(
         baseUrl: String, sessionCookie: String, imdbId: String, season: Int?, episode: Int?,
-        progressive: Boolean,
+        progressive: Boolean, model: String?, quotaLimit: Float?,
     ): SubtitleTranslateJob {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
         val params = buildList {
             if (season != null && episode != null) { add("season=$season"); add("episode=$episode") }
             if (progressive) add("progressive=1")
+            if (!model.isNullOrBlank()) add("model=" + java.net.URLEncoder.encode(model, "UTF-8"))
+            if (quotaLimit != null) add("quota_limit=$quotaLimit")
         }
         var url = "$base/api/subtitles/translate/$imdbId"
         if (params.isNotEmpty()) url += "?" + params.joinToString("&")
@@ -927,11 +929,13 @@ internal class UploaderApi(
     }
 
     override suspend fun continueSubtitleTranslate(
-        baseUrl: String, sessionCookie: String, jobId: String,
+        baseUrl: String, sessionCookie: String, jobId: String, confirm: Boolean,
     ): SubtitleTranslateJob {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
-        return service.continueSubtitleTranslate("$base/api/subtitles/translate/continue/$jobId", cookie)
+        var url = "$base/api/subtitles/translate/continue/$jobId"
+        if (confirm) url += "?confirm=1"
+        return service.continueSubtitleTranslate(url, cookie)
     }
 
     // TUNER (SHW-62) — YouTube podcast streaming

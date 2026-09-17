@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.feature.listen.ui.CastTargetSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.HiddenPodcastsSettingsSection
+import com.github.jankoran90.showlyfin.feature.listen.ui.LinguaQuotaSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenOfflineSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenOrderSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoverySettingsSection
@@ -76,6 +78,9 @@ fun SlovoSettingsScreen(
             }
             SlovoCollapsibleSection("Kvalita videa", Icons.Rounded.HighQuality) {
                 PodcastVideoQualitySettingsSection()
+            }
+            SlovoCollapsibleSection("AI překlad YouTube titulků", Icons.Rounded.Translate) {
+                LinguaQuotaSettingsSection()
             }
             SlovoCollapsibleSection("Přehrávání na TV/Zenbooku", Icons.Rounded.Cast) {
                 CastTargetSettingsSection()

@@ -165,17 +165,22 @@ interface UploaderRemoteDataSource {
         imdbId: String? = null,
     ): SubtitleDownload
     // Plan LINGUA Fáze 2 — async AI překlad EN→CS (poslední záloha když 0 CZ titulků)
-    // progressive (2026-09-16): jen LINGUA-YT (imdbId = "yt:<id>") — rozdělí dlouhý podcast na
-    // 2 půlky, ať uživatel řídí spotřebu 5h mozek kvóty (viz PROGRESSIVE v routes/subtitles.py).
+    // progressive (2026-09-16): jen LINGUA-YT (imdbId = "yt:<id>") — vlnový překlad (VLNY 2026-09-18)
+    // s kvótovou brzdou, ať uživatel řídí spotřebu 5h mozek kvóty (viz routes/subtitles.py).
+    // model (VLNY, jen LINGUA-YT): plné "claude-*" ID (Haiku), null = server default (Sonnet).
+    // quotaLimit (VLNY): % z 5h okna z Nastavení appky, null = server default (80 %).
     suspend fun startSubtitleTranslate(
         baseUrl: String, sessionCookie: String, imdbId: String,
         season: Int? = null, episode: Int? = null, progressive: Boolean = false,
+        model: String? = null, quotaLimit: Float? = null,
     ): SubtitleTranslateJob
     suspend fun getSubtitleTranslateStatus(
         baseUrl: String, sessionCookie: String, jobId: String,
     ): SubtitleTranslateJob
+    // confirm (VLNY, 2026-09-18): uživatel odsouhlasil pokračování i přes kvótové varování —
+    // přeloží JEDNU další vlnu bez ohledu na limit, pak se brzda vrátí pro vlny další.
     suspend fun continueSubtitleTranslate(
-        baseUrl: String, sessionCookie: String, jobId: String,
+        baseUrl: String, sessionCookie: String, jobId: String, confirm: Boolean = false,
     ): SubtitleTranslateJob
 
     // ČSFD popis + recenze přes backend (server zvládá Anubis anti-bot; csfdId se páruje on-device přes Wikidata)

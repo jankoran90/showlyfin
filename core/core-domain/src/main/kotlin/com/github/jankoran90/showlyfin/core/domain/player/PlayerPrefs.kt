@@ -117,4 +117,14 @@ object PlayerPrefs {
     const val VIDEO_RESIZE_ZOOM = "ZOOM"
     const val VIDEO_RESIZE_FILL = "FILL"
     const val DEFAULT_VIDEO_RESIZE_MODE = VIDEO_RESIZE_FIT
+
+    /**
+     * LINGUA-YT VLNY (Slovo, user 2026-09-18): od kolika % z 5h mozek kvóty má AI překlad YouTube
+     * titulků pozastavit auto-chain vln a vyžádat si výslovné potvrzení pokračování i přes riziko
+     * vyčerpání kvóty. Pod limitem appka jede sama dál bez ptaní, nad limitem pauza + dialog s
+     * odhadem spotřeby (viz `_LINGUA_QUOTA_DEFAULT_LIMIT` v `routes/subtitles.py`, stejný default).
+     */
+    const val LINGUA_QUOTA_LIMIT_KEY = "lingua_quota_limit_pct"
+    const val DEFAULT_LINGUA_QUOTA_LIMIT = 80
+    val LINGUA_QUOTA_LIMIT_OPTIONS = listOf(50, 60, 70, 80, 90, 100)
 }

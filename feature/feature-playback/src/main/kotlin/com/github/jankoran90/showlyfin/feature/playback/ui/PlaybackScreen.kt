@@ -37,9 +37,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -190,6 +192,10 @@ private val SUBTITLE_COLORS = listOf(
  * Poznávací znamení šifrovaného streamu je přímo v URL (`encryption=wv`) — tak si ho značí i ČT.
  */
 private const val CTV_WIDEVINE_LICENSE = "https://ivys-wvproxy.o2tv.cz/license"
+
+/** VLNY (2026-09-18) — Haiku volba v model pickeru LINGUA-YT (jen YouTube). Plné ID passthroughuje
+ *  voice-bridge `worker_model_id` beze změny (viz routes/subtitles.py `_lingua_translate_chunk`). */
+private const val LINGUA_MODEL_HAIKU = "claude-haiku-4-5-20251001"
 
 /** TRELLIS (2026-09-03): klíč do [MediaMetadata.extras] pro doplňkový audio proud u YouTube 720p/„max"
  *  (viz [PodcastSourcesRepository.youtubeVideoUrl]) — [MoviePlayerService] ho čte a proudy spojí
@@ -1154,7 +1160,7 @@ fun PlaybackScreen(
                             onEdgeStrength = { viewModel.setEdgeStrength(it) },
                             onFont = { viewModel.setFont(it) },
                             onWeight = { viewModel.setWeight(it) },
-                            onTranslateAi = { viewModel.translateSubtitlesAi() },
+                            onTranslateAi = { model -> viewModel.translateSubtitlesAi(model) },
                             onContinueAiTranslate = { viewModel.continueAiTranslation() },
                             onClose = { showSubtitleMenu = false },
                             firstItemFocusRequester = if (isTv) menuFocusRequester else null,
@@ -1289,12 +1295,51 @@ private fun SubtitleSettingsPanel(
     onEdgeStrength: (Float) -> Unit,
     onFont: (SubtitleFont) -> Unit,
     onWeight: (Int) -> Unit,
-    onTranslateAi: () -> Unit,
+    onTranslateAi: (String?) -> Unit,
     onContinueAiTranslate: () -> Unit,
     onClose: () -> Unit,
     firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
+    // VLNY (2026-09-18, jen LINGUA-YT): model picker PŘED spuštěním překladu — appka nabídne
+    // Sonnet (výchozí, kvalitnější) / Haiku (rychlejší, hodně dialogu a delší videa).
+    var showModelPicker by remember { mutableStateOf(false) }
+    if (showModelPicker) {
+        AlertDialog(
+            onDismissRequest = { showModelPicker = false },
+            title = { Text("Model AI překladu") },
+            text = {
+                Column {
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            showModelPicker = false; onTranslateAi(null)
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = true, onClick = { showModelPicker = false; onTranslateAi(null) })
+                        Column {
+                            Text("Sonnet (výchozí)", style = MaterialTheme.typography.bodyMedium)
+                            Text("Kvalitnější překlad", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            showModelPicker = false; onTranslateAi(LINGUA_MODEL_HAIKU)
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = false, onClick = { showModelPicker = false; onTranslateAi(LINGUA_MODEL_HAIKU) })
+                        Column {
+                            Text("Haiku", style = MaterialTheme.typography.bodyMedium)
+                            Text("Rychlejší — hodně dialogu, delší videa", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showModelPicker = false }) { Text("Zrušit") } },
+        )
+    }
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -1377,18 +1422,27 @@ private fun SubtitleSettingsPanel(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFFFFBF00))
                     Spacer(Modifier.width(10.dp))
-                    // PROGRESSIVE (2026-09-16): reálný progress, když ho server hlásí (jen LINGUA-YT).
-                    val progressText = if (state.aiProgressTotal > 0)
-                        "Překládám titulky… (${state.aiProgressOk}/${state.aiProgressTotal} dávek)"
-                    else "Překládám titulky… (chvíli to potrvá)"
-                    Text(progressText, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    Column {
+                        // VLNY: reálný progress, když ho server hlásí (jen LINGUA-YT).
+                        val progressText = if (state.aiProgressTotal > 0)
+                            "Překládám titulky… (${state.aiProgressOk}/${state.aiProgressTotal} dávek)"
+                        else "Překládám titulky… (chvíli to potrvá)"
+                        Text(progressText, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                        state.aiQuotaPct?.let {
+                            Text(
+                                "Mozek kvóta (5h): ${it.roundToInt()} %",
+                                color = Color.White.copy(alpha = 0.5f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             } else {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .tvFocusBorder(RoundedCornerShape(6.dp))
-                        .clickable(onClick = onTranslateAi)
+                        .clickable { if (state.aiIsYoutube) showModelPicker = true else onTranslateAi(null) }
                         .padding(vertical = 8.dp, horizontal = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -1408,9 +1462,9 @@ private fun SubtitleSettingsPanel(
             }
         }
 
-        // PROGRESSIVE (2026-09-16, jen LINGUA-YT): 1. půlka je hotová a nasazená, 2. čeká na tap —
-        // user řídí spotřebu 5h mozek kvóty, žádné auto-pokračování.
-        if (state.aiPartialPending && !state.aiTranslating) {
+        // VLNY (2026-09-18, jen LINGUA-YT): server sám přeložil, kolik šlo pod limitem kvóty
+        // (auto-chain vln), teď čeká na potvrzení pokračování i přes riziko vyčerpání.
+        if (state.aiPausedForQuota && !state.aiTranslating) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1422,9 +1476,11 @@ private fun SubtitleSettingsPanel(
                 Text("🌐", color = Color.White)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Přeložit i zbytek epizody (AI)", color = Color(0xFFFFBF00), style = MaterialTheme.typography.bodyMedium)
+                    Text("Pokračovat i přes riziko (AI)", color = Color(0xFFFFBF00), style = MaterialTheme.typography.bodyMedium)
+                    val quotaTxt = state.aiQuotaPct?.let { "kvóta ${it.roundToInt()} %" } ?: "kvóta plná"
+                    val avgTxt = state.aiAvgWavePct?.let { " · odhad ~${it.roundToInt()} %/vlna" } ?: ""
                     Text(
-                        "Zatím přeložena jen první půlka",
+                        "Pozastaveno na limitu z Nastavení — $quotaTxt$avgTxt",
                         color = Color.White.copy(alpha = 0.5f),
                         style = MaterialTheme.typography.bodySmall,
                     )
