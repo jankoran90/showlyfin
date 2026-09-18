@@ -698,7 +698,8 @@ class PlaybackViewModel @Inject constructor(
                                 it.copy(aiTranslating = true, aiTranslateError = null, aiPausedForQuota = false,
                                     aiPausedManual = false, canTranslateAi = false, subtitleError = null,
                                     aiProgressOk = st.ok, aiProgressTotal = st.total,
-                                    aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
+                                    aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct,
+                                    aiTranslatedUntilS = st.translatedUntilS)
                             }
                         }
                         // VLNY: server sám přeložil, kolik šlo, obsah je hned nasazený, ale NEpokračuje
@@ -715,7 +716,9 @@ class PlaybackViewModel @Inject constructor(
                             _state.update {
                                 it.copy(aiPausedForQuota = !st.manual, aiPausedManual = st.manual,
                                     canTranslateAi = false, subtitleError = null,
-                                    aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
+                                    aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct,
+                                    aiProgressOk = st.ok, aiProgressTotal = st.total,
+                                    aiTranslatedUntilS = st.translatedUntilS)
                             }
                         }
                         // Done může přijít i PO PausedQuota (stejné subId, plný obsah) → vynuceně přenačti.
@@ -723,9 +726,12 @@ class PlaybackViewModel @Inject constructor(
                             applyAiSubtitle(st.subId, forceRefresh = true)
                             _state.update { it.copy(aiPausedForQuota = false, aiPausedManual = false) }
                         }
+                        // canTranslateAi=true (2026-09-18): bez toho zůstával po chybě (typicky mrtvé
+                        // "Pokračovat" po restartu serveru, viz worker) dead-end — appka ukázala chybu,
+                        // ale žádné tlačítko k novému pokusu, dokud user obrazovku neopustil a nevrátil se.
                         is SubtitleTranslationStore.State.Error ->
                             _state.update { it.copy(aiTranslating = false, aiTranslateError = st.message,
-                                aiPausedForQuota = false, aiPausedManual = false) }
+                                aiPausedForQuota = false, aiPausedManual = false, canTranslateAi = true) }
                         null -> Unit
                     }
                 }

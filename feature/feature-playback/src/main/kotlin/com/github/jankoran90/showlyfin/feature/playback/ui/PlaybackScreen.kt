@@ -1432,6 +1432,14 @@ private fun SubtitleSettingsPanel(
                             "Stav: Spuštěno (${state.aiProgressOk}/${state.aiProgressTotal} dávek)"
                         else "Stav: Spuštěno (chvíli to potrvá)"
                         Text(progressText, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                        // user 2026-09-18 ("kolik minut je přeloženo"): čas videa, ne jen počet dávek.
+                        state.aiTranslatedUntilS?.let {
+                            Text(
+                                "Přeloženo do ${formatMinSec(it)} videa",
+                                color = Color.White.copy(alpha = 0.5f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                         if (state.aiQuotaPct != null || state.aiAvgWavePct != null) {
                             val quotaTxt = state.aiQuotaPct?.let { "kvóta (5h) ${it.roundToInt()} %" }
                             val avgTxt = state.aiAvgWavePct?.let { "odhad ~${it.roundToInt()} %/vlna" }
@@ -1508,6 +1516,18 @@ private fun SubtitleSettingsPanel(
                         color = Color.White.copy(alpha = 0.5f),
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    // user 2026-09-18: "proč nevidím, kolik je hotovo" — dřív se v pozastaveném stavu
+                    // postup dávek ztratil (jen [Running] ho ukazoval). Stejná data ([ok]/[total] z
+                    // téhož pollu, co poslal [quotaPct]) teď přežije i do pauzy.
+                    if (state.aiProgressTotal > 0) {
+                        val pct = (state.aiProgressOk * 100 / state.aiProgressTotal)
+                        val untilTxt = state.aiTranslatedUntilS?.let { " — do ${formatMinSec(it)} videa" } ?: ""
+                        Text(
+                            "Přeloženo ${state.aiProgressOk}/${state.aiProgressTotal} dávek (~$pct %)$untilTxt",
+                            color = Color.White.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         }
@@ -1801,6 +1821,15 @@ private fun audioCodecName(f: Format): String? = when (f.sampleMimeType) {
 
 private fun channelLabel(c: Int): String = when (c) {
     1 -> "Mono"; 2 -> "Stereo"; 6 -> "5.1"; 7 -> "6.1"; 8 -> "7.1"; else -> "${c}ch"
+}
+
+/** user 2026-09-18 ("kolik minut je přeloženo"): čas (s) → "MM:SS" nebo "H:MM:SS" u delších podcastů. */
+private fun formatMinSec(totalSeconds: Float): String {
+    val s = totalSeconds.roundToInt().coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }
 
 /** Krátký popis zdroje do lišty: rozlišení · video kodek · audio kodek · kanály. */

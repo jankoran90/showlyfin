@@ -39,6 +39,8 @@ class SubtitleTranslationStore @Inject constructor(
             val total: Int = 0,
             val quotaPct: Float? = null,
             val avgWavePct: Float? = null,
+            // user 2026-09-18 ("kolik minut je přeloženo"): čas (s) posledního zpracovaného bloku videa.
+            val translatedUntilS: Float? = null,
         ) : State
         /** VLNY (2026-09-18): server sám přeložil, kolik šlo pod limitem kvóty (auto-chain vln),
          *  obsah je stažitelný HNED — teď čeká na explicitní potvrzení pokračování i přes riziko
@@ -46,7 +48,13 @@ class SubtitleTranslationStore @Inject constructor(
          *  limitem z Nastavení. [quotaPct]/[avgWavePct] = živá kvóta a odhad spotřeby na další vlnu. */
         /** [manual] (user 2026-09-17): true = user ťukl na "Pauzni" (ruční pauza), false = automatická
          *  kvótová brzda — appka jinak zobrazuje jen popisek, chování (resume přes `continue`) je stejné. */
-        data class PausedQuota(val subId: String, val quotaPct: Float?, val avgWavePct: Float?, val manual: Boolean = false) : State
+        /** [ok]/[total] (user 2026-09-18: "proč nevidím kolik je hotovo"): stejný postup dávek jako
+         *  u [Running], teď dostupný i v pozastaveném stavu — dřív appka po pauze ukazovala jen kvótu. */
+        data class PausedQuota(
+            val subId: String, val quotaPct: Float?, val avgWavePct: Float?,
+            val manual: Boolean = false, val ok: Int = 0, val total: Int = 0,
+            val translatedUntilS: Float? = null,
+        ) : State
         data class Done(val subId: String) : State
         data class Error(val message: String) : State
     }
@@ -63,8 +71,10 @@ class SubtitleTranslationStore @Inject constructor(
     /** Živý progress tik během "running" (PROGRESSIVE) — [jobId] = subId, jakmile server nahlásí
      *  aspoň 1 hotovou dávku (dřív je null, nic ke stažení). Volá [SubtitleTranslateWorker] po
      *  každém pollu, dokud status zůstává "running". */
-    fun updateRunningProgress(key: String, jobId: String?, ok: Int, total: Int, quotaPct: Float?, avgWavePct: Float?) =
-        _jobs.update { it + (key to State.Running(jobId, ok, total, quotaPct, avgWavePct)) }
+    fun updateRunningProgress(
+        key: String, jobId: String?, ok: Int, total: Int, quotaPct: Float?, avgWavePct: Float?,
+        translatedUntilS: Float? = null,
+    ) = _jobs.update { it + (key to State.Running(jobId, ok, total, quotaPct, avgWavePct, translatedUntilS)) }
 
     fun setError(key: String, message: String) = _jobs.update { it + (key to State.Error(message)) }
 
@@ -78,9 +88,12 @@ class SubtitleTranslationStore @Inject constructor(
      *  existující kandidát v přehrávači se při dokončení jen vynuceně přenačte, ne nahradí. Persistuje
      *  se stejně jako `markDone` (obsah je stažitelný hned) + příznak [isPausedForQuota], ať appka po
      *  návratu na obrazovku ví nabídnout „Pokračovat i přes riziko". */
-    fun markPausedQuota(key: String, subId: String, quotaPct: Float?, avgWavePct: Float?, manual: Boolean = false) {
+    fun markPausedQuota(
+        key: String, subId: String, quotaPct: Float?, avgWavePct: Float?,
+        manual: Boolean = false, ok: Int = 0, total: Int = 0, translatedUntilS: Float? = null,
+    ) {
         prefs.edit { putString(PREFIX + key, subId); putBoolean(PARTIAL_PREFIX + key, true) }
-        _jobs.update { it + (key to State.PausedQuota(subId, quotaPct, avgWavePct, manual)) }
+        _jobs.update { it + (key to State.PausedQuota(subId, quotaPct, avgWavePct, manual, ok, total, translatedUntilS)) }
     }
 
     /** Persistovaný výsledek dřívějšího překladu (přežije restart appky) — null = ještě nepřeloženo. */
@@ -95,7 +108,11 @@ class SubtitleTranslationStore @Inject constructor(
      * znovu (nový, funkční `ai_<hash>` soubor).
      */
     fun clearDone(key: String) {
-        prefs.edit { remove(PREFIX + key) }
+        // 🔴 BUG (2026-09-18, živě nalezeno): dřív mazalo jen [PREFIX] (doneId), ne [PARTIAL_PREFIX]
+        // (isPausedForQuota) — po restartu serveru (job dict ztracen) "Pokračovat" trvale selhávalo
+        // (server: "Job nečeká na pokračování"), ale [isPausedForQuota] zůstávalo `true` navěky →
+        // příští otevření filmu pořád nabízelo tu samou mrtvou pauzu, žádná cesta k novému překladu.
+        prefs.edit { remove(PREFIX + key); remove(PARTIAL_PREFIX + key) }
         _jobs.update { it - key }
     }
 

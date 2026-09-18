@@ -48,6 +48,8 @@ data class PlaybackUiState(
     // Živý progress ("12/40 dávek") během aktivního překladu — 0/0 = zatím žádná data.
     val aiProgressOk: Int = 0,
     val aiProgressTotal: Int = 0,
+    // user 2026-09-18 ("kolik minut je přeloženo"): čas (s) posledního zpracovaného bloku videa.
+    val aiTranslatedUntilS: Float? = null,
     // ── Styl / nastavení titulků (persistované) ──────────────────────────────
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
     // ── TENFOOT F2c: TV transport lišta (konfigurovatelné, načteno z prefs při vzniku VM) ─────

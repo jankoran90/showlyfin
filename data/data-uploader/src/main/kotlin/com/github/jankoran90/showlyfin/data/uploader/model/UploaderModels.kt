@@ -593,6 +593,9 @@ data class SubtitleTranslateJob(
     // pro živý dialog v appce (kvóta + odhad, ne až po vyčerpání).
     @SerializedName("quota_pct") val quotaPct: Float? = null,
     @SerializedName("avg_wave_pct") val avgWavePct: Float? = null,
+    // user 2026-09-18 ("kolik minut je přeloženo"): časová značka (s) posledního zpracovaného bloku,
+    // ne jen počet dávek — appka z toho ukáže "přeloženo do MM:SS".
+    @SerializedName("translated_until_s") val translatedUntilS: Float? = null,
 )
 
 /** Stažený .srt (UTF-8) + ověření délky proti filmu (z hlaviček backendu). Ne-síťový holder. */

@@ -66,7 +66,14 @@ class SubtitleTranslateWorker(
             started = runCatching { ds.continueSubtitleTranslate(base, cookie, continueJobId, confirm = true) }
                 .getOrElse { e ->
                     Timber.w(e, "[Lingua] pokračování překladu selhalo job=$continueJobId")
-                    store.setError(key, e.message ?: "Pokračování překladu se nepodařilo spustit")
+                    // 🔴 BUG (2026-09-18, živě nalezeno): job dict na serveru nepřežije restart —
+                    // "Pokračovat" pak trvale vrací 400 ("Job nečeká na pokračování"). Bez [clearDone]
+                    // appka pořád nabízela tu samou mrtvou pauzu při každém dalším otevření, žádná
+                    // cesta k novému překladu (jen "Přeložit znovu", co dřív taky jen znovu narazilo
+                    // na stejný stale doneId). clearDone zapomene doneId I isPausedForQuota →
+                    // příští otevření nabídne čistý restart.
+                    store.clearDone(key)
+                    store.setError(key, e.message ?: "Pokračování překladu se nepodařilo spustit — zkus přeložit znovu")
                     notify(ctx, title, ok = false)
                     return Result.success()
                 }
@@ -98,13 +105,16 @@ class SubtitleTranslateWorker(
         // stav — obsah přeložený doteď je stažitelný. Jen zapiš a skonči, NEpolluj donekonečna
         // (appka sama nic dalšího nedostane, dokud user neodsouhlasí/nezmáčkne pokračovat).
         if ((status == "paused_quota" || status == "paused_manual") && subId.isNotBlank()) {
-            store.markPausedQuota(key, subId, started.quotaPct, started.avgWavePct, manual = status == "paused_manual")
+            store.markPausedQuota(key, subId, started.quotaPct, started.avgWavePct,
+                manual = status == "paused_manual", ok = started.okCount, total = started.totalChunks,
+                translatedUntilS = started.translatedUntilS)
             Timber.i("[Lingua] pauza (${status}, čeká na potvrzení) → $subId")
             return Result.success()
         }
 
         if (status == "running") {
-            store.updateRunningProgress(key, subId.ifBlank { null }, started.okCount, started.totalChunks, started.quotaPct, started.avgWavePct)
+            store.updateRunningProgress(key, subId.ifBlank { null }, started.okCount, started.totalChunks,
+                started.quotaPct, started.avgWavePct, started.translatedUntilS)
         }
 
         var waitedMs = 0L
@@ -114,7 +124,9 @@ class SubtitleTranslateWorker(
             val s = runCatching { ds.getSubtitleTranslateStatus(base, cookie, jobId) }.getOrNull() ?: continue
             status = s.status; subId = s.subId; error = s.error
             if ((status == "paused_quota" || status == "paused_manual") && subId.isNotBlank()) {
-                store.markPausedQuota(key, subId, s.quotaPct, s.avgWavePct, manual = status == "paused_manual")
+                store.markPausedQuota(key, subId, s.quotaPct, s.avgWavePct,
+                    manual = status == "paused_manual", ok = s.okCount, total = s.totalChunks,
+                    translatedUntilS = s.translatedUntilS)
                 Timber.i("[Lingua] pauza (${status}, čeká na potvrzení) → $subId")
                 return Result.success()
             }
@@ -122,7 +134,8 @@ class SubtitleTranslateWorker(
             // hotová), VM smí rozpracovaný obsah stahovat/přenačítat živě. Auto-chain vln pod
             // limitem kvóty jede celé uvnitř tohohle "running" bez další akce appky.
             if (status == "running") {
-                store.updateRunningProgress(key, subId.ifBlank { null }, s.okCount, s.totalChunks, s.quotaPct, s.avgWavePct)
+                store.updateRunningProgress(key, subId.ifBlank { null }, s.okCount, s.totalChunks,
+                    s.quotaPct, s.avgWavePct, s.translatedUntilS)
             }
         }
 
