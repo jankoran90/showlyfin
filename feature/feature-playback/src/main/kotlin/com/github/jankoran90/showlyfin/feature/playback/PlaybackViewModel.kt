@@ -573,15 +573,30 @@ class PlaybackViewModel @Inject constructor(
                 // zapomeň persistovaný výsledek a nabídni tlačítko znovu, místo tiché smyčky/matoucí chyby.
                 if (cand.id.startsWith("ai_")) {
                     val key = q?.let { translateStore.keyOf(it.imdb, it.season, it.episode) }
+                    // 🔴 BUG (2026-09-18, živě nalezeno JRE dílem): tenhle STARÝ (persistovaný) kandidát
+                    // klidně selže i tak, že ho mezitím nahradil NOVÝ běžící/pozastavený překlad (stejný
+                    // klíč) — v tom případě je "server ztratil, přelož znovu" ZAVÁDĚJÍCÍ a NEBEZPEČNÉ:
+                    // tap na nabízené tlačítko by zahodil rozdělanou práci a začal od nuly. Nabídni restart
+                    // JEN když v store fakt NIC neběží/nečeká.
+                    val liveJob = key?.let { translateStore.jobs.value[it] }
+                    val hasLiveJob = liveJob is SubtitleTranslationStore.State.Running ||
+                        liveJob is SubtitleTranslationStore.State.PausedQuota
                     if (key != null) {
                         translateStore.clearDone(key)
-                        timber.log.Timber.w("[Lingua] AI titulek $key (${cand.id}) server ztratil → nabízím překlad znovu")
-                    }
-                    _state.update {
-                        it.copy(
-                            subtitlesLoading = false, canTranslateAi = true,
-                            subtitleError = "AI překlad se na serveru ztratil (úložiště) — přelož znovu.",
+                        timber.log.Timber.w(
+                            "[Lingua] AI titulek $key (${cand.id}) server ztratil → " +
+                                if (hasLiveJob) "nový překlad už běží/čeká, restart nenabízím" else "nabízím překlad znovu",
                         )
+                    }
+                    if (hasLiveJob) {
+                        _state.update { it.copy(subtitlesLoading = false) }
+                    } else {
+                        _state.update {
+                            it.copy(
+                                subtitlesLoading = false, canTranslateAi = true,
+                                subtitleError = "AI překlad se na serveru ztratil (úložiště) — přelož znovu.",
+                            )
+                        }
                     }
                     return@launch
                 }
@@ -681,17 +696,25 @@ class PlaybackViewModel @Inject constructor(
                             }
                             _state.update {
                                 it.copy(aiTranslating = true, aiTranslateError = null, aiPausedForQuota = false,
-                                    aiPausedManual = false, aiProgressOk = st.ok, aiProgressTotal = st.total,
+                                    aiPausedManual = false, canTranslateAi = false, subtitleError = null,
+                                    aiProgressOk = st.ok, aiProgressTotal = st.total,
                                     aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
                             }
                         }
                         // VLNY: server sám přeložil, kolik šlo, obsah je hned nasazený, ale NEpokračuje
                         // sám nad limitem kvóty — čeká na explicitní potvrzení (viz dialog v UI).
                         // [manual] (user 2026-09-17): true = user ťukl "Pauzni", ne automatická brzda.
+                        // 🔴 BUG (2026-09-18, živě nalezeno): [canTranslateAi]/[subtitleError] se tu dřív
+                        // nemazaly — OKAPI recovery (stažení STARÉHO persistovaného kandidátu selhalo,
+                        // protože ho mezitím nahradil TENHLE nový/pozastavený běh) mohla nastavit
+                        // "Přeložit znovu" SOUČASNĚ s "Pokračovat i přes riziko" → dvě si odporující
+                        // tlačítka, a tap na "znovu" by zahodil rozdělanou práci. Živý stav z tohohle
+                        // Flow je autoritativní, vždy ho vyhraje.
                         is SubtitleTranslationStore.State.PausedQuota -> {
                             applyAiSubtitle(st.subId)
                             _state.update {
                                 it.copy(aiPausedForQuota = !st.manual, aiPausedManual = st.manual,
+                                    canTranslateAi = false, subtitleError = null,
                                     aiQuotaPct = st.quotaPct, aiAvgWavePct = st.avgWavePct)
                             }
                         }
