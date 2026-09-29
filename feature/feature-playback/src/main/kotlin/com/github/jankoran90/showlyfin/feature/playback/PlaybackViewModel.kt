@@ -270,7 +270,15 @@ class PlaybackViewModel @Inject constructor(
                 episode = subtitleQuery?.episode,
             ),
         )
-        val localResume = resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
+        // BUG (Slovo, 2026-09-29, user „byl jsem v 17:52 audia, video začalo od 0:11 a přepsalo to"):
+        // u direct epizody (`yt:`/`ctv:`/`rss:` — jen Slovo) je pravda SDÍLENÁ pozice [videoResumeStore]
+        // (stejná tabulka i klíč jako audio poslech), ne lokální `resume_` prefs, které zná jen video
+        // přehrávač a zůstaly stát na posledním sledování. Filmy (`tt…`) beze změny.
+        val sharedEpisodeResume = resumeKey
+            ?.takeIf { it.startsWith("yt:") || it.startsWith("ctv:") || it.startsWith("rss:") }
+            ?.let { videoResumeStore.get(it)?.posMs }
+            ?.takeIf { it > 0L }
+        val localResume = sharedEpisodeResume ?: resumeKey?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
         // CROSS-DEVICE RESUME: pozice z telefonu (cast příkaz) přebije lokální resume TV, když je >0
         // (a je novější / dál — telefon právě odtud castoval). Bez ní = vlastní lokální resume TV.
         val savedResume = externalResumeMs.takeIf { it > 0L } ?: localResume

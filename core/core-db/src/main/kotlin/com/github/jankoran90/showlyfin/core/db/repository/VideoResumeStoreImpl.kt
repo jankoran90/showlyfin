@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.core.db.repository
 
+import com.github.jankoran90.showlyfin.core.domain.resume.LastPlaybackMode
 import android.content.Context
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
@@ -98,6 +99,8 @@ class VideoResumeStoreImpl @Inject constructor(
         if (posMs < VideoResumeStore.MIN_RESUME_MS) return
         val cur = _marks.value[key]
         if (cur != null && cur.posMs == posMs && cur.durMs == durMs) return
+        // 2026-09-29: sdílená pozice s audiem — zapamatuj, že naposled hrálo VIDEO (viz [LastPlaybackMode]).
+        LastPlaybackMode.mark(appPrefs, key, LastPlaybackMode.VIDEO)
         val now = System.currentTimeMillis()
         _marks.update { it + (key to VideoResumeStore.Mark(posMs, durMs, now)) }
         val profileKey = activeKey() ?: return

@@ -19,6 +19,7 @@ import com.github.jankoran90.showlyfin.data.uploader.youtubeVideoUrl
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
+import com.github.jankoran90.showlyfin.core.domain.resume.LastPlaybackMode
 import com.github.jankoran90.showlyfin.feature.listen.player.PlaybackMode
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
@@ -90,8 +91,15 @@ class HomeViewModel @Inject constructor(
      * neumíme spustit (RSS video bez [SourceEpisode.jfItemId], starší fallback epizoda apod.).
      */
     fun videoLaunch(item: ContinueItem.Episode): VideoLaunch? {
-        if (item.mode != PlaybackMode.VIDEO) return null
         val ep = item.episode
+        // Živě, ne `item.mode` — položka může být ze snímku Domů ([HomeSnapshotStore]) se starým režimem.
+        if (LastPlaybackMode.get(prefs, ep.resumeKey ?: ep.id) != LastPlaybackMode.VIDEO) return null
+        // Video přehrávač ať začne ze SDÍLENÉ pozice (audio mohlo mezitím dojet dál) — stejný princip
+        // jako [AudiobookPlayerViewModel.switchToVideo]; čerstvý `resume_at_` = tichý resume bez dialogu.
+        directResume.get(ep.resumeKey ?: ep.id)?.posMs?.takeIf { it > 0 }?.let { pos ->
+            prefs.edit().putLong("resume_${ep.resumeKey ?: ep.id}", pos)
+                .putLong("resume_at_${ep.resumeKey ?: ep.id}", System.currentTimeMillis()).apply()
+        }
         return when (item.sourceType) {
             "youtube" -> VideoLaunch.External(
                 uploaderDs.youtubeVideoUrl(baseUrl, cookie, ep.id, PodcastVideoQuality.stream(prefs)), ep.title, ep.imageUrl,
@@ -545,7 +553,10 @@ class HomeViewModel @Inject constructor(
             val updatedAt = if (choice.mode == PlaybackMode.VIDEO) vm?.updatedAt ?: 0L else am?.updatedAt ?: 0L
             val durMs = choice.durMs.takeIf { it > 0 } ?: (ep.durationSec * 1000).toLong()
             val progress = if (durMs > 0) (choice.posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f
-            ContinueItem.Episode(sourceType, sourceRef, sourceTitle, ep, progress, updatedAt, choice.mode, choice.posMs, durMs)
+            // BUG (2026-09-29): audio i video mark jsou JEDNA sdílená pozice (viz [LastPlaybackMode]) —
+            // `choice.mode` byl vždy VIDEO (remíza). Režim = kdo naposled zapsal; neznámo = poslech.
+            val mode = if (LastPlaybackMode.get(prefs, key) == LastPlaybackMode.VIDEO) PlaybackMode.VIDEO else PlaybackMode.AUDIO
+            ContinueItem.Episode(sourceType, sourceRef, sourceTitle, ep, progress, updatedAt, mode, choice.posMs, durMs)
         }
     }
 }

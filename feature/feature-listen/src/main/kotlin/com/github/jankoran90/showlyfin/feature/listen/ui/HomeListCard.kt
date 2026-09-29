@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +62,9 @@ fun HomeListCard(
     isPlaying: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     onEndListening: (() -> Unit)? = null,
+    /** User (2026-09-29, „mini play/pause na kartě, ať Domů nezmizí") — null = tlačítko se neukáže. */
+    playing: Boolean? = null,
+    onPlayPause: () -> Unit = {},
 ) {
     val clickMod =
         if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
@@ -100,7 +106,7 @@ fun HomeListCard(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            TimeLine(progress, posMs, durMs, layout.remaining)
+            TimeLine(progress, posMs, durMs, layout.remaining, playing, onPlayPause)
         }
     }
     if (layout.bigCover) {
@@ -137,7 +143,7 @@ private fun BoxScope.CoverBadges(isPlaying: Boolean, onEndListening: (() -> Unit
 }
 
 @Composable
-private fun TimeLine(progress: Float, posMs: Long, durMs: Long, remaining: Boolean) {
+private fun TimeLine(progress: Float, posMs: Long, durMs: Long, remaining: Boolean, playing: Boolean?, onPlayPause: () -> Unit) {
     val text = when {
         durMs <= 0L -> null
         remaining -> "zbývá ${formatHomeClock((durMs - posMs).coerceAtLeast(0L))}"
@@ -158,6 +164,17 @@ private fun TimeLine(progress: Float, posMs: Long, durMs: Long, remaining: Boole
                 maxLines = 1,
                 modifier = Modifier.padding(start = 10.dp),
             )
+        }
+        if (playing != null) {
+            FilledIconButton(
+                onClick = onPlayPause,
+                modifier = Modifier.padding(start = 10.dp).size(40.dp),
+            ) {
+                Icon(
+                    if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (playing) "Pauza" else "Poslouchat",
+                )
+            }
         }
     }
 }

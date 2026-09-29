@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.player
 
+import com.github.jankoran90.showlyfin.core.domain.resume.LastPlaybackMode
 import android.content.Context
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
@@ -110,6 +111,9 @@ class DirectResumeStore @Inject constructor(
         val effectivePos = if (finished) durMs else posMs
         val cur = _marks.value[mediaId]
         if (cur != null && cur.posMs == effectivePos && cur.durMs == durMs) return
+        // 2026-09-29: sdílená pozice s videem — zapamatuj, že naposled hrálo AUDIO (viz [LastPlaybackMode]).
+        // Až ZA kontrolou změny: stojící (pozastavené) audio nesmí přebít režim, když mezitím hraje video.
+        LastPlaybackMode.mark(appPrefs, mediaId, LastPlaybackMode.AUDIO)
         val now = System.currentTimeMillis()
         _marks.update { it + (mediaId to Mark(effectivePos, durMs, now)) }
         val key = activeKey() ?: return

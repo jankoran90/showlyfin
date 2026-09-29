@@ -58,6 +58,7 @@ class AudiobookPlayerConnection @Inject constructor(
 
     /** L2b: throttle pro periodický zápis resume pozice direct epizod (RSS/YT) z [pushState]. */
     private var lastDirectSaveMs = 0L
+    private var lastDirectSavedPos = -1L
 
     private var controller: MediaController? = null
     private var pending: ((MediaController) -> Unit)? = null
@@ -217,10 +218,15 @@ class AudiobookPlayerConnection @Inject constructor(
         // L2b: periodicky ulož pozici DIRECT epizody (RSS/YT) do lokálního resume storu (ekvivalent
         // serverového ABS progresu). Throttle ~4 s, ať netlučeme do SharedPreferences každých 500 ms.
         val ep = currentEpisode
-        if (ep?.direct != null && ep.episodeId.isNotBlank()) {
+        // BUG (2026-09-29, emu důkaz): pozastavené audio (po „Přepnout na video") ukládalo dál každé 4 s
+        // svou STAROU pozici do SDÍLENÉ pozice epizody → přepisovalo, kam došlo video (tak zmizelo
+        // userovo 17:52). Ukládej, když audio hraje, NEBO když se pozice od posledního vlastního zápisu
+        // změnila (ruční posun v pauze) — stojící audio se stejnou pozicí už nic nepřepíše.
+        if (ep?.direct != null && ep.episodeId.isNotBlank() && (c.isPlaying || pos != lastDirectSavedPos)) {
             val now = System.currentTimeMillis()
             if (now - lastDirectSaveMs >= DIRECT_SAVE_INTERVAL_MS) {
                 lastDirectSaveMs = now
+                lastDirectSavedPos = pos
                 resumeStore.save(ep.episodeId, pos, bookDurationMs)
             }
         } else if (ep == null && sessionId(extras).isNullOrBlank()) {
@@ -304,19 +310,22 @@ class AudiobookPlayerConnection @Inject constructor(
                     )
                     .build()
             }
-            c.setMediaItems(items)
+            val startBookMs = when {
+                startOverrideSec != null -> (startOverrideSec * 1000).toLong()
+                fromStart -> 0L
+                else -> (pb.startPositionSec * 1000).toLong()
+            }.coerceAtLeast(0L)
+            // BUG (2026-09-29): start pozice atomicky v setMediaItems — samostatný seek po něm mohla
+            // session zpracovat dřív než samotné položky (viz [playDirect]) → start od 0.
+            val offsetsMs = items.map { ((it.mediaMetadata.extras?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0) * 1000).toLong() }
+            val startIdx = offsetsMs.indexOfLast { it <= startBookMs + 1 }.coerceAtLeast(0)
+            c.setMediaItems(items, startIdx, (startBookMs - (offsetsMs.getOrNull(startIdx) ?: 0L)).coerceAtLeast(0L))
             c.prepare()
             // Rychlost: zapamatovaná (zvlášť kniha/podcast) nebo výchozí z nastavení.
             val targetSpeed = if (prefs.rememberSpeed) {
                 if (episode != null) prefs.lastPodcastSpeed else prefs.lastBookSpeed
             } else prefs.defaultSpeed
             c.setPlaybackSpeed(targetSpeed.coerceIn(0.5f, 3.5f))
-            val startBookMs = when {
-                startOverrideSec != null -> (startOverrideSec * 1000).toLong()
-                fromStart -> 0L
-                else -> (pb.startPositionSec * 1000).toLong()
-            }
-            if (startBookMs > 0) seekBook(c, startBookMs)
             c.playWhenReady = true
         }
     }
@@ -365,7 +374,7 @@ class AudiobookPlayerConnection @Inject constructor(
                 scope.launch { repo.syncProgress(outSession, outPos, 0.0, outDur) }
             } else {
                 // L2b: odcházející DIRECT epizoda (RSS/YT) → ulož resume pozici lokálně před přepnutím.
-                saveOutgoingDirectResume(c, outExtras)
+                saveOutgoingDirectResume(c, outExtras, incomingMediaId = mediaId)
             }
             val artwork = coverUrl?.let(Uri::parse)
             val extras = Bundle().apply {
@@ -387,11 +396,14 @@ class AudiobookPlayerConnection @Inject constructor(
                         .build(),
                 )
                 .build()
-            c.setMediaItems(listOf(item))
+            // BUG (2026-09-29, user „pořád na začátku", emu: start=74285 spočten správně, hrálo od 0):
+            // `setMediaItems(list)` + samostatný `seekTo` — session zpracuje setMediaItems až po
+            // `onSetMediaItems` future, takže seekTo mohl doběhnout DŘÍV a položka se pak nastavila
+            // s resetem pozice na 0. Start pozice teď jde atomicky v témže příkazu.
+            c.setMediaItems(listOf(item), 0, startMs.coerceAtLeast(0L))
             c.prepare()
             val targetSpeed = if (prefs.rememberSpeed) prefs.lastPodcastSpeed else prefs.defaultSpeed
             c.setPlaybackSpeed(targetSpeed.coerceIn(0.5f, 3.5f))
-            if (startMs > 0) c.seekTo(startMs)
             c.playWhenReady = true
         }
     }
@@ -404,9 +416,12 @@ class AudiobookPlayerConnection @Inject constructor(
     }
 
     /** L2b: ulož resume pozici odcházející DIRECT epizody (RSS/YT). `mediaId` = `episodeKey` z VM. */
-    private fun saveOutgoingDirectResume(c: MediaController, outExtras: Bundle?) {
+    private fun saveOutgoingDirectResume(c: MediaController, outExtras: Bundle?, incomingMediaId: String? = null) {
         val mediaId = c.currentMediaItem?.mediaId
         if (mediaId.isNullOrBlank()) return
+        // 2026-09-29: znovuspuštění TÉŽE epizody (pozastavené audio → mezitím video dál) — neukládej
+        // starou audio pozici přes čerstvou sdílenou (start se už spočetl z ní).
+        if (mediaId == incomingMediaId) return
         val durMs = ((outExtras?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0) * 1000).toLong()
         resumeStore.save(mediaId, bookPosMs(c), durMs)
     }
@@ -428,11 +443,26 @@ class AudiobookPlayerConnection @Inject constructor(
     }
 
     fun playPause() = withController { c ->
-        if (c.isPlaying) c.pause() else c.play()
+        if (c.isPlaying) c.pause() else { catchUpToSharedPosition(c); c.play() }
     }
 
     /** L2b: navázat přehrávání PRÁVĚ NAČTENÉ epizody (resume bez reloadu streamu). Idempotentní. */
-    fun play() = withController { it.play() }
+    fun play() = withController { c -> if (!c.isPlaying) catchUpToSharedPosition(c); c.play() }
+
+    /**
+     * BUG (2026-09-29, emu důkaz): po „Přepnout na video" zůstane audio v pauze na staré pozici; video
+     * mezitím posune SDÍLENOU pozici epizody dál. Obyčejné play() by rozjelo audio odtamtud a jeho
+     * ukládání by pak přepsalo postup z videa. Před rozjezdem pozastavené direct epizody proto skoč na
+     * sdílenou pozici, pokud je jinde než přehrávač (> 3 s; video, jiné zařízení).
+     */
+    private fun catchUpToSharedPosition(c: MediaController) {
+        val key = currentEpisode?.takeIf { it.direct != null }?.episodeId?.takeIf { it.isNotBlank() } ?: return
+        val shared = resumeStore.get(key)?.takeUnless { it.isFinished }?.posMs ?: return
+        if (kotlin.math.abs(shared - c.currentPosition) > 3_000L) {
+            c.seekTo(shared)
+            lastDirectSavedPos = shared
+        }
+    }
 
     /** ADAPT (2026-09-04): zastav poslech beze ztráty fronty/pozice — např. při přepnutí na video verzi. */
     fun pause() = withController { it.pause() }
@@ -550,7 +580,9 @@ class AudiobookPlayerConnection @Inject constructor(
                 startMs = run {
                     val audio = resumeStore.get(episode.episodeId)?.takeUnless { it.isFinished }
                     val video = videoResumeStore.get(episode.episodeId)
-                    choosePlaybackResume(audio?.posMs, audio?.durMs, false, video?.posMs, video?.durMs, audio?.updatedAt ?: 0L, video?.updatedAt ?: 0L)?.posMs ?: 0L
+                    val start = choosePlaybackResume(audio?.posMs, audio?.durMs, false, video?.posMs, video?.durMs, audio?.updatedAt ?: 0L, video?.updatedAt ?: 0L)?.posMs ?: 0L
+                    android.util.Log.i("SlovoResume", "startEpisode key=${episode.episodeId} audio=${resumeStore.get(episode.episodeId)} video=$video start=$start")
+                    start
                 },
                 episode = episode,
             )

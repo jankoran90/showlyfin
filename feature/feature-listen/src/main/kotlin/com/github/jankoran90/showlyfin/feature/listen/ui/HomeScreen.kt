@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.feature.listen.AudiobookPlayerViewModel
 import com.github.jankoran90.showlyfin.feature.listen.HomeViewModel
 
 /**
@@ -52,6 +53,8 @@ fun HomeScreen(
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
     val playerState by vm.playerState.collectAsStateWithLifecycle()
     val layout by vm.layout.collectAsStateWithLifecycle()
+    // Sdílený (activity-scoped) přehrávač — stejný jako MiniPlayer; Play/Pauza z karty bez navigace.
+    val playerVm: AudiobookPlayerViewModel = hiltViewModel()
     val otherAdultProfiles by vm.otherAdultProfiles.collectAsStateWithLifecycle()
     val kidsLibraryIds by vm.kidsLibraryIds.collectAsStateWithLifecycle()
     // PROFIL (2026-08-16) — dlouhý stisk epizody na Domů → „Sdílet s…" (celý zdroj epizody, ne jen tuhle).
@@ -96,15 +99,19 @@ fun HomeScreen(
                                     description = b.seriesName?.let { s -> b.seriesSequence?.let { "$s #$it" } ?: s },
                                     imageUrl = b.coverUrl,
                                     wideImage = false,
-                                    progress = b.progress.toFloat(),
-                                    posMs = (b.currentTimeSec * 1000).toLong(),
-                                    durMs = (b.durationSec * 1000).toLong(),
+                                    // Hrající položka = živá pozice z přehrávače (uložená se obnoví až refreshem).
+                                    progress = if (isPlaying && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs.toFloat() / playerState.durationMs else b.progress.toFloat(),
+                                    posMs = if (isPlaying && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs else (b.currentTimeSec * 1000).toLong(),
+                                    durMs = if (isPlaying && playerState.isPlaying && playerState.durationMs > 0) playerState.durationMs else (b.durationSec * 1000).toLong(),
                                     layout = layout,
                                     placeholder = Icons.Default.Headphones,
                                     onClick = { onOpenBook(b.id) },
                                     isPlaying = isPlaying,
                                     onLongClick = onLong,
                                     onEndListening = { vm.resetBookProgress(b) },
+                                    // User (2026-09-29): Play/Pauza přímo na kartě — Domů zůstává, nic se neotevírá.
+                                    playing = isPlaying && playerState.isPlaying,
+                                    onPlayPause = { if (isPlaying) playerVm.playPause() else playerVm.open(b.id, fromStart = false) },
                                 )
                             } else {
                                 AudiobookCard(
@@ -124,10 +131,11 @@ fun HomeScreen(
                             // zůstává jinde — epizoda na rozdíl od knihy nepotřebuje kapitolní kontext).
                             // ADAPT (2026-09-04): spustí SPRÁVNÝ režim (video, pokud vede) — dřív vždy jen audio.
                             // BUG (2026-09-29, user „Cukrfree na Domů nutí video, mám rozposlouchané audio"):
-                            // epizoda načtená v audio frontě (odznak „hraje") se vždy otevře jako audio.
+                            // režim = jak se epizoda naposled hrála ([HomeViewModel.videoLaunch] → LastPlaybackMode),
+                            // neznámo = audio. (Dřívější „načtená ve frontě → audio" zrušeno: po „Přepnout na
+                            // video" zůstává audio načtené v pauze a přebilo by naposled sledované video.)
                             val onClick = {
-                                val launch = if (loadedInQueue) null else vm.videoLaunch(item)
-                                when (launch) {
+                                when (val launch = vm.videoLaunch(item)) {
                                     is HomeViewModel.VideoLaunch.External -> onPlayVideo(launch.url, launch.title, launch.posterUrl)
                                     is HomeViewModel.VideoLaunch.Jellyfin -> onPlayJfVideo(launch.jfItemId, launch.title, launch.resumeKey)
                                     null -> vm.playEpisode(item)
@@ -141,15 +149,19 @@ fun HomeScreen(
                                     description = homeDescription(item.episode.description),
                                     imageUrl = item.episode.imageUrl,
                                     wideImage = item.sourceType == "youtube" || item.sourceType == "ctv",
-                                    progress = item.progress,
-                                    posMs = item.posMs,
-                                    durMs = item.durMs,
+                                    progress = if (loadedInQueue && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs.toFloat() / playerState.durationMs else item.progress,
+                                    posMs = if (loadedInQueue && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs else item.posMs,
+                                    durMs = if (loadedInQueue && playerState.isPlaying && playerState.durationMs > 0) playerState.durationMs else item.durMs,
                                     layout = layout,
                                     placeholder = Icons.Default.Podcasts,
                                     onClick = onClick,
                                     isPlaying = loadedInQueue,
                                     onLongClick = onLong,
                                     onEndListening = { vm.resetEpisodeProgress(item) },
+                                    // Play na kartě = vždy POSLECH (user: „hlavně se spustí audio, na video
+                                    // si přepnu ve frontě"); načtená epizoda jen přepne pauzu.
+                                    playing = loadedInQueue && playerState.isPlaying,
+                                    onPlayPause = { if (loadedInQueue) playerVm.playPause() else vm.playEpisode(item) },
                                 )
                             } else {
                                 ContinueEpisodeCard(

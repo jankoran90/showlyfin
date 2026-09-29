@@ -15,6 +15,12 @@ import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
  * pár vteřin videa přebilo z poloviny poslechnuté audio). Teď vyhrává vyšší POZICE (`posMs`) — „kde se
  * přestalo dál", ne kdy/jestli vůbec.
  */
+/*
+ * ⚠️ 2026-09-29 (root cause Cukrfree #74): audio i video mark jsou ve SKUTEČNOSTI JEDNA pozice (sdílená
+ * tabulka `playback_state`, stejný klíč) — [choosePlaybackResume] porovnává dvě kopie téhož čísla a
+ * jeho `mode` je proto bezcenný (remíza = VIDEO). Pozici z něj brát lze, REŽIM NE → ten určuje
+ * [com.github.jankoran90.showlyfin.core.domain.resume.LastPlaybackMode] (kdo zapsal naposled).
+ */
 enum class PlaybackMode { AUDIO, VIDEO }
 
 data class ResumeChoice(
