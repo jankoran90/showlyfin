@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.feature.listen.AudiobookPlayerViewModel
 
@@ -166,10 +167,14 @@ fun AudiobookPlayerScreen(
             // Cover — menší, ať zbyde místo na seznam.
             // PERCH (SHW-69): klik na cover skočí na seznam dílů rodičovského pořadu/knihy (tah dolů
             // dál sbalí přehrávač — gesta koexistují: vertikální tah konzumuje collapseDrag, ťuk projde).
+            // BUG (2026-09-29, user screenshot Cukrfree #74): YouTube/ČT náhled (4:3 hqdefault se
+            // zapečenými černými pruhy) ve čtvercovém rámu = malý obrázek obklopený černou. Video
+            // epizody teď mají širší 16:9 rám s ořezem (Crop odstřihne i zapečené pruhy).
+            val wideCover = state.currentEpisodeId?.let { it.startsWith("yt:") || it.startsWith("ctv:") } == true
             Box(
                 Modifier
-                    .fillMaxWidth(0.42f)
-                    .aspectRatio(1f)
+                    .fillMaxWidth(if (wideCover) 0.72f else 0.42f)
+                    .aspectRatio(if (wideCover) 16f / 9f else 1f)
                     .then(collapseDrag)
                     .clip(RoundedCornerShape(18.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -177,7 +182,12 @@ fun AudiobookPlayerScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 if (state.coverUrl != null) {
-                    AsyncImage(model = state.coverUrl, contentDescription = state.title, modifier = Modifier.fillMaxSize())
+                    AsyncImage(
+                        model = state.coverUrl,
+                        contentDescription = state.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = if (wideCover) ContentScale.Crop else ContentScale.Fit,
+                    )
                 }
                 if (state.isBuffering) CircularProgressIndicator()
             }

@@ -227,7 +227,7 @@ fun YoutubeChannelScreen(
             // Video mark nemá isFinished (store ho při dohrání sám smaže).
             val videoMark = videoResumeMarks[key]
             val mark = resumeMarks[key]
-            val choice = choosePlaybackResume(mark?.posMs, mark?.durMs, mark?.isFinished == true, videoMark?.posMs, videoMark?.durMs)
+            val choice = choosePlaybackResume(mark?.posMs, mark?.durMs, mark?.isFinished == true, videoMark?.posMs, videoMark?.durMs, mark?.updatedAt ?: 0L, videoMark?.updatedAt ?: 0L)
             val markPos = choice?.posMs
             val markDur = choice?.durMs
             val isFinished = choice?.isFinished == true

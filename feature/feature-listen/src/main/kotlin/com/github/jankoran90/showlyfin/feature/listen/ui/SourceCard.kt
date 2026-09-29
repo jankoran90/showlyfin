@@ -236,20 +236,20 @@ fun DiscoveryCard(
                     if (showEpisodeCount) result.episodeCount?.takeIf { it > 0 }?.let { add(epizodyLabel(it)) }
                     result.category?.takeIf { it.isNotBlank() }?.let { add(it) }
                 }
-                if (meta.isNotEmpty()) {
+                // User (2026-09-29, emulátor audit): „Přidat" dřív na VLASTNÍM řádku pod metadaty →
+                // karta zbytečně vysoká (na telefon se vešly ~3 pořady). Teď metadata vlevo, akce vpravo.
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
                         text = meta.joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 6.dp),
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
                     )
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
                     if (added) {
                         AssistChip(
                             onClick = {}, enabled = false,

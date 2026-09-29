@@ -61,77 +61,82 @@ fun MiniPlayer(
         if (resumeMode) first?.let { viewModel.playQueued(it) } else viewModel.playPause()
     }
 
+    // BUG (2026-09-29, user „lišta progresu je úplně nahoře, nad názvy sekcí"): Row + progress byly dva
+    // sourozenci přímo v rodičovském Boxu — `modifier` (align BottomCenter) dostal jen Row, lišta spadla
+    // do TopStart celé obrazovky. Teď jeden Column s `modifier`, lišta drží pod mini-playerem.
     ListenExpressiveTheme {
-        Row(
-            modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(onClick = { if (resumeMode) startOrToggle() else onExpand() })
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
+        Column(modifier.fillMaxWidth()) {
+            Row(
                 Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable(onClick = { if (resumeMode) startOrToggle() else onExpand() })
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (cover != null) {
-                    AsyncImage(
-                        model = cover,
-                        contentDescription = null,
-                        modifier = Modifier.size(44.dp),
-                        contentScale = ContentScale.Crop,
-                    )
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    if (cover != null) {
+                        AsyncImage(
+                            model = cover,
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
                 }
-            }
-            Column(
-                Modifier
-                    .weight(1f)
-                    .padding(horizontal = 10.dp),
-            ) {
-                guest?.takeIf { it.isNotBlank() && viewModel.episodeDisplay.highlightGuest }?.let { g ->
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(horizontal = 10.dp),
+                ) {
+                    guest?.takeIf { it.isNotBlank() && viewModel.episodeDisplay.highlightGuest }?.let { g ->
+                        Text(
+                            g,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
-                        g,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
+                        mainTitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    subLine?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
-                Text(
-                    mainTitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                subLine?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                IconButton(onClick = { startOrToggle() }) {
+                    Icon(
+                        if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (state.isPlaying) "Pauza" else "Přehrát",
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
-            IconButton(onClick = { startOrToggle() }) {
-                Icon(
-                    if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (state.isPlaying) "Pauza" else "Přehrát",
-                    tint = MaterialTheme.colorScheme.onSurface,
+            if (!resumeMode) {
+                val dur = state.durationMs.coerceAtLeast(1L)
+                LinearProgressIndicator(
+                    progress = { (state.positionMs.toFloat() / dur).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
-        }
-        if (!resumeMode) {
-            val dur = state.durationMs.coerceAtLeast(1L)
-            LinearProgressIndicator(
-                progress = { (state.positionMs.toFloat() / dur).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(2.dp),
-                color = MaterialTheme.colorScheme.primary,
-            )
         }
     }
 }

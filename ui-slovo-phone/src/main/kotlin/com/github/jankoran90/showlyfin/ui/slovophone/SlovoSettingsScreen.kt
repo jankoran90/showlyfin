@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Sort
+import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.runtime.Composable
@@ -56,8 +57,11 @@ fun SlovoSettingsScreen(
             SlovoCollapsibleSection("Účet / Audioknihy", Icons.Rounded.AccountCircle) {
                 SlovoAccountSection()
             }
-            SlovoCollapsibleSection("Vzhled", Icons.Rounded.Palette, initiallyExpanded = true) {
+            SlovoCollapsibleSection("Vzhled", Icons.Rounded.Palette) {
                 SlovoAppearanceSection()
+            }
+            SlovoCollapsibleSection("Zobrazení Domů", Icons.Rounded.ViewAgenda) {
+                SlovoHomeLayoutSection()
             }
             SlovoCollapsibleSection("Pořadí menu", Icons.Rounded.Menu) {
                 SlovoDrawerOrderSection()

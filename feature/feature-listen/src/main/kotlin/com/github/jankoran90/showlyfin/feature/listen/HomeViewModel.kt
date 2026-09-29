@@ -102,6 +102,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** User (2026-09-29) — mřížka vs. jeden sloupec (Nastavení → Zobrazení Domů), živě. */
+    val layout: StateFlow<HomeLayout> = HomeLayoutPrefs.observe(prefs)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, HomeLayoutPrefs.read(prefs))
+
     /** User (2026-08-15 16:49) — odznak „hraje" na dlaždici, když je zrovna aktivní v přehrávači. */
     val playerState = connection.state
 
@@ -204,9 +208,17 @@ class HomeViewModel @Inject constructor(
                 coverUrl = ep.imageUrl,
                 description = ep.description,
                 podcastTitle = item.sourceTitle,
-                direct = DirectAudio(url = localUrl ?: ep.streamUrl, durationSec = ep.durationSec, author = item.sourceTitle),
+                // Stream URL YouTube/ČT nese session klíč — ze snímku Domů ([HomeSnapshotStore]) může být
+                // zastaralý, proto se staví znovu s aktuálním. RSS = přímá enclosure, beze změny.
+                direct = DirectAudio(url = localUrl ?: freshStreamUrl(item), durationSec = ep.durationSec, author = item.sourceTitle),
             ),
         )
+    }
+
+    private fun freshStreamUrl(item: ContinueItem.Episode): String = when (item.sourceType) {
+        "youtube" -> uploaderDs.ytStreamUrl(baseUrl, cookie, item.episode.id, "audio")
+        "ctv" -> uploaderDs.ctvAudioUrl(baseUrl, cookie, item.episode.id)
+        else -> item.episode.streamUrl
     }
 
     fun resetEpisodeProgress(item: ContinueItem.Episode) {
@@ -243,6 +255,9 @@ class HomeViewModel @Inject constructor(
             override val updatedAt: Long,
             /** ADAPT (2026-09-04) — kterou verzí pokračovat („kde se přestalo dál"), viz [choosePlaybackResume]. */
             val mode: PlaybackMode = PlaybackMode.AUDIO,
+            /** User (2026-09-29) — časový údaj v jednosloupcovém Domů ([HomeLayout.list]). */
+            val posMs: Long = 0L,
+            val durMs: Long = 0L,
         ) : ContinueItem
     }
 
@@ -375,6 +390,9 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun doRefresh() {
         val myGeneration = refreshGeneration
+        // User (2026-09-29, „zkrať dobu načítání") — cold start: hned poslední známý obsah, čerstvý doběhne.
+        val profileUuid = profileRepository.activeProfile.value?.profileUuid
+        if (_items.value.isEmpty()) _items.value = HomeSnapshotStore.load(prefs, profileUuid)
         coroutineScope {
             _isLoading.value = true
             val booksDeferred = async {
@@ -419,7 +437,10 @@ class HomeViewModel @Inject constructor(
                 .sortedByDescending { it.updatedAt }
             // Zahoď zastaralý výsledek — mezitím vznikl novější požadavek (refresh()/reset), jehož
             // vlastní běh dopíše čerstvá data sám; tenhle by je jen přepsal starými.
-            if (refreshGeneration == myGeneration) _items.value = result
+            if (refreshGeneration == myGeneration) {
+                _items.value = result
+                HomeSnapshotStore.save(prefs, profileUuid, result)
+            }
             _isLoading.value = false
         }
     }
@@ -520,10 +541,11 @@ class HomeViewModel @Inject constructor(
             val sourceTitle = byKey[key]?.second?.title ?: ep.subtitle ?: "YouTube"
             val vm = videoMarks[key]
             val am = audioMarks[key]
-            val choice = choosePlaybackResume(am?.posMs, am?.durMs, false, vm?.posMs, vm?.durMs) ?: return@mapNotNull null
+            val choice = choosePlaybackResume(am?.posMs, am?.durMs, false, vm?.posMs, vm?.durMs, am?.updatedAt ?: 0L, vm?.updatedAt ?: 0L) ?: return@mapNotNull null
             val updatedAt = if (choice.mode == PlaybackMode.VIDEO) vm?.updatedAt ?: 0L else am?.updatedAt ?: 0L
-            val progress = if (choice.durMs > 0) (choice.posMs.toFloat() / choice.durMs).coerceIn(0f, 1f) else 0f
-            ContinueItem.Episode(sourceType, sourceRef, sourceTitle, ep, progress, updatedAt, choice.mode)
+            val durMs = choice.durMs.takeIf { it > 0 } ?: (ep.durationSec * 1000).toLong()
+            val progress = if (durMs > 0) (choice.posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f
+            ContinueItem.Episode(sourceType, sourceRef, sourceTitle, ep, progress, updatedAt, choice.mode, choice.posMs, durMs)
         }
     }
 }

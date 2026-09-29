@@ -6,7 +6,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -58,10 +63,21 @@ internal fun <T> SettingChips(
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { opt ->
+                // User (2026-09-29, emulátor audit): na AMOLED se vybraný chip skoro nelišil od
+                // nevybraného (jen o chlup tmavší výplň) — fajfka + akcentová výplň z theme.
+                val isSel = opt == selected
                 FilterChip(
-                    selected = opt == selected,
+                    selected = isSel,
                     onClick = { onSelect(opt) },
                     label = { Text(labelOf(opt)) },
+                    leadingIcon = if (isSel) {
+                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                    } else null,
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
                 )
             }
         }

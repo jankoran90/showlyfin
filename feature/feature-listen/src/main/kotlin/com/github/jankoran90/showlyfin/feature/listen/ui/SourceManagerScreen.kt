@@ -65,6 +65,9 @@ import com.github.jankoran90.showlyfin.feature.listen.SourceManagerViewModel
 fun SourceManagerScreen(
     modifier: Modifier = Modifier,
     onUploadAudiobook: () -> Unit = {},
+    showTitle: Boolean = true,
+    /** User (2026-09-29, emulátor audit): ťuk na zdroj ho otevře (dřív řádek nereagoval vůbec). null = jen správa. */
+    onOpenSource: ((PodcastSource) -> Unit)? = null,
     viewModel: SourceManagerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -88,12 +91,13 @@ fun SourceManagerScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = padding.calculateTopPadding() + 8.dp,
-                bottom = padding.calculateBottomPadding() + 24.dp,
+                bottom = padding.calculateBottomPadding() + 96.dp, // rezerva pod mini-player (2026-09-29)
                 start = 12.dp, end = 12.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item {
+            // User (2026-09-29, emulátor audit): ve Slovu nad tím už je lišta „Zdroje" → zdvojený nadpis.
+            if (showTitle) item {
                 Text(
                     "Zdroje podcastů",
                     style = MaterialTheme.typography.headlineSmall,
@@ -202,7 +206,7 @@ fun SourceManagerScreen(
                 }
             } else {
                 items(state.sources, key = { it.id }) { s ->
-                    SourceRow(source = s, onRemove = { pendingRemove = s })
+                    SourceRow(source = s, onRemove = { pendingRemove = s }, onOpen = onOpenSource?.let { cb -> { cb(s) } })
                 }
             }
         }
@@ -232,8 +236,11 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun SourceRow(source: PodcastSource, onRemove: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+private fun SourceRow(source: PodcastSource, onRemove: () -> Unit, onOpen: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Thumb(source.thumbnail)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(source.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -246,7 +253,7 @@ private fun SourceRow(source: PodcastSource, onRemove: () -> Unit) {
         // EXODUS (SHW-67): prémiový zdroj rodiny (NaVýbornou) nelze odebrat → mazání skryté.
         if (!source.premium) {
             IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Delete, contentDescription = "Odebrat", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Default.Delete, contentDescription = "Odebrat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

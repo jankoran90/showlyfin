@@ -550,7 +550,7 @@ class AudiobookPlayerConnection @Inject constructor(
                 startMs = run {
                     val audio = resumeStore.get(episode.episodeId)?.takeUnless { it.isFinished }
                     val video = videoResumeStore.get(episode.episodeId)
-                    choosePlaybackResume(audio?.posMs, audio?.durMs, false, video?.posMs, video?.durMs)?.posMs ?: 0L
+                    choosePlaybackResume(audio?.posMs, audio?.durMs, false, video?.posMs, video?.durMs, audio?.updatedAt ?: 0L, video?.updatedAt ?: 0L)?.posMs ?: 0L
                 },
                 episode = episode,
             )

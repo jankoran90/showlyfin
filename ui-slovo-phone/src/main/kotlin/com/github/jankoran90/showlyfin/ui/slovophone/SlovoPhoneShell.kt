@@ -295,7 +295,7 @@ private fun SlovoShellContent() {
                                     } else if (!listenState.isConfigured) {
                                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                             Text(
-                                                "Poslech zatím není nastaven.\nPřihlas se k Audiobookshelf serveru v Nastavení → Poslech (Audiobookshelf).",
+                                                "Poslech zatím není nastaven.\nPřihlas se k Audiobookshelf serveru v Nastavení → Účet / Audioknihy.",
                                                 textAlign = TextAlign.Center,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.padding(24.dp),
@@ -364,12 +364,14 @@ private fun SlovoShellContent() {
                             }
                         }
                         SlovoSection.OBJEVIT -> SlovoSectionScaffold(current.label, onMenu) {
-                            PodcastDiscoveryScreen(modifier = Modifier.fillMaxSize())
+                            PodcastDiscoveryScreen(modifier = Modifier.fillMaxSize(), showTitle = false)
                         }
                         SlovoSection.ZDROJE -> SlovoSectionScaffold(current.label, onMenu) {
                             SourceManagerScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 onUploadAudiobook = { onPush(SlovoDetailEntry.UploadAudiobook) },
+                                showTitle = false,
+                                onOpenSource = { src -> onPush(sourceDetail(src)) },
                             )
                         }
                         SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu)

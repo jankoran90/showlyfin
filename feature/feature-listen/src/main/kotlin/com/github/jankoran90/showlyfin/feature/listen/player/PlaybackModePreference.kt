@@ -39,6 +39,16 @@ private fun isNearEnd(posMs: Long, durMs: Long): Boolean =
 /** Veřejné pro filtrování seznamů (`inProgressIds`/Domů „rozposlouchané") — stejný práh jako výše. */
 fun VideoResumeStore.Mark.isNearEnd(): Boolean = isNearEnd(posMs, durMs)
 
+/**
+ * BUG (2026-09-29, user „na Domů Cukrfree díl, klik na cover nutí video, přitom mám rozposlouchanou
+ * audio verzi, pár vteřin"): čisté „vyšší pozice vyhrává" nechalo STARŠÍ video mark přebít čerstvě
+ * rozposlouchané audio jen proto, že bylo o pár desítek vteřin dál. Teď vyhrává NAPOSLEDY použitý
+ * režim, pokud ho druhý nepředbíhá o víc než [OUTRUN_MARGIN_MS] — tím zůstává chráněný i původní
+ * ADAPT případ (pár vteřin videa nepřebije z poloviny poslechnuté audio). Bez `updatedAt` (0) = starý
+ * režim čistě podle pozice.
+ */
+private const val OUTRUN_MARGIN_MS = 2 * 60_000L
+
 /** `null` = žádná strana nemá mark (nikdy nespuštěno). */
 fun choosePlaybackResume(
     audioPosMs: Long?,
@@ -46,10 +56,18 @@ fun choosePlaybackResume(
     audioFinished: Boolean,
     videoPosMs: Long?,
     videoDurMs: Long?,
-): ResumeChoice? = when {
-    audioPosMs == null && videoPosMs == null -> null
-    videoPosMs == null -> ResumeChoice(PlaybackMode.AUDIO, audioPosMs!!, audioDurMs ?: 0L, audioFinished)
-    audioPosMs == null -> ResumeChoice(PlaybackMode.VIDEO, videoPosMs, videoDurMs ?: 0L, isNearEnd(videoPosMs, videoDurMs ?: 0L))
-    videoPosMs >= audioPosMs -> ResumeChoice(PlaybackMode.VIDEO, videoPosMs, videoDurMs ?: 0L, isNearEnd(videoPosMs, videoDurMs ?: 0L))
-    else -> ResumeChoice(PlaybackMode.AUDIO, audioPosMs, audioDurMs ?: 0L, audioFinished)
+    audioUpdatedAt: Long = 0L,
+    videoUpdatedAt: Long = 0L,
+): ResumeChoice? {
+    val audio = audioPosMs?.let { ResumeChoice(PlaybackMode.AUDIO, it, audioDurMs ?: 0L, audioFinished) }
+    val video = videoPosMs?.let { ResumeChoice(PlaybackMode.VIDEO, it, videoDurMs ?: 0L, isNearEnd(it, videoDurMs ?: 0L)) }
+    if (audio == null || video == null) return audio ?: video
+    val videoIsRecent = videoUpdatedAt >= audioUpdatedAt
+    val (recent, older) = if (videoIsRecent) video to audio else audio to video
+    val hasRecency = audioUpdatedAt > 0L && videoUpdatedAt > 0L
+    return when {
+        !hasRecency -> if (video.posMs >= audio.posMs) video else audio
+        older.posMs - recent.posMs > OUTRUN_MARGIN_MS -> older
+        else -> recent
+    }
 }

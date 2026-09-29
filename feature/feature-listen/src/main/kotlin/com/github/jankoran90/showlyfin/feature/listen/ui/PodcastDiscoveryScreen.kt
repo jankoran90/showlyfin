@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -64,6 +65,8 @@ import com.github.jankoran90.showlyfin.feature.listen.PodcastDiscoveryViewModel
 @Composable
 fun PodcastDiscoveryScreen(
     modifier: Modifier = Modifier,
+    /** User (2026-09-29, emulátor audit): ve Slovu je nad obrazovkou lišta „Objevit" → nadpis zdvojený. */
+    showTitle: Boolean = true,
     viewModel: PodcastDiscoveryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -112,12 +115,16 @@ fun PodcastDiscoveryScreen(
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Objevit podcasty",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f).padding(bottom = 8.dp),
-                            )
+                            if (showTitle) {
+                                Text(
+                                    "Objevit podcasty",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f).padding(bottom = 8.dp),
+                                )
+                            } else {
+                                Spacer(Modifier.weight(1f))
+                            }
                             // F4: filtr vyloučení kategorií (badge = počet aktivních vyloučení).
                             BadgedBox(badge = {
                                 if (state.excluded.isNotEmpty()) Badge { Text("${state.excluded.size}") }

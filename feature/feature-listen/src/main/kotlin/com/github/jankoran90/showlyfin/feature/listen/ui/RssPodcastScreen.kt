@@ -190,7 +190,7 @@ fun RssPodcastScreen(
         // progres + „Pokračovat" funguje i u VIDEO epizody.
         val rssAudioMark = resumeMarks[key]
         val rssVideoMark = videoResumeMarks[key]
-        val rssChoice = choosePlaybackResume(rssAudioMark?.posMs, rssAudioMark?.durMs, rssAudioMark?.isFinished == true, rssVideoMark?.posMs, rssVideoMark?.durMs)
+        val rssChoice = choosePlaybackResume(rssAudioMark?.posMs, rssAudioMark?.durMs, rssAudioMark?.isFinished == true, rssVideoMark?.posMs, rssVideoMark?.durMs, rssAudioMark?.updatedAt ?: 0L, rssVideoMark?.updatedAt ?: 0L)
         val markPos = rssChoice?.posMs
         val markDur = rssChoice?.durMs
         // User (2026-08-16) — dohraná epizoda (mark na konci) = „poslechnuto", ne rozposlouchaná.
