@@ -3,9 +3,6 @@ package com.github.jankoran90.showlyfin.feature.listen
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
-import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
-import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -14,6 +11,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvCaster
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,7 +38,7 @@ import javax.inject.Named
 class CtvProgramViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val connection: AudiobookPlayerConnection,
-    private val naTv: NaTvService,
+    private val tvCaster: ListenTvCaster,
     private val resumeStore: DirectResumeStore,
     // BUG (2026-09-04): parita s YoutubeChannelViewModel/RssPodcastScreen — video (PlaybackViewModel.
     // saveExternalPosition, REWIND SHW-68 store) se dřív do „poslechového" resume vůbec nepromítlo.
@@ -175,19 +173,7 @@ class CtvProgramViewModel @Inject constructor(
      */
     fun castVideoToTv(ep: CtvEpisode) {
         viewModelScope.launch {
-            val jfUrl = prefs.getString("jellyfin_server_url", "") ?: ""
-            val jfToken = prefs.getString("jellyfin_token", "") ?: ""
-            val reportUrl = if (baseUrl.isNotBlank() && cookie.isNotBlank()) {
-                "${baseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
-            } else null
-            val result = naTv.castFerry(jfUrl, jfToken, videoUrl(ep), ep.title, emptyList(), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
-            Timber.i("[KAVKA] cast ČT video → TV: %s result=%s", ep.title, result)
-            _castMessage.value = when (result) {
-                CastResult.SENT -> "Spuštěno na TV: ${ep.title}"
-                CastResult.NO_SESSION -> "Na TV nikdo nehraje — otevři Showlyfin/Jellyfin na televizi a zkus znovu."
-                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Jellyfin pro TV cast)."
-                CastResult.FAILED -> "Nepodařilo se spustit na TV."
-            }
+            _castMessage.value = tvCaster.castVideo(videoUrl(ep), ep.title, ep.image, episodeKey(ep))
         }
     }
 }

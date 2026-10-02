@@ -4,9 +4,6 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
-import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
-import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
@@ -19,6 +16,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvCaster
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +45,7 @@ class RssPodcastViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
-    private val naTv: NaTvService,
+    private val tvCaster: ListenTvCaster,
     private val resumeStore: DirectResumeStore,
     videoResumeStore: VideoResumeStore,
     // EPHEMERON (2026-09-04): epizody manuálně připojené ke kartě přes scoped hledání (i mimo okno feedu).
@@ -212,22 +210,16 @@ class RssPodcastViewModel @Inject constructor(
     fun castVideoToTv(ep: RssEpisode) {
         val itemId = ep.jfItemId ?: return
         viewModelScope.launch {
+            // Video Na výbornou žije v Jellyfin knihovně (hero_bot) → stream URL potřebuje Jellyfin přihlášení
+            // i při posílání do Filmy na TV.
             val jfUrl = prefs.getString("jellyfin_server_url", "") ?: ""
             val jfToken = prefs.getString("jellyfin_token", "") ?: ""
-            val base = prefs.getString("uploader_base_url", "") ?: ""
-            val cookie = prefs.getString("uploader_session_cookie", "") ?: ""
-            val streamUrl = "${jfUrl.trimEnd('/')}/Videos/$itemId/stream?static=true&api_key=$jfToken"
-            val reportUrl = if (base.isNotBlank() && cookie.isNotBlank()) {
-                "${base.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
-            } else null
-            val result = naTv.castFerry(jfUrl, jfToken, streamUrl, ep.title, emptyList(), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
-            Timber.i("[EXODUS] cast NaVýbornou video → TV: %s result=%s", ep.title, result)
-            _castMessage.value = when (result) {
-                CastResult.SENT -> "Spuštěno na TV: ${ep.title}"
-                CastResult.NO_SESSION -> "Na TV nikdo nehraje — otevři Showlyfin/Jellyfin na televizi a zkus znovu."
-                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Jellyfin pro TV cast)."
-                CastResult.FAILED -> "Nepodařilo se spustit na TV."
+            if (jfUrl.isBlank() || jfToken.isBlank()) {
+                _castMessage.value = "Chybí přihlášení k Jellyfinu (Nastavení → Jellyfin)."
+                return@launch
             }
+            val streamUrl = "${jfUrl.trimEnd('/')}/Videos/$itemId/stream?static=true&api_key=$jfToken"
+            _castMessage.value = tvCaster.castVideo(streamUrl, ep.title, ep.image, episodeKey(ep))
         }
     }
 
@@ -322,21 +314,7 @@ class RssPodcastViewModel @Inject constructor(
     fun castVideoVersion(video: EpisodeVideo, ep: RssEpisode) {
         clearVideoCandidates()
         viewModelScope.launch {
-            val jfUrl = prefs.getString("jellyfin_server_url", "") ?: ""
-            val jfToken = prefs.getString("jellyfin_token", "") ?: ""
-            val base = prefs.getString("uploader_base_url", "") ?: ""
-            val cookie = prefs.getString("uploader_session_cookie", "") ?: ""
-            val reportUrl = if (base.isNotBlank() && cookie.isNotBlank()) {
-                "${base.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
-            } else null
-            val result = naTv.castFerry(jfUrl, jfToken, repo.youtubeVideoUrl(video.id, PodcastVideoQuality.stream(prefs)), ep.title, emptyList(), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
-            Timber.i("[AGORA] cast YouTube video verze → TV: %s result=%s", ep.title, result)
-            _castMessage.value = when (result) {
-                CastResult.SENT -> "Spuštěno na TV: ${ep.title}"
-                CastResult.NO_SESSION -> "Na TV nikdo nehraje — otevři Showlyfin/Jellyfin na televizi a zkus znovu."
-                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Jellyfin pro TV cast)."
-                CastResult.FAILED -> "Nepodařilo se spustit na TV."
-            }
+            _castMessage.value = tvCaster.castVideo(repo.youtubeVideoUrl(video.id, PodcastVideoQuality.stream(prefs)), ep.title, ep.image, episodeKey(ep))
         }
     }
 }

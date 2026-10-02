@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.feature.listen.CastTargetViewModel
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvTarget
 
 /**
  * User (2026-08-22) — parita s Filmy (DOCK SHW-77): kategorický blok „Výchozí zařízení pro Na TV"
@@ -35,6 +36,41 @@ fun CastTargetSettingsSection(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        Text(
+            "Posílání videa na TV",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            if (state.target == ListenTvTarget.FILMY) {
+                "Tlačítko Na TV pošle video do appky Filmy na televizi (stejný profil). Když Filmy na TV " +
+                    "neběží, otevři ji do 2 minut a video se pustí samo. Bez Jellyfinu."
+            } else {
+                "Tlačítko Na TV pustí video v Jellyfin klientovi na televizi. Potřebuje přihlášení k " +
+                    "Jellyfinu a otevřeného klienta na TV; umí poslat i AI titulky."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = state.target == ListenTvTarget.FILMY,
+                onClick = { viewModel.selectTarget(ListenTvTarget.FILMY) },
+                label = { Text("Filmy na TV") },
+            )
+            FilterChip(
+                selected = state.target == ListenTvTarget.JELLYFIN,
+                onClick = { viewModel.selectTarget(ListenTvTarget.JELLYFIN) },
+                label = { Text("Jellyfin") },
+            )
+        }
+        if (state.target != ListenTvTarget.JELLYFIN) return@Column
+
         Text(
             "Výchozí zařízení pro Na TV",
             style = MaterialTheme.typography.labelLarge,

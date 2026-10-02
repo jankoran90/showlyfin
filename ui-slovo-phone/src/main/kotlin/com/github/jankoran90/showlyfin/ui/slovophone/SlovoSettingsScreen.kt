@@ -92,7 +92,7 @@ fun SlovoSettingsScreen(
             }
             // user 2026-09-17: appka neměla ŽÁDNOU Jellyfin login obrazovku, takže cast na TV z YouTube
             // kanálů nešel spustit vůbec (appka hlásila "Chybí přihlášení k Jellyfinu" bez možnosti to řešit).
-            SlovoCollapsibleSection("Jellyfin (pro TV cast)", Icons.Rounded.LiveTv) {
+            SlovoCollapsibleSection("Jellyfin (videa Na výbornou, TV přes Jellyfin)", Icons.Rounded.LiveTv) {
                 SlovoJellyfinSection()
             }
             SlovoCollapsibleSection("O aplikaci", Icons.Rounded.Info) {

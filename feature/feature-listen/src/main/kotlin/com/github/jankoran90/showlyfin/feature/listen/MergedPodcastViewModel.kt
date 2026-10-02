@@ -4,9 +4,6 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
-import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
-import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
@@ -19,6 +16,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvCaster
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -44,7 +42,7 @@ class MergedPodcastViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val linkStore: PodcastLinkStore,
-    private val naTv: NaTvService,
+    private val tvCaster: ListenTvCaster,
     private val resumeStore: DirectResumeStore,
     @javax.inject.Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
@@ -192,19 +190,7 @@ class MergedPodcastViewModel @Inject constructor(
     fun castVideoToTv(item: PodcastPairing.MergedEpisode) {
         val url = videoUrl(item) ?: return
         viewModelScope.launch {
-            val jfUrl = prefs.getString("jellyfin_server_url", "") ?: ""
-            val jfToken = prefs.getString("jellyfin_token", "") ?: ""
-            val reportUrl = if (baseUrl.isNotBlank() && cookie.isNotBlank()) {
-                "${baseUrl.trimEnd('/')}/api/ferry/state?key=${java.net.URLEncoder.encode(cookie, "UTF-8")}"
-            } else null
-            val result = naTv.castFerry(jfUrl, jfToken, url, item.title, emptyList(), reportUrl, preferredDeviceId = CastTargetPrefs.defaultDeviceId(prefs))
-            Timber.i("[WEFT] cast sloučené video → TV: %s result=%s", item.title, result)
-            _castMessage.value = when (result) {
-                CastResult.SENT -> "Spuštěno na TV: ${item.title}"
-                CastResult.NO_SESSION -> "Na TV nikdo nehraje — otevři Showlyfin/Jellyfin na televizi a zkus znovu."
-                CastResult.NO_CREDS -> "Chybí přihlášení k Jellyfinu (Nastavení → Jellyfin pro TV cast)."
-                CastResult.FAILED -> "Nepodařilo se spustit na TV."
-            }
+            _castMessage.value = tvCaster.castVideo(url, item.title, item.imageUrl, item.key)
         }
     }
 
