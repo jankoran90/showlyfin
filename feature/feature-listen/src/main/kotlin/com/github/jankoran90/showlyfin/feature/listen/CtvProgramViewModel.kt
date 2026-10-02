@@ -9,6 +9,7 @@ import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.ejectIfLoaded
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
@@ -129,6 +130,7 @@ class CtvProgramViewModel @Inject constructor(
     // BUG (2026-09-04): smaž i video pozici (jiný store, jinak zůstane epizoda vypadat rozkoukaná).
     fun resetPosition(ep: CtvEpisode) {
         val key = episodeKey(ep)
+        connection.ejectIfLoaded(key)  // 2026-10-02: ukončená epizoda nesmí dál viset v mini-liště
         resumeStore.clear(key)
         videoResumeStore.clear(key)
     }

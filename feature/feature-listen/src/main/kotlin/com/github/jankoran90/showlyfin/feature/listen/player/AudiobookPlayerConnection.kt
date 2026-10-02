@@ -111,6 +111,16 @@ class AudiobookPlayerConnection @Inject constructor(
         _state.value = PlayerState()
     }
 
+    /** Vysune právě načtenou položku z přehrávače (mini-lišta zmizí), fronta zůstává. Pořadí je
+     * záměrně OPAČNÉ než výš: služba při zastavení ukládá pozici (onIsPlayingChanged → syncNow) —
+     * s už prázdným playerem nemá co uložit, takže nevrátí právě ukončenou položku do „Pokračovat". */
+    internal fun ejectCurrent() {
+        withController { c -> c.clearMediaItems(); c.stop() }
+        currentEpisode = null
+        _chapters.value = emptyList()
+        _state.value = PlayerState()
+    }
+
     // Stabilní titul/autor knihy — drží se mimo MediaItem metadata, protože systémovou metadata titulek
     // (notifikace + Android Auto) přepisujeme na PRÁVĚ HRANOU KAPITOLU. In-app UI tak ukáže titul knihy
     // velkým písmem + kapitolu zvlášť, kdežto lišta systému ukáže kapitolu (dřív se duplikoval titul).

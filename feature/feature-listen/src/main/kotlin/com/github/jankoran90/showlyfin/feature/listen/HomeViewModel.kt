@@ -19,6 +19,7 @@ import com.github.jankoran90.showlyfin.data.uploader.youtubeVideoUrl
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
+import com.github.jankoran90.showlyfin.feature.listen.player.ejectIfLoaded
 import com.github.jankoran90.showlyfin.core.domain.resume.LastPlaybackMode
 import com.github.jankoran90.showlyfin.feature.listen.player.PlaybackMode
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
@@ -192,6 +193,7 @@ class HomeViewModel @Inject constructor(
      */
     fun resetBookProgress(book: Audiobook) {
         _items.update { list -> list.filterNot { it is ContinueItem.Book && it.book.id == book.id } }
+        connection.ejectIfLoaded(book.id)  // 2026-10-02: ukončená kniha nesmí dál viset v mini-liště
         audiobookDownloads.clearLocalProgress(book.id)
         viewModelScope.launch {
             repo.endListening(book.id, book.progressId)
@@ -231,10 +233,20 @@ class HomeViewModel @Inject constructor(
 
     fun resetEpisodeProgress(item: ContinueItem.Episode) {
         _items.update { list -> list - item }
+        // BUG (2026-10-02, user „vykřížkováním nezmizí díl z now playing"): načtenou epizodu vysuň
+        // z přehrávače i fronty PŘED smazáním pozice (stejný klíč jako [playEpisode]).
+        val key = item.episode.resumeKey ?: item.episode.id
+        connection.ejectIfLoaded(key)
         // BUG (2026-09-04): smaž i video pozici — jinak by karta „skončit poslech" na rozkoukaném
         // videu zmizela z Domů jen na chvíli (video mark ji další refresh vrátí zpátky).
-        item.episode.resumeKey?.let { directResume.clear(it); videoResume.clear(it) }
-        refresh()
+        directResume.clear(key); videoResume.clear(key)
+        viewModelScope.launch {
+            // Pojistka: případný opožděný zápis pozice ze služby (zastavení jde přes IPC) smaž znovu —
+            // jen pokud ji user mezitím zase nespustil.
+            delay(1_500)
+            if (playerState.value.currentEpisodeId != key) { directResume.clear(key); videoResume.clear(key) }
+            refresh()
+        }
     }
 
     fun setBookSharedWith(itemId: String, targetId: Long, shared: Boolean) {

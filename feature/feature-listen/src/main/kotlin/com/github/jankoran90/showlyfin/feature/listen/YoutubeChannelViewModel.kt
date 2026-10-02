@@ -16,6 +16,7 @@ import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
 import com.github.jankoran90.showlyfin.data.uploader.subtitle.SubtitleTranslationStore
 import com.github.jankoran90.showlyfin.data.uploader.youtubeVideoUrl
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.ejectIfLoaded
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
@@ -166,6 +167,7 @@ class YoutubeChannelViewModel @Inject constructor(
      *  mark stát a epizoda by dál vypadala rozkoukaná (video má v UI přednost). */
     fun resetPosition(ep: YtEpisode) {
         val key = episodeKey(ep)
+        connection.ejectIfLoaded(key)  // 2026-10-02: ukončená epizoda nesmí dál viset v mini-liště
         resumeStore.clear(key)
         videoResumeStore.clear(key)
     }

@@ -14,6 +14,7 @@ import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.EpisodeVideo
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.ejectIfLoaded
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
@@ -136,7 +137,11 @@ class RssPodcastViewModel @Inject constructor(
     fun episodeKey(ep: RssEpisode): String = "rss:${ep.id}"
 
     /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
-    fun resetPosition(ep: RssEpisode) = resumeStore.clear(episodeKey(ep))
+    fun resetPosition(ep: RssEpisode) {
+        val key = episodeKey(ep)
+        connection.ejectIfLoaded(key)  // 2026-10-02: ukončená epizoda nesmí dál viset v mini-liště
+        resumeStore.clear(key)
+    }
 
     /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
     fun markFinished(ep: RssEpisode) = resumeStore.markFinished(episodeKey(ep))

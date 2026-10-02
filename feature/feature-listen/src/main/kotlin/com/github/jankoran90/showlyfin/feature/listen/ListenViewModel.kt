@@ -23,6 +23,7 @@ import com.github.jankoran90.showlyfin.data.uploader.AudiobookUploadRepository
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.ejectIfLoaded
 import com.github.jankoran90.showlyfin.feature.listen.player.PlayerState
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
@@ -578,6 +579,7 @@ class ListenViewModel @Inject constructor(
         _uiState.update { s ->
             s.copy(books = s.books.map { if (it.id == book.id) it.copy(progress = 0.0, currentTimeSec = 0.0) else it })
         }
+        connection.ejectIfLoaded(book.id)  // 2026-10-02: ukončená kniha nesmí dál viset v mini-liště
         audiobookDownloads.clearLocalProgress(book.id)
         viewModelScope.launch {
             repo.endListening(book.id, book.progressId)

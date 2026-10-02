@@ -13,6 +13,7 @@ import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
+import com.github.jankoran90.showlyfin.feature.listen.player.ejectIfLoaded
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
@@ -167,7 +168,12 @@ class MergedPodcastViewModel @Inject constructor(
     }
 
     /** User (2026-08-15 16:49) — „Reset poslechu" u rozposlouchané epizody (long-press menu). */
-    fun resetPosition(item: PodcastPairing.MergedEpisode) = resumeStore.clear(item.key)
+    fun resetPosition(item: PodcastPairing.MergedEpisode) {
+        // 2026-10-02: ukončená epizoda nesmí dál viset v mini-liště (hraje se klíčem audio verze, viz [toQueued]).
+        item.audio?.let { connection.ejectIfLoaded(it.resumeKey ?: it.id) }
+        connection.ejectIfLoaded(item.key)
+        resumeStore.clear(item.key)
+    }
 
     /** User (2026-08-16, „chci volbu, která označí jako poslechnuto") — ruční „Označit jako poslechnuté". */
     fun markFinished(item: PodcastPairing.MergedEpisode) = resumeStore.markFinished(item.key)

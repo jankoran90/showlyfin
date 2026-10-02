@@ -91,8 +91,28 @@ fun AudiobookPlayerConnection.enqueue(episode: QueuedEpisode, atFront: Boolean) 
     )
 }
 
+/** BUG (2026-10-02, user „smazáním z fronty, když jsem právě přehrával, pořád visí v mini liště"):
+ * odebraná PRÁVĚ NAČTENÁ epizoda dřív zmizela jen ze seznamu, přehrávač ji držel dál. Teď: hraje-li
+ * a ve frontě je další → přeskoč na ni (jako ▶▶); jinak ji vysuň z přehrávače. */
 fun AudiobookPlayerConnection.removeFromQueue(episodeId: String) {
-    setQueue(_queue.value.filterNot { it.episodeId == episodeId })
+    val q = _queue.value
+    setQueue(q.filterNot { it.episodeId == episodeId })
+    if (currentEpisode?.episodeId != episodeId) return
+    val idx = q.indexOfFirst { it.episodeId == episodeId }
+    val next = if (idx >= 0) q.getOrNull(idx + 1) else null
+    if (state.value.isPlaying && next != null) playQueued(next) else ejectCurrent()
+}
+
+/** Domů „Ukončit poslech" (user 2026-10-02, „vykřížkováním nezmizí díl z now playing"): je-li
+ * položka (epizoda dle klíče, nebo kniha dle id) načtená v přehrávači, vysuň ji i z fronty — bez
+ * přechodu na další. Volat PŘED smazáním uložené pozice. */
+fun AudiobookPlayerConnection.ejectIfLoaded(id: String) {
+    val st = state.value
+    val loaded = st.isActive &&
+        (st.currentEpisodeId == id || (currentEpisode == null && st.currentItemId == id))
+    if (!loaded) return
+    setQueue(_queue.value.filterNot { it.episodeId == id })
+    ejectCurrent()
 }
 
 fun AudiobookPlayerConnection.clearQueue() = setQueue(emptyList())
