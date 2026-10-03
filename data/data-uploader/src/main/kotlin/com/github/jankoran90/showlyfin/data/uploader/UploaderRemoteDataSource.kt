@@ -60,6 +60,10 @@ interface UploaderRemoteDataSource {
     // true = HTTP OK. castCommandGet = POP (vrátí+smaže) čekající příkaz pro profil → raw JSON (`{pending:…}`) nebo null.
     suspend fun castCommand(baseUrl: String, sessionCookie: String, profile: String, bodyJson: String): Boolean
     suspend fun castCommandGet(baseUrl: String, sessionCookie: String, profile: String): String?
+    /** Jako [castCommand], ale vrací id zařazeného příkazu (pro [castState]); "" = přijato bez id (starý server), null = selhalo. */
+    suspend fun castCommandSend(baseUrl: String, sessionCookie: String, profile: String, bodyJson: String): String?
+    /** Stav příkazu: pending / picked / expired / cancelled / unknown / none; null = server nedostupný. */
+    suspend fun castState(baseUrl: String, sessionCookie: String, commandId: String): String?
     // LAPIDARY (SHW-96) — vzácné klenoty. cacheOne = watchlist/favorite trigger (fire-and-forget, backend běží na pozadí,
     // po nacachování zapíše auto-WorkingSource do profilu). gemsCatalog = obsah sekce (raw JSON {"items":[…]}), null při chybě.
     suspend fun gemsCacheOne(baseUrl: String, sessionCookie: String, imdb: String, tmdb: Long, profile: String, policy: String, title: String, year: Int?)

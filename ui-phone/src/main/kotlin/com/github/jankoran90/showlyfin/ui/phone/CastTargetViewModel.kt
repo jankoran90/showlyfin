@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvTarget
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,10 +31,12 @@ class CastTargetViewModel @Inject constructor(
         val devices: List<Device> = emptyList(),
         val selectedDeviceId: String? = null,   // null = automatika (televize)
         val loading: Boolean = false,
+        /** 2026-10-03: kam „Na TV" posílá obsah ze Zdrojů (podcasty/YouTube/ČT) — Filmy na TV (default) nebo Jellyfin. */
+        val target: ListenTvTarget = ListenTvTarget.FILMY,
     )
 
     private val _state = MutableStateFlow(
-        UiState(selectedDeviceId = CastTargetPrefs.defaultDeviceId(prefs)),
+        UiState(selectedDeviceId = CastTargetPrefs.defaultDeviceId(prefs), target = ListenTvTarget.from(prefs)),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -54,7 +57,7 @@ class CastTargetViewModel @Inject constructor(
             if (sel != null && online.none { it.deviceId == sel }) {
                 list += Device(sel, CastTargetPrefs.defaultDeviceName(prefs) ?: "Zařízení", false)
             }
-            _state.value = UiState(devices = list, selectedDeviceId = sel, loading = false)
+            _state.value = _state.value.copy(devices = list, selectedDeviceId = sel, loading = false)
         }
     }
 
@@ -62,5 +65,10 @@ class CastTargetViewModel @Inject constructor(
     fun select(device: Device?) {
         CastTargetPrefs.setDefault(prefs, device?.deviceId, device?.name)
         _state.value = _state.value.copy(selectedDeviceId = device?.deviceId)
+    }
+
+    fun selectTarget(target: ListenTvTarget) {
+        prefs.edit().putString(ListenTvTarget.PREF_KEY, target.key).apply()
+        _state.value = _state.value.copy(target = target)
     }
 }

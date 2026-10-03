@@ -480,9 +480,15 @@ class WorkingSourceStore @Inject constructor(
     suspend fun castToTv(
         imdb: String?, tmdb: Long?, title: String, year: Int?,
         sourceUrl: String?, positionMs: Long, posterUrl: String?, subtitleQuery: String?,
-    ): Boolean {
+    ): Boolean = castToTvWithId(imdb, tmdb, title, year, sourceUrl, positionMs, posterUrl, subtitleQuery) != null
+
+    /** Jako [castToTv], ale vrací id příkazu pro [castState] ("" = server id nevrátil, null = odeslání selhalo). */
+    suspend fun castToTvWithId(
+        imdb: String?, tmdb: Long?, title: String, year: Int?,
+        sourceUrl: String?, positionMs: Long, posterUrl: String?, subtitleQuery: String?,
+    ): String? {
         val key = profileKey(); val base = serverBase()
-        if (key.isBlank() || base.isBlank()) return false
+        if (key.isBlank() || base.isBlank()) return null
         val body = org.json.JSONObject().apply {
             imdb?.takeIf { it.isNotBlank() }?.let { put("imdb", it) }
             if (tmdb != null && tmdb > 0L) put("tmdb", tmdb)
@@ -493,7 +499,31 @@ class WorkingSourceStore @Inject constructor(
             posterUrl?.takeIf { it.isNotBlank() }?.let { put("posterUrl", it) }
             subtitleQuery?.takeIf { it.isNotBlank() }?.let { put("subtitleQuery", it) }
         }.toString()
-        return uploaderDs.castCommand(base, serverCookie(), key, body)
+        return uploaderDs.castCommandSend(base, serverCookie(), key, body)
+    }
+
+    /**
+     * Počká (poll po 2 s, max [timeoutMs]) až box příkaz vyzvedne. Vrací poslední známý stav: `picked` = box
+     * ho vzal, `pending` = po timeoutu pořád čeká (Filmy na TV nejspíš neběží), `expired`/`cancelled`,
+     * `unknown` (server mezitím restartoval / starý server bez stavu), `error` = server nedostupný.
+     */
+    suspend fun awaitCastPickup(commandId: String, timeoutMs: Long = 100_000L): String {
+        if (commandId.isBlank()) return "unknown"
+        var last = "pending"
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (true) {
+            last = castState(commandId) ?: "error"
+            if (last != "pending" && last != "error") return last
+            if (System.currentTimeMillis() >= deadline) return last
+            kotlinx.coroutines.delay(2_000L)
+        }
+    }
+
+    /** Stav zařazeného castu (pending/picked/expired/…); null = server nedostupný. */
+    suspend fun castState(commandId: String): String? {
+        val base = serverBase()
+        if (base.isBlank() || commandId.isBlank()) return null
+        return uploaderDs.castState(base, serverCookie(), commandId)
     }
 
     /** CATALOGUE — kolik filmů ještě čeká v serverové frontě backfillu (null = server nedostupný/chyba). */

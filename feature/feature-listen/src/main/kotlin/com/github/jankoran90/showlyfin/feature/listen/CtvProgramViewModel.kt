@@ -173,7 +173,7 @@ class CtvProgramViewModel @Inject constructor(
      */
     fun castVideoToTv(ep: CtvEpisode) {
         viewModelScope.launch {
-            _castMessage.value = tvCaster.castVideo(videoUrl(ep), ep.title, ep.image, episodeKey(ep))
+            _castMessage.value = tvCaster.castVideo(videoUrl(ep), ep.title, ep.image, episodeKey(ep), onStatus = { _castMessage.value = it })
         }
     }
 }

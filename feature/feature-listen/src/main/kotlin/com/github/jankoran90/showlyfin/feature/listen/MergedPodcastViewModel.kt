@@ -190,7 +190,7 @@ class MergedPodcastViewModel @Inject constructor(
     fun castVideoToTv(item: PodcastPairing.MergedEpisode) {
         val url = videoUrl(item) ?: return
         viewModelScope.launch {
-            _castMessage.value = tvCaster.castVideo(url, item.title, item.imageUrl, item.key)
+            _castMessage.value = tvCaster.castVideo(url, item.title, item.imageUrl, item.key, onStatus = { _castMessage.value = it })
         }
     }
 

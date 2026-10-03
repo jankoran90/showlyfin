@@ -245,7 +245,7 @@ class YoutubeChannelViewModel @Inject constructor(
      */
     fun castVideoToTv(ep: YtEpisode) {
         viewModelScope.launch {
-            _castMessage.value = tvCaster.castVideo(videoUrl(ep), ep.title, ep.thumbnail, episodeKey(ep), buildTvSubtitle(ep))
+            _castMessage.value = tvCaster.castVideo(videoUrl(ep), ep.title, ep.thumbnail, episodeKey(ep), buildTvSubtitle(ep), onStatus = { _castMessage.value = it })
         }
     }
 

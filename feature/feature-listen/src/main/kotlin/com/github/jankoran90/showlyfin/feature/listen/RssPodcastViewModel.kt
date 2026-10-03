@@ -219,7 +219,7 @@ class RssPodcastViewModel @Inject constructor(
                 return@launch
             }
             val streamUrl = "${jfUrl.trimEnd('/')}/Videos/$itemId/stream?static=true&api_key=$jfToken"
-            _castMessage.value = tvCaster.castVideo(streamUrl, ep.title, ep.image, episodeKey(ep))
+            _castMessage.value = tvCaster.castVideo(streamUrl, ep.title, ep.image, episodeKey(ep), onStatus = { _castMessage.value = it })
         }
     }
 
@@ -314,7 +314,7 @@ class RssPodcastViewModel @Inject constructor(
     fun castVideoVersion(video: EpisodeVideo, ep: RssEpisode) {
         clearVideoCandidates()
         viewModelScope.launch {
-            _castMessage.value = tvCaster.castVideo(repo.youtubeVideoUrl(video.id, PodcastVideoQuality.stream(prefs)), ep.title, ep.image, episodeKey(ep))
+            _castMessage.value = tvCaster.castVideo(repo.youtubeVideoUrl(video.id, PodcastVideoQuality.stream(prefs)), ep.title, ep.image, episodeKey(ep), onStatus = { _castMessage.value = it })
         }
     }
 }

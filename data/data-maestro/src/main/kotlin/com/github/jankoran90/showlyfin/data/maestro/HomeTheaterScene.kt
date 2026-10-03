@@ -73,16 +73,27 @@ class HomeTheaterScene @Inject constructor(
         cfg.tvHost?.takeIf { it.isNotBlank() }?.let { runCatching { box.wake(it) } }
         cfg.boxMac?.takeIf { it.isNotBlank() }?.let { runCatching { box.wakeViaWol(it) } }
         val boxHost = cfg.boxHost?.takeIf { it.isNotBlank() } ?: return
-        repeat(LAUNCH_ATTEMPTS) { i ->
+        // Studený start boxu (WoL → boot → ADB) trvá desítky sekund; opakuj spuštění, dokud nevyjde (první úspěch
+        // stačí — box už byl vzhůru, appka je v popředí). Cast příkaz na serveru žije 120 s.
+        for (i in 0 until LAUNCH_ATTEMPTS) {
             if (i == 1) onProgress("Spouštím appku na TV…")
-            runCatching { box.wakeAndLaunch(boxHost, launchPackage) }
+            val ok = runCatching { box.wakeAndLaunch(boxHost, launchPackage) }
                 .onFailure { Timber.w(it, "[MAESTRO] wakeAndLaunch selhal (pokus %d)", i) }
+                .getOrDefault(false)
+            if (ok) {
+                // Box mohl být právě ze standby a první `monkey` se v rozbíhajícím se systému ztratí — jedno
+                // potvrzovací spuštění po chvíli (idempotentní: Filmy jen vytáhne do popředí).
+                delay(CONFIRM_LAUNCH_MS)
+                runCatching { box.wakeAndLaunch(boxHost, launchPackage) }
+                return
+            }
             if (i < LAUNCH_ATTEMPTS - 1) delay(LAUNCH_RETRY_MS)
         }
     }
 
     private companion object {
-        const val LAUNCH_ATTEMPTS = 3       // opakuj spuštění appky, jak naběhne síť po WoL
-        const val LAUNCH_RETRY_MS = 6_000L  // ~0/6/12 s
+        const val LAUNCH_ATTEMPTS = 9       // opakuj spuštění appky, jak naběhne box a síť po WoL
+        const val CONFIRM_LAUNCH_MS = 6_000L
+        const val LAUNCH_RETRY_MS = 8_000L  // ~0/8/…/64 s (v rámci 120 s TTL cast příkazu)
     }
 }

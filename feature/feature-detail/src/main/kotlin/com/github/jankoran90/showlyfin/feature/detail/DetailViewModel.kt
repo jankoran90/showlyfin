@@ -2464,18 +2464,24 @@ class DetailViewModel @Inject constructor(
             // `saveExternalPosition`). Bez imdb / bez uložené pozice = 0 → TV spustí od začátku / z vlastní pozice.
             val resumePosMs = item?.imdbId?.takeIf { it.isNotBlank() }
                 ?.let { prefs.getLong("resume_$it", 0L) } ?: 0L
-            val ok = runCatching {
-                workingSourceStore.castToTv(
+            val id = runCatching {
+                workingSourceStore.castToTvWithId(
                     imdb = item?.imdbId, tmdb = item?.tmdbId, title = title, year = item?.year,
                     sourceUrl = url, positionMs = resumePosMs, posterUrl = poster, subtitleQuery = subQuery,
                 )
-            }.getOrDefault(false)
-            _uiState.update {
-                it.copy(
-                    isCastingToTv = false,
-                    autoCastMessage = if (ok) "Odesláno na Filmy TV ▶" else "Odeslání na Filmy TV selhalo — zkontroluj připojení a přihlášení.",
-                )
+            }.getOrNull()
+            // Server vrací stav příkazu → řekni uživateli, jestli ho box opravdu vzal (jinak tichá nula).
+            if (!id.isNullOrBlank()) _uiState.update { it.copy(autoCastMessage = "Posláno. Zapínám TV a čekám, až si film vyzvedne…") }
+            val state = if (id.isNullOrBlank()) null else workingSourceStore.awaitCastPickup(id)
+            val msg = when {
+                id == null -> "Odeslání na Filmy TV selhalo — zkontroluj připojení a přihlášení."
+                state == null || state == "unknown" || state == "error" -> "Odesláno na Filmy TV ▶"
+                state == "picked" -> "Spuštěno na Filmy TV ▶"
+                state == "expired" -> "Příkaz na TV propadl — Filmy na TV ho do 2 minut nevyzvedla. Otevři Filmy na TV a pošli to znovu."
+                state == "cancelled" -> "Odeslání na TV bylo zrušeno."
+                else -> "TV příkaz zatím nevyzvedla — je Filmy na TV otevřená? Pustí se sama, jakmile ji otevřeš (do 2 minut)."
             }
+            _uiState.update { it.copy(isCastingToTv = false, autoCastMessage = msg) }
         }
     }
 

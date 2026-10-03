@@ -6,9 +6,15 @@ import com.github.jankoran90.showlyfin.data.jellyfin.CastResult
 import com.github.jankoran90.showlyfin.data.jellyfin.CastTargetPrefs
 import com.github.jankoran90.showlyfin.data.jellyfin.FerrySubtitle
 import com.github.jankoran90.showlyfin.data.jellyfin.NaTvService
+import com.github.jankoran90.showlyfin.data.maestro.HomeTheaterConfig
+import com.github.jankoran90.showlyfin.data.maestro.HomeTheaterScene
 import com.github.jankoran90.showlyfin.data.uploader.WorkingSourceStore
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -45,8 +51,12 @@ class ListenTvCaster @Inject constructor(
     private val workingSourceStore: WorkingSourceStore,
     private val directResume: DirectResumeStore,
     private val videoResume: VideoResumeStore,
+    private val homeTheaterScene: HomeTheaterScene,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
 ) {
+
+    /** Probuzení sestavy trvá až ~minutu (WoL + opakované spuštění) — nesmí zdržet hlášku pro uživatele. */
+    private val wakeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * Pošle video na TV podle zvoleného cíle a vrátí hlášku pro uživatele (Toast).
@@ -59,25 +69,46 @@ class ListenTvCaster @Inject constructor(
         posterUrl: String? = null,
         resumeKey: String? = null,
         subtitles: List<FerrySubtitle> = emptyList(),
+        onStatus: (String) -> Unit = {},
     ): String = when (ListenTvTarget.from(prefs)) {
-        ListenTvTarget.FILMY -> castToFilmy(videoUrl, title, posterUrl, resumeKey)
+        ListenTvTarget.FILMY -> castToFilmy(videoUrl, title, posterUrl, resumeKey, onStatus)
         ListenTvTarget.JELLYFIN -> castToJellyfin(videoUrl, title, subtitles)
     }
 
-    private suspend fun castToFilmy(videoUrl: String, title: String, posterUrl: String?, resumeKey: String?): String {
+    private suspend fun castToFilmy(
+        videoUrl: String, title: String, posterUrl: String?, resumeKey: String?, onStatus: (String) -> Unit,
+    ): String {
         if (videoUrl.isBlank()) return "Tohle video nejde poslat na TV."
-        val ok = runCatching {
-            workingSourceStore.castToTv(
+        // Cast poller na boxu běží jen s Filmy v popředí → před zařazením příkazu probuď sestavu a spusť Filmy
+        // (best-effort; bez nakonfigurované Domácí sestavy no-op — pak platí „otevři Filmy do 2 minut").
+        val wake = HomeTheaterConfig.from(prefs)
+        if (wake.configured) {
+            wakeScope.launch {
+                runCatching { homeTheaterScene.wakeAndLaunch(wake, FILMY_TV_PACKAGE) }
+                    .onFailure { Timber.w(it, "[TVCAST] probuzení sestavy před castem selhalo") }
+            }
+        }
+        val id = runCatching {
+            workingSourceStore.castToTvWithId(
                 imdb = null, tmdb = null, title = title, year = null,
                 sourceUrl = videoUrl, positionMs = resumePositionMs(resumeKey),
                 posterUrl = posterUrl, subtitleQuery = null,
             )
-        }.onFailure { Timber.w(it, "[TVCAST] Filmy TV příkaz selhal") }.getOrDefault(false)
-        Timber.i("[TVCAST] Filmy TV: %s ok=%s", title, ok)
-        return if (ok) {
-            "Posláno do Filmy na TV: $title. Když Filmy na TV neběží, otevři ji do 2 minut — pustí se sama."
-        } else {
-            "Nepodařilo se poslat na TV (server nedostupný nebo chybí profil)."
+        }.onFailure { Timber.w(it, "[TVCAST] Filmy TV příkaz selhal") }.getOrNull()
+        Timber.i("[TVCAST] Filmy TV: %s id=%s", title, id)
+        if (id == null) return "Nepodařilo se poslat na TV (server nedostupný nebo chybí profil)."
+        // Starý server bez id → stav nezjistíme, hláška jako dřív.
+        if (id.isBlank()) return "Posláno do Filmy na TV: $title. Když Filmy na TV neběží, otevři ji do 2 minut — pustí se sama."
+        // Studený box po WoL naběhne až za ~minutu — do TTL příkazu (120 s) neplaš falešným „nevyzvedla".
+        onStatus("Posláno. Zapínám TV a čekám, až si video vyzvedne…")
+        val state = workingSourceStore.awaitCastPickup(id)
+        Timber.i("[TVCAST] Filmy TV stav %s: %s", id, state)
+        return when (state) {
+            "picked" -> "Spuštěno na TV: $title"
+            "pending" -> "TV příkaz zatím nevyzvedla — je Filmy na TV otevřená? Pustí se sama, jakmile ji otevřeš (do 2 minut)."
+            "expired" -> "Příkaz na TV propadl — Filmy na TV ho do 2 minut nevyzvedla. Otevři Filmy na TV a pošli to znovu."
+            "cancelled" -> "Odeslání na TV bylo zrušeno."
+            else -> "Posláno do Filmy na TV: $title. Stav se nepodařilo ověřit — když se nespustí, otevři Filmy na TV."
         }
     }
 
@@ -107,3 +138,5 @@ class ListenTvCaster @Inject constructor(
         return maxOf(v, a)
     }
 }
+
+private const val FILMY_TV_PACKAGE = "com.github.jankoran90.filmy"

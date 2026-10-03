@@ -335,6 +335,26 @@ internal class UploaderApi(
         }.getOrDefault(false)
     }
 
+    override suspend fun castCommandSend(baseUrl: String, sessionCookie: String, profile: String, bodyJson: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val body = bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType())
+        return runCatching {
+            val resp = service.castCommand("$base/api/cast/command?profile=${enc(profile)}", cookie, body)
+            if (!resp.isSuccessful) null
+            else runCatching { org.json.JSONObject(resp.body()?.string().orEmpty()).optString("id") }.getOrDefault("")
+        }.getOrNull()
+    }
+
+    override suspend fun castState(baseUrl: String, sessionCookie: String, commandId: String): String? {
+        val base = baseUrl.trimEnd('/')
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return runCatching {
+            val resp = service.castStatus("$base/api/cast/status?id=${enc(commandId)}", cookie)
+            if (resp.isSuccessful) org.json.JSONObject(resp.body()?.string().orEmpty()).optString("state").ifBlank { null } else null
+        }.getOrNull()
+    }
+
     override suspend fun castCommandGet(baseUrl: String, sessionCookie: String, profile: String): String? {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
