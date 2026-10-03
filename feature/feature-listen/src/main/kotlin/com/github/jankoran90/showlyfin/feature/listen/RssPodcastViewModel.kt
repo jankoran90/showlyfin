@@ -16,6 +16,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenSpeakerCaster
 import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvCaster
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,7 @@ class RssPodcastViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val tvCaster: ListenTvCaster,
+    private val speakerCaster: ListenSpeakerCaster,
     private val resumeStore: DirectResumeStore,
     videoResumeStore: VideoResumeStore,
     // EPHEMERON (2026-09-04): epizody manuálně připojené ke kartě přes scoped hledání (i mimo okno feedu).
@@ -202,6 +204,15 @@ class RssPodcastViewModel @Inject constructor(
 
     /** L3: smaž staženou epizodu z telefonu. */
     fun deleteOffline(ep: RssEpisode) = offline.delete(episodeKey(ep))
+
+    /** „Na repro" (2026-10-03): ZVUK epizody na Chromecast u receiveru (vždy vzdálená adresa, ne stažená kopie). */
+    fun castAudioToSpeaker(ep: RssEpisode, fallbackTitle: String) {
+        viewModelScope.launch {
+            _castMessage.value = speakerCaster.castAudio(
+                ep.audioUrl, ep.title.ifBlank { fallbackTitle }, ep.image ?: _state.value.image, episodeKey(ep),
+            )
+        }
+    }
 
     /**
      * EXODUS (SHW-67) E2: pošle VIDEO verzi epizody (JF knihovní položka) na běžící yellyfin session

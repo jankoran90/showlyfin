@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Info
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.feature.listen.ui.CastTargetSettingsSection
+import com.github.jankoran90.showlyfin.feature.listen.ui.SpeakerSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.HiddenPodcastsSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.LinguaQuotaSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenOfflineSettingsSection
@@ -89,6 +91,9 @@ fun SlovoSettingsScreen(
             }
             SlovoCollapsibleSection("Přehrávání na TV/Zenbooku", Icons.Rounded.Cast) {
                 CastTargetSettingsSection()
+            }
+            SlovoCollapsibleSection("Přehrávání na repro (receiver)", Icons.Rounded.Speaker) {
+                SpeakerSettingsSection()
             }
             // user 2026-09-17: appka neměla ŽÁDNOU Jellyfin login obrazovku, takže cast na TV z YouTube
             // kanálů nešel spustit vůbec (appka hlásila "Chybí přihlášení k Jellyfinu" bez možnosti to řešit).

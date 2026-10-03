@@ -11,6 +11,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenSpeakerCaster
 import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvCaster
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +40,7 @@ class CtvProgramViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val connection: AudiobookPlayerConnection,
     private val tvCaster: ListenTvCaster,
+    private val speakerCaster: ListenSpeakerCaster,
     private val resumeStore: DirectResumeStore,
     // BUG (2026-09-04): parita s YoutubeChannelViewModel/RssPodcastScreen — video (PlaybackViewModel.
     // saveExternalPosition, REWIND SHW-68 store) se dřív do „poslechového" resume vůbec nepromítlo.
@@ -166,6 +168,15 @@ class CtvProgramViewModel @Inject constructor(
 
     /** Přidá ČT díl do fronty (atFront = hned po aktuální, jinak na konec). */
     fun enqueue(ep: CtvEpisode, atFront: Boolean) = connection.enqueue(toQueued(ep), atFront)
+
+    /** „Na repro" (2026-10-03): zvuk ČT dílu (audio-only DASH manifest serveru) na Chromecast u receiveru. */
+    fun castAudioToSpeaker(ep: CtvEpisode) {
+        viewModelScope.launch {
+            _castMessage.value = speakerCaster.castAudio(
+                uploaderDs.ctvAudioUrl(baseUrl, cookie, ep.id), ep.title, ep.image, episodeKey(ep),
+            )
+        }
+    }
 
     /**
      * Pošle VIDEO verzi dílu na běžící yellyfin session na TV/boxu (FERRY cast), stejně jako YouTube/film.

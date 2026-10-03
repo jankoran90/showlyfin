@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
@@ -336,6 +337,9 @@ fun CtvProgramScreen(
             actions = listOfNotNull(
                 ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
                     viewModel.playAudio(ep); onOpenAudioPlayer()
+                },
+                ListenEpisodeAction(Icons.Default.Speaker, "Na repro (receiver)") {
+                    viewModel.castAudioToSpeaker(ep)
                 },
                 if (!audioOnly) {
                     ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {

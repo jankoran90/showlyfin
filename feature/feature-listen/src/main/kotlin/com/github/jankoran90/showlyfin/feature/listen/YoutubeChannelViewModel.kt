@@ -18,6 +18,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenSpeakerCaster
 import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvCaster
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ class YoutubeChannelViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val offline: OfflineDownloadManager,
     private val tvCaster: ListenTvCaster,
+    private val speakerCaster: ListenSpeakerCaster,
     private val resumeStore: DirectResumeStore,
     // BUG (2026-09-04, user „uvidím to video z hledání i na kartě... jako rozposlouchané?"): video
     // (PlaybackViewModel.saveExternalPosition, REWIND SHW-68 store) — parita s RssPodcastScreen,
@@ -233,6 +235,15 @@ class YoutubeChannelViewModel @Inject constructor(
 
     /** L3: smaž staženou AUDIO epizodu z telefonu. */
     fun deleteOffline(ep: YtEpisode) = offline.delete(episodeKey(ep))
+
+    /** „Na repro" (2026-10-03): zvuk YouTube dílu (m4a proxy serveru) na Chromecast u receiveru. */
+    fun castAudioToSpeaker(ep: YtEpisode) {
+        viewModelScope.launch {
+            _castMessage.value = speakerCaster.castAudio(
+                uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"), ep.title, ep.thumbnail, episodeKey(ep),
+            )
+        }
+    }
 
     /**
      * L4 (LEVER): pošle VIDEO verzi epizody na běžící yellyfin session na TV/boxu (FERRY cast),

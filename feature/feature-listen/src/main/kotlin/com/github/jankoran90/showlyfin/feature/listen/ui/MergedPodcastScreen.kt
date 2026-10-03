@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -218,6 +219,11 @@ fun MergedPodcastScreen(
             actions = listOfNotNull(
                 ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
                     viewModel.playAudio(item); onOpenAudioPlayer()
+                },
+                item.audio?.let {
+                    ListenEpisodeAction(Icons.Default.Speaker, "Na repro (receiver)") {
+                        viewModel.castAudioToSpeaker(item)
+                    }
                 },
                 if (!audioOnly) {
                     item.video?.let {

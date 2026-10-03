@@ -16,6 +16,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.PodcastLinkStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.tv.ListenSpeakerCaster
 import com.github.jankoran90.showlyfin.feature.listen.tv.ListenTvCaster
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,7 @@ class MergedPodcastViewModel @Inject constructor(
     private val offline: OfflineDownloadManager,
     private val linkStore: PodcastLinkStore,
     private val tvCaster: ListenTvCaster,
+    private val speakerCaster: ListenSpeakerCaster,
     private val resumeStore: DirectResumeStore,
     @javax.inject.Named("traktPreferences") private val prefs: SharedPreferences,
 ) : ViewModel() {
@@ -181,6 +183,16 @@ class MergedPodcastViewModel @Inject constructor(
         val v = item.video ?: return null
         val id = v.resumeKey?.removePrefix("yt:") ?: v.id
         return repo.youtubeVideoUrl(id, streamQuality)
+    }
+
+    /** „Na repro" (2026-10-03): zvuk audio verze (RSS enclosure / YT audio proxy) na Chromecast u receiveru. */
+    fun castAudioToSpeaker(item: PodcastPairing.MergedEpisode) {
+        val a = item.audio ?: return
+        viewModelScope.launch {
+            _castMessage.value = speakerCaster.castAudio(
+                a.streamUrl, item.title, item.imageUrl ?: _state.value.image, a.resumeKey ?: a.id,
+            )
+        }
     }
 
     /**

@@ -131,7 +131,7 @@ class ListenTvCaster @Inject constructor(
     }
 
     /** Sdílená pozice epizody (audio i video jsou jedna pozice); dohraná = od začátku. */
-    private fun resumePositionMs(key: String?): Long {
+    internal fun resumePositionMs(key: String?): Long {
         if (key.isNullOrBlank()) return 0L
         val v = videoResume.get(key)?.takeUnless { it.isNearEnd() }?.posMs ?: 0L
         val a = directResume.get(key)?.takeUnless { it.isFinished }?.posMs ?: 0L

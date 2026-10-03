@@ -189,6 +189,9 @@ interface UploaderService {
     // FILMYCAST — cast telefon→TV do Filmy appky (fronta příkazů na backendu, POP jednorázově).
     @POST suspend fun castCommand(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
     @GET suspend fun castCommandGet(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
+    // „Na repro" — zvuk na Chromecast u receiveru (server: routes/speaker.py).
+    @POST suspend fun speakerPost(@Url url: String, @Header("Cookie") cookie: String, @Body body: RequestBody): Response<ResponseBody>
+    @GET suspend fun speakerGet(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
     @GET suspend fun castStatus(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
 
     // DROPSHIP F2 — nahrát audioknihu (multipart) do ABS knihovny přes uploader backend.

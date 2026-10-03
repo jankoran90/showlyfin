@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AssistChip
@@ -349,6 +350,9 @@ fun RssPodcastScreen(
             actions = listOfNotNull(
                 ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
                     viewModel.playAudio(ep, fallbackTitle); onOpenAudioPlayer()
+                },
+                ListenEpisodeAction(Icons.Default.Speaker, "Na repro (receiver)") {
+                    viewModel.castAudioToSpeaker(ep, fallbackTitle)
                 },
                 // EXODUS E2: video epizoda (v JF knihovně) → přehrát video / poslat na TV.
                 // SLOVO-KIDS-EPISODE: dětský profil = vždy jen audio, video volby se ani nenabídnou.
