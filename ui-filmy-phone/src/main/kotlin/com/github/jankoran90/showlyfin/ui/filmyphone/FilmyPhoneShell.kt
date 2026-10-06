@@ -251,6 +251,26 @@ private fun FilmyShellContent() {
         }
     }
 
+    // BUTLER K5 (AI Voice): odkaz `showlyfin://detail?tmdb=` (FilmyMainActivity → requestOpenDetail) → karta
+    // filmu nad aktuální sekcí. Detail se hydratuje z tmdbId (stejná stub-cesta jako pushCollectionPart).
+    // Guard přes seq: přežije re-create Activity, ať se karta neotevře podruhé.
+    val openDetailReq by ListenNavSignal.openDetail.collectAsStateWithLifecycle()
+    var lastOpenDetail by rememberSaveable { mutableStateOf(0L) }
+    LaunchedEffect(openDetailReq) {
+        val req = openDetailReq ?: return@LaunchedEffect
+        if (req.seq == lastOpenDetail) return@LaunchedEffect
+        lastOpenDetail = req.seq
+        player = null
+        detailStack = listOf(
+            FilmyDetailEntry.Media(
+                MediaItem(
+                    traktId = 0L, tmdbId = req.tmdb, imdbId = null, title = req.title, year = req.year,
+                    overview = null, rating = null, genres = null, type = MediaType.MOVIE,
+                )
+            )
+        )
+    }
+
     CompositionLocalProvider(
         LocalCsfdRatingProvider provides cardCsfd,
         LocalCzechOverviewProvider provides cardCsfd,

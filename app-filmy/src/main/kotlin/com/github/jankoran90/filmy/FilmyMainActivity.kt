@@ -82,6 +82,7 @@ class FilmyMainActivity : ComponentActivity() {
         handleForYouIntent(intent)
         handleOpenDownloadsIntent(intent)
         handleOpenNovinkyIntent(intent)
+        handleDetailLink(intent)
         val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         lifecycleScope.launch {
             // CELLULOID M1.3 — Filmy má 2 PEVNÉ LOKÁLNÍ profily (Dospělý/Děti), NE backend roster
@@ -213,6 +214,20 @@ class FilmyMainActivity : ComponentActivity() {
         handleForYouIntent(intent)
         handleOpenDownloadsIntent(intent)
         handleOpenNovinkyIntent(intent)
+        handleDetailLink(intent)
+    }
+
+    // BUTLER K5 (AI Voice): odkaz `showlyfin://detail?tmdb=…[&title=&year=]` (z Claude appky přes
+    // ai.jankoran.cz/pust/film) → shell otevře kartu filmu. Telefonní shell; TV ho nesbírá.
+    private fun handleDetailLink(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "showlyfin" || uri.host != "detail") return
+        val tmdb = uri.getQueryParameter("tmdb")?.toLongOrNull() ?: return
+        ListenNavSignal.requestOpenDetail(
+            tmdb,
+            uri.getQueryParameter("title").orEmpty(),
+            uri.getQueryParameter("year")?.toIntOrNull(),
+        )
     }
 
     // Parity (CELLULOID): proklik notifikace kurátora „nová doporučení" (CuratorCheckWorker míří na tuto

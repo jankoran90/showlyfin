@@ -48,6 +48,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- BUTLER K5 (AI Voice): „pusť film" z Claude appky → odkaz ai.jankoran.cz/pust/film →
+                 intent://detail?tmdb=… s package=filmy → otevře kartu filmu. Stejný tvar jako starý
+                 showlyfin://detail (VERDICT/AIRWAVE), ten po CELLULOID splitu ve Filmy chyběl. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="showlyfin" android:host="detail" />
+            </intent-filter>
         </activity>
 
         <!-- EVERGREEN (SHW-64) — výsledek tiché instalace přes PackageInstaller -->
