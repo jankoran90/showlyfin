@@ -50,6 +50,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.domain.MediaItem
@@ -88,6 +90,10 @@ fun WatchlistScreen(
     val openDetail: (MediaItem, String?) -> Unit = { item, jid -> viewModel.setSearchQuery(""); onItemClick(item, jid) }
     val listState = rememberLazyListState()
     val gridState = rememberLazyGridState()
+    // Obnova seznamu při vstupu na obrazovku i návratu do appky — přidání z webu/TV se jinak
+    // ukázalo až po úplném zavření appky (user 2026-10-08). VM si hlídá, aby nenačítal dvakrát.
+    LaunchedEffect(Unit) { viewModel.refreshQuiet() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshQuiet() }
 
     Column(modifier = modifier.fillMaxSize()) {
         // Hlavička se skrývá při scrollu — z aktivního scroll stavu (seznam / mřížka).

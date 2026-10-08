@@ -190,6 +190,25 @@ class WatchlistViewModel @Inject constructor(
         if (_uiState.value.isLoggedIn) load(_uiState.value.activeTab)
     }
 
+    /** Začátek posledního načtení — tichá obnova se nespouští hned po něm (init + vstup na obrazovku). */
+    private var lastLoadStartMs = 0L
+
+    /** Obohacené položky per záložka podle traktId — obnova pak doptává TMDB jen u NOVÝCH titulů. */
+    private val enrichedCache = mutableMapOf<WatchlistTab, Map<Long, MediaItem>>()
+
+    /**
+     * Tichá obnova při vstupu na obrazovku a návratu do appky (user 2026-10-08: „když dám na webu
+     * do Chci vidět, v telefonu nevidím, že by mi skočil do Chci vidět"). Seznam se dřív načetl jen
+     * jednou při vzniku ViewModelu — přidání z webu, z TV i z jiného zařízení se ukázalo až po
+     * úplném zavření appky. Levná: jeden dotaz na Trakt, TMDB jen pro nově přidané tituly.
+     */
+    fun refreshQuiet() {
+        val s = _uiState.value
+        if (!s.isLoggedIn || s.isLoading) return
+        if (System.currentTimeMillis() - lastLoadStartMs < 5_000) return
+        load(s.activeTab)
+    }
+
     /**
      * VISTA V3 — líně načti ČSFD hodnocení pro JEDEN řádek (volá řádek při zobrazení). Drahé
      * (Wikidata + ČSFD scrape/PoW) → jen viditelné řádky, výsledek (i null) se nezahazuje, aby se
@@ -210,8 +229,10 @@ class WatchlistViewModel @Inject constructor(
 
     private fun load(tab: WatchlistTab) {
         viewModelScope.launch {
+            lastLoadStartMs = System.currentTimeMillis()
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
+                val known = enrichedCache[tab].orEmpty()
                 val syncItems = if (tab == WatchlistTab.MOVIES) {
                     authorizedTraktApi.fetchSyncMoviesWatchlist()
                 } else {
@@ -227,6 +248,7 @@ class WatchlistViewModel @Inject constructor(
                 val enriched = coroutineScope {
                     rawItems.map { item ->
                         async {
+                            known[item.traktId]?.let { return@async it }
                             val tmdbId = item.tmdbId ?: return@async item
                             if (tab == WatchlistTab.MOVIES) {
                                 val detailsDeferred = async { runCatching { tmdbApi.fetchMovieDetails(tmdbId) }.getOrNull() }
@@ -254,6 +276,7 @@ class WatchlistViewModel @Inject constructor(
                         }
                     }.awaitAll()
                 }
+                enrichedCache[tab] = enriched.associateBy { it.traktId }
                 _rawItems.value = enriched
                 val genres = enriched
                     .flatMap { it.genres.orEmpty() }
