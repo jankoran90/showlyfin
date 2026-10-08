@@ -326,7 +326,7 @@ private fun FilmotekaChips(
         // + „ikonu filtru dej uplne doprava, kdybych chtel pridat sekci do filmoteky dalsi").
         // Dřív se tu tísnily osy, počet titulů, lupa i přepínač zobrazení a POD tím druhá řada s řazením
         // — na userově snímku se chip „Země" překrýval s textem „127 filmů". Všechno je teď v panelu.
-        FilmySectionBar(
+        FilmyPageBar(
             onMenu = onMenu,
             trailing = {
                 extraActions?.invoke()

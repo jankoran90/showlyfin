@@ -54,7 +54,7 @@ fun FilmyQueueScreen(
 
     Column(modifier.fillMaxSize()) {
         // Táž jednopatrová lišta jako u Filmotéky: ☰ + názvy stránek + ovladače vpravo.
-        FilmySectionBar(
+        FilmyPageBar(
             onMenu = onMenu,
             trailing = {
                 IconButton(onClick = { vm.toggleViewMode() }) {

@@ -43,7 +43,7 @@ fun FilmyObjevitScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     Column(modifier.fillMaxSize()) {
-        FilmySectionBar(onMenu = onMenu, content = { titleContent() })
+        FilmyPageBar(onMenu = onMenu, content = { titleContent() })
         val mapa = state.mapa
         when {
             state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

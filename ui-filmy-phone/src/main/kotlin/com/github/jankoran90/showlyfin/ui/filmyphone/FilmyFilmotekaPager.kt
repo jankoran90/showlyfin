@@ -6,6 +6,15 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -50,76 +59,96 @@ fun FilmyFilmotekaPager(
     // Objevit" → další stránky Objevit, Pro tebe (parita s webem) a Česky (filmy s českým zvukem).
     val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
     val scope = rememberCoroutineScope()
+    // user 2026-10-08: „hlavně ať to není zadrhané, plynule a rychle" — data sousedních stránek se
+    // začnou načítat hned při vstupu na Filmotéku (tytéž ViewModely si pak stránky jen vezmou), takže
+    // po přejetí už je obsah připravený a nečeká se na server.
+    androidx.hilt.navigation.compose.hiltViewModel<ObjevitViewModel>()
+    androidx.hilt.navigation.compose.hiltViewModel<ProTebeKatalogViewModel>()
+    androidx.hilt.navigation.compose.hiltViewModel<CeskyViewModel>()
 
     BackHandler(enabled = pagerState.currentPage != PAGE_FILMOTEKA) {
         scope.launch { pagerState.animateScrollToPage(PAGE_FILMOTEKA) }
     }
 
-    val titles: @Composable () -> Unit = {
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            PageTitle("Filmotéka", pagerState.currentPage == PAGE_FILMOTEKA) {
-                scope.launch { pagerState.animateScrollToPage(PAGE_FILMOTEKA) }
-            }
-            PageTitle("K přehrání", pagerState.currentPage == PAGE_QUEUE) {
-                scope.launch { pagerState.animateScrollToPage(PAGE_QUEUE) }
-            }
-            PageTitle("Objevit", pagerState.currentPage == PAGE_OBJEVIT) {
-                scope.launch { pagerState.animateScrollToPage(PAGE_OBJEVIT) }
-            }
-            PageTitle("Pro tebe", pagerState.currentPage == PAGE_PROTEBE) {
-                scope.launch { pagerState.animateScrollToPage(PAGE_PROTEBE) }
-            }
-            PageTitle("Česky", pagerState.currentPage == PAGE_CESKY) {
-                scope.launch { pagerState.animateScrollToPage(PAGE_CESKY) }
-            }
-        }
+    // LABYRINT (user 2026-10-08: „má se tahat jen obsah a ne vše") — JEDNA pevná lišta nad pagerem:
+    // ☰ + názvy stránek + akce aktivní stránky vpravo. Stránky si lištu nekreslí (LocalPagerBar),
+    // jen sem podají své akce. Přejíždí se tak opravdu jen obsah.
+    val akce = remember { mutableStateMapOf<Int, @Composable RowScope.() -> Unit>() }
+    val titulky = listOf(
+        PAGE_FILMOTEKA to "Filmotéka", PAGE_QUEUE to "K přehrání", PAGE_OBJEVIT to "Objevit",
+        PAGE_PROTEBE to "Pro tebe", PAGE_CESKY to "Česky",
+    )
+    val scroll = rememberScrollState()
+    val pozice = remember { mutableStateMapOf<Int, Int>() }
+    val density = LocalDensity.current
+    // aktivní název vždy na očích (u pěti stránek se do lišty nevejdou všechny)
+    LaunchedEffect(pagerState.currentPage) {
+        val x = pozice[pagerState.currentPage] ?: return@LaunchedEffect
+        scroll.animateScrollTo((x - with(density) { 24.dp.roundToPx() }).coerceAtLeast(0))
     }
 
-    HorizontalPager(state = pagerState, modifier = modifier.fillMaxSize()) { page ->
-        when (page) {
-            PAGE_FILMOTEKA -> FilmyFilmotekaScreen(
-                onMenu = onMenu,
-                onOpenDetail = onOpenDetail,
-                onOpenJellyfinDetail = onOpenJellyfinDetail,
-                titleContent = titles,
-            )
-            PAGE_QUEUE -> FilmyQueueScreen(
-                onMenu = onMenu,
-                onOpenDetail = onOpenDetail,
-                titleContent = titles,
-            )
-            PAGE_OBJEVIT -> FilmyObjevitScreen(
-                onMenu = onMenu,
-                onOpenKatalog = onOpenKatalog,
-                titleContent = titles,
-            )
-            PAGE_PROTEBE -> FilmyProTebeKatalogScreen(
-                onMenu = onMenu,
-                onOpenDetail = onOpenDetail,
-                onOpenKatalog = onOpenKatalog,
-                titleContent = titles,
-            )
-            else -> FilmyCeskyScreen(
-                onMenu = onMenu,
-                onOpenDetail = onOpenDetail,
-                titleContent = titles,
-            )
+    Column(modifier.fillMaxSize()) {
+        FilmySectionBar(
+            onMenu = onMenu,
+            trailing = { akce[pagerState.currentPage]?.invoke(this) },
+        ) {
+            Row(
+                Modifier.horizontalScroll(scroll),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                titulky.forEach { (page, nazev) ->
+                    PageTitle(
+                        nazev, pagerState.currentPage == page,
+                        Modifier.onGloballyPositioned { pozice[page] = it.positionInParent().x.toInt() },
+                    ) { scope.launch { pagerState.animateScrollToPage(page) } }
+                }
+            }
+        }
+        HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
+            val hostitel: (@Composable RowScope.() -> Unit) -> Unit = { a -> akce[page] = a }
+            CompositionLocalProvider(LocalPagerBar provides hostitel) {
+                when (page) {
+                    PAGE_FILMOTEKA -> FilmyFilmotekaScreen(
+                        onMenu = onMenu,
+                        onOpenDetail = onOpenDetail,
+                        onOpenJellyfinDetail = onOpenJellyfinDetail,
+                    )
+                    PAGE_QUEUE -> FilmyQueueScreen(
+                        onMenu = onMenu,
+                        onOpenDetail = onOpenDetail,
+                        titleContent = {},
+                    )
+                    PAGE_OBJEVIT -> FilmyObjevitScreen(
+                        onMenu = onMenu,
+                        onOpenKatalog = onOpenKatalog,
+                        titleContent = {},
+                    )
+                    PAGE_PROTEBE -> FilmyProTebeKatalogScreen(
+                        onMenu = onMenu,
+                        onOpenDetail = onOpenDetail,
+                        onOpenKatalog = onOpenKatalog,
+                        titleContent = {},
+                    )
+                    else -> FilmyCeskyScreen(
+                        onMenu = onMenu,
+                        onOpenDetail = onOpenDetail,
+                        titleContent = {},
+                    )
+                }
+            }
         }
     }
 }
 
 /** Název stránky v liště — aktivní tučně a barevně, druhý zeslabený (vzor = userova ukázka). */
 @Composable
-private fun PageTitle(text: String, active: Boolean, onClick: () -> Unit) {
+private fun PageTitle(text: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleLarge,
         fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
         color = if (active) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
+        modifier = modifier
             .padding(end = 4.dp)
             // Bez vlnky — ripple přes text v liště ruší (klik je jen zkratka k přejetí prstem).
             .clickable(

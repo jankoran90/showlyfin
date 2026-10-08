@@ -66,3 +66,27 @@ fun FilmySectionBar(
         )
     }
 }
+
+
+/**
+ * LABYRINT (user 2026-10-08: „přeměny sekcí fungují divně, má se tahat jen obsah a ne vše") — stránky
+ * v pageru Filmotéky NEKRESLÍ vlastní lištu; pager drží jednu pevnou lištu nahoře a stránka mu sem jen
+ * podá své akce vpravo (ikona ovladačů, přepínač zobrazení…). null = stránka stojí samostatně a lištu
+ * si kreslí sama (Pro tebe v draweru apod.).
+ */
+val LocalPagerBar = androidx.compose.runtime.staticCompositionLocalOf<((@Composable RowScope.() -> Unit) -> Unit)?> { null }
+
+/** Lišta stránky: v pageru jen předá akce hostiteli, jinak ji nakreslí sama (☰ + [content] + [trailing]). */
+@Composable
+fun FilmyPageBar(
+    onMenu: () -> Unit,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val host = LocalPagerBar.current
+    if (host != null) {
+        androidx.compose.runtime.SideEffect { host(trailing ?: {}) }
+    } else {
+        FilmySectionBar(onMenu = onMenu, trailing = trailing, content = content)
+    }
+}

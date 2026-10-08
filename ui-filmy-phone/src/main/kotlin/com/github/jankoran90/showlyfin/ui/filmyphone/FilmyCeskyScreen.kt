@@ -34,7 +34,7 @@ fun FilmyCeskyScreen(
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
     Column(modifier.fillMaxSize()) {
-        FilmySectionBar(onMenu = onMenu, content = { titleContent() })
+        FilmyPageBar(onMenu = onMenu, content = { titleContent() })
         when {
             s.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             s.radky.isEmpty() -> FilmyEmpty(

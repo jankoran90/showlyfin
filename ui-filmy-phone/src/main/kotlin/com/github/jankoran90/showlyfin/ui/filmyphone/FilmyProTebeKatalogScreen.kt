@@ -44,7 +44,7 @@ fun FilmyProTebeKatalogScreen(
     val ulozene by (LocalSourceAvailabilityProvider.current?.savedKeys
         ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsStateWithLifecycle()
     Column(modifier.fillMaxSize()) {
-        FilmySectionBar(onMenu = onMenu, content = { titleContent() })
+        FilmyPageBar(onMenu = onMenu, content = { titleContent() })
         Row(
             Modifier.padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
