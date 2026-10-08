@@ -53,7 +53,11 @@ class KatalogRepository @Inject constructor(
         val cz: Boolean = false,
         /** Hlavní žánr (Tragikomedie, Akční komedie…) — jen u `vlastni`, pro řádky stránky „Česky". */
         val hlavni: String? = null,
+        /** TMDB kolekce (jen u `vlastni`) — díly téže kolekce se v seznamu sloučí pod jednu kartu. */
+        val kolekce: Kolekce? = null,
     )
+
+    data class Kolekce(val id: Long, val nazev: String, val posterPath: String?, val backdropPath: String?)
 
     data class Strana(val tituly: List<Titul>, val stranka: Int, val stranek: Int)
 
@@ -247,6 +251,14 @@ class KatalogRepository @Inject constructor(
             role = o.optString("role").takeIf { it.isNotBlank() && it != "null" },
             cz = o.optBoolean("cz", false),
             hlavni = o.optString("hlavni").takeIf { it.isNotBlank() && it != "null" },
+            kolekce = o.optJSONObject("kolekce")?.let { k ->
+                val kid = k.optLong("id", 0L)
+                if (kid <= 0L) null else Kolekce(
+                    id = kid, nazev = k.optString("nazev"),
+                    posterPath = k.optString("plakat").takeIf { it.isNotBlank() && it != "null" },
+                    backdropPath = k.optString("pozadi").takeIf { it.isNotBlank() && it != "null" },
+                )
+            },
         )
     }
 

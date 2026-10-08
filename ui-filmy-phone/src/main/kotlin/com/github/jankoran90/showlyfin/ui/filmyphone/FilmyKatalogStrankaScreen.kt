@@ -116,7 +116,7 @@ fun FilmyKatalogStrankaScreen(
                             "Nic z toho nemá českou stopu.", color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 16.dp),
                         )
-                    } else KatalogPruh(vlastni, onOpenDetail)
+                    } else KatalogPruhVlastni(vlastni, onOpenDetail)
                 }
             }
             s.pruhy.forEach { p ->

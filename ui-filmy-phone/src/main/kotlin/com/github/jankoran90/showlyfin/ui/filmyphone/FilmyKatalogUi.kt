@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -168,4 +169,67 @@ fun FilmyKatalogHledatStitky(query: String, onOpen: (KatalogCil) -> Unit, vm: Ka
             )
         }
     }
+}
+
+/**
+ * Pruh z VLASTNÍ Filmotéky (Česky, Máš k dispozici): díly téže TMDB kolekce sloučené pod jednu kartu
+ * (user 2026-10-08: „dovol kolekce, když jsou to data z mojí Filmotéky… ať je to sloučené pod jednu").
+ * Klik na kolekci otevře tentýž překryv dílů jako Filmotéka ([FilmyCollectionOverlay]).
+ */
+@Composable
+fun KatalogPruhVlastni(
+    tituly: List<KatalogRepository.Titul>,
+    onOpenDetail: (MediaItem) -> Unit,
+) {
+    var otevrena by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollectionGroup?>(null)
+    }
+    val polozky = androidx.compose.runtime.remember(tituly) { slucKolekce(tituly) }
+    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), modifier = Modifier.fillMaxWidth()) {
+        items(polozky, key = { it.first }) { (_, obsah) ->
+            Box(Modifier.padding(horizontal = 4.dp).width(118.dp).height(215.dp)) {
+                when (obsah) {
+                    is KatalogRepository.Titul -> {
+                        val mi = obsah.toMediaItem()
+                        MediaCard(item = mi, onClick = { onOpenDetail(mi) }, watched = obsah.videno)
+                    }
+                    is com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollectionGroup -> {
+                        val karta = MediaItem(
+                            traktId = 0L, tmdbId = null, imdbId = null,
+                            title = "${obsah.name} (${obsah.members.size})", year = obsah.year,
+                            overview = null, rating = null, genres = null, type = MediaType.MOVIE,
+                            fallbackPosterUrl = obsah.posterUrl,
+                        )
+                        MediaCard(item = karta, onClick = { otevrena = obsah })
+                    }
+                }
+            }
+        }
+    }
+    otevrena?.let { g ->
+        FilmyCollectionOverlay(group = g, onDismiss = { otevrena = null }, onOpenDetail = { otevrena = null; onOpenDetail(it) })
+    }
+}
+
+/** Klíč + (titul NEBO skupina kolekce). Kolekce s jediným dílem zůstává obyčejným titulem. */
+private fun slucKolekce(tituly: List<KatalogRepository.Titul>): List<Pair<String, Any>> {
+    val skupiny = tituly.filter { it.kolekce != null }.groupBy { it.kolekce!!.id }.filterValues { it.size >= 2 }
+    val vlozene = mutableSetOf<Long>()
+    val out = mutableListOf<Pair<String, Any>>()
+    for (t in tituly) {
+        val k = t.kolekce
+        val clenove = k?.let { skupiny[it.id] }
+        if (k == null || clenove == null) { out += t.klic to t; continue }
+        val kid = k.id
+        if (!vlozene.add(kid)) continue
+        out += "kolekce:$kid" to com.github.jankoran90.showlyfin.feature.discover.filmoteka.FilmotekaCollectionGroup(
+            id = "tmdb:$kid", name = k.nazev,
+            posterUrl = k.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" },
+            backdropUrl = k.backdropPath?.let { "https://image.tmdb.org/t/p/w780$it" },
+            jellyfinId = null,
+            members = clenove.sortedBy { it.rok ?: 9999 }.map { it.toMediaItem() },
+            addedAtMs = null, year = clenove.mapNotNull { it.rok }.minOrNull(),
+        )
+    }
+    return out
 }

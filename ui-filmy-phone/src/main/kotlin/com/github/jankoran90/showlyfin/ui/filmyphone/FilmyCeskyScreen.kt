@@ -49,7 +49,7 @@ fun FilmyCeskyScreen(
                 items(s.radky, key = { it.first }) { (zanr, tituly) ->
                     Column {
                         KatalogNadpisRadku("$zanr (${tituly.size})")
-                        KatalogPruh(tituly, onOpenDetail)
+                        KatalogPruhVlastni(tituly, onOpenDetail)
                     }
                 }
             }
