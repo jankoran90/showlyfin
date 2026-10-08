@@ -42,12 +42,16 @@ fun FilmyFilmotekaPager(
     onMenu: () -> Unit,
     onOpenDetail: (MediaItem) -> Unit,
     onOpenJellyfinDetail: (String) -> Unit = {},
+    // LABYRINT (FLM-04): stránka žánru / podžánru / tématu… (zásobník shellu)
+    onOpenKatalog: (KatalogCil) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    // LABYRINT (user 2026-10-08): „rád používám ty sekce na hlavní stránce, takže bych tam přidal
+    // Objevit" → další stránky Objevit, Pro tebe (parita s webem) a Česky (filmy s českým zvukem).
+    val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
     val scope = rememberCoroutineScope()
 
-    BackHandler(enabled = pagerState.currentPage == PAGE_QUEUE) {
+    BackHandler(enabled = pagerState.currentPage != PAGE_FILMOTEKA) {
         scope.launch { pagerState.animateScrollToPage(PAGE_FILMOTEKA) }
     }
 
@@ -62,6 +66,15 @@ fun FilmyFilmotekaPager(
             PageTitle("K přehrání", pagerState.currentPage == PAGE_QUEUE) {
                 scope.launch { pagerState.animateScrollToPage(PAGE_QUEUE) }
             }
+            PageTitle("Objevit", pagerState.currentPage == PAGE_OBJEVIT) {
+                scope.launch { pagerState.animateScrollToPage(PAGE_OBJEVIT) }
+            }
+            PageTitle("Pro tebe", pagerState.currentPage == PAGE_PROTEBE) {
+                scope.launch { pagerState.animateScrollToPage(PAGE_PROTEBE) }
+            }
+            PageTitle("Česky", pagerState.currentPage == PAGE_CESKY) {
+                scope.launch { pagerState.animateScrollToPage(PAGE_CESKY) }
+            }
         }
     }
 
@@ -73,7 +86,23 @@ fun FilmyFilmotekaPager(
                 onOpenJellyfinDetail = onOpenJellyfinDetail,
                 titleContent = titles,
             )
-            else -> FilmyQueueScreen(
+            PAGE_QUEUE -> FilmyQueueScreen(
+                onMenu = onMenu,
+                onOpenDetail = onOpenDetail,
+                titleContent = titles,
+            )
+            PAGE_OBJEVIT -> FilmyObjevitScreen(
+                onMenu = onMenu,
+                onOpenKatalog = onOpenKatalog,
+                titleContent = titles,
+            )
+            PAGE_PROTEBE -> FilmyProTebeKatalogScreen(
+                onMenu = onMenu,
+                onOpenDetail = onOpenDetail,
+                onOpenKatalog = onOpenKatalog,
+                titleContent = titles,
+            )
+            else -> FilmyCeskyScreen(
                 onMenu = onMenu,
                 onOpenDetail = onOpenDetail,
                 titleContent = titles,
@@ -103,3 +132,7 @@ private fun PageTitle(text: String, active: Boolean, onClick: () -> Unit) {
 
 private const val PAGE_FILMOTEKA = 0
 private const val PAGE_QUEUE = 1
+private const val PAGE_OBJEVIT = 2
+private const val PAGE_PROTEBE = 3
+private const val PAGE_CESKY = 4
+private const val PAGE_COUNT = 5

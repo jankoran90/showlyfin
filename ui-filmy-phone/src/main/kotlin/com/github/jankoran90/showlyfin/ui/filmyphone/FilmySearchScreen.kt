@@ -76,6 +76,8 @@ fun FilmySearchScreen(
     modifier: Modifier = Modifier,
     // VLTAVA F6 — ČT titul nemá TMDB identitu → vlastní karta ([FilmyCtvScreen]), ne sdílený detail.
     onOpenCtv: (CtvTitle) -> Unit = {},
+    // LABYRINT (FLM-04): štítek žánru / tématu z hledání → stránka katalogu.
+    onOpenKatalog: (KatalogCil) -> Unit = {},
     vm: SearchViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -138,6 +140,8 @@ fun FilmySearchScreen(
                 }
             }
         }
+        // LABYRINT (parita s webem): žánry, podžánry a témata k dotazu („černý" → Černý humor).
+        FilmyKatalogHledatStitky(query = state.query, onOpen = onOpenKatalog)
         // ŘAZENÍ (user 2026-07-20) — kritéria vhodná pro hledání, filtrovaná dle rozsahu (rok/hodnocení jen u
         // filmů/seriálů). Směr ▲/▼. Vše klientsky nad staženými výsledky (bez další sítě). Jen když jsou výsledky.
         if (state.results.isNotEmpty()) {

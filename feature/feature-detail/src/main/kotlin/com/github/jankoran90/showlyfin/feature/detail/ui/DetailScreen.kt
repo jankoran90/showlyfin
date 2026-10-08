@@ -150,6 +150,9 @@ fun DetailScreen(
     // jeho sezónu a označ ho. null = běžný vstup na titul.
     focusSeason: Int? = null,
     focusEpisode: Int? = null,
+    // LABYRINT (FLM-04, Filmy): obsah pod meta řádkem hera — klikací žánry/podžánry/rok/země/témata.
+    // Dostane klíč titulu „movie:<tmdb>"/„tv:<tmdb>". null = nic (showlyfin, TV).
+    heroExtra: (@Composable (klic: String) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
@@ -900,6 +903,10 @@ fun DetailScreen(
                                 )
                             }
                         }
+                    }
+                    val heroTmdb = displayItem.tmdbId
+                    if (heroExtra != null && heroTmdb != null && heroTmdb > 0L) {
+                        heroExtra("${if (displayItem.type == MediaType.SHOW) "tv" else "movie"}:$heroTmdb")
                     }
                 }
             }

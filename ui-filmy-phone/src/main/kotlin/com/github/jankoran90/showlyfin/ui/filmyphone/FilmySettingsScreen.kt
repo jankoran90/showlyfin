@@ -252,6 +252,8 @@ fun FilmySettingsScreen(
                     labelOf = { if (it == 0) "Výchozí" else it.toString() },
                     onSelect = { homeRowLimit = it; FilmyShellPrefs.setHomeRowLimit(ctx, it) },
                 )
+                // LABYRINT (FLM-04): Objevit / stránky žánrů / Pro tebe / štítky (parita s webem).
+                FilmyKatalogSection()
                 FilmyCuratorSection()
                 FilmyGemsSection()
                 // SPOTLIGHT (FLM-02): sledování tvůrců + upozornění na jejich nové tituly.

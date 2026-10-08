@@ -86,6 +86,8 @@ private sealed interface FilmyDetailEntry {
     data class Jellyfin(val id: String) : FilmyDetailEntry
     // VLTAVA (SHW-110) F6: titul z ČT iVysílání — bez TMDB identity, vlastní karta ([FilmyCtvScreen]).
     data class Ctv(val title: CtvTitle) : FilmyDetailEntry
+    // LABYRINT (FLM-04): stránka katalogu — žánr / podžánr / téma / rok / země (parita s webem).
+    data class Katalog(val cil: KatalogCil) : FilmyDetailEntry
 }
 
 /** M2.6: stav přehrávače nad detailem — externí stream (Real-Debrid/Stremio) NEBO Jellyfin item. */
@@ -194,6 +196,9 @@ private fun FilmyShellContent() {
         player = FilmyPlayer(itemId = jfId, title = title)
     }
     val popDetail: () -> Unit = { detailStack = detailStack.dropLast(1) }
+    // LABYRINT: štítek / mapa žánrů / „vše ›" → stránka katalogu na zásobník (Zpět vrací, odkud přišel).
+    val openKatalog: (KatalogCil) -> Unit = { cil -> detailStack = detailStack + FilmyDetailEntry.Katalog(cil) }
+    val openKatalogDetail: (MediaItem) -> Unit = { mi -> detailStack = detailStack + FilmyDetailEntry.Media(mi) }
 
     // PROFIL (user 2026-07-28 „při přepnutí chci, aby se appka opravdu znovunačetla"): přepnutí profilu
     // mění úplně všechno (Jellyfin creds, Trakt, Oblíbené, uložené zdroje, věkový strop). Reaktivní cesty
@@ -326,6 +331,17 @@ private fun FilmyShellContent() {
                     detailStack = emptyList()
                     current = FilmySection.REFERENCE
                 },
+                // LABYRINT: žánry, podžánry, rok, země a témata jako odkazy na stránky katalogu.
+                heroExtra = { klic -> FilmyKatalogStitkyKarty(klic = klic, onOpen = openKatalog) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (detailEntry is FilmyDetailEntry.Katalog) {
+            BackHandler(onBack = popDetail)
+            FilmyKatalogStrankaScreen(
+                cil = detailEntry.cil,
+                onBack = popDetail,
+                onOpenDetail = openKatalogDetail,
+                onOpenKatalog = openKatalog,
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (detailEntry is FilmyDetailEntry.Ctv) {
@@ -441,6 +457,7 @@ private fun FilmyShellContent() {
                                 onMenu = onMenu,
                                 onOpenDetail = openDetail,
                                 onOpenJellyfinDetail = openJfDetail,
+                                onOpenKatalog = openKatalog,
                             )
                             // M2.5: Vzácné klenoty = LAPIDARY řady (reuse TvLapidaryViewModel).
                             FilmySection.GEMS -> FilmyGemsScreen(onMenu = onMenu, onOpenDetail = openDetail)
@@ -454,6 +471,7 @@ private fun FilmyShellContent() {
                             FilmySection.SEARCH -> FilmySearchScreen(
                                 onMenu = onMenu,
                                 onOpenDetail = openDetail,
+                                onOpenKatalog = openKatalog,
                                 onOpenCtv = { t -> detailStack = detailStack + FilmyDetailEntry.Ctv(t) },
                             )
                             // SEZONA-DÁVKA (user 2026-08-21): stažené filmy/seriály (karty, seskupené po dílech).
