@@ -301,6 +301,7 @@ internal fun SlovoDetail(
         )
         SlovoDetailEntry.UploadAudiobook -> UploadAudiobookScreen(
             onBack = onPop,
+            onEditBook = { id, title, author -> onPush(SlovoDetailEntry.AudiobookEdit(id, title, author)) },
             modifier = Modifier.fillMaxSize(),
         )
     }

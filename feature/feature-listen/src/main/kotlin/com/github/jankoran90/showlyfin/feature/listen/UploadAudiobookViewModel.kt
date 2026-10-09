@@ -5,8 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary
+import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDetail
 import com.github.jankoran90.showlyfin.data.uploader.model.AudiobookUploadResponse
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -35,6 +38,11 @@ class UploadAudiobookViewModel @Inject constructor(
         val result: AudiobookUploadResponse? = null,
         val error: String? = null,
         val notConfigured: Boolean = false,
+        // 2026-10-09 (user: „nikde nevidím výsledek a metadata pro kontrolu") — živý stav nahrané
+        // knihy z ABS pro výsledkovou kartu: obálka, autor, vypravěč, rok, délka, kapitoly, popis.
+        val uploadedDetail: AudiobookDetail? = null,
+        val uploadedCoverUrl: String? = null,
+        val enrichPending: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -65,8 +73,50 @@ class UploadAudiobookViewModel @Inject constructor(
                         error = m.error,
                     )
                 }
+                val id = m.result?.itemId
+                if (id != null && id != loadedItemId) {
+                    loadedItemId = id
+                    watchUploaded(id, m.result?.enrich?.pending == true)
+                }
             }
         }
+    }
+
+    private var loadedItemId: String? = null
+    private var watchJob: Job? = null
+
+    /**
+     * Načte nahranou knihu z ABS. Když enrich běží na pozadí, přečte ji znovu po pár sekundách,
+     * dokud nepřibude popis (= enrich doběhl) — karta se tak sama doplní o obálku a metadata.
+     */
+    private fun watchUploaded(itemId: String, pending: Boolean) {
+        watchJob?.cancel()
+        _state.update { it.copy(enrichPending = pending) }
+        watchJob = viewModelScope.launch {
+            val delays = if (pending) listOf(0L, 4_000L, 6_000L, 10_000L, 15_000L, 25_000L) else listOf(0L)
+            for ((i, d) in delays.withIndex()) {
+                delay(d)
+                val detail = runCatching { absRepo.getAudiobookDetail(itemId) }
+                    .onFailure { Timber.w(it, "[DROPSHIP] detail nahrané knihy") }
+                    .getOrNull() ?: continue
+                val done = !pending || detail.description != null || i == delays.lastIndex
+                _state.update {
+                    it.copy(
+                        uploadedDetail = detail,
+                        // parametr v= obejde cache obrázků — obálka se po enrichi mění pod stejnou adresou.
+                        uploadedCoverUrl = "${absRepo.coverUrl(itemId)}&v=$i",
+                        enrichPending = !done,
+                    )
+                }
+                if (done) break
+            }
+        }
+    }
+
+    /** Znovu načte nahranou knihu (návrat z úpravy). */
+    fun refreshUploaded() {
+        val id = loadedItemId ?: return
+        watchUploaded(id, pending = false)
     }
 
     fun selectLibrary(id: String) = _state.update { it.copy(selectedLibraryId = id) }
@@ -101,7 +151,14 @@ class UploadAudiobookViewModel @Inject constructor(
     /** Reset výsledku při návratu z obrazovky. */
     fun reset() {
         uploadManager.reset()
-        _state.update { it.copy(result = null, error = null, progress = 0f, isUploading = false) }
+        watchJob?.cancel()
+        loadedItemId = null
+        _state.update {
+            it.copy(
+                result = null, error = null, progress = 0f, isUploading = false,
+                uploadedDetail = null, uploadedCoverUrl = null, enrichPending = false,
+            )
+        }
     }
 }
 
