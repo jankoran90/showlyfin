@@ -64,7 +64,8 @@ fun SlovoProfileScreen(
     vm: SlovoProfileViewModel = hiltViewModel(),
 ) {
     val ui by vm.uiState.collectAsStateWithLifecycle()
-    var pinFor by remember { mutableStateOf<ProfileEntity?>(null) }
+    // Cíl přepnutí + hash PINu, kterým se ověří (u dospělého bez PINu z dětského profilu = PIN jiného dospělého).
+    var pinFor by remember { mutableStateOf<Pair<ProfileEntity, String>?>(null) }
     var pinSetFor by remember { mutableStateOf<ProfileEntity?>(null) }
     val activeIsAdmin = ui.profiles.firstOrNull { it.id == ui.activeProfileId }?.isAdmin == true
 
@@ -84,23 +85,34 @@ fun SlovoProfileScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            Text(
-                text = "Podržením profilu nastavíš nebo zrušíš PIN.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Audit dětí (2026-10-12): PIN spravuje jen dospělý — dětský profil by jinak zrušil PIN
+            // Honzy a přepnul se na něj.
+            if (activeIsAdmin) {
+                Text(
+                    text = "Podržením profilu nastavíš nebo zrušíš PIN.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             ui.profiles.forEach { p ->
                 SlovoProfileCard(
                     profile = p,
                     active = p.id == ui.activeProfileId,
                     onClick = {
+                        // Audit dětí (2026-10-12, user „může přepínat na profil Nel"): z dětského
+                        // profilu na dospělého VŽDY přes PIN — dospělý bez vlastního PINu se odemkne
+                        // PINem jiného dospělého. Bez jediného PINu v appce není co ověřit.
+                        val guardPin = p.loginPinHash?.takeIf { it.isNotBlank() }
+                            ?: if (!activeIsAdmin && p.isAdmin) {
+                                ui.profiles.firstNotNullOfOrNull { o -> o.takeIf { it.isAdmin }?.loginPinHash?.takeIf { it.isNotBlank() } }
+                            } else null
                         when {
                             p.id == ui.activeProfileId -> Unit
-                            !p.loginPinHash.isNullOrBlank() -> pinFor = p
+                            guardPin != null -> pinFor = p to guardPin
                             else -> vm.switchProfile(p.id)
                         }
                     },
-                    onLongClick = { pinSetFor = p },
+                    onLongClick = { if (activeIsAdmin) pinSetFor = p },
                 )
             }
 
@@ -112,7 +124,7 @@ fun SlovoProfileScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
-                    text = "Které pořady se dětskému profilu zobrazí v sekci Poslech (živě, celý pořad ke streamování).",
+                    text = "Které pořady se dětskému profilu zobrazí v sekci Poslech (živě, celý pořad ke streamování). Nový pořad dítě nevidí, dokud ho tu nezaškrtneš.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -138,7 +150,7 @@ fun SlovoProfileScreen(
                     )
                 } else {
                     ui.podcasts.forEach { pod ->
-                        val visible = pod.id !in ui.hiddenForKids
+                        val visible = pod.id in ui.visibleForKids
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -159,12 +171,12 @@ fun SlovoProfileScreen(
         }
     }
 
-    pinFor?.let { target ->
+    pinFor?.let { (target, guardPin) ->
         SlovoPinDialog(
             profileName = target.name,
             onDismiss = { pinFor = null },
             onVerified = { vm.switchProfile(target.id); pinFor = null },
-            verify = { pin -> PinHasher.verify(pin, target.loginPinHash) },
+            verify = { pin -> PinHasher.verify(pin, guardPin) },
         )
     }
 

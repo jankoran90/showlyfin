@@ -153,7 +153,13 @@ private fun SlovoShellContent() {
         }
     }
 
-    val onPush: (SlovoDetailEntry) -> Unit = { detailStack = detailStack + it }
+    // Dětský profil: každý push detailu přes [kidsGuard] (jen schválené zdroje / série, odkudkoli).
+    val onPush: (SlovoDetailEntry) -> Unit = { requested ->
+        val entry = if (listenVm.activeProfile.value?.isAdmin == false) {
+            kidsGuard(requested, listenVm.profileConfig.value.visibleForKidsSourceKeys, listenVm.sourceLinks.value)
+        } else requested
+        if (entry != null) detailStack = detailStack + entry
+    }
     val onPop: () -> Unit = { detailStack = detailStack.dropLast(1) }
     val onGoToPoslech: () -> Unit = {
         detailStack = emptyList()
@@ -374,7 +380,7 @@ private fun SlovoShellContent() {
                                 onOpenSource = { src -> onPush(sourceDetail(src)) },
                             )
                         }
-                        SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu)
+                        SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu, isKidsProfile = isKidsProfile)
                         SlovoSection.PROFIL -> SlovoProfileScreen(onMenu = onMenu)
                     }
                 }

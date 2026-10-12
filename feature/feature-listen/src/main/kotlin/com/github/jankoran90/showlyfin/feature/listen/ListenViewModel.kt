@@ -82,34 +82,18 @@ class ListenViewModel @Inject constructor(
     val activeProfile = profileRepository.activeProfile
 
     /**
-     * User (2026-08-15) „na kartě podcastu při long pressu možnost ukázat u dětí" — reaktivně
-     * skrytí podcastů PRO DĚTSKÝ profil (první ne-admin profil; generické napříč appkami s 2
-     * profily, ne natvrdo Slovo UUID — ty žijí výš v `ui-slovo-phone`, sem by šel cyklus).
+     * Admin (Dospělý) — přepne, jestli ABS podcast [podcastId] vidí dětský profil (první ne-admin
+     * profil; generické napříč appkami, ne natvrdo Slovo UUID). Audit 2026-10-12: WHITELIST `abs:id`
+     * ve [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.visibleForKidsSourceKeys] —
+     * stav čte UI z [kidsVisibleSourceKeys]. No-op bez dětského profilu.
      */
-    val kidsHiddenPodcastIds: StateFlow<Set<String>> = profileRepository.observeAll()
-        .map { profiles ->
-            profiles.firstOrNull { !it.isAdmin }
-                ?.let { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).hiddenPodcastIds }
-                .orEmpty()
-        }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
-
-    /** Admin (Dospělý) — přepne, jestli podcast [podcastId] vidí dětský profil. No-op bez dětského profilu. */
-    fun setPodcastVisibleForKids(podcastId: String, visible: Boolean) {
-        viewModelScope.launch {
-            val kids = profileRepository.getAll().firstOrNull { !it.isAdmin } ?: return@launch
-            profileRepository.updateConfig(kids.id) { cfg ->
-                cfg.copy(
-                    hiddenPodcastIds = if (visible) cfg.hiddenPodcastIds - podcastId else cfg.hiddenPodcastIds + podcastId,
-                )
-            }
-        }
-    }
+    fun setPodcastVisibleForKids(podcastId: String, visible: Boolean) =
+        setSourceVisibleForKids(setOf("abs:$podcastId"), visible)
 
     /**
      * SLOVO-KIDS-EPISODE — reaktivně schválené vlastní zdroje (RSS/YouTube/ČT) PRO DĚTSKÝ profil
      * (whitelist [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.visibleForKidsSourceKeys]).
-     * Vzor [kidsHiddenPodcastIds], ale opačná sémantika (whitelist, ne blacklist).
+     * Od 2026-10-12 nese i ABS podcasty (`abs:id`, viz [setPodcastVisibleForKids]).
      */
     val kidsVisibleSourceKeys: StateFlow<Set<String>> = profileRepository.observeAll()
         .map { profiles ->
@@ -296,10 +280,16 @@ class ListenViewModel @Inject constructor(
     /**
      * Per-profil skrytí jednotlivých podcastů (admin authoring ve Správě). Odfiltruje pořady, jejichž
      * id je ve [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.hiddenPodcastIds].
+     * Dětský profil (audit 2026-10-12): naopak jen SCHVÁLENÉ (`isAbsPodcastVisibleForKids`), nový
+     * pořad v ABS knihovně dítě nevidí, dokud ho dospělý nezviditelní.
      */
     private fun List<com.github.jankoran90.showlyfin.data.abs.model.Podcast>.applyProfileHidden():
         List<com.github.jankoran90.showlyfin.data.abs.model.Podcast> {
-        val hidden = profileRepository.activeConfig.value.hiddenPodcastIds
+        val cfg = profileRepository.activeConfig.value
+        if (profileRepository.activeProfile.value?.isAdmin == false) {
+            return filter { cfg.isAbsPodcastVisibleForKids(it.id) }
+        }
+        val hidden = cfg.hiddenPodcastIds
         if (hidden.isEmpty()) return this
         return filter { it.id !in hidden }
     }
@@ -388,7 +378,14 @@ class ListenViewModel @Inject constructor(
         // sync z backendu). Applier zapisuje prefs PŘED emisí configu (ProfileRepository), takže tady
         // už čteme správné přihlášení — řeší závod „fetch knihoven se starým tokenem → prázdné libs".
         profileRepository.activeConfig
-            .map { Triple(it.absLibraryWhitelist, it.credentials.abs, it.hiddenPodcastIds) }
+            // Audit dětí (2026-10-12, Codex review): i schválené ABS podcasty dětí (`abs:id`), jinak by
+            // změna jen whitelistu (sync z backendu) nechala na Dětech starý seznam podcastů.
+            .map {
+                listOf(
+                    it.absLibraryWhitelist, it.credentials.abs, it.hiddenPodcastIds,
+                    it.visibleForKidsSourceKeys.filterTo(mutableSetOf()) { k -> k.startsWith("abs:") },
+                )
+            }
             .distinctUntilChanged()
             .onEach {
                 refresh()
@@ -489,8 +486,21 @@ class ListenViewModel @Inject constructor(
     }
 
     /** Stažené audioknihy jako UI police (Plan CASTAWAY CA-2). */
-    private fun downloadedBooks(): List<Audiobook> =
-        audiobookDownloads.downloads.value.map { it.toAudiobook() }
+    private fun downloadedBooks(): List<Audiobook> {
+        val all = audiobookDownloads.downloads.value.map { it.toAudiobook() }
+        // Audit dětí (2026-10-12): offline / selhání ABS ukazovalo dětem VŠECHNY stažené knihy v
+        // telefonu (i dospělé). Dětský profil jen knihy z whitelistu knihoven; neznámá knihovna
+        // (starší stažení bez libraryId) = skrýt.
+        val active = profileRepository.activeProfile.value ?: return all
+        val cfg = profileRepository.activeConfig.value
+        if (active.isAdmin) {
+            // Codex sweep 2026-10-12: offline police dospělých respektuje vlastnictví (poslední známá
+            // mapa je v cache [AudiobookOwnershipRepository], funguje i bez sítě).
+            return all.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, cfg.sharedAudiobookIds) }
+        }
+        val wl = cfg.absLibraryWhitelist ?: return emptyList()
+        return all.filter { it.libraryId.isNotEmpty() && it.libraryId in wl }
+    }
 
     /** Načte knihovny audioknih a knihy ve vybrané (či první) knihovně. */
     fun refresh() {

@@ -92,6 +92,8 @@ fun YoutubeChannelScreen(
     audioOnly: Boolean = false,
     // SLOVO-KIDS-EPISODE — non-null = otevřeno JEN na jednu AUTO-detekovanou sérii (dětská cesta).
     seriesFilter: String? = null,
+    // User 2026-10-12 — dítě offline vidí jen stažené díly.
+    onlyDownloaded: Boolean = false,
     // WATCHDOG — admin (Dospělý) dlouhým stiskem na kartě série „Zobrazit/Skrýt dětem".
     isAdmin: Boolean = false,
     kidsVisibleSeriesKeys: Set<String> = emptySet(),
@@ -117,12 +119,14 @@ fun YoutubeChannelScreen(
 
     // SLOVO-KIDS-EPISODE / WATCHDOG — série stejným vzorem jako RssPodcastScreen.
     val sourceKey = "youtube:$channel"
-    val filteredEpisodes = remember(state.episodes, seriesFilter) {
-        if (seriesFilter == null) state.episodes
+    val filteredEpisodes = remember(state.episodes, seriesFilter, onlyDownloaded, offlineStates) {
+        val inSeries = if (seriesFilter == null) state.episodes
         else state.episodes.filter {
             PodcastEpisodeSeriesGrouping.detectSeriesTitle(it.title)
                 ?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
         }
+        if (!onlyDownloaded) inSeries
+        else inSeries.filter { offlineStates[viewModel.episodeKey(it)]?.status == OfflineStatus.DOWNLOADED }
     }
     val shelfItems = remember(filteredEpisodes, seriesFilter) {
         if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })

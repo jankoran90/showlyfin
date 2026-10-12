@@ -70,6 +70,10 @@ class AudiobookPlayerService : MediaLibraryService() {
     /** CRUISE (SHW-70): sdílená pozice resume direct epizod (RSS/YT) — zápis z auta + AA „Pokračovat". */
     @Inject lateinit var directResume: DirectResumeStore
 
+    /** Profilové filtry Android Auto ([visibleSources] aj., AutoProfileFilter.kt) — Codex sweep 2026-10-12. */
+    @Inject lateinit var profileRepository: com.github.jankoran90.showlyfin.core.data.ProfileRepository
+    @Inject lateinit var audiobookOwnership: com.github.jankoran90.showlyfin.data.uploader.AudiobookOwnershipRepository
+
     private var session: MediaLibrarySession? = null
     private var player: ExoPlayer? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -355,7 +359,10 @@ class AudiobookPlayerService : MediaLibraryService() {
                     }
                 }
             }
-            // In-app přehrávač posílá už resolvované položky (s URI) → projdou beze změny.
+            // In-app přehrávač posílá už resolvované položky (s URI) → projdou beze změny. Kapitoly
+            // dřívějšího přehrání z Auta zahoď (Codex sweep 2026-10-12): notifikace/AA by jinak ukazovaly
+            // a přeskakovaly kapitoly STARÉ knihy; in-app kapitoly řeší AudiobookPlayerConnection.
+            currentPlayback = null
             return Futures.immediateFuture(
                 MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs),
             )

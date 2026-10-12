@@ -22,6 +22,8 @@ import javax.inject.Named
 import javax.inject.Singleton
 
 private const val PREF_ACTIVE_PROFILE_ID = "active_profile_id"
+/** backendKey profilů, jejichž config se nepodařilo odeslat na backend (viz [ProfileRepository.pushConfigTracked]). */
+private const val PREF_UNPUSHED_CONFIG_KEYS = "profile_config_unpushed_keys"
 
 /** 🔒 2026-08-24 — čte [com.github.jankoran90.showlyfin.data.trakt.token.TraktTokenProvider.saveTokens]
  * (jiný modul, žádná přímá závislost na ProfileRepository) — sdílený "traktPreferences" soubor je
@@ -300,8 +302,29 @@ class ProfileRepository @Inject constructor(
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
         Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
-        configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
+        pushConfigTracked(profile, newJson)
     }
+
+    /**
+     * Write-through configu s pamětí neúspěchu (2026-10-12, Slovo: schválení obsahu dětem mizelo).
+     * Dřív se selhání tiše spolklo a příští [syncConfigFromBackend] přepsal lokální změnu STARŠÍM
+     * configem ze serveru — např. admin schválí dětem pořad, push neprojde, přepnutí na Děti stáhne
+     * server bez schválení a pořad zmizí. Neodeslaný profil se teď pošle znovu DŘÍV, než se stahuje.
+     */
+    private suspend fun pushConfigTracked(profile: ProfileEntity, json: String) {
+        val key = profile.backendKey()
+        val ok = configGateway.pushConfig(key, json, profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
+        // Příznak smaž jen když server dostal POSLEDNÍ lokální verzi — souběžná novější editace
+        // (její push mohl selhat) jinak přijde o ochranu před přepsáním (Codex review).
+        val synced = ok && (dao.getById(profile.id)?.configJson ?: "{}") == json
+        val unpushed = unpushedConfigKeys().toMutableSet()
+        val changed = if (synced) unpushed.remove(key) else unpushed.add(key)
+        if (changed) prefs.edit().putStringSet(PREF_UNPUSHED_CONFIG_KEYS, unpushed).apply()
+        if (!ok) Timber.w("[PUSH] config '$key' neodeslán — lokální změna drží, odešle se při příštím syncu")
+    }
+
+    private fun unpushedConfigKeys(): Set<String> =
+        prefs.getStringSet(PREF_UNPUSHED_CONFIG_KEYS, emptySet()).orEmpty()
 
     /**
      * SUBSTRATE F2c KROK 2 — po Trakt (re)loginu appka pushne čerstvý token (přes [updateConfig]) a hned
@@ -389,7 +412,7 @@ class ProfileRepository @Inject constructor(
         )
         // VAULT V9: snapshot změnil override → propsat i config (jinak by ho příští sync vrátil).
         if (newJson != profile.configJson) {
-            configGateway.pushConfig(profile.backendKey(), newJson ?: "{}", profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
+            pushConfigTracked(profile, newJson ?: "{}")
         }
     }
 
@@ -469,8 +492,8 @@ class ProfileRepository @Inject constructor(
         val newOverride = override.copy(credentials = override.credentials.copy(trakt = newTrakt))
         val newJson = ProfileConfig.toJson(newOverride)
         dao.update(profile.copy(configJson = newJson))
-        // Best-effort write-through (gateway polyká chyby); NEaplikujeme — prefs už ten token drží.
-        configGateway.pushConfig(profile.backendKey(), newJson, profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
+        // Best-effort write-through (neúspěch si pamatuje); NEaplikujeme — prefs už ten token drží.
+        pushConfigTracked(profile, newJson)
         return true
     }
 
@@ -587,8 +610,15 @@ class ProfileRepository @Inject constructor(
             }
         }
 
-        // 3. Config balík (uživatelský override).
-        val remoteJson = withTimeoutOrNull(5000) {
+        // 3. Config balík (uživatelský override). Neodeslaná lokální změna má přednost: nejdřív ji
+        // pošli; dokud neprojde, server NEstahuj (přepsal by ji starším stavem). Po úspěchu je lokál
+        // nejnovější → tohle kolo stahování taky přeskoč.
+        val remoteJson = if (profile.backendKey() in unpushedConfigKeys()) {
+            val local = dao.getById(profile.id) ?: profile
+            // Timeout jako u stahování — přepnutí profilu nesmí viset minuty; při timeoutu příznak zůstává.
+            withTimeoutOrNull(5000) { pushConfigTracked(local, local.configJson ?: "{}") }
+            null
+        } else withTimeoutOrNull(5000) {
             configGateway.fetchConfig(profile.backendKey())
         }?.takeIf { it.isNotBlank() }
         if (remoteJson != null) {

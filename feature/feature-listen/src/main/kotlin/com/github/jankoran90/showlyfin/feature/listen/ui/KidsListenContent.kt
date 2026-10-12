@@ -1,5 +1,11 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import android.widget.Toast
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
+import java.text.Collator
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,7 +87,6 @@ fun KidsListenContent(
     state: ListenUiState,
     viewModel: ListenViewModel,
     onOpenBook: (String) -> Unit,
-    onEditBook: (String, String, String?) -> Unit,
     onOpenPodcast: (String) -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
     onOpenMerged: (groupId: String, title: String) -> Unit,
@@ -91,12 +96,22 @@ fun KidsListenContent(
     // Podcasty se jinak načtou líně jen při přepnutí na záložku Podcasty — dětský profil žádnou
     // záložku nemá, takže si o načtení řekneme sami (idempotentní, no-op když už jsou načtené).
     LaunchedEffect(Unit) { viewModel.ensurePodcastsLoaded() }
+    // Schválené vlastní zdroje / série jsou i offline z paměti — chyba/načítání knih je nesmí schovat
+    // (user 2026-10-12, „musí fungovat i offline"). Rozhoduje jen to, co dítě SMÍ vidět, ne celý seznam.
+    val kidsCfg by viewModel.profileConfig.collectAsStateWithLifecycle()
+    val hasApprovedSources = remember(state.customSources, kidsCfg.visibleForKidsSourceKeys) {
+        val approved = kidsCfg.visibleForKidsSourceKeys.mapTo(HashSet()) { key ->
+            PodcastEpisodeSeriesGrouping.parseSeriesKey(key)?.sourceKey ?: key
+        }
+        state.customSources.any { it.key in approved }
+    }
 
     when {
-        state.isLoading && state.books.isEmpty() && state.podcasts.isEmpty() ->
+        state.isLoading && state.books.isEmpty() && state.podcasts.isEmpty() && !hasApprovedSources ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 
-        state.error != null && state.books.isEmpty() && state.podcasts.isEmpty() -> CenteredMessage(state.error)
+        state.error != null && state.books.isEmpty() && state.podcasts.isEmpty() && !hasApprovedSources ->
+            CenteredMessage(state.error)
 
         else -> {
             // SLOVO-KIDS-EPISODE — vlastní zdroje (RSS/YouTube/ČT) admin schválil pro tenhle (dětský)
@@ -137,15 +152,51 @@ fun KidsListenContent(
                     .mapNotNull { parsed -> byKey[parsed.sourceKey]?.let { src -> Triple(src, parsed.slug, parsed.title) } }
             }
 
+            // User 2026-10-12: offline dítě vidí jen pořad/sérii, ze které je něco STAŽENÉ (knihy offline
+            // řeší už ListenViewModel — jen stažené dětské). ABS podcasty offline nejsou.
+            val offlineDls by viewModel.offlinePodcasts.collectAsStateWithLifecycle()
+            val downloadedTitlesBySource = remember(offlineDls) {
+                offlineDls.filter { it.sourceKey != null }.groupBy({ it.sourceKey!! }, { it.title })
+            }
+            fun hasDownloaded(sourceKey: String, slug: String? = null): Boolean =
+                downloadedTitlesBySource[sourceKey].orEmpty().any { t ->
+                    slug == null || PodcastEpisodeSeriesGrouping.detectSeriesTitle(t)
+                        ?.let(PodcastEpisodeSeriesGrouping::seriesSlug) == slug
+                }
+            val offline = state.isOffline
+
             val shelfItems = remember(state.books) { groupBooksBySeries(state.books) }
-            val items = remember(shelfItems, state.podcasts, sourceCards, seriesItems) {
+            // České řazení (Collator) — „Ď" dřív spadlo podle kódu znaku až za „Z" (user 2026-10-12).
+            val collator = remember { Collator.getInstance(Locale("cs")) }
+            val items = remember(shelfItems, state.podcasts, sourceCards, seriesItems, offline, downloadedTitlesBySource) {
                 (
                     shelfItems.map { KidsShelfItem.BookItem(it) } +
-                        state.podcasts.map { KidsShelfItem.PodcastItem(it) } +
-                        sourceCards.map { KidsShelfItem.SourceItem(it) } +
-                        seriesItems.map { (src, slug, t) -> KidsShelfItem.SeriesItem(src, slug, t) }
-                    ).sortedBy { it.sortKey }
+                        (if (offline) emptyList() else state.podcasts.map { KidsShelfItem.PodcastItem(it) }) +
+                        sourceCards
+                            .filter { c ->
+                                !offline || when (c) {
+                                    is LibraryCard.Plain -> hasDownloaded(c.source.key)
+                                    is LibraryCard.Merged -> c.members.any { hasDownloaded(it) }
+                                    is LibraryCard.Abs -> false
+                                }
+                            }
+                            .map { KidsShelfItem.SourceItem(it) } +
+                        seriesItems
+                            .filter { (src, slug, _) -> !offline || hasDownloaded(src.key, slug) }
+                            .map { (src, slug, t) -> KidsShelfItem.SeriesItem(src, slug, t) }
+                    ).sortedWith(compareBy(collator) { it.sortKey })
             }
+            // Dlouhý stisk na pořadu/sérii → „Stáhnout všechny díly a zařadit do fronty" (user 2026-10-12).
+            val shelfActions: com.github.jankoran90.showlyfin.feature.listen.KidsShelfActionsViewModel = hiltViewModel()
+            val shelfMessage by shelfActions.message.collectAsStateWithLifecycle()
+            val context = LocalContext.current
+            LaunchedEffect(shelfMessage) {
+                shelfMessage?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show(); shelfActions.consumeMessage() }
+            }
+            var downloadFor by remember { mutableStateOf<Triple<com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource, String?, String>?>(null) }
+            fun mergedSource(c: LibraryCard.Merged): com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource? =
+                c.members.filter { it in visibleKeys }.mapNotNull { byKey[it] }
+                    .sortedBy { it.type == "youtube" }.firstOrNull()
             var openSeries by remember { mutableStateOf<BookShelfItem.SeriesGroup?>(null) }
             var actionBook by remember { mutableStateOf<Audiobook?>(null) }
 
@@ -192,17 +243,21 @@ fun KidsListenContent(
                                     is LibraryCard.Plain -> SourceCard(
                                         source = c.source,
                                         onClick = { onOpenSource(c.source) },
+                                        onLongClick = if (offline) null else ({ downloadFor = Triple(c.source, null, c.source.title) }),
                                     )
                                     is LibraryCard.Merged -> MergedSourceCard(
                                         title = c.title,
                                         thumbnail = c.thumbnail,
                                         onClick = { onOpenMerged(c.groupId, c.title) },
+                                        onLongClick = mergedSource(c)?.takeIf { !offline }
+                                            ?.let { src -> { downloadFor = Triple(src, null, c.title) } } ?: {},
                                     )
                                     is LibraryCard.Abs -> Unit // nikdy nevzniká pro SourceItem (jde přes PodcastItem)
                                 }
                                 is KidsShelfItem.SeriesItem -> SourceCard(
                                     source = item.source.copy(title = item.seriesTitle),
                                     onClick = { onOpenSourceSeries(item.source, item.seriesSlug, item.seriesTitle) },
+                                    onLongClick = if (offline) null else ({ downloadFor = Triple(item.source, item.seriesSlug, item.seriesTitle) }),
                                 )
                             }
                         }
@@ -219,12 +274,25 @@ fun KidsListenContent(
                     )
                 }
 
+                downloadFor?.let { (src, slug, title) ->
+                    ListenEpisodeActionSheet(
+                        title = title,
+                        actions = listOf(
+                            ListenEpisodeAction(Icons.Default.Download, "Stáhnout všechny díly a zařadit do fronty") {
+                                shelfActions.downloadAndQueue(src, slug, title)
+                            },
+                        ),
+                        onDismiss = { downloadFor = null },
+                    )
+                }
+
                 actionBook?.let { book ->
                     AudiobookActionSheet(
                         book = book,
                         canDownload = !state.isOffline && book.id !in state.downloadedBookIds,
                         onDownload = { viewModel.downloadBook(book) },
-                        onEdit = { onEditBook(book.id, book.title, book.author) },
+                        // Audit dětí (2026-10-12): dítě metadata knih neupravuje.
+                        onEdit = null,
                         onResetProgress = { viewModel.resetBookProgress(book) },
                         onMarkFinished = { viewModel.markBookFinished(book) },
                         onDismiss = { actionBook = null },

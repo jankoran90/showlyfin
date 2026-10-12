@@ -344,7 +344,7 @@ private fun ChapterRow(ch: Chapter, isCurrent: Boolean, onClick: () -> Unit) {
 }
 
 /** Očistí popis knihy od HTML tagů a entit — Audible/enrich zdroje vrací <p>/<i> místo čistého textu. */
-private fun cleanAudiobookDescription(raw: String): String =
+internal fun cleanAudiobookDescription(raw: String): String =
     raw.replace(Regex("<[^>]*>"), " ")
         .replace(Regex("&nbsp;", RegexOption.IGNORE_CASE), " ")
         .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")

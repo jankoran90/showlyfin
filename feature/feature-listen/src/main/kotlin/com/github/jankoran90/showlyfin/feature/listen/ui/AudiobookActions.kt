@@ -31,7 +31,8 @@ fun AudiobookActionSheet(
     book: Audiobook,
     canDownload: Boolean,
     onDownload: () -> Unit,
-    onEdit: () -> Unit,
+    /** null = „Upravit" se nenabídne (dětský profil, audit 2026-10-12). */
+    onEdit: (() -> Unit)?,
     onResetProgress: () -> Unit,
     onMarkFinished: () -> Unit,
     onDismiss: () -> Unit,
@@ -49,7 +50,7 @@ fun AudiobookActionSheet(
         infoLine = infoLine,
         actions = listOfNotNull(
             ListenEpisodeAction(Icons.Default.Download, "Stáhnout", enabled = canDownload, onClick = onDownload),
-            ListenEpisodeAction(Icons.Default.Edit, "Upravit", onClick = onEdit),
+            onEdit?.let { ListenEpisodeAction(Icons.Default.Edit, "Upravit", onClick = it) },
             if (inProgress) {
                 ListenEpisodeAction(
                     Icons.Default.Close, "Ukončit poslech",

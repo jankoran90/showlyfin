@@ -83,6 +83,8 @@ fun MergedPodcastScreen(
     // SLOVO-KIDS-EPISODE (2026-08-15) — dětský profil: vždy jen audio, video volby úplně skryté
     // (i když je pořad TWINE-propojený s YouTube členem).
     audioOnly: Boolean = false,
+    // User 2026-10-12 — dítě offline vidí jen stažené díly (Codex review: i sloučený pořad).
+    onlyDownloaded: Boolean = false,
     modifier: Modifier = Modifier,
     // WEFT (SHW-75/W2-FIX): klíč epizody (`rss:`/`yt:`) k zvýraznění + odscrollování — proklik z časové
     // osy / z coveru přehrávače na SLOUČENÝ pořad. Match na audio NEBO video verzi spárované epizody.
@@ -171,7 +173,9 @@ fun MergedPodcastScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(state.episodes, key = { it.key }) { item ->
+                val shownEpisodes = if (!onlyDownloaded) state.episodes
+                else state.episodes.filter { offlineStates[it.key]?.status == OfflineStatus.DOWNLOADED }
+                items(shownEpisodes, key = { it.key }) { item ->
                     val key = item.key
                     val isCurrent = playerState.currentEpisodeId == key && playerState.isActive
                     val mark = resumeMarks[key]

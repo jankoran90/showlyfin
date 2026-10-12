@@ -154,6 +154,8 @@ internal fun SlovoDetail(
     // sloučeném pořadu se úplně skryjí (i u TWINE-propojeného páru, nikdy YouTube odkaz dětem).
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
     val audioOnly = activeProfile?.isAdmin == false
+    // Dítě offline vidí jen stažené díly (user 2026-10-12).
+    val listenOffline = listenVm.uiState.collectAsStateWithLifecycle().value.isOffline
     // User (2026-08-22) — „youtube videa ze slova musíme zpět do exoplayer": dřív šlo VŽDY ven do
     // YouTube appky/prohlížeče (2026-08-15 rozhodnutí), teď hraje ROVNOU ve sdíleném přehrávači
     // (:feature:feature-playback — stejný, co používá Filmy), ať appka nabídne stejný styl titulků
@@ -219,6 +221,7 @@ internal fun SlovoDetail(
             highlightEpisodeKey = entry.highlightEpisodeKey,
             audioOnly = audioOnly,
             seriesFilter = entry.seriesFilter,
+            onlyDownloaded = audioOnly && listenOffline,
             isAdmin = activeProfile?.isAdmin == true,
             kidsVisibleSeriesKeys = kidsVisibleSourceKeys,
             onSetSeriesVisibleForKids = { key, visible -> listenVm.setSourceVisibleForKids(setOf(key), visible) },
@@ -233,6 +236,7 @@ internal fun SlovoDetail(
             highlightEpisodeKey = entry.highlightEpisodeKey,
             audioOnly = audioOnly,
             seriesFilter = entry.seriesFilter,
+            onlyDownloaded = audioOnly && listenOffline,
             isAdmin = activeProfile?.isAdmin == true,
             kidsVisibleSeriesKeys = kidsVisibleSourceKeys,
             onSetSeriesVisibleForKids = { key, visible -> listenVm.setSourceVisibleForKids(setOf(key), visible) },
@@ -265,6 +269,7 @@ internal fun SlovoDetail(
             title = entry.title,
             highlightEpisodeKey = entry.highlightEpisodeKey,
             audioOnly = audioOnly,
+            onlyDownloaded = audioOnly && listenOffline,
             onBack = onPop,
             onOpenAudioPlayer = { onPush(SlovoDetailEntry.AudiobookPlayer(itemId = null, fromStart = false)) },
             onPlayVideo = playYoutubeVideo,
@@ -301,6 +306,7 @@ internal fun SlovoDetail(
         )
         SlovoDetailEntry.UploadAudiobook -> UploadAudiobookScreen(
             onBack = onPop,
+            onEditBook = { id, title, author -> onPush(SlovoDetailEntry.AudiobookEdit(id, title, author)) },
             modifier = Modifier.fillMaxSize(),
         )
     }

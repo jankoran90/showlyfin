@@ -78,6 +78,7 @@ data class ProfileConfig(
      * Na rozdíl od [hiddenPodcastIds] (ABS, blacklist/default-viditelné) je tohle WHITELIST/default-
      * NEviditelné — vlastní zdroje jsou uživatelovy osobní RSS/YouTube odběry, ne kurátorovaná ABS
      * knihovna, takže admin musí explicitně zvolit, co dítě smí vidět. Prázdné = nic schváleno.
+     * Od 2026-10-12 nese i ABS podcasty (`abs:id`, viz [isAbsPodcastVisibleForKids]).
      */
     val visibleForKidsSourceKeys: Set<String> = emptySet(),
     /**
@@ -256,6 +257,13 @@ data class ProfileConfig(
 
     /** SLOVO-KIDS-EPISODE: true = vlastní zdroj (klíč `type:ref`) je na TOMTO (dětském) profilu schválený. */
     fun isSourceVisibleForKids(sourceKey: String): Boolean = sourceKey in visibleForKidsSourceKeys
+
+    /**
+     * Audit dětí (2026-10-12, user „jen co jim zviditelním"): ABS podcast je pro DĚTSKÝ profil taky
+     * WHITELIST — klíč `abs:id` ve [visibleForKidsSourceKeys]. Dřív blacklist [hiddenPodcastIds] =
+     * nový pořad v ABS knihovně viděly děti automaticky. [hiddenPodcastIds] dál platí pro dospělé.
+     */
+    fun isAbsPodcastVisibleForKids(podcastId: String): Boolean = "abs:$podcastId" in visibleForKidsSourceKeys
 
     /**
      * CONVERGE V1 — Trakt řady v efektivním pořadí (dynamická sada [available] = co dnes existuje). Neznámé

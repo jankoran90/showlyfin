@@ -58,14 +58,16 @@ class AbsRepository @Inject constructor(
     /** DROPSHIP F2c — úprava metadata audioknihy (title/author). */
     suspend fun updateItemMedia(itemId: String, title: String?, authors: List<String>?): Result<Unit> = runCatching {
         val md = AbsMediaMetadata(title = title, authors = authors?.map { AbsAuthorInput(it) })
-        service.patchMediaMetadata(api("/api/items/$itemId/media"), bearer(), AbsMediaMetadataUpdate(md))
+        val resp = service.patchMediaMetadata(api("/api/items/$itemId/media"), bearer(), AbsMediaMetadataUpdate(md))
+        require(resp.isSuccessful) { "HTTP ${resp.code()}" }
     }
 
     /** DROPSHIP F2c — upload cover z bytů (např. SAF InputStream → readBytes). */
     suspend fun uploadCover(itemId: String, bytes: ByteArray, filename: String = "cover.jpg"): Result<Unit> = runCatching {
         val body = bytes.toRequestBody("image/jpeg".toMediaTypeOrNull())
         val part = MultipartBody.Part.createFormData("cover", filename, body)
-        service.uploadCover(api("/api/items/$itemId/cover"), bearer(), part)
+        val resp = service.uploadCover(api("/api/items/$itemId/cover"), bearer(), part)
+        require(resp.isSuccessful) { "HTTP ${resp.code()}" }
     }
 
     /** Přihlášení + uložení tokenu. Vrací Result se srozumitelnou chybou. */

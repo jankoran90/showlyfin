@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -52,6 +53,9 @@ class AudiobookPlayerConnection @Inject constructor(
     // nevěděl — poslech proto vždycky startoval od 0. Viz [VideoResumeStore] dokumentace.
     private val videoResumeStore: VideoResumeStore,
     private val profileRepository: ProfileRepository,
+    // Stažené direct díly (RSS/YT/ČT): fronta mohla vzniknout dřív, než stažení doběhlo (síťová URL) —
+    // při spuštění se proto lokální soubor dohledá VŽDY (Codex review 2026-10-12, offline fronta dětí).
+    private val offline: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
 ) {
     // Internal (ne private) = čtou/píší je extension funkce fronty v AudiobookPlayerQueue.kt.
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -61,7 +65,9 @@ class AudiobookPlayerConnection @Inject constructor(
     private var lastDirectSavedPos = -1L
 
     private var controller: MediaController? = null
-    private var pending: ((MediaController) -> Unit)? = null
+    /** Příkazy čekající na připojení controlleru — VŠECHNY v pořadí (dřív jen poslední, Codex sweep 2026-10-12). */
+    private val pending = mutableListOf<(MediaController) -> Unit>()
+    private var connecting = false
     private var pollJob: Job? = null
     private var sleepJob: Job? = null
 
@@ -105,6 +111,7 @@ class AudiobookPlayerConnection @Inject constructor(
     /** Zastaví přehrávání a vyprázdní stav BEZ zápisu do perzistované fronty (ta patří starému
      * profilu a zůstává netknutá — na rozdíl od [clearAll], což je uživatelská akce „vyprázdnit"). */
     private fun stopPlaybackForProfileSwitch() {
+        episodeStartJob?.cancel() // rozběhnutý start ABS epizody starého profilu nesmí doběhnout (Codex sweep)
         withController { c -> c.stop(); c.clearMediaItems() }
         currentEpisode = null
         _chapters.value = emptyList()
@@ -139,22 +146,27 @@ class AudiobookPlayerConnection @Inject constructor(
     }
 
     private fun ensureController() {
-        if (controller != null) return
+        if (controller != null || connecting) return // jediné rozběhnuté připojení, ne controller na každé volání
+        connecting = true
         val token = SessionToken(context, ComponentName(context, AudiobookPlayerService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         future.addListener({
-            val c = runCatching { future.get() }.getOrNull() ?: return@addListener
+            connecting = false
+            val c = runCatching { future.get() }.getOrNull()
+            if (c == null) { pending.clear(); return@addListener }
             controller = c
             c.addListener(playerListener)
             startPolling()
-            pending?.let { it(c); pending = null }
+            val blocks = pending.toList()
+            pending.clear()
+            blocks.forEach { it(c) }
             pushState()
         }, ContextCompat.getMainExecutor(context))
     }
 
     private fun withController(block: (MediaController) -> Unit) {
         val c = controller
-        if (c != null) block(c) else { pending = block; ensureController() }
+        if (c != null) block(c) else { pending += block; ensureController() }
     }
 
     private fun startPolling() {
@@ -246,11 +258,16 @@ class AudiobookPlayerConnection @Inject constructor(
             // zavírá). `updateLocalProgress` je no-op, pokud kniha není stažená, takže druhý případ
             // nic nezapíše. Stejný throttle jako u direct epizod (sdílený `lastDirectSaveMs`, hraje
             // vždy jen jedna položka najednou).
+            // Codex sweep 2026-10-12: po dohrání (STATE_ENDED) a ve stojící pauze NEzapisuj — dřív
+            // periodický zápis `isFinished = false` přepsal dokončení z [onPlaybackEnded].
             val itemId = _state.value.currentItemId
-            if (!itemId.isNullOrBlank()) {
+            if (!itemId.isNullOrBlank() && c.playbackState != Player.STATE_ENDED &&
+                (c.isPlaying || pos != lastDirectSavedPos)
+            ) {
                 val now = System.currentTimeMillis()
                 if (now - lastDirectSaveMs >= DIRECT_SAVE_INTERVAL_MS) {
                     lastDirectSaveMs = now
+                    lastDirectSavedPos = pos
                     audiobookDownloads.updateLocalProgress(itemId, posSec, isFinished = false)
                 }
             }
@@ -478,9 +495,21 @@ class AudiobookPlayerConnection @Inject constructor(
     fun pause() = withController { it.pause() }
 
     /** [ms] je v čase celé knihy. */
-    fun seekTo(ms: Long) = withController { seekBook(it, ms) }
+    fun seekTo(ms: Long) = withController { c -> seekBook(c, ms); persistManualSeek(c) }
 
-    fun seekBy(deltaMs: Long) = withController { c -> seekBook(c, bookPosMs(c) + deltaMs) }
+    fun seekBy(deltaMs: Long) = withController { c -> seekBook(c, bookPosMs(c) + deltaMs); persistManualSeek(c) }
+
+    /**
+     * Codex sweep 2026-10-12: ruční posun direct epizody ulož HNED — jinak Play do 4 s (throttle
+     * ukládání) vrátil přehrávač přes [catchUpToSharedPosition] na starou uloženou pozici.
+     */
+    private fun persistManualSeek(c: MediaController) {
+        val ep = currentEpisode?.takeIf { it.direct != null && it.episodeId.isNotBlank() } ?: return
+        val pos = bookPosMs(c)
+        val durMs = ((c.currentMediaItem?.mediaMetadata?.extras?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0) * 1000).toLong()
+        resumeStore.save(ep.episodeId, pos, durMs)
+        lastDirectSavedPos = pos
+    }
 
     fun nextChapter() = withController { c ->
         val posSec = bookPosMs(c) / 1000.0
@@ -572,10 +601,13 @@ class AudiobookPlayerConnection @Inject constructor(
      * (`direct`) přes přímou URL ([playDirect]), klasická ABS epizoda přes ABS play session.
      */
     private fun startEpisode(episode: QueuedEpisode) {
+        // Codex sweep 2026-10-12: jediný řízený start — rychlé A→B nebo přepnutí profilu dřív nechalo
+        // doběhnout starý síťový start a přehrát/zařadit cizí epizodu.
+        episodeStartJob?.cancel()
         val d = episode.direct
         if (d != null) {
             playDirect(
-                url = d.url,
+                url = offline.localVideo(episode.episodeId)?.let { android.net.Uri.fromFile(it).toString() } ?: d.url,
                 title = episode.title,
                 author = d.author,
                 coverUrl = episode.coverUrl,
@@ -598,12 +630,27 @@ class AudiobookPlayerConnection @Inject constructor(
             )
             return
         }
-        scope.launch {
-            runCatching { repo.startEpisodePlayback(episode.itemId, episode.episodeId) }
-                .onSuccess { pb -> playBook(pb, fromStart = false, episode = episode, itemId = episode.itemId) }
+        episodeStartJob = scope.launch {
+            runCatching {
+                // Stažená ABS epizoda hraje z lokálního souboru i z fronty / auto-advance (dřív jen
+                // z detailu → offline fronta nehrála). Online server session kvůli resume + syncu.
+                val local = downloads.localFile(episode.episodeId)
+                if (local == null) {
+                    repo.startEpisodePlayback(episode.itemId, episode.episodeId)
+                } else {
+                    runCatching { repo.startEpisodePlayback(episode.itemId, episode.episodeId) }.getOrNull()
+                        ?.let { pb -> pb.copy(tracks = listOf(pb.tracks.first().copy(url = Uri.fromFile(local).toString()))) }
+                        ?: downloads.offlinePlayback(episode.episodeId)
+                        ?: error("Stažený soubor epizody chybí.")
+                }
+            }
+                // isActive: vnitřní runCatching mohl spolknout zrušení a spadnout do offline větve.
+                .onSuccess { pb -> if (isActive) playBook(pb, fromStart = false, episode = episode, itemId = episode.itemId) }
                 .onFailure { Timber.w(it, "[Listen] přehrání epizody z fronty selhalo") }
         }
     }
+
+    private var episodeStartJob: Job? = null
 
     /** Přehraj konkrétní epizodu z fronty hned (klik v seznamu). NEodebírá ji z fronty. */
     fun playQueued(episode: QueuedEpisode) = startEpisode(episode)
@@ -659,8 +706,9 @@ class AudiobookPlayerConnection @Inject constructor(
                 downloads.delete(ended.episodeId)
             }
         } else {
-            // L2b: direct epizoda dohraná → zahoď resume (žádné „Pokračovat" na konci).
-            resumeStore.clear(ended.episodeId)
+            // L2b: direct epizoda dohraná → označ poslechnuto (Domů dohrané filtruje přes isFinished).
+            // Dřív `clear()` = značka „poslechnuto" zmizela (Codex sweep 2026-10-12).
+            resumeStore.markFinished(ended.episodeId)
         }
 
         // Sleep „do konce epizody" → zastav, nepokračuj.

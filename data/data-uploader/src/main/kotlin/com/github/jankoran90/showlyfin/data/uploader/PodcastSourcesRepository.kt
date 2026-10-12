@@ -7,11 +7,16 @@ import com.github.jankoran90.showlyfin.data.uploader.model.RssFeed
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceCategory
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceSearchResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -45,8 +50,31 @@ fun UploaderRemoteDataSource.youtubeVideoUrl(baseUrl: String, cookie: String, vi
 class PodcastSourcesRepository @Inject constructor(
     private val remote: UploaderRemoteDataSource,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
+    private val offlineCache: SourceOfflineCache,
 ) {
     private val _sources = MutableStateFlow<List<PodcastSource>>(emptyList())
+
+    // Offline paměť (user 2026-10-12): start z posledního známého seznamu (na pozadí, mimo UI vlákno),
+    // každá úspěšná změna seznamu (refresh / přidání / odebrání) se do ní uloží.
+    private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** true = seznam už nastavil server / uživatel — pozdě dočtená paměť ho nesmí přepsat. */
+    private var sourcesTouched = false
+
+    private val cacheRestore = cacheScope.launch {
+        val cached = offlineCache.readSources() ?: return@launch
+        synchronized(this@PodcastSourcesRepository) { if (!sourcesTouched) _sources.value = cached }
+    }
+
+    private fun setSources(list: List<PodcastSource>) {
+        synchronized(this) {
+            sourcesTouched = true
+            _sources.value = list
+        }
+        // Hodnota se čte až pod zámkem cache: poslední doběhnutý zápis vždy uloží nejnovější seznam,
+        // i když se souběžné zápisy na IO vláknech předběhnou (Codex review).
+        cacheScope.launch { offlineCache.writeSources { _sources.value } }
+    }
     val sources = _sources.asStateFlow()
 
     private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
@@ -62,10 +90,15 @@ class PodcastSourcesRepository @Inject constructor(
      * dokud user nepřepnul záložku. To byl bug „v této knihovně nejsou žádné podcasty" po cold startu.
      */
     suspend fun refresh() {
-        if (baseUrl.isBlank()) { _sources.value = emptyList(); return }
+        // Offline start: volající hned po refresh čtou [sources] → paměť musí být dočtená (Codex review).
+        cacheRestore.join()
+        if (baseUrl.isBlank()) { synchronized(this) { sourcesTouched = true; _sources.value = emptyList() }; return }
         runCatching { remote.listSources(baseUrl, cookie) }
-            .onSuccess { _sources.value = it.normalized(); Timber.i("[PRESET] zdrojů načteno: %d", it.size) }
-            .onFailure { Timber.w(it, "[PRESET] načtení zdrojů selhalo") }
+            .onSuccess {
+                setSources(it.normalized())
+                Timber.i("[PRESET] zdrojů načteno: %d", it.size)
+            }
+            .onFailure { Timber.w(it, "[PRESET] načtení zdrojů selhalo — držím poslední známý seznam") }
     }
 
     /**
@@ -76,7 +109,7 @@ class PodcastSourcesRepository @Inject constructor(
     suspend fun add(type: String, ref: String, title: String, thumbnail: String?, addedBy: String? = null): Boolean {
         if (!isConfigured) return false
         return runCatching { remote.addSource(baseUrl, cookie, type, ref, title, thumbnail, addedBy) }
-            .onSuccess { _sources.value = it.normalized() }
+            .onSuccess { setSources(it.normalized()) }
             .onFailure { Timber.w(it, "[PRESET] přidání zdroje selhalo") }
             .isSuccess
     }
@@ -85,7 +118,7 @@ class PodcastSourcesRepository @Inject constructor(
     suspend fun remove(id: String): Boolean {
         if (!isConfigured) return false
         return runCatching { remote.removeSource(baseUrl, cookie, id) }
-            .onSuccess { _sources.value = it.normalized() }
+            .onSuccess { setSources(it.normalized()) }
             .onFailure { Timber.w(it, "[PRESET] odebrání zdroje selhalo") }
             .isSuccess
     }
@@ -162,13 +195,19 @@ class PodcastSourcesRepository @Inject constructor(
     }
 
     /** Epizody RSS podcastu (přímé audio enclosure URL). */
-    suspend fun loadRss(feedUrl: String, limit: Int = 50): RssFeed =
+    suspend fun loadRss(feedUrl: String, limit: Int = 50): RssFeed = try {
         remote.getRssFeed(baseUrl, cookie, feedUrl, limit).let { feed ->
             feed.copy(
                 image = feed.image.httpsUrl(),
                 episodes = feed.episodes.map { it.copy(image = it.image.httpsUrl()) },
             )
-        }
+        }.also { feed -> cacheScope.launch { offlineCache.writeRss(feedUrl, feed) } }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        // Offline / výpadek: poslední načtený feed (stažené díly pak jdou přehrát), jinak původní chyba.
+        offlineCache.readRss(feedUrl)?.also { Timber.w(e, "[OFFLINE] feed z paměti: %s", feedUrl) } ?: throw e
+    }
 
     /**
      * CRUISE (SHW-70): epizody libovolného zdroje (YouTube/RSS/NaVýbornou) jako přehratelné [SourceEpisode]
@@ -229,8 +268,10 @@ class PodcastSourcesRepository @Inject constructor(
                     }
                 }
             }
-        }.onFailure { Timber.w(it, "[CRUISE] načtení epizod zdroje '%s' selhalo", source.title) }
-            .getOrDefault(emptyList())
+        }.onSuccess { eps -> if (source.type != "rss") cacheScope.launch { offlineCache.writeEpisodes(source.key, eps) } }
+            .onFailure { Timber.w(it, "[CRUISE] načtení epizod zdroje '%s' selhalo", source.title) }
+            // RSS má paměť už v [loadRss]; YouTube/ČT tady (offline Domů / Poslech dětí).
+            .getOrElse { if (source.type != "rss") offlineCache.readEpisodes(source.key).orEmpty() else emptyList() }
     }
 
     /**
@@ -241,9 +282,15 @@ class PodcastSourcesRepository @Inject constructor(
      * serveru → [loadEpisodes] s velkým limitem (feed se stejně stahuje celý, viz `/api/rss/feed`
      * strop 200→1000) + klientský [matchesQuery] (diakritika/case-insensitive) na název+popis.
      */
-    suspend fun searchEpisodes(query: String, limitPerSource: Int = 30): List<SourceEpisode> = coroutineScope {
+    suspend fun searchEpisodes(
+        query: String,
+        limitPerSource: Int = 30,
+        // Profilová viditelnost ([PodcastSource.isVisibleTo]) — hledá jen ve zdrojích, které profil vidí.
+        isVisible: (PodcastSource) -> Boolean = { true },
+    ): List<SourceEpisode> = coroutineScope {
         if (baseUrl.isBlank() || query.isBlank()) return@coroutineScope emptyList()
-        _sources.value.map { source -> async { searchOneSource(source, query, limitPerSource) } }.awaitAll().flatten()
+        _sources.value.filter(isVisible)
+            .map { source -> async { searchOneSource(source, query, limitPerSource) } }.awaitAll().flatten()
     }
 
     /**

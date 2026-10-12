@@ -18,6 +18,12 @@ data class HomeLayout(
     val descLines: Int = 3,
     /** true = „zbývá 1:23:45", false = „0:12:00 / 1:35:45". */
     val remaining: Boolean = true,
+    /**
+     * User (2026-10-12, „u audioknih mě to hodí na kartu, u podcastu se udělá play") — ťuk na díl
+     * otevře pořad s tímhle dílem mezi ostatními (true), nebo ho rovnou přehraje (false, chování z 2026-09-04).
+     * Přehrání je vždy i na tlačítku ▶ na kartě.
+     */
+    val episodeTapOpensShow: Boolean = true,
 )
 
 object HomeLayoutPrefs {
@@ -25,7 +31,8 @@ object HomeLayoutPrefs {
     private const val KEY_BIG_COVER = "slovo_home_layout_big_cover"
     private const val KEY_DESC_LINES = "slovo_home_layout_desc_lines"
     private const val KEY_REMAINING = "slovo_home_layout_remaining"
-    private val KEYS = setOf(KEY_LIST, KEY_BIG_COVER, KEY_DESC_LINES, KEY_REMAINING)
+    private const val KEY_TAP_OPENS = "slovo_home_layout_episode_tap_opens_show"
+    private val KEYS = setOf(KEY_LIST, KEY_BIG_COVER, KEY_DESC_LINES, KEY_REMAINING, KEY_TAP_OPENS)
 
     val DESC_LINE_OPTIONS = listOf(0, 2, 3, 5)
 
@@ -34,6 +41,7 @@ object HomeLayoutPrefs {
         bigCover = prefs.getBoolean(KEY_BIG_COVER, true),
         descLines = prefs.getInt(KEY_DESC_LINES, 3),
         remaining = prefs.getBoolean(KEY_REMAINING, true),
+        episodeTapOpensShow = prefs.getBoolean(KEY_TAP_OPENS, true),
     )
 
     fun write(prefs: SharedPreferences, layout: HomeLayout) {
@@ -42,6 +50,7 @@ object HomeLayoutPrefs {
             .putBoolean(KEY_BIG_COVER, layout.bigCover)
             .putInt(KEY_DESC_LINES, layout.descLines)
             .putBoolean(KEY_REMAINING, layout.remaining)
+            .putBoolean(KEY_TAP_OPENS, layout.episodeTapOpensShow)
             .apply()
     }
 

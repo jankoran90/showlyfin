@@ -17,6 +17,8 @@ import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +50,7 @@ class PodcastSearchViewModel @Inject constructor(
     // EPHEMERON (2026-09-04): trvalé připojení scoped-hledáním nalezené epizody ke kartě zdroje.
     private val attachedStore: com.github.jankoran90.showlyfin.feature.listen.player.AttachedEpisodeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val profileRepository: ProfileRepository,
 ) : ViewModel() {
 
     enum class SortMode(val label: String) {
@@ -115,13 +118,24 @@ class PodcastSearchViewModel @Inject constructor(
 
     private suspend fun runSearch(query: String) {
         _state.update { it.copy(loading = true) }
-        val results = runCatching {
-            scopeSource?.let { repo.searchInSource(it, query) } ?: repo.searchEpisodes(query)
+        val results = try {
+            scopeSource?.let { repo.searchInSource(it, query) } ?: repo.searchEpisodes(query, isVisible = ::isSourceVisible)
+        } catch (e: CancellationException) {
+            throw e // nový dotaz zrušil starý — nepřepisuj jeho stav „nic nenalezeno" (Codex sweep 2026-10-12)
+        } catch (e: Exception) {
+            Timber.w(e, "[TRAWL] hledání selhalo")
+            emptyList()
         }
-            .onFailure { Timber.w(it, "[TRAWL] hledání selhalo") }
-            .getOrDefault(emptyList())
+        if (_state.value.query != query) return // mezitím jiný dotaz
         lastResults = results
         _state.update { it.copy(loading = false, searched = true, results = sorted(results, it.sort, query)) }
+    }
+
+    /** Globální hledání jen ve zdrojích, které aktivní profil vidí (viz [PodcastSource.isVisibleTo]). */
+    private fun isSourceVisible(src: PodcastSource): Boolean {
+        val cfg = profileRepository.activeConfig.value
+        val active = profileRepository.activeProfile.value
+        return src.isVisibleTo(active?.profileUuid, active?.isAdmin == false, cfg.sharedSourceKeys, cfg.visibleForKidsSourceKeys)
     }
 
     fun setSort(mode: SortMode) {

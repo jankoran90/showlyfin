@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.AudioFile
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
@@ -73,6 +72,7 @@ import com.github.jankoran90.showlyfin.feature.listen.detectTitleAuthor
 @Composable
 fun UploadAudiobookScreen(
     onBack: () -> Unit,
+    onEditBook: (itemId: String, title: String, author: String?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: UploadAudiobookViewModel = hiltViewModel(),
 ) {
@@ -80,7 +80,11 @@ fun UploadAudiobookScreen(
     val context = LocalContext.current
     // F2d: upload může doběhnout (i probíhat) na pozadí ve službě — při otevření obrazovky
     // přebere se aktuální stav z manageru.
-    LaunchedEffect(Unit) { viewModel.syncFromManager() }
+    // Návrat z „Zkontrolovat / Upravit" → karta si knihu přečte z ABS znovu (nová metadata/obálka).
+    LaunchedEffect(Unit) {
+        viewModel.syncFromManager()
+        viewModel.refreshUploaded()
+    }
 
     val selectedUris = remember { mutableStateListOf<Uri>() }
     var firstFileName by remember { mutableStateOf<String?>(null) }
@@ -331,16 +335,24 @@ fun UploadAudiobookScreen(
 
             state.result?.let { res ->
                 item {
-                    ResultCard(res = res, onBack = onBack, onAgain = {
-                        viewModel.reset()
-                        selectedUris.clear()
-                        firstFileName = null
-                        title = ""
-                        author = ""
-                        titleAuthorPrefilled = false
-                        coverUri = null
-                        coverName = null
-                    })
+                    UploadResultCard(
+                        res = res,
+                        detail = state.uploadedDetail,
+                        coverUrl = state.uploadedCoverUrl,
+                        enrichPending = state.enrichPending,
+                        onEdit = onEditBook,
+                        onBack = onBack,
+                        onAgain = {
+                            viewModel.reset()
+                            selectedUris.clear()
+                            firstFileName = null
+                            title = ""
+                            author = ""
+                            titleAuthorPrefilled = false
+                            coverUri = null
+                            coverName = null
+                        },
+                    )
                 }
             }
         }
@@ -416,58 +428,6 @@ private fun LibraryDropdown(
             }
             libraries.forEach { lib ->
                 DropdownMenuItem(text = { Text(lib.name) }, onClick = { onSelect(lib.id); expanded = false })
-            }
-        }
-    }
-}
-
-@Composable
-private fun ResultCard(
-    res: com.github.jankoran90.showlyfin.data.uploader.model.AudiobookUploadResponse,
-    onBack: () -> Unit,
-    onAgain: () -> Unit,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    "Kniha nahrána",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "${res.title ?: "—"}${res.author?.let { " — $it" }.orEmpty()}" +
-                    (res.folder?.let { "\nSložka: $it" }.orEmpty()) +
-                    "\nStop: ${res.tracks}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            if (res.enrich?.matched == true) {
-                Text(
-                    "Metadata doplněna z Audible.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            } else if (res.enrich?.pending == true) {
-                Text(
-                    "Dohledávám obálku a popisek na pozadí — za chvíli hotovo, netřeba čekat.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onAgain) { Text("Nahrát další") }
-                Button(onClick = onBack) { Text("Zpět") }
             }
         }
     }

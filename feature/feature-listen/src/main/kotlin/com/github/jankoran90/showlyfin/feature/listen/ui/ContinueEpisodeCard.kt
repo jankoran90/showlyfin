@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +36,9 @@ fun ContinueEpisodeCard(
     onLongClick: (() -> Unit)? = null,
     /** User (2026-08-16, „ikonu ukončit poslech přímo na kartě") — vzor [AudiobookCard]. null = nezobrazí se. */
     onEndListening: (() -> Unit)? = null,
+    /** User (2026-10-12) — ▶/⏸ na dlaždici, když ťuk otevírá pořad. null = bez tlačítka. */
+    onPlayPause: (() -> Unit)? = null,
+    playing: Boolean = false,
 ) {
     CoverCard(
         title = episode.title,
@@ -73,6 +79,17 @@ fun ContinueEpisodeCard(
                     modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
                     onConfirm = onEndListening,
                 )
+            }
+            if (onPlayPause != null) {
+                FilledIconButton(
+                    onClick = onPlayPause,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(36.dp),
+                ) {
+                    Icon(
+                        if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (playing) "Pauza" else "Poslouchat",
+                    )
+                }
             }
         },
     )

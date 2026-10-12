@@ -56,7 +56,8 @@ class AudiobookEditViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isWorking = true, message = null) }
             val authors = s.author.ifBlank { null }?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
-            runCatching { absRepo.updateItemMedia(s.itemId, s.title.ifBlank { null }, authors) }
+            // Repo vrací Result — vnější runCatching by failure spolkl jako úspěch (Codex sweep 2026-10-12).
+            absRepo.updateItemMedia(s.itemId, s.title.ifBlank { null }, authors)
                 .onSuccess { _state.update { it.copy(isWorking = false, message = "Uloženo") }; onDone() }
                 .onFailure { e -> Timber.w(e, "[DROPSHIP] save metadata"); _state.update { it.copy(isWorking = false, message = "Chyba: ${e.message ?: e.localizedMessage ?: "neznámá"}") } }
         }
@@ -96,7 +97,7 @@ class AudiobookEditViewModel @Inject constructor(
             runCatching {
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: error("Obálku nelze načíst")
-                absRepo.uploadCover(s.itemId, bytes)
+                absRepo.uploadCover(s.itemId, bytes).getOrThrow()
             }.onSuccess { _state.update { it.copy(isWorking = false, message = "Obálka nahrána") } }
                 .onFailure { e -> Timber.w(e, "[DROPSHIP] upload cover"); _state.update { it.copy(isWorking = false, message = "Chyba: ${e.message ?: e.localizedMessage ?: "neznámá"}") } }
         }
