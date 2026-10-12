@@ -111,6 +111,9 @@ class WatchedReporter @Inject constructor(
         target.jellyfinItemId?.takeIf { it.isNotBlank() }?.let { jfId ->
             ok = jellyfin.markPlayed(jfId, true)
             Timber.i("[CURTAIN] Jellyfin markPlayed(%s) → %s", jfId, ok)
+            // Revize 2026-10-12 (Codex A8): výpadek sítě při zápisu nesmí zablokovat další pokusy —
+            // guard pusť, ať to zkusí příští tik přehrávače nebo konec titulu.
+            if (!ok) reported.remove(id)
         }
 
         if (target.jellyfinItemId.isNullOrBlank()) {

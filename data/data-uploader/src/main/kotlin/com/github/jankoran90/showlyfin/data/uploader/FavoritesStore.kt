@@ -136,10 +136,11 @@ class FavoritesStore @Inject constructor(
      * v serverových logách: DB řádek smazán, o 28 s později PUSH z tohohle store ho oživil zpátky).
      * Fix: tenhle store ty čtyři druhy vůbec nedrží ani nepushuje — na KAŽDÉM zápisu je odfiltruje.
      */
-    private fun List<FavoriteItem>.stripNewStoreKinds(): List<FavoriteItem> = filterNot {
-        it.kind == FavoriteKind.WANT_MOVIE || it.kind == FavoriteKind.WANT_SHOW ||
-            it.kind == FavoriteKind.QUEUE_MOVIE || it.kind == FavoriteKind.QUEUE_SHOW
-    }
+    private fun FavoriteItem.isNewStoreKind(): Boolean =
+        kind == FavoriteKind.WANT_MOVIE || kind == FavoriteKind.WANT_SHOW ||
+            kind == FavoriteKind.QUEUE_MOVIE || kind == FavoriteKind.QUEUE_SHOW
+
+    private fun List<FavoriteItem>.stripNewStoreKinds(): List<FavoriteItem> = filterNot { it.isNewStoreKind() }
 
     private fun persist(list: List<FavoriteItem>) {
         val filtered = list.stripNewStoreKinds()
@@ -197,12 +198,29 @@ class FavoritesStore @Inject constructor(
         }.onFailure { Timber.w(it, "[COMPASS] push oblíbených selhal") }
     }
 
-    /** Po lokální změně pošli celý snapshot na server (fire-and-forget). */
+    /**
+     * Po lokální změně pošli snapshot na server (fire-and-forget).
+     *
+     * 🔴 Revize 2026-10-12: PUT je `full_replace` CELÉ domény `favorites` — a ta na serveru nese i
+     * WANT a QUEUE řádky, které tenhle store lokálně nedrží ([stripNewStoreKinds]). Dřív šel nahoru jen
+     * `_items` → server by „Chci vidět" i frontu K přehrání tombstonoval při každém přepnutí oblíbeného.
+     * Teď: čerstvé WANT/QUEUE řádky ze serveru + naše oblíbené. Bez úspěšného GET se nepushuje vůbec
+     * (chyba ≠ prázdný seznam).
+     */
     private fun pushToServer() {
         val key = profileKey(); val base = baseUrl(); val cookie = cookie()
         if (key.isBlank() || base.isBlank()) return
         val snapshot = _items.value
-        scope.launch { pushNow(key, base, cookie, snapshot) }
+        scope.launch {
+            val server = runCatching { parseServer(uploaderDs.getProfileFavorites(base, cookie, key)) }
+                .getOrNull()
+            if (server == null) {
+                Timber.w("[COMPASS] push oblíbených odložen — server nedostupný")
+                return@launch
+            }
+            val cizi = server.filter { it.isNewStoreKind() }   // WANT/QUEUE patří Room delta store
+            pushNow(key, base, cookie, cizi + snapshot)
+        }
     }
 
     fun isFavorite(kind: FavoriteKind, id: Long): Boolean =

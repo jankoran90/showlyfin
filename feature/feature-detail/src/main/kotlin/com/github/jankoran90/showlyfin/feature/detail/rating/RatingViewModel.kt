@@ -117,7 +117,7 @@ class RatingViewModel @Inject constructor(
                 type = if (t.isShow) "SHOW" else "MOVIE", title = t.title, year = t.year, stars = stars,
             )
         )
-        if (t.traktId > 0L) postToTrakt(t, stars, remove = false)
+        if (t.hasTraktIdentity()) postToTrakt(t, stars, remove = false)
         _justRated.value = t
     }
 
@@ -127,12 +127,21 @@ class RatingViewModel @Inject constructor(
         _pending.value = null
         userRatingStore.clear(t.tmdbId, t.imdbId)
         cardRatingKey(t.tmdbId, t.imdbId)?.let { key -> _traktRatings.value = _traktRatings.value - key }
-        if (t.traktId > 0L) postToTrakt(t, 0, remove = true)
+        if (t.hasTraktIdentity()) postToTrakt(t, 0, remove = true)
     }
+
+    // Revize 2026-10-12: tituly z katalogu (Objevit/Česky) nesou traktId=0 → hodnocení zůstalo jen lokálně
+    // a po smazání se staré Trakt hodnocení vracelo. Trakt umí titul najít i podle TMDB/IMDb id.
+    private fun RatingTarget.hasTraktIdentity(): Boolean =
+        traktId > 0L || (tmdbId ?: 0L) > 0L || !imdbId.isNullOrBlank()
 
     private fun postToTrakt(t: RatingTarget, stars: Int, remove: Boolean) {
         val ratedAt = if (remove) "" else java.time.Instant.now().toString()
-        val value = RatingRequestValue(rating = stars, rated_at = ratedAt, ids = RatingRequestIds(t.traktId))
+        val value = RatingRequestValue(rating = stars, rated_at = ratedAt, ids = RatingRequestIds(
+            trakt = t.traktId.takeIf { it > 0L },
+            tmdb = t.tmdbId?.takeIf { it > 0L },
+            imdb = t.imdbId?.takeIf { it.startsWith("tt") },
+        ))
         val request = if (t.isShow) RatingRequest(shows = listOf(value)) else RatingRequest(movies = listOf(value))
         viewModelScope.launch {
             runCatching { if (remove) trakt.postRemoveRatings(request) else trakt.postRatings(request) }

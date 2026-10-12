@@ -298,11 +298,14 @@ fun PlaybackScreen(
     // Ukazatel načítání (user 2026-08-03): odkdy se buferuje (0 = neběží) a kolik vteřin už to trvá.
     var bufferingSinceMs by remember { mutableLongStateOf(0L) }
     var bufferingSec by remember { mutableIntStateOf(0) }
-    var resumeDecided by remember { mutableStateOf(false) }
+    // Revize 2026-10-12 (Codex A3): TV přechod Player → Player (cast dalšího titulu) zůstává na STEJNÉM místě
+    // kompozice → bez klíče by nový titul převzal rozhodnutí i startovní pozici předchozího. Klíč = identita
+    // titulu (ne URL: výměna zdroje téhož titulu v CASCADE si rozhodnutí ponechat má).
+    var resumeDecided by remember(itemId, externalTitle, localVideoPath) { mutableStateOf(false) }
     // B fix: pozice, ke které se má přehrávání spustit (0 = od začátku). Nastaví ji dialog „Pokračovat/Od
     // začátku"; prepare efekt ji předá ATOMICKY do setMediaItem(startPositionMs), místo aby po prepare
     // volal seekTo na async MediaController (ten se ztrácel než session propagovala timeline → jelo od 0).
-    var resumeStartMs by remember { mutableLongStateOf(0L) }
+    var resumeStartMs by remember(itemId, externalTitle, localVideoPath) { mutableLongStateOf(0L) }
     var playerError by remember { mutableStateOf<String?>(null) }
     // CASCADE Fáze 4: hlásíme selhání externího streamu jen jednou (onPlayerError může přijít víckrát).
     var failureReported by remember { mutableStateOf(false) }

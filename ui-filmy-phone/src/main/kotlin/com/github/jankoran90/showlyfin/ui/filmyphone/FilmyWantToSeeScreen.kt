@@ -47,6 +47,9 @@ fun FilmyWantToSeeScreen(
     val cacheState by cacheVm.state.collectAsStateWithLifecycle()
     var viewMode by remember { mutableStateOf(ViewMode.LIST) }
     val running = cacheState is WatchlistSourceCacheViewModel.State.Running
+    // Obnova při vstupu i návratu do appky — přidání z webu/TV se jinak ukázalo až po zabití appky.
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshQuiet() }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { vm.refreshQuiet() }
 
     Column(modifier.fillMaxSize()) {
         FilmySectionBar(

@@ -54,6 +54,9 @@ fun ShowlyfinTvApp() {
     androidx.compose.runtime.LaunchedEffect(profileSwitch) {
         if (profileSwitch > 0 && profileSwitch != lastProfileSwitch) {
             lastProfileSwitch = profileSwitch
+            // 🔴 2026-10-12 (revize): `recreate()` sám ViewModely PONECHÁ (jako při otočení displeje) → katalog,
+            // „Pro tebe", detail… by dětem ukázaly data dospělého. Store vyprázdni, ať opravdu vše vznikne znovu.
+            (ctx as? androidx.activity.ComponentActivity)?.viewModelStore?.clear()
             (ctx as? android.app.Activity)?.recreate()
         }
     }

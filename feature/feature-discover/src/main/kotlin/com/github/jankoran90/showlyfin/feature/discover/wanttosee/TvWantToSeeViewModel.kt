@@ -81,9 +81,23 @@ class TvWantToSeeViewModel @Inject constructor(
 
     fun refresh() = reload()
 
-    private fun reload() {
+    /**
+     * Tichá obnova při vstupu na obrazovku / návratu do appky (titul přidaný z webu či TV). Revize 2026-10-12:
+     * oprava 1.2.123 šla do `WatchlistViewModel`, jenže telefonní „Chci vidět" Filmů jede přes TENTO VM.
+     * Throttle 5 s, bez spinneru; prázdno chrání stejná retry pojistka jako běžný reload (loader chybu nerozliší).
+     */
+    fun refreshQuiet() {
+        if (_state.value.loading) return
+        if (System.currentTimeMillis() - lastLoadStartMs < QUIET_THROTTLE_MS) return
+        reload(quiet = true)
+    }
+
+    private var lastLoadStartMs = 0L
+
+    private fun reload(quiet: Boolean = false) {
         loadJob?.cancel()
-        _state.value = _state.value.copy(loading = true)
+        lastLoadStartMs = System.currentTimeMillis()
+        if (!quiet) _state.value = _state.value.copy(loading = true)
         loadJob = viewModelScope.launch {
             val cfgTok = profileRepository.activeConfig.value.credentials.trakt?.accessToken?.length ?: 0
             val prefTok = prefs.getString(KEY_TRAKT_ACCESS_TOKEN, null)?.length ?: 0
@@ -130,5 +144,6 @@ class TvWantToSeeViewModel @Inject constructor(
         const val KEY_TRAKT_ACCESS_TOKEN = "TRAKT_ACCESS_TOKEN"
         const val MAX_EMPTY_RETRY = 3
         const val RETRY_DELAY_MS = 1500L
+        const val QUIET_THROTTLE_MS = 5_000L
     }
 }

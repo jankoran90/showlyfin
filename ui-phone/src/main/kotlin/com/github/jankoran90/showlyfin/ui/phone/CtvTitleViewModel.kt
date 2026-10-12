@@ -17,6 +17,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -79,16 +80,23 @@ class CtvTitleViewModel @Inject constructor(
     private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     private var loadedFor: String? = null
+    // Revize 2026-10-12: VM je aktivitní → načtení/resolve předchozího pořadu by po návratu a otevření
+    // jiného pořadu zapsalo jeho díly nebo spustilo jeho přehrávání. Při novém titulu obojí rušíme.
+    private var loadJob: kotlinx.coroutines.Job? = null
+    private var resolveJob: kotlinx.coroutines.Job? = null
 
     fun load(title: CtvTitle) {
         if (loadedFor == title.sidp) return
         loadedFor = title.sidp
+        loadJob?.cancel(); resolveJob?.cancel()
+        _play.value = null
         _state.value = UiState(title = title, inFilmoteka = isSaved(title.sidp))
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             // F6b: titul otevřený z Filmotéky nese jen identitu (`ctvid:<sidp>`) + název → dotáhni zbytek
             // (popis, obrázek, `idec` k přehrání). `idec` schválně NEUKLÁDÁME — je krátkodobé.
             val full = if (title.idec.isNullOrBlank() && title.episodesAnchor.isNullOrBlank()) {
                 val fresh = uploaderDs.getCtvTitle(baseUrl, cookie, title.sidp)
+                ensureActive()   // zrušeno novějším pořadem → žádná chyba do jeho stavu
                 if (fresh == null) {
                     // 🔴 Dřív se to spolklo (`?: title`) a karta zůstala TIŠE prázdná — nešlo poznat,
                     // jestli titul nic nemá, nebo jen selhalo spojení (user 2026-07-28 „karta pořadu
@@ -124,6 +132,7 @@ class CtvTitleViewModel @Inject constructor(
                     }
                 }
                 .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     Timber.w(e, "[VLTAVA] díly ČT pořadu %s se nenačetly", full.sidp)
                     loadedFor = null
                     _state.update {
@@ -220,7 +229,7 @@ class CtvTitleViewModel @Inject constructor(
     fun playIdec(idec: String, label: String, posterUrl: String?) {
         if (idec.isBlank() || _state.value.resolvingIdec != null) return
         _state.update { it.copy(resolvingIdec = idec, error = null) }
-        viewModelScope.launch {
+        resolveJob = viewModelScope.launch {
             when (val r = ctvResolver.resolve(idec)) {
                 is CtvStreamResolver.Result.Ok -> {
                     Timber.i("[VLTAVA] ČT hledání → play idec=%s", idec)

@@ -62,6 +62,9 @@ fun TvWantToSeeScreen(
     sectionVm: TvSectionViewModel = hiltViewModel(),
 ) {
     val state0 by viewModel.state.collectAsStateWithLifecycle()
+    // Obnova při vstupu i návratu do appky (titul přidaný z telefonu/webu) — revize 2026-10-12.
+    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refreshQuiet() }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { viewModel.refreshQuiet() }
     // FOYER (SHW-107, user 2026-07-26): TV vstup do sekce = mřížka + ABECEDNĚ; přepnutí se uloží.
     val modes by sectionVm.modes.collectAsStateWithLifecycle()
     val sort = sectionVm.sortOf(modes, ViewModeStore.SECTION_WANT_TO_SEE)

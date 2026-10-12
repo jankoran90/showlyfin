@@ -147,6 +147,7 @@ class DetailViewModel @Inject constructor(
 
     /** Týž titul? Stub z pásu nese jen `tmdbId` (trakt 0, imdb null), proto OR přes všechna id. */
     private fun MediaItem.isSameAs(other: MediaItem): Boolean {
+        if (type != other.type) return false   // trakt/tmdb číslují filmy a seriály zvlášť
         if (traktId != 0L && traktId == other.traktId) return true
         if (tmdbId != null && tmdbId == other.tmdbId) return true
         if (!imdbId.isNullOrBlank() && imdbId == other.imdbId) return true
@@ -187,6 +188,7 @@ class DetailViewModel @Inject constructor(
     // LAPIDARY S4b — one-click z řady „Uloženo k přehrání": po hydrataci detailu přehraj zapamatovaný
     // zdroj rovnou (jednou). Guard proti dvojímu spuštění (rekompozice / návrat na tentýž titul).
     private var autoplayRememberedPending = false
+    private val autoplayedTitles = mutableSetOf<String>()
     // SEJF LAN: playRemembered() teď před playStream() čeká na async dellhome dosažitelnost
     // (sejfLanStream) — playStream()'s vlastní isResolvingStream guard se během TOHOTO čekání
     // ještě nenastaví, takže dvojtap/dvojí OK na dálkovém by prošel oběma větvemi souběžně.
@@ -263,7 +265,8 @@ class DetailViewModel @Inject constructor(
 
     private fun load(item: MediaItem, force: Boolean) {
         val current = _uiState.value.item
-        if (!force && current != null) {
+        // Film a seriál mají v TMDB i Traktu ODDĚLENÉ číselné řady → stejné číslo ≠ stejný titul (revize 2026-10-12).
+        if (!force && current != null && current.type == item.type) {
             val sameTrakt = current.traktId != 0L && current.traktId == item.traktId
             val sameTmdb = current.tmdbId != null && item.tmdbId != null && current.tmdbId == item.tmdbId
             if (sameTrakt || sameTmdb) return
@@ -2774,13 +2777,23 @@ class DetailViewModel @Inject constructor(
      * ztratil (odepnut / smazán), tiše NEuděláme nic — zůstane otevřený detail (bezpečný fallback).
      */
     fun autoplayRemembered() {
-        if (autoplayRememberedPending) return
+        // Revize 2026-10-12: příznak se dřív nikdy nenuloval → one-click fungoval jednou za život
+        // (aktivitního) VM, u druhého titulu už ne. Teď: každý titul nejvýš jednou (návrat z přehrávače
+        // zpět do detailu ho nesmí pustit znovu) a úloha patří TOMU titulu, pro který byla spuštěna.
+        val cil = _uiState.value.item
+        val klic = cil?.let { "${it.type}:${it.tmdbId ?: it.traktId}" }
+        if (autoplayRememberedPending || (klic != null && !autoplayedTitles.add(klic))) return
         autoplayRememberedPending = true
         viewModelScope.launch {
-            // Počkej na hydrataci detailu — rememberedSource se plní v load() (workingSourceStore.get).
-            val ready = withTimeoutOrNull(20_000) { uiState.first { !it.isLoading && it.item != null } }
-            if (ready == null) return@launch
-            _uiState.value.rememberedSource?.let { playRemembered() }
+            try {
+                // Počkej na hydrataci detailu — rememberedSource se plní v load() (workingSourceStore.get).
+                val ready = withTimeoutOrNull(20_000) { uiState.first { !it.isLoading && it.item != null } }
+                if (ready == null) return@launch
+                if (cil != null && ready.item?.isSameAs(cil) != true) return@launch
+                _uiState.value.rememberedSource?.let { playRemembered() }
+            } finally {
+                autoplayRememberedPending = false
+            }
         }
     }
 

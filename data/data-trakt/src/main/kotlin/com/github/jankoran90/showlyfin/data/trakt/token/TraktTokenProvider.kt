@@ -57,9 +57,9 @@ internal class TraktTokenProvider(
         // 429. Access token dál funguje pro /sync. Po vypršení se zkusí obnova ještě jednou (kdyby se
         // token na telefonu obnovil a přenesl na TV).
         private const val AUTH_FAIL_COOLDOWN_MS = 600_000L
-        // ORBIT — bezpečnostní rezerva: pokud druhá cesta obnovila token s platností kratší než tohle,
-        // ber ho jako „ještě ne čerstvý" a obnov (jinak by nová obnova zdvojila spend rotovaného tokenu).
-        private const val REFRESH_SKEW_MS = 30_000L
+        // ORBIT + proaktivní obnova den před vypršením (token platí 7 dní) — appka používaná aspoň jednou denně
+        // tak nikdy nenarazí na prošlý token; pod tímhle oknem je token pro double-check „čerstvý".
+        private const val REFRESH_BEFORE_EXPIRY_MS = 24L * 60 * 60 * 1000
     }
 
     private var token: String? = null
@@ -168,9 +168,12 @@ internal class TraktTokenProvider(
             val haveRefresh = !sharedPreferences.getString(KEY_REFRESH_TOKEN, null).isNullOrBlank()
             return haveAccess && haveRefresh
         }
-        if (nowMillis - tokenCreatedAt > Config.TRAKT_TOKEN_REFRESH_DURATION.toMillis()) return true
-        if (tokenExpiresAt in 1..nowMillis) return true
-        return false
+        // 2026-10-12: Trakt vydává token na 7 dní (ověřeno na serverových kopiích: expires−created = 604 800 s).
+        // Dřív „obnov po 12 h" — jenže double-check v [refreshTokenSafely] obnovu pustil až těsně před
+        // vypršením, takže každý Trakt request po 12 h jen zbytečně čekal na @Synchronized + mutex.
+        // Teď jedno pravidlo pro obě místa: obnov, když do vypršení zbývá méně než [REFRESH_BEFORE_EXPIRY_MS].
+        if (tokenExpiresAt > 0L) return tokenExpiresAt - nowMillis < REFRESH_BEFORE_EXPIRY_MS
+        return nowMillis - tokenCreatedAt > Config.TRAKT_TOKEN_REFRESH_DURATION.toMillis()
     }
 
     override suspend fun refreshToken(): OAuthResponse {
@@ -229,7 +232,7 @@ internal class TraktTokenProvider(
         // double-check: druhá cesta mohla obnovit, než jsme dostali zámek → NEspotřebovávej refresh_token znovu
         val curAccess = sharedPreferences.getString(KEY_ACCESS_TOKEN, null)?.trim()
         val curExpires = sharedPreferences.getLong(KEY_TOKEN_EXPIRES_AT, 0L)
-        if (!curAccess.isNullOrEmpty() && curExpires > now + REFRESH_SKEW_MS) {
+        if (!curAccess.isNullOrEmpty() && curExpires - now > REFRESH_BEFORE_EXPIRY_MS) {
             return@withLock curAccess // už čerstvý díky druhé cestě → hotovo, žádný další spend
         }
         val fresh = refreshToken()                 // stávající síťové volání, spotřebuje aktuální refresh_token

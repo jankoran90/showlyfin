@@ -197,7 +197,11 @@ private fun FilmyShellContent() {
     }
     val popDetail: () -> Unit = { detailStack = detailStack.dropLast(1) }
     // LABYRINT: štítek / mapa žánrů / „vše ›" → stránka katalogu na zásobník (Zpět vrací, odkud přišel).
-    val openKatalog: (KatalogCil) -> Unit = { cil -> detailStack = detailStack + FilmyDetailEntry.Katalog(cil) }
+    // Stránky katalogu jen pro profil bez věkového stropu (pojistka pro všechny vstupy: štítky, hledání…).
+    val katalogPovolen by hiltViewModel<KatalogPristupViewModel>().povolen.collectAsStateWithLifecycle()
+    val openKatalog: (KatalogCil) -> Unit = { cil ->
+        if (katalogPovolen) detailStack = detailStack + FilmyDetailEntry.Katalog(cil)
+    }
     val openKatalogDetail: (MediaItem) -> Unit = { mi -> detailStack = detailStack + FilmyDetailEntry.Media(mi) }
 
     // PROFIL (user 2026-07-28 „při přepnutí chci, aby se appka opravdu znovunačetla"): přepnutí profilu
@@ -211,6 +215,9 @@ private fun FilmyShellContent() {
     LaunchedEffect(profileSwitch) {
         if (profileSwitch > 0 && profileSwitch != lastProfileSwitch) {
             lastProfileSwitch = profileSwitch
+            // 🔴 2026-10-12 (revize): `recreate()` sám ViewModely PONECHÁ (jako při otočení displeje) → katalog,
+            // „Pro tebe", detail… by dětem ukázaly data dospělého. Store vyprázdni, ať opravdu vše vznikne znovu.
+            (context as? androidx.activity.ComponentActivity)?.viewModelStore?.clear()
             (context as? android.app.Activity)?.recreate()
         }
     }
@@ -332,7 +339,7 @@ private fun FilmyShellContent() {
                     current = FilmySection.REFERENCE
                 },
                 // LABYRINT: žánry, podžánry, rok, země a témata jako odkazy na stránky katalogu.
-                heroExtra = { klic -> FilmyKatalogStitkyKarty(klic = klic, onOpen = openKatalog) },
+                heroExtra = { klic -> if (katalogPovolen) FilmyKatalogStitkyKarty(klic = klic, onOpen = openKatalog) },
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (detailEntry is FilmyDetailEntry.Katalog) {

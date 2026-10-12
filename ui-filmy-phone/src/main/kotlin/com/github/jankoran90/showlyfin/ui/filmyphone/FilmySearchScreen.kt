@@ -141,7 +141,9 @@ fun FilmySearchScreen(
             }
         }
         // LABYRINT (parita s webem): žánry, podžánry a témata k dotazu („černý" → Černý humor).
-        FilmyKatalogHledatStitky(query = state.query, onOpen = onOpenKatalog)
+        // Jen profil bez věkového stropu (katalog je pro děti skrytý, viz KatalogPristupViewModel).
+        val katalogPovolen by hiltViewModel<KatalogPristupViewModel>().povolen.collectAsStateWithLifecycle()
+        if (katalogPovolen) FilmyKatalogHledatStitky(query = state.query, onOpen = onOpenKatalog)
         // ŘAZENÍ (user 2026-07-20) — kritéria vhodná pro hledání, filtrovaná dle rozsahu (rok/hodnocení jen u
         // filmů/seriálů). Směr ▲/▼. Vše klientsky nad staženými výsledky (bez další sítě). Jen když jsou výsledky.
         if (state.results.isNotEmpty()) {

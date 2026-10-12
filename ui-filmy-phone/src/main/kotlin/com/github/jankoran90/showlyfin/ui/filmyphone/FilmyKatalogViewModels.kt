@@ -3,13 +3,17 @@ package com.github.jankoran90.showlyfin.ui.filmyphone
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.jellyfin.ParentalControlsRepository
 import com.github.jankoran90.showlyfin.data.uploader.KatalogRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -41,6 +45,20 @@ object KatalogPrefs {
 }
 
 /** Objevit: mapa žánrů a nálad. */
+/**
+ * Katalog (Objevit / Pro tebe / Česky / stránky žánrů a témat) jen pro profil BEZ věkového stropu —
+ * rozhodnutí usera 2026-10-08 („profil jen dospělý"), na webu platí od LABYRINT F1. V appce chybělo:
+ * dětský profil se přes Objevit dostal na celý TMDB katalog (horory…) a detail přehrání nezablokuje.
+ */
+@HiltViewModel
+class KatalogPristupViewModel @Inject constructor(
+    parental: ParentalControlsRepository,
+) : ViewModel() {
+    val povolen: StateFlow<Boolean> = parental.profile
+        .map { it.effectiveAgeCap == null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, parental.profile.value.effectiveAgeCap == null)
+}
+
 @HiltViewModel
 class ObjevitViewModel @Inject constructor(
     private val repo: KatalogRepository,

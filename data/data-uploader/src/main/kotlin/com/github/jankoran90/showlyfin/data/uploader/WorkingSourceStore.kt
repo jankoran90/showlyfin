@@ -409,7 +409,13 @@ class WorkingSourceStore @Inject constructor(
         // SEZONA: merge i push MUSÍ jít přes [allRecords] (filmy + díly). Přes getAll() (filmy) by se
         // díly z lokálu ztratily a PUT by je smazal i na serveru.
         val local = allRecords()
-        val server = parseServer(uploaderDs.getProfileWorkingSources(base, cookie, key)) ?: local
+        // Revize 2026-10-12: chyba GET ≠ „server má totéž co my". Dřív `?: local` → PUT starší lokální kopie
+        // jako full_replace smazal na serveru zdroje přidané jiným zařízením/webem. Bez serveru nepushuj —
+        // lokální změna zůstává v prefs a odejde s příštím úspěšným merge.
+        val server = parseServer(uploaderDs.getProfileWorkingSources(base, cookie, key)) ?: run {
+            Timber.w("[SIEVE] push zdrojů odložen — server nevrátil seznam")
+            return
+        }
         val byId = LinkedHashMap<String, WorkingSource>()
         for (r in local + server) {
             val id = identity(r)

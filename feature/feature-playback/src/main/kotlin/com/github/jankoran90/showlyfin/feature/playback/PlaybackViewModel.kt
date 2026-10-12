@@ -19,6 +19,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -220,6 +221,7 @@ class PlaybackViewModel @Inject constructor(
     // CURTAIN (SHW-109): co právě běží, ať to jde po dokoukání označit za zhlédnuté. U seriálu z knihovny
     // drží DOŘEŠENOU epizodu (ne id seriálu — to se přehrát nedá), u streamu imdb z `SubtitleQuery`.
     private var watchTarget: WatchedReporter.Target? = null
+    private var watchTargetSetAtMs = 0L
     // REWIND (SHW-68): klíč lokálního resume VIDEA (JF-item playback). Předaný z volajícího (NaVýbornou
     // video → sdílený klíč s RSS epizodou). Null = neukládáme lokálně (např. film z Detailu = jen server).
     private var videoResumeKey: String? = null
@@ -230,6 +232,17 @@ class PlaybackViewModel @Inject constructor(
     // (job_id = sub_id, viz backend), takže se dá poslat na `/translate/pause/{jobId}` přímo.
     private var translateRunningJobId: String? = null
     private var subtitleSelectJob: Job? = null
+    // Revize 2026-10-12 (Codex A2/A4): VM je aktivitní → pozdní odpověď PŘEDCHOZÍHO titulu (JF dotaz,
+    // hledání/stažení titulků) nesmí přepsat právě spouštěný. Každý nový load* obojí ruší.
+    private var subtitleLoadJob: Job? = null
+    private var jfLoadJob: Job? = null
+
+    private fun cancelPreviousTitleJobs() {
+        jfLoadJob?.cancel(); jfLoadJob = null
+        subtitleLoadJob?.cancel(); subtitleLoadJob = null
+        subtitleSelectJob?.cancel(); subtitleSelectJob = null
+        _state.update { it.copy(subtitlesLoading = false) }
+    }
 
     /** Play an arbitrary external HTTP(S) URL (e.g. RealDebrid direct link from Stremio). */
     fun loadExternal(
@@ -255,6 +268,7 @@ class PlaybackViewModel @Inject constructor(
         // API klient prázdné imdb umí (placeholder + hledání dle title/origTitle/year), a funkční TV cast
         // (buildTvSubtitles) gatuje taky JEN na autoSearch. Stačí mít podle čeho hledat (název). AI-překlad
         // větev má vlastní imdb guard → při prázdném imdb se jen přeskočí, primární CZ titulky naskočí.
+        cancelPreviousTitleJobs()
         query = subtitleQuery?.takeIf {
             it.autoSearch && (it.imdb.isNotBlank() || it.title.isNotBlank() || it.origTitle.isNotBlank())
         }
@@ -311,7 +325,7 @@ class PlaybackViewModel @Inject constructor(
         // si vzápětí nastaví subtitlesLoading=true a naplní vlastní kandidáty.
         _state.update {
             it.copy(
-                isLoading = false, title = title, streamUrl = url, posterUrl = posterUrl,
+                isLoading = false, error = null, title = title, streamUrl = url, posterUrl = posterUrl,
                 positionMs = 0L,
                 // Ptáme se JEN v režimu ASK a jen když se právě nedokoukává (viz `stillWatching`);
                 // direct epizoda (ADAPT) se nikdy neptá, vždy tiše pokračuje.
@@ -340,6 +354,7 @@ class PlaybackViewModel @Inject constructor(
      * (saveExternalPosition se postará o průběžné ukládání), takže „Pokračovat / Od začátku" funguje i offline.
      */
     fun loadLocal(videoPath: String, subtitlePath: String?, title: String, offlineKey: String, posterPath: String? = null) {
+        cancelPreviousTitleJobs()
         query = null
         resumeKey = offlineKey.takeIf { it.isNotBlank() }
         // CURTAIN: offline soubor — hlásit není kam, ale dokoukané nemá zůstat v „Pokračovat".
@@ -350,8 +365,8 @@ class PlaybackViewModel @Inject constructor(
         translateObserveJob?.cancel(); translateObserveJob = null; translateKey = null
         _state.update {
             it.copy(
-                isLoading = false, title = title, streamUrl = videoUri, posterUrl = posterUri,
-                positionMs = 0L, resumePositionMs = savedResume,
+                isLoading = false, error = null, title = title, streamUrl = videoUri, posterUrl = posterUri,
+                positionMs = 0L, resumePositionMs = savedResume, silentResumeMs = 0L,
                 subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                 subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
                 canTranslateAi = false, aiTranslating = false, aiTranslateError = null, aiPausedForQuota = false,
@@ -377,8 +392,17 @@ class PlaybackViewModel @Inject constructor(
     /** Nová položka v přehrávači → přepiš cíl hlášení a zapomeň guard (tentýž díl jde označit znovu). */
     private fun setWatchTarget(target: WatchedReporter.Target) {
         watchTarget = target
+        watchTargetSetAtMs = System.currentTimeMillis()
         watchedReporter.forget(target)
     }
+
+    /**
+     * Pojistka (2026-10-12, Křemílek): „zhlédnuto" až po chvíli skutečného sledování. Kdyby přehrávač
+     * kvůli chybě odstartoval za prahem nebo rovnou na konci, nesmí to do Jellyfinu/Traktu zapsat
+     * falešné zhlédnutí (dětem se tak dnes během minuty „zhlédlo" šest dílů).
+     */
+    private fun watchedLongEnough(): Boolean =
+        System.currentTimeMillis() - watchTargetSetAtMs >= MIN_WATCH_BEFORE_MARK_MS
 
     /**
      * Tik průběhu (volá [ui.PlaybackScreen] ze stejné smyčky, co ukládá pozici). Po překročení prahu
@@ -388,6 +412,7 @@ class PlaybackViewModel @Inject constructor(
     fun notePlaybackProgress(positionMs: Long, durationMs: Long) {
         val target = watchTarget ?: return
         if (!watchedReporter.isFinished(positionMs, durationMs)) return
+        if (!watchedLongEnough()) return
         viewModelScope.launch { watchedReporter.markWatched(target) }
     }
 
@@ -442,6 +467,7 @@ class PlaybackViewModel @Inject constructor(
     /** Přehrávání doběhlo do konce (`STATE_ENDED`) → označ zhlédnuté bez ohledu na práh. */
     fun notePlaybackEnded() {
         val target = watchTarget ?: return
+        if (!watchedLongEnough()) return
         viewModelScope.launch { watchedReporter.markWatched(target) }
     }
 
@@ -477,7 +503,8 @@ class PlaybackViewModel @Inject constructor(
     private fun loadSubtitles() {
         val q = query ?: return
         _state.update { it.copy(subtitlesLoading = true, subtitleError = null) }
-        viewModelScope.launch {
+        subtitleLoadJob?.cancel()
+        subtitleLoadJob = viewModelScope.launch {
             val resp = runCatching {
                 uploaderDs.getSubtitles(
                     uploaderBaseUrl, uploaderCookie, q.imdb,
@@ -485,6 +512,7 @@ class PlaybackViewModel @Inject constructor(
                     season = q.season, episode = q.episode, release = q.release, fps = q.fps,
                 )
             }.getOrElse { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e   // nový titul → ticho, žádná chyba
                 timber.log.Timber.w(e, "[Titulky] getSubtitles selhalo imdb=${q.imdb}")
                 _state.update { it.copy(subtitlesLoading = false, subtitleError = e.message ?: "Titulky nedostupné") }
                 return@launch
@@ -973,8 +1001,15 @@ class PlaybackViewModel @Inject constructor(
     fun load(itemId: String, positionMs: Long, resumeKey: String? = null, fallbackTitle: String = "") {
         // REWIND: klíč lokálního video resume (NaVýbornou video sdílí klíč s RSS epizodou; null = jen server).
         videoResumeKey = resumeKey
-        _state.update { it.copy(isLoading = true) }
-        viewModelScope.launch {
+        cancelPreviousTitleJobs()
+        query = null   // JF větev titulky nehledá — ať nezůstane query předchozího streamu
+        watchTarget = null   // do dořešení epizody nesmí tik/konec označit předchozí titul
+        // 🔴 2026-10-12 (Křemílek na TV skákal na konec): VM žije na úrovni aktivity (TV/telefon mají
+        // vlastní back stack bez per-obrazovka ViewModelStore) → stav PŘEŽIJE minulý přehrávač.
+        // `silentResumeMs` z předchozího streamu (Tlapková patrola ~desítky minut) se jinak použil jako
+        // start JF dílu (6 min) → skok na konec → „zhlédnuto" → zavřít. Starý stream/pozici zahoď hned.
+        _state.update { it.copy(isLoading = true, error = null, streamUrl = null, positionMs = 0L, resumePositionMs = 0L, silentResumeMs = 0L) }
+        jfLoadJob = viewModelScope.launch {
             val serverUrl = prefs.getString("jellyfin_server_url", "") ?: ""
             val token = prefs.getString("jellyfin_token", "") ?: ""
             val userId = prefs.getString("jellyfin_user_id", "") ?: ""
@@ -1014,6 +1049,9 @@ class PlaybackViewModel @Inject constructor(
                     }
                 }
 
+                // `runCatching` výše spolkne i zrušení → zrušená úloha (novější titul) tu musí skončit,
+                // než zapíše svůj cíl zhlédnutí a stream (Codex review 2026-10-12).
+                ensureActive()
                 // CURTAIN: hlásit se bude DOŘEŠENÁ epizoda (u seriálu), ne id seriálu — to Jellyfin
                 // označit „zhlédnuto" umí, ale znamenalo by to celý seriál.
                 setWatchTarget(
@@ -1049,12 +1087,15 @@ class PlaybackViewModel @Inject constructor(
                         posterUrl = "$serverUrl/Items/$itemId/Images/Primary?api_key=$token",
                         positionMs = positionMs,
                         resumePositionMs = resumeMs,
+                        silentResumeMs = 0L,
                         subtitleCues = emptyList(), selectedSubtitleIndex = -1,
                         subtitleCandidates = emptyList(), subtitleRuntimeOk = "-", subtitleError = null,
                         canTranslateAi = false, aiTranslating = false, aiTranslateError = null, aiPausedForQuota = false,
                         preferredAudioLanguages = preferredAudioLanguages,
                     )
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e   // zrušeno novějším titulem — nesmí se zapsat jako chyba
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = e.message ?: "Chyba přehrávání") }
             }
@@ -1083,6 +1124,8 @@ class PlaybackViewModel @Inject constructor(
     private companion object {
         /** Jak dlouho po posledním posunu pozice platí „pořád se dívá" → navázat bez dialogu. */
         const val RESUME_SILENT_WINDOW_MS = 90_000L
+        /** Minimální doba od spuštění titulu, než smí přehrávač nahlásit „zhlédnuto". */
+        const val MIN_WATCH_BEFORE_MARK_MS = 20_000L
     }
 }
 

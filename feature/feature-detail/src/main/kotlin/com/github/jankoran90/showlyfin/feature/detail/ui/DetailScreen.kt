@@ -159,7 +159,7 @@ fun DetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(item.traktId, item.tmdbId, item.imdbId, focusSeason, focusEpisode) {
+    LaunchedEffect(item.type, item.traktId, item.tmdbId, item.imdbId, focusSeason, focusEpisode) {
         viewModel.load(item)
         // POŘADÍ: až PO `load` — ten stav titulu resetuje (`focusedEpisode = null`), takže opačně
         // by označení dílu smazal.

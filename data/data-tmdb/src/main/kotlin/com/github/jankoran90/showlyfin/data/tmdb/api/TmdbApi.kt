@@ -27,7 +27,11 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
                 service.fetchMovieReleaseDates(tmdbId).results.orEmpty()
                     .associate { c -> c.iso_3166_1.orEmpty().uppercase() to c.release_dates.orEmpty().mapNotNull { it.certification } }
             )
-        } catch (e: Throwable) { null }
+        } catch (e: retrofit2.HttpException) {
+            // Revize 2026-10-12: jen „TMDB titul nezná" je platné „bez certifikace". Síťová/serverová chyba se
+            // propaguje → [CachedTmdbRemoteDataSource] ji NEuloží (dřív null navždy = dětský filtr titul pustil).
+            if (e.code() == 404) null else throw e
+        }
 
     override suspend fun fetchShowCertificationAge(tmdbId: Long): Int? =
         try {
@@ -36,7 +40,11 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
                 service.fetchShowContentRatings(tmdbId).results.orEmpty()
                     .associate { c -> c.iso_3166_1.orEmpty().uppercase() to listOfNotNull(c.rating) }
             )
-        } catch (e: Throwable) { null }
+        } catch (e: retrofit2.HttpException) {
+            // Revize 2026-10-12: jen „TMDB titul nezná" je platné „bez certifikace". Síťová/serverová chyba se
+            // propaguje → [CachedTmdbRemoteDataSource] ji NEuloží (dřív null navždy = dětský filtr titul pustil).
+            if (e.code() == 404) null else throw e
+        }
 
     /**
      * Vyber certifikaci dle priority zemí ([CertificationAge.COUNTRY_PRIORITY]) a převeď na věk. V rámci

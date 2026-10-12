@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
@@ -57,14 +59,18 @@ fun FilmyFilmotekaPager(
 ) {
     // LABYRINT (user 2026-10-08): „rád používám ty sekce na hlavní stránce, takže bych tam přidal
     // Objevit" → další stránky Objevit, Pro tebe (parita s webem) a Česky (filmy s českým zvukem).
-    val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
+    // Katalogové stránky jen pro profil bez věkového stropu (viz [KatalogPristupViewModel]).
+    val katalog by androidx.hilt.navigation.compose.hiltViewModel<KatalogPristupViewModel>().povolen.collectAsState()
+    val pagerState = rememberPagerState(pageCount = { if (katalog) PAGE_COUNT else PAGE_COUNT_BEZ_KATALOGU })
     val scope = rememberCoroutineScope()
     // user 2026-10-08: „hlavně ať to není zadrhané, plynule a rychle" — data sousedních stránek se
     // začnou načítat hned při vstupu na Filmotéku (tytéž ViewModely si pak stránky jen vezmou), takže
     // po přejetí už je obsah připravený a nečeká se na server.
-    androidx.hilt.navigation.compose.hiltViewModel<ObjevitViewModel>()
-    androidx.hilt.navigation.compose.hiltViewModel<ProTebeKatalogViewModel>()
-    androidx.hilt.navigation.compose.hiltViewModel<CeskyViewModel>()
+    if (katalog) {
+        androidx.hilt.navigation.compose.hiltViewModel<ObjevitViewModel>()
+        androidx.hilt.navigation.compose.hiltViewModel<ProTebeKatalogViewModel>()
+        androidx.hilt.navigation.compose.hiltViewModel<CeskyViewModel>()
+    }
 
     BackHandler(enabled = pagerState.currentPage != PAGE_FILMOTEKA) {
         scope.launch { pagerState.animateScrollToPage(PAGE_FILMOTEKA) }
@@ -77,7 +83,7 @@ fun FilmyFilmotekaPager(
     val titulky = listOf(
         PAGE_FILMOTEKA to "Filmotéka", PAGE_QUEUE to "K přehrání", PAGE_OBJEVIT to "Objevit",
         PAGE_PROTEBE to "Pro tebe", PAGE_CESKY to "Česky",
-    )
+    ).take(if (katalog) PAGE_COUNT else PAGE_COUNT_BEZ_KATALOGU)
     val scroll = rememberScrollState()
     val pozice = remember { mutableStateMapOf<Int, Int>() }
     val density = LocalDensity.current
@@ -165,3 +171,4 @@ private const val PAGE_OBJEVIT = 2
 private const val PAGE_PROTEBE = 3
 private const val PAGE_CESKY = 4
 private const val PAGE_COUNT = 5
+private const val PAGE_COUNT_BEZ_KATALOGU = 2

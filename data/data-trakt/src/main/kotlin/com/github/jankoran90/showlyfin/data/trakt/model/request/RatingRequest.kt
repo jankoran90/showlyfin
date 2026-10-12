@@ -13,4 +13,5 @@ data class RatingRequestValue(
     val ids: RatingRequestIds,
 )
 
-data class RatingRequestIds(val trakt: Long)
+/** Trakt přijímá kterékoli id (`trakt`/`tmdb`/`imdb`); titul z katalogu (TMDB) Trakt id nemá. Gson null pole vynechá. */
+data class RatingRequestIds(val trakt: Long? = null, val tmdb: Long? = null, val imdb: String? = null)
