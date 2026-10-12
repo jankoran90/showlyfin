@@ -100,6 +100,8 @@ fun RssPodcastScreen(
     // SLOVO-KIDS-EPISODE — non-null = otevřeno JEN na jednu AUTO-detekovanou sérii (dětská cesta,
     // nikdy neuvidí zbytek podcastu). Hodnota = [PodcastEpisodeSeriesGrouping.seriesSlug].
     seriesFilter: String? = null,
+    // User 2026-10-12 („děti mají offline vidět obsah jen když je stažený") — true = jen stažené díly.
+    onlyDownloaded: Boolean = false,
     // SLOVO-KIDS-EPISODE — admin (Dospělý) může dlouhým stiskem na kartě série „Zobrazit/Skrýt dětem".
     isAdmin: Boolean = false,
     kidsVisibleSeriesKeys: Set<String> = emptySet(),
@@ -137,12 +139,14 @@ fun RssPodcastScreen(
     // SLOVO-KIDS-EPISODE — [seriesFilter] != null: dětská cesta, jen epizody DANÉ série, plochý seznam
     // (žádné další seskupování). Jinak (admin): AUTO seskupení do sérií + samostatné epizody.
     val sourceKey = "rss:$feedUrl"
-    val filteredEpisodes = remember(state.episodes, seriesFilter) {
-        if (seriesFilter == null) state.episodes
+    val filteredEpisodes = remember(state.episodes, seriesFilter, onlyDownloaded, offlineStates) {
+        val inSeries = if (seriesFilter == null) state.episodes
         else state.episodes.filter {
             PodcastEpisodeSeriesGrouping.detectSeriesTitle(it.title)
                 ?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
         }
+        if (!onlyDownloaded) inSeries
+        else inSeries.filter { offlineStates[viewModel.episodeKey(it)]?.status == OfflineStatus.DOWNLOADED }
     }
     val shelfItems = remember(filteredEpisodes, seriesFilter) {
         if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })

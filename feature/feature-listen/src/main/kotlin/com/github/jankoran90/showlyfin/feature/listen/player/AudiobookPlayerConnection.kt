@@ -53,6 +53,9 @@ class AudiobookPlayerConnection @Inject constructor(
     // nevěděl — poslech proto vždycky startoval od 0. Viz [VideoResumeStore] dokumentace.
     private val videoResumeStore: VideoResumeStore,
     private val profileRepository: ProfileRepository,
+    // Stažené direct díly (RSS/YT/ČT): fronta mohla vzniknout dřív, než stažení doběhlo (síťová URL) —
+    // při spuštění se proto lokální soubor dohledá VŽDY (Codex review 2026-10-12, offline fronta dětí).
+    private val offline: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
 ) {
     // Internal (ne private) = čtou/píší je extension funkce fronty v AudiobookPlayerQueue.kt.
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -604,7 +607,7 @@ class AudiobookPlayerConnection @Inject constructor(
         val d = episode.direct
         if (d != null) {
             playDirect(
-                url = d.url,
+                url = offline.localVideo(episode.episodeId)?.let { android.net.Uri.fromFile(it).toString() } ?: d.url,
                 title = episode.title,
                 author = d.author,
                 coverUrl = episode.coverUrl,
