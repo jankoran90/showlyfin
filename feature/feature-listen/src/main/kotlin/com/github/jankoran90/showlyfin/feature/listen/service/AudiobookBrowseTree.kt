@@ -23,6 +23,7 @@ internal suspend fun AudiobookPlayerService.rootChildren(): List<MediaItem> {
     // Každá audioknihovní knihovna = vlastní záložka (Dětské/Dospělý — oddělené knihovny, každá své obecenstvo).
     if (repo.isConfigured) {
         runCatching { repo.getAudiobookLibraries() }.getOrDefault(emptyList())
+            .let(::visibleLibraries)
             .forEach { nodes += browsableNode("${AudiobookPlayerService.PREFIX_LIB}${it.id}", audiobookTabLabel(it.name)) }
     }
     if (currentPlayback?.chapters?.isNotEmpty() == true) nodes += browsableNode(AudiobookPlayerService.NODE_CHAPTERS, "Kapitoly")
@@ -37,14 +38,14 @@ internal suspend fun AudiobookPlayerService.rootChildren(): List<MediaItem> {
  */
 internal suspend fun AudiobookPlayerService.podcastSection(): List<MediaItem> {
     sourcesRepo.refresh()
-    val custom = sourcesRepo.sources.value
+    val custom = visibleSources()
         .sortedWith(
             compareByDescending<PodcastSource> { it.premium }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title },
         )
         .map(::sourceNode)
     val absLibs = if (repo.isConfigured) {
-        runCatching { repo.getPodcastLibraries() }.getOrDefault(emptyList())
+        runCatching { repo.getPodcastLibraries() }.getOrDefault(emptyList()).let(::visibleLibraries)
     } else emptyList()
     if (custom.isEmpty() && absLibs.size == 1) return libraryPodcasts(absLibs.first().id)
     // CRUISE: „Nejnovější epizody" (čerstvé napříč zdroji) jako PRVNÍ položka v Podcasty (5. věc, co se
@@ -56,7 +57,7 @@ internal suspend fun AudiobookPlayerService.podcastSection(): List<MediaItem> {
 /** CRUISE: „Nejnovější epizody" napříč VŠEMI custom zdroji — round-robin nejnovějších (feedy jsou newest-first). */
 internal suspend fun AudiobookPlayerService.latestEpisodes(): List<MediaItem> {
     sourcesRepo.refresh()
-    val perSource = sourcesRepo.sources.value.map { it.id to sourcesRepo.loadEpisodes(it) }
+    val perSource = visibleSources().map { it.id to sourcesRepo.loadEpisodes(it) }
     val result = mutableListOf<MediaItem>()
     var i = 0
     while (result.size < AudiobookPlayerService.LATEST_LIMIT) {
@@ -73,7 +74,7 @@ internal suspend fun AudiobookPlayerService.latestEpisodes(): List<MediaItem> {
 
 /** CRUISE: epizody custom zdroje jako přehratelné položky S URI (cache v itemCache → play je najde). */
 internal suspend fun AudiobookPlayerService.sourceEpisodes(sourceId: String): List<MediaItem> {
-    val src = sourcesRepo.sources.value.firstOrNull { it.id == sourceId } ?: return emptyList()
+    val src = visibleSources().firstOrNull { it.id == sourceId } ?: return emptyList()
     return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
 }
 
@@ -84,8 +85,8 @@ internal suspend fun AudiobookPlayerService.sourceEpisodes(sourceId: String): Li
  * Play zůstává (sdílený seek increment jako u audioknih). Funguje i pro cold resume (refresh+feed).
  */
 internal suspend fun AudiobookPlayerService.directSourceEpisodes(sourceId: String): List<MediaItem> {
-    val src = sourcesRepo.sources.value.firstOrNull { it.id == sourceId }
-        ?: run { sourcesRepo.refresh(); sourcesRepo.sources.value.firstOrNull { it.id == sourceId } }
+    val src = visibleSources().firstOrNull { it.id == sourceId }
+        ?: run { sourcesRepo.refresh(); visibleSources().firstOrNull { it.id == sourceId } }
         ?: return emptyList()
     return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
         .also { items -> items.forEach { itemCache[it.mediaId] = it } }
@@ -99,8 +100,8 @@ internal suspend fun AudiobookPlayerService.directSourceEpisodes(sourceId: Strin
 internal suspend fun AudiobookPlayerService.continueItems(): List<MediaItem> {
     val books: List<Pair<Long, MediaItem>> = if (repo.isConfigured) {
         runCatching {
-            repo.getAudiobookLibraries()
-                .flatMap { repo.getAudiobooks(it.id) }
+            audiobookOwnership.refresh()
+            visibleBooks(visibleLibraries(repo.getAudiobookLibraries()).flatMap { repo.getAudiobooks(it.id) })
                 .filter { it.progress > 0.0 && !it.isFinished }
                 .map { (it.lastUpdate ?: 0L) to bookItem(it) }
         }.getOrDefault(emptyList())
@@ -118,7 +119,7 @@ internal suspend fun AudiobookPlayerService.continueDirectEntries(): List<Pair<L
     if (marks.isEmpty()) return emptyList()
     sourcesRepo.refresh()
     val byKey = HashMap<String, Pair<SourceEpisode, String>>()
-    sourcesRepo.sources.value.forEach { src ->
+    visibleSources().forEach { src ->
         sourcesRepo.loadEpisodes(src).forEach { ep -> ep.resumeKey?.let { byKey[it] = ep to src.id } }
     }
     return marks.entries.mapNotNull { (key, mark) ->
@@ -126,12 +127,15 @@ internal suspend fun AudiobookPlayerService.continueDirectEntries(): List<Pair<L
     }
 }
 
-internal suspend fun AudiobookPlayerService.libraryBooks(libraryId: String): List<MediaItem> =
-    repo.getAudiobooks(libraryId).map(::bookItem)
+internal suspend fun AudiobookPlayerService.libraryBooks(libraryId: String): List<MediaItem> {
+    if (!isLibraryVisible(libraryId)) return emptyList()
+    audiobookOwnership.refresh()
+    return visibleBooks(repo.getAudiobooks(libraryId)).map(::bookItem)
+}
 
 /** Podcasty v knihovně jako browsable uzly (klik → epizody). */
 internal suspend fun AudiobookPlayerService.libraryPodcasts(libraryId: String): List<MediaItem> =
-    repo.getPodcasts(libraryId).map(::podcastNode)
+    visiblePodcasts(repo.getPodcasts(libraryId)).map(::podcastNode)
 
 /** Epizody podcastu jako playable položky (newest-first; respektuje skrývání přehraných). */
 internal suspend fun AudiobookPlayerService.podcastEpisodes(podcastItemId: String): List<MediaItem> {

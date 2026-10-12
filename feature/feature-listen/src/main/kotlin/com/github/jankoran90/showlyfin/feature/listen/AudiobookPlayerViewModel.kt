@@ -141,7 +141,11 @@ class AudiobookPlayerViewModel @Inject constructor(
         val s = connection.state.value
         val alreadyPlayingThis = s.isActive && s.currentItemId == itemId && s.currentEpisodeId == episodeId
         if (openedFor == key && alreadyPlayingThis) {
-            if (startSec != null) connection.seekTo((startSec * 1000).toLong())
+            // Codex sweep 2026-10-12: „Od začátku" u už načtené knihy dřív nic neudělalo.
+            when {
+                fromStart -> connection.seekTo(0L)
+                startSec != null -> connection.seekTo((startSec * 1000).toLong())
+            }
             return
         }
         openedFor = key

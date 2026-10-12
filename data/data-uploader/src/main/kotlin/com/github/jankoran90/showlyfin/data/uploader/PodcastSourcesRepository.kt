@@ -241,9 +241,15 @@ class PodcastSourcesRepository @Inject constructor(
      * serveru → [loadEpisodes] s velkým limitem (feed se stejně stahuje celý, viz `/api/rss/feed`
      * strop 200→1000) + klientský [matchesQuery] (diakritika/case-insensitive) na název+popis.
      */
-    suspend fun searchEpisodes(query: String, limitPerSource: Int = 30): List<SourceEpisode> = coroutineScope {
+    suspend fun searchEpisodes(
+        query: String,
+        limitPerSource: Int = 30,
+        // Profilová viditelnost ([PodcastSource.isVisibleTo]) — hledá jen ve zdrojích, které profil vidí.
+        isVisible: (PodcastSource) -> Boolean = { true },
+    ): List<SourceEpisode> = coroutineScope {
         if (baseUrl.isBlank() || query.isBlank()) return@coroutineScope emptyList()
-        _sources.value.map { source -> async { searchOneSource(source, query, limitPerSource) } }.awaitAll().flatten()
+        _sources.value.filter(isVisible)
+            .map { source -> async { searchOneSource(source, query, limitPerSource) } }.awaitAll().flatten()
     }
 
     /**

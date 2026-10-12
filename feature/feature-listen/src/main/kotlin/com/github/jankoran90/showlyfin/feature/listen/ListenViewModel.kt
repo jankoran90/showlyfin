@@ -491,8 +491,14 @@ class ListenViewModel @Inject constructor(
         // Audit dětí (2026-10-12): offline / selhání ABS ukazovalo dětem VŠECHNY stažené knihy v
         // telefonu (i dospělé). Dětský profil jen knihy z whitelistu knihoven; neznámá knihovna
         // (starší stažení bez libraryId) = skrýt.
-        if (profileRepository.activeProfile.value?.isAdmin != false) return all
-        val wl = profileRepository.activeConfig.value.absLibraryWhitelist ?: return emptyList()
+        val active = profileRepository.activeProfile.value ?: return all
+        val cfg = profileRepository.activeConfig.value
+        if (active.isAdmin) {
+            // Codex sweep 2026-10-12: offline police dospělých respektuje vlastnictví (poslední známá
+            // mapa je v cache [AudiobookOwnershipRepository], funguje i bez sítě).
+            return all.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, cfg.sharedAudiobookIds) }
+        }
+        val wl = cfg.absLibraryWhitelist ?: return emptyList()
         return all.filter { it.libraryId.isNotEmpty() && it.libraryId in wl }
     }
 

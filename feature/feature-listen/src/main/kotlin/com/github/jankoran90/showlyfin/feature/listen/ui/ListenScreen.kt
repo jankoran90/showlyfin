@@ -414,10 +414,8 @@ fun FollowingContent(
     // sdílel. Legacy zdroje (addedBy == null, vznikly PŘED touhle featurou) zůstávají viditelné všem.
     val myUuid = activeProfile?.profileUuid
     val visibleSources = remember(state.customSources, myUuid, cfg.sharedSourceKeys) {
-        state.customSources.filter { src ->
-            src.addedBy.isNullOrBlank() || src.addedBy == myUuid ||
-                "${src.type}:${src.ref}" in cfg.sharedSourceKeys
-        }
+        // Dětský profil sem nechodí (má KidsListenContent) → isKids = false.
+        state.customSources.filter { it.isVisibleTo(myUuid, isKids = false, cfg.sharedSourceKeys, emptySet()) }
     }
     // Filtr typu zdroje (z filtru): all|rss|youtube — aplikuje se na vlastní zdroje. ABS podcasty
     // ukazujeme jen u „Vše" nebo „Podcasty" (jsou to RSS-like pořady, ne YouTube).

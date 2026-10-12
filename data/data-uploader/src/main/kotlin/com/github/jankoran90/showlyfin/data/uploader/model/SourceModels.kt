@@ -25,7 +25,24 @@ data class PodcastSource(
      * explicitně nesdílí ([com.github.jankoran90.showlyfin.core.domain.ProfileConfig.sharedSourceKeys]).
      */
     @SerializedName("added_by") val addedBy: String? = null,
-)
+) {
+    /** Klíč zdroje `type:ref` (whitelisty dětí, sdílení, skrytí). */
+    val key: String get() = "$type:$ref"
+
+    /**
+     * Profilová viditelnost zdroje — JEDINÉ místo pravidla (dřív kopie jen v ListenScreen, globální
+     * hledání a Android Auto ho obcházely; Codex sweep 2026-10-12). Dítě ([isKids]) vidí jen
+     * schválené ([kidsVisibleKeys]); dospělý svoje + legacy (bez `addedBy`) + sdílené ([sharedKeys]).
+     */
+    fun isVisibleTo(
+        myUuid: String?,
+        isKids: Boolean,
+        sharedKeys: Set<String>,
+        kidsVisibleKeys: Set<String>,
+    ): Boolean =
+        if (isKids) key in kidsVisibleKeys
+        else addedBy.isNullOrBlank() || addedBy == myUuid || key in sharedKeys
+}
 
 /** Odpověď store endpointů (`/api/sources` GET/POST/DELETE). */
 data class SourcesResponse(

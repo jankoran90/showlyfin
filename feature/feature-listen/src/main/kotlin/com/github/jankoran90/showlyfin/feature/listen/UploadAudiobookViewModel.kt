@@ -164,14 +164,15 @@ class UploadAudiobookViewModel @Inject constructor(
 
 /**
  * Detekce `title`/`author` z názvu souboru — split na " - " (vzor backendu `_detect_title_author`).
- * `Autor - Název.ext` → (Autor, Název). Bez " - " → (celý název bez přípony, null).
+ * Vrací VŽDY (název, autor): `Autor - Název.ext` → (Název, Autor). Bez " - " → (celý název bez přípony, null).
+ * Oprava 2026-10-12 (Codex sweep): dřív vracelo (autor, název) a volající plnil Název autorem.
  */
 internal fun detectTitleAuthor(filename: String): Pair<String, String?> {
     val raw = filename.substringBeforeLast('.').trim()
     if (" - " !in raw) return prettyCase(cleanSep(raw)) to null
     val (left, right) = raw.split(" - ", limit = 2).map { prettyCase(cleanSep(it.trim())) }
     // Kratší strana (méně slov) bývá autor (knihovní konvence „Autor - Název").
-    return if (left.split(' ').size <= right.split(' ').size) left to right else right to left
+    return if (left.split(' ').size <= right.split(' ').size) right to left else left to right
 }
 
 /** Pomlčky/podtržítka (mimo „ - ") → mezery, sbalené mezery. */
