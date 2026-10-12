@@ -25,6 +25,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.PlaybackMode
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
+import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastEpisodeSeriesGrouping
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -524,20 +525,26 @@ class HomeViewModel @Inject constructor(
         // zdroje, co mu admin schválil (stejná whitelist jako [KidsListenContent]), jinak by Domů
         // ukázalo epizody z dospěláckých zdrojů, co dítě jinde v appce vůbec nevidí.
         val active = profileRepository.activeProfile.value
+        // Dítě: celé schválené zdroje + zdroje se schválenou SÉRIÍ (user 2026-10-12: rozposlouchané
+        // Ďábelské káry z Na výbornou se na Domů neobjevily — dřív se bral jen celý zdroj `type:ref`).
+        val kidsKeys = if (active?.isAdmin == false) profileRepository.activeConfig.value.visibleForKidsSourceKeys else null
+        val kidsSeriesSlugs = kidsKeys.orEmpty()
+            .mapNotNull { PodcastEpisodeSeriesGrouping.parseSeriesKey(it) }
+            .groupBy({ it.sourceKey }, { it.slug })
+        fun kidsAllowed(src: PodcastSource, ep: SourceEpisode): Boolean {
+            if (kidsKeys == null || src.key in kidsKeys) return true
+            val slug = PodcastEpisodeSeriesGrouping.detectSeriesTitle(ep.title)?.let(PodcastEpisodeSeriesGrouping::seriesSlug)
+            return slug != null && slug in kidsSeriesSlugs[src.key].orEmpty()
+        }
         val relevant = sourcesRepo.sources.value
             .filter { it.type in neededTypes }
-            .let { srcs ->
-                if (active?.isAdmin == false) {
-                    val visibleKeys = profileRepository.activeConfig.value.visibleForKidsSourceKeys
-                    srcs.filter { "${it.type}:${it.ref}" in visibleKeys }
-                } else srcs
-            }
+            .filter { kidsKeys == null || it.key in kidsKeys || it.key in kidsSeriesSlugs }
         val byKey = coroutineScope {
             relevant
                 .map { src -> async { src to runCatching { sourcesRepo.loadEpisodes(src) }.getOrDefault(emptyList()) } }
                 .awaitAll()
         }.fold(HashMap<String, Pair<SourceEpisode, PodcastSource>>()) { acc, (src, episodes) ->
-            episodes.forEach { ep -> ep.resumeKey?.let { acc[it] = ep to src } }
+            episodes.filter { kidsAllowed(src, it) }.forEach { ep -> ep.resumeKey?.let { acc[it] = ep to src } }
             acc
         }
         // BUG (2026-09-04, user „starší díl se nezobrazí na kartě/Domů, chci plnou podporu"): epizoda
