@@ -134,13 +134,27 @@ fun HomeScreen(
                             // režim = jak se epizoda naposled hrála ([HomeViewModel.videoLaunch] → LastPlaybackMode),
                             // neznámo = audio. (Dřívější „načtená ve frontě → audio" zrušeno: po „Přepnout na
                             // video" zůstává audio načtené v pauze a přebilo by naposled sledované video.)
-                            val onClick = {
+                            val play = {
                                 when (val launch = vm.videoLaunch(item)) {
                                     is HomeViewModel.VideoLaunch.External -> onPlayVideo(launch.url, launch.title, launch.posterUrl)
                                     is HomeViewModel.VideoLaunch.Jellyfin -> onPlayJfVideo(launch.jfItemId, launch.title, launch.resumeKey)
                                     null -> vm.playEpisode(item)
                                 }
                             }
+                            // User (2026-10-12): ťuk = otevřít pořad s dílem mezi ostatními (parita s knihou),
+                            // přehrání na ▶; staré „ťuk = přehrát" volitelně v Nastavení → Zobrazení Domů.
+                            // Starší YouTube díl mimo načtené okno nemá zdroj (sourceRef "") → nelze otevřít pořad,
+                            // ťuk ho přehraje jako dřív (Codex review).
+                            val opensShow = layout.episodeTapOpensShow && item.sourceRef.isNotBlank()
+                            val onClick = if (opensShow) {
+                                {
+                                    onOpenSourceEpisode(
+                                        item.sourceType, item.sourceRef, item.sourceTitle,
+                                        item.episode.resumeKey ?: item.episode.id,
+                                    )
+                                }
+                            } else play
+                            val onPlayPause = { if (loadedInQueue) playerVm.playPause() else vm.playEpisode(item) }
                             val onLong: (() -> Unit)? = if (otherAdultProfiles.isNotEmpty()) ({ shareEpisode = item }) else null
                             if (layout.list) {
                                 HomeListCard(
@@ -161,7 +175,7 @@ fun HomeScreen(
                                     // Play na kartě = vždy POSLECH (user: „hlavně se spustí audio, na video
                                     // si přepnu ve frontě"); načtená epizoda jen přepne pauzu.
                                     playing = loadedInQueue && playerState.isPlaying,
-                                    onPlayPause = { if (loadedInQueue) playerVm.playPause() else vm.playEpisode(item) },
+                                    onPlayPause = onPlayPause,
                                 )
                             } else {
                                 ContinueEpisodeCard(
@@ -172,6 +186,9 @@ fun HomeScreen(
                                     onClick = onClick,
                                     onLongClick = onLong,
                                     onEndListening = { vm.resetEpisodeProgress(item) },
+                                    // ▶ jen když ťuk otevírá pořad (jinak ťuk sám přehrává).
+                                    onPlayPause = if (opensShow) onPlayPause else null,
+                                    playing = loadedInQueue && playerState.isPlaying,
                                 )
                             }
                         }

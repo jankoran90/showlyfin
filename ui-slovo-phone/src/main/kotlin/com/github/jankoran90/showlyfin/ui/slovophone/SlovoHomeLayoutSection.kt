@@ -26,6 +26,14 @@ internal fun SlovoHomeLayoutSection(viewModel: HomeLayoutViewModel = hiltViewMod
             labelOf = { if (it) "Seznam (1 sloupec)" else "Mřížka (2 sloupce)" },
             onSelect = { v -> viewModel.update { it.copy(list = v) } },
         )
+        SettingChips(
+            label = "Ťuk na díl podcastu",
+            subtitle = "Otevřít pořad = díl se ukáže mezi ostatními (jako u audioknih), přehrát jde tlačítkem ▶ na kartě.",
+            options = listOf(true, false),
+            selected = layout.episodeTapOpensShow,
+            labelOf = { if (it) "Otevřít pořad" else "Rovnou přehrát" },
+            onSelect = { v -> viewModel.update { it.copy(episodeTapOpensShow = v) } },
+        )
         if (layout.list) {
             SettingChips(
                 label = "Cover v seznamu",
