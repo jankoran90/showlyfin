@@ -23,7 +23,8 @@ data class SlovoProfileUiState(
     val activeProfileId: Long? = null,
     /** Admin authoring (2026-08-15): všechny ABS podcasty + jestli jsou vidět dětskému profilu. */
     val podcasts: List<Podcast> = emptyList(),
-    val hiddenForKids: Set<String> = emptySet(),
+    /** Audit 2026-10-12: WHITELIST — id ABS podcastů schválených dětem (default = nevidí). */
+    val visibleForKids: Set<String> = emptySet(),
     val podcastsLoading: Boolean = false,
     /** null = žádná chyba (buď se ještě nenačítalo, nebo úspěch — i s prázdným seznamem). */
     val podcastsError: String? = null,
@@ -33,7 +34,7 @@ data class SlovoProfileUiState(
  * Profily (2026-08-15) — VM sekce „Profil" appky Slovo: přepínání Dospělý/Děti + PIN (vzor
  * showlyfin/Filmy `SettingsViewModel`, zúžené jen na profily — Slovo nemá Trakt/šablony/roster).
  * Navíc admin curation: Dospělý v seznamu podcastů odškrtává, které se zobrazí Dětskému profilu
- * ([com.github.jankoran90.showlyfin.core.domain.ProfileConfig.hiddenPodcastIds] na profilu Děti,
+ * (od 2026-10-12 whitelist `abs:id` ve [com.github.jankoran90.showlyfin.core.domain.ProfileConfig.visibleForKidsSourceKeys] na profilu Děti,
  * NE na aktivním — proto se zapisuje přímo přes [ProfileRepository.updateConfig] s kids ID).
  */
 @HiltViewModel
@@ -45,17 +46,17 @@ class SlovoProfileViewModel @Inject constructor(
     private val _podcasts = MutableStateFlow<List<Podcast>>(emptyList())
     private val _podcastsLoading = MutableStateFlow(false)
     private val _podcastsError = MutableStateFlow<String?>(null)
-    private val _kidsHidden = MutableStateFlow<Set<String>>(emptySet())
+    private val _kidsVisible = MutableStateFlow<Set<String>>(emptySet())
 
     val uiState: StateFlow<SlovoProfileUiState> =
         combine(
             profileRepository.observeAll(),
             profileRepository.activeProfile,
             _podcasts,
-            _kidsHidden,
+            _kidsVisible,
             _podcastsLoading,
-        ) { profiles, active, podcasts, hidden, loading ->
-            SlovoProfileUiState(profiles, active?.id, podcasts, hidden, loading)
+        ) { profiles, active, podcasts, visible, loading ->
+            SlovoProfileUiState(profiles, active?.id, podcasts, visible, loading)
         }.combine(_podcastsError) { state, err -> state.copy(podcastsError = err) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, SlovoProfileUiState())
 
@@ -63,7 +64,11 @@ class SlovoProfileViewModel @Inject constructor(
         viewModelScope.launch { profileRepository.setActive(profileId) }
     }
 
+    /** Audit dětí (2026-10-12, user „PIN má dospělý"): PIN smí měnit/rušit jen aktivní dospělý profil. */
+    private fun canEditPins(): Boolean = profileRepository.activeProfile.value?.isAdmin == true
+
     fun setProfilePin(profileId: Long, pin: String) {
+        if (!canEditPins()) return
         viewModelScope.launch {
             val trimmed = pin.trim()
             val hash = if (trimmed.isBlank()) null else PinHasher.hash(trimmed)
@@ -72,6 +77,7 @@ class SlovoProfileViewModel @Inject constructor(
     }
 
     fun clearProfilePin(profileId: Long) {
+        if (!canEditPins()) return
         viewModelScope.launch { profileRepository.setLoginPinHash(profileId, null) }
     }
 
@@ -90,7 +96,8 @@ class SlovoProfileViewModel @Inject constructor(
                     _podcastsError.value = e.message ?: "Načtení podcastů selhalo"
                 }
             val kids = profileRepository.getAll().firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS }
-            _kidsHidden.value = kids?.let { ProfileConfig.fromJson(it.configJson).hiddenPodcastIds }.orEmpty()
+            _kidsVisible.value = kids?.let { ProfileConfig.fromJson(it.configJson).visibleForKidsSourceKeys }.orEmpty()
+                .filter { it.startsWith("abs:") }.map { it.removePrefix("abs:") }.toSet()
             _podcastsLoading.value = false
         }
     }
@@ -99,12 +106,13 @@ class SlovoProfileViewModel @Inject constructor(
     fun setPodcastVisibleForKids(podcastId: String, visible: Boolean) {
         viewModelScope.launch {
             val kids = profileRepository.getAll().firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS } ?: return@launch
+            val key = "abs:$podcastId"
             profileRepository.updateConfig(kids.id) { cfg ->
                 cfg.copy(
-                    hiddenPodcastIds = if (visible) cfg.hiddenPodcastIds - podcastId else cfg.hiddenPodcastIds + podcastId,
+                    visibleForKidsSourceKeys = if (visible) cfg.visibleForKidsSourceKeys + key else cfg.visibleForKidsSourceKeys - key,
                 )
             }
-            _kidsHidden.value = if (visible) _kidsHidden.value - podcastId else _kidsHidden.value + podcastId
+            _kidsVisible.value = if (visible) _kidsVisible.value + podcastId else _kidsVisible.value - podcastId
         }
     }
 }

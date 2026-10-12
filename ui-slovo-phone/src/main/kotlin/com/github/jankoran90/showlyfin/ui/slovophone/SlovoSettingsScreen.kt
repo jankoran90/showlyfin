@@ -25,6 +25,8 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import com.github.jankoran90.showlyfin.feature.listen.ui.CastTargetSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.SpeakerSettingsSection
 import com.github.jankoran90.showlyfin.feature.listen.ui.HiddenPodcastsSettingsSection
@@ -46,7 +48,14 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastVideoQualitySett
 fun SlovoSettingsScreen(
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Audit dětí (2026-10-12, user „Nastavení jen co se netýká obsahu"): dětský profil vidí jen
+     * Vzhled, Zobrazení Domů, Kvalitu videa a O aplikaci. Účet, zdroje, stažené, TV/repro (platí pro
+     * celý telefon) apod. jen dospělý.
+     */
+    isKidsProfile: Boolean = false,
 ) {
+    val adult = !isKidsProfile
     Column(modifier.fillMaxSize()) {
         SlovoSectionBar(title = "Nastavení", onMenu = onMenu)
         Column(
@@ -56,7 +65,15 @@ fun SlovoSettingsScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            SlovoCollapsibleSection("Účet / Audioknihy", Icons.Rounded.AccountCircle) {
+            if (isKidsProfile) {
+                Text(
+                    "Ostatní nastavení jsou dostupná jen v profilu dospělého.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+            if (adult) SlovoCollapsibleSection("Účet / Audioknihy", Icons.Rounded.AccountCircle) {
                 SlovoAccountSection()
             }
             SlovoCollapsibleSection("Vzhled", Icons.Rounded.Palette) {
@@ -65,39 +82,39 @@ fun SlovoSettingsScreen(
             SlovoCollapsibleSection("Zobrazení Domů", Icons.Rounded.ViewAgenda) {
                 SlovoHomeLayoutSection()
             }
-            SlovoCollapsibleSection("Pořadí menu", Icons.Rounded.Menu) {
+            if (adult) SlovoCollapsibleSection("Pořadí menu", Icons.Rounded.Menu) {
                 SlovoDrawerOrderSection()
             }
-            SlovoCollapsibleSection("Řazení zdrojů", Icons.Rounded.Sort) {
+            if (adult) SlovoCollapsibleSection("Řazení zdrojů", Icons.Rounded.Sort) {
                 ListenOrderSettingsSection()
             }
-            SlovoCollapsibleSection("Stažené / offline", Icons.Rounded.Download) {
+            if (adult) SlovoCollapsibleSection("Stažené / offline", Icons.Rounded.Download) {
                 ListenOfflineSettingsSection()
             }
-            SlovoCollapsibleSection("Objevování podcastů", Icons.Rounded.Explore) {
+            if (adult) SlovoCollapsibleSection("Objevování podcastů", Icons.Rounded.Explore) {
                 PodcastDiscoverySettingsSection()
             }
-            SlovoCollapsibleSection("Skryté pořady", Icons.Rounded.VisibilityOff) {
+            if (adult) SlovoCollapsibleSection("Skryté pořady", Icons.Rounded.VisibilityOff) {
                 HiddenPodcastsSettingsSection()
             }
-            SlovoCollapsibleSection("Propojené pořady", Icons.Rounded.Link) {
+            if (adult) SlovoCollapsibleSection("Propojené pořady", Icons.Rounded.Link) {
                 PodcastLinksSettingsSection()
             }
             SlovoCollapsibleSection("Kvalita videa", Icons.Rounded.HighQuality) {
                 PodcastVideoQualitySettingsSection()
             }
-            SlovoCollapsibleSection("AI překlad YouTube titulků", Icons.Rounded.Translate) {
+            if (adult) SlovoCollapsibleSection("AI překlad YouTube titulků", Icons.Rounded.Translate) {
                 LinguaQuotaSettingsSection()
             }
-            SlovoCollapsibleSection("Přehrávání na TV/Zenbooku", Icons.Rounded.Cast) {
+            if (adult) SlovoCollapsibleSection("Přehrávání na TV/Zenbooku", Icons.Rounded.Cast) {
                 CastTargetSettingsSection()
             }
-            SlovoCollapsibleSection("Přehrávání na repro (receiver)", Icons.Rounded.Speaker) {
+            if (adult) SlovoCollapsibleSection("Přehrávání na repro (receiver)", Icons.Rounded.Speaker) {
                 SpeakerSettingsSection()
             }
             // user 2026-09-17: appka neměla ŽÁDNOU Jellyfin login obrazovku, takže cast na TV z YouTube
             // kanálů nešel spustit vůbec (appka hlásila "Chybí přihlášení k Jellyfinu" bez možnosti to řešit).
-            SlovoCollapsibleSection("Jellyfin (videa Na výbornou, TV přes Jellyfin)", Icons.Rounded.LiveTv) {
+            if (adult) SlovoCollapsibleSection("Jellyfin (videa Na výbornou, TV přes Jellyfin)", Icons.Rounded.LiveTv) {
                 SlovoJellyfinSection()
             }
             SlovoCollapsibleSection("O aplikaci", Icons.Rounded.Info) {

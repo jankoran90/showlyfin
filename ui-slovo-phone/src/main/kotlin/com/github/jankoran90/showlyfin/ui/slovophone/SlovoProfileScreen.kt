@@ -84,11 +84,15 @@ fun SlovoProfileScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            Text(
-                text = "Podržením profilu nastavíš nebo zrušíš PIN.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Audit dětí (2026-10-12): PIN spravuje jen dospělý — dětský profil by jinak zrušil PIN
+            // Honzy a přepnul se na něj.
+            if (activeIsAdmin) {
+                Text(
+                    text = "Podržením profilu nastavíš nebo zrušíš PIN.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             ui.profiles.forEach { p ->
                 SlovoProfileCard(
                     profile = p,
@@ -100,7 +104,7 @@ fun SlovoProfileScreen(
                             else -> vm.switchProfile(p.id)
                         }
                     },
-                    onLongClick = { pinSetFor = p },
+                    onLongClick = { if (activeIsAdmin) pinSetFor = p },
                 )
             }
 
@@ -112,7 +116,7 @@ fun SlovoProfileScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
-                    text = "Které pořady se dětskému profilu zobrazí v sekci Poslech (živě, celý pořad ke streamování).",
+                    text = "Které pořady se dětskému profilu zobrazí v sekci Poslech (živě, celý pořad ke streamování). Nový pořad dítě nevidí, dokud ho tu nezaškrtneš.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -138,7 +142,7 @@ fun SlovoProfileScreen(
                     )
                 } else {
                     ui.podcasts.forEach { pod ->
-                        val visible = pod.id !in ui.hiddenForKids
+                        val visible = pod.id in ui.visibleForKids
                         Row(
                             Modifier
                                 .fillMaxWidth()

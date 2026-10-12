@@ -97,7 +97,6 @@ fun ListenScreen(
                     state = state,
                     viewModel = viewModel,
                     onOpenBook = onOpenBook,
-                    onEditBook = onEditBook,
                     onOpenPodcast = onOpenPodcast,
                     onOpenSource = onOpenSource,
                     onOpenMerged = onOpenMerged,
@@ -428,7 +427,6 @@ fun FollowingContent(
     // TWINE (SHW-74 / plán F7): slinkované zdroje (audio+video = týž pořad) → 1 sloučená karta.
     val links by viewModel.sourceLinks.collectAsStateWithLifecycle()
     var linkFor by remember { mutableStateOf<com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource?>(null) }
-    val kidsHidden by viewModel.kidsHiddenPodcastIds.collectAsStateWithLifecycle()
     // SLOVO-KIDS-EPISODE — dlouhý stisk i na vlastních zdrojích (Plain/Merged) → "Zobrazit/Skrýt dětem".
     val kidsVisibleSources by viewModel.kidsVisibleSourceKeys.collectAsStateWithLifecycle()
     val byKey = remember(visibleSources) { visibleSources.associateBy { viewModel.sourceKey(it) } }
@@ -548,7 +546,7 @@ fun FollowingContent(
                     }
                 },
                 if (absPodcastId != null && activeProfile?.isAdmin == true) {
-                    val visibleToKids = absPodcastId !in kidsHidden
+                    val visibleToKids = "abs:$absPodcastId" in kidsVisibleSources
                     ListenEpisodeAction(
                         if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
                         if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",

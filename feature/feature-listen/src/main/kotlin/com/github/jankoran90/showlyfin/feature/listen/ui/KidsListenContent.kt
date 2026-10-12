@@ -81,7 +81,6 @@ fun KidsListenContent(
     state: ListenUiState,
     viewModel: ListenViewModel,
     onOpenBook: (String) -> Unit,
-    onEditBook: (String, String, String?) -> Unit,
     onOpenPodcast: (String) -> Unit,
     onOpenSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit,
     onOpenMerged: (groupId: String, title: String) -> Unit,
@@ -224,7 +223,8 @@ fun KidsListenContent(
                         book = book,
                         canDownload = !state.isOffline && book.id !in state.downloadedBookIds,
                         onDownload = { viewModel.downloadBook(book) },
-                        onEdit = { onEditBook(book.id, book.title, book.author) },
+                        // Audit dětí (2026-10-12): dítě metadata knih neupravuje.
+                        onEdit = null,
                         onResetProgress = { viewModel.resetBookProgress(book) },
                         onMarkFinished = { viewModel.markBookFinished(book) },
                         onDismiss = { actionBook = null },

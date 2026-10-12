@@ -374,7 +374,7 @@ private fun SlovoShellContent() {
                                 onOpenSource = { src -> onPush(sourceDetail(src)) },
                             )
                         }
-                        SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu)
+                        SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu, isKidsProfile = isKidsProfile)
                         SlovoSection.PROFIL -> SlovoProfileScreen(onMenu = onMenu)
                     }
                 }
