@@ -90,12 +90,22 @@ fun KidsListenContent(
     // Podcasty se jinak načtou líně jen při přepnutí na záložku Podcasty — dětský profil žádnou
     // záložku nemá, takže si o načtení řekneme sami (idempotentní, no-op když už jsou načtené).
     LaunchedEffect(Unit) { viewModel.ensurePodcastsLoaded() }
+    // Schválené vlastní zdroje / série jsou i offline z paměti — chyba/načítání knih je nesmí schovat
+    // (user 2026-10-12, „musí fungovat i offline"). Rozhoduje jen to, co dítě SMÍ vidět, ne celý seznam.
+    val kidsCfg by viewModel.profileConfig.collectAsStateWithLifecycle()
+    val hasApprovedSources = remember(state.customSources, kidsCfg.visibleForKidsSourceKeys) {
+        val approved = kidsCfg.visibleForKidsSourceKeys.mapTo(HashSet()) { key ->
+            PodcastEpisodeSeriesGrouping.parseSeriesKey(key)?.sourceKey ?: key
+        }
+        state.customSources.any { it.key in approved }
+    }
 
     when {
-        state.isLoading && state.books.isEmpty() && state.podcasts.isEmpty() ->
+        state.isLoading && state.books.isEmpty() && state.podcasts.isEmpty() && !hasApprovedSources ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 
-        state.error != null && state.books.isEmpty() && state.podcasts.isEmpty() -> CenteredMessage(state.error)
+        state.error != null && state.books.isEmpty() && state.podcasts.isEmpty() && !hasApprovedSources ->
+            CenteredMessage(state.error)
 
         else -> {
             // SLOVO-KIDS-EPISODE — vlastní zdroje (RSS/YouTube/ČT) admin schválil pro tenhle (dětský)
