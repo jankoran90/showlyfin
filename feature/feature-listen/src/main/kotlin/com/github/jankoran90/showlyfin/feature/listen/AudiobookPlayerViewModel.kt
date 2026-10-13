@@ -41,6 +41,7 @@ class AudiobookPlayerViewModel @Inject constructor(
     private val uploaderDs: UploaderRemoteDataSource,
     private val videoResumeStore: VideoResumeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val sourcesRepo: com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository,
 ) : ViewModel() {
 
     val state = connection.state
@@ -78,11 +79,23 @@ class AudiobookPlayerViewModel @Inject constructor(
             // RESONANCE (SHW-81): offline hraná epizoda (lokální soubor) → offline detail pořadu,
             // ne ABS/online (to by bez sítě hlásilo „nepodařilo se načíst epizody"). title = pořad.
             itemId == "offline" -> ListenSourceTarget.Offline(title, episodeKey = epId)
-            epId != null && epId.startsWith("rss:") -> ListenSourceTarget.Rss(itemId, title, episodeKey = epId)
-            epId != null && epId.startsWith("yt:") -> ListenSourceTarget.Youtube(itemId, title, episodeKey = epId)
+            epId != null && epId.startsWith("rss:") -> ListenSourceTarget.Rss(sourceRef("rss", itemId), title, episodeKey = epId)
+            epId != null && epId.startsWith("yt:") -> ListenSourceTarget.Youtube(sourceRef("youtube", itemId), title, episodeKey = epId)
+            // Dřív ČT díl spadl do větve Podcast (ABS) → u dětí pojistka nic neotevřela.
+            epId != null && epId.startsWith("ctv:") -> ListenSourceTarget.Ctv(sourceRef("ctv", itemId), title, episodeKey = epId)
             s.isPodcastEpisode -> ListenSourceTarget.Podcast(itemId)
             else -> ListenSourceTarget.Audiobook(itemId)
         }
+    }
+
+    /**
+     * 2026-10-13 (emulátor): starší položky fronty z Domů nesou místo ID zdroje jeho NÁZEV („Po jedné
+     * stopě") → přelož název na ref známého zdroje, jinak ponech (feed URL / handle / ID projdou beze změny).
+     */
+    private fun sourceRef(type: String, itemId: String): String {
+        val sources = sourcesRepo.sources.value.filter { it.type == type }
+        if (sources.any { it.ref == itemId }) return itemId
+        return sources.firstOrNull { it.title.equals(itemId, ignoreCase = true) }?.ref ?: itemId
     }
 
     private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
@@ -221,6 +234,16 @@ class AudiobookPlayerViewModel @Inject constructor(
     }
 
     /** Akce swipe doprava ve frontě dle nastavení (0=stáhnout, 1=přehrát, 2=na začátek). */
+    /** Swipe ve frontě podle Nastavení (viz [AbsPreferences.queueSwipeLeft]). */
+    fun onQueueSwipe(ep: QueuedEpisode, action: Int) {
+        when (action) {
+            1 -> removeFromQueue(ep.episodeId)
+            2 -> downloadQueued(ep)
+            3 -> connection.playQueued(ep)
+            4 -> connection.moveToFront(ep.episodeId)
+        }
+    }
+
     fun onQueueSwipeAction(ep: QueuedEpisode, action: Int) = when (action) {
         1 -> connection.playQueued(ep)
         2 -> connection.moveToFront(ep.episodeId)

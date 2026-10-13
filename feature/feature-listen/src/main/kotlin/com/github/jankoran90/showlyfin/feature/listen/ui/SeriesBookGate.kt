@@ -78,3 +78,27 @@ internal fun <T> SeriesBookGate(
     )
     return true
 }
+
+/**
+ * Slovo 2026-10-13 (user „v přehrávači ťuknu na obrázek a nehodí mě do knihy Po jedné stopě") — dětská
+ * pojistka otevře pořad se schválenou sérií, a když jich je víc, vezme první. Je-li zvýrazněný díl
+ * v JINÉ schválené sérii téhož pořadu, otevři tu jeho. Neschválená série = beze změny (pojistka platí dál).
+ */
+internal fun <T> seriesFilterForHighlight(
+    seriesFilter: String?,
+    highlightKey: String?,
+    episodes: List<T>,
+    keyOf: (T) -> String,
+    seriesTitleOf: (T) -> String?,
+    sourceKey: String,
+    approvedKeys: Set<String>,
+): String? {
+    if (seriesFilter == null || highlightKey == null) return seriesFilter
+    val ep = episodes.firstOrNull { keyOf(it) == highlightKey } ?: return seriesFilter
+    val slug = seriesTitleOf(ep)?.let(PodcastEpisodeSeriesGrouping::seriesSlug) ?: return seriesFilter
+    if (slug == seriesFilter) return seriesFilter
+    val approved = sourceKey in approvedKeys || approvedKeys.any { k ->
+        PodcastEpisodeSeriesGrouping.parseSeriesKey(k)?.let { it.sourceKey == sourceKey && it.slug == slug } == true
+    }
+    return if (approved) slug else seriesFilter
+}

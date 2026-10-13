@@ -17,6 +17,8 @@ sealed interface ListenSourceTarget {
     /** [episodeKey] = klíč právě hrané epizody (`rss:`/`yt:`) → zvýraznění + scroll v obsahu zdroje. */
     data class Rss(val feedUrl: String, val title: String, val episodeKey: String? = null) : ListenSourceTarget
     data class Youtube(val handle: String, val title: String, val episodeKey: String? = null) : ListenSourceTarget
+    /** Slovo 2026-10-13 (user „ťuk na obrázek v přehrávači nehodí do knihy Po jedné stopě") — ČT pořad. */
+    data class Ctv(val ctvId: String, val title: String, val episodeKey: String? = null) : ListenSourceTarget
 
     /**
      * RESONANCE (SHW-81): offline stažený pořad (proklik z přehrávače u epizody hrané z lokálního

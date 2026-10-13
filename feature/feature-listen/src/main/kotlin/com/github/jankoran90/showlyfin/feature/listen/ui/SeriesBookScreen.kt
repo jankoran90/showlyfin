@@ -106,8 +106,10 @@ fun SeriesBookScreen(
 
     val listState = rememberLazyListState()
     LaunchedEffect(highlightKey, chapters) {
+        // Prvních pár kapitol se vejde pod hlavičku → nescrolluj (Pokračovat/Stáhnout zůstanou vidět);
+        // dál nech nad zvýrazněnou jednu kapitolu pro orientaci (emulátor 2026-10-13).
         val idx = chapters.indexOfFirst { it.key == highlightKey }
-        if (idx >= 0) listState.scrollToItem(idx + HEADER_ITEMS)
+        if (idx >= 4) listState.scrollToItem(idx + HEADER_ITEMS - 1)
     }
 
     ListenExpressiveTheme {

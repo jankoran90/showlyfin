@@ -1046,6 +1046,7 @@ fun ShowlyfinApp(isTv: Boolean = false) {
                             is ListenSourceTarget.Youtube -> podcastLinkLookup.groupFor("youtube", target.handle)?.let {
                                 Destination.MergedPodcast(it.id, it.title ?: target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
                             } ?: Destination.YoutubeChannel(target.handle, target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
+                            is ListenSourceTarget.Ctv -> Destination.CtvProgram(target.ctvId, target.title, parent = dest, highlightEpisodeKey = target.episodeKey)
                         }
                     },
                     modifier = Modifier.fillMaxSize(),

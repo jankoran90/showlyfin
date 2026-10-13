@@ -57,7 +57,13 @@ class DownloadsViewModel @Inject constructor(
         // (whitelist, neznámý zdroj = skrýt), stejné pravidlo jako jeho offline Poslech.
         val kidsKeys = if (profile?.isAdmin == false) config.visibleForKidsSourceKeys else null
         fun allowed(sourceKey: String?, title: String, series: String?) = kidsKeys == null || kidsMayShow(kidsKeys, sourceKey, title, series)
+        // Pořad / série pohromadě a kapitoly popořadě („3/13" podle čísla, jinak podle data vydání).
         val podcastDone = done.filter { it.type == OfflineRequest.TYPE_PODCAST && allowed(it.sourceKey, it.title, it.seriesTitle) }
+            .sortedWith(
+                compareBy<OfflineDownload>({ it.subtitle.orEmpty() })
+                    .thenBy { PodcastEpisodeSeriesGrouping.numberedPart(it.title)?.first ?: Int.MAX_VALUE }
+                    .thenBy { it.publishedAt ?: Long.MAX_VALUE },
+            )
         val items = pending.filter { it.type == OfflineRequest.TYPE_PODCAST && allowed(it.sourceKey, it.title, it.seriesTitle) }
             .map { Item(it, states[it.key] ?: OfflineState()) }
         val active = items.firstOrNull { it.state.status == OfflineStatus.DOWNLOADING }
@@ -106,7 +112,8 @@ class DownloadsViewModel @Inject constructor(
         val file = File(dl.videoPath).takeIf(File::exists) ?: return
         connection.playDirectEpisode(
             QueuedEpisode(
-                itemId = dl.sourceKey ?: "offline",
+                // ref zdroje (ne celý klíč) → ťuk na obrázek v přehrávači otevře pořad; neznámý zdroj = offline detail.
+                itemId = dl.sourceKey?.substringAfter(':') ?: "offline",
                 episodeId = dl.key,
                 title = dl.title,
                 coverUrl = dl.posterUrl,

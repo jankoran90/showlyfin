@@ -78,6 +78,8 @@ class HomeViewModel @Inject constructor(
     // ADAPT (2026-09-04): sestavení video URL (YouTube/ČT) pro [videoLaunch].
     private val uploaderDs: UploaderRemoteDataSource,
     @Named("traktPreferences") private val prefs: android.content.SharedPreferences,
+    private val seriesRules: com.github.jankoran90.showlyfin.feature.listen.player.SeriesRuleStore,
+    private val seriesQueue: com.github.jankoran90.showlyfin.feature.listen.player.SeriesQueueBuilder,
 ) : ViewModel() {
 
     private val baseUrl get() = prefs.getString("uploader_base_url", "") ?: ""
@@ -213,7 +215,9 @@ class HomeViewModel @Inject constructor(
         val localUrl = offline.localVideo(key)?.let { android.net.Uri.fromFile(it).toString() }
         connection.playDirectEpisode(
             QueuedEpisode(
-                itemId = ep.sourceKey?.substringAfter(':') ?: ep.subtitle ?: item.sourceRef,
+                // 2026-10-13 (emulátor): dřív `ep.subtitle` (= NÁZEV pořadu) → ťuk na obrázek v přehrávači
+                // hledal pořad „Po jedné stopě" místo jeho ID a u dětí neotevřel nic. ID zdroje má přednost.
+                itemId = item.sourceRef.ifBlank { null } ?: ep.sourceKey?.substringAfter(':') ?: ep.subtitle ?: "",
                 episodeId = key,
                 title = ep.title,
                 coverUrl = ep.imageUrl,
@@ -224,6 +228,16 @@ class HomeViewModel @Inject constructor(
                 direct = DirectAudio(url = localUrl ?: freshStreamUrl(item), durationSec = ep.durationSec, author = item.sourceTitle),
             ),
         )
+        // Díl ze série = kapitola knihy → za něj zbytek knihy (fronta pak navazuje jako v knize).
+        viewModelScope.launch {
+            seriesQueue.enqueueRestOfSeries(item.sourceType, item.sourceRef, ep) { e ->
+                QueuedEpisode(
+                    itemId = item.sourceRef, episodeId = e.resumeKey ?: e.id, title = e.title, coverUrl = e.imageUrl,
+                    description = e.description, podcastTitle = item.sourceTitle,
+                    direct = DirectAudio(url = e.streamUrl, durationSec = e.durationSec, author = item.sourceTitle),
+                )
+            }
+        }
     }
 
     private fun freshStreamUrl(item: ContinueItem.Episode): String = when (item.sourceType) {
@@ -533,7 +547,8 @@ class HomeViewModel @Inject constructor(
             .groupBy({ it.sourceKey }, { it.slug })
         fun kidsAllowed(src: PodcastSource, ep: SourceEpisode): Boolean {
             if (kidsKeys == null || src.key in kidsKeys) return true
-            val slug = PodcastEpisodeSeriesGrouping.detectSeriesTitle(ep.title)?.let(PodcastEpisodeSeriesGrouping::seriesSlug)
+            // 2026-10-13: i ČT řada / číslovaný díl / ruční kniha (dřív jen prefix → Po jedné stopě dětem na Domů chyběla).
+            val slug = SeriesResolver.seriesSlug(seriesRules, src.key, src.title, ep.title, ep.seriesTitle)
             return slug != null && slug in kidsSeriesSlugs[src.key].orEmpty()
         }
         val relevant = sourcesRepo.sources.value

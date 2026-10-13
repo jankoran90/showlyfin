@@ -234,6 +234,8 @@ class AudiobookPlayerConnection @Inject constructor(
                 showSpeedButton = prefs.showSpeedButton,
                 showSleepButton = prefs.showSleepButton,
                 queueSwipeAction = prefs.queueSwipeAction,
+                queueSwipeLeft = prefs.queueSwipeLeft,
+                queueSwipeRight = prefs.queueSwipeRight,
             )
         }
 

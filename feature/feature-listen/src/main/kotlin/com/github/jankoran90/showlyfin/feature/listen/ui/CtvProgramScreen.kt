@@ -135,6 +135,11 @@ fun CtvProgramScreen(
     val ruleDraft = remember { mutableStateOf<SeriesRuleDraft?>(null) }
     val openBookSlug = rememberSaveable { mutableStateOf<String?>(null) }
     val offlineStates by bookViewModel.offlineStates.collectAsStateWithLifecycle()
+    // Dětská pojistka otevřela první schválenou sérii → díl z přehrávače otevře SVOU schválenou sérii.
+    @Suppress("NAME_SHADOWING")
+    val seriesFilter = remember(seriesFilter, highlightEpisodeKey, state.episodes, seriesTitleOf, kidsVisibleSeriesKeys) {
+        seriesFilterForHighlight(seriesFilter, highlightEpisodeKey, state.episodes, viewModel::episodeKey, seriesTitleOf, sourceKey, kidsVisibleSeriesKeys)
+    }
     val filteredEpisodes = remember(state.episodes, seriesFilter, seriesTitleOf, onlyDownloaded, offlineStates) {
         val inSeries = if (seriesFilter == null) state.episodes
         else state.episodes.filter {

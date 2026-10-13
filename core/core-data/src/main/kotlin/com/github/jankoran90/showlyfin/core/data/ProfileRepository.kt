@@ -199,6 +199,23 @@ class ProfileRepository @Inject constructor(
      * Na TV tím odfiltrujeme čistě poslechové/device-local profily; profily se stejným `jellyfinUserId`
      * (honza + neli = JF „dospělý") navíc [seedFromRoster] deduplikuje na jeden (párování na backendKey).
      */
+    /**
+     * Slovo 2026-10-13 (user „ať dítě nemůže přepnout na Nel, nastav jí PIN") — převezme PIN existujících
+     * profilů ze serveru (PIN se tam posílá při nastavení na kterémkoli zařízení). Jen doplní / změní PIN,
+     * nové profily nezakládá; prázdný PIN na serveru lokální PIN nemaže. Best-effort.
+     */
+    suspend fun pullLoginPins() {
+        val metas = runCatching { configGateway.fetchAllProfiles() }.getOrNull() ?: return
+        for (local in dao.getAll()) {
+            val remote = metas.firstOrNull { it.key.ifBlank { it.jellyfinUserId } == local.backendKey() } ?: continue
+            val pin = remote.loginPinHash?.takeIf { it.isNotBlank() } ?: continue
+            if (pin != local.loginPinHash) {
+                dao.update(local.copy(loginPinHash = pin))
+                if (_activeProfile.value?.id == local.id) publishProfile(dao.getById(local.id))
+            }
+        }
+    }
+
     suspend fun seedFromBackendRoster(requireJellyfinUser: Boolean = false): Int {
         val metas = configGateway.fetchAllProfiles() ?: return 0
         val filtered = if (requireJellyfinUser) metas.filter { it.jellyfinUserId.isNotBlank() } else metas

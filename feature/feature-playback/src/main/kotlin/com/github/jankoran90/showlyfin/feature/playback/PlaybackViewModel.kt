@@ -807,8 +807,8 @@ class PlaybackViewModel @Inject constructor(
 
     /** Uživatel ťukl na „Přeložit do češtiny (AI)" → zařadí překlad NA POZADÍ (přežije odchod
      *  z přehrávače) + dá vědět notifikací, až je hotovo. UI převezme výsledek přes [observeTranslation].
-     *  [model] (VLNY, jen LINGUA-YT — appka nabídne picker Sonnet/Haiku PŘED voláním) — null = server
-     *  default (Sonnet). Limit kvóty se čte vždy z Nastavení ([PlayerPrefs.LINGUA_QUOTA_LIMIT_KEY]). */
+     *  [model] (VLNY, jen LINGUA-YT — appka nabídne picker PŘED voláním) — null = server default
+     *  (od 2026-10-13 nejnovější Haiku), jinak alias `sonnet`. Limit kvóty se čte vždy z Nastavení ([PlayerPrefs.LINGUA_QUOTA_LIMIT_KEY]). */
     fun translateSubtitlesAi(model: String? = null) {
         val q = query ?: return
         if (q.imdb.isBlank() || _state.value.aiTranslating) return

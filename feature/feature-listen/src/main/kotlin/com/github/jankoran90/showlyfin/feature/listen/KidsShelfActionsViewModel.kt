@@ -61,11 +61,7 @@ class KidsShelfActionsViewModel @Inject constructor(
      * díl N/M (celý pořad) → prefix před dvojtečkou (Codex 2026-10-13: ČT série jinak nešly najít).
      */
     private fun slugOf(source: PodcastSource, ep: SourceEpisode): String? =
-        (ruleStore.titleFor(source.key, ep.title)
-            ?: ep.seriesTitle
-            ?: PodcastEpisodeSeriesGrouping.numberedPart(ep.title)?.let { source.title }
-            ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(ep.title))
-            ?.let(PodcastEpisodeSeriesGrouping::seriesSlug)
+        SeriesResolver.seriesSlug(ruleStore, source.key, source.title, ep.title, ep.seriesTitle)
 
     /** Jedno načtení feedu na zdroj (víc sérií téhož pořadu = jeden dotaz). Selhání se nepamatuje. */
     private val feedCache = HashMap<String, Deferred<List<SourceEpisode>>>()
