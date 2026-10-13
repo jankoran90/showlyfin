@@ -7,6 +7,7 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
+import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
@@ -14,6 +15,8 @@ import com.github.jankoran90.showlyfin.feature.listen.player.SeriesRuleStore
 import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastEpisodeSeriesGrouping
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -50,6 +53,50 @@ class KidsShelfActionsViewModel @Inject constructor(
         (ruleStore.titleFor(sourceKey, episodeTitle) ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(episodeTitle))
             ?.let(PodcastEpisodeSeriesGrouping::seriesSlug)
 
+    /**
+     * Slug série dílu ze zdroje — stejné pořadí jako obrazovka pořadu: ruční kniha → ČT řada → číslovaný
+     * díl N/M (celý pořad) → prefix před dvojtečkou (Codex 2026-10-13: ČT série jinak nešly najít).
+     */
+    private fun slugOf(source: PodcastSource, ep: SourceEpisode): String? =
+        (ruleStore.titleFor(source.key, ep.title)
+            ?: ep.seriesTitle
+            ?: PodcastEpisodeSeriesGrouping.numberedPart(ep.title)?.let { source.title }
+            ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(ep.title))
+            ?.let(PodcastEpisodeSeriesGrouping::seriesSlug)
+
+    /** Jedno načtení feedu na zdroj (víc sérií téhož pořadu = jeden dotaz). Selhání se nepamatuje. */
+    private val feedCache = HashMap<String, Deferred<List<SourceEpisode>>>()
+
+    private suspend fun episodesOf(source: PodcastSource): List<SourceEpisode> {
+        val d = feedCache.getOrPut(source.key) {
+            viewModelScope.async { sourcesRepo.loadEpisodes(source, limit = if (source.type == "rss") 1000 else 500) }
+        }
+        val list = runCatching { d.await() }.getOrDefault(emptyList())
+        if (list.isEmpty()) feedCache.remove(source.key)
+        return list
+    }
+
+    /**
+     * User 2026-10-13 („karta série ukazuje obrázek celého podcastu, v knize je obrázek série") — obálka
+     * karty série = obrázek jejích dílů (nejstarší díl s obrázkem, stejně jako obálka knihy). Klíč `sourceKey#slug`, jen v paměti;
+     * offline díly dodá offline paměť feedu.
+     */
+    private val _seriesCovers = MutableStateFlow<Map<String, String>>(emptyMap())
+    val seriesCovers = _seriesCovers.asStateFlow()
+    private val coverRequested = HashSet<String>()
+
+    fun requestSeriesCover(source: PodcastSource, seriesSlug: String) {
+        val key = "${source.key}#$seriesSlug"
+        if (!coverRequested.add(key)) return
+        viewModelScope.launch {
+            val image = episodesOf(source)
+                .lastOrNull { !it.imageUrl.isNullOrBlank() && slugOf(source, it) == seriesSlug } // feed od nejnovějšího → nejstarší díl = obálka knihy
+                ?.imageUrl
+            if (image != null) _seriesCovers.value = _seriesCovers.value + (key to image)
+            else coverRequested.remove(key) // zkusí se znovu (třeba až bude síť)
+        }
+    }
+
     /** Stažené díly (živě) — menu pořadu z nich počítá „V telefonu: N dílů". */
     val downloads = offline.downloads
 
@@ -83,8 +130,8 @@ class KidsShelfActionsViewModel @Inject constructor(
     /** [seriesSlug] != null = jen díly téhle série (dítěti schválená jen série). */
     fun downloadAndQueue(source: PodcastSource, seriesSlug: String?, title: String, queue: Boolean = true) {
         viewModelScope.launch {
-            val episodes = sourcesRepo.loadEpisodes(source, limit = if (source.type == "rss") 1000 else 500)
-                .filter { ep -> seriesSlug == null || slugOf(source.key, ep.title) == seriesSlug }
+            val episodes = episodesOf(source)
+                .filter { ep -> seriesSlug == null || slugOf(source, ep) == seriesSlug }
                 .filter { it.streamUrl.isNotBlank() }
                 .reversed() // feed = nejnovější první → fronta od 1. dílu
             if (episodes.isEmpty()) {

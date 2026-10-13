@@ -189,6 +189,7 @@ fun KidsListenContent(
             // Dlouhý stisk na pořadu/sérii → „Stáhnout všechny díly a zařadit do fronty" (user 2026-10-12).
             val shelfActions: com.github.jankoran90.showlyfin.feature.listen.KidsShelfActionsViewModel = hiltViewModel()
             val shelfMessage by shelfActions.message.collectAsStateWithLifecycle()
+            val seriesCovers by shelfActions.seriesCovers.collectAsStateWithLifecycle()
             val context = LocalContext.current
             LaunchedEffect(shelfMessage) {
                 shelfMessage?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show(); shelfActions.consumeMessage() }
@@ -255,11 +256,17 @@ fun KidsListenContent(
                                     )
                                     is LibraryCard.Abs -> Unit // nikdy nevzniká pro SourceItem (jde přes PodcastItem)
                                 }
-                                is KidsShelfItem.SeriesItem -> SourceCard(
-                                    source = item.source.copy(title = item.seriesTitle),
-                                    onClick = { onOpenSourceSeries(item.source, item.seriesSlug, item.seriesTitle) },
-                                    onLongClick = { downloadFor = SourceDownloadTarget(item.source, setOf(item.source.key), item.seriesSlug, item.seriesTitle) },
-                                )
+                                is KidsShelfItem.SeriesItem -> {
+                                    LaunchedEffect(item.itemKey) { shelfActions.requestSeriesCover(item.source, item.seriesSlug) }
+                                    SourceCard(
+                                        source = item.source.copy(
+                                            title = item.seriesTitle,
+                                            thumbnail = seriesCovers["${item.source.key}#${item.seriesSlug}"] ?: item.source.thumbnail,
+                                        ),
+                                        onClick = { onOpenSourceSeries(item.source, item.seriesSlug, item.seriesTitle) },
+                                        onLongClick = { downloadFor = SourceDownloadTarget(item.source, setOf(item.source.key), item.seriesSlug, item.seriesTitle) },
+                                    )
+                                }
                             }
                         }
                     }
