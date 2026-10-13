@@ -49,4 +49,7 @@ data class CtvEpisode(
     val date: String? = null,         // ISO datetime ("2026-06-17T22:00:00.000Z")
     val label: String? = null,        // "43 min" (cardLabels.bottomRight)
     val image: String? = null,        // URL karty dílu
+    // Slovo 2026-10-13: ČT řada („Po jedné stopě do Iráku“) — díly jedné řady = jedna kniha v appce.
+    val seasonId: String? = null,
+    val seasonTitle: String? = null,
 )

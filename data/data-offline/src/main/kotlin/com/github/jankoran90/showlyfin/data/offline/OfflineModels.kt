@@ -18,6 +18,11 @@ data class OfflineState(
     val downloadedBytes: Long = 0L,
     val totalBytes: Long = 0L,
     val error: String? = null,
+    // Slovo 2026-10-13 (user „vidět progres, rychlost a ETA"): rychlost stahování (klouzavý průměr)
+    // a odhad zbývajícího času; [preparing] = server ještě skládá soubor (ČT díl z DASH → m4a).
+    val bytesPerSec: Long = 0L,
+    val etaSec: Long? = null,
+    val preparing: Boolean = false,
 )
 
 /**

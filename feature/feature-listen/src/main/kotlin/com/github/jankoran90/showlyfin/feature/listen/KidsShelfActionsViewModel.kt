@@ -1,6 +1,5 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
@@ -38,7 +37,7 @@ class KidsShelfActionsViewModel @Inject constructor(
     /** [seriesSlug] != null = jen díly téhle série (dítěti schválená jen série). */
     fun downloadAndQueue(source: PodcastSource, seriesSlug: String?, title: String) {
         viewModelScope.launch {
-            val episodes = sourcesRepo.loadEpisodes(source, limit = 500)
+            val episodes = sourcesRepo.loadEpisodes(source, limit = if (source.type == "rss") 1000 else 500)
                 .filter { ep ->
                     seriesSlug == null || PodcastEpisodeSeriesGrouping.detectSeriesTitle(ep.title)
                         ?.let(PodcastEpisodeSeriesGrouping::seriesSlug) == seriesSlug
@@ -66,7 +65,6 @@ class KidsShelfActionsViewModel @Inject constructor(
                         sourceKey = source.key,
                     ),
                 )
-                val local = offline.localVideo(key)?.let { Uri.fromFile(it).toString() }
                 connection.enqueue(
                     QueuedEpisode(
                         itemId = source.ref,
@@ -75,7 +73,7 @@ class KidsShelfActionsViewModel @Inject constructor(
                         coverUrl = ep.imageUrl,
                         description = ep.description,
                         podcastTitle = title,
-                        direct = DirectAudio(url = local ?: ep.streamUrl, durationSec = ep.durationSec, author = title),
+                        direct = DirectAudio(url = ep.streamUrl, durationSec = ep.durationSec, author = title),
                     ),
                     atFront = false,
                 )

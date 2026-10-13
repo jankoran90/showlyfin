@@ -1065,6 +1065,18 @@ internal class UploaderApi(
         return runCatching { service.getCtvTitle("$base/api/ctv/title?sidp=$s", cookieOf(sessionCookie)) }.getOrNull()
     }
 
+    override fun ctvAudioFileUrl(baseUrl: String, sessionCookie: String, idec: String): String {
+        val key = URLEncoder.encode(sessionCookie, "UTF-8")
+        return "${baseUrl.trimEnd('/')}/api/ctv/audiofile/$idec.m4a?key=$key"
+    }
+
+    override suspend fun prepareCtvAudioFiles(baseUrl: String, sessionCookie: String, idecs: List<String>) {
+        if (idecs.isEmpty()) return
+        val json = org.json.JSONObject().put("ids", org.json.JSONArray(idecs)).toString()
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        runCatching { service.speakerPost("${baseUrl.trimEnd('/')}/api/ctv/audiofile/prepare", cookieOf(sessionCookie), body) }
+    }
+
     override suspend fun warmCtv(baseUrl: String, sessionCookie: String, idec: String) {
         val base = baseUrl.trimEnd('/')
         // /api/ctv/resolve vrací {ok}; getYtResolve je generický GET (Response<ResponseBody>) → reuse.

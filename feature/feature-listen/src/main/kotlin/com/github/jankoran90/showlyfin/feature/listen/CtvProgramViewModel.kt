@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -142,8 +143,26 @@ class CtvProgramViewModel @Inject constructor(
         videoResumeStore.clear(key)
     }
 
+    /**
+     * Slovo 2026-10-13 — stažení ČT dílu do telefonu: server ho složí z DASH do jednoho m4a
+     * (`/api/ctv/audiofile`, dokud se připravuje, vrací 202 a stahování čeká).
+     */
+    fun offlineRequest(ep: CtvEpisode): OfflineRequest = OfflineRequest(
+        key = episodeKey(ep),
+        title = ep.title,
+        subtitle = _state.value.showTitle,
+        type = OfflineRequest.TYPE_PODCAST,
+        sourceLabel = "ČT iVysílání",
+        videoUrl = uploaderDs.ctvAudioFileUrl(baseUrl, cookie, ep.id),
+        posterUrl = ep.image,
+        durationSec = ep.duration ?: 0.0,
+        description = ep.description,
+        publishedAt = parseEpisodeDateMs(ep.date),
+        sourceKey = loadedFor?.let { "ctv:$it" },
+    )
+
     /** Mapování ČT dílu na položku fronty: audio přes audio-only DASH manifest (poslech). */
-    private fun toQueued(ep: CtvEpisode): QueuedEpisode {
+    fun toQueued(ep: CtvEpisode): QueuedEpisode {
         val show = _state.value.showTitle
         return QueuedEpisode(
             itemId = loadedFor ?: "ctv",

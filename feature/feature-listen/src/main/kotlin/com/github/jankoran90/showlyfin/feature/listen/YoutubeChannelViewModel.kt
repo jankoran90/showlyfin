@@ -1,7 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
 import android.content.SharedPreferences
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
@@ -185,10 +184,11 @@ class YoutubeChannelViewModel @Inject constructor(
      * Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session.
      * L3: stažená epizoda hraje z lokálního `file://` souboru (offline + šetří mobilní data).
      */
-    private fun toQueued(ep: YtEpisode): QueuedEpisode {
+    fun toQueued(ep: YtEpisode): QueuedEpisode {
         val channel = _state.value.channelTitle
         val key = episodeKey(ep)
-        val localUrl = offline.localVideo(key)?.let { Uri.fromFile(it).toString() }
+        // 2026-10-13 (Codex): do fronty vždy síťová URL — stažený soubor dohledá AudiobookPlayerConnection.startEpisode
+        // při spuštění; uložené file:// by po smazání stažení zůstalo neplatné.
         return QueuedEpisode(
             itemId = loadedFor ?: "yt",
             episodeId = key,
@@ -197,7 +197,7 @@ class YoutubeChannelViewModel @Inject constructor(
             description = ep.description,
             podcastTitle = channel,
             direct = DirectAudio(
-                url = localUrl ?: uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                url = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
                 durationSec = ep.duration ?: 0.0,
                 author = channel,
             ),
@@ -214,8 +214,10 @@ class YoutubeChannelViewModel @Inject constructor(
     fun enqueue(ep: YtEpisode, atFront: Boolean) = connection.enqueue(toQueued(ep), atFront)
 
     /** L3: stáhni AUDIO epizodu do telefonu (offline) přes proxy `/api/yt/stream?kind=audio`. */
-    fun download(ep: YtEpisode) {
-        offline.enqueue(
+    fun download(ep: YtEpisode) = offline.enqueue(offlineRequest(ep))
+
+    /** Požadavek na stažení AUDIO epizody (sdílí ho i kniha ze série). */
+    fun offlineRequest(ep: YtEpisode): OfflineRequest =
             OfflineRequest(
                 key = episodeKey(ep),
                 title = ep.title,
@@ -229,9 +231,7 @@ class YoutubeChannelViewModel @Inject constructor(
                 publishedAt = parseEpisodeDateMs(ep.uploadDate),
                 // RESONANCE (SHW-81) D: klíč zdroje pro filtr skrytých pořadů offline (dětský profil).
                 sourceKey = loadedFor?.let { "youtube:$it" },
-            ),
-        )
-    }
+            )
 
     /** L3: smaž staženou AUDIO epizodu z telefonu. */
     fun deleteOffline(ep: YtEpisode) = offline.delete(episodeKey(ep))

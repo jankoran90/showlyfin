@@ -1,7 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
 import android.content.SharedPreferences
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
@@ -114,6 +113,16 @@ class RssPodcastViewModel @Inject constructor(
                 .onSuccess { feed ->
                     _rawEpisodes.value = feed.episodes
                     _state.update { it.copy(isLoading = false, title = feed.title, image = feed.image) }
+                    // User 2026-10-13 („seznam dílů to ořezává, nejsou vidět první díly, ani celá skupina") —
+                    // prvních 50 hned, celá historie feedu (server strop 1000) potichu na pozadí → série/knihy
+                    // se složí celé. Selhání = zůstane těch 50.
+                    if (feed.episodes.size >= FIRST_PAGE) {
+                        launch {
+                            runCatching { repo.loadRss(feedUrl, limit = FULL_HISTORY) }.getOrNull()
+                                ?.takeIf { loadedFor == feedUrl && it.episodes.size > _rawEpisodes.value.size }
+                                ?.let { full -> _rawEpisodes.value = full.episodes }
+                        }
+                    }
                     // RESONANCE (SHW-81) D: dovyplň popis + datum u UŽ stažených epizod (staré stažení bez
                     // těchto polí) → offline detail je ukáže i u „Divokých kár". Ignoruje ne-stažené.
                     // PERF (2026-08-15, WATCHDOG incident): [OfflineDownloadManager.backfillMeta] serializuje
@@ -150,10 +159,11 @@ class RssPodcastViewModel @Inject constructor(
      * Mapování RSS epizody na položku fronty (LEVER): přímá enclosure URL, bez ABS session.
      * L3: když je epizoda STAŽENÁ, hraj z lokálního `file://` souboru (offline + šetří data).
      */
-    private fun toQueued(ep: RssEpisode, fallbackTitle: String): QueuedEpisode {
+    fun toQueued(ep: RssEpisode, fallbackTitle: String): QueuedEpisode {
         val podcast = _state.value.title ?: fallbackTitle
         val key = episodeKey(ep)
-        val localUrl = offline.localVideo(key)?.let { Uri.fromFile(it).toString() }
+        // 2026-10-13 (Codex): do fronty vždy síťová URL — stažený soubor dohledá AudiobookPlayerConnection.startEpisode
+        // při spuštění; uložené file:// by po smazání stažení zůstalo neplatné.
         return QueuedEpisode(
             itemId = loadedFor ?: "rss",
             episodeId = key,
@@ -162,7 +172,7 @@ class RssPodcastViewModel @Inject constructor(
             description = ep.description,
             podcastTitle = podcast,
             direct = DirectAudio(
-                url = localUrl ?: ep.audioUrl,
+                url = ep.audioUrl,
                 durationSec = parseDurationSec(ep.duration),
                 author = podcast,
             ),
@@ -182,10 +192,17 @@ class RssPodcastViewModel @Inject constructor(
 
     /** L3: stáhni epizodu do telefonu (offline). Idempotentní (už stažené/stahující se přeskočí). */
     fun download(ep: RssEpisode, fallbackTitle: String) {
-        if (ep.audioUrl.isBlank()) return
+        offlineRequest(ep, fallbackTitle)?.let(offline::enqueue)
+    }
+
+    /** Délka epizody v sekundách (RSS `itunes:duration` bývá „1:02:03" i čisté sekundy). */
+    fun durationSecOf(ep: RssEpisode): Double = parseDurationSec(ep.duration)
+
+    /** Požadavek na stažení epizody (null = feed nemá audio URL). Sdílí ho i kniha ze série. */
+    fun offlineRequest(ep: RssEpisode, fallbackTitle: String): OfflineRequest? {
+        if (ep.audioUrl.isBlank()) return null
         val podcast = _state.value.title ?: fallbackTitle
-        offline.enqueue(
-            OfflineRequest(
+        return OfflineRequest(
                 key = episodeKey(ep),
                 title = ep.title.ifBlank { fallbackTitle },
                 subtitle = podcast,
@@ -198,8 +215,7 @@ class RssPodcastViewModel @Inject constructor(
                 publishedAt = parseEpisodeDateMs(ep.date),
                 // RESONANCE (SHW-81) D: klíč zdroje pro filtr skrytých pořadů offline (dětský profil).
                 sourceKey = loadedFor?.let { "rss:$it" },
-            ),
-        )
+            )
     }
 
     /** L3: smaž staženou epizodu z telefonu. */
@@ -331,6 +347,9 @@ class RssPodcastViewModel @Inject constructor(
 }
 
 /** itunes:duration → sekundy. Podporuje "HH:MM:SS", "MM:SS" i čisté sekundy. */
+private const val FIRST_PAGE = 50
+private const val FULL_HISTORY = 1000
+
 private fun parseDurationSec(d: String?): Double {
     val t = d?.trim().orEmpty()
     if (t.isEmpty()) return 0.0

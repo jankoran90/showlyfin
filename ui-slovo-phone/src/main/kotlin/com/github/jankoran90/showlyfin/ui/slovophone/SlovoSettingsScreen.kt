@@ -79,7 +79,7 @@ fun SlovoSettingsScreen(
             SlovoCollapsibleSection("Vzhled", Icons.Rounded.Palette) {
                 SlovoAppearanceSection()
             }
-            SlovoCollapsibleSection("Zobrazení Domů", Icons.Rounded.ViewAgenda) {
+            SlovoCollapsibleSection("Zobrazení Domů a pořadů", Icons.Rounded.ViewAgenda) {
                 SlovoHomeLayoutSection()
             }
             if (adult) SlovoCollapsibleSection("Pořadí menu", Icons.Rounded.Menu) {

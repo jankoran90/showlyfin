@@ -24,6 +24,13 @@ data class HomeLayout(
      * Přehrání je vždy i na tlačítku ▶ na kartě.
      */
     val episodeTapOpensShow: Boolean = true,
+    /**
+     * User (2026-10-13, „Po jedné stopě, Trabantem, Ďábelské káry jako audioknihy — kapitoly") — série
+     * uvnitř pořadu = karta knihy s kapitolami (true), nebo rozbalovací řádek se díly (false, dřívější).
+     */
+    val seriesAsBook: Boolean = true,
+    /** Pořad, který je celý jedna série (Trabantem Jižní Amerikou), se otevře rovnou jako kniha. */
+    val singleSeriesOpensBook: Boolean = true,
 )
 
 object HomeLayoutPrefs {
@@ -32,7 +39,9 @@ object HomeLayoutPrefs {
     private const val KEY_DESC_LINES = "slovo_home_layout_desc_lines"
     private const val KEY_REMAINING = "slovo_home_layout_remaining"
     private const val KEY_TAP_OPENS = "slovo_home_layout_episode_tap_opens_show"
-    private val KEYS = setOf(KEY_LIST, KEY_BIG_COVER, KEY_DESC_LINES, KEY_REMAINING, KEY_TAP_OPENS)
+    private const val KEY_SERIES_BOOK = "slovo_series_as_book"
+    private const val KEY_SINGLE_BOOK = "slovo_single_series_opens_book"
+    private val KEYS = setOf(KEY_LIST, KEY_BIG_COVER, KEY_DESC_LINES, KEY_REMAINING, KEY_TAP_OPENS, KEY_SERIES_BOOK, KEY_SINGLE_BOOK)
 
     val DESC_LINE_OPTIONS = listOf(0, 2, 3, 5)
 
@@ -42,6 +51,8 @@ object HomeLayoutPrefs {
         descLines = prefs.getInt(KEY_DESC_LINES, 3),
         remaining = prefs.getBoolean(KEY_REMAINING, true),
         episodeTapOpensShow = prefs.getBoolean(KEY_TAP_OPENS, true),
+        seriesAsBook = prefs.getBoolean(KEY_SERIES_BOOK, true),
+        singleSeriesOpensBook = prefs.getBoolean(KEY_SINGLE_BOOK, true),
     )
 
     fun write(prefs: SharedPreferences, layout: HomeLayout) {
@@ -51,6 +62,8 @@ object HomeLayoutPrefs {
             .putInt(KEY_DESC_LINES, layout.descLines)
             .putBoolean(KEY_REMAINING, layout.remaining)
             .putBoolean(KEY_TAP_OPENS, layout.episodeTapOpensShow)
+            .putBoolean(KEY_SERIES_BOOK, layout.seriesAsBook)
+            .putBoolean(KEY_SINGLE_BOOK, layout.singleSeriesOpensBook)
             .apply()
     }
 
