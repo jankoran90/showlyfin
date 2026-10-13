@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -55,6 +57,8 @@ internal fun FilmyYoutubeSearchResults(
     onOpenSource: (PodcastSource) -> Unit,
 ) {
     if (!state.on || state.query.length < 2) return
+    val marks by podcasts.marks.collectAsStateWithLifecycle()
+    val watched by podcasts.watched.collectAsStateWithLifecycle()
     var confirmFor by remember { mutableStateOf<YtSearchVideo?>(null) }
     confirmFor?.let { v ->
         FilmyTranslateConfirmDialog(
@@ -90,6 +94,8 @@ internal fun FilmyYoutubeSearchResults(
                     VideoCard(
                         video = v,
                         czech = "yt:${v.id}" in state.translated,
+                        progressPct = marks["yt:${v.id}"]?.takeIf { it.durMs > 0 }?.let { (it.posMs * 100 / it.durMs).toInt().coerceIn(1, 99) },
+                        watched = "yt:${v.id}" in watched,
                         onClick = { podcasts.playTarget(v.asSource(), v.asEpisode())?.let(onPlay) },
                         onLongClick = { confirmFor = v },
                     )
@@ -112,14 +118,26 @@ internal fun FilmyYoutubeSearchResults(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun VideoCard(video: YtSearchVideo, czech: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun VideoCard(
+    video: YtSearchVideo,
+    czech: Boolean,
+    progressPct: Int?,
+    watched: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
     Column(Modifier.width(VideoWidth).clip(MaterialTheme.shapes.small).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.small)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             AsyncImage(model = video.thumbnail, contentDescription = video.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            val badge = listOfNotNull(if (czech) "CZ" else null, durationLabel(video.duration)).joinToString(" · ")
+            // Rozkoukané = proužek průběhu, dokoukané = štítek „Zhlédnuto" (video ve výsledcích zůstává).
+            if (progressPct != null && !watched) {
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(progressPct / 100f).height(3.dp)
+                    .background(MaterialTheme.colorScheme.primary))
+            }
+            val badge = listOfNotNull(if (watched) "Zhlédnuto" else null, if (czech) "CZ" else null, durationLabel(video.duration)).joinToString(" · ")
             if (badge.isNotEmpty()) {
                 Text(
                     badge,

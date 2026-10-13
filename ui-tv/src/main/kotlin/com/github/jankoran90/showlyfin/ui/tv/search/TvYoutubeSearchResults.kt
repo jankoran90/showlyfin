@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,6 +48,8 @@ internal fun TvYoutubeSearchResults(
     otherResults: @Composable () -> Unit,
 ) {
     var confirmFor by remember { mutableStateOf<Pair<PodcastSource, SourceEpisode>?>(null) }
+    val marks by podcasts.marks.collectAsStateWithLifecycle()
+    val watched by podcasts.watched.collectAsStateWithLifecycle()
     confirmFor?.let { (src, ep) ->
         TvTranslateConfirmDialog(
             episode = ep,
@@ -55,7 +58,7 @@ internal fun TvYoutubeSearchResults(
             onDismiss = { confirmFor = null },
         )
     }
-    val videoItems = remember(state.videos, state.translated) {
+    val videoItems = remember(state.videos, state.translated, marks, watched) {
         state.videos.map { v ->
             HomeRowItem(
                 key = "ytv|${v.id}",
@@ -64,6 +67,8 @@ internal fun TvYoutubeSearchResults(
                     .joinToString(" · "),
                 landscapeUrl = v.thumbnail,
                 posterUrl = v.thumbnail,
+                progressPct = marks["yt:${v.id}"]?.takeIf { it.durMs > 0 }?.let { (it.posMs * 100 / it.durMs).toInt().coerceIn(1, 99) },
+                watched = "yt:${v.id}" in watched,
             )
         }
     }

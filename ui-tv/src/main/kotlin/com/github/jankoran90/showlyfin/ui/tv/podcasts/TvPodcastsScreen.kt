@@ -48,13 +48,14 @@ fun TvPodcastsScreen(
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.onEnter() }
     val translated by vm.translated.collectAsStateWithLifecycle()
     val translating by vm.translating.collectAsStateWithLifecycle()
+    val watched by vm.watched.collectAsStateWithLifecycle()
     var confirmFor by remember { mutableStateOf<Pair<PodcastSource, SourceEpisode>?>(null) }
 
     val prefs = androidx.compose.ui.platform.LocalContext.current
         .getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE)
     val rowPrefs = remember { PodcastPrefs.rows(prefs) }
-    val rails = remember(state, marks, translated, translating, rowPrefs) {
-        podcastRails(podcastShelves(state, marks, translated, translating, rowPrefs))
+    val rails = remember(state, marks, translated, translating, rowPrefs, watched) {
+        podcastRails(podcastShelves(state, marks, translated, translating, rowPrefs, watched))
     }
 
     confirmFor?.let { (src, ep) ->

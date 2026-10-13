@@ -46,13 +46,14 @@ fun FilmyPodcastsScreen(
     val marks by vm.marks.collectAsStateWithLifecycle()
     val translated by vm.translated.collectAsStateWithLifecycle()
     val translating by vm.translating.collectAsStateWithLifecycle()
+    val watched by vm.watched.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.onEnter() }
     var confirmFor by remember { mutableStateOf<Pair<PodcastSource, SourceEpisode>?>(null) }
 
     val prefs = LocalContext.current.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE)
     val rowPrefs = remember { PodcastPrefs.rows(prefs) }
-    val rails = remember(state, marks, translated, translating, rowPrefs) {
-        val shelves = podcastShelves(state, marks, translated, translating, rowPrefs)
+    val rails = remember(state, marks, translated, translating, rowPrefs, watched) {
+        val shelves = podcastShelves(state, marks, translated, translating, rowPrefs, watched)
         buildList {
             if (shelves.continueItems.isNotEmpty()) add(FilmyRail("podcasty-pokracovat", "Pokračovat", HomeCardStyle.LANDSCAPE, shelves.continueItems))
             if (shelves.newItems.isNotEmpty()) add(FilmyRail("podcasty-nove", "Nové díly", HomeCardStyle.LANDSCAPE, shelves.newItems))
@@ -129,6 +130,7 @@ internal fun FilmyPodcastRow(item: HomeRowItem, onClick: () -> Unit, onLongClick
             imageUrl = item.landscapeUrl ?: item.posterUrl,
             meta = item.subtitle,
             progressPct = item.progressPct,
+            watched = item.watched,
             numbered = false,
         ),
         onClick = onClick,

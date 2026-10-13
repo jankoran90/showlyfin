@@ -56,6 +56,7 @@ fun TvPodcastSourceScreen(
         } else null
     val translated by vm.translated.collectAsStateWithLifecycle()
     val translating by vm.translating.collectAsStateWithLifecycle()
+    val watched by vm.watched.collectAsStateWithLifecycle()
     var confirmFor by remember { mutableStateOf<com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode?>(null) }
     val episodes = state.episodes[source.key].orEmpty()
     val title = "${source.title} · ${sourceTypeLabel(source.type)}"
@@ -69,7 +70,7 @@ fun TvPodcastSourceScreen(
         )
     }
 
-    val rails = remember(episodes, marks, translated, translating) {
+    val rails = remember(episodes, marks, translated, translating, watched) {
         val keyOf = { e: com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode -> e.resumeKey ?: e.id }
         val started = episodes.filter { (marks[keyOf(it)]?.posMs ?: 0L) > 0L }
             .sortedByDescending { marks[keyOf(it)]?.updatedAt ?: 0L }
@@ -77,13 +78,13 @@ fun TvPodcastSourceScreen(
             if (started.isNotEmpty()) add(
                 TvRail(
                     id = "kanal-pokracovat", title = "Pokračovat", style = HomeCardStyle.LANDSCAPE,
-                    items = started.map { episodeItem(source, it, marks[keyOf(it)], translated, translating) }, configId = "kanal-pokracovat",
+                    items = started.map { episodeItem(source, it, marks[keyOf(it)], translated, translating, watched) }, configId = "kanal-pokracovat",
                 ),
             )
             if (episodes.isNotEmpty()) add(
                 TvRail(
                     id = "kanal-dily", title = "Díly", style = HomeCardStyle.LANDSCAPE,
-                    items = episodes.map { episodeItem(source, it, marks[keyOf(it)], translated, translating) }, configId = "kanal-dily",
+                    items = episodes.map { episodeItem(source, it, marks[keyOf(it)], translated, translating, watched) }, configId = "kanal-dily",
                 ),
             )
         }

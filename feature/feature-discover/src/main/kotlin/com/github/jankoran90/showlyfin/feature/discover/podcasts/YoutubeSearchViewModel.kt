@@ -69,7 +69,11 @@ class YoutubeSearchViewModel @Inject constructor(
 
     fun onQuery(query: String) {
         lastQuery = query
-        if (_state.value.on) search(query, debounce = true)
+        val st = _state.value
+        // Návrat z přehrávače znovu vyvolá onQuery se STEJNÝM dotazem → nové hledání by vrátilo jinou sadu
+        // a právě pouštěné video by „zmizelo" (user 2026-10-13). Výsledky téhož dotazu nech.
+        if (st.on && query.trim() == st.query && (st.loading || st.videos.isNotEmpty() || st.channels.isNotEmpty())) return
+        if (st.on) search(query, debounce = true)
     }
 
     private fun search(query: String, debounce: Boolean) {

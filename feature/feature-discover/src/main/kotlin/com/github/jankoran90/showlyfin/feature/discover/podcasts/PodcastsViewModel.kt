@@ -55,7 +55,11 @@ class PodcastsViewModel @Inject constructor(
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
     private val activeTranslations: ActiveTranslationsRepository,
     @param:ApplicationContext private val appContext: Context,
+    watchedStore: com.github.jankoran90.showlyfin.core.domain.resume.CtvWatchedStore,
 ) : ViewModel() {
+
+    /** Dokoukané díly (`yt:`/`ctv:`, per profil, sdílené mezi zařízeními) → štítek „zhlédnuto" na kartě. */
+    val watched: StateFlow<Set<String>> = watchedStore.watched
 
     data class UiState(
         val loading: Boolean = true,

@@ -36,6 +36,7 @@ fun episodeItem(
     mark: VideoResumeStore.Mark?,
     translated: Set<String> = emptySet(),
     translating: Set<String> = emptySet(),
+    watchedKeys: Set<String> = emptySet(),
 ): HomeRowItem =
     HomeRowItem(
         key = PodcastItemKey.episode(src, ep),
@@ -48,6 +49,7 @@ fun episodeItem(
         landscapeUrl = ep.imageUrl ?: src.thumbnail,
         posterUrl = ep.imageUrl ?: src.thumbnail,
         progressPct = mark?.takeIf { it.durMs > 0 }?.let { (it.posMs * 100 / it.durMs).toInt().coerceIn(1, 99) },
+        watched = (ep.resumeKey ?: "yt:${ep.id}") in watchedKeys,
     )
 
 private fun sourceItem(src: PodcastSource, eps: List<SourceEpisode>): HomeRowItem =
@@ -87,6 +89,7 @@ fun podcastShelves(
     translated: Set<String>,
     translating: Set<String>,
     rowPrefs: PodcastPrefs.Rows,
+    watchedKeys: Set<String> = emptySet(),
 ): PodcastShelves {
     if (state.sources.isEmpty()) return PodcastShelves(emptyList(), emptyList(), emptyList())
     val all = state.sources.flatMap { src -> state.episodes[src.key].orEmpty().map { src to it } }
@@ -99,8 +102,8 @@ fun podcastShelves(
         .filter { (_, ep) -> keyOf(ep) !in inProgressKeys }
         .sortedByDescending { (_, ep) -> PodcastsViewModel.dateSortKey(ep.date) }
         .take(rowPrefs.newLimit)
-    val cont = if (rowPrefs.continueRow) inProgress.map { (src, ep, mark) -> episodeItem(src, ep, mark, translated, translating) } else emptyList()
-    val new = if (rowPrefs.newRow) newest.map { (src, ep) -> episodeItem(src, ep, marks[keyOf(ep)], translated, translating) } else emptyList()
+    val cont = if (rowPrefs.continueRow) inProgress.map { (src, ep, mark) -> episodeItem(src, ep, mark, translated, translating, watchedKeys) } else emptyList()
+    val new = if (rowPrefs.newRow) newest.map { (src, ep) -> episodeItem(src, ep, marks[keyOf(ep)], translated, translating, watchedKeys) } else emptyList()
     // Kanály = jediná cesta k celému seznamu dílů → když ostatní řady nic neukazují, ukaž je i přes vypnutý přepínač.
     val channels = if (rowPrefs.channelsRow || (cont.isEmpty() && new.isEmpty()))
         state.sources.map { src -> sourceItem(src, state.episodes[src.key].orEmpty()) } else emptyList()

@@ -101,9 +101,11 @@ class WatchedReporter @Inject constructor(
             prefs.edit().remove("resume_$key").apply()
             // ČT díl (`ctv:<idec>`) → zapiš „dokoukáno", jinak by ho „Další díly" nabízely donekonečna
             // (smazaná pozice sama o sobě nerozliší dokoukaný díl od nespuštěného).
-            if (key.startsWith("ctv:")) {
+            // YouTube (`yt:<id>`, user 2026-10-13: „ať tam zůstane, ale má zhlédnuto") — stejná paměť,
+            // klíče jsou oddělené prefixem, takže ČT řady „Další díly" se to nedotkne.
+            if (key.startsWith("ctv:") || key.startsWith("yt:")) {
                 ctvWatchedStore.markWatched(key)
-                Timber.i("[VLTAVA] ČT díl dokoukán: %s", key)
+                Timber.i("[VLTAVA] díl dokoukán: %s", key)
             }
         }
 

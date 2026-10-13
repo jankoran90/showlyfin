@@ -47,6 +47,7 @@ fun FilmyPodcastSourceScreen(
     val marks by vm.marks.collectAsStateWithLifecycle()
     val translated by vm.translated.collectAsStateWithLifecycle()
     val translating by vm.translating.collectAsStateWithLifecycle()
+    val watched by vm.watched.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.onEnter() }
     // Kanál z hledání na YouTube není mezi zdroji → díly se načtou zvlášť; nabídni „Sledovat".
     LaunchedEffect(source.key, state.sources, state.loading) { if (!state.loading) vm.openExternal(source) }
@@ -71,7 +72,7 @@ fun FilmyPodcastSourceScreen(
 
     @Composable
     fun EpisodeRow(ep: SourceEpisode) = FilmyPodcastRow(
-        item = episodeItem(source, ep, marks[keyOf(ep)], translated, translating),
+        item = episodeItem(source, ep, marks[keyOf(ep)], translated, translating, watched),
         onClick = { vm.playTarget(source, ep)?.let(onPlay) },
         onLongClick = if (vm.canTranslate(source)) { { confirmFor = ep } } else null,
     )
