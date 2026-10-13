@@ -11,6 +11,9 @@ import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.DirectAudio
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
+import com.github.jankoran90.showlyfin.feature.listen.player.SeriesRuleStore
+import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastEpisodeSeriesGrouping
+import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +31,8 @@ import javax.inject.Inject
 class DownloadsViewModel @Inject constructor(
     private val offline: OfflineDownloadManager,
     private val connection: AudiobookPlayerConnection,
+    private val profiles: ProfileRepository,
+    private val ruleStore: SeriesRuleStore,
 ) : ViewModel() {
 
     data class Item(val request: OfflineRequest, val state: OfflineState)
@@ -41,11 +46,20 @@ class DownloadsViewModel @Inject constructor(
         val freeBytes: Long = 0L,
         /** Odhad do konce celé fronty (aktuální + čekající), null = zatím neznámá rychlost. */
         val queueEtaSec: Long? = null,
+        /** Dětský profil: jen schválené pořady/série, bez mazání. */
+        val isKids: Boolean = false,
     )
 
-    val state: StateFlow<UiState> = combine(offline.pending, offline.states, offline.downloads) { pending, states, done ->
-        val podcastDone = done.filter { it.type == OfflineRequest.TYPE_PODCAST }
-        val items = pending.filter { it.type == OfflineRequest.TYPE_PODCAST }.map { Item(it, states[it.key] ?: OfflineState()) }
+    val state: StateFlow<UiState> = combine(
+        offline.pending, offline.states, offline.downloads, profiles.activeProfileWithConfig,
+    ) { pending, states, done, (profile, config) ->
+        // User 2026-10-13 („děti nemají Stahování v sidebaru") — dítě vidí jen díly schválených pořadů / sérií
+        // (whitelist, neznámý zdroj = skrýt), stejné pravidlo jako jeho offline Poslech.
+        val kidsKeys = if (profile?.isAdmin == false) config.visibleForKidsSourceKeys else null
+        fun allowed(sourceKey: String?, title: String) = kidsKeys == null || kidsMayShow(kidsKeys, sourceKey, title)
+        val podcastDone = done.filter { it.type == OfflineRequest.TYPE_PODCAST && allowed(it.sourceKey, it.title) }
+        val items = pending.filter { it.type == OfflineRequest.TYPE_PODCAST && allowed(it.sourceKey, it.title) }
+            .map { Item(it, states[it.key] ?: OfflineState()) }
         val active = items.firstOrNull { it.state.status == OfflineStatus.DOWNLOADING }
         val queued = items.filter { it.state.status == OfflineStatus.QUEUED }
         UiState(
@@ -56,8 +70,16 @@ class DownloadsViewModel @Inject constructor(
             usedBytes = podcastDone.sumOf { it.sizeBytes },
             freeBytes = offline.freeBytes(),
             queueEtaSec = queueEta(active, queued, podcastDone),
+            isKids = kidsKeys != null,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
+
+    private fun kidsMayShow(kidsKeys: Set<String>, sourceKey: String?, title: String): Boolean {
+        if (sourceKey == null) return false
+        if (KidsSourceAccess.isWholeSourceApproved(kidsKeys, sourceKey)) return true
+        val series = ruleStore.titleFor(sourceKey, title) ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(title) ?: return false
+        return KidsSourceAccess.isSeriesApproved(kidsKeys, sourceKey, PodcastEpisodeSeriesGrouping.seriesSlug(series))
+    }
 
     /**
      * Fronta má jen délky dílů, ne velikosti → velikost odhadni z bajtů na sekundu zvuku (aktuální

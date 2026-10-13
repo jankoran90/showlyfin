@@ -127,7 +127,7 @@ private fun SlovoShellContent() {
     // NENÍ v tomhle seznamu; [HomeViewModel] správně omezuje obsah dětského profilu na jeho vlastní
     // knihovnu/schválené zdroje (viz `kidsOnlyLibraryIds`), takže dítě tam vidí jen SVÉ rozposlouchané.
     LaunchedEffect(isKidsProfile) {
-        if (isKidsProfile && current in setOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE, SlovoSection.STAHOVANI)) {
+        if (isKidsProfile && current in setOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE)) {
             current = SlovoSection.DOMU
         }
     }

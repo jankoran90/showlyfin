@@ -8,6 +8,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,13 +45,27 @@ fun AudiobookActionSheet(
     /** EXCISE (2026-08-19) — „Smazat" (soft, archivováno na serveru); null = akce se vůbec nenabídne
      * (server-side ownership check appku ochrání i kdyby klient omylem dovolil víc, tohle je jen UI). */
     onDelete: (() -> Unit)? = null,
+    /** User 2026-10-13 („long-press nabízí jen stažení, ne odstranění") — práce se staženou knihou. */
+    isDownloaded: Boolean = false,
+    onDeleteDownload: (() -> Unit)? = null,
+    onRedownload: (() -> Unit)? = null,
 ) {
     val inProgress = book.progress > 0.001 && !book.isFinished
     ListenEpisodeActionSheet(
         title = book.title,
         infoLine = infoLine,
         actions = listOfNotNull(
-            ListenEpisodeAction(Icons.Default.Download, "Stáhnout", enabled = canDownload, onClick = onDownload),
+            if (!isDownloaded) ListenEpisodeAction(Icons.Default.Download, "Stáhnout", enabled = canDownload, onClick = onDownload) else null,
+            if (isDownloaded) onRedownload?.let {
+                ListenEpisodeAction(Icons.Default.Refresh, "Stáhnout znovu", onClick = it)
+            } else null,
+            if (isDownloaded) onDeleteDownload?.let {
+                ListenEpisodeAction(
+                    Icons.Default.DeleteOutline, "Odstranit z telefonu",
+                    confirmMessage = "Stažená kniha se smaže z telefonu. Na serveru zůstane, poslouchat jde dál online.",
+                    onClick = it,
+                )
+            } else null,
             onEdit?.let { ListenEpisodeAction(Icons.Default.Edit, "Upravit", onClick = it) },
             if (inProgress) {
                 ListenEpisodeAction(

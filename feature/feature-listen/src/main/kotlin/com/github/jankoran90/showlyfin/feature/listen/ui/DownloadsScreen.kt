@@ -143,7 +143,9 @@ fun DownloadsScreen(
                     onClick = { viewModel.play(d); onOpenAudioPlayer() },
                 ) {
                     IconButton(onClick = { viewModel.play(d); onOpenAudioPlayer() }) { Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát") }
-                    IconButton(onClick = { confirmDelete = d }) { Icon(Icons.Default.Delete, contentDescription = "Smazat") }
+                    if (!st.isKids) {
+                        IconButton(onClick = { confirmDelete = d }) { Icon(Icons.Default.Delete, contentDescription = "Smazat") }
+                    }
                 }
             }
         }

@@ -51,7 +51,7 @@ fun SlovoDrawer(
             // Objevit/Zdroje je teď konfigurovatelné v Nastavení → Pořadí menu ([SlovoShellPrefs]).
             val ctx = LocalContext.current
             val poslechSections =
-                if (isAdmin) SlovoShellPrefs.drawerOrder(ctx) else listOf(SlovoSection.DOMU)
+                if (isAdmin) SlovoShellPrefs.drawerOrder(ctx) else listOf(SlovoSection.DOMU, SlovoSection.STAHOVANI)
             poslechSections.forEach { DrawerRow(it, current, onSelect) }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 20.dp))
