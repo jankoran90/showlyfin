@@ -94,7 +94,9 @@ fun TvFilmotekaScreen(
 ) {
     val filmotekaState by viewModel.state.collectAsStateWithLifecycle()
     // OPONA: rozkoukané pořady i v „Další díly" Filmotéky (vypínač Nastavení → Pořady).
-    val poradyNextUp = com.github.jankoran90.showlyfin.feature.discover.podcasts.rememberPoradyNextUp()
+    val poradyNextUp = com.github.jankoran90.showlyfin.feature.discover.podcasts.rememberPoradyNextUp(
+        viewModel.showNextUp.collectAsStateWithLifecycle().value,
+    )
     val state = if (poradyNextUp.items.isEmpty()) filmotekaState
         else filmotekaState.copy(nextUp = filmotekaState.nextUp + poradyNextUp.items)
     // Zdroje uložené na jiném zařízení (telefon, auto-cache po „Chci vidět") → přenačtení přes savedKeys.
@@ -358,6 +360,7 @@ internal fun TvFilmotekaGrid(
                         immersive = immersive,
                         onFocusItem = onFocusItem,
                         onItemClick = onItemClick,
+                        onItemLongClick = onItemLongClick,
                         firstFocusRequester = nextUpFirstFocus,
                         // 🔴 Cíl pohybu dolů smí ukazovat jen na SKUTEČNĚ vykreslenou dlaždici:
                         // `FocusRequester.requestFocus()` na nepřipojený uzel hodí výjimku, takže
@@ -410,6 +413,7 @@ private fun TvNextUpRow(
     immersive: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
     onItemClick: (HomeRowItem) -> Unit,
+    onItemLongClick: ((HomeRowItem) -> Unit)? = null,
     firstFocusRequester: FocusRequester? = null,
     /**
      * 🔒 2026-08-24 (user: „když jsem nahoře na další díly zafokusovanej a dám dpadem dolů tak nejedu
@@ -445,6 +449,7 @@ private fun TvNextUpRow(
                         style = HomeCardStyle.LANDSCAPE,
                         onClick = { onItemClick(item) },
                         focusRequester = if (index == 0) firstFocusRequester else null,
+                        onLongClick = onItemLongClick?.let { { it(item) } },
                     )
                 }
             }

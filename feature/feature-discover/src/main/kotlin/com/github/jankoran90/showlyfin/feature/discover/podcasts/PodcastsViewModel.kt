@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -108,6 +109,14 @@ class PodcastsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     init {
+        // Codex review: přidání / odebrání zdroje (Spravovat zdroje, Slovo) → Pořady načti znovu hned,
+        // ne až po [STALE_MS]. drop(1) = počáteční stav; reload sám refresh() dělá, distinct brání smyčce.
+        viewModelScope.launch {
+            sourcesRepo.sources.map { list -> list.map { it.key }.toSet() }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { if (lastLoadAt > 0L) reload() }
+        }
         // Nová rozkoukaná YouTube videa (i z jiného zařízení) → dohledej ta, co nejsou ve sledovaných kanálech.
         viewModelScope.launch {
             resume.marks.map { m -> m.keys.filter { it.startsWith("yt:") }.toSet() }
@@ -230,7 +239,9 @@ class PodcastsViewModel @Inject constructor(
     /** Rozkoukané `yt:` mimo načtené díly → metadata videa (cache v repu; jen dospělý, max [MAX_ORPHANS]). */
     private fun resolveOrphans(keys: Set<String>) {
         if (profiles.activeProfile.value?.isAdmin == false) return
-        val known = _state.value.episodes.values.flatten().map { it.resumeKey ?: "yt:${it.id}" }.toSet()
+        // Jen díly SLEDOVANÝCH zdrojů — nesledovaný kanál otevřený z hledání v řadách není (Codex review).
+        val known = _state.value.sources.flatMap { _state.value.episodes[it.key].orEmpty() }
+            .map { it.resumeKey ?: "yt:${it.id}" }.toSet()
         val wanted = keys.filter { it.startsWith("yt:") && it !in known }
             .sortedByDescending { resume.marks.value[it]?.updatedAt ?: 0L }
             .take(MAX_ORPHANS)

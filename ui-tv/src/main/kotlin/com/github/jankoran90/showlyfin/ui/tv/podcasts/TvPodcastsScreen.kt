@@ -110,7 +110,7 @@ fun TvPodcastsScreen(
     val layout = remember { PodcastPrefs.tvLayout(prefs) }
     if (layout == "grid") {
         val shelves = remember(state, marks, translated, translating, rowPrefs, watched) {
-            podcastShelves(state, marks, translated, translating, rowPrefs.copy(continueRow = true, newRow = true, channelsRow = true), watched)
+            podcastShelves(state, marks, translated, translating, rowPrefs, watched)
         }
         var filtr by remember { mutableStateOf(0) }
         val items = when (filtr) {

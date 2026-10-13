@@ -457,6 +457,9 @@ class TvFilmotekaViewModel @Inject constructor(
     }
 
 
+    /** Hlavní vypínač řady „Další díly" (pořady se k ní přidávají jen když je zapnutá). */
+    val showNextUp: kotlinx.coroutines.flow.StateFlow<Boolean> get() = settings.showNextUp
+
     /** Obrazovka zpět v popředí → dotáhni zdroje uložené jinde (změna savedKeys Filmotéku přenačte). */
     fun onResume() = workingSources.refreshIfStale()
 

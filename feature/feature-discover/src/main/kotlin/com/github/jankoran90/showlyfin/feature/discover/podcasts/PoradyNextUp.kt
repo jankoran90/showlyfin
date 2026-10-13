@@ -27,11 +27,12 @@ class PoradyNextUp(val items: List<HomeRowItem>, private val vm: PodcastsViewMod
     }
 }
 
+/** [masterEnabled] = hlavní vypínač Filmotéka → „Další díly nahoře" (vypnutý skryje celou řadu, i pořady). */
 @Composable
-fun rememberPoradyNextUp(): PoradyNextUp {
+fun rememberPoradyNextUp(masterEnabled: Boolean): PoradyNextUp {
     val prefs = LocalContext.current.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE)
     val enabled = remember { PodcastPrefs.inFilmotekaNextUp(prefs) }
-    if (!enabled) return PoradyNextUp(emptyList(), null)
+    if (!enabled || !masterEnabled) return PoradyNextUp(emptyList(), null)
     val vm: PodcastsViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
     val marks by vm.marks.collectAsStateWithLifecycle()

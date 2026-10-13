@@ -75,8 +75,8 @@ fun FilmyPodcastsPage(
     var layout by remember { mutableStateOf(PodcastPrefs.phoneLayout(prefsOf(layoutCtx))) }
 
     val prefs = LocalContext.current.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE)
-    // Na stránce vždy všechny řady (přepínače řad z Nastavení patří sekci Podcasty).
-    val rows = remember { PodcastPrefs.rows(prefs).copy(continueRow = true, newRow = true, channelsRow = true) }
+    // Přepínače řad z Nastavení → Pořady platí i tady (Nastavení nesmí lhát, Codex review).
+    val rows = remember { PodcastPrefs.rows(prefs) }
     val shelves = remember(state, marks, translated, translating, watched, rows) {
         podcastShelves(state, marks, translated, translating, rows, watched)
     }
@@ -143,7 +143,7 @@ fun FilmyPodcastsPage(
     }
     val header: @Composable () -> Unit = {
         if (shelves.continueItems.isNotEmpty()) {
-            Box(Modifier.padding(horizontal = 16.dp)) { FilmyNextUpRow(items = shelves.continueItems, onClick = onItem) }
+            Box(Modifier.padding(horizontal = 16.dp)) { FilmyNextUpRow(items = shelves.continueItems, onClick = onItem, onLongClick = longPressOf) }
         }
     }
     val chips: @Composable () -> Unit = {

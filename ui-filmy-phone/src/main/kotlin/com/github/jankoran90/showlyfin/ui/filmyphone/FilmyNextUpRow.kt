@@ -1,7 +1,7 @@
 package com.github.jankoran90.showlyfin.ui.filmyphone
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +43,8 @@ import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
 internal fun FilmyNextUpRow(
     items: List<HomeRowItem>,
     onClick: (HomeRowItem) -> Unit,
+    // Pořady: podržení = Přeložit do češtiny (null = bez akce).
+    onLongClick: ((HomeRowItem) -> (() -> Unit)?)? = null,
 ) {
     if (items.isEmpty()) return
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
@@ -56,17 +58,18 @@ internal fun FilmyNextUpRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(end = 4.dp),
         ) {
-            items(items, key = { it.key }) { item -> NextUpCard(item = item, onClick = { onClick(item) }) }
+            items(items, key = { it.key }) { item -> NextUpCard(item = item, onClick = { onClick(item) }, onLongClick = onLongClick?.invoke(item)) }
         }
     }
 }
 
 @Composable
-private fun NextUpCard(item: HomeRowItem, onClick: () -> Unit) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun NextUpCard(item: HomeRowItem, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     Column(
         Modifier
             .width(CardWidth)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         Box(
             Modifier

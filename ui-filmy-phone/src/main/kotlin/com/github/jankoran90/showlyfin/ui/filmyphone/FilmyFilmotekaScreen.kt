@@ -44,7 +44,9 @@ fun FilmyFilmotekaScreen(
     vm: TvFilmotekaViewModel = hiltViewModel(),
 ) {
     val filmotekaState by vm.state.collectAsStateWithLifecycle()
-    val poradyNextUp = com.github.jankoran90.showlyfin.feature.discover.podcasts.rememberPoradyNextUp()
+    val poradyNextUp = com.github.jankoran90.showlyfin.feature.discover.podcasts.rememberPoradyNextUp(
+        vm.showNextUp.collectAsStateWithLifecycle().value,
+    )
     val state = if (poradyNextUp.items.isEmpty()) filmotekaState
         else filmotekaState.copy(nextUp = filmotekaState.nextUp + poradyNextUp.items)
     val viewMode by vm.browseViewMode.collectAsStateWithLifecycle()
