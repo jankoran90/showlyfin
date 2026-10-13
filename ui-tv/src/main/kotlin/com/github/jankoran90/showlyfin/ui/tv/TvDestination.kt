@@ -75,4 +75,6 @@ sealed interface TvDestination {
 
     /** AMFITEÁTR (FLM-05) — kanál YouTube / video podcast ze zdrojů Slova (seznam dílů). */
     data class PodcastSourceDest(val source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) : TvDestination
+    /** AMFITEÁTR F5 — správa zdrojů Podcastů (hledat / přidat / děti / odebrat), společná se Slovem. */
+    data object PodcastManage : TvDestination
 }

@@ -91,10 +91,12 @@ fun podcastShelves(
     rowPrefs: PodcastPrefs.Rows,
     watchedKeys: Set<String> = emptySet(),
 ): PodcastShelves {
-    if (state.sources.isEmpty()) return PodcastShelves(emptyList(), emptyList(), emptyList())
+    if (state.sources.isEmpty() && state.orphans.isEmpty()) return PodcastShelves(emptyList(), emptyList(), emptyList())
     val all = state.sources.flatMap { src -> state.episodes[src.key].orEmpty().map { src to it } }
+    // Rozkoukaná videa mimo sledované kanály (z hledání) — jen do Pokračovat, ne do Nových dílů.
+    val orphans = state.orphans.map { it.orphanSource() to it }
     val keyOf = { ep: SourceEpisode -> ep.resumeKey ?: ep.id }
-    val inProgress = all
+    val inProgress = (all + orphans).distinctBy { (_, ep) -> keyOf(ep) }
         .mapNotNull { (src, ep) -> marks[keyOf(ep)]?.takeIf { it.posMs > 0 }?.let { Triple(src, ep, it) } }
         .sortedByDescending { it.third.updatedAt }
     val inProgressKeys = inProgress.map { keyOf(it.second) }.toSet()
@@ -109,3 +111,7 @@ fun podcastShelves(
         state.sources.map { src -> sourceItem(src, state.episodes[src.key].orEmpty()) } else emptyList()
     return PodcastShelves(cont, new, channels)
 }
+
+/** Syntetický zdroj rozkoukaného videa z hledání (přehrání i překlad jdou stejně jako u kanálu). */
+fun SourceEpisode.orphanSource(): PodcastSource =
+    PodcastSource(id = "yt-rozkoukane", type = "youtube", ref = subtitle ?: "youtube", title = subtitle ?: "YouTube")

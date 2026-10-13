@@ -70,6 +70,11 @@ class PodcastsViewModel @Inject constructor(
         val error: String? = null,
         /** Nesledované kanály (z hledání na YouTube), jejichž díly se právě načítají. */
         val loadingSources: Set<String> = emptySet(),
+        /**
+         * Rozkoukaná YouTube videa MIMO sledované kanály (pustil je z hledání, i na jiném zařízení) —
+         * user 2026-10-13: „přeložím a rozkoukám na telefonu → uvidím na TV". Jdou do řady Pokračovat.
+         */
+        val orphans: List<SourceEpisode> = emptyList(),
     )
 
     /** Co se má stát po výběru dílu — rozhodne navigátor (přehrávač / karta ČT). */
@@ -103,6 +108,12 @@ class PodcastsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     init {
+        // Nová rozkoukaná YouTube videa (i z jiného zařízení) → dohledej ta, co nejsou ve sledovaných kanálech.
+        viewModelScope.launch {
+            resume.marks.map { m -> m.keys.filter { it.startsWith("yt:") }.toSet() }
+                .distinctUntilChanged()
+                .collect { if (!_state.value.loading) resolveOrphans(it) }
+        }
         // Doběhlý překlad (dle serveru) → obnov štítky CZ.
         viewModelScope.launch {
             activeTranslations.jobs.map { jobs -> jobs.count { it.status == "done" } }
@@ -150,7 +161,9 @@ class PodcastsViewModel @Inject constructor(
                     loading = false,
                     sources = withVideo.map { it.first },
                     episodes = withVideo.associate { (src, eps) -> src.key to eps } + external,
+                    orphans = _state.value.orphans,
                 )
+                resolveOrphans(resume.marks.value.keys)
                 refreshTranslated()
             } catch (e: CancellationException) {
                 throw e
@@ -181,7 +194,8 @@ class PodcastsViewModel @Inject constructor(
         val base = prefs.getString("uploader_base_url", "").orEmpty()
         if (base.isBlank()) return
         val ids = (_state.value.sources.filter { it.type == "youtube" }.map { it.key } + external.keys)
-            .flatMap { key -> _state.value.episodes[key].orEmpty().map { "yt:${it.id}" } }
+            .flatMap { key -> _state.value.episodes[key].orEmpty().map { "yt:${it.id}" } } +
+            _state.value.orphans.map { "yt:${it.id}" }
         if (ids.isEmpty()) return
         runCatching { remote.getDoneTranslations(base, prefs.getString("uploader_session_cookie", "").orEmpty(), ids) }
             .onSuccess { _translated.value = it }
@@ -209,6 +223,26 @@ class PodcastsViewModel @Inject constructor(
             episode = null,
             progressive = true,
         )
+    }
+
+    private val orphanJob = java.util.concurrent.atomic.AtomicReference<Job?>(null)
+
+    /** Rozkoukané `yt:` mimo načtené díly → metadata videa (cache v repu; jen dospělý, max [MAX_ORPHANS]). */
+    private fun resolveOrphans(keys: Set<String>) {
+        if (profiles.activeProfile.value?.isAdmin == false) return
+        val known = _state.value.episodes.values.flatten().map { it.resumeKey ?: "yt:${it.id}" }.toSet()
+        val wanted = keys.filter { it.startsWith("yt:") && it !in known }
+            .sortedByDescending { resume.marks.value[it]?.updatedAt ?: 0L }
+            .take(MAX_ORPHANS)
+        orphanJob.getAndSet(viewModelScope.launch {
+            val eps = wanted.mapNotNull { key ->
+                runCatching { sourcesRepo.resolveYoutubeEpisode(key.removePrefix("yt:")) }
+                    .onFailure { if (it is CancellationException) throw it }
+                    .getOrNull()
+            }
+            _state.update { it.copy(orphans = eps) }
+            if (eps.isNotEmpty()) refreshTranslated()
+        })?.cancel()
     }
 
     /** Je kanál mezi sledovanými zdroji profilu? (Kanál z hledání na YouTube nemusí být.) */
@@ -242,9 +276,11 @@ class PodcastsViewModel @Inject constructor(
     }
 
     fun sourceOf(sourceKey: String): PodcastSource? = _state.value.sources.firstOrNull { it.key == sourceKey }
+        ?: _state.value.orphans.map { it.orphanSource() }.firstOrNull { it.key == sourceKey }
 
     fun episodeOf(sourceKey: String, episodeId: String): SourceEpisode? =
         _state.value.episodes[sourceKey]?.firstOrNull { it.id == episodeId }
+            ?: _state.value.orphans.firstOrNull { it.id == episodeId && it.orphanSource().key == sourceKey }
 
     /** Kam vede výběr dílu. ČT → karta pořadu (video se resolvuje na zařízení, umí to `TvCtvScreen`). */
     fun playTarget(source: PodcastSource, ep: SourceEpisode): PlayTarget? {
@@ -276,6 +312,7 @@ class PodcastsViewModel @Inject constructor(
 
     companion object {
         val VIDEO_TYPES = setOf("youtube", "ctv", "rss")
+        private const val MAX_ORPHANS = 12
         private const val STALE_MS = 3 * 60_000L
 
         /**

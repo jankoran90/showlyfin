@@ -91,6 +91,8 @@ private sealed interface FilmyDetailEntry {
     data class Katalog(val cil: KatalogCil) : FilmyDetailEntry
     // AMFITEÁTR F4: karta kanálu / pořadu ze sekce Podcasty.
     data class PodcastSource(val source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) : FilmyDetailEntry
+    // AMFITEÁTR F5: správa zdrojů (hledat / přidat / děti / odebrat).
+    data object PodcastManage : FilmyDetailEntry
 }
 
 /** M2.6: stav přehrávače nad detailem — externí stream (Real-Debrid/Stremio) NEBO Jellyfin item. */
@@ -381,6 +383,12 @@ private fun FilmyShellContent() {
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+        } else if (detailEntry is FilmyDetailEntry.PodcastManage) {
+            BackHandler(onBack = popDetail)
+            FilmyPodcastSourcesManageScreen(
+                onBack = popDetail,
+                onOpenSource = { src -> detailStack = detailStack + FilmyDetailEntry.PodcastSource(src) },
+            )
         } else if (detailEntry is FilmyDetailEntry.PodcastSource) {
             BackHandler(onBack = popDetail)
             FilmyPodcastSourceScreen(source = detailEntry.source, onBack = popDetail, onPlay = playPodcast)
@@ -509,6 +517,7 @@ private fun FilmyShellContent() {
                                 onMenu = onMenu,
                                 onOpenSource = { src -> detailStack = detailStack + FilmyDetailEntry.PodcastSource(src) },
                                 onPlay = playPodcast,
+                                onManageSources = { detailStack = detailStack + FilmyDetailEntry.PodcastManage },
                             )
                             // PROVOZ (SHW-114): co hraje kde, výkon přenosu, stav zdrojů + akce nad nimi.
                             FilmySection.OPS -> FilmyOpsScreen(onMenu = onMenu)

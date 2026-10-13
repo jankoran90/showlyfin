@@ -59,6 +59,7 @@ fun TvShell(
     onOpenRowAll: (configId: String, title: String) -> Unit = { _, _ -> },
     // AMFITEÁTR (FLM-05): sekce Podcasty — otevření kanálu a přehrání dílu (dispatch řeší TvNavigator).
     onOpenPodcastSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit = {},
+    onManagePodcastSources: () -> Unit = {},
     onPlayPodcast: (com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget) -> Unit = {},
     // FOYER: karta kolekce (Jellyfin BoxSet) → mřížka obsahu kolekce.
     onOpenCollection: (collectionId: String, name: String) -> Unit = { _, _ -> },
@@ -219,6 +220,7 @@ fun TvShell(
                     )
                     TvSection.PODCASTS -> com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsScreen(
                         onOpenSource = onOpenPodcastSource,
+                        onManageSources = onManagePodcastSources,
                         onPlay = onPlayPodcast,
                         immersive = immersive,
                         immersiveHeader = immersiveHeader,

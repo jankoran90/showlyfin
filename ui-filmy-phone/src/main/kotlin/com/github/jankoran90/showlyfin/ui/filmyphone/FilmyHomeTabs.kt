@@ -50,6 +50,8 @@ fun FilmyHomeTabbed(
     modifier: Modifier = Modifier,
     // AMFITEÁTR: vlastní řádek položky (Podcasty = řádek dílu 16:9 s dlouhým stiskem); null = filmový řádek.
     itemRow: (@Composable (HomeRowItem) -> Unit)? = null,
+    // Akce vpravo v liště (Podcasty: „Spravovat zdroje").
+    barTrailing: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null,
 ) {
     val pagerState = rememberPagerState(pageCount = { rails.size })
     val scope = rememberCoroutineScope()
@@ -57,7 +59,7 @@ fun FilmyHomeTabbed(
 
     Column(modifier = modifier.fillMaxSize()) {
         // Taby = řady, SPLYNULÉ s lištou: ☰ + záložky v jednom tenkém pruhu (M2.2b vize, minimal chrome).
-        FilmySectionBar(onMenu = onMenu) {
+        FilmySectionBar(onMenu = onMenu, trailing = barTrailing) {
             ScrollableTabRow(
                 selectedTabIndex = selected,
                 modifier = Modifier.fillMaxWidth(),

@@ -17,6 +17,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
+import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
@@ -37,6 +38,7 @@ import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
 fun TvPodcastsScreen(
     onOpenSource: (PodcastSource) -> Unit,
     onPlay: (PodcastsViewModel.PlayTarget) -> Unit,
+    onManageSources: () -> Unit = {},
     immersive: Boolean,
     immersiveHeader: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
@@ -70,11 +72,14 @@ fun TvPodcastsScreen(
     if (rails.isEmpty()) {
         Column(modifier.fillMaxSize().tvOverscan(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Podcasty", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+            if (vm.canFollow()) {
+                androidx.compose.material3.Button(onClick = onManageSources, modifier = Modifier.tvFocusBorder()) { Text("Spravovat zdroje") }
+            }
             val msg = when {
                 state.loading -> "Načítám podcasty…"
                 state.error != null -> state.error!!
                 else -> "Zatím tu nejsou žádné podcasty s videem. Kanály YouTube, pořady ČT a video podcasty " +
-                    "přidáš v appce Slovo — tady se objeví samy."
+                    "přidáš tlačítkem Spravovat zdroje (nebo ve Slovu — zdroje jsou společné)."
             }
             Text(msg, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp))
@@ -88,6 +93,9 @@ fun TvPodcastsScreen(
         immersive = immersive,
         immersiveHeader = immersiveHeader,
         onFocusItem = onFocusItem,
+        sectionActions = if (vm.canFollow()) {
+            { androidx.compose.material3.OutlinedButton(onClick = onManageSources, modifier = Modifier.tvFocusBorder()) { Text("Spravovat zdroje") } }
+        } else null,
         onItemClick = { item ->
             when (val ref = PodcastItemKey.parse(item.key)) {
                 is PodcastItemKey.Source -> vm.sourceOf(ref.sourceKey)?.let(onOpenSource)

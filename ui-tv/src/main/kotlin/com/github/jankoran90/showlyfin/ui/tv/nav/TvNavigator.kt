@@ -180,6 +180,12 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
                 }
             },
             onPlayPodcast = { target -> playPodcast(target) },
+            onManagePodcastSources = { navigate(TvDestination.PodcastManage) },
+        )
+
+        TvDestination.PodcastManage -> com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastSourcesManageScreen(
+            onBack = { back() },
+            onOpenSource = { source -> navigate(TvDestination.PodcastSourceDest(source)) },
         )
 
         is TvDestination.PodcastSourceDest -> com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastSourceScreen(

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,8 +41,20 @@ fun FilmyPodcastsScreen(
     onMenu: () -> Unit,
     onOpenSource: (PodcastSource) -> Unit,
     onPlay: (PodcastsViewModel.PlayTarget) -> Unit,
+    onManageSources: () -> Unit = {},
     vm: PodcastsViewModel = hiltViewModel(),
 ) {
+    val manage: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+        if (vm.canFollow()) {
+            androidx.compose.material3.IconButton(onClick = onManageSources) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.Rounded.AddCircle,
+                    contentDescription = "Spravovat zdroje",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
     val state by vm.state.collectAsStateWithLifecycle()
     val marks by vm.marks.collectAsStateWithLifecycle()
     val translated by vm.translated.collectAsStateWithLifecycle()
@@ -72,13 +85,15 @@ fun FilmyPodcastsScreen(
 
     if (rails.isEmpty()) {
         Column(Modifier.fillMaxSize()) {
-            FilmySectionBar(title = "Podcasty", onMenu = onMenu)
+            FilmySectionBar(onMenu = onMenu, trailing = manage) {
+                Text("Podcasty", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
+            }
             Text(
                 when {
                     state.loading -> "Načítám podcasty…"
                     state.error != null -> state.error!!
                     else -> "Zatím tu nejsou žádné podcasty s videem. Kanály YouTube, pořady ČT a video podcasty " +
-                        "přidáš v appce Slovo — tady se objeví samy."
+                        "přidáš tlačítkem ⊕ vpravo nahoře (nebo ve Slovu — zdroje jsou společné)."
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -103,6 +118,7 @@ fun FilmyPodcastsScreen(
         rails = rails,
         onItemClick = onItem,
         onMenu = onMenu,
+        barTrailing = manage,
         itemRow = { item ->
             val ref = PodcastItemKey.parse(item.key) as? PodcastItemKey.Episode
             val src = ref?.let { vm.sourceOf(it.sourceKey) }
