@@ -60,6 +60,7 @@ class YoutubeChannelViewModel @Inject constructor(
     // persistovaný stav — cast na TV pošle CZ stopu, pokud už existuje.
     private val translateStore: SubtitleTranslationStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val offlineEpisodes: ListenOfflineEpisodes,
 ) : ViewModel() {
 
     /** Stav offline stahování epizod (badge / akce v menu). Klíč = [episodeKey]. */
@@ -120,16 +121,29 @@ class YoutubeChannelViewModel @Inject constructor(
     private val streamQuality get() = PodcastVideoQuality.stream(prefs)
 
     private var loadedFor: String? = null
+    private var fromOfflineCache = false
 
     fun load(channel: String) {
-        if (loadedFor == channel && _rawEpisodes.value.isNotEmpty()) return
+        if (loadedFor == channel && _rawEpisodes.value.isNotEmpty() && !fromOfflineCache) return
         loadedFor = channel
+        fromOfflineCache = false
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             runCatching { uploaderDs.getYtFeed(baseUrl, cookie, channel, limit = YoutubeFeedPrefs.limit(prefs)) }
                 .onSuccess { feed ->
                     _rawEpisodes.value = feed.entries
                     _state.update { it.copy(isLoading = false, channelTitle = feed.channel) }
+                    // Slovo 2026-10-13: offline záloha seznamu dílů (parita s RSS).
+                    launch {
+                        offlineEpisodes.save("youtube:$channel", feed.entries.map { ep ->
+                            com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode(
+                                id = ep.id, title = ep.title, subtitle = feed.channel,
+                                streamUrl = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                                imageUrl = ep.thumbnail, date = ep.uploadDate, resumeKey = "yt:${ep.id}",
+                                description = ep.description, durationSec = ep.duration ?: 0.0,
+                            )
+                        })
+                    }
                     // Pre-warm: resolvni audio nejnovějších pár epizod → start přehrávání pak ~okamžitý.
                     feed.entries.take(3).forEach { ep ->
                         viewModelScope.launch { runCatching { uploaderDs.warmYt(baseUrl, cookie, ep.id, "audio") } }
@@ -147,6 +161,19 @@ class YoutubeChannelViewModel @Inject constructor(
                 }
                 .onFailure {
                     Timber.w(it, "[TUNER] načtení YouTube feedu selhalo")
+                    // Slovo 2026-10-13 — bez sítě díly z paměti + stažené (stažené jdou přehrát).
+                    val cached = offlineEpisodes.load("youtube:$channel", "yt:")
+                    if (cached.isNotEmpty()) {
+                        _rawEpisodes.value = cached.map { e ->
+                            YtEpisode(
+                                id = e.id, title = e.title, thumbnail = e.imageUrl,
+                                duration = e.durationSec.takeIf { d -> d > 0.0 }, uploadDate = e.date, description = e.description,
+                            )
+                        }
+                        _state.update { s -> s.copy(isLoading = false, channelTitle = cached.firstNotNullOfOrNull { e -> e.subtitle } ?: s.channelTitle) }
+                        fromOfflineCache = true // příští otevření zkusí síť znovu (Codex 2026-10-13)
+                        return@onFailure
+                    }
                     loadedFor = null
                     _state.update { s -> s.copy(isLoading = false, error = "Nepodařilo se načíst epizody kanálu.") }
                 }

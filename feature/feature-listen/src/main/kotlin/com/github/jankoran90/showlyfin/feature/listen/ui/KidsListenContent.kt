@@ -155,13 +155,14 @@ fun KidsListenContent(
             // User 2026-10-12: offline dítě vidí jen pořad/sérii, ze které je něco STAŽENÉ (knihy offline
             // řeší už ListenViewModel — jen stažené dětské). ABS podcasty offline nejsou.
             val offlineDls by viewModel.offlinePodcasts.collectAsStateWithLifecycle()
+            val shelfActions: com.github.jankoran90.showlyfin.feature.listen.KidsShelfActionsViewModel = hiltViewModel()
             val downloadedTitlesBySource = remember(offlineDls) {
-                offlineDls.filter { it.sourceKey != null }.groupBy({ it.sourceKey!! }, { it.title })
+                offlineDls.filter { it.sourceKey != null }.groupBy({ it.sourceKey!! }, { it.title to it.seriesTitle })
             }
+            // 2026-10-13: série i z uložené ČT řady / ruční knihy (dřív jen prefix z názvu → ČT řada offline zmizela).
             fun hasDownloaded(sourceKey: String, slug: String? = null): Boolean =
-                downloadedTitlesBySource[sourceKey].orEmpty().any { t ->
-                    slug == null || PodcastEpisodeSeriesGrouping.detectSeriesTitle(t)
-                        ?.let(PodcastEpisodeSeriesGrouping::seriesSlug) == slug
+                downloadedTitlesBySource[sourceKey].orEmpty().any { (t, series) ->
+                    slug == null || shelfActions.downloadSlug(sourceKey, t, series) == slug
                 }
             val offline = state.isOffline
 
@@ -187,7 +188,6 @@ fun KidsListenContent(
                     ).sortedWith(compareBy(collator) { it.sortKey })
             }
             // Dlouhý stisk na pořadu/sérii → „Stáhnout všechny díly a zařadit do fronty" (user 2026-10-12).
-            val shelfActions: com.github.jankoran90.showlyfin.feature.listen.KidsShelfActionsViewModel = hiltViewModel()
             val shelfMessage by shelfActions.message.collectAsStateWithLifecycle()
             val seriesCovers by shelfActions.seriesCovers.collectAsStateWithLifecycle()
             val context = LocalContext.current

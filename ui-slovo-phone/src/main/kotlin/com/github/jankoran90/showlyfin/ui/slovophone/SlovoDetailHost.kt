@@ -253,6 +253,7 @@ internal fun SlovoDetail(
             title = entry.title,
             highlightEpisodeKey = entry.highlightEpisodeKey,
             audioOnly = audioOnly,
+            onlyDownloaded = audioOnly && listenOffline,
             seriesFilter = entry.seriesFilter,
             isAdmin = activeProfile?.isAdmin == true,
             kidsVisibleSeriesKeys = kidsVisibleSourceKeys,

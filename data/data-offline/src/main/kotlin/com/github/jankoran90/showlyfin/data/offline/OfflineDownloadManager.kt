@@ -240,6 +240,7 @@ class OfflineDownloadManager @Inject constructor(
             description = req.description,
             publishedAt = req.publishedAt,
             sourceKey = req.sourceKey,
+            seriesTitle = req.seriesTitle,
         )
     }
 
@@ -316,13 +317,14 @@ class OfflineDownloadManager @Inject constructor(
      * polí, vč. `sourceKey` u epizod stažených před 1.45.144) se dovyplní samy → dětský profil je pak
      * offline filtruje. Nepřepisuje existující hodnoty ani neupravuje jiné položky. `null` args ignoruje.
      */
-    fun backfillMeta(key: String, description: String?, publishedAt: Long?, sourceKey: String? = null) {
+    fun backfillMeta(key: String, description: String?, publishedAt: Long?, sourceKey: String? = null, seriesTitle: String? = null) {
         val dl = index[key] ?: return
         val newDesc = dl.description ?: description?.takeIf { it.isNotBlank() }
         val newPub = dl.publishedAt ?: publishedAt?.takeIf { it > 0L }
         val newSrc = dl.sourceKey ?: sourceKey?.takeIf { it.isNotBlank() }
-        if (newDesc == dl.description && newPub == dl.publishedAt && newSrc == dl.sourceKey) return
-        index[key] = dl.copy(description = newDesc, publishedAt = newPub, sourceKey = newSrc)
+        val newSeries = dl.seriesTitle ?: seriesTitle?.takeIf { it.isNotBlank() }
+        if (newDesc == dl.description && newPub == dl.publishedAt && newSrc == dl.sourceKey && newSeries == dl.seriesTitle) return
+        index[key] = dl.copy(description = newDesc, publishedAt = newPub, sourceKey = newSrc, seriesTitle = newSeries)
         persistIndex()
         refreshDownloads()
     }

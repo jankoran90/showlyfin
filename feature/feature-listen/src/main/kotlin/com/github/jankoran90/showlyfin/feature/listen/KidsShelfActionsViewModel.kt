@@ -48,9 +48,12 @@ class KidsShelfActionsViewModel @Inject constructor(
         prefs.getString("uploader_base_url", "") ?: "", prefs.getString("uploader_session_cookie", "") ?: "", idec,
     )
 
-    /** Slug série dílu: ruční kniha (pravidlo) má přednost, jinak série z názvu. */
-    private fun slugOf(sourceKey: String, episodeTitle: String): String? =
-        (ruleStore.titleFor(sourceKey, episodeTitle) ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(episodeTitle))
+    /**
+     * Slug série STAŽENÉHO dílu: ruční kniha → uložená řada (ČT) → prefix z názvu. Veřejné pro offline
+     * Poslech dětí (karta série je vidět, jen když z ní je něco stažené).
+     */
+    fun downloadSlug(sourceKey: String, episodeTitle: String, seriesTitle: String?): String? =
+        (ruleStore.titleFor(sourceKey, episodeTitle) ?: seriesTitle ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(episodeTitle))
             ?.let(PodcastEpisodeSeriesGrouping::seriesSlug)
 
     /**
@@ -108,7 +111,7 @@ class KidsShelfActionsViewModel @Inject constructor(
         offline.downloads.value
             .filter { d ->
                 val src = d.sourceKey ?: return@filter false
-                src in sourceKeys && (seriesSlug == null || slugOf(src, d.title) == seriesSlug)
+                src in sourceKeys && (seriesSlug == null || downloadSlug(src, d.title, d.seriesTitle) == seriesSlug)
             }
             .map { it.key }
 
@@ -154,6 +157,7 @@ class KidsShelfActionsViewModel @Inject constructor(
                         description = ep.description,
                         publishedAt = parseEpisodeDateMs(ep.date),
                         sourceKey = source.key,
+                        seriesTitle = ep.seriesTitle,
                     ),
                 )
                 if (queue) connection.enqueue(

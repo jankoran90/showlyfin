@@ -50,6 +50,9 @@ data class OfflineRequest(
     // pořadů v offline seznamu (dětský profil). null = staré stažené / neznámý zdroj → NEfiltruje se.
     val sourceKey: String? = null,
     val headers: Map<String, String> = emptyMap(),
+    // Slovo 2026-10-13: série/řada dílu (ČT „Po jedné stopě do Afriky I"), kterou z názvu odvodit nejde —
+    // offline seznamy a dětský whitelist podle ní poznají schválenou sérii. null = odvodit z názvu.
+    val seriesTitle: String? = null,
 ) {
     companion object {
         const val TYPE_MOVIE = "movie"
@@ -86,6 +89,7 @@ data class OfflineDownload(
     val publishedAt: Long? = null,
     // RESONANCE (SHW-81) D: klíč zdroje „type:ref" pro filtr skrytých pořadů offline (dětský profil). null = nefiltruje se.
     val sourceKey: String? = null,
+    val seriesTitle: String? = null,
     val addedAt: Long = System.currentTimeMillis(),
     val lastPlayedAt: Long = 0L,
     val resumePositionMs: Long = 0L,

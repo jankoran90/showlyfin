@@ -101,6 +101,8 @@ fun CtvProgramScreen(
     kidsVisibleSeriesKeys: Set<String> = emptySet(),
     onSetSeriesVisibleForKids: (key: String, visible: Boolean) -> Unit = { _, _ -> },
     highlightEpisodeKey: String? = null,
+    // Slovo 2026-10-13 — dítě offline vidí jen stažené díly (parita s RSS / YouTube).
+    onlyDownloaded: Boolean = false,
     modifier: Modifier = Modifier,
     viewModel: CtvProgramViewModel = hiltViewModel(),
     bookViewModel: SeriesBookViewModel = hiltViewModel(),
@@ -132,11 +134,14 @@ fun CtvProgramScreen(
     }
     val ruleDraft = remember { mutableStateOf<SeriesRuleDraft?>(null) }
     val openBookSlug = rememberSaveable { mutableStateOf<String?>(null) }
-    val filteredEpisodes = remember(state.episodes, seriesFilter, seriesTitleOf) {
-        if (seriesFilter == null) state.episodes
+    val offlineStates by bookViewModel.offlineStates.collectAsStateWithLifecycle()
+    val filteredEpisodes = remember(state.episodes, seriesFilter, seriesTitleOf, onlyDownloaded, offlineStates) {
+        val inSeries = if (seriesFilter == null) state.episodes
         else state.episodes.filter {
             seriesTitleOf(it)?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
         }
+        if (!onlyDownloaded) inSeries
+        else inSeries.filter { offlineStates[viewModel.episodeKey(it)]?.status == com.github.jankoran90.showlyfin.data.offline.OfflineStatus.DOWNLOADED }
     }
     val shelfItems = remember(filteredEpisodes, seriesFilter, seriesTitleOf) {
         if (seriesFilter != null) null
