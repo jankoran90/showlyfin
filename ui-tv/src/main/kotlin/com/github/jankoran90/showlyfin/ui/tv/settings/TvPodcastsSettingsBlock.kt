@@ -24,8 +24,17 @@ fun TvPodcastsSettingsBlock() {
     var ytOffer by remember { mutableStateOf(PodcastPrefs.searchYoutubeOffered(prefs)) }
     var layout by remember { mutableStateOf(PodcastPrefs.tvLayout(prefs)) }
     var nextUp by remember { mutableStateOf(PodcastPrefs.inFilmotekaNextUp(prefs)) }
+    var scope by remember { mutableStateOf(PodcastPrefs.sourcesScope(prefs)) }
 
     TvSettingsBlock(title = "Pořady") {
+        TvOptionStepperRow(
+            label = "Zdroje ze Slova",
+            subtitle = "Celá rodina = i kanály přidané jiným profilem Slova (děti vždy jen schválené)",
+            options = PodcastPrefs.SOURCES_SCOPES,
+            selected = scope,
+            labelOf = { if (it == "all") "Celá rodina" else "Jen moje a sdílené" },
+            onSelect = { prefs.edit().putString(PodcastPrefs.SOURCES_SCOPE, it).apply(); scope = it },
+        )
         TvOptionStepperRow(
             label = "Rozvržení sekce",
             subtitle = "Řady (jako Domů) nebo mřížka (jako Filmotéka)",

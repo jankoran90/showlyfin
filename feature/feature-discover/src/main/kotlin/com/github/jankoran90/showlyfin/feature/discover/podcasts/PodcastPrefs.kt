@@ -24,6 +24,16 @@ object PodcastPrefs {
     /** Stránka Pořady v pageru Filmotéky telefonu (Filmotéka · Pořady · K přehrání). */
     const val PAGE_IN_FILMOTEKA = "porady_page_in_filmoteka"
 
+    /**
+     * Které zdroje ze Slova Filmy ukazují dospělému profilu (user 2026-10-13 „co zdroje?": kanály přidané
+     * profilem Slova „Honza" chyběly). Filmy mají vlastní profily (Dospělý/Děti) jiné než Slovo, takže
+     * soukromé zdroje Slova by jinak nikdy neviděly. `all` = celá rodina (výchozí), `mine` = jen svoje + sdílené.
+     */
+    const val SOURCES_SCOPE = "porady_sources_scope"
+    val SOURCES_SCOPES = listOf("all", "mine")
+
+    fun sourcesScope(p: SharedPreferences): String = p.getString(SOURCES_SCOPE, null)?.takeIf { it in SOURCES_SCOPES } ?: "all"
+
     val PHONE_LAYOUTS = listOf("grid", "list", "channels")
     val TV_LAYOUTS = listOf("rows", "grid")
 

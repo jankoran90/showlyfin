@@ -189,7 +189,11 @@ class PodcastsViewModel @Inject constructor(
         val isKids = profile?.isAdmin == false
         return sourcesRepo.sources.value
             .filter { it.type in VIDEO_TYPES }
-            .filter { it.isVisibleTo(profile?.profileUuid, isKids, cfg.sharedSourceKeys, cfg.visibleForKidsSourceKeys) }
+            .filter {
+                // Dospělý ve Filmech vidí výchozí zdroje celé rodiny (i soukromé zdroje profilů Slova).
+                (!isKids && PodcastPrefs.sourcesScope(prefs) == "all") ||
+                    it.isVisibleTo(profile?.profileUuid, isKids, cfg.sharedSourceKeys, cfg.visibleForKidsSourceKeys)
+            }
     }
 
     private suspend fun loadVideoEpisodes(src: PodcastSource): List<SourceEpisode> =

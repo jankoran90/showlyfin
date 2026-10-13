@@ -30,6 +30,7 @@ import javax.inject.Inject
 class PodcastSourceManagerViewModel @Inject constructor(
     private val repo: PodcastSourcesRepository,
     private val profiles: ProfileRepository,
+    @param:javax.inject.Named("traktPreferences") private val prefs: android.content.SharedPreferences,
 ) : ViewModel() {
 
     enum class TypeFilter(val apiValue: String, val label: String) {
@@ -66,7 +67,8 @@ class PodcastSourceManagerViewModel @Inject constructor(
                 it.copy(
                     sources = srcs.filter { s ->
                         if (isKids) s.isVisibleTo(my, true, cfg.sharedSourceKeys, cfg.visibleForKidsSourceKeys)
-                        else s.addedBy.isNullOrBlank() || s.addedBy == my || s.key in cfg.sharedSourceKeys
+                        else PodcastPrefs.sourcesScope(prefs) == "all" ||
+                            s.addedBy.isNullOrBlank() || s.addedBy == my || s.key in cfg.sharedSourceKeys
                     },
                     kidsKeys = kidsKeys,
                     isAdult = !isKids,

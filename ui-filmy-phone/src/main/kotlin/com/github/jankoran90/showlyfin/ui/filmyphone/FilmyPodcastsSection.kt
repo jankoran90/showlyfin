@@ -26,8 +26,17 @@ fun FilmyPodcastsSection() {
     var layout by remember { mutableStateOf(PodcastPrefs.phoneLayout(prefs)) }
     var page by remember { mutableStateOf(PodcastPrefs.pageInFilmoteka(prefs)) }
     var nextUp by remember { mutableStateOf(PodcastPrefs.inFilmotekaNextUp(prefs)) }
+    var scope by remember { mutableStateOf(PodcastPrefs.sourcesScope(prefs)) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SettingChips(
+            label = "Zdroje ze Slova",
+            subtitle = "Celá rodina = i kanály a pořady, které si ve Slovu přidal jiný profil. Dětský profil vidí vždy jen schválené.",
+            options = PodcastPrefs.SOURCES_SCOPES,
+            selected = scope,
+            labelOf = { if (it == "all") "Celá rodina" else "Jen moje a sdílené" },
+            onSelect = { prefs.edit().putString(PodcastPrefs.SOURCES_SCOPE, it).apply(); scope = it },
+        )
         SettingSectionTitle("Ve Filmotéce")
         SettingSwitchRow(
             title = "Stránka Pořady",
