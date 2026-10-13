@@ -197,6 +197,19 @@ fun FilmySettingsScreen(
                     checked = settings.askRemoveAfterRating,
                     onCheckedChange = { settingsVm.setAskRemoveAfterRating(it) },
                 )
+                // AMFITEÁTR (FLM-05): proužek „Překládá se … %, zbývá ~X min" dole (sdílený vypínač s TV).
+                run {
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val p = remember { ctx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE) }
+                    var on by remember { mutableStateOf(com.github.jankoran90.showlyfin.core.ui.TranslationIndicatorPrefs.enabled(p)) }
+                    SettingSwitchRow(
+                        title = "Ukazatel AI překladů",
+                        subtitle = "Dole na obrazovce ukáže, co se právě překládá, průběh a odhad času — i když " +
+                            "zavřeš film nebo video. Průběh a dokončení hlásí i notifikace.",
+                        checked = on,
+                        onCheckedChange = { on = it; com.github.jankoran90.showlyfin.core.ui.TranslationIndicatorPrefs.set(p, it) },
+                    )
+                }
                 FilmyPlayerSection()
                 FilmyAudioSection()
             }

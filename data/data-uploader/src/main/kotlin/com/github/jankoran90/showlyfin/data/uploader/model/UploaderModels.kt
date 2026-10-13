@@ -647,3 +647,26 @@ data class RepackJob(
     val isDone: Boolean get() = status == "done"
     val isFailed: Boolean get() = status == "error" || status == "unknown"
 }
+
+/** AMFITEÁTR (FLM-05) F2 — běžící / nedávno dokončený AI překlad (server `/api/subtitles/translate/active`). */
+data class ActiveTranslation(
+    @SerializedName("job_id") val jobId: String = "",
+    @SerializedName("title") val title: String = "",
+    @SerializedName("kind") val kind: String = "",              // youtube | film
+    @SerializedName("status") val status: String = "",          // running | paused_quota | paused_manual | done | error
+    @SerializedName("ok_count") val okCount: Int = 0,
+    @SerializedName("total_chunks") val totalChunks: Int = 0,
+    @SerializedName("pct") val pct: Int = 0,
+    @SerializedName("eta_s") val etaS: Int? = null,
+    @SerializedName("started") val started: Long = 0,
+    @SerializedName("finished") val finished: Long? = null,
+    @SerializedName("error") val error: String? = null,
+) {
+    val isActive: Boolean get() = status == "running" || status == "paused_quota" || status == "paused_manual"
+}
+
+data class ActiveTranslationsResponse(@SerializedName("jobs") val jobs: List<ActiveTranslation> = emptyList())
+
+/** AMFITEÁTR F2 — které z dotazovaných položek (`yt:<id>`) už mají hotový CZ překlad (štítek CZ). */
+data class DoneTranslationsRequest(@SerializedName("ids") val ids: List<String>)
+data class DoneTranslationsResponse(@SerializedName("done") val done: List<String> = emptyList())

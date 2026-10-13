@@ -449,6 +449,9 @@ fun TvSettingsScreen(
         // ── Vzácné klenoty (LAPIDARY SHW-96) — výběr zemí sekce + řazení ──
         item { TvLapidarySettingsBlock() }
 
+        // ── Podcasty (AMFITEÁTR FLM-05) — řady sekce, kvalita videa, ukazatel překladů ──
+        item { TvPodcastsSettingsBlock() }
+
         // ── Rodičovská kontrola (COUCH SHW-88) — věkový strop objevovacích ploch dětského profilu ──
         item { TvParentalSettingsBlock() }
 
@@ -505,7 +508,7 @@ fun TvSettingsScreen(
                         subtitle = "Kam se tento profil otevře po spuštění appky",
                         options = listOf(
                             TvSection.HOME, TvSection.FILMOTEKA, TvSection.FOR_YOU,
-                            TvSection.LAPIDARY, TvSection.LIBRARY, TvSection.WANT_TO_SEE,
+                            TvSection.LAPIDARY, TvSection.LIBRARY, TvSection.WANT_TO_SEE, TvSection.PODCASTS,
                         ),
                         selected = defSection,
                         labelOf = ::tvSectionLabel,
@@ -733,5 +736,6 @@ private fun tvSectionLabel(s: TvSection): String = when (s) {
     TvSection.WANT_TO_SEE -> "Chci vidět"
     TvSection.TRAKT -> "Trakt"
     TvSection.WATCHLIST -> "Oblíbené"
+    TvSection.PODCASTS -> "Podcasty"
     TvSection.SETTINGS -> "Nastavení"
 }

@@ -295,6 +295,8 @@ private fun FilmyShellContent() {
         // takže ji umí každá karta bez zásahu do jednotlivých obrazovek.
         com.github.jankoran90.showlyfin.core.ui.LocalPlayQueueProvider provides queueBadgeVm,
     ) {
+    // AMFITEÁTR (FLM-05) F2: obal kvůli stále viditelnému proužku AI překladů (dole nad vším obsahem).
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
         val activePlayer = player
         val detailEntry = detailStack.lastOrNull()
         if (activePlayer != null) {
@@ -504,6 +506,13 @@ private fun FilmyShellContent() {
         }
         // BESPOKE F3: hvězdičkový dialog nad obsahem (spouštěč z detailu / MENU karty) — parita s TV.
         RatingDialogHost(ratingVm)
+        // V přehrávači ne — překryl by ovládání (stav překladu tam ukazuje přehrávač sám).
+        if (player == null) {
+            com.github.jankoran90.showlyfin.feature.playback.ui.PhoneTranslationIndicator(
+                modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+            )
+        }
+    }
     }
 }
 

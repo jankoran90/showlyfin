@@ -12,7 +12,7 @@ import com.github.jankoran90.showlyfin.ui.tv.TvDestination
  * Pozn.: [WATCHLIST] historicky renderuje **Oblíbené** (`TvWatchlistScreen`/`TvFavoritesViewModel`);
  * skutečný Trakt watchlist je [WANT_TO_SEE] („Chci vidět", BESPOKE F1). Enum není perzistovaný (default HOME).
  */
-enum class TvSection { HOME, FOR_YOU, FILMOTEKA, LAPIDARY, TRAKT, LIBRARY, WATCHLIST, WANT_TO_SEE, SETTINGS }
+enum class TvSection { HOME, FOR_YOU, FILMOTEKA, LAPIDARY, TRAKT, LIBRARY, WATCHLIST, WANT_TO_SEE, PODCASTS, SETTINGS }
 
 /**
  * TENFOOT (SHW-87) — back stack TV shellu drží ViewModel (ne `remember`), aby PŘEŽIL rekreaci Activity.

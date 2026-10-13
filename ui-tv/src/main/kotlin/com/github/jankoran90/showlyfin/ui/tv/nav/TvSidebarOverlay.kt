@@ -94,6 +94,7 @@ fun TvSidebarOverlay(
                         SidebarItem.TRAKT -> onSelectSection(TvSection.TRAKT)
                         SidebarItem.CHCI_VIDET -> onSelectSection(TvSection.WANT_TO_SEE)
                         SidebarItem.KNIHOVNA -> onSelectSection(TvSection.LIBRARY)
+                        SidebarItem.PODCASTY -> onSelectSection(TvSection.PODCASTS)
                         SidebarItem.OBLIBENE -> onSelectSection(TvSection.WATCHLIST)
                         SidebarItem.NASTAVENI -> onSelectSection(TvSection.SETTINGS)
                         SidebarItem.HLEDAT -> onOpenSearch()
@@ -115,5 +116,6 @@ private fun TvSection.toOverlaySidebarItem(): SidebarItem = when (this) {
     TvSection.LIBRARY -> SidebarItem.KNIHOVNA
     TvSection.WATCHLIST -> SidebarItem.OBLIBENE
     TvSection.WANT_TO_SEE -> SidebarItem.CHCI_VIDET
+    TvSection.PODCASTS -> SidebarItem.PODCASTY
     TvSection.SETTINGS -> SidebarItem.NASTAVENI
 }

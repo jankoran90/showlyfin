@@ -98,6 +98,9 @@ fun TvRailList(
     onItemClick: (HomeRowItem) -> Unit,
     modifier: Modifier = Modifier,
     onRequestEditor: ((configId: String) -> Unit)? = null,
+    // AMFITEÁTR (FLM-05): podržení OK na KONKRÉTNÍ kartě (akce s položkou, např. „Přeložit do češtiny");
+    // když je zadané, má přednost před editorem řady.
+    onItemLongClick: ((HomeRowItem) -> Unit)? = null,
     // COUCH Fáze B: drill do plné mřížky řady (dlaždice „Zobrazit vše" na konci `showAll` řad). `configId` = identita řady.
     onShowAll: ((configId: String) -> Unit)? = null,
     // CONVERGE (SHW-97) KÁNON: chipy/přepínač sekce (Mřížka↔Immersive řada, osa Filmotéky…) VEDLE názvu sekce
@@ -191,7 +194,9 @@ fun TvRailList(
                         firstCardFocus = if (rail.id == firstContentRailId) firstFocus else null,
                         onItemClick = onItemClick,
                         onItemFocused = { item -> focusedItem = item; focusedRailId = rail.id },
-                        onItemLongPress = { onRequestEditor?.invoke(rail.configId) },
+                        onItemLongPress = { item ->
+                            if (onItemLongClick != null) onItemLongClick(item) else onRequestEditor?.invoke(rail.configId)
+                        },
                         showLabel = rail.showTitles,
                         rowBringIntoViewSpec = defaultBiv,
                         onShowAll = if (rail.showAll && onShowAll != null) {
@@ -213,7 +218,7 @@ private fun RailSection(
     firstCardFocus: FocusRequester?,
     onItemClick: (HomeRowItem) -> Unit,
     onItemFocused: (HomeRowItem) -> Unit,
-    onItemLongPress: () -> Unit,
+    onItemLongPress: (HomeRowItem) -> Unit,
     showLabel: Boolean = true,
     rowBringIntoViewSpec: BringIntoViewSpec,
     onShowAll: (() -> Unit)? = null,
@@ -264,7 +269,7 @@ private fun RailSection(
                             // 1. karta nese enterFocus (cíl focusProperties.enter + initial autofokus první řady).
                             focusRequester = if (item.key == firstKey) enterFocus else null,
                             showLabel = showLabel,
-                            onLongClick = onItemLongPress,
+                            onLongClick = { onItemLongPress(item) },
                         )
                     }
                 }

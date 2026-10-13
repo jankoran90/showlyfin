@@ -42,6 +42,9 @@ enum class SidebarItem(val label: String) {
     TRAKT("Trakt"),
     CHCI_VIDET("Chci vidět"),
     KNIHOVNA("Knihovna"),
+    // AMFITEÁTR (FLM-05) — video podcasty a YouTube ze zdrojů Slova. Uložené layouty ji dostanou na konec
+    // (HomeLayoutStore doplní chybějící DEFAULT položky), přesunout jde jako ostatní.
+    PODCASTY("Podcasty"),
     OBLIBENE("Oblíbené"),
     HLEDAT("Hledat"),
     NASTAVENI("Nastavení"),
@@ -60,6 +63,7 @@ enum class SidebarItem(val label: String) {
             SidebarEntry(TRAKT.name, enabled = true),
             SidebarEntry(CHCI_VIDET.name, enabled = true),
             SidebarEntry(KNIHOVNA.name, enabled = true),
+            SidebarEntry(PODCASTY.name, enabled = true),
             SidebarEntry(OBLIBENE.name, enabled = false),
             SidebarEntry(HLEDAT.name, enabled = true),
             SidebarEntry(NASTAVENI.name, enabled = true),

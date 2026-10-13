@@ -57,6 +57,9 @@ fun TvShell(
     onOpenLibrary: (libraryId: String, libraryName: String, collectionType: String?) -> Unit,
     // FOYER (SHW-107): „Zobrazit vše" u řady domova bez vlastní sekce → plná mřížka řady (drill).
     onOpenRowAll: (configId: String, title: String) -> Unit = { _, _ -> },
+    // AMFITEÁTR (FLM-05): sekce Podcasty — otevření kanálu a přehrání dílu (dispatch řeší TvNavigator).
+    onOpenPodcastSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit = {},
+    onPlayPodcast: (com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget) -> Unit = {},
     // FOYER: karta kolekce (Jellyfin BoxSet) → mřížka obsahu kolekce.
     onOpenCollection: (collectionId: String, name: String) -> Unit = { _, _ -> },
     homeVm: TvHomeViewModel = hiltViewModel(),
@@ -146,6 +149,7 @@ fun TvShell(
                         SidebarItem.TRAKT -> onSelectSection(TvSection.TRAKT)
                         SidebarItem.CHCI_VIDET -> onSelectSection(TvSection.WANT_TO_SEE)
                         SidebarItem.KNIHOVNA -> onSelectSection(TvSection.LIBRARY)
+                        SidebarItem.PODCASTY -> onSelectSection(TvSection.PODCASTS)
                         SidebarItem.OBLIBENE -> onSelectSection(TvSection.WATCHLIST)
                         SidebarItem.NASTAVENI -> onSelectSection(TvSection.SETTINGS)
                         SidebarItem.HLEDAT -> onOpenSearch()
@@ -213,6 +217,13 @@ fun TvShell(
                         immersive = immersive,
                         onFocusItem = { rawInfo = it },
                     )
+                    TvSection.PODCASTS -> com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsScreen(
+                        onOpenSource = onOpenPodcastSource,
+                        onPlay = onPlayPodcast,
+                        immersive = immersive,
+                        immersiveHeader = immersiveHeader,
+                        onFocusItem = { rawInfo = it },
+                    )
                     TvSection.SETTINGS -> TvSettingsScreen(onBack = { onSelectSection(TvSection.HOME) })
                 }
             }
@@ -237,6 +248,7 @@ private fun TvSection.toSidebarItem(): SidebarItem = when (this) {
     TvSection.LIBRARY -> SidebarItem.KNIHOVNA
     TvSection.WATCHLIST -> SidebarItem.OBLIBENE
     TvSection.WANT_TO_SEE -> SidebarItem.CHCI_VIDET
+    TvSection.PODCASTS -> SidebarItem.PODCASTY
     TvSection.SETTINGS -> SidebarItem.NASTAVENI
 }
 

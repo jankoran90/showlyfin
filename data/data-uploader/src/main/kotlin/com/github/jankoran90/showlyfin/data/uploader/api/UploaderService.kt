@@ -77,6 +77,8 @@ interface UploaderService {
     // Plan LINGUA Fáze 2 — async AI překlad EN→CS (start + poll status)
     @POST suspend fun startSubtitleTranslate(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
     @GET suspend fun getSubtitleTranslateStatus(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
+    @GET suspend fun getActiveTranslations(@Url url: String, @Header("Cookie") cookie: String): com.github.jankoran90.showlyfin.data.uploader.model.ActiveTranslationsResponse
+    @POST suspend fun getDoneTranslations(@Url url: String, @Header("Cookie") cookie: String, @retrofit2.http.Body body: com.github.jankoran90.showlyfin.data.uploader.model.DoneTranslationsRequest): com.github.jankoran90.showlyfin.data.uploader.model.DoneTranslationsResponse
     // PROGRESSIVE (2026-09-16) — pokračování rozděleného LINGUA-YT jobu (2. půlka), viz UploaderRemoteDataSource
     @POST suspend fun continueSubtitleTranslate(@Url url: String, @Header("Cookie") cookie: String): SubtitleTranslateJob
     // Ruční pauza LINGUA-YT vln (user 2026-09-17), viz UploaderRemoteDataSource

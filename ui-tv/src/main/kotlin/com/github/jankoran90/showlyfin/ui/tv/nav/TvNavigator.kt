@@ -67,6 +67,25 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         }
     }
     fun back() { sidebarOverlay = false; navVm.back() }
+
+    /** AMFITEÁTR (FLM-05): díl podcastu → přehrávač (YouTube / Jellyfin video) nebo karta pořadu ČT. */
+    fun playPodcast(target: com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget) {
+        when (target) {
+            is com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget.External -> navigate(
+                TvDestination.Player(
+                    externalUrl = target.url,
+                    externalTitle = target.title,
+                    externalPosterUrl = target.posterUrl,
+                    subtitleQuery = target.subtitleQuery,
+                    resumeKey = target.resumeKey,
+                ),
+            )
+            is com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget.Jellyfin ->
+                navigate(TvDestination.Player(itemId = target.itemId))
+            is com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget.CtvProgram ->
+                navigate(TvDestination.CtvTitleDest(target.title))
+        }
+    }
     fun openSidebarOverlay() { sidebarOverlay = true }
     fun selectSectionAndHome(section: TvSection) { navVm.selectSection(section); navVm.goHome(); sidebarOverlay = false }
 
@@ -122,6 +141,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
 
     BackHandler(enabled = navVm.canGoBack) { back() }
 
+    // AMFITEÁTR (FLM-05) F2: ukazatel AI překladů nad VŠEMI destinacemi (i přehrávačem) — viz TvTranslationIndicator.
+    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
     when (val dest = current) {
         TvDestination.Home -> TvShell(
             section = navVm.section,
@@ -140,6 +161,24 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             onOpenCollection = { id, name ->
                 navigate(TvDestination.LibraryItems(id, name, collectionType = null, parentItemType = "BOX_SET"))
             },
+            onOpenPodcastSource = { source ->
+                // ČT pořad má vlastní kartu (série, zhlédnuté díly); kanál YouTube / video podcast = seznam dílů.
+                if (source.type == "ctv") {
+                    navigate(TvDestination.CtvTitleDest(
+                        com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle(
+                            sidp = source.ref, type = "series", title = source.title, thumbnail = source.thumbnail,
+                        ),
+                    ))
+                } else {
+                    navigate(TvDestination.PodcastSourceDest(source))
+                }
+            },
+            onPlayPodcast = { target -> playPodcast(target) },
+        )
+
+        is TvDestination.PodcastSourceDest -> com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastSourceScreen(
+            source = dest.source,
+            onPlay = { target -> playPodcast(target) },
         )
 
         TvDestination.Search -> TvSearchScreen(
@@ -288,5 +327,9 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             resumeKey = dest.resumeKey,
             onBack = { back() },
         )
+    }
+    com.github.jankoran90.showlyfin.ui.tv.components.TvTranslationIndicator(
+        modifier = androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopEnd),
+    )
     }
 }

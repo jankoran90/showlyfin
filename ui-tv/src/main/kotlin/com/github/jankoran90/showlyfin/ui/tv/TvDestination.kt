@@ -72,4 +72,7 @@ sealed interface TvDestination {
      * ČT titul nemá TMDB identitu, na které stojí [Detail].
      */
     data class CtvTitleDest(val title: CtvTitle) : TvDestination
+
+    /** AMFITEÁTR (FLM-05) — kanál YouTube / video podcast ze zdrojů Slova (seznam dílů). */
+    data class PodcastSourceDest(val source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) : TvDestination
 }

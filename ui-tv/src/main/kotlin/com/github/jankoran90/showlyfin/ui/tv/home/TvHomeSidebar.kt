@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Recommend
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -248,6 +249,7 @@ private fun SidebarItem.icon(): ImageVector = when (this) {
     SidebarItem.TRAKT -> Icons.Filled.Recommend
     SidebarItem.CHCI_VIDET -> Icons.Filled.Bookmarks
     SidebarItem.KNIHOVNA -> Icons.Filled.VideoLibrary
+    SidebarItem.PODCASTY -> Icons.Filled.Podcasts
     SidebarItem.OBLIBENE -> Icons.Filled.Favorite
     SidebarItem.HLEDAT -> Icons.Filled.Search
     SidebarItem.NASTAVENI -> Icons.Filled.Settings

@@ -51,7 +51,8 @@ object UploaderModule {
     @Singleton
     fun providesUploaderRemoteDataSource(
         @Named("retrofitUploader") retrofit: Retrofit,
-    ): UploaderRemoteDataSource = UploaderApi(retrofit.create(UploaderService::class.java))
+        aiSubtitles: com.github.jankoran90.showlyfin.data.uploader.subtitle.AiSubtitleLocalStore,
+    ): UploaderRemoteDataSource = UploaderApi(retrofit.create(UploaderService::class.java), aiSubtitles)
 
     /** DROPSHIP F2 — Retrofit interface pro přímé injektování (AudiobookUploadRepository). */
     @Provides

@@ -177,10 +177,16 @@ interface UploaderRemoteDataSource {
         baseUrl: String, sessionCookie: String, imdbId: String,
         season: Int? = null, episode: Int? = null, progressive: Boolean = false,
         model: String? = null, quotaLimit: Float? = null,
+        // AMFITEÁTR F2: název do přehledu běžících překladů (ukazatel v appkách, notifikace).
+        title: String? = null,
     ): SubtitleTranslateJob
     suspend fun getSubtitleTranslateStatus(
         baseUrl: String, sessionCookie: String, jobId: String,
     ): SubtitleTranslateJob
+    /** AMFITEÁTR F2 — běžící a nedávno dokončené AI překlady (stále viditelný ukazatel). */
+    suspend fun getActiveTranslations(baseUrl: String, sessionCookie: String): List<com.github.jankoran90.showlyfin.data.uploader.model.ActiveTranslation>
+    /** AMFITEÁTR F2 — které `yt:<id>` / `tt…` už mají hotový CZ překlad (štítek CZ na kartách). */
+    suspend fun getDoneTranslations(baseUrl: String, sessionCookie: String, ids: List<String>): Set<String>
     // confirm (VLNY, 2026-09-18): uživatel odsouhlasil pokračování i přes kvótové varování —
     // přeloží JEDNU další vlnu bez ohledu na limit, pak se brzda vrátí pro vlny další.
     suspend fun continueSubtitleTranslate(

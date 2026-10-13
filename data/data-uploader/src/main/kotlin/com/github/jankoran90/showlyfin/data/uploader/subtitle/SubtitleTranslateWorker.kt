@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -21,6 +22,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.delay
+import java.util.concurrent.TimeUnit
 import timber.log.Timber
 
 /**
@@ -63,7 +65,14 @@ class SubtitleTranslateWorker(
             // VM co job odstartoval).
             key = inputData.getString(K_KEY).orEmpty()
             if (key.isBlank()) return Result.failure()
-            started = runCatching { ds.continueSubtitleTranslate(base, cookie, continueJobId, confirm = true) }
+            // AMFITEÁTR F2 (Codex review): opakovaný běh (retry po RUN_BUDGET_MS) NESMÍ znovu volat
+            // /continue — úloha už běží nebo mezitím doběhla (server by vrátil 400 a hotový překlad by
+            // se zapsal jako chyba). Nejdřív stav; /continue jen při prvním běhu nebo když stav nic neví.
+            val resumed = if (runAttemptCount > 0) {
+                runCatching { ds.getSubtitleTranslateStatus(base, cookie, continueJobId) }.getOrNull()
+                    ?.takeIf { it.status == "running" || it.status == "done" }
+            } else null
+            started = resumed ?: runCatching { ds.continueSubtitleTranslate(base, cookie, continueJobId, confirm = true) }
                 .getOrElse { e ->
                     Timber.w(e, "[Lingua] pokračování překladu selhalo job=$continueJobId")
                     // 🔴 BUG (2026-09-18, živě nalezeno): job dict na serveru nepřežije restart —
@@ -87,7 +96,7 @@ class SubtitleTranslateWorker(
             if (imdb.isBlank()) return Result.failure()
             key = store.keyOf(imdb, season, episode)
             store.setRunning(key)
-            started = runCatching { ds.startSubtitleTranslate(base, cookie, imdb, season, episode, progressive, model, quotaLimit) }
+            started = runCatching { ds.startSubtitleTranslate(base, cookie, imdb, season, episode, progressive, model, quotaLimit, title) }
                 .getOrElse { e ->
                     Timber.w(e, "[Lingua] start překladu na pozadí selhal imdb=$imdb")
                     store.setError(key, e.message ?: "Překlad se nepodařilo spustit")
@@ -109,16 +118,29 @@ class SubtitleTranslateWorker(
                 manual = status == "paused_manual", ok = started.okCount, total = started.totalChunks,
                 translatedUntilS = started.translatedUntilS)
             Timber.i("[Lingua] pauza (${status}, čeká na potvrzení) → $subId")
+            notifyPaused(ctx, title, manual = status == "paused_manual")
             return Result.success()
         }
 
         if (status == "running") {
             store.updateRunningProgress(key, subId.ifBlank { null }, started.okCount, started.totalChunks,
                 started.quotaPct, started.avgWavePct, started.translatedUntilS)
+            notifyProgress(ctx, title, jobId, started.okCount, started.totalChunks)
         }
 
+        // AMFITEÁTR F2 (2026-10-13): dřív strop 10 min → dlouhé video skončilo hláškou „trvá déle než
+        // obvykle", ač server překládal dál. Worker smí běžet ~10 min, proto po [RUN_BUDGET_MS] vrátí
+        // `retry()` — WorkManager ho za chvíli pustí znovu, start na serveru je idempotentní (vrátí
+        // běžící úlohu) a pokračuje se v pollování. Strop celku = [MAX_ATTEMPTS] běhů (~6 h).
         var waitedMs = 0L
-        while (status == "running" && jobId.isNotBlank() && waitedMs < MAX_WAIT_MS) {
+        while (status == "running" && jobId.isNotBlank()) {
+            if (waitedMs >= RUN_BUDGET_MS) {
+                if (runAttemptCount + 1 < MAX_ATTEMPTS) {
+                    Timber.i("[Lingua] překlad běží dál, worker se znovu naplánuje (běh ${runAttemptCount + 1}) job=$jobId")
+                    return Result.retry()
+                }
+                break
+            }
             delay(POLL_MS)
             waitedMs += POLL_MS
             val s = runCatching { ds.getSubtitleTranslateStatus(base, cookie, jobId) }.getOrNull() ?: continue
@@ -128,6 +150,7 @@ class SubtitleTranslateWorker(
                     manual = status == "paused_manual", ok = s.okCount, total = s.totalChunks,
                     translatedUntilS = s.translatedUntilS)
                 Timber.i("[Lingua] pauza (${status}, čeká na potvrzení) → $subId")
+                notifyPaused(ctx, title, manual = status == "paused_manual")
                 return Result.success()
             }
             // VLNY: server ukládá po každé dávce, i za "running" — jakmile má subId (aspoň 1 dávka
@@ -136,8 +159,10 @@ class SubtitleTranslateWorker(
             if (status == "running") {
                 store.updateRunningProgress(key, subId.ifBlank { null }, s.okCount, s.totalChunks,
                     s.quotaPct, s.avgWavePct, s.translatedUntilS)
+                notifyProgress(ctx, title, jobId, s.okCount, s.totalChunks)
             }
         }
+        clearProgressStart(ctx, jobId)
 
         return if (status == "done" && subId.isNotBlank()) {
             store.markDone(key, subId)
@@ -153,6 +178,70 @@ class SubtitleTranslateWorker(
             Result.success()
         }
     }
+
+    /**
+     * AMFITEÁTR F2 — průběžná notifikace „Překládám … 45 % · zbývá ~3 min" (user 2026-10-13: „v telefonu
+     * … plus notifikace o průběhu a dokončení"). Stejné id jako výsledná → dokončení ji nahradí.
+     * ETA z tempa od prvního pozorování úlohy (uloženo mimo worker, přežije retry).
+     */
+    private fun notifyProgress(ctx: Context, title: String, jobId: String, ok: Int, total: Int) {
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        ensureChannel(nm)
+        val pct = if (total > 0) ok * 100 / total else 0
+        val prefs = ctx.getSharedPreferences(PROGRESS_PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (!prefs.contains("${jobId}_t0")) prefs.edit().putLong("${jobId}_t0", now).putInt("${jobId}_ok0", ok).apply()
+        val t0 = prefs.getLong("${jobId}_t0", now)
+        val ok0 = prefs.getInt("${jobId}_ok0", ok)
+        val etaS = if (ok > ok0 && total > ok) ((now - t0) / 1000L * (total - ok) / (ok - ok0)).toInt() else null
+        val text = listOfNotNull(if (total > 0) "$pct %" else "spouštím…", etaLabel(etaS)).joinToString(" · ")
+        val notification = NotificationCompat.Builder(ctx, CHANNEL_ID)
+            .setSmallIcon(ctx.applicationInfo.icon)
+            .setContentTitle("Překládám titulky: ${title.ifBlank { "video" }}")
+            .setContentText(text)
+            .setProgress(total.coerceAtLeast(0), ok.coerceAtLeast(0), total <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .apply { launchIntent(ctx)?.let { setContentIntent(it) } }
+            .build()
+        runCatching { nm.notify(NOTIF_BASE_ID + (title.hashCode() and 0xffff), notification) }
+    }
+
+    /** Pauza (kvóta / ručně) = klidový stav → průběžnou notifikaci nahraď nepřetrvávající zprávou. */
+    private fun notifyPaused(ctx: Context, title: String, manual: Boolean) {
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        ensureChannel(nm)
+        val notification = NotificationCompat.Builder(ctx, CHANNEL_ID)
+            .setSmallIcon(ctx.applicationInfo.icon)
+            .setContentTitle("Překlad titulků pozastaven")
+            .setContentText("${title.ifBlank { "video" }} — " +
+                if (manual) "pokračuj v přehrávači" else "kvóta je vysoko, pokračování potvrď v přehrávači")
+            .setAutoCancel(true)
+            .apply { launchIntent(ctx)?.let { setContentIntent(it) } }
+            .build()
+        runCatching { nm.notify(NOTIF_BASE_ID + (title.hashCode() and 0xffff), notification) }
+    }
+
+    private fun clearProgressStart(ctx: Context, jobId: String) {
+        ctx.getSharedPreferences(PROGRESS_PREFS, Context.MODE_PRIVATE).edit()
+            .remove("${jobId}_t0").remove("${jobId}_ok0").apply()
+    }
+
+    private fun ensureChannel(nm: NotificationManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm.getNotificationChannel(CHANNEL_ID) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "Titulky", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "Průběh a dokončení AI překladu titulků do češtiny"
+                },
+            )
+        }
+    }
+
+    private fun launchIntent(ctx: Context): PendingIntent? =
+        ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let {
+            PendingIntent.getActivity(ctx, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
 
     private fun notify(ctx: Context, title: String, ok: Boolean) {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -188,7 +277,9 @@ class SubtitleTranslateWorker(
         private const val CHANNEL_ID = "showlyfin_subtitles"
         private const val NOTIF_BASE_ID = 4720
         private const val POLL_MS = 3000L
-        private const val MAX_WAIT_MS = 600_000L  // 10 min strop (pak je výsledek v cache, stačí znovu)
+        private const val RUN_BUDGET_MS = 510_000L  // ~8,5 min na jeden běh (WorkManager pustí worker max ~10 min)
+        private const val MAX_ATTEMPTS = 40         // ~6 h celkem, pak „trvá déle než obvykle"
+        private const val PROGRESS_PREFS = "lingua_worker_progress"
 
         private const val K_BASE = "base"
         private const val K_COOKIE = "cookie"
@@ -232,6 +323,7 @@ class SubtitleTranslateWorker(
                 .setConstraints(
                     Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
                 )
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS)
                 .setInputData(data)
                 .build()
             val workName = "lingua_translate_" +
@@ -261,6 +353,7 @@ class SubtitleTranslateWorker(
                 .setConstraints(
                     Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
                 )
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS)
                 .setInputData(data)
                 .build()
             WorkManager.getInstance(context)

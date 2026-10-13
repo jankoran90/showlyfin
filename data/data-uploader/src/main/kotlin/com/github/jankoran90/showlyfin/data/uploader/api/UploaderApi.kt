@@ -15,6 +15,8 @@ import java.net.URLEncoder
 
 internal class UploaderApi(
     private val service: UploaderService,
+    // AMFITEÁTR F2: kopie AI překladů v zařízení (dvojí uložení se serverem, offline záloha).
+    private val aiSubtitles: com.github.jankoran90.showlyfin.data.uploader.subtitle.AiSubtitleLocalStore? = null,
 ) : UploaderRemoteDataSource {
 
     override suspend fun getStreams(baseUrl: String, sessionCookie: String, mediaType: String, imdbId: String, season: Int?, episode: Int?, strict: Boolean?, link: String?, wideLastResort: Boolean?): List<UploaderStream> {
@@ -906,8 +908,20 @@ internal class UploaderApi(
         }
         var url = "$base/api/subtitles/download/$titulkyId"
         if (params.isNotEmpty()) url += "?" + params.joinToString("&")
-        val resp = service.downloadSubtitle(url, cookie)
-        if (!resp.isSuccessful) throw HttpException(resp)
+        val isAi = titulkyId.startsWith("ai_")
+        val resp = try {
+            service.downloadSubtitle(url, cookie)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Server nedostupný → AI překlad z kopie v zařízení (když ji máme), jinak původní chyba.
+            if (isAi) aiSubtitles?.read(titulkyId)?.let { return SubtitleDownload(bytes = it, lastTsSec = 0, runtimeOk = "-", syncInfo = null) }
+            throw e
+        }
+        if (!resp.isSuccessful) {
+            if (isAi) aiSubtitles?.read(titulkyId)?.let { return SubtitleDownload(bytes = it, lastTsSec = 0, runtimeOk = "-", syncInfo = null) }
+            throw HttpException(resp)
+        }
         val body = resp.body() ?: throw IllegalStateException("Stažení titulků nevrátilo data")
         val lastTs = resp.headers()["X-Sub-LastTs"]?.toIntOrNull() ?: 0
         val runtimeOk = resp.headers()["X-Sub-RuntimeOk"] ?: "-"
@@ -919,13 +933,36 @@ internal class UploaderApi(
         // s plným tělem (ověřeno curlem přes veřejnou HTTPS cestu). Proto to selhávalo i na JEDINÉ
         // kliknutí a u každého filmu. *Tělo @Streaming odpovědi se NIKDY nesmí číst na hlavním vlákně.*
         // (Malé titulky mohly projít, když se vešly do už načteného bufferu — odtud „někdy to šlo".)
-        val bytes = withContext(Dispatchers.IO) { body.bytes() }
+        val bytes = try {
+            withContext(Dispatchers.IO) { body.bytes() }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Spojení se přerušilo až při čtení těla → u AI překladu kopie v zařízení (Codex review).
+            if (isAi) aiSubtitles?.read(titulkyId)?.let { return SubtitleDownload(bytes = it, lastTsSec = 0, runtimeOk = "-", syncInfo = null) }
+            throw e
+        }
+        if (isAi) aiSubtitles?.save(titulkyId, bytes)
         return SubtitleDownload(bytes = bytes, lastTsSec = lastTs, runtimeOk = runtimeOk, syncInfo = syncInfo)
+    }
+
+    override suspend fun getActiveTranslations(baseUrl: String, sessionCookie: String): List<com.github.jankoran90.showlyfin.data.uploader.model.ActiveTranslation> {
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.getActiveTranslations("${baseUrl.trimEnd('/')}/api/subtitles/translate/active", cookie).jobs
+    }
+
+    override suspend fun getDoneTranslations(baseUrl: String, sessionCookie: String, ids: List<String>): Set<String> {
+        if (ids.isEmpty()) return emptySet()
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        return service.getDoneTranslations(
+            "${baseUrl.trimEnd('/')}/api/subtitles/ai-hotove", cookie,
+            com.github.jankoran90.showlyfin.data.uploader.model.DoneTranslationsRequest(ids),
+        ).done.toSet()
     }
 
     override suspend fun startSubtitleTranslate(
         baseUrl: String, sessionCookie: String, imdbId: String, season: Int?, episode: Int?,
-        progressive: Boolean, model: String?, quotaLimit: Float?,
+        progressive: Boolean, model: String?, quotaLimit: Float?, title: String?,
     ): SubtitleTranslateJob {
         val base = baseUrl.trimEnd('/')
         val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
@@ -933,6 +970,7 @@ internal class UploaderApi(
             if (season != null && episode != null) { add("season=$season"); add("episode=$episode") }
             if (progressive) add("progressive=1")
             if (!model.isNullOrBlank()) add("model=" + java.net.URLEncoder.encode(model, "UTF-8"))
+            if (!title.isNullOrBlank()) add("title=" + java.net.URLEncoder.encode(title.take(200), "UTF-8"))
             if (quotaLimit != null) add("quota_limit=$quotaLimit")
         }
         var url = "$base/api/subtitles/translate/$imdbId"
