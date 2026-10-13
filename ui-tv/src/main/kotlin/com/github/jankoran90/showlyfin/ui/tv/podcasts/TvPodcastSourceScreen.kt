@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.github.jankoran90.showlyfin.core.ui.tvFocusBorder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -17,24 +18,42 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.jankoran90.showlyfin.core.domain.home.HomeCardStyle
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastItemKey
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.episodeItem
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.sourceTypeLabel
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRail
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
 
 /**
  * AMFITEÁTR (FLM-05) F1 — kanál YouTube / video podcast: řada „Pokračovat" (rozkoukané v tomto kanálu)
- * + „Díly" (nejnovější první). Data drží sdílený [TvPodcastsViewModel] sekce (activity scope) —
+ * + „Díly" (nejnovější první). Data drží sdílený [PodcastsViewModel] sekce (activity scope) —
  * kanál se otevírá ze sekce, takže díly už jsou načtené a obrazovka naskočí bez čekání.
  */
 @Composable
 fun TvPodcastSourceScreen(
     source: PodcastSource,
-    onPlay: (TvPodcastsViewModel.PlayTarget) -> Unit,
+    onPlay: (PodcastsViewModel.PlayTarget) -> Unit,
     modifier: Modifier = Modifier,
-    vm: TvPodcastsViewModel = hiltViewModel(),
+    vm: PodcastsViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val marks by vm.marks.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.onEnter() }
+    // Kanál z hledání na YouTube (nesledovaný) → díly zvlášť + nabídka „Sledovat" (1.2.129).
+    androidx.compose.runtime.LaunchedEffect(source.key, state.sources, state.loading) { if (!state.loading) vm.openExternal(source) }
+    val followed = state.sources.any { it.key == source.key }
+    var following by remember { mutableStateOf(false) }
+    val followAction: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? =
+        if (!followed && !state.loading && vm.canFollow()) {
+            {
+                androidx.compose.material3.Button(
+                    onClick = { following = true; vm.follow(source) { following = false } },
+                    enabled = !following,
+                    modifier = Modifier.tvFocusBorder(),
+                ) { Text(if (following) "Přidávám…" else "Sledovat") }
+            }
+        } else null
     val translated by vm.translated.collectAsStateWithLifecycle()
     val translating by vm.translating.collectAsStateWithLifecycle()
     var confirmFor by remember { mutableStateOf<com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode?>(null) }
@@ -74,7 +93,7 @@ fun TvPodcastSourceScreen(
         Column(modifier.fillMaxSize().tvOverscan(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
             Text(
-                if (state.loading) "Načítám díly…" else "Tenhle kanál zatím nemá žádné díly s videem.",
+                if (state.loading || source.key in state.loadingSources) "Načítám díly…" else "Tenhle kanál zatím nemá žádné díly s videem.",
                 style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -87,6 +106,7 @@ fun TvPodcastSourceScreen(
         immersive = false,
         immersiveHeader = false,
         onFocusItem = {},
+        sectionActions = followAction,
         onItemClick = { item ->
             val ref = PodcastItemKey.parse(item.key) as? PodcastItemKey.Episode ?: return@TvRailList
             val ep = vm.episodeOf(ref.sourceKey, ref.episodeId) ?: return@TvRailList

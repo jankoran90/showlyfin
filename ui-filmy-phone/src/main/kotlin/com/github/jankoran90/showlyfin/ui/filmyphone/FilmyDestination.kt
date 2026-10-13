@@ -15,6 +15,7 @@ import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MovieFilter
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Recommend
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SettingsRemote
@@ -46,6 +47,8 @@ enum class FilmySection(val label: String, val icon: ImageVector) {
     // SEZONA-DÁVKA (user 2026-08-21: „udelej mi sekci stazeno") — offline filmy/epizody v telefonu.
     DOWNLOADS("Stažené", Icons.Rounded.Download),
     SEARCH("Hledat", Icons.Rounded.Search),
+    // AMFITEÁTR (FLM-05) F4, user 2026-10-13 „odmakej to i pro telefon": YouTube, video podcasty, ČT ze zdrojů Slova.
+    PODCASTY("Podcasty", Icons.Rounded.Podcasts),
     // PROVOZ (SHW-114): co se právě hraje, jak to jede, stav zdrojů. Jen telefon (zadání usera).
     OPS("Provoz", Icons.Rounded.MonitorHeart),
     // MAESTRO (SHW-27) — portováno z yellyfinu 2026-09-08 (user: "na ovladac ano dotahni to na filmy").
@@ -94,7 +97,7 @@ object FilmyShellPrefs {
                 FilmySection.FILMOTEKA, FilmySection.HOME, FilmySection.WANT_TO_SEE,
                 FilmySection.HISTORY, FilmySection.FOR_YOU, FilmySection.NOVINKY,
                 FilmySection.MUZA, FilmySection.TVURCI, FilmySection.REFERENCE,
-                FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
+                FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.PODCASTY, FilmySection.OPS,
                 FilmySection.OVLADAC,
             )
         else
@@ -102,7 +105,7 @@ object FilmyShellPrefs {
                 FilmySection.HOME, FilmySection.WANT_TO_SEE, FilmySection.HISTORY,
                 FilmySection.FOR_YOU, FilmySection.NOVINKY, FilmySection.MUZA, FilmySection.TVURCI,
                 FilmySection.REFERENCE, FilmySection.FILMOTEKA,
-                FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.OPS,
+                FilmySection.GEMS, FilmySection.DOWNLOADS, FilmySection.SEARCH, FilmySection.PODCASTY, FilmySection.OPS,
                 FilmySection.OVLADAC,
             )
 }

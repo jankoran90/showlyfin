@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -78,9 +79,10 @@ fun FilmyKatalogStrankaScreen(
         snapshotFlow { blizkoKonce }.collect { if (it) vm.nactiDalsi() }
     }
 
-    Column(modifier.fillMaxSize()) {
+    // Stránka leží mimo Scaffold sekcí → odsazení pod stavový řádek si řeší sama.
+    Column(modifier.fillMaxSize().statusBarsPadding()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět") }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět", tint = MaterialTheme.colorScheme.onBackground) }
             Column(Modifier.weight(1f)) {
                 s.rodic?.let { (id, label) ->
                     Text(

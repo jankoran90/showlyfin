@@ -1022,6 +1022,12 @@ internal class UploaderApi(
         return service.getYtFeed("$base/api/yt/search?channel=$ch&q=$q&limit=$limit", cookie)
     }
 
+    override suspend fun searchYoutubeGlobal(baseUrl: String, sessionCookie: String, query: String): com.github.jankoran90.showlyfin.data.uploader.model.YtGlobalSearch {
+        val cookie = if (sessionCookie.isNotBlank()) "session=$sessionCookie" else ""
+        val q = URLEncoder.encode(query, "UTF-8")
+        return service.searchYoutubeGlobal("${baseUrl.trimEnd('/')}/api/yt/global_search?q=$q", cookie)
+    }
+
     // BUG (2026-09-04) — metadata JEDNOHO videa mimo normální feed okno (proxy antenna /yt_video_info).
     override suspend fun getYtVideoInfo(baseUrl: String, sessionCookie: String, videoId: String): YtEpisode {
         val base = baseUrl.trimEnd('/')

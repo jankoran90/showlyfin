@@ -8,10 +8,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -39,6 +42,33 @@ class ActiveTranslationsRepository @Inject constructor(
         }
     }.stateIn(scope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Úlohy, které user zavřel klepnutím (jen do zabití appky). */
+    private val dismissed = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Pro ukazatele: běžící + nedávno skončené (hotovo/chyba ještě [DONE_VISIBLE_S]), bez zavřených.
+     * BUG 1.2.128 (proužek „Přeloženo…" visel pořád): stáří se filtrovalo jen při recompozici a StateFlow
+     * stejný seznam znovu nevyšle → filtr žije tady a tikač ho přepočítává i bez nových dat ze serveru.
+     */
+    val visible: StateFlow<List<ActiveTranslation>> = combine(jobs, dismissed, ticker()) { list, gone, nowS ->
+        list.filter { it.jobId !in gone && (it.isActive || isRecentlyFinished(it, nowS)) }
+    }.stateIn(scope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun dismiss(jobId: String) = dismissed.update { it + jobId }
+
+    private fun ticker() = flow {
+        while (true) {
+            emit(System.currentTimeMillis() / 1000)
+            delay(TICK_MS)
+        }
+    }
+
+    private fun isRecentlyFinished(job: ActiveTranslation, nowS: Long): Boolean {
+        if (job.status != "done" && job.status != "error") return false
+        val finished = job.finished ?: return false
+        return nowS - finished < DONE_VISIBLE_S
+    }
+
     private suspend fun fetch(): List<ActiveTranslation>? {
         val base = prefs.getString("uploader_base_url", "").orEmpty()
         if (base.isBlank()) return null
@@ -56,6 +86,8 @@ class ActiveTranslationsRepository @Inject constructor(
     private companion object {
         const val POLL_ACTIVE_MS = 4_000L
         const val POLL_IDLE_MS = 20_000L
+        const val TICK_MS = 10_000L
+        const val DONE_VISIBLE_S = 120L
     }
 }
 

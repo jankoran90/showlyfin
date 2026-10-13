@@ -1,18 +1,20 @@
-package com.github.jankoran90.showlyfin.ui.tv.podcasts
+package com.github.jankoran90.showlyfin.feature.discover.podcasts
 
 import android.content.SharedPreferences
 
 /**
- * AMFITEÁTR (FLM-05) F3 — volby sekce Podcasty na TV (blok „Podcasty" v Nastavení). Prefs `trakt_prefs`
+ * AMFITEÁTR (FLM-05) F3 — volby sekce Podcasty (TV i telefon, blok „Podcasty" v Nastavení). Prefs `trakt_prefs`
  * (= `@Named("traktPreferences")`). Kvalita videa je SDÍLENÝ klíč se Slovem (`podcast_stream_quality`).
  */
-object TvPodcastPrefs {
+object PodcastPrefs {
     const val ROW_CONTINUE = "tv_podcasts_row_continue"
     const val ROW_NEW = "tv_podcasts_row_new"
     const val ROW_CHANNELS = "tv_podcasts_row_channels"
     const val NEW_LIMIT = "tv_podcasts_new_limit"
     const val PER_SOURCE = "tv_podcasts_per_source"
     const val QUALITY = "podcast_stream_quality"
+    /** Hledat nabízí přepínač „Hledat i na YouTube" (sám přepínač začíná pokaždé vypnutý). */
+    const val SEARCH_YT_OFFER = "search_youtube_offer"
 
     val NEW_LIMITS = listOf(15, 30, 50, 100)
     val PER_SOURCE_OPTIONS = listOf(10, 20, 40)
@@ -28,6 +30,8 @@ object TvPodcastPrefs {
     )
 
     fun perSource(p: SharedPreferences): Int = p.getInt(PER_SOURCE, 20).takeIf { it in PER_SOURCE_OPTIONS } ?: 20
+
+    fun searchYoutubeOffered(p: SharedPreferences): Boolean = p.getBoolean(SEARCH_YT_OFFER, true)
 
     fun quality(p: SharedPreferences): String = p.getString(QUALITY, null)?.takeIf { it in QUALITIES } ?: "720"
 

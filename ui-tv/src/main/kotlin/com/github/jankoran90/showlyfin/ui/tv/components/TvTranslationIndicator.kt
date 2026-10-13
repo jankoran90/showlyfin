@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -34,7 +35,7 @@ import javax.inject.Inject
 class TvTranslationIndicatorViewModel @Inject constructor(
     repo: ActiveTranslationsRepository,
 ) : ViewModel() {
-    val jobs = repo.jobs
+    val jobs = repo.visible
 }
 
 /**
@@ -52,9 +53,7 @@ fun TvTranslationIndicator(
     val enabled by com.github.jankoran90.showlyfin.core.ui.TranslationIndicatorPrefs.observe(prefs)
     if (!enabled) return
     val jobs by vm.jobs.collectAsStateWithLifecycle()
-    val nowS = System.currentTimeMillis() / 1000
-    val shown = jobs.filter { it.isActive || (it.status == "done" && (nowS - (it.finished ?: 0)) < DONE_VISIBLE_S) }
-        .take(MAX_SHOWN)
+    val shown = jobs.take(MAX_SHOWN)    // stáří hotových filtruje ActiveTranslationsRepository.visible
     if (shown.isEmpty()) return
     Column(modifier.padding(top = 20.dp, end = 28.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         shown.forEach { TranslationPill(it) }
@@ -72,7 +71,11 @@ private fun TranslationPill(job: ActiveTranslation) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(
-                if (job.status == "done") Icons.Rounded.CheckCircle else Icons.Rounded.Translate,
+                when (job.status) {
+                    "done" -> Icons.Rounded.CheckCircle
+                    "error" -> Icons.Rounded.ErrorOutline
+                    else -> Icons.Rounded.Translate
+                },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
             )
@@ -97,6 +100,7 @@ private fun TranslationPill(job: ActiveTranslation) {
 
 private fun statusLine(job: ActiveTranslation): String = when (job.status) {
     "done" -> "Přeloženo do češtiny"
+    "error" -> "Překlad se nepovedl"
     "paused_quota" -> "Pozastaveno (kvóta) · ${job.pct} %"
     "paused_manual" -> "Pozastaveno · ${job.pct} %"
     else -> listOfNotNull(
@@ -105,5 +109,4 @@ private fun statusLine(job: ActiveTranslation): String = when (job.status) {
     ).joinToString(" · ")
 }
 
-private const val DONE_VISIBLE_S = 120L
 private const val MAX_SHOWN = 3

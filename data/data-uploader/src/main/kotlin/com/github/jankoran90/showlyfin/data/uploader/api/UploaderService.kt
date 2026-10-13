@@ -161,6 +161,8 @@ interface UploaderService {
     // BUG (2026-09-04) — metadata JEDNOHO videa mimo normální feed okno (rozposlouchaná epizoda
     // mimo limit, viz PodcastSourcesRepository.getYtVideoInfo).
     @GET suspend fun getYtVideoInfo(@Url url: String, @Header("Cookie") cookie: String): YtEpisode
+    // AMFITEÁTR (Filmy 1.2.129) — hledání videí a kanálů na celém YouTube
+    @GET suspend fun searchYoutubeGlobal(@Url url: String, @Header("Cookie") cookie: String): com.github.jankoran90.showlyfin.data.uploader.model.YtGlobalSearch
     // TUNER — pre-warm resolve cache (rychlejší start přehrávání nejnovějších epizod)
     @GET suspend fun getYtResolve(@Url url: String, @Header("Cookie") cookie: String): Response<ResponseBody>
 

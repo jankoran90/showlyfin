@@ -48,6 +48,8 @@ fun FilmyHomeTabbed(
     onItemClick: (HomeRowItem) -> Unit,
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
+    // AMFITEÁTR: vlastní řádek položky (Podcasty = řádek dílu 16:9 s dlouhým stiskem); null = filmový řádek.
+    itemRow: (@Composable (HomeRowItem) -> Unit)? = null,
 ) {
     val pagerState = rememberPagerState(pageCount = { rails.size })
     val scope = rememberCoroutineScope()
@@ -80,22 +82,29 @@ fun FilmyHomeTabbed(
             modifier = Modifier.fillMaxSize(),
             key = { rails[it].id },
         ) { page ->
-            FilmyRailPage(rail = rails[page], onItemClick = onItemClick)
+            FilmyRailPage(rail = rails[page], onItemClick = onItemClick, itemRow = itemRow)
         }
     }
 }
 
 /** Obsah jednoho tabu = svislý seznam řádků jedné řady. */
 @Composable
-private fun FilmyRailPage(rail: FilmyRail, onItemClick: (HomeRowItem) -> Unit) {
+private fun FilmyRailPage(
+    rail: FilmyRail,
+    onItemClick: (HomeRowItem) -> Unit,
+    itemRow: (@Composable (HomeRowItem) -> Unit)?,
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        // Vlastní řádek (PhoneEpisodeRow) si okraj kreslí sám — jinak by byl dvojitý.
+        contentPadding = PaddingValues(horizontal = if (itemRow != null) 0.dp else 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(rail.items, key = { it.key }) { item ->
             val mi = item.mediaItem
-            if (mi != null) {
+            if (itemRow != null) {
+                itemRow(item)
+            } else if (mi != null) {
                 MediaRow(
                     item = mi,
                     onClick = { onItemClick(item) },

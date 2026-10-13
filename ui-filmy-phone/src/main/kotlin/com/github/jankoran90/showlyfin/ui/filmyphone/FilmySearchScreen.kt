@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -36,6 +37,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,9 +80,20 @@ fun FilmySearchScreen(
     onOpenCtv: (CtvTitle) -> Unit = {},
     // LABYRINT (FLM-04): štítek žánru / tématu z hledání → stránka katalogu.
     onOpenKatalog: (KatalogCil) -> Unit = {},
+    // AMFITEÁTR (1.2.129): „Hledat i na YouTube" — přehrání videa a karta kanálu.
+    onPlayPodcast: (com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget) -> Unit = {},
+    onOpenPodcastSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit = {},
     vm: SearchViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // Přepínač YouTube začíná při každém novém vstupu do Hledat vypnutý (zadání usera); návrat z přehrávače
+    // nebo karty kanálu ho nechá (rememberSaveable přežije push detailu, drawer stav sekce maže).
+    val ytVm: com.github.jankoran90.showlyfin.feature.discover.podcasts.YoutubeSearchViewModel = hiltViewModel()
+    val podcastsVm: com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel = hiltViewModel()
+    val yt by ytVm.state.collectAsStateWithLifecycle()
+    var ytEntered by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { if (!ytEntered) { ytVm.reset(); ytEntered = true } }
+    androidx.compose.runtime.LaunchedEffect(state.query) { ytVm.onQuery(state.query) }
     val sheet by vm.sheet.collectAsStateWithLifecycle()
     val viewMode by vm.viewMode.collectAsStateWithLifecycle()
     // RELEVANCE (user 2026-07-20) — u výchozího řazení strč výsledky BEZ plakátu na konec: obskurní tituly bez
@@ -121,6 +134,15 @@ fun FilmySearchScreen(
                 Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Přepínač YouTube PRVNÍ: na konci řady ho výsledky (počet, přepínač zobrazení) odsunuly mimo obrazovku.
+                if (ytVm.available()) {
+                    FilterChip(
+                        selected = yt.on,
+                        onClick = { ytVm.setOn(!yt.on) },
+                        label = { Text("Hledat i na YouTube") },
+                        leadingIcon = if (yt.on) { { Icon(Icons.Rounded.Check, contentDescription = null) } } else null,
+                    )
+                }
                 listOf(SearchScope.FILMS, SearchScope.SHOWS, SearchScope.PEOPLE, SearchScope.CTV).forEach { s ->
                     FilterChip(selected = state.scope == s, onClick = { vm.onScopeChange(s) }, label = { Text(s.label) })
                 }
@@ -172,6 +194,7 @@ fun FilmySearchScreen(
                 }
             }
         }
+        FilmyYoutubeSearchResults(state = yt, podcasts = podcastsVm, onPlay = onPlayPodcast, onOpenSource = onOpenPodcastSource)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
                 state.loading -> CircularProgressIndicator()

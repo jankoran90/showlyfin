@@ -1,4 +1,4 @@
-package com.github.jankoran90.showlyfin.ui.tv.podcasts
+package com.github.jankoran90.showlyfin.feature.discover.podcasts
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -38,7 +38,7 @@ import javax.inject.Inject
 import javax.inject.Named
 
 /**
- * AMFITEÁTR (FLM-05) F1 — sekce Podcasty na TV: video podcasty ze STEJNÝCH zdrojů jako Slovo (server
+ * AMFITEÁTR (FLM-05) — sekce Podcasty (TV i telefon Filmů, sdílený mozek): video podcasty ze STEJNÝCH zdrojů jako Slovo (server
  * `/api/sources`, [PodcastSourcesRepository]). Viditelnost per profil = [PodcastSource.isVisibleTo]
  * (jediné místo pravidla; dítě jen schválené zdroje). Pozice = [VideoResumeStore] (sdílená se Slovem
  * přes server, klíče `yt:`/`ctv:`/`rss:` — přehrávač je ukládá sám podle `resumeKey`).
@@ -47,7 +47,7 @@ import javax.inject.Named
  * zařízení) a RSS podcasty s video epizodou v Jellyfinu (`jfItemId`).
  */
 @HiltViewModel
-class TvPodcastsViewModel @Inject constructor(
+class PodcastsViewModel @Inject constructor(
     private val sourcesRepo: PodcastSourcesRepository,
     private val remote: UploaderRemoteDataSource,
     private val profiles: ProfileRepository,
@@ -64,6 +64,8 @@ class TvPodcastsViewModel @Inject constructor(
         /** `source.key` → načtené díly s videem (nejnovější první). */
         val episodes: Map<String, List<SourceEpisode>> = emptyMap(),
         val error: String? = null,
+        /** Nesledované kanály (z hledání na YouTube), jejichž díly se právě načítají. */
+        val loadingSources: Set<String> = emptySet(),
     )
 
     /** Co se má stát po výběru dílu — rozhodne navigátor (přehrávač / karta ČT). */
@@ -83,6 +85,9 @@ class TvPodcastsViewModel @Inject constructor(
     val marks: StateFlow<Map<String, VideoResumeStore.Mark>> = resume.marks
 
     private var loadJob: Job? = null
+
+    /** Díly nesledovaných kanálů otevřených z hledání na YouTube (`source.key` → díly); přežijí reload. */
+    private val external = mutableMapOf<String, List<SourceEpisode>>()
 
     /** F2: `yt:<id>` dílů, které už mají hotový český AI překlad (štítek CZ na kartě). */
     private val _translated = MutableStateFlow<Set<String>>(emptySet())
@@ -116,13 +121,15 @@ class TvPodcastsViewModel @Inject constructor(
      * stav starší než [STALE_MS] nebo se změnilo nastavení počtu dílů.
      */
     fun onEnter() {
-        val per = TvPodcastPrefs.perSource(prefs)
+        val per = PodcastPrefs.perSource(prefs)
         if (System.currentTimeMillis() - lastLoadAt > STALE_MS || per != lastPerSource) reload()
     }
 
     fun reload() {
         lastLoadAt = System.currentTimeMillis()
-        lastPerSource = TvPodcastPrefs.perSource(prefs)
+        lastPerSource = PodcastPrefs.perSource(prefs)
+        // Díly nesledovaných kanálů zastarávají stejně jako ostatní → karta je po reloadu načte znovu (Codex review).
+        external.clear()
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
@@ -138,7 +145,7 @@ class TvPodcastsViewModel @Inject constructor(
                 _state.value = UiState(
                     loading = false,
                     sources = withVideo.map { it.first },
-                    episodes = withVideo.associate { (src, eps) -> src.key to eps },
+                    episodes = withVideo.associate { (src, eps) -> src.key to eps } + external,
                 )
                 refreshTranslated()
             } catch (e: CancellationException) {
@@ -160,7 +167,7 @@ class TvPodcastsViewModel @Inject constructor(
     }
 
     private suspend fun loadVideoEpisodes(src: PodcastSource): List<SourceEpisode> =
-        runCatching { sourcesRepo.loadEpisodes(src, TvPodcastPrefs.perSource(prefs)) }
+        runCatching { sourcesRepo.loadEpisodes(src, PodcastPrefs.perSource(prefs)) }
             .onFailure { if (it is CancellationException) throw it; Timber.w(it, "[AMFITEATR] díly %s", src.key) }
             .getOrDefault(emptyList())
             .let { eps -> if (src.type == "rss") eps.filter { !it.jfItemId.isNullOrBlank() } else eps }
@@ -169,8 +176,8 @@ class TvPodcastsViewModel @Inject constructor(
     private suspend fun refreshTranslated() {
         val base = prefs.getString("uploader_base_url", "").orEmpty()
         if (base.isBlank()) return
-        val ids = _state.value.sources.filter { it.type == "youtube" }
-            .flatMap { src -> _state.value.episodes[src.key].orEmpty().map { "yt:${it.id}" } }
+        val ids = (_state.value.sources.filter { it.type == "youtube" }.map { it.key } + external.keys)
+            .flatMap { key -> _state.value.episodes[key].orEmpty().map { "yt:${it.id}" } }
         if (ids.isEmpty()) return
         runCatching { remote.getDoneTranslations(base, prefs.getString("uploader_session_cookie", "").orEmpty(), ids) }
             .onSuccess { _translated.value = it }
@@ -198,6 +205,36 @@ class TvPodcastsViewModel @Inject constructor(
             episode = null,
             progressive = true,
         )
+    }
+
+    /** Je kanál mezi sledovanými zdroji profilu? (Kanál z hledání na YouTube nemusí být.) */
+    fun isFollowed(source: PodcastSource): Boolean = _state.value.sources.any { it.key == source.key }
+
+    /** Sledovat smí jen dospělý profil (dětem zdroje schvaluje rodič). */
+    fun canFollow(): Boolean = profiles.activeProfile.value?.isAdmin != false
+
+    /** Karta nesledovaného kanálu (z hledání na YouTube): načti jeho díly, aniž by se stal zdrojem. */
+    fun openExternal(source: PodcastSource) {
+        if (isFollowed(source) || source.key in external || source.key in _state.value.loadingSources) return
+        viewModelScope.launch {
+            _state.update { it.copy(loadingSources = it.loadingSources + source.key) }
+            val eps = loadVideoEpisodes(source)
+            if (eps.isNotEmpty()) external[source.key] = eps
+            _state.update {
+                it.copy(loadingSources = it.loadingSources - source.key, episodes = it.episodes + (source.key to eps))
+            }
+            refreshTranslated()
+        }
+    }
+
+    /** „Sledovat" — kanál z hledání přidá mezi zdroje (sdílené se Slovem), pak sekce načte znovu. */
+    fun follow(source: PodcastSource, onDone: (Boolean) -> Unit = {}) {
+        if (!canFollow()) return
+        viewModelScope.launch {
+            val ok = sourcesRepo.add(source.type, source.ref, source.title, source.thumbnail, profiles.activeProfile.value?.profileUuid)
+            if (ok) { external.remove(source.key); reload() }
+            onDone(ok)
+        }
     }
 
     fun sourceOf(sourceKey: String): PodcastSource? = _state.value.sources.firstOrNull { it.key == sourceKey }
@@ -231,7 +268,7 @@ class TvPodcastsViewModel @Inject constructor(
         CtvTitle(sidp = source.ref, type = "series", title = source.title, thumbnail = source.thumbnail)
 
     /** Kvalita videa sdílená se Slovem (`podcast_stream_quality`: 360 / 720 / max). */
-    private fun videoQuality(): String = TvPodcastPrefs.quality(prefs)
+    private fun videoQuality(): String = PodcastPrefs.quality(prefs)
 
     companion object {
         val VIDEO_TYPES = setOf("youtube", "ctv", "rss")

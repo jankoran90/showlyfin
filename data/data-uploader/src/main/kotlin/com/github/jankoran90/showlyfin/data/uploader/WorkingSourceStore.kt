@@ -595,6 +595,20 @@ class WorkingSourceStore @Inject constructor(
         scope.launch { syncFromServer() }
     }
 
+    @Volatile private var lastResumeRefreshMs = 0L
+
+    /**
+     * Návrat appky do popředí: dotáhni zdroje uložené JINDE (TV, server auto-cache po „Chci vidět").
+     * Bez toho je telefon viděl až po změně profilu / otevření detailu (user 2026-10-13: Madagaskar 3
+     * přidaný na TV chyběl v dětské kolekci). Nejvýš jednou za [minIntervalMs].
+     */
+    fun refreshIfStale(minIntervalMs: Long = 60_000L) {
+        val now = System.currentTimeMillis()
+        if (now - lastResumeRefreshMs < minIntervalMs) return
+        lastResumeRefreshMs = now
+        refresh()
+    }
+
     /**
      * CELLULOID (SHW-98) — vynucený sync ze serveru „teď", AWAITABLE (na rozdíl od [refresh], co jen fire-and-forget
      * launchne). Volá detail při otevření filmu, aby živě dotáhl auto-nacachovaný zdroj (backfill watchlistu)
@@ -606,14 +620,16 @@ class WorkingSourceStore @Inject constructor(
     private fun imdbKey(imdb: String, epKey: String? = null) = "sieve_working_$imdb" + epKey?.let { "_$it" }.orEmpty()
     private fun tmdbKey(tmdb: Long, epKey: String? = null) = "sieve_working_tmdb_$tmdb" + epKey?.let { "_$it" }.orEmpty()
 
-    private fun parse(raw: String?, where: String): WorkingSource? {
+    // `log=false` pro hromadné čtení ([allRecords]): řádek logu na každý záznam (stovky) zahltil hlavní
+    // vlákno ladicí verze až do ANR (emulátor 2026-10-13); jednotlivá čtení logují dál.
+    private fun parse(raw: String?, where: String, log: Boolean = true): WorkingSource? {
         if (raw == null) return null
         val rec = runCatching { gson.fromJson(raw, WorkingSource::class.java) }
             .onFailure { Timber.w(it, "[SIEVE] parse working source failed ($where)") }
             .getOrNull()
         val s = rec?.stream
         val hasId = s != null && (s.cometPath != null || s.infoHash != null || !s.url.isNullOrBlank())
-        Timber.i("[SIEVE] get %s → raw=%dB parsed=%b hasId=%b", where, raw.length, rec != null, hasId)
+        if (log) Timber.i("[SIEVE] get %s → raw=%dB parsed=%b hasId=%b", where, raw.length, rec != null, hasId)
         return if (hasId) rec else null
     }
 
@@ -884,7 +900,7 @@ class WorkingSourceStore @Inject constructor(
         val out = ArrayList<WorkingSource>()
         for ((k, value) in prefs.all) {
             if (!k.startsWith("sieve_working_")) continue
-            val rec = parse(value as? String, k) ?: continue
+            val rec = parse(value as? String, k, log = false) ?: continue
             val id = identity(rec).takeIf { it != "hash:" } ?: "hash:$k"
             if (seen.add(id)) out.add(rec)
         }

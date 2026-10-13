@@ -20,7 +20,11 @@ import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
 import com.github.jankoran90.showlyfin.core.ui.tvOverscan
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
-import com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastItemKey
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastPrefs
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastShelves
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.podcastShelves
 import com.github.jankoran90.showlyfin.ui.tv.components.ImmersiveInfo
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRail
 import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
@@ -32,12 +36,12 @@ import com.github.jankoran90.showlyfin.ui.tv.components.TvRailList
 @Composable
 fun TvPodcastsScreen(
     onOpenSource: (PodcastSource) -> Unit,
-    onPlay: (TvPodcastsViewModel.PlayTarget) -> Unit,
+    onPlay: (PodcastsViewModel.PlayTarget) -> Unit,
     immersive: Boolean,
     immersiveHeader: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
     modifier: Modifier = Modifier,
-    vm: TvPodcastsViewModel = hiltViewModel(),
+    vm: PodcastsViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val marks by vm.marks.collectAsStateWithLifecycle()
@@ -48,9 +52,9 @@ fun TvPodcastsScreen(
 
     val prefs = androidx.compose.ui.platform.LocalContext.current
         .getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE)
-    val rowPrefs = remember { TvPodcastPrefs.rows(prefs) }
+    val rowPrefs = remember { PodcastPrefs.rows(prefs) }
     val rails = remember(state, marks, translated, translating, rowPrefs) {
-        podcastRails(state, marks, translated, translating, rowPrefs)
+        podcastRails(podcastShelves(state, marks, translated, translating, rowPrefs))
     }
 
     confirmFor?.let { (src, ep) ->
@@ -105,109 +109,17 @@ fun TvPodcastsScreen(
     )
 }
 
-/** Klíč karty → co reprezentuje (karta nese jen string, akce se dohledá ve VM). */
-internal sealed interface PodcastItemKey {
-    data class Source(val sourceKey: String) : PodcastItemKey
-    data class Episode(val sourceKey: String, val episodeId: String) : PodcastItemKey
-
-    companion object {
-        fun source(src: PodcastSource) = "src|${src.key}"
-        fun episode(src: PodcastSource, ep: SourceEpisode) = "ep|${src.key}|${ep.id}"
-
-        fun parse(key: String): PodcastItemKey? {
-            val parts = key.split('|')
-            return when {
-                parts.size == 2 && parts[0] == "src" -> Source(parts[1])
-                parts.size >= 3 && parts[0] == "ep" -> Episode(parts[1], parts.drop(2).joinToString("|"))
-                else -> null
-            }
-        }
-    }
-}
-
-private fun podcastRails(
-    state: TvPodcastsViewModel.UiState,
-    marks: Map<String, VideoResumeStore.Mark>,
-    translated: Set<String>,
-    translating: Set<String>,
-    rowPrefs: TvPodcastPrefs.Rows,
-): List<TvRail> {
-    if (state.sources.isEmpty()) return emptyList()
-    val all = state.sources.flatMap { src -> state.episodes[src.key].orEmpty().map { src to it } }
-    val keyOf = { ep: SourceEpisode -> ep.resumeKey ?: ep.id }
-    val inProgress = all
-        .mapNotNull { (src, ep) -> marks[keyOf(ep)]?.takeIf { it.posMs > 0 }?.let { Triple(src, ep, it) } }
-        .sortedByDescending { it.third.updatedAt }
-    val inProgressKeys = inProgress.map { keyOf(it.second) }.toSet()
-    val newest = all
-        .filter { (_, ep) -> keyOf(ep) !in inProgressKeys }
-        .sortedByDescending { (_, ep) -> TvPodcastsViewModel.dateSortKey(ep.date) }
-        .take(rowPrefs.newLimit)
-
-    return buildList {
-        if (rowPrefs.continueRow && inProgress.isNotEmpty()) add(
-            TvRail(
-                id = "podcasty-pokracovat", title = "Pokračovat", style = HomeCardStyle.LANDSCAPE,
-                items = inProgress.map { (src, ep, mark) -> episodeItem(src, ep, mark, translated, translating) }, configId = "podcasty-pokracovat",
-            ),
-        )
-        if (rowPrefs.newRow && newest.isNotEmpty()) add(
-            TvRail(
-                id = "podcasty-nove", title = "Nové díly", style = HomeCardStyle.LANDSCAPE,
-                items = newest.map { (src, ep) -> episodeItem(src, ep, marks[keyOf(ep)], translated, translating) }, configId = "podcasty-nove",
-            ),
-        )
-        // Řada kanálů je jediná cesta k celému seznamu dílů → když jsou ostatní řady vypnuté nebo
-        // prázdné, ukaž ji i přes vypnutý přepínač (sekce nesmí zůstat prázdná).
-        if (rowPrefs.channelsRow || isEmpty()) add(
-            TvRail(
-                id = "podcasty-kanaly", title = "Kanály a pořady", style = HomeCardStyle.LANDSCAPE,
-                items = state.sources.map { src -> sourceItem(src, state.episodes[src.key].orEmpty()) },
-                configId = "podcasty-kanaly",
-            ),
-        )
-    }
-}
-
-internal fun episodeItem(
-    src: PodcastSource,
-    ep: SourceEpisode,
-    mark: VideoResumeStore.Mark?,
-    translated: Set<String> = emptySet(),
-    translating: Set<String> = emptySet(),
-): HomeRowItem =
-    HomeRowItem(
-        key = PodcastItemKey.episode(src, ep),
-        title = ep.title,
-        // F2: „CZ" = hotový český překlad, „Překládá se" = běží právě teď (na serveru).
-        subtitle = listOfNotNull(
-            when ("yt:${ep.id}") { in translated -> "CZ"; in translating -> "Překládá se"; else -> null },
-            src.title, formatDate(ep.date),
-        ).joinToString(" · "),
-        landscapeUrl = ep.imageUrl ?: src.thumbnail,
-        posterUrl = ep.imageUrl ?: src.thumbnail,
-        progressPct = mark?.takeIf { it.durMs > 0 }?.let { (it.posMs * 100 / it.durMs).toInt().coerceIn(1, 99) },
+private fun podcastRails(shelves: PodcastShelves): List<TvRail> = buildList {
+    if (shelves.continueItems.isNotEmpty()) add(
+        TvRail(id = "podcasty-pokracovat", title = "Pokračovat", style = HomeCardStyle.LANDSCAPE,
+            items = shelves.continueItems, configId = "podcasty-pokracovat"),
     )
-
-private fun sourceItem(src: PodcastSource, eps: List<SourceEpisode>): HomeRowItem =
-    HomeRowItem(
-        key = PodcastItemKey.source(src),
-        title = src.title,
-        subtitle = sourceTypeLabel(src.type) + (if (eps.isNotEmpty()) " · ${eps.size} dílů" else ""),
-        landscapeUrl = src.thumbnail ?: eps.firstOrNull()?.imageUrl,
-        posterUrl = src.thumbnail ?: eps.firstOrNull()?.imageUrl,
+    if (shelves.newItems.isNotEmpty()) add(
+        TvRail(id = "podcasty-nove", title = "Nové díly", style = HomeCardStyle.LANDSCAPE,
+            items = shelves.newItems, configId = "podcasty-nove"),
     )
-
-internal fun sourceTypeLabel(type: String): String = when (type) {
-    "youtube" -> "YouTube"
-    "ctv" -> "Česká televize"
-    else -> "Video podcast"
+    if (shelves.channelItems.isNotEmpty()) add(
+        TvRail(id = "podcasty-kanaly", title = "Kanály a pořady", style = HomeCardStyle.LANDSCAPE,
+            items = shelves.channelItems, configId = "podcasty-kanaly"),
+    )
 }
-
-/** `yyyyMMdd` → „12. 10. 2026" (neznámý tvar = nic). */
-internal fun formatDate(date: String?): String? {
-    val k = TvPodcastsViewModel.dateSortKey(date)
-    if (k.length != 8) return null
-    return "${k.substring(6, 8).trimStart('0')}. ${k.substring(4, 6).trimStart('0')}. ${k.substring(0, 4)}"
-}
-

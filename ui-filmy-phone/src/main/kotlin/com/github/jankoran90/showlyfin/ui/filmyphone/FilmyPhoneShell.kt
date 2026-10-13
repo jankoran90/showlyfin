@@ -39,6 +39,7 @@ import com.github.jankoran90.showlyfin.core.ui.LocalSourceAvailabilityProvider
 import com.github.jankoran90.showlyfin.core.ui.LocalUserRatingProvider
 import com.github.jankoran90.showlyfin.data.uploader.ctvSidpOrNull
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvTitle
+import com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel
 import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.detail.DetailViewModel
 import com.github.jankoran90.showlyfin.feature.detail.rating.RatingDialogHost
@@ -88,6 +89,8 @@ private sealed interface FilmyDetailEntry {
     data class Ctv(val title: CtvTitle) : FilmyDetailEntry
     // LABYRINT (FLM-04): stránka katalogu — žánr / podžánr / téma / rok / země (parita s webem).
     data class Katalog(val cil: KatalogCil) : FilmyDetailEntry
+    // AMFITEÁTR F4: karta kanálu / pořadu ze sekce Podcasty.
+    data class PodcastSource(val source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) : FilmyDetailEntry
 }
 
 /** M2.6: stav přehrávače nad detailem — externí stream (Real-Debrid/Stremio) NEBO Jellyfin item. */
@@ -149,6 +152,7 @@ private fun FilmyShellContent() {
     val queueBadgeVm: com.github.jankoran90.showlyfin.feature.discover.queue.PlayQueueBadgeViewModel = hiltViewModel()
     // CINEMATHEQUE: odznak „má uložený zdroj" na kartách/řádcích — provider napojený na WorkingSourceStore.
     val sourceAvailVm: FilmySourceAvailabilityViewModel = hiltViewModel()
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { sourceAvailVm.onResume() }
     // CASCADE: stejná (Activity-scoped) instance DetailViewModelu jako uvnitř DetailScreen — drží candidate
     // list `streams`; po chybě přehrávání (onPlaybackFailed) spustí dalšího kandidáta místo chyby.
     val detailVm: DetailViewModel = hiltViewModel()
@@ -196,6 +200,17 @@ private fun FilmyShellContent() {
         player = FilmyPlayer(itemId = jfId, title = title)
     }
     val popDetail: () -> Unit = { detailStack = detailStack.dropLast(1) }
+    // AMFITEÁTR F4: výběr dílu podcastu — YouTube/RSS do přehrávače, ČT na kartu pořadu (video resolvuje zařízení).
+    val playPodcast: (PodcastsViewModel.PlayTarget) -> Unit = { t ->
+        when (t) {
+            is PodcastsViewModel.PlayTarget.External -> player = FilmyPlayer(
+                externalUrl = t.url, title = t.title, subtitleQuery = t.subtitleQuery,
+                posterUrl = t.posterUrl, resumeKey = t.resumeKey,
+            )
+            is PodcastsViewModel.PlayTarget.Jellyfin -> playJellyfin(t.itemId, "")
+            is PodcastsViewModel.PlayTarget.CtvProgram -> detailStack = detailStack + FilmyDetailEntry.Ctv(t.title)
+        }
+    }
     // LABYRINT: štítek / mapa žánrů / „vše ›" → stránka katalogu na zásobník (Zpět vrací, odkud přišel).
     // Stránky katalogu jen pro profil bez věkového stropu (pojistka pro všechny vstupy: štítky, hledání…).
     val katalogPovolen by hiltViewModel<KatalogPristupViewModel>().povolen.collectAsStateWithLifecycle()
@@ -366,6 +381,9 @@ private fun FilmyShellContent() {
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+        } else if (detailEntry is FilmyDetailEntry.PodcastSource) {
+            BackHandler(onBack = popDetail)
+            FilmyPodcastSourceScreen(source = detailEntry.source, onBack = popDetail, onPlay = playPodcast)
         } else if (detailEntry is FilmyDetailEntry.Jellyfin) {
             // M2.6: JF-only položka (z Knihovny/domova) — dohledej tmdb/imdb a otevři sdílený detail.
             BackHandler(onBack = popDetail)
@@ -482,9 +500,16 @@ private fun FilmyShellContent() {
                                 onOpenDetail = openDetail,
                                 onOpenKatalog = openKatalog,
                                 onOpenCtv = { t -> detailStack = detailStack + FilmyDetailEntry.Ctv(t) },
+                                onPlayPodcast = playPodcast,
+                                onOpenPodcastSource = { src -> detailStack = detailStack + FilmyDetailEntry.PodcastSource(src) },
                             )
                             // SEZONA-DÁVKA (user 2026-08-21): stažené filmy/seriály (karty, seskupené po dílech).
                             FilmySection.DOWNLOADS -> FilmyDownloadsScreen(onMenu = onMenu, onOpenDetail = openDetail)
+                            FilmySection.PODCASTY -> FilmyPodcastsScreen(
+                                onMenu = onMenu,
+                                onOpenSource = { src -> detailStack = detailStack + FilmyDetailEntry.PodcastSource(src) },
+                                onPlay = playPodcast,
+                            )
                             // PROVOZ (SHW-114): co hraje kde, výkon přenosu, stav zdrojů + akce nad nimi.
                             FilmySection.OPS -> FilmyOpsScreen(onMenu = onMenu)
                             // MAESTRO (SHW-27): ovládání AVR + TV boxu z telefonu — portováno z yellyfinu

@@ -24,3 +24,25 @@ data class YtEpisode(
     // ho neposílají (channel název appka zná z vlastního zdroje, ne z feedu).
     val uploader: String? = null,
 )
+
+/** AMFITEÁTR (Filmy 1.2.129): hledání na celém YouTube z Hledat (`/api/yt/global_search`). */
+data class YtGlobalSearch(
+    val videos: List<YtSearchVideo> = emptyList(),
+    val channels: List<YtSearchChannel> = emptyList(),
+)
+
+data class YtSearchVideo(
+    val id: String,
+    val title: String = "",
+    val uploader: String = "",
+    /** Sekundy (0 = neznámá). */
+    val duration: Int = 0,
+    val thumbnail: String? = null,
+)
+
+data class YtSearchChannel(
+    /** channel_id (UC…) nebo @handle — stejný `ref` jako u zdroje typu youtube. */
+    val ref: String,
+    val title: String = "",
+    val thumbnail: String? = null,
+)

@@ -230,6 +230,8 @@ interface UploaderRemoteDataSource {
      *  načtené okno (`getYtFeed`/`searchYtFeed` mají limit). Volat JEN pro jednotlivé konkrétní
      *  video_id (resume marky), nikdy plošně/pro procházení. */
     suspend fun getYtVideoInfo(baseUrl: String, sessionCookie: String, videoId: String): YtEpisode
+    /** AMFITEÁTR (Filmy 1.2.129): videa + kanály z celého YouTube (jen na výslovný přepínač v Hledat). */
+    suspend fun searchYoutubeGlobal(baseUrl: String, sessionCookie: String, query: String): com.github.jankoran90.showlyfin.data.uploader.model.YtGlobalSearch
     /** Přímá přehrávací URL přes backend byte-proxy (googlevideo je IP-locked na server). kind = "video"|"audio".
      *  CLARITY: quality jen pro video. Pro audio + progresivní 360p video. */
     fun ytStreamUrl(baseUrl: String, sessionCookie: String, videoId: String, kind: String, quality: String = "720"): String

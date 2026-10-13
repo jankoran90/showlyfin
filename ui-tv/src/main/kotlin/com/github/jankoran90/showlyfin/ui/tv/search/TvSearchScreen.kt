@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,6 +28,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.focus.FocusRequester
@@ -67,10 +73,18 @@ fun TvSearchScreen(
     modifier: Modifier = Modifier,
     // VLTAVA (SHW-110) F6 — ČT titul nemá TMDB identitu → vlastní karta (`TvCtvScreen`).
     onOpenCtv: (CtvTitle) -> Unit = {},
+    // AMFITEÁTR (1.2.129): „Hledat i na YouTube" — přehrání videa a karta kanálu.
+    onPlayPodcast: (com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget) -> Unit = {},
+    onOpenPodcastSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val ytVm: com.github.jankoran90.showlyfin.feature.discover.podcasts.YoutubeSearchViewModel = hiltViewModel()
+    val podcastsVm: com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel = hiltViewModel()
+    val yt by ytVm.state.collectAsStateWithLifecycle()
+    LaunchedEffect(state.query) { ytVm.onQuery(state.query) }
     val queryFocus = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     LaunchedEffect(Unit) { runCatching { queryFocus.requestFocus() } }
 
     // Na TV nabízíme filmy/seriály (osoby/vydavatelství = telefonní works-sheet) + VLTAVA F6 ČT iVysílání.
@@ -102,7 +116,17 @@ fun TvSearchScreen(
                 placeholder = { Text("Hledat film nebo seriál") },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 textStyle = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f).focusRequester(queryFocus),
+                // D-pad dolů z pole → čipy a výsledky. Jednořádkové pole si šipku jinak nechá (posun kurzoru)
+                // a fokus se z něj ovladačem nedostal (emulátor 2026-10-13).
+                modifier = Modifier.weight(1f).focusRequester(queryFocus).onPreviewKeyEvent { e ->
+                    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
+                        e.key == androidx.compose.ui.input.key.Key.DirectionDown
+                    ) {
+                        focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+                    } else {
+                        false
+                    }
+                },
             )
         }
 
@@ -118,9 +142,60 @@ fun TvSearchScreen(
                     modifier = Modifier.tvFocusable(),
                 )
             }
+            // Přepínač (ne rozsah): k výsledkům přidá řady z YouTube. Pokaždé začíná vypnutý, děti ho nemají.
+            if (ytVm.available()) {
+                FilterChip(
+                    selected = yt.on,
+                    onClick = { ytVm.setOn(!yt.on) },
+                    label = { Text("Hledat i na YouTube") },
+                    leadingIcon = if (yt.on) { { Icon(Icons.Filled.Check, contentDescription = null) } } else null,
+                    modifier = Modifier.tvFocusable(),
+                )
+            }
         }
 
-        when {
+        if (yt.on && state.query.trim().length >= 2) {
+            TvYoutubeSearchResults(
+                state = yt,
+                podcasts = podcastsVm,
+                onPlay = onPlayPodcast,
+                onOpenSource = onOpenPodcastSource,
+                modifier = Modifier.weight(1f),
+            ) {
+                // Výsledky filmů / ČT pod YouTube jako jedna vodorovná řada (mřížka se do seznamu nevnoří).
+                val ctv = state.results.filterIsInstance<SearchResult.Ctv>()
+                val label = if (state.scope == SearchScope.CTV) "Česká televize" else "Filmy a seriály"
+                androidx.compose.foundation.layout.Column {
+                    Text(label, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(start = 14.dp, top = 8.dp))
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        if (state.scope == SearchScope.CTV) {
+                            items(ctv, key = { it.id }) { r ->
+                                Box(Modifier.width(260.dp)) { TvCtvResultCard(r.title, onClick = { onOpenCtv(r.title) }) }
+                            }
+                        } else {
+                            items(movieShow, key = { it.id }) { result ->
+                                Box(Modifier.width(140.dp)) {
+                                    TvPosterCard(
+                                        posterUrl = result.resultPosterUrl(),
+                                        title = result.displayTitle(),
+                                        year = result.displayYear(),
+                                        onClick = { onOpenDetail(result.toDetailStub()) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (!state.loading && (if (state.scope == SearchScope.CTV) ctv.isEmpty() else movieShow.isEmpty())) {
+                        Text("Nic nenalezeno", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 14.dp))
+                    }
+                }
+            }
+        } else when {
             state.loading -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }

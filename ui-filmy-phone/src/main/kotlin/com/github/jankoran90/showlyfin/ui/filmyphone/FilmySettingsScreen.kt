@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChildCare
@@ -212,6 +213,11 @@ fun FilmySettingsScreen(
                 }
                 FilmyPlayerSection()
                 FilmyAudioSection()
+            }
+
+            // ── PODCASTY (AMFITEÁTR FLM-05 F4) — řady sekce, kvalita, hledání na YouTube ──
+            FilmyCollapsibleSection("Podcasty", Icons.Rounded.Podcasts) {
+                FilmyPodcastsSection()
             }
 
             // ── DOMÁCÍ SESTAVA (AVR) — D-c: „Přehrát na TV" probudí celý obývák ────

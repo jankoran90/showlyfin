@@ -68,10 +68,16 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
     }
     fun back() { sidebarOverlay = false; navVm.back() }
 
+    // AMFITEÁTR (1.2.129): „Hledat i na YouTube" začíná při každém NOVÉM otevření Hledat vypnutý; návrat
+    // z přehrávače / karty kanálu (back) ho nechá zapnutý i s výsledky.
+    val ytSearchVm: com.github.jankoran90.showlyfin.feature.discover.podcasts.YoutubeSearchViewModel =
+        androidx.hilt.navigation.compose.hiltViewModel()
+    fun openSearch() { ytSearchVm.reset(); navigate(TvDestination.Search) }
+
     /** AMFITEÁTR (FLM-05): díl podcastu → přehrávač (YouTube / Jellyfin video) nebo karta pořadu ČT. */
-    fun playPodcast(target: com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget) {
+    fun playPodcast(target: com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget) {
         when (target) {
-            is com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget.External -> navigate(
+            is com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget.External -> navigate(
                 TvDestination.Player(
                     externalUrl = target.url,
                     externalTitle = target.title,
@@ -80,9 +86,9 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
                     resumeKey = target.resumeKey,
                 ),
             )
-            is com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget.Jellyfin ->
+            is com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget.Jellyfin ->
                 navigate(TvDestination.Player(itemId = target.itemId))
-            is com.github.jankoran90.showlyfin.ui.tv.podcasts.TvPodcastsViewModel.PlayTarget.CtvProgram ->
+            is com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget.CtvProgram ->
                 navigate(TvDestination.CtvTitleDest(target.title))
         }
     }
@@ -147,7 +153,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
         TvDestination.Home -> TvShell(
             section = navVm.section,
             onSelectSection = { navVm.selectSection(it) },
-            onOpenSearch = { navigate(TvDestination.Search) },
+            onOpenSearch = { openSearch() },
             onOpenDetail = { item -> openMediaDetail(item) },
             // LAPIDARY S4b: klik na kartu řady „Uloženo k přehrání" → detail v režimu one-click (autoplay).
             onOpenDetailPlay = { item -> openMediaDetail(item, autoplay = true) },
@@ -185,6 +191,8 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
             onOpenDetail = { item -> openMediaDetail(item) },
             // VLTAVA F6: rozsah „Česká televize" → vlastní karta (ČT titul nemá TMDB identitu).
             onOpenCtv = { title -> navigate(TvDestination.CtvTitleDest(title)) },
+            onPlayPodcast = { target -> playPodcast(target) },
+            onOpenPodcastSource = { source -> navigate(TvDestination.PodcastSourceDest(source)) },
             onBack = { back() },
         )
 
@@ -257,7 +265,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
                 TvSidebarOverlay(
                     activeSection = navVm.section,
                     onSelectSection = { selectSectionAndHome(it) },
-                    onOpenSearch = { sidebarOverlay = false; navigate(TvDestination.Search) },
+                    onOpenSearch = { sidebarOverlay = false; openSearch() },
                     onDismiss = { sidebarOverlay = false },
                 )
             }
@@ -311,7 +319,7 @@ fun TvNavigator(navVm: TvNavViewModel = viewModel()) {
                 TvSidebarOverlay(
                     activeSection = navVm.section,
                     onSelectSection = { selectSectionAndHome(it) },
-                    onOpenSearch = { sidebarOverlay = false; navigate(TvDestination.Search) },
+                    onOpenSearch = { sidebarOverlay = false; openSearch() },
                     onDismiss = { sidebarOverlay = false },
                 )
             }

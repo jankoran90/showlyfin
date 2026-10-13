@@ -26,4 +26,7 @@ class FilmySourceAvailabilityViewModel @Inject constructor(
         // Sjednoť lokální index (savedKeys) se serverem/diskem, ať odznaky sedí hned po startu.
         viewModelScope.launch { runCatching { store.refresh() } }
     }
+
+    /** Appka zpět v popředí → zdroje uložené na jiném zařízení (throttle ve storu). */
+    fun onResume() = store.refreshIfStale()
 }

@@ -76,11 +76,14 @@ data class EpisodeUi(
     val progressPct: Int? = null,
     /** Kolečko místo náhledu, dokud se hledá odkaz na video (ČT resolvuje až zařízení). */
     val loading: Boolean = false,
+    /** false = díl bez číslování (YouTube / podcast) → jen název, žádné „S00E00". */
+    val numbered: Boolean = true,
 )
 
 /** „S01E04 · Název" — tvar čísel, na kterém user trvá (stejný u JF seriálu i ČT pořadu). */
 fun episodeLabel(e: EpisodeUi): String =
-    "S%02dE%02d · %s".format(e.seasonNumber, e.episodeNumber, e.title.ifBlank { "Díl ${e.episodeNumber}" })
+    if (!e.numbered) e.title
+    else "S%02dE%02d · %s".format(e.seasonNumber, e.episodeNumber, e.title.ifBlank { "Díl ${e.episodeNumber}" })
 
 /**
  * TV: vodorovná lišta dílů + auto-scroll a AUTOFOKUS na první nedokoukaný (D-pad pokračuje odtud).

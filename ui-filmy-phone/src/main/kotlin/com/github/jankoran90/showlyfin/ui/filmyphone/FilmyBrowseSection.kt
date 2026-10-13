@@ -272,7 +272,9 @@ fun FilmyBrowseSection(
         }
     }
 
-    openCollection?.let { group ->
+    // Otevřená kolekce se čte z AKTUÁLNÍHO stavu (podle id): přenačtení Filmotéky (např. zdroj uložený
+    // na TV, user 2026-10-13 Madagaskar 3) do ní přidá díl i při otevřeném překryvu, ne až po zavření.
+    openCollection?.let { opened -> state.collectionGroups.firstOrNull { it.id == opened.id } ?: opened }?.let { group ->
         FilmyCollectionOverlay(
             group = group,
             onDismiss = { openCollection = null },

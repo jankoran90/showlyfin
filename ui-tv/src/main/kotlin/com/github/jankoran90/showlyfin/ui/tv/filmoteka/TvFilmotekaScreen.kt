@@ -91,6 +91,8 @@ fun TvFilmotekaScreen(
     sectionVm: TvSectionViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // Zdroje uložené na jiném zařízení (telefon, auto-cache po „Chci vidět") → přenačtení přes savedKeys.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { viewModel.onResume() }
     // FOYER (SHW-107, user 2026-07-26): na TV je vstup do Filmotéky MŘÍŽKA + ABECEDNĚ (osa „Vše"); přepnutí
     // se uloží. Osy Žánr/Země zůstávají řadové — mřížka by u nich smazala samotné dělení na řady.
     val modes by sectionVm.modes.collectAsStateWithLifecycle()

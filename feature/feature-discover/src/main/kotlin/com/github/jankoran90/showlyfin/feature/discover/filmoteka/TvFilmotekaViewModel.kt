@@ -456,4 +456,8 @@ class TvFilmotekaViewModel @Inject constructor(
         )
     }
 
+
+    /** Obrazovka zpět v popředí → dotáhni zdroje uložené jinde (změna savedKeys Filmotéku přenačte). */
+    fun onResume() = workingSources.refreshIfStale()
+
 }
