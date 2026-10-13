@@ -55,14 +55,7 @@ internal class TmdbApi(private val service: TmdbService) : TmdbRemoteDataSource 
         try { if (tmdbId <= 0) emptyList() else service.fetchMovieRecommendations(tmdbId).results }
         catch (e: Throwable) { emptyList() }
 
-    private fun pickCertificationAge(byCountry: Map<String, List<String>>): Int? {
-        fun ageOf(certs: List<String>): Int? =
-            certs.mapNotNull { CertificationAge.toAge(it) }.minOrNull()
-        for (country in CertificationAge.COUNTRY_PRIORITY) {
-            byCountry[country]?.let { ageOf(it)?.let { age -> return age } }
-        }
-        return byCountry.values.flatMap { it }.let { ageOf(it) }
-    }
+    private fun pickCertificationAge(byCountry: Map<String, List<String>>): Int? = CertificationAge.pick(byCountry)
 
     override suspend fun fetchShowImages(tmdbId: Long) =
         try { if (tmdbId <= 0) TmdbImages.EMPTY else service.fetchShowImages(tmdbId) }
