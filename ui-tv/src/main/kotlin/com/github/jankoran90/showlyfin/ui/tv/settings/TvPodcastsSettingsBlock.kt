@@ -22,10 +22,26 @@ fun TvPodcastsSettingsBlock() {
     var quality by remember { mutableStateOf(PodcastPrefs.quality(prefs)) }
     var indicator by remember { mutableStateOf(TranslationIndicatorPrefs.enabled(prefs)) }
     var ytOffer by remember { mutableStateOf(PodcastPrefs.searchYoutubeOffered(prefs)) }
+    var layout by remember { mutableStateOf(PodcastPrefs.tvLayout(prefs)) }
+    var nextUp by remember { mutableStateOf(PodcastPrefs.inFilmotekaNextUp(prefs)) }
 
-    TvSettingsBlock(title = "Podcasty") {
+    TvSettingsBlock(title = "Pořady") {
+        TvOptionStepperRow(
+            label = "Rozvržení sekce",
+            subtitle = "Řady (jako Domů) nebo mřížka (jako Filmotéka)",
+            options = PodcastPrefs.TV_LAYOUTS,
+            selected = layout,
+            labelOf = PodcastPrefs::layoutLabel,
+            onSelect = { prefs.edit().putString(PodcastPrefs.TV_LAYOUT, it).apply(); layout = it },
+        )
         TvToggleRow(
-            label = "Řada Pokračovat",
+            label = "Pořady v Další díly Filmotéky",
+            subtitle = "Rozkoukané díly pořadů i v řadě Další díly ve Filmotéce",
+            checked = nextUp,
+            onCheckedChange = { prefs.edit().putBoolean(PodcastPrefs.IN_FILMOTEKA_NEXTUP, it).apply(); nextUp = it },
+        )
+        TvToggleRow(
+            label = "Řada Další díly",
             subtitle = "Rozkoukané díly (pozice sdílená s telefonem)",
             checked = rows.continueRow,
             onCheckedChange = { prefs.edit().putBoolean(PodcastPrefs.ROW_CONTINUE, it).apply(); rows = rows.copy(continueRow = it) },

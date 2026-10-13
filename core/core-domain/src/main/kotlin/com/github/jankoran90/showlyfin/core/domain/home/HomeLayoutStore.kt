@@ -260,7 +260,12 @@ class HomeLayoutStore @Inject constructor(
             prefs.edit().putInt(keyFor(KEY_LAYOUT_VERSION), LAYOUT_VERSION_FOYER).apply()
         }
         if (remote.sidebar.isNotEmpty()) {
-            _sidebar.value = remote.sidebar
+            // OPONA: rozvržení ze serveru vzniklo před přesunem Pořadů → jednou ho posuň i tady (a pošle se zpět).
+            val synced = if (!prefs.getBoolean(keyFor(KEY_MIG_PORADY_SYNC), false)) {
+                prefs.edit().putBoolean(keyFor(KEY_MIG_PORADY_SYNC), true).apply()
+                poradyUnderFilmoteka(remote.sidebar)
+            } else remote.sidebar
+            _sidebar.value = synced
             persistSidebar()
         }
         if (remote.phoneMenu.isNotEmpty()) {
@@ -391,7 +396,26 @@ class HomeLayoutStore @Inject constructor(
         }.filter { SidebarItem.fromName(it.item) != null }
         if (stored.isEmpty()) return SidebarItem.DEFAULT
         val storedItems = stored.map { it.item }.toSet()
-        return stored + SidebarItem.DEFAULT.filter { it.item !in storedItems }
+        val merged = stored + SidebarItem.DEFAULT.filter { it.item !in storedItems }
+        // OPONA (user 2026-10-13: „Filmotéka / Pořady / K přehrání") — jednorázově posuň Pořady hned pod
+        // Filmotéku (do 1.2.131 je OTA přidala na konec). Pak už rozhoduje jen userovo přeskládání.
+        if (!prefs.getBoolean(keyFor(KEY_MIG_PORADY), false)) {
+            val moved = poradyUnderFilmoteka(merged)
+            prefs.edit().putBoolean(keyFor(KEY_MIG_PORADY), true)
+                .putString(keyFor(KEY_SIDEBAR), json.encodeToString(moved)).apply()
+            return moved
+        }
+        return merged
+    }
+
+    /** OPONA: Pořady hned pod Filmotéku (jednorázová migrace; jinak pořadí nechá). */
+    private fun poradyUnderFilmoteka(list: List<SidebarEntry>): List<SidebarEntry> {
+        val porady = list.firstOrNull { it.item == SidebarItem.PODCASTY.name } ?: return list
+        val rest = list.filterNot { it === porady }.toMutableList()
+        val idx = rest.indexOfFirst { it.item == SidebarItem.FILMOTEKA.name }
+        if (idx < 0) return list
+        rest.add(idx + 1, porady)
+        return rest
     }
 
     /** Per-element tolerantní decode: poškozená položka se přeskočí, ne celý seznam. */
@@ -405,6 +429,8 @@ class HomeLayoutStore @Inject constructor(
     companion object {
         private const val KEY_ROWS = "rows_json"
         private const val KEY_SIDEBAR = "sidebar_json"
+        private const val KEY_MIG_PORADY = "sidebar_mig_porady"
+        private const val KEY_MIG_PORADY_SYNC = "sidebar_mig_porady_sync"
         /** PŮDORYS (SHW-112) — menu telefonu (pořadí + zapnutí sekcí drawer). */
         private const val KEY_PHONE_MENU = "phone_menu_json"
         // „Sáhl na tuhle doménu uživatel NA TOMTO zařízení?" — brání tomu, aby výchozí hodnoty přepsaly

@@ -493,6 +493,9 @@ private fun FilmyShellContent() {
                                 onOpenDetail = openDetail,
                                 onOpenJellyfinDetail = openJfDetail,
                                 onOpenKatalog = openKatalog,
+                                onPlayPodcast = playPodcast,
+                                onOpenPodcastSource = { src -> detailStack = detailStack + FilmyDetailEntry.PodcastSource(src) },
+                                onManagePodcastSources = { detailStack = detailStack + FilmyDetailEntry.PodcastManage },
                             )
                             // M2.5: Vzácné klenoty = LAPIDARY řady (reuse TvLapidaryViewModel).
                             FilmySection.GEMS -> FilmyGemsScreen(onMenu = onMenu, onOpenDetail = openDetail)

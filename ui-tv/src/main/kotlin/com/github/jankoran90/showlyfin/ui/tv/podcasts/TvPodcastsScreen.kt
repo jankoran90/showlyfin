@@ -71,7 +71,7 @@ fun TvPodcastsScreen(
 
     if (rails.isEmpty()) {
         Column(modifier.fillMaxSize().tvOverscan(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Podcasty", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+            Text("Pořady", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
             if (vm.canFollow()) {
                 androidx.compose.material3.Button(onClick = onManageSources, modifier = Modifier.tvFocusBorder()) { Text("Spravovat zdroje") }
             }
@@ -87,40 +87,83 @@ fun TvPodcastsScreen(
         return
     }
 
+    fun onItem(item: com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem) {
+        when (val ref = PodcastItemKey.parse(item.key)) {
+            is PodcastItemKey.Source -> vm.sourceOf(ref.sourceKey)?.let(onOpenSource)
+            is PodcastItemKey.Episode -> {
+                val src = vm.sourceOf(ref.sourceKey)
+                val ep = vm.episodeOf(ref.sourceKey, ref.episodeId)
+                if (src != null && ep != null) vm.playTarget(src, ep)?.let(onPlay)
+            }
+            null -> Unit
+        }
+    }
+    fun onItemLong(item: com.github.jankoran90.showlyfin.feature.discover.home.HomeRowItem) {
+        val ref = PodcastItemKey.parse(item.key) as? PodcastItemKey.Episode ?: return
+        val src = vm.sourceOf(ref.sourceKey) ?: return
+        val ep = vm.episodeOf(ref.sourceKey, ref.episodeId) ?: return
+        if (vm.canTranslate(src)) confirmFor = src to ep
+    }
+
+    // OPONA: varianta „mřížka" (Nastavení → Pořady → Rozvržení sekce) — jako Filmotéka: Další díly nahoře,
+    // filtry vedle názvu, pod tím mřížka širokých karet.
+    val layout = remember { PodcastPrefs.tvLayout(prefs) }
+    if (layout == "grid") {
+        val shelves = remember(state, marks, translated, translating, rowPrefs, watched) {
+            podcastShelves(state, marks, translated, translating, rowPrefs.copy(continueRow = true, newRow = true, channelsRow = true), watched)
+        }
+        var filtr by remember { mutableStateOf(0) }
+        val items = when (filtr) {
+            1 -> shelves.channelItems
+            2 -> shelves.newItems.filter { it.subtitle?.startsWith("CZ") == true }
+            else -> shelves.newItems
+        }
+        com.github.jankoran90.showlyfin.ui.tv.filmoteka.TvFilmotekaGrid(
+            items = items,
+            immersive = immersive,
+            onFocusItem = onFocusItem,
+            onItemClick = ::onItem,
+            header = {
+                com.github.jankoran90.showlyfin.ui.tv.components.TvSectionHeader(title = "Pořady", actions = {
+                    listOf("Nové díly", "Kanály a pořady", "Přeložené").forEachIndexed { i, label ->
+                        androidx.compose.material3.FilterChip(
+                            selected = filtr == i, onClick = { filtr = i }, label = { Text(label) },
+                            modifier = Modifier.tvFocusBorder(),
+                        )
+                    }
+                    if (vm.canFollow()) {
+                        androidx.compose.material3.OutlinedButton(onClick = onManageSources, modifier = Modifier.tvFocusBorder()) { Text("Spravovat zdroje") }
+                    }
+                })
+            },
+            gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
+            nextUp = shelves.continueItems,
+            modifier = modifier,
+            cardStyle = HomeCardStyle.LANDSCAPE,
+            onItemLongClick = ::onItemLong,
+        )
+        return
+    }
+
     TvRailList(
         rails = rails,
-        sectionTitle = "Podcasty",
+        sectionTitle = "Pořady",
         immersive = immersive,
         immersiveHeader = immersiveHeader,
         onFocusItem = onFocusItem,
         sectionActions = if (vm.canFollow()) {
             { androidx.compose.material3.OutlinedButton(onClick = onManageSources, modifier = Modifier.tvFocusBorder()) { Text("Spravovat zdroje") } }
         } else null,
-        onItemClick = { item ->
-            when (val ref = PodcastItemKey.parse(item.key)) {
-                is PodcastItemKey.Source -> vm.sourceOf(ref.sourceKey)?.let(onOpenSource)
-                is PodcastItemKey.Episode -> {
-                    val src = vm.sourceOf(ref.sourceKey)
-                    val ep = vm.episodeOf(ref.sourceKey, ref.episodeId)
-                    if (src != null && ep != null) vm.playTarget(src, ep)?.let(onPlay)
-                }
-                null -> Unit
-            }
-        },
+        onItemClick = ::onItem,
         // F2: podržení OK na dílu YouTube = „Přeložit do češtiny" (s potvrzením).
-        onItemLongClick = { item ->
-            val ref = PodcastItemKey.parse(item.key) as? PodcastItemKey.Episode ?: return@TvRailList
-            val src = vm.sourceOf(ref.sourceKey) ?: return@TvRailList
-            val ep = vm.episodeOf(ref.sourceKey, ref.episodeId) ?: return@TvRailList
-            if (vm.canTranslate(src)) confirmFor = src to ep
-        },
+        onItemLongClick = ::onItemLong,
         modifier = modifier,
     )
 }
 
 private fun podcastRails(shelves: PodcastShelves): List<TvRail> = buildList {
     if (shelves.continueItems.isNotEmpty()) add(
-        TvRail(id = "podcasty-pokracovat", title = "Pokračovat", style = HomeCardStyle.LANDSCAPE,
+        TvRail(id = "podcasty-pokracovat", title = "Další díly", style = HomeCardStyle.LANDSCAPE,
             items = shelves.continueItems, configId = "podcasty-pokracovat"),
     )
     if (shelves.newItems.isNotEmpty()) add(

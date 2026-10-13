@@ -23,11 +23,35 @@ fun FilmyPodcastsSection() {
     var perSource by remember { mutableStateOf(PodcastPrefs.perSource(prefs)) }
     var quality by remember { mutableStateOf(PodcastPrefs.quality(prefs)) }
     var ytOffer by remember { mutableStateOf(PodcastPrefs.searchYoutubeOffered(prefs)) }
+    var layout by remember { mutableStateOf(PodcastPrefs.phoneLayout(prefs)) }
+    var page by remember { mutableStateOf(PodcastPrefs.pageInFilmoteka(prefs)) }
+    var nextUp by remember { mutableStateOf(PodcastPrefs.inFilmotekaNextUp(prefs)) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SettingSectionTitle("Řady sekce Podcasty")
+        SettingSectionTitle("Ve Filmotéce")
         SettingSwitchRow(
-            title = "Pokračovat",
+            title = "Stránka Pořady",
+            subtitle = "Filmotéka · Pořady · K přehrání. Projeví se při dalším otevření Filmotéky.",
+            checked = page,
+            onCheckedChange = { prefs.edit().putBoolean(PodcastPrefs.PAGE_IN_FILMOTEKA, it).apply(); page = it },
+        )
+        SettingChips(
+            label = "Rozvržení stránky Pořady",
+            subtitle = "Mřížka a seznam jdou přepnout i ikonou v liště.",
+            options = PodcastPrefs.PHONE_LAYOUTS,
+            selected = layout,
+            labelOf = PodcastPrefs::layoutLabel,
+            onSelect = { prefs.edit().putString(PodcastPrefs.PHONE_LAYOUT, it).apply(); layout = it },
+        )
+        SettingSwitchRow(
+            title = "Pořady v „Další díly“",
+            subtitle = "Rozkoukané díly pořadů i v řadě Další díly ve Filmotéce (i z hledání a z TV).",
+            checked = nextUp,
+            onCheckedChange = { prefs.edit().putBoolean(PodcastPrefs.IN_FILMOTEKA_NEXTUP, it).apply(); nextUp = it },
+        )
+        SettingSectionTitle("Řady sekce Pořady")
+        SettingSwitchRow(
+            title = "Další díly",
             subtitle = "Rozkoukané díly (pozice sdílená s TV)",
             checked = rows.continueRow,
             onCheckedChange = { prefs.edit().putBoolean(PodcastPrefs.ROW_CONTINUE, it).apply(); rows = rows.copy(continueRow = it) },

@@ -55,13 +55,33 @@ fun FilmyFilmotekaPager(
     onOpenJellyfinDetail: (String) -> Unit = {},
     // LABYRINT (FLM-04): stránka žánru / podžánru / tématu… (zásobník shellu)
     onOpenKatalog: (KatalogCil) -> Unit = {},
+    // OPONA: stránka Pořady (Filmotéka · Pořady · K přehrání) — přehrání, karta kanálu, správa zdrojů.
+    onPlayPodcast: (com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget) -> Unit = {},
+    onOpenPodcastSource: (com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource) -> Unit = {},
+    onManagePodcastSources: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val porady = remember {
+        com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastPrefs.pageInFilmoteka(
+            ctx.getSharedPreferences("trakt_prefs", android.content.Context.MODE_PRIVATE),
+        )
+    }
     // LABYRINT (user 2026-10-08): „rád používám ty sekce na hlavní stránce, takže bych tam přidal
     // Objevit" → další stránky Objevit, Pro tebe (parita s webem) a Česky (filmy s českým zvukem).
     // Katalogové stránky jen pro profil bez věkového stropu (viz [KatalogPristupViewModel]).
     val katalog by androidx.hilt.navigation.compose.hiltViewModel<KatalogPristupViewModel>().povolen.collectAsState()
-    val pagerState = rememberPagerState(pageCount = { if (katalog) PAGE_COUNT else PAGE_COUNT_BEZ_KATALOGU })
+    // OPONA (user 2026-10-13): Filmotéka · Pořady · K přehrání (+ katalog jen dospělým). Pořadí stránek je
+    // seznam, ne pevné indexy — Pořady jdou vypnout v Nastavení a katalog podle profilu.
+    val stranky = remember(katalog, porady) {
+        buildList {
+            add(Stranka.FILMOTEKA)
+            if (porady) add(Stranka.PORADY)
+            add(Stranka.QUEUE)
+            if (katalog) { add(Stranka.OBJEVIT); add(Stranka.PROTEBE); add(Stranka.CESKY) }
+        }
+    }
+    val pagerState = rememberPagerState(pageCount = { stranky.size })
     val scope = rememberCoroutineScope()
     // user 2026-10-08: „hlavně ať to není zadrhané, plynule a rychle" — data sousedních stránek se
     // začnou načítat hned při vstupu na Filmotéku (tytéž ViewModely si pak stránky jen vezmou), takže
@@ -72,18 +92,15 @@ fun FilmyFilmotekaPager(
         androidx.hilt.navigation.compose.hiltViewModel<CeskyViewModel>()
     }
 
-    BackHandler(enabled = pagerState.currentPage != PAGE_FILMOTEKA) {
-        scope.launch { pagerState.animateScrollToPage(PAGE_FILMOTEKA) }
+    BackHandler(enabled = pagerState.currentPage != 0) {
+        scope.launch { pagerState.animateScrollToPage(0) }
     }
 
     // LABYRINT (user 2026-10-08: „má se tahat jen obsah a ne vše") — JEDNA pevná lišta nad pagerem:
     // ☰ + názvy stránek + akce aktivní stránky vpravo. Stránky si lištu nekreslí (LocalPagerBar),
     // jen sem podají své akce. Přejíždí se tak opravdu jen obsah.
     val akce = remember { mutableStateMapOf<Int, @Composable RowScope.() -> Unit>() }
-    val titulky = listOf(
-        PAGE_FILMOTEKA to "Filmotéka", PAGE_QUEUE to "K přehrání", PAGE_OBJEVIT to "Objevit",
-        PAGE_PROTEBE to "Pro tebe", PAGE_CESKY to "Česky",
-    ).take(if (katalog) PAGE_COUNT else PAGE_COUNT_BEZ_KATALOGU)
+    val titulky = stranky.mapIndexed { i, st -> i to st.nazev }
     val scroll = rememberScrollState()
     val pozice = remember { mutableStateMapOf<Int, Int>() }
     val density = LocalDensity.current
@@ -113,29 +130,36 @@ fun FilmyFilmotekaPager(
         HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
             val hostitel: (@Composable RowScope.() -> Unit) -> Unit = { a -> akce[page] = a }
             CompositionLocalProvider(LocalPagerBar provides hostitel) {
-                when (page) {
-                    PAGE_FILMOTEKA -> FilmyFilmotekaScreen(
+                when (stranky.getOrElse(page) { Stranka.FILMOTEKA }) {
+                    Stranka.FILMOTEKA -> FilmyFilmotekaScreen(
                         onMenu = onMenu,
                         onOpenDetail = onOpenDetail,
                         onOpenJellyfinDetail = onOpenJellyfinDetail,
+                        onPlayPodcast = onPlayPodcast,
                     )
-                    PAGE_QUEUE -> FilmyQueueScreen(
+                    Stranka.PORADY -> FilmyPodcastsPage(
+                        onMenu = onMenu,
+                        onOpenSource = onOpenPodcastSource,
+                        onPlay = onPlayPodcast,
+                        onManageSources = onManagePodcastSources,
+                    )
+                    Stranka.QUEUE -> FilmyQueueScreen(
                         onMenu = onMenu,
                         onOpenDetail = onOpenDetail,
                         titleContent = {},
                     )
-                    PAGE_OBJEVIT -> FilmyObjevitScreen(
+                    Stranka.OBJEVIT -> FilmyObjevitScreen(
                         onMenu = onMenu,
                         onOpenKatalog = onOpenKatalog,
                         titleContent = {},
                     )
-                    PAGE_PROTEBE -> FilmyProTebeKatalogScreen(
+                    Stranka.PROTEBE -> FilmyProTebeKatalogScreen(
                         onMenu = onMenu,
                         onOpenDetail = onOpenDetail,
                         onOpenKatalog = onOpenKatalog,
                         titleContent = {},
                     )
-                    else -> FilmyCeskyScreen(
+                    Stranka.CESKY -> FilmyCeskyScreen(
                         onMenu = onMenu,
                         onOpenDetail = onOpenDetail,
                         titleContent = {},
@@ -165,10 +189,6 @@ private fun PageTitle(text: String, active: Boolean, modifier: Modifier = Modifi
     )
 }
 
-private const val PAGE_FILMOTEKA = 0
-private const val PAGE_QUEUE = 1
-private const val PAGE_OBJEVIT = 2
-private const val PAGE_PROTEBE = 3
-private const val PAGE_CESKY = 4
-private const val PAGE_COUNT = 5
-private const val PAGE_COUNT_BEZ_KATALOGU = 2
+private enum class Stranka(val nazev: String) {
+    FILMOTEKA("Filmotéka"), PORADY("Pořady"), QUEUE("K přehrání"), OBJEVIT("Objevit"), PROTEBE("Pro tebe"), CESKY("Česky"),
+}

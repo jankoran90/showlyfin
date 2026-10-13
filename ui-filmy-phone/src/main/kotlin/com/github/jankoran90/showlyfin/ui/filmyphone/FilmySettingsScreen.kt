@@ -216,7 +216,7 @@ fun FilmySettingsScreen(
             }
 
             // ── PODCASTY (AMFITEÁTR FLM-05 F4) — řady sekce, kvalita, hledání na YouTube ──
-            FilmyCollapsibleSection("Podcasty", Icons.Rounded.Podcasts) {
+            FilmyCollapsibleSection("Pořady", Icons.Rounded.Podcasts) {
                 FilmyPodcastsSection()
             }
 

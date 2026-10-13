@@ -68,7 +68,7 @@ fun FilmyPodcastsScreen(
     val rails = remember(state, marks, translated, translating, rowPrefs, watched) {
         val shelves = podcastShelves(state, marks, translated, translating, rowPrefs, watched)
         buildList {
-            if (shelves.continueItems.isNotEmpty()) add(FilmyRail("podcasty-pokracovat", "Pokračovat", HomeCardStyle.LANDSCAPE, shelves.continueItems))
+            if (shelves.continueItems.isNotEmpty()) add(FilmyRail("podcasty-pokracovat", "Další díly", HomeCardStyle.LANDSCAPE, shelves.continueItems))
             if (shelves.newItems.isNotEmpty()) add(FilmyRail("podcasty-nove", "Nové díly", HomeCardStyle.LANDSCAPE, shelves.newItems))
             if (shelves.channelItems.isNotEmpty()) add(FilmyRail("podcasty-kanaly", "Kanály a pořady", HomeCardStyle.LANDSCAPE, shelves.channelItems))
         }
@@ -86,7 +86,7 @@ fun FilmyPodcastsScreen(
     if (rails.isEmpty()) {
         Column(Modifier.fillMaxSize()) {
             FilmySectionBar(onMenu = onMenu, trailing = manage) {
-                Text("Podcasty", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
+                Text("Pořady", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
             }
             Text(
                 when {

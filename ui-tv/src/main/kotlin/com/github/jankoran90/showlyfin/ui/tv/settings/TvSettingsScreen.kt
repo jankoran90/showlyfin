@@ -736,6 +736,6 @@ private fun tvSectionLabel(s: TvSection): String = when (s) {
     TvSection.WANT_TO_SEE -> "Chci vidět"
     TvSection.TRAKT -> "Trakt"
     TvSection.WATCHLIST -> "Oblíbené"
-    TvSection.PODCASTS -> "Podcasty"
+    TvSection.PODCASTS -> "Pořady"
     TvSection.SETTINGS -> "Nastavení"
 }

@@ -86,11 +86,17 @@ fun TvFilmotekaScreen(
     immersive: Boolean,
     immersiveHeader: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
+    // OPONA: přehrání rozkoukaného pořadu z „Další díly".
+    onPlayPodcast: (com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: TvFilmotekaViewModel = hiltViewModel(),
     sectionVm: TvSectionViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val filmotekaState by viewModel.state.collectAsStateWithLifecycle()
+    // OPONA: rozkoukané pořady i v „Další díly" Filmotéky (vypínač Nastavení → Pořady).
+    val poradyNextUp = com.github.jankoran90.showlyfin.feature.discover.podcasts.rememberPoradyNextUp()
+    val state = if (poradyNextUp.items.isEmpty()) filmotekaState
+        else filmotekaState.copy(nextUp = filmotekaState.nextUp + poradyNextUp.items)
     // Zdroje uložené na jiném zařízení (telefon, auto-cache po „Chci vidět") → přenačtení přes savedKeys.
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { viewModel.onResume() }
     // FOYER (SHW-107, user 2026-07-26): na TV je vstup do Filmotéky MŘÍŽKA + ABECEDNĚ (osa „Vše"); přepnutí
@@ -150,6 +156,7 @@ fun TvFilmotekaScreen(
         val jf = item.jellyfinId
         val collectionKey = item.collectionKey
         when {
+            poradyNextUp.handles(item) -> poradyNextUp.play(item, onPlayPodcast)
             // ATRIUM (SHW-118): sdružená kolekce se otevře VLASTNÍM překryvem, ne obsahem BoxSetu —
             // kolekce může mít díl mimo Jellyfin (sdilej.cz) a ten by v JF prohlížeči chyběl.
             collectionKey != null ->
@@ -303,7 +310,7 @@ private fun AxisChips(
  * (název + chipy) jde dovnitř jako [header], ať nad mřížkou není druhý pás.
  */
 @Composable
-private fun TvFilmotekaGrid(
+internal fun TvFilmotekaGrid(
     items: List<HomeRowItem>,
     immersive: Boolean,
     onFocusItem: (ImmersiveInfo?) -> Unit,
@@ -312,6 +319,9 @@ private fun TvFilmotekaGrid(
     gridState: LazyGridState,
     nextUp: List<HomeRowItem> = emptyList(),
     modifier: Modifier = Modifier,
+    // OPONA: TV Pořady ve variantě mřížka — široké karty (16:9) a podržení OK = Přeložit do češtiny.
+    cardStyle: HomeCardStyle = HomeCardStyle.POSTER,
+    onItemLongClick: ((HomeRowItem) -> Unit)? = null,
 ) {
     val cardScale = LocalTvCardScale.current
     val firstFocus = remember { FocusRequester() }
@@ -332,7 +342,10 @@ private fun TvFilmotekaGrid(
         header()
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Fixed((6f / cardScale.widthScale).roundToInt().coerceIn(3, 9)),
+            columns = GridCells.Fixed(
+                if (cardStyle == HomeCardStyle.LANDSCAPE) (4f / cardScale.widthScale).roundToInt().coerceIn(2, 6)
+                else (6f / cardScale.widthScale).roundToInt().coerceIn(3, 9),
+            ),
             horizontalArrangement = Arrangement.spacedBy(cardScale.spacing(16.dp)),
             verticalArrangement = Arrangement.spacedBy(cardScale.spacing(16.dp)),
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
@@ -359,9 +372,10 @@ private fun TvFilmotekaGrid(
                 ) {
                     TvHomeCard(
                         item = item,
-                        style = HomeCardStyle.POSTER,
+                        style = cardStyle,
                         onClick = { onItemClick(item) },
                         focusRequester = if (index == 0) firstFocus else null,
+                        onLongClick = onItemLongClick?.let { { it(item) } },
                     )
                 }
             }

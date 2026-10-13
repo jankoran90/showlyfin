@@ -187,6 +187,7 @@ fun TvShell(
                         immersive = immersive,
                         immersiveHeader = immersiveHeader,
                         onFocusItem = { rawInfo = it },
+                        onPlayPodcast = onPlayPodcast,
                     )
                     TvSection.LAPIDARY -> TvLapidaryScreen(
                         onOpenDetail = onOpenDetail,

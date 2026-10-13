@@ -39,9 +39,14 @@ fun FilmyFilmotekaScreen(
     /** RAMPA (SHW-121) — názvy stránek do lišty (Filmotéka / K přehrání); kreslí je pager. */
     titleContent: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
+    // OPONA: rozkoukané pořady v „Další díly" (přehrání přes shell).
+    onPlayPodcast: (com.github.jankoran90.showlyfin.feature.discover.podcasts.PodcastsViewModel.PlayTarget) -> Unit = {},
     vm: TvFilmotekaViewModel = hiltViewModel(),
 ) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val filmotekaState by vm.state.collectAsStateWithLifecycle()
+    val poradyNextUp = com.github.jankoran90.showlyfin.feature.discover.podcasts.rememberPoradyNextUp()
+    val state = if (poradyNextUp.items.isEmpty()) filmotekaState
+        else filmotekaState.copy(nextUp = filmotekaState.nextUp + poradyNextUp.items)
     val viewMode by vm.browseViewMode.collectAsStateWithLifecycle()
     // VM je retained na úrovni shellu (sekce se přepínají when-em) → při vstupu obnov výchozí osu z Nastavení.
     LaunchedEffect(Unit) { vm.applyDefaultAxis() }
@@ -54,6 +59,7 @@ fun FilmyFilmotekaScreen(
             val mi = item.mediaItem
             val jf = item.jellyfinId
             when {
+                poradyNextUp.handles(item) -> poradyNextUp.play(item, onPlayPodcast)
                 jf != null -> onOpenJellyfinDetail(jf)
                 mi != null -> onOpenDetail(mi)
             }
