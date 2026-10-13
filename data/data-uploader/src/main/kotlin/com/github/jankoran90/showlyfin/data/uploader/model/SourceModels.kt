@@ -171,4 +171,6 @@ data class SourceEpisode(
      *  [PodcastSourcesRepository.loadEpisodes] (RSS větev, z [RssEpisode.jfItemId]); umožňuje spustit
      *  VIDEO verzi epizody i mimo zdrojovou obrazovku (Domů „Pokračovat"). Null = RSS bez videa / jiný zdroj. */
     val jfItemId: String? = null,
+    /** Slovo 2026-10-13 — ČT řada dílu („Po jedné stopě do Afriky I") → Domů ukáže díl jako kapitolu knihy. */
+    val seriesTitle: String? = null,
 )

@@ -184,6 +184,7 @@ internal fun SlovoDetail(
             is ListenSourceTarget.Podcast -> onPush(SlovoDetailEntry.PodcastDetail(target.itemId))
             is ListenSourceTarget.Rss -> onPush(linkedOrPlain(podcastLinkLookup, "rss", target.feedUrl, target.title, target.episodeKey))
             is ListenSourceTarget.Youtube -> onPush(linkedOrPlain(podcastLinkLookup, "youtube", target.handle, target.title, target.episodeKey))
+            is ListenSourceTarget.Ctv -> onPush(linkedOrPlain(podcastLinkLookup, "ctv", target.ctvId, target.title, target.episodeKey))
         }
     }
 
@@ -253,6 +254,7 @@ internal fun SlovoDetail(
             title = entry.title,
             highlightEpisodeKey = entry.highlightEpisodeKey,
             audioOnly = audioOnly,
+            onlyDownloaded = audioOnly && listenOffline,
             seriesFilter = entry.seriesFilter,
             isAdmin = activeProfile?.isAdmin == true,
             kidsVisibleSeriesKeys = kidsVisibleSourceKeys,

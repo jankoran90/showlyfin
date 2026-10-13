@@ -218,6 +218,19 @@ class AbsPreferences @Inject constructor(
         get() = prefs.getInt(KEY_QUEUE_SWIPE, 0)
         set(value) = prefs.edit { putInt(KEY_QUEUE_SWIPE, value.coerceIn(0, 2)) }
 
+    /**
+     * Slovo 2026-10-13 (user „swipe doleva/doprava ve frontě přehrávače do Nastavení: zapnout/vypnout
+     * a jakou má mít funkci") — akce swipu položky fronty pro každý směr zvlášť:
+     * 0 = vypnuto (výchozí), 1 = odebrat z fronty, 2 = stáhnout do telefonu, 3 = přehrát hned, 4 = na začátek fronty.
+     */
+    var queueSwipeLeft: Int
+        get() = prefs.getInt(KEY_QUEUE_SWIPE_LEFT, 0)
+        set(value) = prefs.edit { putInt(KEY_QUEUE_SWIPE_LEFT, value.coerceIn(0, 4)) }
+
+    var queueSwipeRight: Int
+        get() = prefs.getInt(KEY_QUEUE_SWIPE_RIGHT, 0)
+        set(value) = prefs.edit { putInt(KEY_QUEUE_SWIPE_RIGHT, value.coerceIn(0, 4)) }
+
     /** Zobrazit tlačítko rychlosti v přehrávači. */
     var showSpeedButton: Boolean
         get() = prefs.getBoolean(KEY_SHOW_SPEED_BTN, true)
@@ -397,6 +410,8 @@ class AbsPreferences @Inject constructor(
         private const val KEY_EPISODE_ACTION = "listen_episode_action"
         private const val KEY_SHOW_REMAINING = "listen_show_remaining"
         private const val KEY_QUEUE_SWIPE = "listen_queue_swipe_action"
+        private const val KEY_QUEUE_SWIPE_LEFT = "listen_queue_swipe_left"
+        private const val KEY_QUEUE_SWIPE_RIGHT = "listen_queue_swipe_right"
         private const val KEY_SHOW_SPEED_BTN = "listen_show_speed_btn"
         private const val KEY_SHOW_SLEEP_BTN = "listen_show_sleep_btn"
         private const val KEY_SYNC_INTERVAL = "listen_sync_interval"

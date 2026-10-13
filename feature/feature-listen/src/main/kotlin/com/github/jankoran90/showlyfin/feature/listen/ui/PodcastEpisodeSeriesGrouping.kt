@@ -47,13 +47,19 @@ internal object PodcastEpisodeSeriesGrouping {
      * zachovává pozici PRVNÍHO výskytu série ve vstupu — feed bývá newest-first, takže série se
      * zobrazí na pozici svého nejnovějšího dílu.
      */
-    fun <T> group(items: List<T>, titleOf: (T) -> String, minSize: Int = 2): List<EpisodeShelfItem<T>> {
+    fun <T> group(
+        items: List<T>,
+        titleOf: (T) -> String,
+        minSize: Int = 2,
+        // Slovo 2026-10-13: ČT řady nejsou v názvu dílu → volající umí dodat vlastní název série.
+        seriesTitleOf: (T) -> String? = { detectSeriesTitle(titleOf(it)) },
+    ): List<EpisodeShelfItem<T>> {
         val bySlug = LinkedHashMap<String, MutableList<T>>()
         val titleBySlug = HashMap<String, String>()
         val firstIndex = HashMap<String, Int>()
         val standalone = mutableListOf<Pair<Int, T>>()
         items.forEachIndexed { idx, item ->
-            val seriesTitle = detectSeriesTitle(titleOf(item))
+            val seriesTitle = seriesTitleOf(item)
             if (seriesTitle == null) {
                 standalone += idx to item
             } else {
@@ -74,6 +80,48 @@ internal object PodcastEpisodeSeriesGrouping {
             }
         }
         return positioned.sortedBy { it.first }.map { it.second }
+    }
+
+    private val numberedRegex = Regex("^\\s*(\\d{1,3})\\s*/\\s*(\\d{1,3})\\b")
+
+    /** „3/18 Název" → (3, 18); jinak null. ČT čísluje díly konečných seriálů takhle. */
+    fun numberedPart(title: String): Pair<Int, Int>? =
+        numberedRegex.find(title)?.let { m -> m.groupValues[1].toInt() to m.groupValues[2].toInt() }
+
+    /**
+     * Slovo 2026-10-13 (user „Po jedné stopě, Trabantem… jako audioknihy") — název série ČT dílu:
+     * 1) ČT řada ze serveru („Po jedné stopě do Afriky I"); 2) číslovaný díl „N/M" bez řady → celý
+     * pořad je jeden seriál (víc různých M = víc seriálů → „Pořad (M dílů)"); 3) prefix před dvojtečkou.
+     */
+    fun ctvSeriesTitleOf(
+        episodes: List<com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode>,
+        showTitle: String,
+    ): (com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode) -> String? {
+        val totals = episodes.filter { it.seasonTitle.isNullOrBlank() }
+            .mapNotNull { numberedPart(it.title)?.second }.toSet()
+        return { ep ->
+            ep.seasonTitle?.takeIf { it.isNotBlank() }
+                ?: numberedPart(ep.title)?.let { (_, total) -> if (totals.size <= 1) showTitle else "$showTitle ($total dílů)" }
+                ?: detectSeriesTitle(ep.title)
+        }
+    }
+
+    /**
+     * Pořadí kapitol knihy ze série: „N/M" číslo dílu, jinak datum vydání vzestupně, jinak obrácené
+     * pořadí feedu (feedy jsou od nejnovějšího). Vrací nový seznam, vstup nemění.
+     */
+    fun <T> chapterOrder(members: List<T>, titleOf: (T) -> String, dateOf: (T) -> String?): List<T> {
+        val indexed = members.withIndex().toList()
+        val allNumbered = members.all { numberedPart(titleOf(it)) != null }
+        val sorted = if (allNumbered) {
+            indexed.sortedBy { numberedPart(titleOf(it.value))!!.first }
+        } else {
+            indexed.sortedWith(
+                compareBy<IndexedValue<T>> { PodcastTimelineViewModel.parseEpisodeDate(dateOf(it.value)) ?: Long.MAX_VALUE }
+                    .thenByDescending { it.index },
+            )
+        }
+        return sorted.map { it.value }
     }
 
     /**

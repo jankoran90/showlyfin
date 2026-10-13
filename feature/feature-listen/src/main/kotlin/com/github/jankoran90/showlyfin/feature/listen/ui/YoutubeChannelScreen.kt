@@ -19,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CheckCircle
@@ -53,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +72,8 @@ import com.github.jankoran90.showlyfin.core.ui.ShareLinks
 import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
+import com.github.jankoran90.showlyfin.feature.listen.SeriesBookChapter
+import com.github.jankoran90.showlyfin.feature.listen.SeriesBookViewModel
 import com.github.jankoran90.showlyfin.feature.listen.YoutubeChannelViewModel
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
@@ -100,8 +104,10 @@ fun YoutubeChannelScreen(
     onSetSeriesVisibleForKids: (key: String, visible: Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: YoutubeChannelViewModel = hiltViewModel(),
+    bookViewModel: SeriesBookViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val layout by bookViewModel.layout.collectAsStateWithLifecycle()
     val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
@@ -119,17 +125,29 @@ fun YoutubeChannelScreen(
 
     // SLOVO-KIDS-EPISODE / WATCHDOG — série stejným vzorem jako RssPodcastScreen.
     val sourceKey = "youtube:$channel"
-    val filteredEpisodes = remember(state.episodes, seriesFilter, onlyDownloaded, offlineStates) {
+    // Slovo 2026-10-13 — ruční knihy (pravidla) mají přednost před automatickou sérií z názvu.
+    val seriesRules by bookViewModel.seriesRules.collectAsStateWithLifecycle()
+    val seriesTitleOf: (String) -> String? = remember(seriesRules) {
+        { t -> bookViewModel.ruleTitle(sourceKey, t) ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(t) }
+    }
+    val ruleDraft = remember { mutableStateOf<SeriesRuleDraft?>(null) }
+    val openBookSlug = rememberSaveable { mutableStateOf<String?>(null) }
+    // Dětská pojistka otevřela první schválenou sérii → díl z přehrávače otevře SVOU schválenou sérii.
+    @Suppress("NAME_SHADOWING")
+    val seriesFilter = remember(seriesFilter, highlightEpisodeKey, state.episodes, seriesTitleOf, kidsVisibleSeriesKeys) {
+        seriesFilterForHighlight(seriesFilter, highlightEpisodeKey, state.episodes, viewModel::episodeKey, { seriesTitleOf(it.title) }, sourceKey, kidsVisibleSeriesKeys)
+    }
+    val filteredEpisodes = remember(state.episodes, seriesFilter, onlyDownloaded, offlineStates, seriesTitleOf) {
         val inSeries = if (seriesFilter == null) state.episodes
         else state.episodes.filter {
-            PodcastEpisodeSeriesGrouping.detectSeriesTitle(it.title)
-                ?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
+            seriesTitleOf(it.title)?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
         }
         if (!onlyDownloaded) inSeries
         else inSeries.filter { offlineStates[viewModel.episodeKey(it)]?.status == OfflineStatus.DOWNLOADED }
     }
-    val shelfItems = remember(filteredEpisodes, seriesFilter) {
-        if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
+    val shelfItems = remember(filteredEpisodes, seriesFilter, seriesTitleOf) {
+        if (seriesFilter != null) null
+        else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title }, seriesTitleOf = { seriesTitleOf(it.title) })
     }
     // BUG (2026-09-04, user screenshot): rozposlouchané/rozkoukané epizody nahoru. Klíč jen na
     // MNOŽINU rozečtených id (ne na `resumeMarks` samotné) — nepřeuspořádá se s každým tikem pozice
@@ -171,6 +189,34 @@ fun YoutubeChannelScreen(
             viewModel.consumeCastMessage()
         }
     }
+
+    // Slovo 2026-10-13 — série jako kniha (kapitoly = díly), viz [SeriesBookGate].
+    fun chapterOf(ep: YtEpisode) = SeriesBookChapter(
+        key = viewModel.episodeKey(ep), title = ep.title, durationSec = ep.duration ?: 0.0, date = ep.uploadDate,
+        image = ep.thumbnail, description = ep.description, queued = viewModel.toQueued(ep),
+        download = viewModel.offlineRequest(ep),
+        onVideo = if (audioOnly) null else ({ onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.thumbnail) }),
+    )
+    SeriesRuleDialog(
+        draft = ruleDraft,
+        onSave = { original, rule ->
+            bookViewModel.saveRule(sourceKey, original, rule)
+            openBookSlug.value = PodcastEpisodeSeriesGrouping.seriesSlug(rule.title)
+        },
+        onDelete = { t -> bookViewModel.removeRule(sourceKey, t); openBookSlug.value = null },
+    )
+    if (!showSearch && SeriesBookGate(
+            layout = layout, shelfItems = shelfItems, seriesFiltered = if (seriesFilter != null) filteredEpisodes else null,
+            showTitle = state.channelTitle ?: channelTitle, seriesTitleOf = { seriesTitleOf(it.title) },
+            keyOf = viewModel::episodeKey,
+            chaptersOf = { m -> PodcastEpisodeSeriesGrouping.chapterOrder(m, { it.title }, { it.uploadDate }).map(::chapterOf) },
+            openSlug = openBookSlug, highlightKey = highlightEpisodeKey, wideCover = true,
+            onBack = onBack, onOpenAudioPlayer = onOpenAudioPlayer, modifier = modifier,
+            onEditBook = if (isAdmin) ({ t -> ruleDraft.value = bookRuleDraft(bookViewModel.ruleFor(sourceKey, t), t) }) else null,
+            kidsVisible = if (isAdmin) ({ t -> PodcastEpisodeSeriesGrouping.buildSeriesKey(sourceKey, t) in kidsVisibleSeriesKeys }) else null,
+            onToggleKids = { t, v -> onSetSeriesVisibleForKids(PodcastEpisodeSeriesGrouping.buildSeriesKey(sourceKey, t), v) },
+        )
+    ) return
 
     if (showSearch) {
         val chTitle = state.channelTitle ?: channelTitle
@@ -244,8 +290,8 @@ fun YoutubeChannelScreen(
             }
             val canResume = !isCurrent && markPos != null && !isFinished
             val remainingLabel = if (canResume && markDur != null && markDur > 0)
-                "zbývá ${formatDuration((markDur - markPos!!).coerceAtLeast(0L) / 1000.0)}" else null
-            EpisodeRow(
+                "zbývá ${ytFormatDuration((markDur - markPos!!).coerceAtLeast(0L) / 1000.0)}" else null
+            YoutubeEpisodeRow(
                 title = ep.title,
                 thumbnail = ep.thumbnail,
                 durationSec = ep.duration,
@@ -280,8 +326,10 @@ fun YoutubeChannelScreen(
                 latestDateLabel = latestMs?.let { PodcastEpisodeSeriesGrouping.formatSeriesDate(it) },
                 thumbnail = group.members.firstOrNull()?.thumbnail,
                 expanded = group.slug in expandedSeries,
+                asBook = layout.seriesAsBook,
                 onClick = {
-                    expandedSeries = if (group.slug in expandedSeries) expandedSeries - group.slug else expandedSeries + group.slug
+                    if (layout.seriesAsBook) openBookSlug.value = group.slug
+                    else expandedSeries = if (group.slug in expandedSeries) expandedSeries - group.slug else expandedSeries + group.slug
                 },
                 onLongClick = if (isAdmin) ({ seriesForAction = group }) else null,
             )
@@ -379,6 +427,11 @@ fun YoutubeChannelScreen(
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, atFront = true)
                 },
+                if (isAdmin) {
+                    ListenEpisodeAction(Icons.AutoMirrored.Filled.MenuBook, "Udělat knihu z dílů…") {
+                        ruleDraft.value = SeriesRuleDraft.fromEpisode(ep.title)
+                    }
+                } else null,
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
                     viewModel.enqueue(ep, atFront = false)
                 },
@@ -410,153 +463,4 @@ fun YoutubeChannelScreen(
             onDismiss = { actionEpisode = null },
         )
     }
-}
-
-@Composable
-private fun EpisodeRow(
-    title: String,
-    thumbnail: String?,
-    durationSec: Double?,
-    uploadDate: String?,
-    description: String?,
-    downloaded: Boolean,
-    isCurrent: Boolean,
-    isPlaying: Boolean,
-    progress: Float?,
-    canResume: Boolean,
-    remainingLabel: String?,
-    highlighted: Boolean,
-    showVideo: Boolean = true,
-    isFinished: Boolean = false,
-    onVideo: () -> Unit,
-    onAudio: () -> Unit,
-    onMore: () -> Unit,
-    onEndListening: (() -> Unit)? = null,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val accent = MaterialTheme.colorScheme.primary
-    // NAVIGATE: zvýrazni hranou epizodu (isCurrent) i tu, ze které se uživatel proklikl (highlighted).
-    val emphasized = isCurrent || highlighted
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (emphasized) accent.copy(alpha = 0.12f) else Color.Transparent)
-            .padding(if (emphasized) 6.dp else 0.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = thumbnail,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .width(120.dp)
-                    .height(68.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-            )
-            Column(Modifier.padding(start = 12.dp)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (emphasized) accent else MaterialTheme.colorScheme.onBackground,
-                )
-                val meta = listOfNotNull(formatDate(uploadDate), durationSec?.let { formatDuration(it) }, remainingLabel)
-                    .joinToString(" · ")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (downloaded) {
-                        Icon(
-                            Icons.Default.DownloadDone,
-                            contentDescription = "Staženo do telefonu",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
-                        )
-                    }
-                    if (isFinished) {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = "Poslechnuto",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
-                        )
-                    }
-                    if (meta.isNotBlank()) {
-                        Text(
-                            meta,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                    }
-                }
-                if (progress != null && !isFinished) {
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.fillMaxWidth().height(3.dp).padding(top = 6.dp),
-                        color = accent,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                }
-            }
-        }
-        if (!description.isNullOrBlank()) {
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = if (expanded) Int.MAX_VALUE else 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp)
-                    .clickable { expanded = !expanded },
-            )
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (showVideo) {
-                FilledTonalButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("Video", Modifier.padding(start = 6.dp))
-                }
-            }
-            val (audioIcon, audioLabel) = when {
-                isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
-                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
-                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
-                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
-                else -> Icons.Default.Headphones to "Poslech"
-            }
-            OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {
-                Icon(audioIcon, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text(audioLabel, Modifier.padding(start = 6.dp))
-            }
-            if (canResume && !isFinished && onEndListening != null) {
-                EndListeningButton(onConfirm = onEndListening)
-            }
-            IconButton(onClick = onMore) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
-            }
-        }
-    }
-}
-
-private fun formatDuration(sec: Double): String {
-    val total = sec.toLong()
-    val h = total / 3600
-    val m = (total % 3600) / 60
-    val s = total % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
-}
-
-/** "YYYY-MM-DD" → "D. M. YYYY" (null/neúplné → null). */
-private fun formatDate(d: String?): String? {
-    if (d.isNullOrBlank()) return null
-    val p = d.take(10).split("-")
-    if (p.size != 3) return null
-    val day = p[2].toIntOrNull() ?: return null
-    val mon = p[1].toIntOrNull() ?: return null
-    return "$day. $mon. ${p[0]}"
 }

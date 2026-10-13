@@ -34,6 +34,32 @@ internal fun SlovoHomeLayoutSection(viewModel: HomeLayoutViewModel = hiltViewMod
             labelOf = { if (it) "Otevřít pořad" else "Rovnou přehrát" },
             onSelect = { v -> viewModel.update { it.copy(episodeTapOpensShow = v) } },
         )
+        SettingChips(
+            label = "Série v pořadu",
+            subtitle = "Kniha = jedna karta s kapitolami (díly), Přehrát pokračuje dalším dílem. Seznam = rozbalovací řádek s díly.",
+            options = listOf(true, false),
+            selected = layout.seriesAsBook,
+            labelOf = { if (it) "Jako kniha" else "Rozbalit v seznamu" },
+            onSelect = { v -> viewModel.update { it.copy(seriesAsBook = v) } },
+        )
+        if (layout.seriesAsBook) {
+            SettingChips(
+                label = "Díl ze série na Domů",
+                subtitle = "Kniha = název knihy a „kapitola 2/13 · název dílu“, ťuk otevře knihu na té kapitole.",
+                options = listOf(true, false),
+                selected = layout.episodeAsBook,
+                labelOf = { if (it) "Jako kniha" else "Jako díl" },
+                onSelect = { v -> viewModel.update { it.copy(episodeAsBook = v) } },
+            )
+            SettingChips(
+                label = "Pořad o jedné sérii",
+                subtitle = "Třeba Trabantem Jižní Amerikou: otevřít rovnou knihu, nebo nejdřív kartu série.",
+                options = listOf(true, false),
+                selected = layout.singleSeriesOpensBook,
+                labelOf = { if (it) "Rovnou kniha" else "Karta série" },
+                onSelect = { v -> viewModel.update { it.copy(singleSeriesOpensBook = v) } },
+            )
+        }
         if (layout.list) {
             SettingChips(
                 label = "Cover v seznamu",

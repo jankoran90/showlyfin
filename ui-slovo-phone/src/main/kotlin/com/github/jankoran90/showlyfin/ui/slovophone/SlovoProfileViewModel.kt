@@ -43,6 +43,11 @@ class SlovoProfileViewModel @Inject constructor(
     private val absRepo: AbsRepository,
 ) : ViewModel() {
 
+    init {
+        // 2026-10-13: PIN nastavený na jiném zařízení (nebo na serveru) platí i tady — dítě pak nepřepne na Nel.
+        viewModelScope.launch { profileRepository.pullLoginPins() }
+    }
+
     private val _podcasts = MutableStateFlow<List<Podcast>>(emptyList())
     private val _podcastsLoading = MutableStateFlow(false)
     private val _podcastsError = MutableStateFlow<String?>(null)

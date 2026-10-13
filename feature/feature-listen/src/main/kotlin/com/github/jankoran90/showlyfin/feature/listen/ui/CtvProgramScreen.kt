@@ -1,5 +1,8 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.gestures.detectTapGestures
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,9 +23,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -51,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +73,8 @@ import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.feature.listen.CtvProgramViewModel
+import com.github.jankoran90.showlyfin.feature.listen.SeriesBookChapter
+import com.github.jankoran90.showlyfin.feature.listen.SeriesBookViewModel
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
 
@@ -93,10 +101,14 @@ fun CtvProgramScreen(
     kidsVisibleSeriesKeys: Set<String> = emptySet(),
     onSetSeriesVisibleForKids: (key: String, visible: Boolean) -> Unit = { _, _ -> },
     highlightEpisodeKey: String? = null,
+    // Slovo 2026-10-13 — dítě offline vidí jen stažené díly (parita s RSS / YouTube).
+    onlyDownloaded: Boolean = false,
     modifier: Modifier = Modifier,
     viewModel: CtvProgramViewModel = hiltViewModel(),
+    bookViewModel: SeriesBookViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val layout by bookViewModel.layout.collectAsStateWithLifecycle()
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
     // BUG (2026-09-04): video watch pozice — parita s RssPodcastScreen/YoutubeChannelScreen.
@@ -112,15 +124,33 @@ fun CtvProgramScreen(
 
     // SLOVO-KIDS-EPISODE / WATCHDOG — série stejným vzorem jako RssPodcastScreen.
     val sourceKey = "ctv:$ctvId"
-    val filteredEpisodes = remember(state.episodes, seriesFilter) {
-        if (seriesFilter == null) state.episodes
-        else state.episodes.filter {
-            PodcastEpisodeSeriesGrouping.detectSeriesTitle(it.title)
-                ?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
-        }
+    val showTitle = state.showTitle ?: title
+    // Slovo 2026-10-13: série ČT = řada ze serveru / číslované díly „N/M" / prefix před dvojtečkou.
+    val seriesRules by bookViewModel.seriesRules.collectAsStateWithLifecycle()
+    val seriesTitleOf: (CtvEpisode) -> String? = remember(state.episodes, showTitle, seriesRules) {
+        val auto = PodcastEpisodeSeriesGrouping.ctvSeriesTitleOf(state.episodes, showTitle)
+        val combined: (CtvEpisode) -> String? = { ep -> bookViewModel.ruleTitle(sourceKey, ep.title) ?: auto(ep) }
+        combined
     }
-    val shelfItems = remember(filteredEpisodes, seriesFilter) {
-        if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
+    val ruleDraft = remember { mutableStateOf<SeriesRuleDraft?>(null) }
+    val openBookSlug = rememberSaveable { mutableStateOf<String?>(null) }
+    val offlineStates by bookViewModel.offlineStates.collectAsStateWithLifecycle()
+    // Dětská pojistka otevřela první schválenou sérii → díl z přehrávače otevře SVOU schválenou sérii.
+    @Suppress("NAME_SHADOWING")
+    val seriesFilter = remember(seriesFilter, highlightEpisodeKey, state.episodes, seriesTitleOf, kidsVisibleSeriesKeys) {
+        seriesFilterForHighlight(seriesFilter, highlightEpisodeKey, state.episodes, viewModel::episodeKey, seriesTitleOf, sourceKey, kidsVisibleSeriesKeys)
+    }
+    val filteredEpisodes = remember(state.episodes, seriesFilter, seriesTitleOf, onlyDownloaded, offlineStates) {
+        val inSeries = if (seriesFilter == null) state.episodes
+        else state.episodes.filter {
+            seriesTitleOf(it)?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
+        }
+        if (!onlyDownloaded) inSeries
+        else inSeries.filter { offlineStates[viewModel.episodeKey(it)]?.status == com.github.jankoran90.showlyfin.data.offline.OfflineStatus.DOWNLOADED }
+    }
+    val shelfItems = remember(filteredEpisodes, seriesFilter, seriesTitleOf) {
+        if (seriesFilter != null) null
+        else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title }, seriesTitleOf = seriesTitleOf)
     }
     // BUG (2026-09-04, user screenshot): rozposlouchané/rozkoukané epizody nahoru, parita s YoutubeChannelScreen.
     val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.filterValues { !it.isNearEnd() }.keys
@@ -159,6 +189,33 @@ fun CtvProgramScreen(
             viewModel.consumeCastMessage()
         }
     }
+
+    // Slovo 2026-10-13 — série jako kniha (kapitoly = díly), viz [SeriesBookGate].
+    fun chapterOf(ep: CtvEpisode) = SeriesBookChapter(
+        key = viewModel.episodeKey(ep), title = ep.title, durationSec = ep.duration ?: 0.0, date = ep.date,
+        image = ep.image, description = ep.description, queued = viewModel.toQueued(ep),
+        download = viewModel.offlineRequest(ep),
+        onVideo = if (audioOnly) null else ({ onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.image) }),
+    )
+    SeriesRuleDialog(
+        draft = ruleDraft,
+        onSave = { original, rule ->
+            bookViewModel.saveRule(sourceKey, original, rule)
+            openBookSlug.value = PodcastEpisodeSeriesGrouping.seriesSlug(rule.title)
+        },
+        onDelete = { t -> bookViewModel.removeRule(sourceKey, t); openBookSlug.value = null },
+    )
+    if (!showSearch && SeriesBookGate(
+            layout = layout, shelfItems = shelfItems, seriesFiltered = if (seriesFilter != null) filteredEpisodes else null,
+            showTitle = showTitle, seriesTitleOf = seriesTitleOf, keyOf = viewModel::episodeKey,
+            chaptersOf = { m -> PodcastEpisodeSeriesGrouping.chapterOrder(m, { it.title }, { it.date }).map(::chapterOf) },
+            openSlug = openBookSlug, highlightKey = highlightEpisodeKey, wideCover = true,
+            onBack = onBack, onOpenAudioPlayer = onOpenAudioPlayer, modifier = modifier,
+            onEditBook = if (isAdmin) ({ t -> ruleDraft.value = bookRuleDraft(bookViewModel.ruleFor(sourceKey, t), t) }) else null,
+            kidsVisible = if (isAdmin) ({ t -> PodcastEpisodeSeriesGrouping.buildSeriesKey(sourceKey, t) in kidsVisibleSeriesKeys }) else null,
+            onToggleKids = { t, v -> onSetSeriesVisibleForKids(PodcastEpisodeSeriesGrouping.buildSeriesKey(sourceKey, t), v) },
+        )
+    ) return
 
     if (showSearch) {
         val chTitle = state.showTitle ?: title
@@ -258,8 +315,10 @@ fun CtvProgramScreen(
                 latestDateLabel = latestMs?.let { PodcastEpisodeSeriesGrouping.formatSeriesDate(it) },
                 thumbnail = group.members.firstOrNull()?.image,
                 expanded = group.slug in expandedSeries,
+                asBook = layout.seriesAsBook,
                 onClick = {
-                    expandedSeries = if (group.slug in expandedSeries) expandedSeries - group.slug else expandedSeries + group.slug
+                    if (layout.seriesAsBook) openBookSlug.value = group.slug
+                    else expandedSeries = if (group.slug in expandedSeries) expandedSeries - group.slug else expandedSeries + group.slug
                 },
                 onLongClick = if (isAdmin) ({ seriesForAction = group }) else null,
             )
@@ -351,9 +410,18 @@ fun CtvProgramScreen(
                         viewModel.castVideoToTv(ep)
                     }
                 } else null,
+                // Slovo 2026-10-13: ČT díl jde stáhnout (server ho složí do jednoho souboru).
+                ListenEpisodeAction(Icons.Default.Download, "Stáhnout do telefonu") {
+                    bookViewModel.download(chapterOf(ep))
+                },
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, atFront = true)
                 },
+                if (isAdmin) {
+                    ListenEpisodeAction(Icons.AutoMirrored.Filled.MenuBook, "Udělat knihu z dílů…") {
+                        ruleDraft.value = SeriesRuleDraft.fromEpisode(ep.title)
+                    }
+                } else null,
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
                     viewModel.enqueue(ep, atFront = false)
                 },
@@ -400,9 +468,12 @@ private fun EpisodeRow(
     var expanded by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
     val emphasized = isCurrent || highlighted
+    // Slovo 2026-10-13 (user „ať je ovládání stejné nehledě na typ zdroje") — dlouhý stisk = menu ⋮ jako u RSS.
+    val currentOnMore by rememberUpdatedState(onMore)
     Column(
         Modifier
             .fillMaxWidth()
+            .pointerInput(Unit) { detectTapGestures(onLongPress = { currentOnMore() }) }
             .clip(RoundedCornerShape(12.dp))
             .background(if (emphasized) accent.copy(alpha = 0.12f) else Color.Transparent)
             .padding(if (emphasized) 6.dp else 0.dp),

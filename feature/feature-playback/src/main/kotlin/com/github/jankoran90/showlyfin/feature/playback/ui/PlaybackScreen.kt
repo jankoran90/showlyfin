@@ -193,9 +193,10 @@ private val SUBTITLE_COLORS = listOf(
  */
 private const val CTV_WIDEVINE_LICENSE = "https://ivys-wvproxy.o2tv.cz/license"
 
-/** VLNY (2026-09-18) — Haiku volba v model pickeru LINGUA-YT (jen YouTube). Plné ID passthroughuje
- *  voice-bridge `worker_model_id` beze změny (viz routes/subtitles.py `_lingua_translate_chunk`). */
-private const val LINGUA_MODEL_HAIKU = "claude-haiku-4-5-20251001"
+/** VLNY (2026-09-18) — volba modelu LINGUA-YT (jen YouTube). 2026-10-13 (user „výchozí Haiku, prostě
+ *  latest"): výchozí = server (`LINGUA_YT_MODEL`, alias `haiku` = vždy nejnovější Haiku); alternativa
+ *  Sonnet aliasem `sonnet` (mozek vezme nejnovější Sonnet). Dřív natvrdo `claude-haiku-4-5-…`. */
+private const val LINGUA_MODEL_SONNET = "sonnet"
 
 /** TRELLIS (2026-09-03): klíč do [MediaMetadata.extras] pro doplňkový audio proud u YouTube 720p/„max"
  *  (viz [PodcastSourcesRepository.youtubeVideoUrl]) — [MoviePlayerService] ho čte a proudy spojí
@@ -1323,20 +1324,20 @@ private fun SubtitleSettingsPanel(
                     ) {
                         RadioButton(selected = true, onClick = { showModelPicker = false; onTranslateAi(null) })
                         Column {
-                            Text("Sonnet (výchozí)", style = MaterialTheme.typography.bodyMedium)
-                            Text("Kvalitnější překlad", style = MaterialTheme.typography.bodySmall)
+                            Text("Haiku (výchozí)", style = MaterialTheme.typography.bodyMedium)
+                            Text("Nejnovější Haiku — rychlý a levný, na titulky stačí", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     Row(
                         Modifier.fillMaxWidth().clickable {
-                            showModelPicker = false; onTranslateAi(LINGUA_MODEL_HAIKU)
+                            showModelPicker = false; onTranslateAi(LINGUA_MODEL_SONNET)
                         },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(selected = false, onClick = { showModelPicker = false; onTranslateAi(LINGUA_MODEL_HAIKU) })
+                        RadioButton(selected = false, onClick = { showModelPicker = false; onTranslateAi(LINGUA_MODEL_SONNET) })
                         Column {
-                            Text("Haiku", style = MaterialTheme.typography.bodyMedium)
-                            Text("Rychlejší — hodně dialogu, delší videa", style = MaterialTheme.typography.bodySmall)
+                            Text("Sonnet", style = MaterialTheme.typography.bodyMedium)
+                            Text("Pomalejší a dražší, zkus když Haiku nesedí", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

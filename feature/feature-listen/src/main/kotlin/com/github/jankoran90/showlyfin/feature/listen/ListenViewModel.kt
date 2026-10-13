@@ -575,6 +575,15 @@ class ListenViewModel @Inject constructor(
         if (!_uiState.value.podcastsLoaded) loadPodcastLibraries()
     }
 
+    /** User 2026-10-13 — „Odstranit z telefonu" (long-press): smaže staženou knihu, server beze změny. */
+    fun deleteBookDownload(book: Audiobook) = audiobookDownloads.delete(book.id)
+
+    /** „Stáhnout znovu" (např. po úpravě knihy na serveru): smaž stažené a stáhni nanovo. */
+    fun redownloadBook(book: Audiobook) {
+        audiobookDownloads.delete(book.id)
+        downloadBook(book)
+    }
+
     /** Stáhne jednu audioknihu (long-press menu v gridu — "Stáhnout"). */
     fun downloadBook(book: Audiobook) {
         audiobookDownloads.download(book.id, book.title, book.author, book.coverUrl, book.libraryId, book.seriesName)

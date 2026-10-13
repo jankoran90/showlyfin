@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Layers
@@ -39,6 +40,8 @@ internal fun PodcastSeriesRow(
     thumbnail: String?,
     expanded: Boolean,
     onClick: () -> Unit,
+    /** Slovo 2026-10-13 — tap otevře knihu ze série (kapitoly), ne rozbalení; ikona knihy + šipka doprava. */
+    asBook: Boolean = false,
     onLongClick: (() -> Unit)? = null,
 ) {
     Row(
@@ -61,7 +64,7 @@ internal fun PodcastSeriesRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Default.Layers,
+                if (asBook) Icons.AutoMirrored.Filled.MenuBook else Icons.Default.Layers,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.width(18.dp).height(18.dp),
@@ -74,7 +77,7 @@ internal fun PodcastSeriesRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val meta = listOfNotNull("$memberCount dílů", latestDateLabel?.let { "nejnovější $it" })
+                val meta = listOfNotNull(if (asBook) "kniha · $memberCount kap." else "$memberCount dílů", latestDateLabel?.let { "nejnovější $it" })
                     .joinToString(" · ")
                 Text(
                     meta,
@@ -86,8 +89,8 @@ internal fun PodcastSeriesRow(
             }
         }
         Icon(
-            if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
-            contentDescription = if (expanded) "Sbalit" else "Rozbalit",
+            if (expanded && !asBook) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
+            contentDescription = if (asBook) "Otevřít knihu" else if (expanded) "Sbalit" else "Rozbalit",
             tint = MaterialTheme.colorScheme.onSecondaryContainer,
         )
     }

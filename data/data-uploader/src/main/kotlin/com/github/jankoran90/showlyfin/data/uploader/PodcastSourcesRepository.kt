@@ -247,6 +247,7 @@ class PodcastSourcesRepository @Inject constructor(
                         resumeKey = "ctv:${ep.id}",   // shoda s CtvProgramViewModel.episodeKey
                         description = ep.description,
                         durationSec = ep.duration ?: 0.0,
+                        seriesTitle = ep.seasonTitle?.takeIf { it.isNotBlank() },
                     )
                 }
                 else -> loadRss(source.ref, limit).let { feed ->

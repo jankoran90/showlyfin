@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -79,8 +80,11 @@ fun SlovoSettingsScreen(
             SlovoCollapsibleSection("Vzhled", Icons.Rounded.Palette) {
                 SlovoAppearanceSection()
             }
-            SlovoCollapsibleSection("Zobrazení Domů", Icons.Rounded.ViewAgenda) {
+            SlovoCollapsibleSection("Zobrazení Domů a pořadů", Icons.Rounded.ViewAgenda) {
                 SlovoHomeLayoutSection()
+            }
+            if (adult) SlovoCollapsibleSection("Přehrávač", Icons.Rounded.PlayCircle) {
+                SlovoPlayerSettingsSection()
             }
             if (adult) SlovoCollapsibleSection("Pořadí menu", Icons.Rounded.Menu) {
                 SlovoDrawerOrderSection()
@@ -100,7 +104,8 @@ fun SlovoSettingsScreen(
             if (adult) SlovoCollapsibleSection("Propojené pořady", Icons.Rounded.Link) {
                 PodcastLinksSettingsSection()
             }
-            SlovoCollapsibleSection("Kvalita videa", Icons.Rounded.HighQuality) {
+            // Emulátor 2026-10-13: dítě má jen poslech (video volby skryté) → kvalita videa nedává smysl.
+            if (adult) SlovoCollapsibleSection("Kvalita videa", Icons.Rounded.HighQuality) {
                 PodcastVideoQualitySettingsSection()
             }
             if (adult) SlovoCollapsibleSection("AI překlad YouTube titulků", Icons.Rounded.Translate) {

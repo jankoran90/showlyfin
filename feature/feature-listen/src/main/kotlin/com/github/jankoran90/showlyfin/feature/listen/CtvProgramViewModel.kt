@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.listen
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.CtvEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
@@ -22,6 +23,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -48,6 +51,8 @@ class CtvProgramViewModel @Inject constructor(
     // EPHEMERON (2026-09-04): epizody manuálně připojené ke kartě přes scoped hledání (i mimo okno feedu).
     private val attachedStore: com.github.jankoran90.showlyfin.feature.listen.player.AttachedEpisodeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val offlineEpisodes: ListenOfflineEpisodes,
+    private val offlineDownloads: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
 ) : ViewModel() {
 
     /** Stav přehrávače (aktuální epizoda + živá pozice) → zvýraznění řádku + ikona hraje/pauza. */
@@ -97,16 +102,27 @@ class CtvProgramViewModel @Inject constructor(
     private val cookie get() = prefs.getString("uploader_session_cookie", "") ?: ""
 
     private var loadedFor: String? = null
+    private var fromOfflineCache = false
 
     fun load(show: String) {
-        if (loadedFor == show && _rawEpisodes.value.isNotEmpty()) return
+        if (loadedFor == show && _rawEpisodes.value.isNotEmpty() && !fromOfflineCache) return
         loadedFor = show
+        fromOfflineCache = false
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             runCatching { uploaderDs.getCtvFeed(baseUrl, cookie, show, limit = 100) }
                 .onSuccess { feed ->
                     _rawEpisodes.value = feed.episodes
                     _state.update { it.copy(isLoading = false, showTitle = feed.title) }
+                    // Slovo 2026-10-13: offline záloha + řada u už stažených dílů (dětský filtr / offline seznam).
+                    launch {
+                        offlineEpisodes.save("ctv:$show", feed.episodes.map { it.toSourceEpisode(feed.title) })
+                        withContext(Dispatchers.IO) {
+                            feed.episodes.forEach { ep ->
+                                offlineDownloads.backfillMeta(episodeKey(ep), ep.description, parseEpisodeDateMs(ep.date), "ctv:$show", ep.seasonTitle)
+                            }
+                        }
+                    }
                     // Pre-warm: resolvni nejnovější pár dílů → start přehrávání pak ~okamžitý.
                     feed.episodes.take(2).forEach { ep ->
                         viewModelScope.launch { runCatching { uploaderDs.warmCtv(baseUrl, cookie, ep.id) } }
@@ -114,11 +130,31 @@ class CtvProgramViewModel @Inject constructor(
                 }
                 .onFailure {
                     Timber.w(it, "[KAVKA] načtení ČT feedu selhalo")
+                    // Slovo 2026-10-13 (user „bez wifi Trabantem nenačte díly") — díly z paměti + stažené.
+                    val cached = offlineEpisodes.load("ctv:$show", "ctv:")
+                    if (cached.isNotEmpty()) {
+                        _rawEpisodes.value = cached.map { e ->
+                            CtvEpisode(
+                                id = e.id, title = e.title, description = e.description,
+                                duration = e.durationSec.takeIf { d -> d > 0.0 }, date = e.date, image = e.imageUrl,
+                                seasonTitle = e.seriesTitle,
+                            )
+                        }
+                        _state.update { s -> s.copy(isLoading = false, showTitle = cached.firstNotNullOfOrNull { e -> e.subtitle } ?: s.showTitle) }
+                        fromOfflineCache = true // příští otevření zkusí síť znovu (Codex 2026-10-13)
+                        return@onFailure
+                    }
                     loadedFor = null
                     _state.update { s -> s.copy(isLoading = false, error = "Nepodařilo se načíst díly pořadu.") }
                 }
         }
     }
+
+    private fun CtvEpisode.toSourceEpisode(show: String?) = com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode(
+        id = id, title = title, subtitle = show, streamUrl = uploaderDs.ctvAudioUrl(baseUrl, cookie, id),
+        imageUrl = image, date = date, resumeKey = "ctv:$id", description = description,
+        durationSec = duration ?: 0.0, seriesTitle = seasonTitle,
+    )
 
     /** URL pro video přehrávač i cast na TV — plný DASH manifest (ExoPlayer ABR, default nejvyšší). */
     fun videoUrl(ep: CtvEpisode): String = uploaderDs.ctvVideoUrl(baseUrl, cookie, ep.id)
@@ -142,8 +178,27 @@ class CtvProgramViewModel @Inject constructor(
         videoResumeStore.clear(key)
     }
 
+    /**
+     * Slovo 2026-10-13 — stažení ČT dílu do telefonu: server ho složí z DASH do jednoho m4a
+     * (`/api/ctv/audiofile`, dokud se připravuje, vrací 202 a stahování čeká).
+     */
+    fun offlineRequest(ep: CtvEpisode): OfflineRequest = OfflineRequest(
+        key = episodeKey(ep),
+        title = ep.title,
+        subtitle = _state.value.showTitle,
+        type = OfflineRequest.TYPE_PODCAST,
+        sourceLabel = "ČT iVysílání",
+        videoUrl = uploaderDs.ctvAudioFileUrl(baseUrl, cookie, ep.id),
+        posterUrl = ep.image,
+        durationSec = ep.duration ?: 0.0,
+        description = ep.description,
+        publishedAt = parseEpisodeDateMs(ep.date),
+        sourceKey = loadedFor?.let { "ctv:$it" },
+        seriesTitle = ep.seasonTitle,
+    )
+
     /** Mapování ČT dílu na položku fronty: audio přes audio-only DASH manifest (poslech). */
-    private fun toQueued(ep: CtvEpisode): QueuedEpisode {
+    fun toQueued(ep: CtvEpisode): QueuedEpisode {
         val show = _state.value.showTitle
         return QueuedEpisode(
             itemId = loadedFor ?: "ctv",

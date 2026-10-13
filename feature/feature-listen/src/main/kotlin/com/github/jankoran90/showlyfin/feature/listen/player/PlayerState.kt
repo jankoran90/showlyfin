@@ -32,4 +32,7 @@ data class PlayerState(
     val showSleepButton: Boolean = true,
     /** Akce swipe doprava ve frontě: 0=stáhnout, 1=přehrát, 2=na začátek (z nastavení). */
     val queueSwipeAction: Int = 0,
+    /** Swipe doleva / doprava ve frontě: 0 vypnuto, 1 odebrat, 2 stáhnout, 3 přehrát, 4 na začátek. */
+    val queueSwipeLeft: Int = 0,
+    val queueSwipeRight: Int = 0,
 )

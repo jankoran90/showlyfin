@@ -262,6 +262,13 @@ interface UploaderRemoteDataSource {
     fun ctvVideoUrl(baseUrl: String, sessionCookie: String, idec: String): String
     /** Pre-warm resolve cache ČT dílu (best-effort). */
     suspend fun warmCtv(baseUrl: String, sessionCookie: String, idec: String)
+    /**
+     * Slovo 2026-10-13 — ČT díl jako JEDEN m4a pro stažení do telefonu (server ho složí z DASH ffmpegem).
+     * Dokud se připravuje, server vrací 202 + Retry-After (OfflineDownloadManager čeká a ptá se znovu).
+     */
+    fun ctvAudioFileUrl(baseUrl: String, sessionCookie: String, idec: String): String
+    /** „Stáhnout vše" u ČT knihy — server připraví soubory dopředu (po 2), telefon pak jen stahuje. Best-effort. */
+    suspend fun prepareCtvAudioFiles(baseUrl: String, sessionCookie: String, idecs: List<String>)
 
     /**
      * VLTAVA (SHW-110) F6 — hledání titulů v ČT iVysílání (záložka „Česká televize" v Hledat).

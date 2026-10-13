@@ -113,10 +113,11 @@ internal fun InlineQueueList(
     queue: List<QueuedEpisode>,
     currentEpisodeId: String?,
     display: EpisodeDisplaySettings,
-    swipeAction: Int,
+    /** 0 vypnuto, 1 odebrat, 2 stáhnout, 3 přehrát, 4 na začátek (Nastavení → Přehrávač). */
+    swipeLeft: Int,
+    swipeRight: Int,
     onPlay: (QueuedEpisode) -> Unit,
-    onRemove: (String) -> Unit,
-    onSwipeRight: (QueuedEpisode) -> Unit,
+    onSwipe: (QueuedEpisode, action: Int) -> Unit,
     onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
 ) {
@@ -137,19 +138,23 @@ internal fun InlineQueueList(
                 val accent = MaterialTheme.colorScheme.primary
                 val dismissState = rememberSwipeToDismissBoxState(
                     confirmValueChange = { v ->
-                        when (v) {
-                            SwipeToDismissBoxValue.EndToStart -> { onRemove(q.episodeId); true }
-                            SwipeToDismissBoxValue.StartToEnd -> { onSwipeRight(q); false }
-                            else -> false
+                        val action = when (v) {
+                            SwipeToDismissBoxValue.EndToStart -> swipeLeft
+                            SwipeToDismissBoxValue.StartToEnd -> swipeRight
+                            else -> 0
                         }
+                        if (action != 0) onSwipe(q, action)
+                        action == 1 // jen „odebrat" nechá položku odjet; ostatní se vrátí na místo
                     },
                 )
                 SwipeToDismissBox(
                     state = dismissState,
+                    enableDismissFromStartToEnd = swipeRight != 0,
+                    enableDismissFromEndToStart = swipeLeft != 0,
                     modifier = Modifier
                         .zIndex(if (isDragging) 1f else 0f)
                         .graphicsLayer { translationY = if (isDragging) dragAccum else 0f },
-                    backgroundContent = { QueueSwipeBackground(dismissState, swipeAction) },
+                    backgroundContent = { QueueSwipeBackground(dismissState, swipeLeft, swipeRight) },
                 ) {
                     Row(
                         Modifier
@@ -221,34 +226,30 @@ internal fun InlineQueueList(
     }
 }
 
-/** Pozadí swipe gesta na položce fronty: vlevo (StartToEnd) = volitelná akce, vpravo (EndToStart) = odebrat. */
+/** Pozadí swipe gesta: akce podle Nastavení, „odebrat" červeně, ostatní v barvě akcentu. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QueueSwipeBackground(state: SwipeToDismissBoxState, swipeAction: Int) {
-    when (state.dismissDirection) {
-        SwipeToDismissBoxValue.EndToStart -> SwipeBg(
-            align = Alignment.CenterEnd,
-            color = MaterialTheme.colorScheme.errorContainer,
-            icon = Icons.Default.Delete,
-            label = "Odebrat",
-            onColor = MaterialTheme.colorScheme.onErrorContainer,
-        )
-        SwipeToDismissBoxValue.StartToEnd -> {
-            val (icon, label) = when (swipeAction) {
-                1 -> Icons.Default.PlayArrow to "Přehrát"
-                2 -> Icons.Default.ArrowUpward to "Na začátek"
-                else -> Icons.Default.CloudDownload to "Stáhnout"
-            }
-            SwipeBg(
-                align = Alignment.CenterStart,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                icon = icon,
-                label = label,
-                onColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-        }
-        else -> Box(Modifier.fillMaxSize())
+private fun QueueSwipeBackground(state: SwipeToDismissBoxState, swipeLeft: Int, swipeRight: Int) {
+    val (action, align) = when (state.dismissDirection) {
+        SwipeToDismissBoxValue.EndToStart -> swipeLeft to Alignment.CenterEnd
+        SwipeToDismissBoxValue.StartToEnd -> swipeRight to Alignment.CenterStart
+        else -> 0 to Alignment.Center
     }
+    if (action == 0) { Box(Modifier.fillMaxSize()); return }
+    val (icon, label) = when (action) {
+        1 -> Icons.Default.Delete to "Odebrat"
+        3 -> Icons.Default.PlayArrow to "Přehrát"
+        4 -> Icons.Default.ArrowUpward to "Na začátek"
+        else -> Icons.Default.CloudDownload to "Stáhnout"
+    }
+    val remove = action == 1
+    SwipeBg(
+        align = align,
+        color = if (remove) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+        icon = icon,
+        label = label,
+        onColor = if (remove) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+    )
 }
 
 @Composable

@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -83,6 +84,25 @@ class OfflineDownloadManager @Inject constructor(
     /** Seznam dokončených stažení (obrazovka „Stažené"). */
     val downloads = _downloads.asStateFlow()
 
+    /**
+     * Slovo 2026-10-13 (sekce Stahování) — požadavky, co ještě nejsou stažené: stahuje se, ve frontě
+     * i selhané (dokud je uživatel neodebere / nezkusí znovu). Pořadí = pořadí zařazení (= pořadí
+     * stahování, [gate] je férový FIFO semafor).
+     */
+    private val _pending = MutableStateFlow<List<OfflineRequest>>(emptyList())
+    val pending = _pending.asStateFlow()
+
+    private fun addPending(req: OfflineRequest) =
+        _pending.update { list -> list.filterNot { it.key == req.key } + req }
+
+    private fun removePending(key: String) = _pending.update { list -> list.filterNot { it.key == key } }
+
+    /** Znovu zkusí selhané stažení (sekce Stahování). */
+    fun retry(key: String) {
+        val req = _pending.value.firstOrNull { it.key == key } ?: return
+        enqueue(req)
+    }
+
     fun stateFor(key: String): OfflineState = _states.value[key] ?: OfflineState()
     fun get(key: String): OfflineDownload? = index[key]
     fun localVideo(key: String): File? = index[key]?.let { File(it.videoPath).takeIf(File::exists) }
@@ -101,6 +121,7 @@ class OfflineDownloadManager @Inject constructor(
         if (isDownloaded(key)) return
         if (jobs[key]?.isActive == true) return
         requests[key] = req
+        addPending(req)
         setState(key, OfflineState(OfflineStatus.QUEUED))
         OfflineDownloadService.start(context)
         jobs[key] = scope.launch {
@@ -109,11 +130,13 @@ class OfflineDownloadManager @Inject constructor(
                     index[key] = dl
                     persistIndex()
                     setState(key, OfflineState(OfflineStatus.DOWNLOADED, 1f, dl.sizeBytes, dl.sizeBytes))
+                    removePending(key)
                     refreshDownloads()
                 }
                 .onFailure { e ->
                     if (e is CancellationException) {
                         setState(key, OfflineState(OfflineStatus.NONE))
+                        removePending(key)
                     } else {
                         Timber.w(e, "[NOMAD] stažení '%s' selhalo", req.title)
                         setState(key, OfflineState(OfflineStatus.FAILED, error = e.message))
@@ -133,7 +156,18 @@ class OfflineDownloadManager @Inject constructor(
         req.headers.forEach { (k, v) -> builder.header(k, v) }
         if (existing > 0) builder.header("Range", "bytes=$existing-")
 
-        client.newCall(builder.build()).execute().use { resp ->
+        // Slovo 2026-10-13: 202 = server soubor teprve skládá (ČT díl) → čekej Retry-After a zkus znovu.
+        val prepDeadline = System.currentTimeMillis() + PREPARE_TIMEOUT_MS
+        var call = client.newCall(builder.build()).execute()
+        while (call.code == 202) {
+            val wait = (call.header("Retry-After")?.toLongOrNull() ?: 4L).coerceIn(1L, 30L)
+            call.close()
+            if (System.currentTimeMillis() > prepDeadline) error("Server soubor nepřipravil včas.")
+            setState(req.key, OfflineState(OfflineStatus.DOWNLOADING, 0f, existing, 0L, preparing = true))
+            delay(wait * 1000)
+            call = client.newCall(builder.build()).execute()
+        }
+        call.use { resp ->
             if (!resp.isSuccessful) error("HTTP ${resp.code}")
             val partial = resp.code == 206
             val append = partial && existing > 0
@@ -146,14 +180,30 @@ class OfflineDownloadManager @Inject constructor(
                 body.byteStream().use { ins ->
                     val buf = ByteArray(128 * 1024)
                     var done = if (append) existing else 0L
+                    // Rychlost = klouzavý průměr po ~1 s oknech (jednotlivé read() jsou příliš trhané).
+                    var windowStart = System.currentTimeMillis()
+                    var windowBytes = 0L
+                    var speed = 0L
                     var read = ins.read(buf)
                     while (read != -1) {
                         os.write(buf, 0, read)
                         done += read
+                        windowBytes += read
+                        val now = System.currentTimeMillis()
+                        if (now - windowStart >= 1000) {
+                            val inst = windowBytes * 1000 / (now - windowStart)
+                            speed = if (speed == 0L) inst else (speed * 7 + inst * 3) / 10
+                            windowStart = now
+                            windowBytes = 0L
+                        }
                         if (grandTotal > 0) {
+                            val eta = if (speed > 0) (grandTotal - done).coerceAtLeast(0L) / speed else null
                             setState(
                                 req.key,
-                                OfflineState(OfflineStatus.DOWNLOADING, (done.toFloat() / grandTotal).coerceIn(0f, 1f), done, grandTotal),
+                                OfflineState(
+                                    OfflineStatus.DOWNLOADING, (done.toFloat() / grandTotal).coerceIn(0f, 1f), done, grandTotal,
+                                    bytesPerSec = speed, etaSec = eta,
+                                ),
                             )
                         }
                         read = ins.read(buf)
@@ -190,6 +240,7 @@ class OfflineDownloadManager @Inject constructor(
             description = req.description,
             publishedAt = req.publishedAt,
             sourceKey = req.sourceKey,
+            seriesTitle = req.seriesTitle,
         )
     }
 
@@ -208,6 +259,7 @@ class OfflineDownloadManager @Inject constructor(
     fun cancel(key: String) {
         jobs.remove(key)?.cancel()
         requests.remove(key)
+        removePending(key)
         partFile(key).delete()
         setState(key, OfflineState(OfflineStatus.NONE))
     }
@@ -215,6 +267,7 @@ class OfflineDownloadManager @Inject constructor(
     /** Smaže stažený soubor + titulky + poster + záznam. */
     fun delete(key: String) {
         jobs.remove(key)?.cancel()
+        removePending(key)
         index.remove(key)?.let { dl ->
             File(dl.videoPath).delete()
             dl.subtitlePath?.let { File(it).delete() }
@@ -231,6 +284,7 @@ class OfflineDownloadManager @Inject constructor(
         jobs.values.forEach { it.cancel() }
         jobs.clear()
         requests.clear()
+        _pending.value = emptyList()
         index.clear()
         listOf(videoDir, subDir, posterDir).forEach { d -> d.listFiles()?.forEach { it.delete() } }
         persistIndex()
@@ -263,13 +317,14 @@ class OfflineDownloadManager @Inject constructor(
      * polí, vč. `sourceKey` u epizod stažených před 1.45.144) se dovyplní samy → dětský profil je pak
      * offline filtruje. Nepřepisuje existující hodnoty ani neupravuje jiné položky. `null` args ignoruje.
      */
-    fun backfillMeta(key: String, description: String?, publishedAt: Long?, sourceKey: String? = null) {
+    fun backfillMeta(key: String, description: String?, publishedAt: Long?, sourceKey: String? = null, seriesTitle: String? = null) {
         val dl = index[key] ?: return
         val newDesc = dl.description ?: description?.takeIf { it.isNotBlank() }
         val newPub = dl.publishedAt ?: publishedAt?.takeIf { it > 0L }
         val newSrc = dl.sourceKey ?: sourceKey?.takeIf { it.isNotBlank() }
-        if (newDesc == dl.description && newPub == dl.publishedAt && newSrc == dl.sourceKey) return
-        index[key] = dl.copy(description = newDesc, publishedAt = newPub, sourceKey = newSrc)
+        val newSeries = dl.seriesTitle ?: seriesTitle?.takeIf { it.isNotBlank() }
+        if (newDesc == dl.description && newPub == dl.publishedAt && newSrc == dl.sourceKey && newSeries == dl.seriesTitle) return
+        index[key] = dl.copy(description = newDesc, publishedAt = newPub, sourceKey = newSrc, seriesTitle = newSeries)
         persistIndex()
         refreshDownloads()
     }
@@ -320,5 +375,7 @@ class OfflineDownloadManager @Inject constructor(
 
     companion object {
         private const val KEY_INDEX = "offline_downloads"
+        /** Jak dlouho čekat, než server soubor připraví (ČT díl ~1,5 min, při frontě na serveru víc). */
+        private const val PREPARE_TIMEOUT_MS = 20 * 60 * 1000L
     }
 }

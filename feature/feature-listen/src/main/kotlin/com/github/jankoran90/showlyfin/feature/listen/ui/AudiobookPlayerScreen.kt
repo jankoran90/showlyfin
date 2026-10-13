@@ -360,10 +360,10 @@ fun AudiobookPlayerScreen(
                     queue = queue,
                     currentEpisodeId = state.currentEpisodeId,
                     display = viewModel.episodeDisplay,
-                    swipeAction = state.queueSwipeAction,
+                    swipeLeft = state.queueSwipeLeft,
+                    swipeRight = state.queueSwipeRight,
                     onPlay = { viewModel.playQueued(it) },
-                    onRemove = { viewModel.removeFromQueue(it) },
-                    onSwipeRight = { viewModel.onQueueSwipeAction(it, state.queueSwipeAction) },
+                    onSwipe = { ep, action -> viewModel.onQueueSwipe(ep, action) },
                     onMove = { from, to -> viewModel.moveQueueItem(from, to) },
                     onClear = { viewModel.clearAll() },
                 )

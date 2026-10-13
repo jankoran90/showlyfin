@@ -53,6 +53,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
 import com.github.jankoran90.showlyfin.feature.listen.ui.BooksContent
 import com.github.jankoran90.showlyfin.feature.listen.ui.FollowingContent
+import com.github.jankoran90.showlyfin.feature.listen.ui.DownloadsScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
@@ -379,6 +380,9 @@ private fun SlovoShellContent() {
                                 showTitle = false,
                                 onOpenSource = { src -> onPush(sourceDetail(src)) },
                             )
+                        }
+                        SlovoSection.STAHOVANI -> SlovoSectionScaffold(current.label, onMenu) {
+                            DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize())
                         }
                         SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu, isKidsProfile = isKidsProfile)
                         SlovoSection.PROFIL -> SlovoProfileScreen(onMenu = onMenu)

@@ -1,7 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
 import android.content.SharedPreferences
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.domain.resume.VideoResumeStore
@@ -61,6 +60,7 @@ class YoutubeChannelViewModel @Inject constructor(
     // persistovaný stav — cast na TV pošle CZ stopu, pokud už existuje.
     private val translateStore: SubtitleTranslationStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
+    private val offlineEpisodes: ListenOfflineEpisodes,
 ) : ViewModel() {
 
     /** Stav offline stahování epizod (badge / akce v menu). Klíč = [episodeKey]. */
@@ -121,16 +121,29 @@ class YoutubeChannelViewModel @Inject constructor(
     private val streamQuality get() = PodcastVideoQuality.stream(prefs)
 
     private var loadedFor: String? = null
+    private var fromOfflineCache = false
 
     fun load(channel: String) {
-        if (loadedFor == channel && _rawEpisodes.value.isNotEmpty()) return
+        if (loadedFor == channel && _rawEpisodes.value.isNotEmpty() && !fromOfflineCache) return
         loadedFor = channel
+        fromOfflineCache = false
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             runCatching { uploaderDs.getYtFeed(baseUrl, cookie, channel, limit = YoutubeFeedPrefs.limit(prefs)) }
                 .onSuccess { feed ->
                     _rawEpisodes.value = feed.entries
                     _state.update { it.copy(isLoading = false, channelTitle = feed.channel) }
+                    // Slovo 2026-10-13: offline záloha seznamu dílů (parita s RSS).
+                    launch {
+                        offlineEpisodes.save("youtube:$channel", feed.entries.map { ep ->
+                            com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode(
+                                id = ep.id, title = ep.title, subtitle = feed.channel,
+                                streamUrl = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                                imageUrl = ep.thumbnail, date = ep.uploadDate, resumeKey = "yt:${ep.id}",
+                                description = ep.description, durationSec = ep.duration ?: 0.0,
+                            )
+                        })
+                    }
                     // Pre-warm: resolvni audio nejnovějších pár epizod → start přehrávání pak ~okamžitý.
                     feed.entries.take(3).forEach { ep ->
                         viewModelScope.launch { runCatching { uploaderDs.warmYt(baseUrl, cookie, ep.id, "audio") } }
@@ -148,6 +161,19 @@ class YoutubeChannelViewModel @Inject constructor(
                 }
                 .onFailure {
                     Timber.w(it, "[TUNER] načtení YouTube feedu selhalo")
+                    // Slovo 2026-10-13 — bez sítě díly z paměti + stažené (stažené jdou přehrát).
+                    val cached = offlineEpisodes.load("youtube:$channel", "yt:")
+                    if (cached.isNotEmpty()) {
+                        _rawEpisodes.value = cached.map { e ->
+                            YtEpisode(
+                                id = e.id, title = e.title, thumbnail = e.imageUrl,
+                                duration = e.durationSec.takeIf { d -> d > 0.0 }, uploadDate = e.date, description = e.description,
+                            )
+                        }
+                        _state.update { s -> s.copy(isLoading = false, channelTitle = cached.firstNotNullOfOrNull { e -> e.subtitle } ?: s.channelTitle) }
+                        fromOfflineCache = true // příští otevření zkusí síť znovu (Codex 2026-10-13)
+                        return@onFailure
+                    }
                     loadedFor = null
                     _state.update { s -> s.copy(isLoading = false, error = "Nepodařilo se načíst epizody kanálu.") }
                 }
@@ -185,10 +211,11 @@ class YoutubeChannelViewModel @Inject constructor(
      * Mapování YouTube epizody na položku fronty (LEVER): audio přes náš proxy, bez ABS session.
      * L3: stažená epizoda hraje z lokálního `file://` souboru (offline + šetří mobilní data).
      */
-    private fun toQueued(ep: YtEpisode): QueuedEpisode {
+    fun toQueued(ep: YtEpisode): QueuedEpisode {
         val channel = _state.value.channelTitle
         val key = episodeKey(ep)
-        val localUrl = offline.localVideo(key)?.let { Uri.fromFile(it).toString() }
+        // 2026-10-13 (Codex): do fronty vždy síťová URL — stažený soubor dohledá AudiobookPlayerConnection.startEpisode
+        // při spuštění; uložené file:// by po smazání stažení zůstalo neplatné.
         return QueuedEpisode(
             itemId = loadedFor ?: "yt",
             episodeId = key,
@@ -197,7 +224,7 @@ class YoutubeChannelViewModel @Inject constructor(
             description = ep.description,
             podcastTitle = channel,
             direct = DirectAudio(
-                url = localUrl ?: uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
+                url = uploaderDs.ytStreamUrl(baseUrl, cookie, ep.id, "audio"),
                 durationSec = ep.duration ?: 0.0,
                 author = channel,
             ),
@@ -214,8 +241,10 @@ class YoutubeChannelViewModel @Inject constructor(
     fun enqueue(ep: YtEpisode, atFront: Boolean) = connection.enqueue(toQueued(ep), atFront)
 
     /** L3: stáhni AUDIO epizodu do telefonu (offline) přes proxy `/api/yt/stream?kind=audio`. */
-    fun download(ep: YtEpisode) {
-        offline.enqueue(
+    fun download(ep: YtEpisode) = offline.enqueue(offlineRequest(ep))
+
+    /** Požadavek na stažení AUDIO epizody (sdílí ho i kniha ze série). */
+    fun offlineRequest(ep: YtEpisode): OfflineRequest =
             OfflineRequest(
                 key = episodeKey(ep),
                 title = ep.title,
@@ -229,9 +258,7 @@ class YoutubeChannelViewModel @Inject constructor(
                 publishedAt = parseEpisodeDateMs(ep.uploadDate),
                 // RESONANCE (SHW-81) D: klíč zdroje pro filtr skrytých pořadů offline (dětský profil).
                 sourceKey = loadedFor?.let { "youtube:$it" },
-            ),
-        )
-    }
+            )
 
     /** L3: smaž staženou AUDIO epizodu z telefonu. */
     fun deleteOffline(ep: YtEpisode) = offline.delete(episodeKey(ep))

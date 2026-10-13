@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.ui.slovophone
 import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Home
@@ -29,6 +30,8 @@ enum class SlovoSection(val label: String, val icon: ImageVector) {
     POSLECH("Poslech", Icons.Rounded.Headphones),
     OBJEVIT("Objevit", Icons.Rounded.Explore),
     ZDROJE("Zdroje", Icons.Rounded.RssFeed),
+    /** User 2026-10-13 — „sekce stahování v sidebaru: fronta, staženo, stahování, rychlost a ETA". */
+    STAHOVANI("Stahování", Icons.Rounded.Download),
     NASTAVENI("Nastavení", Icons.Rounded.Settings),
     PROFIL("Profil", Icons.Rounded.AccountCircle),
 }
@@ -54,7 +57,7 @@ object SlovoShellPrefs {
      * zbytek tohohle objektu) — čte se znovu při každém překreslení draweru (viz [SlovoDrawer]), takže
      * změna v Nastavení se projeví hned při příštím otevření menu, bez restartu appky.
      */
-    private val reorderableSections = listOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE)
+    private val reorderableSections = listOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE, SlovoSection.STAHOVANI)
 
     private fun savedOrder(ctx: Context): List<SlovoSection> {
         val saved = prefs(ctx).getString(KEY_DRAWER_ORDER, null)

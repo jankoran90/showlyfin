@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.CheckCircle
@@ -57,6 +58,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +77,8 @@ import com.github.jankoran90.showlyfin.data.uploader.model.EpisodeVideo
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.RssEpisode
 import com.github.jankoran90.showlyfin.feature.listen.RssPodcastViewModel
+import com.github.jankoran90.showlyfin.feature.listen.SeriesBookChapter
+import com.github.jankoran90.showlyfin.feature.listen.SeriesBookViewModel
 import com.github.jankoran90.showlyfin.feature.listen.player.choosePlaybackResume
 import com.github.jankoran90.showlyfin.feature.listen.player.isNearEnd
 
@@ -108,8 +112,10 @@ fun RssPodcastScreen(
     onSetSeriesVisibleForKids: (key: String, visible: Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: RssPodcastViewModel = hiltViewModel(),
+    bookViewModel: SeriesBookViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val layout by bookViewModel.layout.collectAsStateWithLifecycle()
     val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
@@ -139,17 +145,29 @@ fun RssPodcastScreen(
     // SLOVO-KIDS-EPISODE — [seriesFilter] != null: dětská cesta, jen epizody DANÉ série, plochý seznam
     // (žádné další seskupování). Jinak (admin): AUTO seskupení do sérií + samostatné epizody.
     val sourceKey = "rss:$feedUrl"
-    val filteredEpisodes = remember(state.episodes, seriesFilter, onlyDownloaded, offlineStates) {
+    // Slovo 2026-10-13 — ruční knihy (pravidla) mají přednost před automatickou sérií z názvu.
+    val seriesRules by bookViewModel.seriesRules.collectAsStateWithLifecycle()
+    val seriesTitleOf: (String) -> String? = remember(seriesRules) {
+        { t -> bookViewModel.ruleTitle(sourceKey, t) ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(t) }
+    }
+    val ruleDraft = remember { mutableStateOf<SeriesRuleDraft?>(null) }
+    val openBookSlug = rememberSaveable { mutableStateOf<String?>(null) }
+    // Dětská pojistka otevřela první schválenou sérii → díl z přehrávače otevře SVOU schválenou sérii.
+    @Suppress("NAME_SHADOWING")
+    val seriesFilter = remember(seriesFilter, highlightEpisodeKey, state.episodes, seriesTitleOf, kidsVisibleSeriesKeys) {
+        seriesFilterForHighlight(seriesFilter, highlightEpisodeKey, state.episodes, viewModel::episodeKey, { seriesTitleOf(it.title) }, sourceKey, kidsVisibleSeriesKeys)
+    }
+    val filteredEpisodes = remember(state.episodes, seriesFilter, onlyDownloaded, offlineStates, seriesTitleOf) {
         val inSeries = if (seriesFilter == null) state.episodes
         else state.episodes.filter {
-            PodcastEpisodeSeriesGrouping.detectSeriesTitle(it.title)
-                ?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
+            seriesTitleOf(it.title)?.let { t -> PodcastEpisodeSeriesGrouping.seriesSlug(t) } == seriesFilter
         }
         if (!onlyDownloaded) inSeries
         else inSeries.filter { offlineStates[viewModel.episodeKey(it)]?.status == OfflineStatus.DOWNLOADED }
     }
-    val shelfItems = remember(filteredEpisodes, seriesFilter) {
-        if (seriesFilter != null) null else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title })
+    val shelfItems = remember(filteredEpisodes, seriesFilter, seriesTitleOf) {
+        if (seriesFilter != null) null
+        else PodcastEpisodeSeriesGrouping.group(filteredEpisodes, titleOf = { it.title }, seriesTitleOf = { seriesTitleOf(it.title) })
     }
     // BUG (2026-09-04, user screenshot): rozposlouchané/rozkoukané epizody nahoru, parita s YoutubeChannelScreen/CtvProgramScreen.
     val inProgressIds = resumeMarks.filterValues { !it.isFinished }.keys + videoResumeMarks.filterValues { !it.isNearEnd() }.keys
@@ -245,12 +263,42 @@ fun RssPodcastScreen(
             latestDateLabel = latestMs?.let { PodcastEpisodeSeriesGrouping.formatSeriesDate(it) },
             thumbnail = group.members.firstOrNull()?.image ?: state.image,
             expanded = group.slug in expandedSeries,
+            asBook = layout.seriesAsBook,
             onClick = {
-                expandedSeries = if (group.slug in expandedSeries) expandedSeries - group.slug else expandedSeries + group.slug
+                if (layout.seriesAsBook) openBookSlug.value = group.slug
+                else expandedSeries = if (group.slug in expandedSeries) expandedSeries - group.slug else expandedSeries + group.slug
             },
             onLongClick = if (isAdmin) ({ seriesForAction = group }) else null,
         )
     }
+
+    // Slovo 2026-10-13 — série jako kniha (Ďábelské káry = kapitoly), viz [SeriesBookGate].
+    fun chapterOf(ep: RssEpisode) = SeriesBookChapter(
+        key = viewModel.episodeKey(ep), title = ep.title.ifBlank { fallbackTitle }, durationSec = viewModel.durationSecOf(ep),
+        date = ep.date, image = ep.image ?: state.image, description = ep.description,
+        queued = viewModel.toQueued(ep, fallbackTitle), download = viewModel.offlineRequest(ep, fallbackTitle),
+        onVideo = ep.jfItemId?.takeIf { !audioOnly }?.let { jf -> { onPlayVideo(jf, ep.title.ifBlank { fallbackTitle }, viewModel.episodeKey(ep)) } },
+    )
+    SeriesRuleDialog(
+        draft = ruleDraft,
+        onSave = { original, rule ->
+            bookViewModel.saveRule(sourceKey, original, rule)
+            openBookSlug.value = PodcastEpisodeSeriesGrouping.seriesSlug(rule.title)
+        },
+        onDelete = { t -> bookViewModel.removeRule(sourceKey, t); openBookSlug.value = null },
+    )
+    if (!showSearch && SeriesBookGate(
+            layout = layout, shelfItems = shelfItems, seriesFiltered = if (seriesFilter != null) filteredEpisodes else null,
+            showTitle = fallbackTitle, seriesTitleOf = { seriesTitleOf(it.title) },
+            keyOf = viewModel::episodeKey,
+            chaptersOf = { m -> PodcastEpisodeSeriesGrouping.chapterOrder(m, { it.title }, { it.date }).map(::chapterOf) },
+            openSlug = openBookSlug, highlightKey = highlightEpisodeKey, wideCover = false,
+            onBack = onBack, onOpenAudioPlayer = onOpenAudioPlayer, modifier = modifier,
+            onEditBook = if (isAdmin) ({ t -> ruleDraft.value = bookRuleDraft(bookViewModel.ruleFor(sourceKey, t), t) }) else null,
+            kidsVisible = if (isAdmin) ({ t -> PodcastEpisodeSeriesGrouping.buildSeriesKey(sourceKey, t) in kidsVisibleSeriesKeys }) else null,
+            onToggleKids = { t, v -> onSetSeriesVisibleForKids(PodcastEpisodeSeriesGrouping.buildSeriesKey(sourceKey, t), v) },
+        )
+    ) return
 
     if (showSearch) {
         PodcastSearchScreen(
@@ -385,6 +433,11 @@ fun RssPodcastScreen(
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, fallbackTitle, atFront = true)
                 },
+                if (isAdmin) {
+                    ListenEpisodeAction(Icons.AutoMirrored.Filled.MenuBook, "Udělat knihu z dílů…") {
+                        ruleDraft.value = SeriesRuleDraft.fromEpisode(ep.title)
+                    }
+                } else null,
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
                     viewModel.enqueue(ep, fallbackTitle, atFront = false)
                 },
@@ -441,140 +494,6 @@ fun RssPodcastScreen(
             onDismiss = { viewModel.clearVideoCandidates(); videoForEpisode = null },
         )
     }
-}
-
-/**
- * AGORA (F5): ModalBottomSheet s kandidáty VIDEO verze epizody (YouTube). U každého název / kanál /
- * délka + akce Přehrát a Na TV. Doporučený (heuristika [pickBestVideo]) je nahoře s odznakem.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun VideoVersionPicker(
-    episodeTitle: String,
-    loading: Boolean,
-    candidates: List<EpisodeVideo>?,
-    recommendedId: String?,
-    onPlay: (EpisodeVideo) -> Unit,
-    onCast: (EpisodeVideo) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
-        Text(
-            "Video verze (YouTube)",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-        )
-        Text(
-            episodeTitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp),
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-        when {
-            loading || candidates == null ->
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-
-            candidates.isEmpty() ->
-                Text(
-                    "Video verze nenalezena.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                )
-
-            else -> LazyColumn(
-                contentPadding = PaddingValues(vertical = 4.dp),
-            ) {
-                items(candidates, key = { it.id }) { video ->
-                    VideoVersionRow(
-                        video = video,
-                        recommended = video.id == recommendedId,
-                        onPlay = { onPlay(video) },
-                        onCast = { onCast(video) },
-                    )
-                }
-            }
-        }
-        Box(Modifier.height(12.dp))
-    }
-}
-
-@Composable
-private fun VideoVersionRow(
-    video: EpisodeVideo,
-    recommended: Boolean,
-    onPlay: () -> Unit,
-    onCast: () -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-        if (recommended) {
-            AssistChip(
-                onClick = {},
-                enabled = false,
-                label = { Text("Doporučeno") },
-                leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                colors = AssistChipDefaults.assistChipColors(
-                    disabledLabelColor = MaterialTheme.colorScheme.primary,
-                    disabledLeadingIconContentColor = MaterialTheme.colorScheme.primary,
-                ),
-            )
-            Box(Modifier.height(4.dp))
-        }
-        Text(
-            video.title.ifBlank { "Video" },
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val meta = listOfNotNull(
-            video.uploader.takeIf { it.isNotBlank() },
-            formatVideoDuration(video.duration),
-        ).joinToString(" · ")
-        if (meta.isNotBlank()) {
-            Text(
-                meta,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Přehrát", Modifier.padding(start = 6.dp))
-            }
-            OutlinedButton(onClick = onCast, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Tv, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Na TV", Modifier.padding(start = 6.dp))
-            }
-        }
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
-            modifier = Modifier.padding(top = 12.dp),
-        )
-    }
-}
-
-/** Sekundy → "mm:ss" / "h:mm:ss"; 0 = bez délky. */
-private fun formatVideoDuration(sec: Int): String? {
-    if (sec <= 0) return null
-    val h = sec / 3600
-    val m = (sec % 3600) / 60
-    val s = sec % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
 /** ms → "m:ss" / "h:mm:ss". */
