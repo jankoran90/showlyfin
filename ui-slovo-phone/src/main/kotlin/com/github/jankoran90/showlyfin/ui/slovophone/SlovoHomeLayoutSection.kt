@@ -44,6 +44,14 @@ internal fun SlovoHomeLayoutSection(viewModel: HomeLayoutViewModel = hiltViewMod
         )
         if (layout.seriesAsBook) {
             SettingChips(
+                label = "Díl ze série na Domů",
+                subtitle = "Kniha = název knihy a „kapitola 2/13 · název dílu“, ťuk otevře knihu na té kapitole.",
+                options = listOf(true, false),
+                selected = layout.episodeAsBook,
+                labelOf = { if (it) "Jako kniha" else "Jako díl" },
+                onSelect = { v -> viewModel.update { it.copy(episodeAsBook = v) } },
+            )
+            SettingChips(
                 label = "Pořad o jedné sérii",
                 subtitle = "Třeba Trabantem Jižní Amerikou: otevřít rovnou knihu, nebo nejdřív kartu série.",
                 options = listOf(true, false),

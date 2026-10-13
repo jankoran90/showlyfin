@@ -31,6 +31,8 @@ data class HomeLayout(
     val seriesAsBook: Boolean = true,
     /** Pořad, který je celý jedna série (Trabantem Jižní Amerikou), se otevře rovnou jako kniha. */
     val singleSeriesOpensBook: Boolean = true,
+    /** Rozposlouchaný díl ze série se na Domů ukáže jako kniha (název knihy + kapitola), ne jako díl. */
+    val episodeAsBook: Boolean = true,
 )
 
 object HomeLayoutPrefs {
@@ -41,7 +43,8 @@ object HomeLayoutPrefs {
     private const val KEY_TAP_OPENS = "slovo_home_layout_episode_tap_opens_show"
     private const val KEY_SERIES_BOOK = "slovo_series_as_book"
     private const val KEY_SINGLE_BOOK = "slovo_single_series_opens_book"
-    private val KEYS = setOf(KEY_LIST, KEY_BIG_COVER, KEY_DESC_LINES, KEY_REMAINING, KEY_TAP_OPENS, KEY_SERIES_BOOK, KEY_SINGLE_BOOK)
+    private const val KEY_EPISODE_BOOK = "slovo_home_episode_as_book"
+    private val KEYS = setOf(KEY_LIST, KEY_BIG_COVER, KEY_DESC_LINES, KEY_REMAINING, KEY_TAP_OPENS, KEY_SERIES_BOOK, KEY_SINGLE_BOOK, KEY_EPISODE_BOOK)
 
     val DESC_LINE_OPTIONS = listOf(0, 2, 3, 5)
 
@@ -53,6 +56,7 @@ object HomeLayoutPrefs {
         episodeTapOpensShow = prefs.getBoolean(KEY_TAP_OPENS, true),
         seriesAsBook = prefs.getBoolean(KEY_SERIES_BOOK, true),
         singleSeriesOpensBook = prefs.getBoolean(KEY_SINGLE_BOOK, true),
+        episodeAsBook = prefs.getBoolean(KEY_EPISODE_BOOK, true),
     )
 
     fun write(prefs: SharedPreferences, layout: HomeLayout) {
@@ -64,6 +68,7 @@ object HomeLayoutPrefs {
             .putBoolean(KEY_TAP_OPENS, layout.episodeTapOpensShow)
             .putBoolean(KEY_SERIES_BOOK, layout.seriesAsBook)
             .putBoolean(KEY_SINGLE_BOOK, layout.singleSeriesOpensBook)
+            .putBoolean(KEY_EPISODE_BOOK, layout.episodeAsBook)
             .apply()
     }
 

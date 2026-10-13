@@ -3,8 +3,6 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.text.Collator
@@ -195,7 +193,7 @@ fun KidsListenContent(
             LaunchedEffect(shelfMessage) {
                 shelfMessage?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show(); shelfActions.consumeMessage() }
             }
-            var downloadFor by remember { mutableStateOf<Triple<com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource, String?, String>?>(null) }
+            var downloadFor by remember { mutableStateOf<SourceDownloadTarget?>(null) }
             fun mergedSource(c: LibraryCard.Merged): com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource? =
                 c.members.filter { it in visibleKeys }.mapNotNull { byKey[it] }
                     .sortedBy { it.type == "youtube" }.firstOrNull()
@@ -245,21 +243,22 @@ fun KidsListenContent(
                                     is LibraryCard.Plain -> SourceCard(
                                         source = c.source,
                                         onClick = { onOpenSource(c.source) },
-                                        onLongClick = { downloadFor = Triple(c.source, null, c.source.title) },
+                                        onLongClick = { downloadFor = SourceDownloadTarget(c.source, setOf(c.source.key), null, c.source.title) },
                                     )
                                     is LibraryCard.Merged -> MergedSourceCard(
                                         title = c.title,
                                         thumbnail = c.thumbnail,
                                         onClick = { onOpenMerged(c.groupId, c.title) },
-                                        onLongClick = mergedSource(c)
-                                            ?.let { src -> { downloadFor = Triple(src, null, c.title) } } ?: {},
+                                        onLongClick = {
+                                            downloadFor = SourceDownloadTarget(mergedSource(c), c.members.filter { it in visibleKeys }.toSet(), null, c.title)
+                                        },
                                     )
                                     is LibraryCard.Abs -> Unit // nikdy nevzniká pro SourceItem (jde přes PodcastItem)
                                 }
                                 is KidsShelfItem.SeriesItem -> SourceCard(
                                     source = item.source.copy(title = item.seriesTitle),
                                     onClick = { onOpenSourceSeries(item.source, item.seriesSlug, item.seriesTitle) },
-                                    onLongClick = { downloadFor = Triple(item.source, item.seriesSlug, item.seriesTitle) },
+                                    onLongClick = { downloadFor = SourceDownloadTarget(item.source, setOf(item.source.key), item.seriesSlug, item.seriesTitle) },
                                 )
                             }
                         }
@@ -276,27 +275,10 @@ fun KidsListenContent(
                     )
                 }
 
-                downloadFor?.let { (src, slug, title) ->
+                downloadFor?.let { target ->
                     // User 2026-10-13 („nabízí jen stažení, ne odstranění; po úpravách musím stáhnout znovu").
-                    val count = remember(src, slug, offlineDls) { shelfActions.downloadedCount(src.key, slug) }
-                    ListenEpisodeActionSheet(
-                        title = title,
-                        infoLine = if (count > 0) "V telefonu: $count dílů" else "V telefonu zatím nic",
-                        actions = listOfNotNull(
-                            if (!offline) ListenEpisodeAction(Icons.Default.Download, "Stáhnout všechny díly a zařadit do fronty") {
-                                shelfActions.downloadAndQueue(src, slug, title)
-                            } else null,
-                            if (!offline && count > 0) ListenEpisodeAction(
-                                Icons.Default.Refresh, "Stáhnout znovu",
-                                confirmMessage = "Stažené díly se smažou a stáhnou nanovo (třeba po úpravě na serveru).",
-                            ) { shelfActions.redownload(src, slug, title) } else null,
-                            if (count > 0) ListenEpisodeAction(
-                                Icons.Default.DeleteOutline, "Odstranit stažené ($count dílů)",
-                                confirmMessage = "Stažené díly se smažou z telefonu. Online je půjde poslouchat dál.",
-                            ) { shelfActions.deleteDownloaded(src.key, slug) } else null,
-                        ),
-                        onDismiss = { downloadFor = null },
-                    )
+                    val (info, actions) = sourceDownloadActions(target, offline, shelfActions)
+                    ListenEpisodeActionSheet(title = target.title, infoLine = info, actions = actions, onDismiss = { downloadFor = null })
                 }
 
                 actionBook?.let { book ->

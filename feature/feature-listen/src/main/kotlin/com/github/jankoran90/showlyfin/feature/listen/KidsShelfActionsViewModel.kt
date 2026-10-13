@@ -50,24 +50,33 @@ class KidsShelfActionsViewModel @Inject constructor(
         (ruleStore.titleFor(sourceKey, episodeTitle) ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(episodeTitle))
             ?.let(PodcastEpisodeSeriesGrouping::seriesSlug)
 
-    /** Klíče stažených dílů pořadu (celého, nebo jen série [seriesSlug]). */
-    private fun downloadedKeys(sourceKey: String, seriesSlug: String?): List<String> =
+    /** Stažené díly (živě) — menu pořadu z nich počítá „V telefonu: N dílů". */
+    val downloads = offline.downloads
+
+    /**
+     * Klíče stažených dílů pořadu: [sourceKeys] = všichni členové (sloučený pořad RSS + YouTube),
+     * [seriesSlug] != null = jen díly téhle série.
+     */
+    private fun downloadedKeys(sourceKeys: Set<String>, seriesSlug: String?): List<String> =
         offline.downloads.value
-            .filter { it.sourceKey == sourceKey && (seriesSlug == null || slugOf(sourceKey, it.title) == seriesSlug) }
+            .filter { d ->
+                val src = d.sourceKey ?: return@filter false
+                src in sourceKeys && (seriesSlug == null || slugOf(src, d.title) == seriesSlug)
+            }
             .map { it.key }
 
-    fun downloadedCount(sourceKey: String, seriesSlug: String?): Int = downloadedKeys(sourceKey, seriesSlug).size
+    fun downloadedCount(sourceKeys: Set<String>, seriesSlug: String?): Int = downloadedKeys(sourceKeys, seriesSlug).size
 
     /** User 2026-10-13 — „Odstranit stažené": smaže stažené díly pořadu/série z telefonu (i offline). */
-    fun deleteDownloaded(sourceKey: String, seriesSlug: String?) {
-        val keys = downloadedKeys(sourceKey, seriesSlug)
+    fun deleteDownloaded(sourceKeys: Set<String>, seriesSlug: String?) {
+        val keys = downloadedKeys(sourceKeys, seriesSlug)
         keys.forEach(offline::delete)
         _message.value = "Odstraněno ${keys.size} dílů z telefonu."
     }
 
     /** „Stáhnout znovu" (po úpravě dílů na serveru): smaž stažené a stáhni nanovo, fronta přehrávání beze změny. */
-    fun redownload(source: PodcastSource, seriesSlug: String?, title: String) {
-        downloadedKeys(source.key, seriesSlug).forEach(offline::delete)
+    fun redownload(source: PodcastSource, sourceKeys: Set<String>, seriesSlug: String?, title: String) {
+        downloadedKeys(sourceKeys, seriesSlug).forEach(offline::delete)
         downloadAndQueue(source, seriesSlug, title, queue = false)
     }
 

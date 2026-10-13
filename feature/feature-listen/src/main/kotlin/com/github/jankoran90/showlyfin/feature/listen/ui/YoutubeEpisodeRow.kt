@@ -1,5 +1,8 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.gestures.detectTapGestures
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -105,9 +108,12 @@ internal fun YoutubeEpisodeRow(
     val accent = MaterialTheme.colorScheme.primary
     // NAVIGATE: zvýrazni hranou epizodu (isCurrent) i tu, ze které se uživatel proklikl (highlighted).
     val emphasized = isCurrent || highlighted
+    // Slovo 2026-10-13 (user „ať je ovládání stejné nehledě na typ zdroje") — dlouhý stisk = menu ⋮ jako u RSS.
+    val currentOnMore by rememberUpdatedState(onMore)
     Column(
         Modifier
             .fillMaxWidth()
+            .pointerInput(Unit) { detectTapGestures(onLongPress = { currentOnMore() }) }
             .clip(RoundedCornerShape(12.dp))
             .background(if (emphasized) accent.copy(alpha = 0.12f) else Color.Transparent)
             .padding(if (emphasized) 6.dp else 0.dp),

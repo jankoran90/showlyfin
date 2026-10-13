@@ -53,6 +53,9 @@ fun HomeScreen(
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
     val playerState by vm.playerState.collectAsStateWithLifecycle()
     val layout by vm.layout.collectAsStateWithLifecycle()
+    // Slovo 2026-10-13 — díl ze série = karta knihy (ruční knihy z pravidel, ČT řady, N/M, prefix).
+    val bookVm: com.github.jankoran90.showlyfin.feature.listen.SeriesBookViewModel = hiltViewModel()
+    val seriesRules by bookVm.seriesRules.collectAsStateWithLifecycle()
     // Sdílený (activity-scoped) přehrávač — stejný jako MiniPlayer; Play/Pauza z karty bez navigace.
     val playerVm: AudiobookPlayerViewModel = hiltViewModel()
     val otherAdultProfiles by vm.otherAdultProfiles.collectAsStateWithLifecycle()
@@ -156,10 +159,19 @@ fun HomeScreen(
                             } else play
                             val onPlayPause = { if (loadedInQueue) playerVm.playPause() else vm.playEpisode(item) }
                             val onLong: (() -> Unit)? = if (otherAdultProfiles.isNotEmpty()) ({ shareEpisode = item }) else null
+                            val bookLabel = remember(item, seriesRules, layout.seriesAsBook, layout.episodeAsBook) {
+                                if (!layout.seriesAsBook || !layout.episodeAsBook) null
+                                else homeBookLabel(
+                                    episodeTitle = item.episode.title,
+                                    sourceTitle = item.sourceTitle,
+                                    seriesTitle = item.episode.seriesTitle,
+                                    ruleTitle = bookVm.ruleTitle("${item.sourceType}:${item.sourceRef}", item.episode.title),
+                                )
+                            }
                             if (layout.list) {
                                 HomeListCard(
-                                    title = item.episode.title,
-                                    subtitle = item.sourceTitle,
+                                    title = bookLabel?.bookTitle ?: item.episode.title,
+                                    subtitle = bookLabel?.chapterLine ?: item.sourceTitle,
                                     description = homeDescription(item.episode.description),
                                     imageUrl = item.episode.imageUrl,
                                     wideImage = item.sourceType == "youtube" || item.sourceType == "ctv",
@@ -179,8 +191,8 @@ fun HomeScreen(
                                 )
                             } else {
                                 ContinueEpisodeCard(
-                                    episode = item.episode,
-                                    sourceTitle = item.sourceTitle,
+                                    episode = bookLabel?.let { item.episode.copy(title = it.bookTitle) } ?: item.episode,
+                                    sourceTitle = bookLabel?.chapterLine ?: item.sourceTitle,
                                     progress = item.progress,
                                     isPlaying = loadedInQueue,
                                     onClick = onClick,
