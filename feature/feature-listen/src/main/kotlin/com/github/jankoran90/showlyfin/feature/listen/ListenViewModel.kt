@@ -136,6 +136,13 @@ class ListenViewModel @Inject constructor(
      * User (2026-08-16 14:42, „Sdílet s Nel u dětské knihy nedává smysl") — vzor [HomeViewModel.kidsLibraryIds].
      * Vlastnictví/sdílení se knih z čistě dětské ABS knihovny netýká.
      */
+    /** Knihovny dětských profilů hned (bez čekání na [kidsLibraryIds] po startu VM). */
+    private suspend fun kidsLibraryIdsNow(): Set<String> =
+        profileRepository.getAll()
+            .filterNot { it.isAdmin }
+            .flatMap { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).absLibraryWhitelist.orEmpty() }
+            .toSet()
+
     val kidsLibraryIds: StateFlow<Set<String>> =
         profileRepository.observeAll()
             .map { profiles ->
@@ -496,7 +503,8 @@ class ListenViewModel @Inject constructor(
         if (active.isAdmin) {
             // Codex sweep 2026-10-12: offline police dospělých respektuje vlastnictví (poslední známá
             // mapa je v cache [AudiobookOwnershipRepository], funguje i bez sítě).
-            return all.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, cfg.sharedAudiobookIds) }
+            val kidsIds = kidsLibraryIds.value
+            return all.filter { it.libraryId in kidsIds || audiobookOwnership.isVisible(it.id, active.profileUuid, cfg.sharedAudiobookIds) }
         }
         val wl = cfg.absLibraryWhitelist ?: return emptyList()
         return all.filter { it.libraryId.isNotEmpty() && it.libraryId in wl }
@@ -663,7 +671,10 @@ class ListenViewModel @Inject constructor(
         if (!active.isAdmin) return books
         audiobookOwnership.refresh()
         val shared = profileRepository.activeConfig.value.sharedAudiobookIds
-        return books.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, shared) }
+        // 2026-11-03 (Nel neviděla Správnou pětku #4 nahranou Honzou): dětské knihovny se vlastnictví
+        // netýká (pravidlo z 2026-08-16) → vidí je všichni dospělí, stejně jako na Domů.
+        val kidsIds = kidsLibraryIdsNow()
+        return books.filter { it.libraryId in kidsIds || audiobookOwnership.isVisible(it.id, active.profileUuid, shared) }
     }
 
     private suspend fun loadBooks(libraryId: String) {

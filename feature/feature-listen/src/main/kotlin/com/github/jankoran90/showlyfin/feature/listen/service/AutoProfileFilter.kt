@@ -29,14 +29,18 @@ internal fun AudiobookPlayerService.visibleLibraries(libs: List<AbsLibrary>): Li
     libs.filter { isLibraryVisible(it.id) }
 
 /** Audioknihy: dítě jen z whitelistu knihoven, dospělý svoje + legacy + sdílené. */
-internal fun AudiobookPlayerService.visibleBooks(books: List<Audiobook>): List<Audiobook> {
+internal suspend fun AudiobookPlayerService.visibleBooks(books: List<Audiobook>): List<Audiobook> {
     val active = profileRepository.activeProfile.value ?: return books
     val cfg = profileRepository.activeConfig.value
     if (!active.isAdmin) {
         val wl = cfg.absLibraryWhitelist ?: return emptyList()
         return books.filter { it.libraryId in wl }
     }
-    return books.filter { audiobookOwnership.isVisible(it.id, active.profileUuid, cfg.sharedAudiobookIds) }
+    // Dětské knihovny se vlastnictví netýká → vidí je všichni dospělí (2026-11-03, jako Domů).
+    val kidsIds = profileRepository.getAll().filterNot { it.isAdmin }
+        .flatMap { com.github.jankoran90.showlyfin.core.domain.ProfileConfig.fromJson(it.configJson).absLibraryWhitelist.orEmpty() }
+        .toSet()
+    return books.filter { it.libraryId in kidsIds || audiobookOwnership.isVisible(it.id, active.profileUuid, cfg.sharedAudiobookIds) }
 }
 
 /** ABS podcasty: dítě jen schválené (`abs:id`), dospělý bez skrytých. */
