@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.ui.slovophone
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AbsCreds
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
@@ -87,11 +88,14 @@ class SlovoSettingsViewModel @Inject constructor(
         absRepo.logout()
         viewModelScope.launch {
             val active = profileRepository.activeProfile.value ?: return@launch
+            val activeUser = ProfileConfig.fromJson(active.configJson).credentials.abs?.username
             profileRepository.updateConfig(active.id) { c -> c.copy(credentials = c.credentials.copy(abs = null)) }
             if (active.isDefault) {
-                profileRepository.getAll().firstOrNull { !it.isAdmin }?.let { kids ->
-                    profileRepository.updateConfig(kids.id) { c -> c.copy(credentials = c.credentials.copy(abs = null)) }
-                }
+                profileRepository.getAll().firstOrNull { !it.isAdmin }
+                    ?.takeIf { kidsInheritsAbs(it, activeUser) }
+                    ?.let { kids ->
+                        profileRepository.updateConfig(kids.id) { c -> c.copy(credentials = c.credentials.copy(abs = null)) }
+                    }
             }
             _account.update { it.copy(absConfigured = false, absBaseUrl = "", absError = null) }
         }
@@ -100,9 +104,9 @@ class SlovoSettingsViewModel @Inject constructor(
     /**
      * Zrcadlí právě uložené ABS creds (z kanonických prefs po [AbsRepository.login]) do balíku
      * AKTIVNÍHO profilu (cross-device). Profily (2026-08-16, dva dospělí): Honza a Nel mají KAŽDÝ
-     * SVÉ VLASTNÍ ABS přihlášení — login jednoho nesmí přepsat creds druhého. Výjimka: Děti nemají
-     * vlastní ABS účet, dědí od Honzy (`isDefault=true`) — pokud se PRÁVĚ Honza přihlašuje/re-loguje,
-     * zrcadli nové creds i jim (viz [com.github.jankoran90.slovo.SlovoProfileManager.ensureKidsProfile]).
+     * SVÉ VLASTNÍ ABS přihlášení — login jednoho nesmí přepsat creds druhého. Děti: od 2026-11-03 mají
+     * vlastní ABS účet `maty` (user: „proč mi skáče poslech dětí do mého profilu" — postup se ukládá
+     * k účtu). Honzovy creds se jim zrcadlí JEN dokud dědí jeho účet (stará instalace bez vlastního).
      * Token přiložíme, ať se nová instance nemusí re-loginovat; heslo drží re-login na 401 po expiraci.
      */
     private suspend fun persistAbsCredsToProfile() {
@@ -117,11 +121,20 @@ class SlovoSettingsViewModel @Inject constructor(
             Timber.w("[SLOVO] persistAbsCreds: žádný aktivní profil — creds jen v prefs (bez cross-device)")
             return
         }
+        val previousUser = ProfileConfig.fromJson(active.configJson).credentials.abs?.username
         profileRepository.updateConfig(active.id) { c -> c.copy(credentials = c.credentials.copy(abs = creds)) }
         if (active.isDefault) {
-            profileRepository.getAll().firstOrNull { !it.isAdmin }?.let { kids ->
-                profileRepository.updateConfig(kids.id) { c -> c.copy(credentials = c.credentials.copy(abs = creds)) }
-            }
+            profileRepository.getAll().firstOrNull { !it.isAdmin }
+                ?.takeIf { kidsInheritsAbs(it, previousUser ?: creds.username) }
+                ?.let { kids ->
+                    profileRepository.updateConfig(kids.id) { c -> c.copy(credentials = c.credentials.copy(abs = creds)) }
+                }
         }
+    }
+
+    /** Děti dědí ABS účet dospělého (bez vlastního, nebo se stejným uživatelem) → smí se jim zrcadlit. */
+    private fun kidsInheritsAbs(kids: ProfileEntity, adultUser: String?): Boolean {
+        val kidsUser = ProfileConfig.fromJson(kids.configJson).credentials.abs?.username ?: return true
+        return adultUser != null && kidsUser.equals(adultUser, ignoreCase = true)
     }
 }
