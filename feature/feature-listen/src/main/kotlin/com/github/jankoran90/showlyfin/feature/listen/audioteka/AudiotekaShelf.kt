@@ -46,6 +46,9 @@ internal fun AtBook.seriesTitle(seriesName: String): String {
     return rest.trimStart(' ', ':', '-', '–', ',', '.').ifBlank { title }
 }
 
+internal fun numberedSeries(seriesName: String, items: List<AtBook>): Boolean =
+    seriesName.isNotBlank() && items.all { it.title.startsWith(seriesName, ignoreCase = true) }
+
 internal fun AtBook.seriesSubtitle(order: Int): String =
     listOfNotNull("$order. díl", if (inLibrary != null) null else price ?: if (free) "Zdarma" else null).joinToString(" · ")
 
@@ -126,7 +129,8 @@ fun AtShelf(
                 )
             }
         }
-        val isSeries = section.kind == "series"
+        // Číslovat jen opravdovou sérii: všechny díly začínají jejím jménem (kolekce autora ne).
+        val isSeries = section.kind == "series" && numberedSeries(section.title, items)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(end = 8.dp)) {
             itemsIndexed(items, key = { _, b -> b.id }) { i, b ->
                 val cur = currentId != null && (b.id == currentId || b.inLibrary == currentId)

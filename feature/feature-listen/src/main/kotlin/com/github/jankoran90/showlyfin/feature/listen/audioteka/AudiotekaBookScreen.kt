@@ -178,7 +178,7 @@ fun AudiotekaSeriesScreen(
                     }
                 }
                 // Série ze hledání: díly číslované, bez opakovaného jména série (kolekce beze změny).
-                val numbered = s.data.items.all { b -> b.title.startsWith(s.data.title, ignoreCase = true) }
+                val numbered = numberedSeries(s.data.title, s.data.items)
                 itemsIndexed(s.data.items, key = { _, b -> b.id }) { i, b ->
                     if (numbered) AtCoverCard(b, onOpen, title = b.seriesTitle(s.data.title), subtitle = b.seriesSubtitle(i + 1))
                     else AtCoverCard(b, onOpen)

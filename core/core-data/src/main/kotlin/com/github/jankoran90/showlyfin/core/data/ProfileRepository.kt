@@ -628,13 +628,15 @@ class ProfileRepository @Inject constructor(
         }
 
         // 3. Config balík (uživatelský override). Neodeslaná lokální změna má přednost: nejdřív ji
-        // pošli; dokud neprojde, server NEstahuj (přepsal by ji starším stavem). Po úspěchu je lokál
-        // nejnovější → tohle kolo stahování taky přeskoč.
+        // pošli; dokud neprojde, server NEstahuj (přepsal by ji starším stavem). Po úspěšném odeslání
+        // stáhni výsledek: server slučuje a některá pole chrání (2026-11-03: vlastní ABS účet Dětí
+        // nepřepíše stará místní kopie s účtem dospělého) → místní kopie musí převzít jeho verzi.
         val remoteJson = if (profile.backendKey() in unpushedConfigKeys()) {
             val local = dao.getById(profile.id) ?: profile
             // Timeout jako u stahování — přepnutí profilu nesmí viset minuty; při timeoutu příznak zůstává.
             withTimeoutOrNull(5000) { pushConfigTracked(local, local.configJson ?: "{}") }
-            null
+            if (profile.backendKey() in unpushedConfigKeys()) null
+            else withTimeoutOrNull(5000) { configGateway.fetchConfig(profile.backendKey()) }
         } else withTimeoutOrNull(5000) {
             configGateway.fetchConfig(profile.backendKey())
         }?.takeIf { it.isNotBlank() }
