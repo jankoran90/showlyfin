@@ -57,7 +57,10 @@ import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDetail
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadState
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus
+import com.github.jankoran90.showlyfin.data.uploader.audioteka.AtBook
 import com.github.jankoran90.showlyfin.feature.listen.AudiobookDetailViewModel
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaPrefs
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaSuggestions
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +69,8 @@ fun AudiobookDetailScreen(
     onBack: () -> Unit,
     onPlay: (itemId: String, fromStart: Boolean, startSec: Double?) -> Unit,
     modifier: Modifier = Modifier,
+    /** Katalog Audioteky (user 2026-11-03) — null = návrhy se neukazují (děti, vypnuto v Nastavení). */
+    onOpenAudioteka: ((AtBook) -> Unit)? = null,
     viewModel: AudiobookDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -119,6 +124,7 @@ fun AudiobookDetailScreen(
                     onDownload = viewModel::downloadAudiobook,
                     onCancelDownload = viewModel::cancelDownload,
                     onDeleteDownload = viewModel::deleteDownload,
+                    onOpenAudioteka = onOpenAudioteka,
                     modifier = Modifier.fillMaxSize().padding(pad),
                 )
             }
@@ -135,9 +141,11 @@ private fun DetailContent(
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onDeleteDownload: () -> Unit,
+    onOpenAudioteka: ((AtBook) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val book = detail.book
+    val hideOwnedAt = AudiotekaPrefs.hideOwned(LocalContext.current)
     val resumeSec = book.currentTimeSec
     val canResume = resumeSec > 1.0 && !book.isFinished
 
@@ -237,6 +245,18 @@ private fun DetailContent(
                     cleanAudiobookDescription(desc),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.86f),
+                    modifier = Modifier.padding(top = 18.dp),
+                )
+            }
+        }
+
+        if (onOpenAudioteka != null) {
+            item(key = "audioteka") {
+                AudiotekaSuggestions(
+                    title = book.title,
+                    author = book.author,
+                    hideOwned = hideOwnedAt,
+                    onOpen = onOpenAudioteka,
                     modifier = Modifier.padding(top = 18.dp),
                 )
             }

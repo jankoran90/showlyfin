@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Sort
+import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Download
@@ -94,6 +95,9 @@ fun SlovoSettingsScreen(
             }
             if (adult) SlovoCollapsibleSection("Stažené / offline", Icons.Rounded.Download) {
                 ListenOfflineSettingsSection()
+            }
+            if (adult) SlovoCollapsibleSection("Katalog Audioteky", Icons.Rounded.Storefront) {
+                SlovoAudiotekaSection()
             }
             if (adult) SlovoCollapsibleSection("Objevování podcastů", Icons.Rounded.Explore) {
                 PodcastDiscoverySettingsSection()

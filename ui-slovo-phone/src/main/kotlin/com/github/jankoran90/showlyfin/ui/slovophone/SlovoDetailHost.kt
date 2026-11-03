@@ -10,6 +10,10 @@ import com.github.jankoran90.showlyfin.data.uploader.model.SubtitleQuery
 import com.github.jankoran90.showlyfin.feature.listen.ListenSourceTarget
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
+import com.github.jankoran90.showlyfin.data.uploader.audioteka.AtBook
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaBookScreen
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaPrefs
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaSeriesScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookDetailScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookEditScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookPlayerScreen
@@ -79,6 +83,16 @@ sealed interface SlovoDetailEntry {
     ) : SlovoDetailEntry
     /** DROPSHIP F2 — Nahrát audioknihu z telefonu do ABS knihovny. */
     data object UploadAudiobook : SlovoDetailEntry
+    /** Katalog Audioteky (user 2026-11-03) — kniha z katalogu / série nebo kolekce. */
+    data class AudiotekaBook(val bookId: String, val title: String) : SlovoDetailEntry
+    data class AudiotekaSeries(val seriesId: String, val title: String) : SlovoDetailEntry
+}
+
+/** Kniha z katalogu → cíl: máme ji = naše kniha, série = seznam dílů, jinak detail v katalogu. */
+internal fun audiotekaEntry(b: AtBook): SlovoDetailEntry = when {
+    b.inLibrary != null -> SlovoDetailEntry.AudiobookDetail(b.inLibrary!!)
+    b.isSeries -> SlovoDetailEntry.AudiotekaSeries(b.id, b.title)
+    else -> SlovoDetailEntry.AudiotekaBook(b.id, b.title)
 }
 
 /** True = tento cíl je fullscreen přehrávač (skryj MiniPlayer overlay nad ním). */
@@ -153,6 +167,7 @@ internal fun SlovoDetail(
     // SLOVO-KIDS-EPISODE (2026-08-15) — dětský profil: vždy jen audio, video volby v RSS/YouTube/ČT/
     // sloučeném pořadu se úplně skryjí (i u TWINE-propojeného páru, nikdy YouTube odkaz dětem).
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
+    val ctxHost = androidx.compose.ui.platform.LocalContext.current
     val audioOnly = activeProfile?.isAdmin == false
     // Dítě offline vidí jen stažené díly (user 2026-10-12).
     val listenOffline = listenVm.uiState.collectAsStateWithLifecycle().value.isOffline
@@ -195,6 +210,22 @@ internal fun SlovoDetail(
             onPlay = { itemId, fromStart, startSec ->
                 onPush(SlovoDetailEntry.AudiobookPlayer(itemId, fromStart, startSec))
             },
+            modifier = Modifier.fillMaxSize(),
+            onOpenAudioteka = { b: AtBook -> onPush(audiotekaEntry(b)) }
+                .takeIf { activeProfile?.isAdmin == true && AudiotekaPrefs.suggestionsInBook(ctxHost) },
+        )
+        is SlovoDetailEntry.AudiotekaBook -> AudiotekaBookScreen(
+            bookId = entry.bookId,
+            title = entry.title,
+            onBack = onPop,
+            onOpen = { onPush(audiotekaEntry(it)) },
+            modifier = Modifier.fillMaxSize(),
+        )
+        is SlovoDetailEntry.AudiotekaSeries -> AudiotekaSeriesScreen(
+            seriesId = entry.seriesId,
+            title = entry.title,
+            onBack = onPop,
+            onOpen = { onPush(audiotekaEntry(it)) },
             modifier = Modifier.fillMaxSize(),
         )
         is SlovoDetailEntry.PodcastDetail -> PodcastDetailScreen(
