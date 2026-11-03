@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -80,7 +80,7 @@ fun AudiotekaBookScreen(
                 s.data.detail?.let { d -> item { BookHeader(d, onOpen) } }
                 // Série obsahuje i tuhle knihu → ťuk na ni nepřidá stejný detail podruhé.
                 val openOther: (AtBook) -> Unit = { if (it.id != bookId || it.inLibrary != null) onOpen(it) }
-                items(s.data.sections, key = { it.kind + it.id }) { AtShelf(it, openOther, hideOwned = hideOwned) }
+                items(s.data.sections, key = { it.kind + it.id }) { AtShelf(it, openOther, hideOwned = hideOwned, currentId = bookId) }
             }
             AtLoad.Failed -> Retry(pad) { viewModel.load(bookId, force = true) }
             else -> Loading(pad)
@@ -177,7 +177,12 @@ fun AudiotekaSeriesScreen(
                         s.data.description?.let { Meta(it) }
                     }
                 }
-                items(s.data.items, key = { it.id }) { AtCoverCard(it, onOpen) }
+                // Série ze hledání: díly číslované, bez opakovaného jména série (kolekce beze změny).
+                val numbered = s.data.items.all { b -> b.title.startsWith(s.data.title, ignoreCase = true) }
+                itemsIndexed(s.data.items, key = { _, b -> b.id }) { i, b ->
+                    if (numbered) AtCoverCard(b, onOpen, title = b.seriesTitle(s.data.title), subtitle = b.seriesSubtitle(i + 1))
+                    else AtCoverCard(b, onOpen)
+                }
             }
             AtLoad.Empty -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
                 Text("Série je prázdná.", color = MaterialTheme.colorScheme.onSurfaceVariant)

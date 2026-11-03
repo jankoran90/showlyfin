@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.LibraryBooks
@@ -37,15 +37,28 @@ internal fun AtBook.cardSubtitle(): String = when {
     else -> listOfNotNull(authors.firstOrNull(), price ?: if (free) "Zdarma" else null).joinToString(" · ")
 }
 
-/** Odznak přes obálku: „V knihovně" (máme) / „Klub" (v předplatném Audioteky). */
+/**
+ * Díl série na kartě (user 2026-11-03: „popisky nejsou celé, díl není vidět"): název bez opakovaného
+ * jména série („SPRÁVNÁ PĚTKA na útěku" → „na útěku"), podtitulek „3. díl · cena".
+ */
+internal fun AtBook.seriesTitle(seriesName: String): String {
+    val rest = if (title.startsWith(seriesName, ignoreCase = true)) title.substring(seriesName.length) else title
+    return rest.trimStart(' ', ':', '-', '–', ',', '.').ifBlank { title }
+}
+
+internal fun AtBook.seriesSubtitle(order: Int): String =
+    listOfNotNull("$order. díl", if (inLibrary != null) null else price ?: if (free) "Zdarma" else null).joinToString(" · ")
+
+/** Odznak přes obálku: „Tato kniha" / „V knihovně" (máme) / „Klub" (v předplatném Audioteky). */
 @Composable
-internal fun BoxScope.AtBadge(book: AtBook) {
+internal fun BoxScope.AtBadge(book: AtBook, current: Boolean = false) {
     val text = when {
+        current -> "Tato kniha"
         book.inLibrary != null -> "V knihovně"
         book.inClub -> "Klub"
         else -> return
     }
-    val owned = book.inLibrary != null
+    val owned = current || book.inLibrary != null
     Text(
         text,
         style = MaterialTheme.typography.labelSmall,
@@ -62,21 +75,35 @@ internal fun BoxScope.AtBadge(book: AtBook) {
 }
 
 @Composable
-internal fun AtCoverCard(book: AtBook, onOpen: (AtBook) -> Unit, modifier: Modifier = Modifier) {
+internal fun AtCoverCard(
+    book: AtBook,
+    onOpen: (AtBook) -> Unit,
+    modifier: Modifier = Modifier,
+    title: String = book.title,
+    subtitle: String = book.cardSubtitle(),
+    current: Boolean = false,
+) {
     CoverCard(
-        title = book.title,
-        subtitle = book.cardSubtitle(),
+        title = title,
+        subtitle = subtitle,
         imageUrl = book.imageUrl,
         onClick = { onOpen(book) },
         modifier = modifier,
         placeholder = if (book.isSeries) Icons.Rounded.LibraryBooks else Icons.Rounded.MenuBook,
-        overlay = { AtBadge(book) },
+        overlay = { AtBadge(book, current) },
     )
 }
 
 /** Vodorovný pruh knih s nadpisem a počtem („máš 4 z 12" u série). */
 @Composable
-fun AtShelf(section: AtSection, onOpen: (AtBook) -> Unit, modifier: Modifier = Modifier, hideOwned: Boolean = false) {
+fun AtShelf(
+    section: AtSection,
+    onOpen: (AtBook) -> Unit,
+    modifier: Modifier = Modifier,
+    hideOwned: Boolean = false,
+    /** Právě otevřená kniha (id v Audiotéce nebo v naší knihovně) → odznak „Tato kniha". */
+    currentId: String? = null,
+) {
     val isGroup = section.kind == "series" || section.kind == "collection"
     val items = if (hideOwned && !isGroup) section.items.filter { it.inLibrary == null } else section.items
     if (items.isEmpty()) return
@@ -99,8 +126,17 @@ fun AtShelf(section: AtSection, onOpen: (AtBook) -> Unit, modifier: Modifier = M
                 )
             }
         }
+        val isSeries = section.kind == "series"
         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(end = 8.dp)) {
-            items(items, key = { it.id }) { b -> AtCoverCard(b, onOpen, Modifier.width(128.dp)) }
+            itemsIndexed(items, key = { _, b -> b.id }) { i, b ->
+                val cur = currentId != null && (b.id == currentId || b.inLibrary == currentId)
+                if (isSeries) AtCoverCard(
+                    b, onOpen, Modifier.width(136.dp),
+                    title = b.seriesTitle(section.title),
+                    subtitle = b.seriesSubtitle(i + 1),
+                    current = cur,
+                ) else AtCoverCard(b, onOpen, Modifier.width(136.dp), current = cur)
+            }
         }
     }
 }
@@ -113,6 +149,7 @@ fun AtShelf(section: AtSection, onOpen: (AtBook) -> Unit, modifier: Modifier = M
 fun AudiotekaSuggestions(
     title: String,
     author: String?,
+    currentItemId: String?,
     hideOwned: Boolean,
     onOpen: (AtBook) -> Unit,
     modifier: Modifier = Modifier,
@@ -128,6 +165,6 @@ fun AudiotekaSuggestions(
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
         )
-        ready.data.sections.forEach { AtShelf(it, onOpen, hideOwned = hideOwned) }
+        ready.data.sections.forEach { AtShelf(it, onOpen, hideOwned = hideOwned, currentId = currentItemId) }
     }
 }

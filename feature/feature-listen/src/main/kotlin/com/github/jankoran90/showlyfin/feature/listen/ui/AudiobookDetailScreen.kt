@@ -255,6 +255,7 @@ private fun DetailContent(
                 AudiotekaSuggestions(
                     title = book.title,
                     author = book.author,
+                    currentItemId = book.id,
                     hideOwned = hideOwnedAt,
                     onOpen = onOpenAudioteka,
                     modifier = Modifier.padding(top = 18.dp),
