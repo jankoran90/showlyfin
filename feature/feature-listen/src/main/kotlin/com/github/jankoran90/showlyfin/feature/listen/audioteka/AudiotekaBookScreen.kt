@@ -78,7 +78,9 @@ fun AudiotekaBookScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 s.data.detail?.let { d -> item { BookHeader(d, onOpen) } }
-                items(s.data.sections, key = { it.kind + it.id }) { AtShelf(it, onOpen, hideOwned = hideOwned) }
+                // Série obsahuje i tuhle knihu → ťuk na ni nepřidá stejný detail podruhé.
+                val openOther: (AtBook) -> Unit = { if (it.id != bookId || it.inLibrary != null) onOpen(it) }
+                items(s.data.sections, key = { it.kind + it.id }) { AtShelf(it, openOther, hideOwned = hideOwned) }
             }
             AtLoad.Failed -> Retry(pad) { viewModel.load(bookId, force = true) }
             else -> Loading(pad)

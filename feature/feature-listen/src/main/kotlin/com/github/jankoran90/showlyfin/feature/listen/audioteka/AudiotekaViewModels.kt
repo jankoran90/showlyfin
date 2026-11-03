@@ -30,6 +30,7 @@ sealed interface AtLoad<out T> {
 @HiltViewModel
 class AudiotekaSearchViewModel @Inject constructor(
     private val repo: AudiotekaRepository,
+    private val owned: AudiotekaOwnedFilter,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -53,12 +54,14 @@ class AudiotekaSearchViewModel @Inject constructor(
 
     fun retry() {
         val q = _query.value.trim()
-        if (q.length >= 2) viewModelScope.launch { run(q) }
+        if (q.length < 2) return
+        job?.cancel()
+        job = viewModelScope.launch { run(q) }
     }
 
     private suspend fun run(q: String) {
         _result.value = AtLoad.Loading
-        val items = repo.search(q)
+        val items = repo.search(q)?.let { owned.apply(it) }
         _result.value = when {
             items == null -> AtLoad.Failed
             items.isEmpty() -> AtLoad.Empty
@@ -71,6 +74,7 @@ class AudiotekaSearchViewModel @Inject constructor(
 @HiltViewModel
 class AudiotekaBookViewModel @Inject constructor(
     private val repo: AudiotekaRepository,
+    private val owned: AudiotekaOwnedFilter,
 ) : ViewModel() {
     private val _state = MutableStateFlow<AtLoad<AtRelated>>(AtLoad.Idle)
     val state: StateFlow<AtLoad<AtRelated>> = _state.asStateFlow()
@@ -81,7 +85,7 @@ class AudiotekaBookViewModel @Inject constructor(
         loadedId = bookId
         _state.value = AtLoad.Loading
         viewModelScope.launch {
-            val r = repo.related(bookId)
+            val r = repo.related(bookId)?.let { owned.apply(it) }
             _state.value = if (r?.detail == null) AtLoad.Failed else AtLoad.Ready(r)
         }
     }
@@ -91,6 +95,7 @@ class AudiotekaBookViewModel @Inject constructor(
 @HiltViewModel
 class AudiotekaSeriesViewModel @Inject constructor(
     private val repo: AudiotekaRepository,
+    private val owned: AudiotekaOwnedFilter,
 ) : ViewModel() {
     private val _state = MutableStateFlow<AtLoad<AtSeries>>(AtLoad.Idle)
     val state: StateFlow<AtLoad<AtSeries>> = _state.asStateFlow()
@@ -101,7 +106,7 @@ class AudiotekaSeriesViewModel @Inject constructor(
         loadedId = seriesId
         _state.value = AtLoad.Loading
         viewModelScope.launch {
-            val s = repo.series(seriesId)
+            val s = repo.series(seriesId)?.let { it.copy(items = owned.apply(it.items)) }
             _state.value = when {
                 s == null -> AtLoad.Failed
                 s.items.isEmpty() -> AtLoad.Empty
@@ -118,6 +123,7 @@ class AudiotekaSeriesViewModel @Inject constructor(
 @HiltViewModel
 class AudiotekaSuggestionsViewModel @Inject constructor(
     private val repo: AudiotekaRepository,
+    private val owned: AudiotekaOwnedFilter,
 ) : ViewModel() {
     private val _state = MutableStateFlow<AtLoad<AtRelated>>(AtLoad.Idle)
     val state: StateFlow<AtLoad<AtRelated>> = _state.asStateFlow()
@@ -125,14 +131,17 @@ class AudiotekaSuggestionsViewModel @Inject constructor(
 
     fun load(title: String, author: String?) {
         val k = "$title|$author"
-        if (key == k) return
+        // Hotový výsledek (i „nenalezeno") se nenačítá znovu; po chybě sítě ano (revize 2026-11-03).
+        if (key == k && _state.value !is AtLoad.Failed) return
         key = k
         _state.value = AtLoad.Loading
         viewModelScope.launch {
-            val match = repo.match(title, author)
-            val related = match?.let { repo.related(it.id) }
+            val res = repo.match(title, author)
+            val match = res?.getOrNull()
+            val related = match?.let { repo.related(it.id) }?.let { owned.apply(it) }
             _state.update {
                 when {
+                    res == null -> AtLoad.Failed
                     match == null -> AtLoad.Empty
                     related == null -> AtLoad.Failed
                     related.sections.isEmpty() -> AtLoad.Empty

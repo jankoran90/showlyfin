@@ -67,10 +67,14 @@ class AudiotekaRepository @Inject constructor(
         )
     }
 
-    /** Kniha z naší knihovny → kniha v Audiotéce (shoda názvu + autora na serveru). */
-    suspend fun match(title: String, author: String?): AtBook? {
+    /**
+     * Kniha z naší knihovny → kniha v Audiotéce (shoda názvu + autora na serveru).
+     * null = dotaz selhal; `Result.success(null)` = Audioteka knihu nemá.
+     */
+    suspend fun match(title: String, author: String?): Result<AtBook?>? {
         val q = "title=${enc(title)}" + (author?.takeIf { it.isNotBlank() }?.let { "&author=${enc(it)}" } ?: "")
-        return get("/api/audioteka/match?$q")?.optJSONObject("book")?.let { parseBook(it) }
+        val o = get("/api/audioteka/match?$q") ?: return null
+        return Result.success(o.optJSONObject("book")?.let { parseBook(it) })
     }
 
     private suspend fun get(path: String): JSONObject? = withContext(Dispatchers.IO) {
@@ -110,6 +114,7 @@ class AudiotekaRepository @Inject constructor(
             rating = o.optDouble("rating", 0.0).takeIf { it > 0.0 }?.toFloat(),
             url = o.str("url"),
             inLibrary = o.str("in_library"),
+            inLibraryLib = o.str("in_library_lib"),
         )
     }
 
@@ -149,8 +154,10 @@ data class AtBook(
     val minutes: Int?,
     val rating: Float?,
     val url: String?,
-    /** id položky v naší ABS knihovně, když knihu už máme. */
+    /** id položky v naší ABS knihovně, když knihu už máme (appka ještě ověří vlastnictví profilu). */
     val inLibrary: String?,
+    /** ABS knihovna té položky (výjimka vlastnictví pro dětské knihovny). */
+    val inLibraryLib: String? = null,
 )
 
 data class AtBookDetail(

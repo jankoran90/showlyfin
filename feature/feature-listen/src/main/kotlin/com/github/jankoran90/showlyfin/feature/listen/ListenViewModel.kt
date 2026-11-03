@@ -493,7 +493,7 @@ class ListenViewModel @Inject constructor(
     }
 
     /** Stažené audioknihy jako UI police (Plan CASTAWAY CA-2). */
-    private fun downloadedBooks(): List<Audiobook> {
+    private fun downloadedBooks(kidsIds: Set<String>): List<Audiobook> {
         val all = audiobookDownloads.downloads.value.map { it.toAudiobook() }
         // Audit dětí (2026-10-12): offline / selhání ABS ukazovalo dětem VŠECHNY stažené knihy v
         // telefonu (i dospělé). Dětský profil jen knihy z whitelistu knihoven; neznámá knihovna
@@ -503,7 +503,6 @@ class ListenViewModel @Inject constructor(
         if (active.isAdmin) {
             // Codex sweep 2026-10-12: offline police dospělých respektuje vlastnictví (poslední známá
             // mapa je v cache [AudiobookOwnershipRepository], funguje i bez sítě).
-            val kidsIds = kidsLibraryIds.value
             return all.filter { it.libraryId in kidsIds || audiobookOwnership.isVisible(it.id, active.profileUuid, cfg.sharedAudiobookIds) }
         }
         val wl = cfg.absLibraryWhitelist ?: return emptyList()
@@ -512,9 +511,10 @@ class ListenViewModel @Inject constructor(
 
     /** Načte knihovny audioknih a knihy ve vybrané (či první) knihovně. */
     fun refresh() {
-        val offlineBooks = downloadedBooks()
         // Plan CASTAWAY — bez přihlášení k ABS ukaž aspoň stažené knihy (offline police), ať jdou hrát.
-        if (!repo.isConfigured) {
+        // Revize 2026-11-03: dětské knihovny z Room hned (StateFlow je po startu VM ještě prázdný).
+        if (!repo.isConfigured) viewModelScope.launch {
+            val offlineBooks = downloadedBooks(kidsLibraryIdsNow())
             _uiState.update {
                 it.copy(
                     isConfigured = offlineBooks.isNotEmpty(),
@@ -525,24 +525,25 @@ class ListenViewModel @Inject constructor(
                     error = null,
                 )
             }
-            return
         }
+        if (!repo.isConfigured) return
         // Plan CASTAWAY — offline: nestreamuj seznam, rovnou ukaž stažené knihy.
-        if (!connectivity.isCurrentlyOnline()) {
+        if (!connectivity.isCurrentlyOnline()) viewModelScope.launch {
+            val offlineBooks = downloadedBooks(kidsLibraryIdsNow())
             _uiState.update {
                 it.copy(
                     isConfigured = true, isLoading = false, isOffline = true,
                     libraries = emptyList(), books = offlineBooks, error = null,
                 )
             }
-            return
         }
+        if (!connectivity.isCurrentlyOnline()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isConfigured = true, isLoading = true, isOffline = false, error = null) }
             runCatching { repo.getAudiobookLibraries().applyProfileWhitelist().ordered(absPrefs.audiobookLibraryOrder) }
                 .onSuccess { libs ->
                     if (libs.isEmpty()) {
-                        _uiState.update { it.copy(isLoading = false, libraries = emptyList(), books = downloadedBooks()) }
+                        _uiState.update { it.copy(isLoading = false, libraries = emptyList(), books = downloadedBooks(kidsLibraryIdsNow())) }
                         return@onSuccess
                     }
                     val selected = _uiState.value.selectedLibraryId?.takeIf { id -> libs.any { it.id == id } }
@@ -553,7 +554,7 @@ class ListenViewModel @Inject constructor(
                 .onFailure { e ->
                     // Síť/server selhaly i přes „online" stav → degraduj na stažené knihy místo prázdna.
                     Timber.w(e, "[Listen] knihovny selhaly")
-                    val books = downloadedBooks()
+                    val books = downloadedBooks(kidsLibraryIdsNow())
                     _uiState.update {
                         it.copy(
                             isLoading = false, libraries = emptyList(), books = books, isOffline = true,
@@ -683,7 +684,7 @@ class ListenViewModel @Inject constructor(
             .onSuccess { books -> _uiState.update { it.copy(isLoading = false, books = filterVisibleBooks(books)) } }
             .onFailure { e ->
                 Timber.w(e, "[Listen] knihy selhaly")
-                val offline = downloadedBooks()
+                val offline = downloadedBooks(kidsLibraryIdsNow())
                 _uiState.update {
                     it.copy(
                         isLoading = false, books = offline, isOffline = true,
