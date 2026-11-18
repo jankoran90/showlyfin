@@ -127,7 +127,10 @@ fun AudiotekaWebScreen(
                     val auto = AudiotekaPrefs.importDownloads(ctx) && AudiotekaPrefs.autoAfterPurchase(ctx)
                     when (val ev = viewModel.purchase.onPage(u)) {
                         is AudiotekaPurchaseFlow.Event.Product -> viewModel.onProductPage(ev.slug)
-                        AudiotekaPurchaseFlow.Event.CheckoutStarted -> viewModel.sendPurchaseLog("pokladna")
+                        AudiotekaPurchaseFlow.Event.CheckoutStarted -> {
+                            viewModel.sendPurchaseLog("pokladna")
+                            if (auto) purchaseText = "Po zaplacení otevřu Poličku a knihu stáhnu sám."
+                        }
                         AudiotekaPurchaseFlow.Event.PurchaseFinished -> {
                             viewModel.sendPurchaseLog("konec nákupu (stránka poděkování)")
                             if (auto) {
