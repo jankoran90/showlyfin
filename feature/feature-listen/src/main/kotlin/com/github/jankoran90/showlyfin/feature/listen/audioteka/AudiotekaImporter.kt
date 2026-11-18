@@ -237,7 +237,11 @@ class AudiotekaImporter @Inject constructor(
             }
             val mine = (_state.value as? State.Importing)?.uploadId == uploadId && generation.get() == gen
             if (done.uploadId != uploadId) {
-                if (mine) _state.value = State.Idle
+                // Výsledek přepsalo jiné nahrávání (revize P2): soubor nechat k dovozu / smazání, ne ztratit.
+                if (mine) _state.value = ready.copy(
+                    note = "Výsledek nahrávání se nepodařilo zjistit (souběh s jiným nahráváním). Zkontroluj knihovnu, než knihu dovezeš znovu.",
+                    suggestion = target,
+                )
                 return@launch
             }
             if (done.result != null) {

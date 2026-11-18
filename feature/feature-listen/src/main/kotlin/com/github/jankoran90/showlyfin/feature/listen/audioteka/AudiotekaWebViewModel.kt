@@ -76,14 +76,22 @@ class AudiotekaWebViewModel @Inject constructor(
     /** Stránka knihy ve WebView (slug z adresy) → kniha se mění, návrh knihovny podle její kategorie. */
     fun onProductPage(slug: String) {
         // První stránka knihy = kniha z karty; přechod na jinou → název a autor z karty už neplatí.
-        if (firstSlug == null) firstSlug = slug else if (slug != firstSlug) cardActive = false
-        if (userPicked) return
+        val changed = firstSlug != null && slug != firstSlug
+        if (firstSlug == null) firstSlug = slug else if (changed) cardActive = false
+        if (changed || !cardActive) {
+            // Jiná kniha: staré údaje i návrh zahodit HNED (revize P1/P2) — kdyby dotaz na kategorii selhal,
+            // nesmí se dovézt do knihovny předchozí knihy ani hledat v Poličce její název.
+            bookTitle = null
+            bookId = null
+            if (!userPicked) _target.value = null
+        }
+        // Stránka knihy z karty: návrh už běží podle id knihy (spolehlivější než slug) → neprepisovat.
+        if (cardActive && bookId != null) return
         suggest(stem = slug, id = null)
     }
 
     fun pick(lib: AbsLibrary) {
         userPicked = true
-        suggestJob?.cancel()
         _target.value = AudiotekaImporter.ImportTarget(lib.id, lib.name, null)
     }
 
@@ -91,12 +99,9 @@ class AudiotekaWebViewModel @Inject constructor(
         suggestJob?.cancel()
         suggestJob = viewModelScope.launch {
             val h = atRepo.libraryHint(stem, id) ?: return@launch
+            if (stem != null && !cardActive) bookTitle = h.title // kniha z WebView (jiná než z karty)
             libsLoad.join()
-            if (userPicked) return@launch
-            if (stem != null && !cardActive) {
-                bookTitle = h.title // kniha z WebView (jiná než z karty)
-                bookId = null
-            }
+            if (userPicked) return@launch // ruční volba knihovny platí, identita knihy se aktualizuje dál
             pickLibrary(_libraries.value.map { it.id to it.name }, h.kids)?.let { (lid, n) ->
                 _target.value = AudiotekaImporter.ImportTarget(lid, n, h.category)
             }
