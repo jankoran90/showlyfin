@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.github.jankoran90.showlyfin.feature.listen.AudiobookUploadManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +44,7 @@ class UploadAudiobookService : Service() {
         scope.launch {
             manager.state.collectLatest { s ->
                 if (!s.isUploading && (s.result != null || s.error != null)) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE) // API 23 nemá stopForeground(int)
                     stopSelf()
                     return@collectLatest
                 }

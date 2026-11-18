@@ -52,22 +52,26 @@ class AudiobookUploadManager @Inject constructor(
         val progress: Float = 0f,
         val result: AudiobookUploadResponse? = null,
         val error: String? = null,
+        /** Které nahrávání tenhle stav popisuje (0 = žádné) — volající si tak výsledek přiřadí jen ke svému. */
+        val uploadId: Long = 0,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(UploadState())
     val state = _state.asStateFlow()
     private val running = AtomicBoolean(false)
+    private val lastId = java.util.concurrent.atomic.AtomicLong(0)
 
     /**
      * Spustí upload (pokud žádný neběží): nahodí foreground službu a v [scope] pošle [uris] na
      * uploader backend po kouscích (session → chunky → finish per soubor → finalize).
      * Průběh 0..1 do [state]; výsledek/chyba do [state].
      */
-    fun upload(uris: List<Uri>, libraryId: String, title: String?, author: String?, autoMatch: Boolean, coverUri: Uri? = null): Boolean {
-        if (uris.isEmpty()) return false
-        if (!running.compareAndSet(false, true)) return false // jeden upload v jednu chvíli (false = nespuštěno)
-        _state.value = UploadState(isUploading = true)
+    fun upload(uris: List<Uri>, libraryId: String, title: String?, author: String?, autoMatch: Boolean, coverUri: Uri? = null): Long {
+        if (uris.isEmpty()) return 0
+        if (!running.compareAndSet(false, true)) return 0 // jeden upload v jednu chvíli (0 = nespuštěno, jinak id nahrávání)
+        val id = lastId.incrementAndGet()
+        _state.value = UploadState(isUploading = true, uploadId = id)
         runCatching {
             ContextCompat.startForegroundService(context, Intent(context, UploadAudiobookService::class.java))
         }.onFailure { Timber.w(it, "[DROPSHIP] upload service start selhal (upload běží dál)") }
@@ -108,15 +112,15 @@ class AudiobookUploadManager @Inject constructor(
                 val coverPart = coverUri?.let { buildCoverPart(it) }
                 uploaderRepo.finalizeUpload(sid, coverPart)
             }.onSuccess { res ->
-                _state.value = UploadState(isUploading = false, progress = 1f, result = res)
+                _state.value = UploadState(isUploading = false, progress = 1f, result = res, uploadId = id)
             }.onFailure { e ->
                 Timber.w(e, "[DROPSHIP] upload selhal")
                 sessionId?.let { uploaderRepo.cancelUploadSession(it) }
-                _state.value = UploadState(isUploading = false, error = e.message ?: "Nahrávání selhalo")
+                _state.value = UploadState(isUploading = false, error = e.message ?: "Nahrávání selhalo", uploadId = id)
             }
             running.set(false)
         }
-        return true
+        return id
     }
 
     /** Vymaže hotový výsledek/chybu (při návratu na obrazovku / novém pokusu). */

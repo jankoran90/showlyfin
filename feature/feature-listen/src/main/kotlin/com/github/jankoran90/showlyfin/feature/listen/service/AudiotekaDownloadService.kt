@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaImporter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -65,7 +66,7 @@ class AudiotekaDownloadService : Service() {
 
     /** Konec služby; [last] zůstane v liště jako obyčejná (odklepnutelná) notifikace. */
     private fun finish(last: Notification?) {
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE) // API 23 nemá stopForeground(int)
         if (last != null) notifyNow(last, DONE_ID)
         stopSelf()
     }

@@ -160,14 +160,14 @@ class AudiotekaImporter @Inject constructor(
     fun import(libraryId: String, title: String?, author: String?) {
         val ready = _state.value as? State.Ready ?: return
         uploadManager.reset()
-        val started = uploadManager.upload(
+        val uploadId = uploadManager.upload(
             uris = listOf(Uri.fromFile(ready.file)),
             libraryId = libraryId,
             title = title?.takeIf { it.isNotBlank() },
             author = author?.takeIf { it.isNotBlank() },
             autoMatch = true,
         )
-        if (!started) {
+        if (uploadId == 0L) {
             // Běží jiné nahrávání (např. z obrazovky Nahrát audioknihu) → tenhle soubor zůstává k dovozu.
             _state.value = ready.copy(note = "Právě běží jiné nahrávání. Počkej, až skončí, a zkus to znovu.")
             return
@@ -175,8 +175,11 @@ class AudiotekaImporter @Inject constructor(
         _state.value = State.Idle
         val gen = generation.get()
         scope.launch {
-            // Stav managera teď patří právě tomuhle nahrávání (jiné se spustit nemohlo, dokud běží).
-            val done = uploadManager.state.first { !it.isUploading && (it.result != null || it.error != null) }
+            // Výsledek jen tohoto nahrávání (podle id); když ho mezitím přepsalo jiné, nehádat a soubor nechat.
+            val done = uploadManager.state.first {
+                it.uploadId != uploadId || (!it.isUploading && (it.result != null || it.error != null))
+            }
+            if (done.uploadId != uploadId) return@launch
             if (done.result != null) {
                 if (AudiotekaPrefs.deleteAfterImport(context)) ready.file.parentFile?.deleteRecursively()
             } else if (_state.value == State.Idle && generation.get() == gen) {
