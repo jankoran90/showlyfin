@@ -14,6 +14,7 @@ import com.github.jankoran90.showlyfin.data.uploader.audioteka.AtBook
 import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaBookScreen
 import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaPrefs
 import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaSeriesScreen
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaWebScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookDetailScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookEditScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.AudiobookPlayerScreen
@@ -86,6 +87,8 @@ sealed interface SlovoDetailEntry {
     /** Katalog Audioteky (user 2026-11-03) — kniha z katalogu / série nebo kolekce. */
     data class AudiotekaBook(val bookId: String, val title: String) : SlovoDetailEntry
     data class AudiotekaSeries(val seriesId: String, val title: String) : SlovoDetailEntry
+    /** Stránka Audioteky uvnitř Slova — nákup, Polička, dovoz koupené knihy (user 2026-11-18). */
+    data class AudiotekaWeb(val url: String, val titleHint: String? = null, val authorHint: String? = null) : SlovoDetailEntry
 }
 
 /** Kniha z katalogu → cíl: máme ji = naše kniha, série = seznam dílů, jinak detail v katalogu. */
@@ -219,6 +222,17 @@ internal fun SlovoDetail(
             title = entry.title,
             onBack = onPop,
             onOpen = { onPush(audiotekaEntry(it)) },
+            modifier = Modifier.fillMaxSize(),
+            onBuyInApp = { b: AtBook ->
+                b.url?.let { onPush(SlovoDetailEntry.AudiotekaWeb(it, b.title, b.authors.joinToString(", ").ifBlank { null })) }
+                Unit
+            }.takeIf { AudiotekaPrefs.buyInApp(ctxHost) },
+        )
+        is SlovoDetailEntry.AudiotekaWeb -> AudiotekaWebScreen(
+            url = entry.url,
+            titleHint = entry.titleHint,
+            authorHint = entry.authorHint,
+            onBack = onPop,
             modifier = Modifier.fillMaxSize(),
         )
         is SlovoDetailEntry.AudiotekaSeries -> AudiotekaSeriesScreen(

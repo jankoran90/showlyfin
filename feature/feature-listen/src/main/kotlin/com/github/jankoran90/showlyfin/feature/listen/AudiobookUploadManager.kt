@@ -183,10 +183,14 @@ class AudiobookUploadManager @Inject constructor(
         return cleaned.ifBlank { "audiobook" }
     }
 
-    private fun sizeOfUri(uri: Uri): Long = queryLong(uri, OpenableColumns.SIZE)
+    // file:// (dovoz z Audioteky stahuje do souboru appky) ContentResolver.query neumí → velikost a jméno ze souboru.
+    private fun sizeOfUri(uri: Uri): Long =
+        if (uri.scheme == "file") uri.path?.let { java.io.File(it).length() } ?: -1L
+        else queryLong(uri, OpenableColumns.SIZE)
 
     private fun queryDisplayName(uri: Uri): String? =
-        queryString(uri, OpenableColumns.DISPLAY_NAME)
+        if (uri.scheme == "file") uri.lastPathSegment
+        else queryString(uri, OpenableColumns.DISPLAY_NAME)
 
     private fun queryString(uri: Uri, column: String): String? = runCatching {
         context.contentResolver.query(uri, arrayOf(column), null, null, null)?.use { c ->

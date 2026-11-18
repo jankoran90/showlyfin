@@ -54,6 +54,8 @@ import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
 import com.github.jankoran90.showlyfin.feature.listen.ui.BooksContent
 import com.github.jankoran90.showlyfin.feature.listen.ui.FollowingContent
 import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaCatalogScreen
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AUDIOTEKA_SHELF_URL
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaPrefs
 import com.github.jankoran90.showlyfin.feature.listen.ui.DownloadsScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
@@ -386,7 +388,12 @@ private fun SlovoShellContent() {
                             DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize())
                         }
                         SlovoSection.KATALOG -> SlovoSectionScaffold(current.label, onMenu) {
-                            AudiotekaCatalogScreen(onOpen = { onPush(audiotekaEntry(it)) }, modifier = Modifier.fillMaxSize())
+                            AudiotekaCatalogScreen(
+                                onOpen = { onPush(audiotekaEntry(it)) },
+                                modifier = Modifier.fillMaxSize(),
+                                onOpenShelf = { onPush(SlovoDetailEntry.AudiotekaWeb(AUDIOTEKA_SHELF_URL)) }
+                                    .takeIf { AudiotekaPrefs.buyInApp(LocalContext.current) },
+                            )
                         }
                         SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu, isKidsProfile = isKidsProfile)
                         SlovoSection.PROFIL -> SlovoProfileScreen(onMenu = onMenu)

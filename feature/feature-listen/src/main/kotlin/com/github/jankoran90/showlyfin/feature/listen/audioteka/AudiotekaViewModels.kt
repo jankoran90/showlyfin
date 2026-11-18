@@ -167,4 +167,41 @@ object AudiotekaPrefs {
     /** V návrzích „Od autora / Čte / kategorie" skrýt knihy, které už máme (série je ukazuje vždy). */
     fun hideOwned(ctx: Context) = p(ctx).getBoolean(KEY_HIDE_OWNED, false)
     fun setHideOwned(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_HIDE_OWNED, v).apply()
+
+    private const val KEY_BUY_IN_APP = "buy_in_app"
+    private const val KEY_IMPORT_DOWNLOADS = "import_downloads"
+    private const val KEY_DELETE_AFTER_IMPORT = "delete_after_import"
+
+    /** Koupit otevře stránku Audioteky uvnitř Slova (user 2026-11-18); vypnuto = prohlížeč telefonu. */
+    fun buyInApp(ctx: Context) = p(ctx).getBoolean(KEY_BUY_IN_APP, true)
+    fun setBuyInApp(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_BUY_IN_APP, v).apply()
+
+    /** Stažení z Poličky uvnitř Slova nabídne dovoz do knihovny (vypnuto = jen uložit do Stažených souborů). */
+    fun importDownloads(ctx: Context) = p(ctx).getBoolean(KEY_IMPORT_DOWNLOADS, true)
+    fun setImportDownloads(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_IMPORT_DOWNLOADS, v).apply()
+
+    /** Po úspěšném dovozu smazat stažený archiv z telefonu (místo). */
+    fun deleteAfterImport(ctx: Context) = p(ctx).getBoolean(KEY_DELETE_AFTER_IMPORT, true)
+    fun setDeleteAfterImport(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_DELETE_AFTER_IMPORT, v).apply()
+
+    /** Složka stažených archivů čekajících na dovoz (sdílí [AudiotekaImporter]). */
+    fun importDir(ctx: Context) = java.io.File(ctx.filesDir, "audioteka_import")
+
+    /** Velikost nedovezených stažených archivů v bajtech. */
+    fun pendingImportBytes(ctx: Context): Long = importDir(ctx).listFiles()?.sumOf { it.length() } ?: 0L
+
+    fun clearImportFiles(ctx: Context) { importDir(ctx).listFiles()?.forEach { it.delete() } }
+
+    /** Odhlášení z Audioteky ve Slovu: smaže cookies a úložiště jen jejich webu (ostatní přihlášení ve WebView zůstanou). */
+    fun logout(ctx: Context) {
+        val cm = android.webkit.CookieManager.getInstance()
+        for (url in listOf("https://audioteka.com", "https://www.audioteka.com", "https://api-audioteka.audioteka.com")) {
+            cm.getCookie(url)?.split(";")?.map { it.substringBefore("=").trim() }?.filter { it.isNotEmpty() }?.forEach { name ->
+                cm.setCookie(url, "$name=; Max-Age=0; Path=/")
+                cm.setCookie(url, "$name=; Max-Age=0; Path=/; Domain=.audioteka.com")
+            }
+            runCatching { android.webkit.WebStorage.getInstance().deleteOrigin(url) }
+        }
+        cm.flush()
+    }
 }

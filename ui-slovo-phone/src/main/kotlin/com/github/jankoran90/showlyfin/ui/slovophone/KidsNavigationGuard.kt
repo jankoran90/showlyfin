@@ -38,7 +38,7 @@ internal fun kidsGuard(
     }
     is SlovoDetailEntry.PodcastDetail -> entry.takeIf { "abs:${it.itemId}" in kidsKeys }
     // Katalog Audioteky (ceny, nákup) dětem ne.
-    is SlovoDetailEntry.AudiotekaBook, is SlovoDetailEntry.AudiotekaSeries -> null
+    is SlovoDetailEntry.AudiotekaBook, is SlovoDetailEntry.AudiotekaSeries, is SlovoDetailEntry.AudiotekaWeb -> null
     else -> entry
 }
 

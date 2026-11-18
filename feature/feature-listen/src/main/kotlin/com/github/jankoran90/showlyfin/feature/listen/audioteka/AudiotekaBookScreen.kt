@@ -64,6 +64,8 @@ fun AudiotekaBookScreen(
     onBack: () -> Unit,
     onOpen: (AtBook) -> Unit,
     modifier: Modifier = Modifier,
+    /** Koupit uvnitř Slova (stránka Audioteky ve WebView); null = prohlížeč telefonu. */
+    onBuyInApp: ((AtBook) -> Unit)? = null,
     viewModel: AudiotekaBookViewModel = hiltViewModel(key = "at-book-$bookId"),
 ) {
     LaunchedEffect(bookId) { viewModel.load(bookId) }
@@ -78,7 +80,7 @@ fun AudiotekaBookScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                s.data.detail?.let { d -> item { BookHeader(d, sample, onOpen) } }
+                s.data.detail?.let { d -> item { BookHeader(d, sample, onOpen, onBuyInApp) } }
                 // Série obsahuje i tuhle knihu → ťuk na ni nepřidá stejný detail podruhé.
                 val openOther: (AtBook) -> Unit = { if (it.id != bookId || it.inLibrary != null) onOpen(it) }
                 items(s.data.sections, key = { it.kind + it.id }) { AtShelf(it, openOther, hideOwned = hideOwned, currentId = bookId) }
@@ -90,7 +92,7 @@ fun AudiotekaBookScreen(
 }
 
 @Composable
-private fun BookHeader(d: AtBookDetail, sample: AtSampleState, onOpen: (AtBook) -> Unit) {
+private fun BookHeader(d: AtBookDetail, sample: AtSampleState, onOpen: (AtBook) -> Unit, onBuyInApp: ((AtBook) -> Unit)?) {
     val b = d.book
     val uri = LocalUriHandler.current
     var expanded by remember { mutableStateOf(false) }
@@ -118,9 +120,12 @@ private fun BookHeader(d: AtBookDetail, sample: AtSampleState, onOpen: (AtBook) 
             }
             b.url != null -> {
                 val price = b.price ?: if (b.free) "zdarma" else null
-                Button(onClick = { uri.openUri(b.url!!) }, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { onBuyInApp?.invoke(b) ?: uri.openUri(b.url!!) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Icon(Icons.Rounded.ShoppingCart, contentDescription = null)
-                    Text("  Koupit na Audiotéce" + (price?.let { " · $it" } ?: ""))
+                    Text((if (onBuyInApp != null) "  Koupit" else "  Koupit na Audiotéce") + (price?.let { " · $it" } ?: ""))
                 }
                 val club = listOfNotNull(
                     b.priceClub?.let { "v Klubu $it" },
@@ -132,7 +137,7 @@ private fun BookHeader(d: AtBookDetail, sample: AtSampleState, onOpen: (AtBook) 
         }
         if (b.inLibrary == null) d.sampleUrl?.let { AudiotekaSamplePlayer(it, sample, Modifier.fillMaxWidth()) }
         if (b.inLibrary == null && b.url != null) {
-            TextButton(onClick = { uri.openUri(b.url!!) }, modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = { onBuyInApp?.invoke(b) ?: uri.openUri(b.url!!) }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.OpenInNew, contentDescription = null)
                 Text(if (d.sampleUrl != null) "  Recenze na Audiotéce" else "  Ukázka a recenze na Audiotéce")
             }

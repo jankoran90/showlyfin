@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -42,6 +43,8 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.ListenExpressiveTheme
 fun AudiotekaCatalogScreen(
     onOpen: (AtBook) -> Unit,
     modifier: Modifier = Modifier,
+    /** Polička Audioteky uvnitř Slova (koupené knihy → Stáhnout → dovoz); null = nákup v prohlížeči, chip se neukáže. */
+    onOpenShelf: (() -> Unit)? = null,
     viewModel: AudiotekaSearchViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -63,6 +66,14 @@ fun AudiotekaCatalogScreen(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             )
+            onOpenShelf?.let { open ->
+                androidx.compose.material3.AssistChip(
+                    onClick = open,
+                    label = { Text("Moje Polička na Audiotéce — koupené knihy a dovoz") },
+                    leadingIcon = { Icon(Icons.Rounded.LibraryBooks, contentDescription = null) },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
             when (val r = result) {
                 AtLoad.Idle -> Hint("Napiš aspoň dvě písmena. Uvidíš knihy i série z Audioteky a co z nich už máš v knihovně.")
                 AtLoad.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
