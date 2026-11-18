@@ -61,6 +61,15 @@ class AudiotekaPurchaseFlow {
         return Event.None
     }
 
+    /** Jsi na stránce košíku / pokladny Audioteky (nabídnout zaplacení v Chrome). */
+    fun isCheckoutPage(url: String): Boolean {
+        val u = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        return u.host.orEmpty().endsWith("audioteka.com") && CHECKOUT.containsMatchIn(u.path.orEmpty().lowercase())
+    }
+
+    /** Platba proběhla mimo Slovo (Chrome): po návratu čekat knihu v Poličce. */
+    fun markCheckout() { checkoutSeen = true }
+
     /** Polička otevřená po koupi: samo-ťuknutí proběhne nejvýš jednou. */
     fun consumeCheckout() { checkoutSeen = false }
 

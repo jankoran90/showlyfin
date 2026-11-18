@@ -27,6 +27,7 @@ internal fun SlovoAudiotekaSection() {
     var autoAfterPurchase by remember { mutableStateOf(AudiotekaPrefs.autoAfterPurchase(ctx)) }
     var autoImport by remember { mutableStateOf(AudiotekaPrefs.autoImport(ctx)) }
     var recordPages by remember { mutableStateOf(AudiotekaPrefs.recordPurchasePages(ctx)) }
+    var webGpay by remember { mutableStateOf(AudiotekaPrefs.webViewGooglePay(ctx)) }
     var pending by remember { mutableStateOf(AudiotekaPrefs.pendingImportBytes(ctx)) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingSwitchRow(
@@ -48,6 +49,12 @@ internal fun SlovoAudiotekaSection() {
             onCheckedChange = { buyInApp = it; AudiotekaPrefs.setBuyInApp(ctx, it) },
         )
         if (buyInApp) {
+            SettingSwitchRow(
+                title = "Google Pay přímo ve Slovu",
+                subtitle = "Zatím ho Google pro Slovo neschválil (chyba OR_BIBED_11). Vypnuto = v košíku tlačítko Zaplatit v Chrome",
+                checked = webGpay,
+                onCheckedChange = { webGpay = it; AudiotekaPrefs.setWebViewGooglePay(ctx, it) },
+            )
             SettingSwitchRow(
                 title = "Dovážet stažené knihy do knihovny",
                 subtitle = "Stažení z Poličky Slovo samo nahraje do knihovny. Vypnuto = jen uložit do Stažených souborů",

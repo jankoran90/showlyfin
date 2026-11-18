@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -58,6 +59,26 @@ internal fun ImportTargetBar(
         }
         TextButton(onClick = onChange) { Text(if (target == null) "Vybrat" else "Změnit") }
         IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = "Skrýt") }
+    }
+}
+
+/**
+ * Košík / pokladna: Google Pay ve Slovu Google odmítá (OR_BIBED_11) → zaplatit v Chrome, kde jde; po návratu
+ * do Slova se kniha stáhne a doveze sama.
+ */
+@Composable
+internal fun PayInChromeBar(onPay: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Google Pay jde jen v Chrome. Zaplať tam a vrať se do Slova, knihu stáhnu sám.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Button(onClick = onPay) { Text("Zaplatit v Chrome") }
     }
 }
 

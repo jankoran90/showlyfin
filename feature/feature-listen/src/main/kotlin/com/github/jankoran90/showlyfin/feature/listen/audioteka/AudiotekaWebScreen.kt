@@ -48,6 +48,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
@@ -95,6 +98,11 @@ fun AudiotekaWebScreen(
     /** Po koupi čeká samo-ťuknutí v Poličce. */
     var autoPending by remember { mutableStateOf(false) }
     var autoJob by remember { mutableStateOf<Job?>(null) }
+    /** Stránka košíku / pokladny → nabídnout zaplacení v Chrome (Google Pay ve Slovu Google odmítá). */
+    var onCheckout by remember { mutableStateOf(false) }
+    /** Odešel jsi platit do Chrome → po návratu do Slova zkontrolovat Poličku. */
+    var paidOutside by rememberSaveable { mutableStateOf(false) }
+    var shelfRetries by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val titleHintState by rememberUpdatedState(titleHint)
     val authorHintState by rememberUpdatedState(authorHint)
@@ -109,7 +117,7 @@ fun AudiotekaWebScreen(
             settings.useWideViewPort = true
             // Google Pay v pokladně (user 2026-11-18 19:47). Vlastní User-Agent nenastavovat — Google Pay by zmizel.
             if (WebViewFeature.isFeatureSupported(WebViewFeature.PAYMENT_REQUEST)) {
-                WebSettingsCompat.setPaymentRequestEnabled(settings, true)
+                WebSettingsCompat.setPaymentRequestEnabled(settings, AudiotekaPrefs.webViewGooglePay(ctx))
             }
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
@@ -124,6 +132,7 @@ fun AudiotekaWebScreen(
                     CookieManager.getInstance().flush()
                     if (u == null) return
                     viewModel.recordPage(u)
+                    onCheckout = viewModel.purchase.isCheckoutPage(u)
                     val auto = AudiotekaPrefs.importDownloads(ctx) && AudiotekaPrefs.autoAfterPurchase(ctx)
                     when (val ev = viewModel.purchase.onPage(u)) {
                         is AudiotekaPurchaseFlow.Event.Product -> viewModel.onProductPage(ev.slug)
@@ -149,7 +158,16 @@ fun AudiotekaWebScreen(
                         viewModel.purchase.consumeCheckout()
                         autoJob = scope.launch {
                             val ok = autoDownload(view, viewModel) { viewModel.importer.state.value }
-                            purchaseText = if (ok) null else "Kniha je koupená — ťukni u ní na Stáhnout, dovoz proběhne sám."
+                            if (!ok && shelfRetries > 0) {
+                                // Po platbě v Chrome se kniha v Poličce může objevit se zpožděním → ještě jednou.
+                                shelfRetries--
+                                purchaseText = "Kniha v Poličce ještě není, zkusím to znovu…"
+                                delay(8000)
+                                autoPending = true
+                                view.loadUrl(AUDIOTEKA_SHELF_URL)
+                                return@launch
+                            }
+                            purchaseText = if (ok) null else "Kniha je koupená? Ťukni u ní na Stáhnout, dovoz proběhne sám."
                         }
                     }
                 }
@@ -176,6 +194,26 @@ fun AudiotekaWebScreen(
         }
     }
     BackHandler(enabled = canGoBack) { webView.goBack() }
+    // Návrat z Chrome po platbě → Polička → samo-ťuknutí u koupené knihy.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME && paidOutside) {
+                paidOutside = false
+                if (AudiotekaPrefs.importDownloads(ctx) && AudiotekaPrefs.autoAfterPurchase(ctx)) {
+                    viewModel.purchase.markCheckout()
+                    viewModel.sendPurchaseLog("návrat z platby v Chrome")
+                    autoPending = true
+                    shelfRetries = 1
+                    purchaseText = "Vítej zpět — kontroluji Poličku a stahuji knihu…"
+                    barVisible = true
+                    webView.loadUrl(AUDIOTEKA_SHELF_URL)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -205,6 +243,15 @@ fun AudiotekaWebScreen(
                     onChange = { picking = true },
                     onClose = { barVisible = false },
                 )
+            }
+            if (onCheckout && !AudiotekaPrefs.webViewGooglePay(ctx)) {
+                PayInChromeBar(onPay = {
+                    val cur = webView.url ?: return@PayInChromeBar
+                    if (openInChrome(ctx, cur)) {
+                        paidOutside = true
+                        viewModel.sendPurchaseLog("platba v Chrome")
+                    }
+                })
             }
             Box(Modifier.fillMaxSize()) {
                 AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
@@ -270,6 +317,18 @@ private suspend fun autoDownload(
 
 private suspend fun WebView.evalJs(js: String): String = suspendCancellableCoroutine { c ->
     evaluateJavascript(js) { r -> if (c.isActive) c.resume(r.orEmpty()) }
+}
+
+/** Otevře adresu v Chrome (Google Pay tam jde); bez Chrome ve výchozím prohlížeči. */
+private fun openInChrome(ctx: Context, url: String): Boolean {
+    val uri = Uri.parse(url)
+    val chrome = Intent(Intent.ACTION_VIEW, uri).setPackage("com.android.chrome").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    return try {
+        ctx.startActivity(chrome)
+        true
+    } catch (e: ActivityNotFoundException) {
+        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+    }
 }
 
 /** Platební brány a banky otevírají vlastní appky (intent://, bankovní schémata) → předat systému. */

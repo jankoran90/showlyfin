@@ -188,6 +188,14 @@ object AudiotekaPrefs {
     private const val KEY_AUTO_IMPORT = "auto_import"
     private const val KEY_RECORD_PURCHASE = "record_purchase_pages"
     private const val KEY_PURCHASE_PAGES = "purchase_pages"
+    private const val KEY_WEBVIEW_GPAY = "webview_google_pay"
+
+    /**
+     * Google Pay přímo ve Slovu (WebView PaymentRequest). Výchozí VYPNUTO: Google platbu z appky, kterou pro Google
+     * Pay neschválil, odmítne (OR_BIBED_11, user 2026-11-18 20:32) → platí se v Chrome tlačítkem v košíku.
+     */
+    fun webViewGooglePay(ctx: Context) = p(ctx).getBoolean(KEY_WEBVIEW_GPAY, false)
+    fun setWebViewGooglePay(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_WEBVIEW_GPAY, v).apply()
 
     /** Po zaplacení samo otevřít Poličku a ťuknout na Stáhnout u koupené knihy (user 2026-11-18 19:52). */
     fun autoAfterPurchase(ctx: Context) = p(ctx).getBoolean(KEY_AUTO_AFTER_PURCHASE, true)
