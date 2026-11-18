@@ -26,7 +26,6 @@ import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -129,10 +128,11 @@ private fun BookHeader(d: AtBookDetail, onOpen: (AtBook) -> Unit) {
                 if (club.isNotEmpty()) Meta(club.joinToString(" · "))
             }
         }
+        if (b.inLibrary == null) d.sampleUrl?.let { AudiotekaSamplePlayer(it, Modifier.fillMaxWidth()) }
         if (b.inLibrary == null && b.url != null) {
-            FilledTonalButton(onClick = { uri.openUri(b.url!!) }, modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = { uri.openUri(b.url!!) }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.OpenInNew, contentDescription = null)
-                Text("  Ukázka a recenze na Audiotéce")
+                Text(if (d.sampleUrl != null) "  Recenze na Audiotéce" else "  Ukázka a recenze na Audiotéce")
             }
         }
         if (d.categories.isNotEmpty()) Meta(d.categories.joinToString(" · "))
