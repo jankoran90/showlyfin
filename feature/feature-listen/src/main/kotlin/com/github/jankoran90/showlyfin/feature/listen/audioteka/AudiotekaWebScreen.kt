@@ -250,6 +250,7 @@ private fun ImportDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Staženo: ${ready.name} (${ready.file.length() / 1_000_000} MB)", style = MaterialTheme.typography.bodySmall)
+                ready.note?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 if (libraries.isEmpty()) {
                     Text("Knihovny se nenačetly. Zkontroluj přihlášení k audioknihám v Nastavení.", color = MaterialTheme.colorScheme.error)
                 } else {

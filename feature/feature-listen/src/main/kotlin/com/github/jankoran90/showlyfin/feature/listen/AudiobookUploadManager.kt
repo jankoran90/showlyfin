@@ -64,9 +64,9 @@ class AudiobookUploadManager @Inject constructor(
      * uploader backend po kouscích (session → chunky → finish per soubor → finalize).
      * Průběh 0..1 do [state]; výsledek/chyba do [state].
      */
-    fun upload(uris: List<Uri>, libraryId: String, title: String?, author: String?, autoMatch: Boolean, coverUri: Uri? = null) {
-        if (uris.isEmpty()) return
-        if (!running.compareAndSet(false, true)) return // jeden upload v jednu chvíli
+    fun upload(uris: List<Uri>, libraryId: String, title: String?, author: String?, autoMatch: Boolean, coverUri: Uri? = null): Boolean {
+        if (uris.isEmpty()) return false
+        if (!running.compareAndSet(false, true)) return false // jeden upload v jednu chvíli (false = nespuštěno)
         _state.value = UploadState(isUploading = true)
         runCatching {
             ContextCompat.startForegroundService(context, Intent(context, UploadAudiobookService::class.java))
@@ -116,6 +116,7 @@ class AudiobookUploadManager @Inject constructor(
             }
             running.set(false)
         }
+        return true
     }
 
     /** Vymaže hotový výsledek/chybu (při návratu na obrazovku / novém pokusu). */

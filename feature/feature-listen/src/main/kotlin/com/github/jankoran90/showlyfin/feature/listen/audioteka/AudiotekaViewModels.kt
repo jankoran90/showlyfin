@@ -188,9 +188,9 @@ object AudiotekaPrefs {
     fun importDir(ctx: Context) = java.io.File(ctx.filesDir, "audioteka_import")
 
     /** Velikost nedovezených stažených archivů v bajtech. */
-    fun pendingImportBytes(ctx: Context): Long = importDir(ctx).listFiles()?.sumOf { it.length() } ?: 0L
+    fun pendingImportBytes(ctx: Context): Long = importDir(ctx).walkBottomUp().filter { it.isFile }.sumOf { it.length() }
 
-    fun clearImportFiles(ctx: Context) { importDir(ctx).listFiles()?.forEach { it.delete() } }
+    fun clearImportFiles(ctx: Context) { importDir(ctx).listFiles()?.forEach { it.deleteRecursively() } }
 
     /** Odhlášení z Audioteky ve Slovu: smaže cookies a úložiště jen jejich webu (ostatní přihlášení ve WebView zůstanou). */
     fun logout(ctx: Context) {

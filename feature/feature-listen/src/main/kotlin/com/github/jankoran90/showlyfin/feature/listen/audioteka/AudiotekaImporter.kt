@@ -23,6 +23,7 @@ import okhttp3.Request
 import timber.log.Timber
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,8 +42,14 @@ class AudiotekaImporter @Inject constructor(
     sealed interface State {
         data object Idle : State
         data class Downloading(val name: String, val progress: Float?, val bytes: Long) : State
-        /** Staženo, čeká na volbu knihovny. */
-        data class Ready(val file: File, val name: String, val titleHint: String?, val authorHint: String?) : State
+        /** Staženo, čeká na volbu knihovny. [note] = proč předchozí pokus nevyšel (jiné nahrávání, chyba). */
+        data class Ready(
+            val file: File,
+            val name: String,
+            val titleHint: String?,
+            val authorHint: String?,
+            val note: String? = null,
+        ) : State
         data class Failed(val message: String) : State
     }
 
@@ -50,13 +57,13 @@ class AudiotekaImporter @Inject constructor(
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
     private var job: Job? = null
+    /** Číslo aktuálního stahování: zrušená úloha, která doběhne později, už stav ani soubory nového nepřepíše. */
+    private val generation = AtomicInteger(0)
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .build()
-
-    private val dir: File get() = AudiotekaPrefs.importDir(context).apply { mkdirs() }
 
     /** Stažení ohlášené WebView. [titleHint]/[authorHint] = kniha, ze které jsi šel nakupovat (může být null). */
     fun onDownload(
@@ -67,16 +74,21 @@ class AudiotekaImporter @Inject constructor(
         titleHint: String?,
         authorHint: String?,
     ) {
-        if (_state.value is State.Downloading) return
+        if (_state.value is State.Downloading || _state.value is State.Ready) return
         if (!url.startsWith("http")) {
             _state.value = State.Failed("Tohle stažení Slovo neumí převzít (${url.substringBefore(':')}). Stáhni knihu v prohlížeči a nahraj ji přes Nahrát audioknihu.")
             return
         }
         val name = safeName(URLUtil.guessFileName(url, contentDisposition, mimeType))
+        // Název a autora knihy, ze které jsi šel nakupovat, předvyplnit jen když stažený soubor zjevně patří k ní
+        // (v Poličce můžeš stáhnout úplně jinou knihu); jinak prázdné → server dohledá podle souboru.
+        val matches = titleHint != null && fileMatchesTitle(name, titleHint)
+        val gen = generation.incrementAndGet()
+        // Každé stahování ve vlastní podsložce: zrušené a nové se stejným jménem souboru si nesmažou data.
+        val target = File(AudiotekaPrefs.importDir(context), "d$gen-${System.currentTimeMillis()}").apply { mkdirs() }.let { File(it, name) }
+        _state.value = State.Downloading(name, null, 0)
         job = scope.launch {
-            val target = File(dir, name)
             runCatching {
-                _state.value = State.Downloading(name, null, 0)
                 val req = Request.Builder().url(url).apply {
                     CookieManager.getInstance().getCookie(url)?.let { header("Cookie", it) }
                     userAgent?.let { header("User-Agent", it) }
@@ -96,7 +108,7 @@ class AudiotekaImporter @Inject constructor(
                                 if (n < 0) break
                                 out.write(buf, 0, n)
                                 done += n
-                                if (done - lastEmit > 1_000_000) {
+                                if (done - lastEmit > 1_000_000 && generation.get() == gen) {
                                     lastEmit = done
                                     _state.value = State.Downloading(name, if (total > 0) done.toFloat() / total else null, done)
                                 }
@@ -106,15 +118,16 @@ class AudiotekaImporter @Inject constructor(
                 }
                 if (target.length() == 0L) error("Stažený soubor je prázdný")
             }.onSuccess {
-                _state.value = State.Ready(target, name, titleHint, authorHint)
-            }.onFailure { e ->
-                target.delete()
-                if (e is CancellationException) {
-                    _state.value = State.Idle
+                if (generation.get() == gen) {
+                    _state.value = State.Ready(target, name, titleHint.takeIf { matches }, authorHint.takeIf { matches })
                 } else {
-                    Timber.w(e, "[AUDIOTEKA] stažení z Poličky selhalo")
-                    _state.value = State.Failed(e.message ?: "Stažení selhalo")
+                    target.parentFile?.deleteRecursively()
                 }
+            }.onFailure { e ->
+                target.parentFile?.deleteRecursively()
+                if (generation.get() != gen || e is CancellationException) return@onFailure
+                Timber.w(e, "[AUDIOTEKA] stažení z Poličky selhalo")
+                _state.value = State.Failed(e.message ?: "Stažení selhalo")
             }
         }
     }
@@ -123,25 +136,36 @@ class AudiotekaImporter @Inject constructor(
     fun import(libraryId: String, title: String?, author: String?) {
         val ready = _state.value as? State.Ready ?: return
         uploadManager.reset()
-        uploadManager.upload(
+        val started = uploadManager.upload(
             uris = listOf(Uri.fromFile(ready.file)),
             libraryId = libraryId,
             title = title?.takeIf { it.isNotBlank() },
             author = author?.takeIf { it.isNotBlank() },
             autoMatch = true,
         )
+        if (!started) {
+            // Běží jiné nahrávání (např. z obrazovky Nahrát audioknihu) → tenhle soubor zůstává k dovozu.
+            _state.value = ready.copy(note = "Právě běží jiné nahrávání. Počkej, až skončí, a zkus to znovu.")
+            return
+        }
         _state.value = State.Idle
-        val file = ready.file
-        // Archiv smazat až po úspěšném nahrání (a jen když to Nastavení chce); při chybě zůstane pro další pokus.
+        val gen = generation.get()
         scope.launch {
+            // Stav managera teď patří právě tomuhle nahrávání (jiné se spustit nemohlo, dokud běží).
             val done = uploadManager.state.first { !it.isUploading && (it.result != null || it.error != null) }
-            if (done.result != null && AudiotekaPrefs.deleteAfterImport(context)) file.delete()
+            if (done.result != null) {
+                if (AudiotekaPrefs.deleteAfterImport(context)) ready.file.parentFile?.deleteRecursively()
+            } else if (_state.value == State.Idle && generation.get() == gen) {
+                // Chyba nahrání: soubor zůstal, nabídnout znovu bez nového stahování.
+                _state.value = ready.copy(note = "Nahrání do knihovny selhalo (${done.error}). Zkus to znovu.")
+            }
         }
     }
 
     fun cancel() {
+        generation.incrementAndGet()
         job?.cancel()
-        (_state.value as? State.Ready)?.file?.delete()
+        (_state.value as? State.Ready)?.file?.parentFile?.deleteRecursively()
         _state.value = State.Idle
     }
 
@@ -151,4 +175,20 @@ class AudiotekaImporter @Inject constructor(
 
     private fun safeName(n: String): String =
         n.replace(Regex("[/\\\\:*?\"<>|]"), "_").ifBlank { "audioteka.zip" }
+
+    /** Patří stažený soubor ke knize? Aspoň dvě (u krátkého názvu jedno) významná slova názvu ve jméně souboru. */
+    private fun fileMatchesTitle(fileName: String, title: String): Boolean {
+        val f = norm(fileName)
+        val words = norm(title).split(' ').filter { it.length >= 3 }
+        if (words.isEmpty()) return false
+        val need = if (words.size >= 2) 2 else 1
+        return words.count { f.contains(it) } >= need
+    }
+
+    private fun norm(s: String): String =
+        java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
 }
