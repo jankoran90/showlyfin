@@ -5,7 +5,9 @@ import com.github.jankoran90.showlyfin.data.uploader.api.UploaderAuthInterceptor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
@@ -75,6 +77,36 @@ class AudiotekaRepository @Inject constructor(
         val q = "title=${enc(title)}" + (author?.takeIf { it.isNotBlank() }?.let { "&author=${enc(it)}" } ?: "")
         val o = get("/api/audioteka/match?$q") ?: return null
         return Result.success(o.optJSONObject("book")?.let { parseBook(it) })
+    }
+
+    /**
+     * Dovoz z Poličky (2026-11-18): kategorie knihy → návrh dětské / dospělé knihovny. [bookId] = kniha z karty,
+     * jinak [stem] = jméno staženého archivu (slug knihy). null = nenalezeno nebo server neodpověděl.
+     */
+    suspend fun libraryHint(stem: String?, bookId: String?): AtLibraryHint? {
+        val q = listOfNotNull(
+            stem?.takeIf { it.isNotBlank() }?.let { "stem=${enc(it)}" },
+            bookId?.takeIf { it.isNotBlank() }?.let { "book_id=${enc(it)}" },
+        ).joinToString("&").ifBlank { return null }
+        val h = get("/api/audioteka/library_hint?$q")?.optJSONObject("hint") ?: return null
+        return AtLibraryHint(
+            kids = h.optBoolean("kids"),
+            category = h.str("category"),
+            title = h.str("title"),
+        )
+    }
+
+    /** Záznam do serverového logu (`POST /api/logs`, složka logů appek) — např. cesty stránek nákupu. */
+    suspend fun postLog(text: String): Boolean = withContext(Dispatchers.IO) {
+        val base = base()
+        if (base.isBlank()) return@withContext false
+        runCatching {
+            val req = Request.Builder().url("$base/api/logs")
+                .apply { if (cookie().isNotBlank()) header("Cookie", "session=${cookie()}") }
+                .post(text.toRequestBody("text/plain; charset=utf-8".toMediaType()))
+                .build()
+            client.newCall(req).execute().use { it.isSuccessful }
+        }.onFailure { Timber.w(it, "[AUDIOTEKA] log na server neodešel") }.getOrDefault(false)
     }
 
     private suspend fun get(path: String): JSONObject? = withContext(Dispatchers.IO) {
@@ -179,3 +211,6 @@ data class AtSeries(
     val image: String?,
     val items: List<AtBook>,
 )
+
+/** Návrh knihovny pro dovoz z Poličky: [kids] = dětská kategorie ([category] = podle které). */
+data class AtLibraryHint(val kids: Boolean, val category: String?, val title: String?)

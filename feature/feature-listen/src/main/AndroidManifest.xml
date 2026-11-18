@@ -7,6 +7,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- 2026-11-18: Google Pay v pokladně Audioteky uvnitř WebView (PaymentRequest) — WebView musí platební
+         appky najít (viditelnost balíčků od Androidu 11). -->
+    <queries>
+        <intent>
+            <action android:name="org.chromium.intent.action.PAY" />
+        </intent>
+        <intent>
+            <action android:name="org.chromium.intent.action.IS_READY_TO_PAY" />
+        </intent>
+        <intent>
+            <action android:name="org.chromium.intent.action.UPDATE_PAYMENT_DETAILS" />
+        </intent>
+    </queries>
+
     <application>
         <!-- Android Auto: aplikace je media app (procházení + přehrávání ABS audioknih v autě). -->
         <meta-data

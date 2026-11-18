@@ -67,12 +67,21 @@ class AudiobookUploadManager @Inject constructor(
      * uploader backend po kouscích (session → chunky → finish per soubor → finalize).
      * Průběh 0..1 do [state]; výsledek/chyba do [state].
      */
-    fun upload(uris: List<Uri>, libraryId: String, title: String?, author: String?, autoMatch: Boolean, coverUri: Uri? = null): Long {
+    fun upload(
+        uris: List<Uri>,
+        libraryId: String,
+        title: String?,
+        author: String?,
+        autoMatch: Boolean,
+        coverUri: Uri? = null,
+        /** false = proces drží na popředí volající (dovoz z Audioteky má vlastní notifikaci celého řetězce). */
+        startService: Boolean = true,
+    ): Long {
         if (uris.isEmpty()) return 0
         if (!running.compareAndSet(false, true)) return 0 // jeden upload v jednu chvíli (0 = nespuštěno, jinak id nahrávání)
         val id = lastId.incrementAndGet()
         _state.value = UploadState(isUploading = true, uploadId = id)
-        runCatching {
+        if (startService) runCatching {
             ContextCompat.startForegroundService(context, Intent(context, UploadAudiobookService::class.java))
         }.onFailure { Timber.w(it, "[DROPSHIP] upload service start selhal (upload běží dál)") }
         scope.launch {

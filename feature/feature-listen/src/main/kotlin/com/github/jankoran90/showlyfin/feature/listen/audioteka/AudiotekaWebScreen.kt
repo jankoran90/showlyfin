@@ -14,29 +14,19 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.LibraryBooks
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -58,8 +49,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.github.jankoran90.showlyfin.data.abs.model.AbsLibrary
-import com.github.jankoran90.showlyfin.feature.listen.AudiobookUploadManager
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONArray
+import kotlin.coroutines.resume
 
 /** Polička Audioteky (koupené knihy, odtud se stahují). */
 const val AUDIOTEKA_SHELF_URL = "https://audioteka.com/cz/policka/"
@@ -67,8 +64,9 @@ const val AUDIOTEKA_LOGIN_URL = "https://audioteka.com/cz/prihlaseni/"
 
 /**
  * Stránka Audioteky uvnitř Slova (user 2026-11-18: „chci kupovat přímo u nás z appky… a po koupi rovnou
- * integrovat nahrávku do appky"). Přihlášení i pokladna jsou jejich vlastní (WebView si přihlášení pamatuje);
- * ťuk na Stáhnout v Poličce převezme [AudiotekaImporter] a po volbě knihovny knihu nahraje do ABS.
+ * integrovat nahrávku do appky"). Přihlášení i pokladna jsou jejich vlastní (WebView si přihlášení pamatuje,
+ * Google Pay přes PaymentRequest). Po zaplacení samo otevře Poličku a u koupené knihy ťukne na Stáhnout
+ * ([AudiotekaPurchaseFlow]); stažení převezme [AudiotekaImporter] a doveze knihu do knihovny zvolené už u nákupu.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,20 +77,28 @@ fun AudiotekaWebScreen(
     authorHint: String?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    bookId: String? = null,
     viewModel: AudiotekaWebViewModel = hiltViewModel(),
 ) {
     val ctx = LocalContext.current
     val importState by viewModel.importer.state.collectAsStateWithLifecycle()
     val upload by viewModel.upload.collectAsStateWithLifecycle()
     val libraries by viewModel.libraries.collectAsStateWithLifecycle()
+    val target by viewModel.target.collectAsStateWithLifecycle()
     var pageTitle by remember { mutableStateOf("Audioteka") }
     var loading by remember { mutableStateOf(true) }
     var canGoBack by remember { mutableStateOf(false) }
-    var hintVisible by rememberSaveable { mutableStateOf(true) }
-    // Výsledek nahrávání ukazujeme jen u dovozu spuštěného tady (ne cizí upload z obrazovky Nahrát).
-    var importStarted by rememberSaveable { mutableStateOf(false) }
+    var barVisible by rememberSaveable { mutableStateOf(true) }
+    var picking by remember { mutableStateOf(false) }
+    /** Hláška nákupu v pruhu („Zaplaceno — otevírám Poličku", „ťukni na Stáhnout"). */
+    var purchaseText by remember { mutableStateOf<String?>(null) }
+    /** Po koupi čeká samo-ťuknutí v Poličce. */
+    var autoPending by remember { mutableStateOf(false) }
+    var autoJob by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
     val titleHintState by rememberUpdatedState(titleHint)
     val authorHintState by rememberUpdatedState(authorHint)
+    LaunchedEffect(Unit) { viewModel.start(bookId, titleHint) }
 
     val webView = remember {
         WebView(ctx).apply {
@@ -101,6 +107,10 @@ fun AudiotekaWebScreen(
             settings.setSupportMultipleWindows(false) // target=_blank (platební brána) zůstane v tomtéž okně
             settings.loadWithOverviewMode = true
             settings.useWideViewPort = true
+            // Google Pay v pokladně (user 2026-11-18 19:47). Vlastní User-Agent nenastavovat — Google Pay by zmizel.
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.PAYMENT_REQUEST)) {
+                WebSettingsCompat.setPaymentRequestEnabled(settings, true)
+            }
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webViewClient = object : WebViewClient() {
@@ -112,6 +122,33 @@ fun AudiotekaWebScreen(
                     canGoBack = view.canGoBack()
                     view.title?.takeIf { it.isNotBlank() && !it.startsWith("http") }?.let { pageTitle = it }
                     CookieManager.getInstance().flush()
+                    if (u == null) return
+                    viewModel.recordPage(u)
+                    val auto = AudiotekaPrefs.importDownloads(ctx) && AudiotekaPrefs.autoAfterPurchase(ctx)
+                    when (val ev = viewModel.purchase.onPage(u)) {
+                        is AudiotekaPurchaseFlow.Event.Product -> viewModel.onProductPage(ev.slug)
+                        AudiotekaPurchaseFlow.Event.CheckoutStarted -> viewModel.sendPurchaseLog("pokladna")
+                        AudiotekaPurchaseFlow.Event.PurchaseFinished -> {
+                            viewModel.sendPurchaseLog("konec nákupu (stránka poděkování)")
+                            if (auto) {
+                                autoPending = true
+                                purchaseText = "Zaplaceno — otevírám Poličku a stahuji knihu…"
+                                barVisible = true
+                                view.postDelayed({ view.loadUrl(AUDIOTEKA_SHELF_URL) }, 1500)
+                            }
+                        }
+                        AudiotekaPurchaseFlow.Event.None -> Unit
+                    }
+                    // Polička po koupi (i když stránku poděkování nepoznáme a user ji otevře sám) → samo-ťuknutí.
+                    val shelf = u.contains("/policka")
+                    if (shelf && auto && (autoPending || viewModel.purchase.checkoutSeen) && autoJob?.isActive != true) {
+                        autoPending = false
+                        viewModel.purchase.consumeCheckout()
+                        autoJob = scope.launch {
+                            val ok = autoDownload(view, viewModel) { viewModel.importer.state.value }
+                            purchaseText = if (ok) null else "Kniha je koupená — ťukni u ní na Stáhnout, dovoz proběhne sám."
+                        }
+                    }
                 }
 
                 override fun onPageStarted(view: WebView, u: String?, favicon: android.graphics.Bitmap?) {
@@ -120,7 +157,7 @@ fun AudiotekaWebScreen(
             }
             setDownloadListener { dUrl, ua, disposition, mime, _ ->
                 if (AudiotekaPrefs.importDownloads(ctx)) {
-                    viewModel.importer.onDownload(dUrl, ua, disposition, mime, titleHintState, authorHintState)
+                    viewModel.importer.onDownload(dUrl, ua, disposition, mime, viewModel.hints(titleHintState, authorHintState))
                 } else {
                     systemDownload(ctx, dUrl, ua, disposition, mime)
                 }
@@ -157,120 +194,79 @@ fun AudiotekaWebScreen(
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (hintVisible && AudiotekaPrefs.importDownloads(ctx)) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "Po zaplacení otevři Poličku a u knihy ťukni na Stáhnout. Slovo ji doveze do knihovny.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = { hintVisible = false }) { Icon(Icons.Rounded.Close, contentDescription = "Skrýt nápovědu") }
-                }
+            if (barVisible && AudiotekaPrefs.importDownloads(ctx)) {
+                ImportTargetBar(
+                    target = target,
+                    auto = AudiotekaPrefs.autoImport(ctx) && AudiotekaPrefs.autoAfterPurchase(ctx),
+                    text = purchaseText,
+                    onChange = { picking = true },
+                    onClose = { barVisible = false },
+                )
             }
             Box(Modifier.fillMaxSize()) {
                 AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
                 ImportStatusCard(
                     importState = importState,
-                    upload = upload.takeIf { importStarted },
+                    upload = upload,
                     onCancel = { viewModel.importer.cancel() },
-                    onDismiss = { viewModel.importer.dismissError(); importStarted = false },
+                    onDismiss = { viewModel.importer.dismissError() },
                     modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
                 )
             }
         }
     }
 
+    if (picking) {
+        LibraryPickDialog(
+            libraries = libraries,
+            selectedId = target?.libraryId,
+            onPick = { viewModel.pick(it); picking = false },
+            onDismiss = { picking = false },
+        )
+    }
     (importState as? AudiotekaImporter.State.Ready)?.let { ready ->
         ImportDialog(
             ready = ready,
             libraries = libraries,
-            onImport = { lib, t, a -> importStarted = true; viewModel.importer.import(lib, t, a) },
+            onImport = { t, title, author -> viewModel.importer.import(t, title, author) },
             onCancel = { viewModel.importer.cancel() },
         )
     }
 }
 
-@Composable
-private fun ImportStatusCard(
-    importState: AudiotekaImporter.State,
-    upload: AudiobookUploadManager.UploadState?,
-    onCancel: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val (text, progress, action) = when {
-        importState is AudiotekaImporter.State.Downloading -> Triple(
-            "Stahuji z Audioteky: ${importState.name} (${importState.bytes / 1_000_000} MB)",
-            importState.progress ?: -1f,
-            "Zrušit" to onCancel,
-        )
-        importState is AudiotekaImporter.State.Failed -> Triple(importState.message, null, "OK" to onDismiss)
-        upload?.isUploading == true -> Triple("Nahrávám do knihovny…", upload.progress, null)
-        upload?.result != null -> Triple("Hotovo, kniha je v knihovně. Najdeš ji ve Slovu mezi audioknihami.", null, "OK" to onDismiss)
-        upload?.error != null -> Triple("Nahrání do knihovny selhalo: ${upload.error}", null, "OK" to onDismiss)
-        else -> return
-    }
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text, style = MaterialTheme.typography.bodyMedium)
-            when {
-                progress == null -> Unit
-                progress < 0f -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                else -> LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+/**
+ * Po koupi v Poličce: ťukne na Stáhnout u koupené knihy (stránka se dočítá → víc pokusů), pak v okně formátu na
+ * MP3. Hotovo, jakmile importér začne stahovat. false = nenašel (diagnostika jde do serverového logu).
+ */
+private suspend fun autoDownload(
+    view: WebView,
+    vm: AudiotekaWebViewModel,
+    state: () -> AudiotekaImporter.State,
+): Boolean {
+    fun started() = state().let { it is AudiotekaImporter.State.Downloading || it is AudiotekaImporter.State.Importing }
+    var last = ""
+    repeat(10) {
+        delay(1500)
+        if (started()) return true
+        val raw = view.evalJs(AudiotekaPurchaseFlow.clickDownloadJs(vm.purchase.productSlug, vm.hints(null, null).title))
+        last = runCatching { JSONArray("[$raw]").getString(0) }.getOrDefault(raw)
+        if (last.contains("\"ok\":true")) {
+            repeat(8) {
+                delay(1000)
+                if (started()) return true
+                view.evalJs(AudiotekaPurchaseFlow.CLICK_MP3_JS)
             }
-            action?.let { (label, fn) ->
-                TextButton(onClick = fn, modifier = Modifier.align(Alignment.End)) { Text(label) }
-            }
+            if (started()) return true
+            vm.sendPurchaseLog("samo-ťuknutí: Stáhnout ťuknuto, stažení nezačalo ($last)")
+            return false
         }
     }
+    vm.sendPurchaseLog("samo-ťuknutí: kniha v Poličce nenalezena ($last)")
+    return false
 }
 
-/** Volba knihovny u každé koupě (user 2026-11-18: „Zeptat se u každé koupě"). */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ImportDialog(
-    ready: AudiotekaImporter.State.Ready,
-    libraries: List<AbsLibrary>,
-    onImport: (libraryId: String, title: String, author: String) -> Unit,
-    onCancel: () -> Unit,
-) {
-    // Bez předvýběru: první knihovna bývá dětská (user 2026-11-18: kniha pro dospělé skončila v Děti).
-    var selected by remember(libraries) { mutableStateOf(libraries.singleOrNull()?.id) }
-    var title by remember(ready) { mutableStateOf(ready.titleHint.orEmpty()) }
-    var author by remember(ready) { mutableStateOf(ready.authorHint.orEmpty()) }
-    AlertDialog(
-        onDismissRequest = {},
-        title = { Text("Dovézt do knihovny") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Staženo: ${ready.name} (${ready.file.length() / 1_000_000} MB)", style = MaterialTheme.typography.bodySmall)
-                ready.note?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                if (libraries.isEmpty()) {
-                    Text("Knihovny se nenačetly. Zkontroluj přihlášení k audioknihám v Nastavení.", color = MaterialTheme.colorScheme.error)
-                } else {
-                    Text("Do které knihovny?", style = MaterialTheme.typography.labelLarge)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        libraries.forEach { lib ->
-                            FilterChip(selected = selected == lib.id, onClick = { selected = lib.id }, label = { Text(lib.name) })
-                        }
-                    }
-                }
-                OutlinedTextField(title, { title = it }, label = { Text("Název (prázdné = dohledá server)") }, singleLine = true)
-                OutlinedTextField(author, { author = it }, label = { Text("Autor") }, singleLine = true)
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = selected != null, onClick = { selected?.let { onImport(it, title, author) } }) { Text("Dovézt") }
-        },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Zahodit") } },
-    )
+private suspend fun WebView.evalJs(js: String): String = suspendCancellableCoroutine { c ->
+    evaluateJavascript(js) { r -> if (c.isActive) c.resume(r.orEmpty()) }
 }
 
 /** Platební brány a banky otevírají vlastní appky (intent://, bankovní schémata) → předat systému. */

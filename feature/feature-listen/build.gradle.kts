@@ -32,6 +32,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.webkit) // 2026-11-18: Google Pay v pokladně Audioteky (WebView PaymentRequest)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

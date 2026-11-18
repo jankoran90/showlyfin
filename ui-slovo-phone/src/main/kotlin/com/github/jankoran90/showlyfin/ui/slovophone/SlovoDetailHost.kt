@@ -88,7 +88,13 @@ sealed interface SlovoDetailEntry {
     data class AudiotekaBook(val bookId: String, val title: String) : SlovoDetailEntry
     data class AudiotekaSeries(val seriesId: String, val title: String) : SlovoDetailEntry
     /** Stránka Audioteky uvnitř Slova — nákup, Polička, dovoz koupené knihy (user 2026-11-18). */
-    data class AudiotekaWeb(val url: String, val titleHint: String? = null, val authorHint: String? = null) : SlovoDetailEntry
+    data class AudiotekaWeb(
+        val url: String,
+        val titleHint: String? = null,
+        val authorHint: String? = null,
+        /** Kniha z karty → návrh knihovny podle její kategorie ještě před platbou (user 2026-11-18 19:53). */
+        val bookId: String? = null,
+    ) : SlovoDetailEntry
 }
 
 /** Kniha z katalogu → cíl: máme ji = naše kniha, série = seznam dílů, jinak detail v katalogu. */
@@ -224,7 +230,7 @@ internal fun SlovoDetail(
             onOpen = { onPush(audiotekaEntry(it)) },
             modifier = Modifier.fillMaxSize(),
             onBuyInApp = { b: AtBook ->
-                b.url?.let { onPush(SlovoDetailEntry.AudiotekaWeb(it, b.title, b.authors.joinToString(", ").ifBlank { null })) }
+                b.url?.let { onPush(SlovoDetailEntry.AudiotekaWeb(it, b.title, b.authors.joinToString(", ").ifBlank { null }, b.id)) }
                 Unit
             }.takeIf { AudiotekaPrefs.buyInApp(ctxHost) },
         )
@@ -232,6 +238,7 @@ internal fun SlovoDetail(
             url = entry.url,
             titleHint = entry.titleHint,
             authorHint = entry.authorHint,
+            bookId = entry.bookId,
             onBack = onPop,
             modifier = Modifier.fillMaxSize(),
         )

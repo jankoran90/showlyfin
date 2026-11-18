@@ -184,6 +184,32 @@ object AudiotekaPrefs {
     fun deleteAfterImport(ctx: Context) = p(ctx).getBoolean(KEY_DELETE_AFTER_IMPORT, true)
     fun setDeleteAfterImport(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_DELETE_AFTER_IMPORT, v).apply()
 
+    private const val KEY_AUTO_AFTER_PURCHASE = "auto_after_purchase"
+    private const val KEY_AUTO_IMPORT = "auto_import"
+    private const val KEY_RECORD_PURCHASE = "record_purchase_pages"
+    private const val KEY_PURCHASE_PAGES = "purchase_pages"
+
+    /** Po zaplacení samo otevřít Poličku a ťuknout na Stáhnout u koupené knihy (user 2026-11-18 19:52). */
+    fun autoAfterPurchase(ctx: Context) = p(ctx).getBoolean(KEY_AUTO_AFTER_PURCHASE, true)
+    fun setAutoAfterPurchase(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_AUTO_AFTER_PURCHASE, v).apply()
+
+    /** Dovézt bez ptaní do knihovny navržené podle kategorie (jinak dialog s předvybranou knihovnou). */
+    fun autoImport(ctx: Context) = p(ctx).getBoolean(KEY_AUTO_IMPORT, true)
+    fun setAutoImport(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_AUTO_IMPORT, v).apply()
+
+    /** Zapisovat adresy stránek nákupu (bez parametrů) a posílat je na server — ladění samočinného dovozu. */
+    fun recordPurchasePages(ctx: Context) = p(ctx).getBoolean(KEY_RECORD_PURCHASE, true)
+    fun setRecordPurchasePages(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean(KEY_RECORD_PURCHASE, v).apply()
+
+    /** Posledních [max] stránek nákupu (čas + adresa bez parametrů), nejnovější na konci. */
+    fun purchasePages(ctx: Context): List<String> =
+        p(ctx).getString(KEY_PURCHASE_PAGES, null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
+
+    fun addPurchasePage(ctx: Context, line: String, max: Int = 40) {
+        val all = (purchasePages(ctx) + line).takeLast(max)
+        p(ctx).edit().putString(KEY_PURCHASE_PAGES, all.joinToString("\n")).apply()
+    }
+
     /** Složka stažených archivů čekajících na dovoz (sdílí [AudiotekaImporter]). */
     fun importDir(ctx: Context) = java.io.File(ctx.filesDir, "audioteka_import")
 

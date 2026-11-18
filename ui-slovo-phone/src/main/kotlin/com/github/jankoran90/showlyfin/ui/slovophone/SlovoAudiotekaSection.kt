@@ -24,6 +24,9 @@ internal fun SlovoAudiotekaSection() {
     var buyInApp by remember { mutableStateOf(AudiotekaPrefs.buyInApp(ctx)) }
     var importDownloads by remember { mutableStateOf(AudiotekaPrefs.importDownloads(ctx)) }
     var deleteAfter by remember { mutableStateOf(AudiotekaPrefs.deleteAfterImport(ctx)) }
+    var autoAfterPurchase by remember { mutableStateOf(AudiotekaPrefs.autoAfterPurchase(ctx)) }
+    var autoImport by remember { mutableStateOf(AudiotekaPrefs.autoImport(ctx)) }
+    var recordPages by remember { mutableStateOf(AudiotekaPrefs.recordPurchasePages(ctx)) }
     var pending by remember { mutableStateOf(AudiotekaPrefs.pendingImportBytes(ctx)) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingSwitchRow(
@@ -47,10 +50,30 @@ internal fun SlovoAudiotekaSection() {
         if (buyInApp) {
             SettingSwitchRow(
                 title = "Dovážet stažené knihy do knihovny",
-                subtitle = "Stáhni v Poličce → Slovo se zeptá na knihovnu a knihu nahraje. Vypnuto = jen uložit do Stažených souborů",
+                subtitle = "Stažení z Poličky Slovo samo nahraje do knihovny. Vypnuto = jen uložit do Stažených souborů",
                 checked = importDownloads,
                 onCheckedChange = { importDownloads = it; AudiotekaPrefs.setImportDownloads(ctx, it) },
             )
+            if (importDownloads) {
+                SettingSwitchRow(
+                    title = "Po zaplacení samo stáhnout",
+                    subtitle = "Po návratu z pokladny Slovo samo otevře Poličku a u koupené knihy ťukne na Stáhnout",
+                    checked = autoAfterPurchase,
+                    onCheckedChange = { autoAfterPurchase = it; AudiotekaPrefs.setAutoAfterPurchase(ctx, it) },
+                )
+                SettingSwitchRow(
+                    title = "Dovézt bez ptaní do navržené knihovny",
+                    subtitle = "Knihovnu Slovo navrhne podle kategorie Audioteky (Pohádky → dětská). Vypnuto = vždy se zeptá s předvybranou knihovnou",
+                    checked = autoImport,
+                    onCheckedChange = { autoImport = it; AudiotekaPrefs.setAutoImport(ctx, it) },
+                )
+                SettingSwitchRow(
+                    title = "Zapisovat průběh nákupu",
+                    subtitle = "Adresy stránek nákupu (bez osobních údajů) jdou do logu na server, aby šlo samočinný dovoz doladit",
+                    checked = recordPages,
+                    onCheckedChange = { recordPages = it; AudiotekaPrefs.setRecordPurchasePages(ctx, it) },
+                )
+            }
             SettingSwitchRow(
                 title = "Po dovozu smazat stažený soubor z telefonu",
                 subtitle = "Kniha zůstane v knihovně na serveru, v telefonu se uvolní místo",
