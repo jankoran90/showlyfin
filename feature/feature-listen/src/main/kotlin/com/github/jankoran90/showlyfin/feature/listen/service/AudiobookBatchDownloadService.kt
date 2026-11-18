@@ -44,7 +44,7 @@ class AudiobookBatchDownloadService : Service() {
         scope.launch {
             manager.batchProgress.collectLatest { p ->
                 if (p == null) {
-                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE) // API 23 nemá stopForeground(int)
+                    ServiceCompat.stopForeground(this@AudiobookBatchDownloadService, ServiceCompat.STOP_FOREGROUND_REMOVE) // API 23 nemá stopForeground(int)
                     stopSelf()
                     return@collectLatest
                 }

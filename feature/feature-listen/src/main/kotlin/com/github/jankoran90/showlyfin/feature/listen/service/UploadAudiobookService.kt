@@ -44,7 +44,7 @@ class UploadAudiobookService : Service() {
         scope.launch {
             manager.state.collectLatest { s ->
                 if (!s.isUploading && (s.result != null || s.error != null)) {
-                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE) // API 23 nemá stopForeground(int)
+                    ServiceCompat.stopForeground(this@UploadAudiobookService, ServiceCompat.STOP_FOREGROUND_REMOVE) // API 23 nemá stopForeground(int)
                     stopSelf()
                     return@collectLatest
                 }

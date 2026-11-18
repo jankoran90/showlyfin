@@ -241,7 +241,8 @@ private fun ImportDialog(
     onImport: (libraryId: String, title: String, author: String) -> Unit,
     onCancel: () -> Unit,
 ) {
-    var selected by remember(libraries) { mutableStateOf(libraries.firstOrNull()?.id) }
+    // Bez předvýběru: první knihovna bývá dětská (user 2026-11-18: kniha pro dospělé skončila v Děti).
+    var selected by remember(libraries) { mutableStateOf(libraries.singleOrNull()?.id) }
     var title by remember(ready) { mutableStateOf(ready.titleHint.orEmpty()) }
     var author by remember(ready) { mutableStateOf(ready.authorHint.orEmpty()) }
     AlertDialog(
