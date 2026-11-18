@@ -1,6 +1,9 @@
 package com.github.jankoran90.showlyfin.feature.listen.audioteka
 
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
+import com.github.jankoran90.showlyfin.feature.listen.service.AudiotekaDownloadService
 import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.URLUtil
@@ -11,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -87,33 +91,53 @@ class AudiotekaImporter @Inject constructor(
         // Každé stahování ve vlastní podsložce: zrušené a nové se stejným jménem souboru si nesmažou data.
         val target = File(AudiotekaPrefs.importDir(context), "d$gen-${System.currentTimeMillis()}").apply { mkdirs() }.let { File(it, name) }
         _state.value = State.Downloading(name, null, 0)
+        // Služba na popředí: přepnutí do jiné appky jinak stahování utne („Software caused connection abort").
+        runCatching { ContextCompat.startForegroundService(context, Intent(context, AudiotekaDownloadService::class.java)) }
+            .onFailure { Timber.w(it, "[AUDIOTEKA] služba stahování nenaběhla (stahuje se dál)") }
         job = scope.launch {
             runCatching {
-                val req = Request.Builder().url(url).apply {
-                    CookieManager.getInstance().getCookie(url)?.let { header("Cookie", it) }
-                    userAgent?.let { header("User-Agent", it) }
-                }.build()
-                http.newCall(req).execute().use { res ->
-                    if (!res.isSuccessful) error("Audioteka odmítla stažení (HTTP ${res.code}). Zkus se v Poličce přihlásit znovu.")
-                    val body = res.body ?: error("Prázdná odpověď")
-                    val total = body.contentLength()
-                    var done = 0L
-                    var lastEmit = 0L
-                    body.byteStream().use { input ->
-                        target.outputStream().use { out ->
-                            val buf = ByteArray(256 * 1024)
-                            while (true) {
-                                ensureActive()
-                                val n = input.read(buf)
-                                if (n < 0) break
-                                out.write(buf, 0, n)
-                                done += n
-                                if (done - lastEmit > 1_000_000 && generation.get() == gen) {
-                                    lastEmit = done
-                                    _state.value = State.Downloading(name, if (total > 0) done.toFloat() / total else null, done)
+                var done = 0L
+                var total = -1L
+                var attempt = 0
+                // Výpadek sítě uprostřed → navázat od staženého místa (Range), jinak znovu od začátku.
+                while (true) {
+                    try {
+                        val req = Request.Builder().url(url).apply {
+                            CookieManager.getInstance().getCookie(url)?.let { header("Cookie", it) }
+                            userAgent?.let { header("User-Agent", it) }
+                            if (done > 0) header("Range", "bytes=$done-")
+                        }.build()
+                        http.newCall(req).execute().use { res ->
+                            if (!res.isSuccessful) error("Audioteka odmítla stažení (HTTP ${res.code}). Zkus se v Poličce přihlásit znovu.")
+                            val resumed = done > 0 && res.code == 206
+                            if (!resumed) done = 0
+                            val body = res.body ?: error("Prázdná odpověď")
+                            if (!resumed) total = body.contentLength()
+                            var lastEmit = done
+                            body.byteStream().use { input ->
+                                java.io.FileOutputStream(target, resumed).use { out ->
+                                    val buf = ByteArray(256 * 1024)
+                                    while (true) {
+                                        ensureActive()
+                                        val n = input.read(buf)
+                                        if (n < 0) break
+                                        out.write(buf, 0, n)
+                                        done += n
+                                        if (done - lastEmit > 1_000_000 && generation.get() == gen) {
+                                            lastEmit = done
+                                            _state.value = State.Downloading(name, if (total > 0) done.toFloat() / total else null, done)
+                                        }
+                                    }
                                 }
                             }
                         }
+                        if (total > 0 && done < total) throw java.io.IOException("Spojení skončilo předčasně ($done z $total B)")
+                        break
+                    } catch (e: java.io.IOException) {
+                        attempt++
+                        if (attempt > MAX_RETRIES || generation.get() != gen) throw e
+                        Timber.w(e, "[AUDIOTEKA] stažení přerušeno, pokus $attempt/$MAX_RETRIES od $done B")
+                        delay(2000L * attempt)
                     }
                 }
                 if (target.length() == 0L) error("Stažený soubor je prázdný")
@@ -171,6 +195,10 @@ class AudiotekaImporter @Inject constructor(
 
     fun dismissError() {
         if (_state.value is State.Failed) _state.value = State.Idle
+    }
+
+    private companion object {
+        const val MAX_RETRIES = 5
     }
 
     private fun safeName(n: String): String =

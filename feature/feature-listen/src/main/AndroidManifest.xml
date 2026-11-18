@@ -31,6 +31,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- User (2026-11-18) — stahování koupené knihy z Poličky Audioteky přežije přepnutí appky. -->
+        <service
+            android:name=".service.AudiotekaDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- User (2026-08-15) — drží proces přiživu během dávkového stahování ("Stáhnout vše"). -->
         <service
             android:name=".service.AudiobookBatchDownloadService"
