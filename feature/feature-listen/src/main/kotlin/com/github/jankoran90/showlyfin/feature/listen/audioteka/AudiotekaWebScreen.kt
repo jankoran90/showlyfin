@@ -200,7 +200,11 @@ fun AudiotekaWebScreen(
         val obs = LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_RESUME && paidOutside) {
                 paidOutside = false
-                if (AudiotekaPrefs.importDownloads(ctx) && AudiotekaPrefs.autoAfterPurchase(ctx)) {
+                if (viewModel.alreadyOwned) {
+                    // Návrat nepotvrzuje platbu; knihu, kterou už máme, znovu nestahovat (revize P2).
+                    purchaseText = "Tuhle knihu už v knihovně máš, nic nestahuji."
+                    barVisible = true
+                } else if (AudiotekaPrefs.importDownloads(ctx) && AudiotekaPrefs.autoAfterPurchase(ctx)) {
                     viewModel.purchase.markCheckout()
                     viewModel.sendPurchaseLog("návrat z platby v Chrome")
                     autoPending = true
@@ -246,7 +250,10 @@ fun AudiotekaWebScreen(
             }
             if (onCheckout && !AudiotekaPrefs.webViewGooglePay(ctx)) {
                 PayInChromeBar(onPay = {
-                    val cur = webView.url ?: return@PayInChromeBar
+                    // Chrome nemá košík ani přihlášení ze Slova (revize P1) → stránka knihy, odkud se koupí
+                    // na pár ťuknutí; bez známé knihy aspoň košík.
+                    val cur = viewModel.purchase.productSlug?.let { "https://audioteka.com/cz/audiokniha/$it/" }
+                        ?: webView.url ?: return@PayInChromeBar
                     if (openInChrome(ctx, cur)) {
                         paidOutside = true
                         viewModel.sendPurchaseLog("platba v Chrome")

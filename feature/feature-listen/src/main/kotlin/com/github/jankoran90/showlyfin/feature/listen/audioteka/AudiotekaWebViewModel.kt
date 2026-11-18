@@ -56,6 +56,9 @@ class AudiotekaWebViewModel @Inject constructor(
         private set
     var bookTitle: String? = null
         private set
+    /** Kupovaná kniha už je v naší knihovně → po návratu z Chrome nic nestahovat (revize P2 1.0.104). */
+    var alreadyOwned: Boolean = false
+        private set
 
     private val libsLoad = viewModelScope.launch {
         runCatching { absRepo.getAudiobookLibraries() }
@@ -83,6 +86,7 @@ class AudiotekaWebViewModel @Inject constructor(
             // nesmí se dovézt do knihovny předchozí knihy ani hledat v Poličce její název.
             bookTitle = null
             bookId = null
+            alreadyOwned = false
             if (!userPicked) _target.value = null
         }
         // Stránka knihy z karty: návrh už běží podle id knihy (spolehlivější než slug) → neprepisovat.
@@ -99,6 +103,7 @@ class AudiotekaWebViewModel @Inject constructor(
         suggestJob?.cancel()
         suggestJob = viewModelScope.launch {
             val h = atRepo.libraryHint(stem, id) ?: return@launch
+            alreadyOwned = h.inLibrary != null
             if (stem != null && !cardActive) bookTitle = h.title // kniha z WebView (jiná než z karty)
             libsLoad.join()
             if (userPicked) return@launch // ruční volba knihovny platí, identita knihy se aktualizuje dál

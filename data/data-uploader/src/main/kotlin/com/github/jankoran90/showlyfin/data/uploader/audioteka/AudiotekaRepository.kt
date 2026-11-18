@@ -93,6 +93,7 @@ class AudiotekaRepository @Inject constructor(
             kids = h.optBoolean("kids"),
             category = h.str("category"),
             title = h.str("title"),
+            inLibrary = h.str("in_library"),
         )
     }
 
@@ -213,4 +214,10 @@ data class AtSeries(
 )
 
 /** Návrh knihovny pro dovoz z Poličky: [kids] = dětská kategorie ([category] = podle které). */
-data class AtLibraryHint(val kids: Boolean, val category: String?, val title: String?)
+data class AtLibraryHint(
+    val kids: Boolean,
+    val category: String?,
+    val title: String?,
+    /** id položky v naší ABS knihovně, když knihu už máme (null = nemáme / starší server). */
+    val inLibrary: String? = null,
+)

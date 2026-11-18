@@ -73,7 +73,7 @@ internal fun PayInChromeBar(onPay: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "Google Pay jde jen v Chrome. Zaplať tam a vrať se do Slova, knihu stáhnu sám.",
+            "Google Pay jde jen v Chrome. Otevřu tam stránku knihy (přihlas se stejným účtem), kup ji a vrať se do Slova, knihu stáhnu sám.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
