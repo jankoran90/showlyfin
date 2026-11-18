@@ -69,6 +69,8 @@ fun AudiotekaBookScreen(
     LaunchedEffect(bookId) { viewModel.load(bookId) }
     val st by viewModel.state.collectAsStateWithLifecycle()
     val hideOwned = AudiotekaPrefs.hideOwned(LocalContext.current)
+    // Ukázka drží stav mimo seznam: odrolování hlavičky ji neutne (revize 2026-11-18).
+    val sample = rememberAtSampleState()
     AtScaffold(title, onBack, modifier) { pad ->
         when (val s = st) {
             is AtLoad.Ready -> LazyColumn(
@@ -76,7 +78,7 @@ fun AudiotekaBookScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                s.data.detail?.let { d -> item { BookHeader(d, onOpen) } }
+                s.data.detail?.let { d -> item { BookHeader(d, sample, onOpen) } }
                 // Série obsahuje i tuhle knihu → ťuk na ni nepřidá stejný detail podruhé.
                 val openOther: (AtBook) -> Unit = { if (it.id != bookId || it.inLibrary != null) onOpen(it) }
                 items(s.data.sections, key = { it.kind + it.id }) { AtShelf(it, openOther, hideOwned = hideOwned, currentId = bookId) }
@@ -88,7 +90,7 @@ fun AudiotekaBookScreen(
 }
 
 @Composable
-private fun BookHeader(d: AtBookDetail, onOpen: (AtBook) -> Unit) {
+private fun BookHeader(d: AtBookDetail, sample: AtSampleState, onOpen: (AtBook) -> Unit) {
     val b = d.book
     val uri = LocalUriHandler.current
     var expanded by remember { mutableStateOf(false) }
@@ -128,7 +130,7 @@ private fun BookHeader(d: AtBookDetail, onOpen: (AtBook) -> Unit) {
                 if (club.isNotEmpty()) Meta(club.joinToString(" · "))
             }
         }
-        if (b.inLibrary == null) d.sampleUrl?.let { AudiotekaSamplePlayer(it, Modifier.fillMaxWidth()) }
+        if (b.inLibrary == null) d.sampleUrl?.let { AudiotekaSamplePlayer(it, sample, Modifier.fillMaxWidth()) }
         if (b.inLibrary == null && b.url != null) {
             TextButton(onClick = { uri.openUri(b.url!!) }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.OpenInNew, contentDescription = null)
