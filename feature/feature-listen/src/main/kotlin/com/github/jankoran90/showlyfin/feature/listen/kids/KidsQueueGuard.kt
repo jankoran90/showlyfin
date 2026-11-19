@@ -38,15 +38,17 @@ class KidsQueueGuard @Inject constructor(
         if (started) return
         started = true
         scope.launch {
-            var prev: Pair<Long, Set<String>>? = null
+            // Poslední config každého dětského profilu (i přes mezihru v rodičovském profilu — revize 2026-11-19:
+            // rodič odebere díl ve svém profilu, po přepnutí zpět na dítě se porovná s tím, co dítě mělo naposled).
+            val lastByProfile = HashMap<Long, Set<String>>()
             profiles.activeProfileWithConfig.collect { (active, cfg) ->
-                val kidsId = active?.takeIf { !it.isAdmin }?.id
-                val now = kidsId?.let { it to cfg.visibleForKidsSourceKeys }
-                val before = prev
-                prev = now
-                if (now == null || before == null || before.first != now.first) return@collect
-                if ((before.second - now.second).isEmpty()) return@collect
-                ejectNoLongerAllowed(before.second, now.second)
+                val kidsId = active?.takeIf { !it.isAdmin }?.id ?: return@collect
+                val now = cfg.visibleForKidsSourceKeys
+                // Prázdný config = nejspíš ještě nenačtený (přechod mezi profily) → nic nevyhazovat ani nepamatovat.
+                if (now.isEmpty()) return@collect
+                val before = lastByProfile.put(kidsId, now) ?: return@collect
+                if ((before - now).isEmpty()) return@collect
+                ejectNoLongerAllowed(before, now)
             }
         }
     }
@@ -80,6 +82,8 @@ class KidsQueueGuard @Inject constructor(
         if (KidsSourceAccess.isWholeSourceApproved(keys, sourceKey)) return true
         if (KidsSourceAccess.isEpisodeApproved(keys, sourceKey, KidsSourceAccess.episodeIdOfResumeKey(q.episodeId))) return true
         val slug = SeriesResolver.seriesSlug(ruleStore, sourceKey, src?.title ?: q.podcastTitle, q.title, null)
-        return slug != null && KidsSourceAccess.isSeriesApproved(keys, sourceKey, slug)
+        if (slug != null) return KidsSourceAccess.isSeriesApproved(keys, sourceKey, slug)
+        // Série jen z metadat dílu (fronta je nenese) → při schválené sérii pořadu nejde rozhodnout, nesahat (revize).
+        return if (KidsSourceAccess.approvedSeries(keys, sourceKey).isNotEmpty()) null else false
     }
 }
