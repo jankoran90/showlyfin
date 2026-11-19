@@ -4,6 +4,7 @@ import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
+import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
@@ -137,11 +138,14 @@ class KidsShelfActionsViewModel @Inject constructor(
                 _message.value = "Žádné díly ke stažení (zkontroluj připojení)."
                 return@launch
             }
+            // Revize 3 (P1): adoptovat jen díly, které tohle klepnutí opravdu stahuje — už stažené nebo rozstahované
+            // (třeba dospělým na sdíleném telefonu) Dětem nepatří a po odebrání pořadu se mazat nesmí.
+            val adoptKeys = mutableListOf<String>()
             episodes.forEach { ep ->
                 val req = kidsSync.offlineRequest(source, ep, title)
                 val key = req.key
+                if (!offline.isDownloaded(key) && offline.stateFor(key).status !in ACTIVE_OFFLINE) adoptKeys += "o:$key"
                 offline.enqueue(req)
-                kidsSync.adoptManual(listOf("o:$key"))
                 if (queue) connection.enqueue(
                     QueuedEpisode(
                         itemId = source.ref,
@@ -155,6 +159,7 @@ class KidsShelfActionsViewModel @Inject constructor(
                     atFront = false,
                 )
             }
+            kidsSync.adoptManual(adoptKeys)
             _message.value = if (queue) "Stahuji ${dilyCz(episodes.size)} a řadím je do fronty." else "Stahuji znovu ${dilyCz(episodes.size)}."
         }
     }
@@ -259,3 +264,6 @@ class KidsShelfActionsViewModel @Inject constructor(
         }
     }
 }
+
+/** Stav stažení, který už běží nebo čeká ve frontě (takový díl tohle klepnutí nestahuje). */
+private val ACTIVE_OFFLINE = setOf(OfflineStatus.QUEUED, OfflineStatus.DOWNLOADING)

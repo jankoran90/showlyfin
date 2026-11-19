@@ -57,10 +57,13 @@ class KidsOfflineSyncWorker(
                 .enqueueUniquePeriodicWork(WORK_PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
         }
 
-        /** Jednorázově, až bude Wi-Fi (appka spuštěná bez Wi-Fi → dožene se po připojení). */
+        /**
+         * Jednorázově, až bude Wi-Fi (appka spuštěná bez Wi-Fi → dožene se po připojení). APPEND_OR_REPLACE (revize 3):
+         * volá se i zevnitř běžící úlohy (konec Wi-Fi uprostřed průchodu) — KEEP by nový požadavek zahodil.
+         */
         fun runWhenOnWifi(context: Context) {
             val request = OneTimeWorkRequestBuilder<KidsOfflineSyncWorker>().setConstraints(wifiOnly()).build()
-            WorkManager.getInstance(context).enqueueUniqueWork(WORK_NOW, ExistingWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).enqueueUniqueWork(WORK_NOW, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
     }
 }
