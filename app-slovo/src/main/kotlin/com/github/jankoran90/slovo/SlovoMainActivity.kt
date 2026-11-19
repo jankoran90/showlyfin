@@ -14,6 +14,7 @@ import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureGestur
 import com.github.jankoran90.showlyfin.core.appservices.debug.DebugCaptureManager
 import com.github.jankoran90.showlyfin.core.appservices.services.ApkInstaller
 import com.github.jankoran90.showlyfin.core.appservices.services.EXTRA_OPEN_UPDATE_DIALOG
+import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdateCheckWorker
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdateChecker
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdatePreferences
@@ -48,6 +49,8 @@ class SlovoMainActivity : ComponentActivity() {
     // EXCISE (SHW-103) Fáze B — cross-device poslech: push/pull pozic + oblíbených na lifecycle.
     @Inject lateinit var directResumeStore: DirectResumeStore
     @Inject lateinit var favoriteSourcesStore: FavoriteSourcesStore
+    // Dětský telefon (2026-11-19): offline poslech stažených knih → ABS po návratu sítě.
+    @Inject lateinit var audiobookDownloads: AudiobookDownloadManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +63,7 @@ class SlovoMainActivity : ComponentActivity() {
             override fun onResume(owner: LifecycleOwner) {
                 directResumeStore.syncNow()
                 favoriteSourcesStore.syncNow()
+                lifecycleScope.launch { runCatching { audiobookDownloads.pushOfflineProgress() } }
             }
             override fun onPause(owner: LifecycleOwner) {
                 directResumeStore.syncNow()

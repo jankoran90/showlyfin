@@ -423,6 +423,43 @@ class AbsRepository @Inject constructor(
         resetProgress(itemId)
     }
 
+    /**
+     * Dětský telefon (2026-11-19): progres celých knih aktuálního účtu podle libraryItemId — pro
+     * odeslání offline poslechu ([com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager.pushOfflineProgress]).
+     * Na rozdíl od ostatních čtení chybu NEPOLYKÁ (offline → výjimka → nic se neodešle ani nepřevezme).
+     */
+    suspend fun bookProgressByItem(): Map<String, AbsMediaProgress> =
+        service.getMe(api("/api/me"), bearer())
+            .mediaProgress
+            .filter { it.episodeId == null && it.libraryItemId != null }
+            .associateBy { it.libraryItemId!! }
+
+    /**
+     * Odešle offline poslech celé knihy (PATCH /api/me/progress/{itemId}). Sémantika ABS (viz
+     * [resetProgress]): `progress` server čte jen když `isFinished` v požadavku chybí → u nedohrané
+     * knihy posíláme currentTime+progress bez isFinished; jen když server knihu vede jako dohranou,
+     * pošleme `isFinished=false` (znovu poslouchaná). Vrací true jen při HTTP 2xx.
+     */
+    suspend fun pushBookProgress(
+        itemId: String,
+        currentTimeSec: Double,
+        durationSec: Double,
+        isFinished: Boolean,
+        serverFinished: Boolean,
+    ): Boolean {
+        val body = when {
+            isFinished -> AbsProgressUpdate(isFinished = true)
+            serverFinished -> AbsProgressUpdate(isFinished = false, currentTime = currentTimeSec)
+            else -> AbsProgressUpdate(
+                currentTime = currentTimeSec,
+                progress = if (durationSec > 0.0) (currentTimeSec / durationSec).coerceIn(0.0, 1.0) else null,
+            )
+        }
+        val resp = service.patchProgress(api("/api/me/progress/$itemId"), bearer(), body)
+        if (!resp.isSuccessful) Timber.w("[ABS] pushBookProgress HTTP ${resp.code()} pro $itemId")
+        return resp.isSuccessful
+    }
+
     /** Otevře ABS play session a vrátí streamovatelnou URL + uloženou pozici. */
     suspend fun startPlayback(itemId: String): AbsPlayback {
         val req = AbsPlayRequest(deviceInfo = AbsDeviceInfo(deviceId = prefs.deviceId))

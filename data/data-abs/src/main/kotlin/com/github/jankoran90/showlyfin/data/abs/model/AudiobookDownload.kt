@@ -40,6 +40,14 @@ data class AudiobookDownload(
     val localUpdatedAt: Long = 0L,
     /** Kniha dohrána OFFLINE (server o tom neví). */
     val localIsFinished: Boolean = false,
+    /**
+     * Dětský telefon (2026-11-19): ABS účet (username), pod kterým se lokální pozice zapsala. Offline
+     * poslech se odešle JEN do tohoto účtu (dítě nepřepíše postup dospělého). Null = starší záznam →
+     * nikdy se neodesílá (žádná zpětná heuristika). Nullable kvůli Gson (viz [libraryId]).
+     */
+    val localUser: String? = null,
+    /** [localUpdatedAt] zápisu, který už je na serveru (odeslaný nebo přepsaný novějším serverovým). */
+    val localSyncedAt: Long? = null,
 )
 
 /** Jedna lokálně stažená audio stopa audioknihy (offset v rámci celé knihy zachován). */

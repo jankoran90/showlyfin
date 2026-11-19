@@ -20,6 +20,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.displayCover
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,6 +29,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -281,16 +284,96 @@ class AudiobookDownloadManager @Inject constructor(
             localPositionSec = positionSec,
             localUpdatedAt = System.currentTimeMillis(),
             localIsFinished = isFinished,
+            localUser = absPrefs.username.takeIf { it.isNotBlank() },
         )
         persistIndex()
         refreshDownloads()
+    }
+
+    /** Lokální (offline) pozice knihy, která ještě není na serveru — přehrávač pak nevěří pozici ze serveru. */
+    fun hasUnsyncedLocalProgress(itemId: String): Boolean {
+        val dl = index[itemId] ?: return false
+        return dl.localUser != null && dl.localUser == absPrefs.username &&
+            dl.localUpdatedAt > (dl.localSyncedAt ?: 0L)
+    }
+
+    private val pushMutex = Mutex()
+
+    /**
+     * Dětský telefon (2026-11-19, předání dellhome „stažené knihy úplně bez sítě"): offline poslech
+     * se dřív zapsal jen do telefonu a po návratu online ho přepsala starší serverová pozice. Teď:
+     * pro záznamy zapsané AKTUÁLNÍM ABS účtem porovná lokální a serverový čas poslední změny —
+     * novější lokální se odešle (PATCH), novější serverový se převezme do lokálního záznamu (offline
+     * pak navazuje tam, kde se poslouchalo online). Bez sítě vyhodí výjimku uvnitř → nic se nemění.
+     * Volá přehrávač před startem stažené knihy a aktivita při návratu do popředí. Vrací počet odeslaných.
+     */
+    suspend fun pushOfflineProgress(): Int = pushMutex.withLock {
+        val user = absPrefs.username.takeIf { it.isNotBlank() } ?: return@withLock 0
+        val mine = index.values.filter { it.localUser == user && it.localUpdatedAt > 0L }
+        if (mine.isEmpty()) return@withLock 0
+        val server = runCatching { repo.bookProgressByItem() }
+            .onFailure {
+                if (it is CancellationException) throw it
+                Timber.d("[ABS] offline progres: server nedostupný (${it.javaClass.simpleName})")
+            }
+            .getOrNull() ?: return@withLock 0
+        var pushed = 0
+        var changed = false
+        for (dl in mine) {
+            val sp = server[dl.itemId]
+            val serverAt = sp?.lastUpdate ?: 0L
+            val pending = dl.localUpdatedAt > (dl.localSyncedAt ?: 0L)
+            when {
+                pending && dl.localUpdatedAt > serverAt -> {
+                    val ok = runCatching {
+                        repo.pushBookProgress(
+                            itemId = dl.itemId,
+                            currentTimeSec = dl.localPositionSec,
+                            durationSec = dl.durationSec,
+                            isFinished = dl.localIsFinished,
+                            serverFinished = sp?.isFinished == true,
+                        )
+                    }.onFailure { if (it is CancellationException) throw it }.getOrDefault(false)
+                    if (ok) {
+                        pushed++
+                        // Jen když se mezitím nezapsala novější lokální pozice (přehrávač běží dál).
+                        index.computeIfPresent(dl.itemId) { _, cur ->
+                            if (cur.localUpdatedAt == dl.localUpdatedAt) cur.copy(localSyncedAt = dl.localUpdatedAt) else cur
+                        }
+                        changed = true
+                        Timber.i("[ABS] offline progres odeslán: ${dl.itemId} ${dl.localPositionSec.toInt()} s finished=${dl.localIsFinished}")
+                    }
+                }
+                sp != null && serverAt > dl.localUpdatedAt -> {
+                    // Server novější (poslech online / jiné zařízení) → převzít, ať offline navazuje správně.
+                    index.computeIfPresent(dl.itemId) { _, cur ->
+                        if (cur.localUpdatedAt == dl.localUpdatedAt) {
+                            cur.copy(
+                                localPositionSec = sp.currentTime ?: cur.localPositionSec,
+                                localIsFinished = sp.isFinished,
+                                localUpdatedAt = serverAt,
+                                localSyncedAt = serverAt,
+                            )
+                        } else cur
+                    }
+                    changed = true
+                }
+            }
+        }
+        if (changed) {
+            persistIndex()
+            refreshDownloads()
+        }
+        pushed
     }
 
     /** „Ukončit poslech"/reset u stažené knihy — smaže i lokálně uloženou pozici (mirror server DELETE). */
     fun clearLocalProgress(itemId: String) {
         val dl = index[itemId] ?: return
         if (dl.localPositionSec == 0.0 && !dl.localIsFinished) return
-        index[itemId] = dl.copy(localPositionSec = 0.0, localUpdatedAt = 0L, localIsFinished = false)
+        index[itemId] = dl.copy(
+            localPositionSec = 0.0, localUpdatedAt = 0L, localIsFinished = false, localUser = null, localSyncedAt = null,
+        )
         persistIndex()
         refreshDownloads()
     }

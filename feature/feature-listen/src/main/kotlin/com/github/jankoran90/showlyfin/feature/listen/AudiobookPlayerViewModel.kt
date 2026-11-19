@@ -20,6 +20,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Named
@@ -173,12 +174,20 @@ class AudiobookPlayerViewModel @Inject constructor(
                     // server session kvůli resume pozici + syncu, ale URL stop přepiš na lokální (dle
                     // indexu); když server selže (offline) → čistě lokální session.
                     offlineBook != null -> {
+                        // Dětský telefon (2026-11-19): offline poslech nejdřív na server (jinak by session
+                        // začala ze starší serverové pozice), bez sítě se nečeká déle než pár sekund.
+                        withTimeoutOrNull(OFFLINE_PUSH_TIMEOUT_MS) { audiobookDownloads.pushOfflineProgress() }
                         val server = runCatching { repo.startPlayback(itemId) }.getOrNull()
                         if (server != null) {
                             val localByIndex = offlineBook.tracks.associateBy { it.index }
-                            server.copy(tracks = server.tracks.map { t -> localByIndex[t.index]?.let { t.copy(url = it.url) } ?: t })
+                            val merged = server.copy(tracks = server.tracks.map { t -> localByIndex[t.index]?.let { t.copy(url = it.url) } ?: t })
+                            // Odeslání se nepovedlo → novější je pořád lokální pozice, ne ta ze serveru.
+                            if (audiobookDownloads.hasUnsyncedLocalProgress(itemId)) {
+                                merged.copy(startPositionSec = offlineBook.startPositionSec)
+                            } else merged
                         } else {
-                            offlineBook
+                            // Pozice mohla být právě převzatá ze serveru → číst index znovu.
+                            audiobookDownloads.offlineAudiobookPlayback(itemId) ?: offlineBook
                         }
                     }
                     episodeId == null -> repo.startPlayback(itemId)
@@ -250,3 +259,6 @@ class AudiobookPlayerViewModel @Inject constructor(
         else -> downloadQueued(ep)
     }
 }
+
+/** Kolik nejvýš čekat na odeslání offline poslechu před startem stažené knihy (bez sítě selže hned). */
+private const val OFFLINE_PUSH_TIMEOUT_MS = 4_000L
