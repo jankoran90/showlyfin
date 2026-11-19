@@ -253,7 +253,10 @@ class AudiobookPlayerConnection @Inject constructor(
                 lastDirectSavedPos = pos
                 resumeStore.save(ep.episodeId, pos, bookDurationMs)
             }
-        } else if (ep == null && sessionId(extras).isNullOrBlank()) {
+        } else if (ep == null) {
+            // Dětský telefon (2026-11-19, revize): zapisuj i při SERVEROVÉ session stažené knihy — když
+            // uprostřed poslechu vypadne síť, `syncProgress` jen zaloguje chybu a poslech by se neuložil
+            // nikam. Lokální záznam pak odešle `AudiobookDownloadManager.pushOfflineProgress`.
             // User (2026-08-16 17:38/17:56, „offline nezaznamenává změny") — audiokniha bez ABS
             // session = buď čistě lokální (offline) přehrání stažené knihy, nebo právě dočasně
             // offline stažení (viz `AudiobookDownloadManager.downloadLocked` — session se hned
@@ -690,7 +693,8 @@ class AudiobookPlayerConnection @Inject constructor(
             // začátku (viz [pushState] výše, stejný vzor).
             val itemId = _state.value.currentItemId
             val extras = controller?.currentMediaItem?.mediaMetadata?.extras
-            if (sessionId(extras).isNullOrBlank() && !itemId.isNullOrBlank()) {
+            // I při serverové session (viz [pushState]) — výpadek sítě by jinak dohrání ztratil.
+            if (!itemId.isNullOrBlank()) {
                 val durSec = extras?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0
                 audiobookDownloads.updateLocalProgress(itemId, durSec, isFinished = true)
             }

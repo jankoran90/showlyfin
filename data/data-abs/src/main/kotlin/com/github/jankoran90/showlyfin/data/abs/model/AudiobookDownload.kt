@@ -46,8 +46,13 @@ data class AudiobookDownload(
      * nikdy se neodesílá (žádná zpětná heuristika). Nullable kvůli Gson (viz [libraryId]).
      */
     val localUser: String? = null,
+    /** ABS server (base URL), ke kterému [localUser] patří — stejné jméno na jiném serveru je jiný účet. */
+    val localServer: String? = null,
     /** [localUpdatedAt] zápisu, který už je na serveru (odeslaný nebo přepsaný novějším serverovým). */
     val localSyncedAt: Long? = null,
+    /** Pozice/dohrání naposled sladěné se serverem — pozná, že server mezitím změnil někdo jiný (bez hodin). */
+    val syncedPositionSec: Double? = null,
+    val syncedFinished: Boolean? = null,
 )
 
 /** Jedna lokálně stažená audio stopa audioknihy (offset v rámci celé knihy zachován). */

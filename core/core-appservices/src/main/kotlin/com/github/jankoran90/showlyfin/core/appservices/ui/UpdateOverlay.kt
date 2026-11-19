@@ -27,7 +27,10 @@ object UpdateOverlayController {
 
     fun show(context: Context) {
         // Kiosek: aktualizace řeší Dětský launcher, dialog by vedl na zablokovaný instalátor.
-        if (KioskMode.isActive(context)) return
+        if (KioskMode.isActive(context)) {
+            _pending.value = null // i dialog nabídnutý ještě před zamčením telefonu
+            return
+        }
         _pending.value = UpdatePreferences.read(context)
     }
 

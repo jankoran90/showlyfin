@@ -435,10 +435,11 @@ class AbsRepository @Inject constructor(
             .associateBy { it.libraryItemId!! }
 
     /**
-     * Odešle offline poslech celé knihy (PATCH /api/me/progress/{itemId}). Sémantika ABS (viz
-     * [resetProgress]): `progress` server čte jen když `isFinished` v požadavku chybí → u nedohrané
-     * knihy posíláme currentTime+progress bez isFinished; jen když server knihu vede jako dohranou,
-     * pošleme `isFinished=false` (znovu poslouchaná). Vrací true jen při HTTP 2xx.
+     * Odešle offline poslech celé knihy (PATCH /api/me/progress/{itemId}). Sémantika ABS ověřená ve
+     * zdroji (`MediaProgress.applyProgressUpdate`): `progress` se čte jen bez `isFinished`; přechod
+     * dohráno→nedohráno VYNULUJE pozici a `currentTime` z téhož požadavku zahodí → u znovu poslouchané
+     * knihy dva požadavky (nejdřív zrušit dohrání, pak pozice). `duration` jde vždy (nový záznam na
+     * serveru by jinak měl délku 0). Vrací true jen když všechny požadavky vrátily 2xx.
      */
     suspend fun pushBookProgress(
         itemId: String,
@@ -447,15 +448,28 @@ class AbsRepository @Inject constructor(
         isFinished: Boolean,
         serverFinished: Boolean,
     ): Boolean {
-        val body = when {
-            isFinished -> AbsProgressUpdate(isFinished = true)
-            serverFinished -> AbsProgressUpdate(isFinished = false, currentTime = currentTimeSec)
-            else -> AbsProgressUpdate(
-                currentTime = currentTimeSec,
-                progress = if (durationSec > 0.0) (currentTimeSec / durationSec).coerceIn(0.0, 1.0) else null,
-            )
+        val url = api("/api/me/progress/$itemId")
+        val duration = durationSec.takeIf { it > 0.0 }
+        if (isFinished) {
+            val resp = service.patchProgress(url, bearer(), AbsProgressUpdate(isFinished = true, currentTime = currentTimeSec, duration = duration))
+            if (!resp.isSuccessful) Timber.w("[ABS] pushBookProgress(finished) HTTP ${resp.code()} pro $itemId")
+            return resp.isSuccessful
         }
-        val resp = service.patchProgress(api("/api/me/progress/$itemId"), bearer(), body)
+        if (serverFinished) {
+            val reset = service.patchProgress(url, bearer(), AbsProgressUpdate(isFinished = false))
+            if (!reset.isSuccessful) {
+                Timber.w("[ABS] pushBookProgress(unfinish) HTTP ${reset.code()} pro $itemId")
+                return false
+            }
+        }
+        val resp = service.patchProgress(
+            url, bearer(),
+            AbsProgressUpdate(
+                currentTime = currentTimeSec,
+                progress = duration?.let { (currentTimeSec / it).coerceIn(0.0, 1.0) },
+                duration = duration,
+            ),
+        )
         if (!resp.isSuccessful) Timber.w("[ABS] pushBookProgress HTTP ${resp.code()} pro $itemId")
         return resp.isSuccessful
     }

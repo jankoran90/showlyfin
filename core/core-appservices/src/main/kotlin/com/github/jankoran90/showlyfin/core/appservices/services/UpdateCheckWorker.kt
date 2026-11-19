@@ -35,7 +35,13 @@ class UpdateCheckWorker(
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         // Kiosek (dětský telefon): aktualizaci instaluje Dětský launcher, systémový instalátor by tu neprošel.
-        if (KioskMode.isActive(ctx)) return Result.success()
+        if (KioskMode.isActive(ctx)) {
+            // Notifikace nabídnutá ještě před zamčením by vedla na zablokovaný instalátor.
+            runCatching {
+                (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+            }
+            return Result.success()
+        }
         val checker = UpdateChecker()
         val manifest = checker.fetchManifest(ctx)
         UpdatePreferences.storeCheckAt(ctx)

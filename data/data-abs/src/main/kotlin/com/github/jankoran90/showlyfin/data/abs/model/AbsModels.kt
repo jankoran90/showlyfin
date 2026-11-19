@@ -182,6 +182,8 @@ data class AbsProgressUpdate(
      * vynechává (null), ať ABS server skutečně smaže i tohle druhé pole.
      */
     val progress: Double? = null,
+    /** Délka knihy (s) — ABS ji použije při ZALOŽENÍ záznamu postupu (jinak 0 → nefunguje zbývající čas). */
+    val duration: Double? = null,
 )
 
 data class AbsChapter(
