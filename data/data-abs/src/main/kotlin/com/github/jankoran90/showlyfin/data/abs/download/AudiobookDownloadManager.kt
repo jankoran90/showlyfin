@@ -371,8 +371,9 @@ class AudiobookDownloadManager @Inject constructor(
                         Timber.i("[ABS] offline progres odeslán: ${dl.itemId} ${dl.localPositionSec.toInt()} s finished=${dl.localIsFinished}")
                     }
                 }
-                sp != null && !pending && !sameAsServer -> {
-                    // Server se změnil (poslech online / jiné zařízení), lokálně nic nového → převzít.
+                sp != null && !sameAsServer -> {
+                    // Server se změnil (poslech online / jiné zařízení) a lokálně nic novějšího → převzít.
+                    if (pending) Timber.i("[ABS] offline progres: ${dl.itemId} na serveru změněn jinde a novější → přebírám serverový")
                     index.computeIfPresent(dl.itemId) { _, cur ->
                         if (cur.localUpdatedAt == dl.localUpdatedAt) {
                             changed = true
@@ -387,7 +388,6 @@ class AudiobookDownloadManager @Inject constructor(
                         } else cur
                     }
                 }
-                pending -> Timber.i("[ABS] offline progres: ${dl.itemId} na serveru změněn jinde a novější → nechávám serverový")
             }
         }
         if (changed) {
