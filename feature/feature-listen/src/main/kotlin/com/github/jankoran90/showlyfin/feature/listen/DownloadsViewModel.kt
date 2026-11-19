@@ -56,15 +56,15 @@ class DownloadsViewModel @Inject constructor(
         // User 2026-10-13 („děti nemají Stahování v sidebaru") — dítě vidí jen díly schválených pořadů / sérií
         // (whitelist, neznámý zdroj = skrýt), stejné pravidlo jako jeho offline Poslech.
         val kidsKeys = if (profile?.isAdmin == false) config.visibleForKidsSourceKeys else null
-        fun allowed(sourceKey: String?, title: String, series: String?) = kidsKeys == null || kidsMayShow(kidsKeys, sourceKey, title, series)
+        fun allowed(key: String, sourceKey: String?, title: String, series: String?) = kidsKeys == null || kidsMayShow(kidsKeys, key, sourceKey, title, series)
         // Pořad / série pohromadě a kapitoly popořadě („3/13" podle čísla, jinak podle data vydání).
-        val podcastDone = done.filter { it.type == OfflineRequest.TYPE_PODCAST && allowed(it.sourceKey, it.title, it.seriesTitle) }
+        val podcastDone = done.filter { it.type == OfflineRequest.TYPE_PODCAST && allowed(it.key, it.sourceKey, it.title, it.seriesTitle) }
             .sortedWith(
                 compareBy<OfflineDownload>({ it.subtitle.orEmpty() })
                     .thenBy { PodcastEpisodeSeriesGrouping.numberedPart(it.title)?.first ?: Int.MAX_VALUE }
                     .thenBy { it.publishedAt ?: Long.MAX_VALUE },
             )
-        val items = pending.filter { it.type == OfflineRequest.TYPE_PODCAST && allowed(it.sourceKey, it.title, it.seriesTitle) }
+        val items = pending.filter { it.type == OfflineRequest.TYPE_PODCAST && allowed(it.key, it.sourceKey, it.title, it.seriesTitle) }
             .map { Item(it, states[it.key] ?: OfflineState()) }
         val active = items.firstOrNull { it.state.status == OfflineStatus.DOWNLOADING }
         val queued = items.filter { it.state.status == OfflineStatus.QUEUED }
@@ -80,9 +80,11 @@ class DownloadsViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
-    private fun kidsMayShow(kidsKeys: Set<String>, sourceKey: String?, title: String, seriesTitle: String?): Boolean {
+    private fun kidsMayShow(kidsKeys: Set<String>, key: String, sourceKey: String?, title: String, seriesTitle: String?): Boolean {
         if (sourceKey == null) return false
         if (KidsSourceAccess.isWholeSourceApproved(kidsKeys, sourceKey)) return true
+        // Rodičovská správa (2026-11-19): jednotlivě schválený díl.
+        if (KidsSourceAccess.isEpisodeApproved(kidsKeys, sourceKey, KidsSourceAccess.episodeIdOfResumeKey(key))) return true
         val series = ruleStore.titleFor(sourceKey, title) ?: seriesTitle ?: PodcastEpisodeSeriesGrouping.detectSeriesTitle(title) ?: return false
         return KidsSourceAccess.isSeriesApproved(kidsKeys, sourceKey, PodcastEpisodeSeriesGrouping.seriesSlug(series))
     }

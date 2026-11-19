@@ -4,7 +4,6 @@ import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
-import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
@@ -38,6 +37,9 @@ class KidsShelfActionsViewModel @Inject constructor(
     private val ruleStore: SeriesRuleStore,
     private val uploaderDs: UploaderRemoteDataSource,
     @param:Named("traktPreferences") private val prefs: SharedPreferences,
+    private val kidsSync: com.github.jankoran90.showlyfin.feature.listen.kids.KidsOfflineSync,
+    private val abs: com.github.jankoran90.showlyfin.data.abs.AbsRepository,
+    private val absEpisodes: com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager,
 ) : ViewModel() {
 
     private val _message = MutableStateFlow<String?>(null)
@@ -45,9 +47,6 @@ class KidsShelfActionsViewModel @Inject constructor(
 
     fun consumeMessage() { _message.value = null }
 
-    private fun ctvFileUrl(idec: String) = uploaderDs.ctvAudioFileUrl(
-        prefs.getString("uploader_base_url", "") ?: "", prefs.getString("uploader_session_cookie", "") ?: "", idec,
-    )
 
     /**
      * Slug série STAŽENÉHO dílu: ruční kniha → uložená řada (ČT) → prefix z názvu. Veřejné pro offline
@@ -139,24 +138,9 @@ class KidsShelfActionsViewModel @Inject constructor(
                 return@launch
             }
             episodes.forEach { ep ->
-                val key = ep.resumeKey ?: "${source.type}:${ep.id}"
-                offline.enqueue(
-                    OfflineRequest(
-                        key = key,
-                        title = ep.title,
-                        subtitle = title,
-                        type = OfflineRequest.TYPE_PODCAST,
-                        sourceLabel = "Podcast",
-                        // ČT díl je DASH manifest → stáhnout jde jen serverem složený m4a (2026-10-13).
-                        videoUrl = if (source.type == "ctv") ctvFileUrl(ep.id) else ep.streamUrl,
-                        posterUrl = ep.imageUrl,
-                        durationSec = ep.durationSec,
-                        description = ep.description,
-                        publishedAt = parseEpisodeDateMs(ep.date),
-                        sourceKey = source.key,
-                        seriesTitle = ep.seriesTitle,
-                    ),
-                )
+                val req = kidsSync.offlineRequest(source, ep, title)
+                val key = req.key
+                offline.enqueue(req)
                 if (queue) connection.enqueue(
                     QueuedEpisode(
                         itemId = source.ref,
@@ -171,6 +155,103 @@ class KidsShelfActionsViewModel @Inject constructor(
                 )
             }
             _message.value = if (queue) "Stahuji ${dilyCz(episodes.size)} a řadím je do fronty." else "Stahuji znovu ${dilyCz(episodes.size)}."
+        }
+    }
+
+    // ── Rodičovská správa R3 (2026-11-19): jednotlivě schválené díly (`typ:ref#ep:id|Název`) ──────────
+
+    /** Stažené ABS epizody (karta dílu ABS podcastu ukazuje „v telefonu"). */
+    val absEpisodeDownloads = absEpisodes.downloads
+
+    private val _episodeCovers = MutableStateFlow<Map<String, String>>(emptyMap())
+    val episodeCovers = _episodeCovers.asStateFlow()
+    private val episodeCoverRequested = HashSet<String>()
+
+    private fun coverKey(e: KidsSourceAccess.Episode) = "${e.sourceKey}#ep:${e.episodeId}"
+
+    private fun ghostSource(sourceKey: String) = PodcastSource(
+        id = "", type = sourceKey.substringBefore(':'), ref = sourceKey.substringAfter(':'), title = "",
+    )
+
+    fun isEpisodeDownloaded(e: KidsSourceAccess.Episode): Boolean =
+        if (e.sourceKey.startsWith("abs:")) absEpisodes.localFile(e.episodeId) != null
+        else offline.isDownloaded(KidsSourceAccess.resumeKeyFor(e.sourceKey, e.episodeId))
+
+    /** Obal karty dílu: ABS = obal pořadu, jinak obrázek dílu z feedu (offline z paměti feedu / stažený). */
+    fun requestEpisodeCover(e: KidsSourceAccess.Episode, source: PodcastSource?) {
+        val key = coverKey(e)
+        if (!episodeCoverRequested.add(key)) return
+        if (e.sourceKey.startsWith("abs:")) {
+            _episodeCovers.value = _episodeCovers.value + (key to abs.coverUrl(e.sourceKey.removePrefix("abs:")))
+            return
+        }
+        offline.get(KidsSourceAccess.resumeKeyFor(e.sourceKey, e.episodeId))?.posterUrl?.let {
+            _episodeCovers.value = _episodeCovers.value + (key to it)
+            return
+        }
+        viewModelScope.launch {
+            val image = episodesOf(source ?: ghostSource(e.sourceKey)).firstOrNull { it.id == e.episodeId }?.imageUrl
+                ?: source?.thumbnail
+            if (image != null) _episodeCovers.value = _episodeCovers.value + (key to image)
+            else episodeCoverRequested.remove(key)
+        }
+    }
+
+    /** Klepnutí na kartu dílu → rovnou přehrát (stažený z telefonu, jinak stream). */
+    fun playEpisode(e: KidsSourceAccess.Episode, source: PodcastSource?) {
+        if (e.sourceKey.startsWith("abs:")) {
+            val itemId = e.sourceKey.removePrefix("abs:")
+            connection.playQueued(
+                QueuedEpisode(itemId = itemId, episodeId = e.episodeId, title = e.title.ifBlank { "Díl" }, coverUrl = abs.coverUrl(itemId)),
+            )
+            return
+        }
+        viewModelScope.launch {
+            val src = source ?: ghostSource(e.sourceKey)
+            val key = KidsSourceAccess.resumeKeyFor(e.sourceKey, e.episodeId)
+            val local = offline.get(key)?.takeIf { offline.isDownloaded(key) }
+            val ep = if (local == null) episodesOf(src).firstOrNull { it.id == e.episodeId && it.streamUrl.isNotBlank() } else null
+            if (local == null && ep == null) {
+                _message.value = "Díl se teď nepodařilo načíst (zkontroluj připojení)."
+                return@launch
+            }
+            val show = src.title.ifBlank { local?.subtitle.orEmpty() }.ifBlank { null }
+            connection.playDirectEpisode(
+                QueuedEpisode(
+                    itemId = src.ref,
+                    episodeId = key,
+                    title = ep?.title ?: local?.title ?: e.title,
+                    coverUrl = ep?.imageUrl ?: _episodeCovers.value[coverKey(e)],
+                    description = ep?.description ?: local?.description,
+                    podcastTitle = show,
+                    // Stažený díl hraje přehrávač z lokálního souboru podle klíče (URL se pak nepoužije).
+                    direct = DirectAudio(url = ep?.streamUrl.orEmpty(), durationSec = ep?.durationSec ?: local?.durationSec ?: 0.0, author = show),
+                ),
+            )
+        }
+    }
+
+    /** Dlouhý stisk na kartě dílu → stáhnout do telefonu (když samostahování neběží). */
+    fun downloadEpisode(e: KidsSourceAccess.Episode, source: PodcastSource?) {
+        if (isEpisodeDownloaded(e)) {
+            _message.value = "Díl už je v telefonu."
+            return
+        }
+        if (e.sourceKey.startsWith("abs:")) {
+            val itemId = e.sourceKey.removePrefix("abs:")
+            absEpisodes.downloadByIds(itemId, e.episodeId, e.title.ifBlank { "Díl" }, abs.coverUrl(itemId))
+            _message.value = "Stahuji díl do telefonu."
+            return
+        }
+        viewModelScope.launch {
+            val src = source ?: ghostSource(e.sourceKey)
+            val ep = episodesOf(src).firstOrNull { it.id == e.episodeId && it.streamUrl.isNotBlank() }
+            if (ep == null) {
+                _message.value = "Díl se teď nepodařilo načíst (zkontroluj připojení)."
+                return@launch
+            }
+            offline.enqueue(kidsSync.offlineRequest(src, ep, src.title.ifBlank { e.title }))
+            _message.value = "Stahuji díl do telefonu."
         }
     }
 }

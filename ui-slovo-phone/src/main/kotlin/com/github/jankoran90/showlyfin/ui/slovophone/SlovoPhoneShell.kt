@@ -216,6 +216,8 @@ private fun SlovoShellContent() {
     }
     BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
     val onMenu: () -> Unit = { scope.launch { drawerState.open() } }
+    // Rodičovská správa (user 2026-11-19 15:57): dětský profil bez ☰ (viz [LocalSlovoMenuLocked]).
+    androidx.compose.runtime.CompositionLocalProvider(LocalSlovoMenuLocked provides isKidsProfile) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         // User (2026-08-16 14:26, „zruš swipe sidebar, bude jen vlevo nahoře přístup v ikoně") —
@@ -420,6 +422,7 @@ private fun SlovoShellContent() {
                 )
             }
         }
+    }
     }
 }
 

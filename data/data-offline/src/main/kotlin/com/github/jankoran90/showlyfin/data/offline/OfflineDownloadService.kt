@@ -120,7 +120,12 @@ class OfflineDownloadService : Service() {
         private const val NOTIF_ID = 4711
 
         fun start(context: Context) {
-            ContextCompat.startForegroundService(context, Intent(context, OfflineDownloadService::class.java))
+            // Samostahování Dětí (2026-11-19) běží i z WorkManageru na pozadí — Android 12+ tam spuštění
+            // foreground služby odmítne (ForegroundServiceStartNotAllowedException). Stahování samo běží
+            // v [OfflineDownloadManager] dál, služba jen drží notifikaci → chybu nepouštět výš.
+            runCatching {
+                ContextCompat.startForegroundService(context, Intent(context, OfflineDownloadService::class.java))
+            }.onFailure { android.util.Log.w("OfflineDownload", "služba na pozadí nespuštěna: ${it.javaClass.simpleName}") }
         }
     }
 }

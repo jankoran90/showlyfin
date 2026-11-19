@@ -713,6 +713,15 @@ class ProfileRepository @Inject constructor(
         syncConfigFromBackend(profile)
     }
 
+    /** Kdy naposled přišel config balík profilu ze serveru (ms, 0 = v tomhle běhu appky ještě ne). */
+    private val serverConfigFetchedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * Rodičovská správa (2026-11-19): samostahování Dětí smí MAZAT jen podle configu čerstvě staženého ze
+     * serveru (ne podle místní kopie / pahýlu, viz incident g32 2026-11-19) → volající porovná s časem startu.
+     */
+    fun lastServerConfigFetchAt(profile: ProfileEntity): Long = serverConfigFetchedAt[profile.backendKey()] ?: 0L
+
     /**
      * Stáhne z backendu šablony + přiřazení + config balík profilu a uloží jako lokální cache
      * (Plan PROFILES Fáze 2 + WARDEN W3c). Best-effort s timeouty; po všech změnách re-aplikuje
@@ -773,6 +782,7 @@ class ProfileRepository @Inject constructor(
         }?.takeIf { it.isNotBlank() }
         if (remoteJson == null) return false
         pendingEdits.markVerified(key)
+        serverConfigFetchedAt[key] = System.currentTimeMillis()
         // Nepotvrzený rozdíl z úpravy bez spojení (viz [PendingConfigEdits]) přenes na serverovou verzi a odešli.
         val hadPending = pendingEdits.has(key)
         val current = dao.getById(profile.id) ?: profile

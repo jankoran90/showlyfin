@@ -18,6 +18,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.input.pointer.pointerInput
+
+/**
+ * Rodičovská správa (user 2026-11-19 15:57: „sidebar bych mu tam znepřístupnil … zbytečně odvádí
+ * pozornost") — v dětském profilu lišta nemá ☰. Rodič menu otevře podržením levého horního rohu 3 s
+ * (odtud Profil s PINem → zpět na dospělého).
+ */
+val LocalSlovoMenuLocked = staticCompositionLocalOf { false }
+
+private const val MENU_UNLOCK_HOLD_MS = 3_000L
 
 /**
  * Slovo (EXCISE/SHW-103) — sjednocená horní lišta telefonní sekce (zrcadlo
@@ -37,8 +52,20 @@ fun SlovoSectionBar(
             .background(MaterialTheme.colorScheme.background),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onMenu) {
-            Icon(Icons.Rounded.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
+        if (LocalSlovoMenuLocked.current) {
+            Box(
+                Modifier.size(48.dp).pointerInput(onMenu) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        val released = withTimeoutOrNull(MENU_UNLOCK_HOLD_MS) { waitForUpOrCancellation() }
+                        if (released == null) onMenu()
+                    }
+                },
+            )
+        } else {
+            IconButton(onClick = onMenu) {
+                Icon(Icons.Rounded.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
+            }
         }
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart, content = content)
         trailing?.invoke(this)

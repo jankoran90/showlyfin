@@ -80,6 +80,18 @@ internal sealed interface KidsShelfItem {
         override val sortKey get() = seriesTitle.lowercase(Locale("cs"))
         override val itemKey get() = "series_${source.id}_$seriesSlug"
     }
+
+    /**
+     * Rodičovská správa R3 (2026-11-19) — jednotlivě schválený díl (`typ:ref#ep:id|Název`). [source] je
+     * null, když Slovo zdroj nezná (ABS podcast, nebo zdroj mimo seznam) — díl jde přehrát i tak.
+     */
+    data class EpisodeItem(
+        val episode: com.github.jankoran90.showlyfin.feature.listen.KidsSourceAccess.Episode,
+        val source: com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource?,
+    ) : KidsShelfItem {
+        override val sortKey get() = episode.title.lowercase(Locale("cs"))
+        override val itemKey get() = "ep_${episode.sourceKey}#${episode.episodeId}"
+    }
 }
 
 @Composable
@@ -101,9 +113,10 @@ fun KidsListenContent(
     val kidsCfg by viewModel.profileConfig.collectAsStateWithLifecycle()
     val hasApprovedSources = remember(state.customSources, kidsCfg.visibleForKidsSourceKeys) {
         val approved = kidsCfg.visibleForKidsSourceKeys.mapTo(HashSet()) { key ->
-            PodcastEpisodeSeriesGrouping.parseSeriesKey(key)?.sourceKey ?: key
+            com.github.jankoran90.showlyfin.feature.listen.KidsSourceAccess.sourceOf(key)
         }
-        state.customSources.any { it.key in approved }
+        state.customSources.any { it.key in approved } ||
+            com.github.jankoran90.showlyfin.feature.listen.KidsSourceAccess.approvedEpisodes(kidsCfg.visibleForKidsSourceKeys).isNotEmpty()
     }
 
     when {
@@ -165,11 +178,30 @@ fun KidsListenContent(
                     slug == null || shelfActions.downloadSlug(sourceKey, t, series) == slug
                 }
             val offline = state.isOffline
+            // Rodičovská správa R3: jednotlivé díly. Přeskoč díl, jehož pořad nebo série je schválená celá
+            // (karta pořadu / série už ho nese). Offline jen stažené.
+            val absEpDls by shelfActions.absEpisodeDownloads.collectAsStateWithLifecycle()
+            val episodeCovers by shelfActions.episodeCovers.collectAsStateWithLifecycle()
+            val absPodcastIds = remember(state.podcasts) { state.podcasts.mapTo(HashSet()) { "abs:${it.id}" } }
+            val episodeItems = remember(visibleKeys, byKey, seriesItems, offlineDls, absEpDls, offline, absPodcastIds) {
+                com.github.jankoran90.showlyfin.feature.listen.KidsSourceAccess.approvedEpisodes(visibleKeys)
+                    .filter { e -> e.sourceKey !in visibleKeys && e.sourceKey !in absPodcastIds }
+                    .filter { e ->
+                        val src = byKey[e.sourceKey]
+                        val seriesSlugs = seriesItems.filter { it.first.key == e.sourceKey }.map { it.second }
+                        val epTitle = e.title
+                        // Díl uvnitř schválené série (podle názvu) je už na kartě série.
+                        src == null || seriesSlugs.isEmpty() ||
+                            shelfActions.downloadSlug(e.sourceKey, epTitle, null) !in seriesSlugs
+                    }
+                    .filter { e -> !offline || shelfActions.isEpisodeDownloaded(e) }
+                    .map { e -> KidsShelfItem.EpisodeItem(e, byKey[e.sourceKey]) }
+            }
 
             val shelfItems = remember(state.books) { groupBooksBySeries(state.books) }
             // České řazení (Collator) — „Ď" dřív spadlo podle kódu znaku až za „Z" (user 2026-10-12).
             val collator = remember { Collator.getInstance(Locale("cs")) }
-            val items = remember(shelfItems, state.podcasts, sourceCards, seriesItems, offline, downloadedTitlesBySource) {
+            val items = remember(shelfItems, state.podcasts, sourceCards, seriesItems, offline, downloadedTitlesBySource, episodeItems) {
                 (
                     shelfItems.map { KidsShelfItem.BookItem(it) } +
                         (if (offline) emptyList() else state.podcasts.map { KidsShelfItem.PodcastItem(it) }) +
@@ -184,7 +216,8 @@ fun KidsListenContent(
                             .map { KidsShelfItem.SourceItem(it) } +
                         seriesItems
                             .filter { (src, slug, _) -> !offline || hasDownloaded(src.key, slug) }
-                            .map { (src, slug, t) -> KidsShelfItem.SeriesItem(src, slug, t) }
+                            .map { (src, slug, t) -> KidsShelfItem.SeriesItem(src, slug, t) } +
+                        episodeItems
                     ).sortedWith(compareBy(collator) { it.sortKey })
             }
             // Dlouhý stisk na pořadu/sérii → „Stáhnout všechny díly a zařadit do fronty" (user 2026-10-12).
@@ -265,6 +298,18 @@ fun KidsListenContent(
                                         ),
                                         onClick = { onOpenSourceSeries(item.source, item.seriesSlug, item.seriesTitle) },
                                         onLongClick = { downloadFor = SourceDownloadTarget(item.source, setOf(item.source.key), item.seriesSlug, item.seriesTitle) },
+                                    )
+                                }
+                                is KidsShelfItem.EpisodeItem -> {
+                                    LaunchedEffect(item.itemKey) { shelfActions.requestEpisodeCover(item.episode, item.source) }
+                                    val coverKey = "${item.episode.sourceKey}#ep:${item.episode.episodeId}"
+                                    KidsEpisodeCard(
+                                        title = item.episode.title.ifBlank { "Díl" },
+                                        showTitle = item.source?.title,
+                                        imageUrl = episodeCovers[coverKey] ?: item.source?.thumbnail,
+                                        downloaded = remember(offlineDls, absEpDls) { shelfActions.isEpisodeDownloaded(item.episode) },
+                                        onClick = { shelfActions.playEpisode(item.episode, item.source) },
+                                        onLongClick = if (offline) null else ({ shelfActions.downloadEpisode(item.episode, item.source) }),
                                     )
                                 }
                             }

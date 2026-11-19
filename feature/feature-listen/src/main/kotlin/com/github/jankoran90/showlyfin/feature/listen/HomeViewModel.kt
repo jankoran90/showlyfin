@@ -545,15 +545,19 @@ class HomeViewModel @Inject constructor(
         val kidsSeriesSlugs = kidsKeys.orEmpty()
             .mapNotNull { PodcastEpisodeSeriesGrouping.parseSeriesKey(it) }
             .groupBy({ it.sourceKey }, { it.slug })
+        // Rodičovská správa (2026-11-19): i jednotlivě schválené díly (`type:ref#ep:id|Název`).
+        val kidsEpisodeIds = kidsKeys.orEmpty().mapNotNull { KidsSourceAccess.parseEpisodeKey(it) }
+            .groupBy({ it.sourceKey }, { it.episodeId })
         fun kidsAllowed(src: PodcastSource, ep: SourceEpisode): Boolean {
             if (kidsKeys == null || src.key in kidsKeys) return true
+            if (ep.id in kidsEpisodeIds[src.key].orEmpty()) return true
             // 2026-10-13: i ČT řada / číslovaný díl / ruční kniha (dřív jen prefix → Po jedné stopě dětem na Domů chyběla).
             val slug = SeriesResolver.seriesSlug(seriesRules, src.key, src.title, ep.title, ep.seriesTitle)
             return slug != null && slug in kidsSeriesSlugs[src.key].orEmpty()
         }
         val relevant = sourcesRepo.sources.value
             .filter { it.type in neededTypes }
-            .filter { kidsKeys == null || it.key in kidsKeys || it.key in kidsSeriesSlugs }
+            .filter { kidsKeys == null || it.key in kidsKeys || it.key in kidsSeriesSlugs || it.key in kidsEpisodeIds }
         val byKey = coroutineScope {
             relevant
                 .map { src -> async { src to runCatching { sourcesRepo.loadEpisodes(src) }.getOrDefault(emptyList()) } }

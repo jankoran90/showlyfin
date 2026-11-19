@@ -51,6 +51,9 @@ class SlovoMainActivity : ComponentActivity() {
     @Inject lateinit var favoriteSourcesStore: FavoriteSourcesStore
     // Dětský telefon (2026-11-19): offline poslech stažených knih → ABS po návratu sítě.
     @Inject lateinit var audiobookDownloads: AudiobookDownloadManager
+    // Rodičovská správa R3 (2026-11-19): samostahování obsahu Dětí přes Wi-Fi + mazání odebraného.
+    @Inject lateinit var kidsOfflineSync: com.github.jankoran90.showlyfin.feature.listen.kids.KidsOfflineSync
+    private var skipFirstResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,6 +67,18 @@ class SlovoMainActivity : ComponentActivity() {
                 directResumeStore.syncNow()
                 favoriteSourcesStore.syncNow()
                 lifecycleScope.launch { runCatching { audiobookDownloads.pushOfflineProgress() } }
+                // Změna z webu rodic.jankoran.cz / jiného zařízení → config aktivního profilu znovu ze
+                // serveru (dřív jen Filmy; Slovo ho bez přepnutí profilu nedotáhlo). První resume = start,
+                // tam config stahuje restoreActive. Pak samostahování Dětí nad čerstvým configem.
+                if (skipFirstResume) {
+                    skipFirstResume = false
+                } else {
+                    lifecycleScope.launch {
+                        val t0 = System.currentTimeMillis()
+                        runCatching { profileRepository.refreshActiveConfig() }
+                        kidsOfflineSync.trigger("návrat do appky", freshSince = t0)
+                    }
+                }
             }
             override fun onPause(owner: LifecycleOwner) {
                 directResumeStore.syncNow()
@@ -75,11 +90,15 @@ class SlovoMainActivity : ComponentActivity() {
             // Backend uploader login z build env PŘED aktivací profilu — nastaví `uploader_base_url`,
             // aby zdroje poslechu (podcasty/ČT/YouTube) naskočily. Idempotentní (isAvailable() guard).
             profileRepository.ensureUploaderLogin()
+            val restoreStartedAt = System.currentTimeMillis()
             profileRepository.restoreActive(preferTv = false)
             // Whitelist Dětí opravit i na serveru (2026-11-19) — AŽ po restoreActive a bez blokování: síť by
             // zdržela obnovu profilu a kiosek by po 4 s ukázal dospělé rozhraní (revize). Aktivní Děti
             // updateConfigIfChanged po opravě sám znovu promítne.
             launch { runCatching { slovoProfileManager.repairKidsLibrariesOnServer() } }
+            // Samostahování Dětí: hned po startu (config už stáhl restoreActive) + periodicky na Wi-Fi.
+            kidsOfflineSync.trigger("start appky", freshSince = restoreStartedAt)
+            com.github.jankoran90.showlyfin.feature.listen.kids.KidsOfflineSyncWorker.schedule(applicationContext)
         }
 
         val launcher = object : UpdateLauncher {
