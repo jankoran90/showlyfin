@@ -6,7 +6,7 @@ import com.github.jankoran90.showlyfin.feature.listen.HomeViewModel.ContinueItem
  * User 2026-11-19 16:00: „sdružovat poslechové karty na Domů — Harry Potter, Správná pětka, Trabantem, Po jedné
  * stopě … rozposlouchané sbalené pod jednu hlavní kartu toho pořadu nebo audioknihy, řazené dle nejnovějšího
  * poslechu, pod rozbalením díly označené jako na kartě pořadu". Knihy = stejná série v ABS, díly = stejný pořad.
- * Jedna rozposlouchaná položka zůstává samostatnou kartou (skupina o jednom nic nepřidá).
+ * Skupina s jednou položkou se ukáže jako běžná karta s tlačítkem „Celá série“ (rozbalí zbytek série / pořadu).
  */
 internal sealed interface HomeEntry {
     val key: String
@@ -35,7 +35,8 @@ internal fun groupHomeItems(items: List<ContinueItem>, enabled: Boolean): List<H
     val buckets = LinkedHashMap<String, MutableList<ContinueItem>>()
     items.forEach { buckets.getOrPut(groupKeyOf(it) ?: "single:${continueItemKey(it)}") { mutableListOf() } += it }
     return buckets.map { (key, list) ->
-        if (list.size < 2 || key.startsWith("single:")) return@map HomeEntry.Single(list.first())
+        // User 2026-11-19 17:35: série knih / pořad se rozbalí i s jednou rozposlouchanou položkou (zbytek série).
+        if (key.startsWith("single:")) return@map HomeEntry.Single(list.first())
         val first = list.first()
         when (first) {
             is ContinueItem.Book -> HomeEntry.Group(

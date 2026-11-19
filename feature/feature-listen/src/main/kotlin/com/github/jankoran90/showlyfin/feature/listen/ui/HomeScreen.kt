@@ -2,6 +2,11 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import com.github.jankoran90.showlyfin.feature.listen.HomeGroupViewModel
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -110,7 +115,30 @@ fun HomeScreen(
                                     layout = layout,
                                     onCollapse = { expandedGroups = expandedGroups - entry.key },
                                     child = card,
+                                    other = { e ->
+                                        when (e) {
+                                            is HomeGroupViewModel.Entry.Episode -> ContinueEpisodeCard(
+                                                episode = e.episode,
+                                                sourceTitle = e.sourceTitle,
+                                                progress = 0f,
+                                                onClick = {
+                                                    onOpenSourceEpisode(e.sourceType, e.sourceRef, e.sourceTitle, e.episode.resumeKey ?: e.episode.id)
+                                                },
+                                            )
+                                            is HomeGroupViewModel.Entry.Book -> AudiobookCard(book = e.book, onClick = { onOpenBook(e.book.id) })
+                                            is HomeGroupViewModel.Entry.Listened -> card(e.item)
+                                        }
+                                    },
                                 )
+                            } else if (entry.items.size == 1) item(key = "group:${entry.key}") {
+                                // Jedna rozposlouchaná ze série: běžná karta + „Celá série“ (rozbalí zbytek).
+                                Column {
+                                    card(entry.latest)
+                                    TextButton(onClick = { expandedGroups = expandedGroups + entry.key }) {
+                                        Icon(Icons.Default.ExpandMore, contentDescription = null)
+                                        Text(if (entry.isBooks) "Celá série" else "Všechny díly")
+                                    }
+                                }
                             } else item(key = "group:${entry.key}") {
                                 val latest = entry.latest
                                 val latestLoaded = playerState.isActive && when (latest) {

@@ -1,8 +1,17 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.background
+import com.github.jankoran90.showlyfin.feature.listen.HomeGroupViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.border
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.PaddingValues
@@ -151,6 +160,103 @@ private fun ExpandHint(expanded: Boolean, onToggle: () -> Unit) {
         }
     }
 }
+
+private fun knihyCz(count: Int): String = when {
+    count == 1 -> "1 kniha"
+    count in 2..4 -> "$count knihy"
+    else -> "$count knih"
+}
+
+/**
+ * Rozbalená skupina (user 2026-11-19 17:33/17:35): pruh přes celou šířku mřížky — hlavička (název, počet, Sbalit)
+ * a pod ní VŠECHNY díly pořadu / knihy série od prvního ([HomeGroupViewModel]); rozposlouchané s průběhem, pruh hned
+ * odjede na naposled poslouchaný a ten je zvýrazněný. Než se celý seznam načte, ukazují se jen rozposlouchané.
+ */
+@Composable
+internal fun HomeGroupPanel(
+    group: HomeEntry.Group,
+    layout: HomeLayout,
+    onCollapse: () -> Unit,
+    child: @Composable (ContinueItem) -> Unit,
+    other: @Composable (HomeGroupViewModel.Entry) -> Unit,
+    groupVm: HomeGroupViewModel = hiltViewModel(),
+) {
+    LaunchedEffect(group.key) { groupVm.load(group.key, group.items) }
+    val full by groupVm.full.collectAsStateWithLifecycle()
+    val entries = full[group.key] ?: group.items.sortedBy { it.updatedAt }.map { HomeGroupViewModel.Entry.Listened(it) }
+    val latestKey = continueItemKey(group.latest)
+    val latestIndex = entries.indexOfFirst { it is HomeGroupViewModel.Entry.Listened && continueItemKey(it.item) == latestKey }
+    val count = group.items.size
+    val countLine = buildString {
+        append("Rozposlouchané: ")
+        append(if (group.isBooks) knihyCz(count) else dilyCz(count))
+        full[group.key]?.let { append(" z ${it.size}") }
+    }
+    @Composable
+    fun entryCard(e: HomeGroupViewModel.Entry, highlight: Boolean, mod: Modifier) {
+        val hl = if (highlight) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier
+        Box(mod.then(hl)) {
+            when (e) {
+                is HomeGroupViewModel.Entry.Listened -> child(e.item)
+                else -> other(e)
+            }
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.large)
+            .padding(vertical = 10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(group.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(countLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onCollapse) {
+                Icon(Icons.Default.ExpandLess, contentDescription = null)
+                Text("Sbalit")
+            }
+        }
+        val rowState = rememberLazyListState()
+        LaunchedEffect(latestIndex, entries.size) {
+            if (latestIndex > 0) rowState.scrollToItem((latestIndex - if (layout.list) 0 else 1).coerceAtLeast(0))
+        }
+        if (layout.list) {
+            // Seznam: svislá řada v omezené výšce (celý pořad by jinak Domů nekonečně natáhl).
+            LazyColumn(
+                state = rowState,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                modifier = Modifier.heightIn(max = 520.dp),
+            ) {
+                itemsIndexed(entries, key = { i, e -> entryKey(e, i) }) { i, e ->
+                    entryCard(e, highlight = i == latestIndex, mod = Modifier.fillMaxWidth())
+                }
+            }
+        } else {
+            LazyRow(
+                state = rowState,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.padding(top = 6.dp),
+            ) {
+                itemsIndexed(entries, key = { i, e -> entryKey(e, i) }) { i, e ->
+                    entryCard(e, highlight = i == latestIndex, mod = Modifier.width(160.dp))
+                }
+            }
+        }
+    }
+}
+
+private fun entryKey(e: HomeGroupViewModel.Entry, index: Int): String = when (e) {
+    is HomeGroupViewModel.Entry.Listened -> continueItemKey(e.item)
+    is HomeGroupViewModel.Entry.Episode -> "ep:${e.sourceType}:${e.sourceRef}:${e.episode.id}"
+    is HomeGroupViewModel.Entry.Book -> "book:${e.book.id}"
+} + "#$index"
 
 private fun knihyCz(count: Int): String = when {
     count == 1 -> "1 kniha"
