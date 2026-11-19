@@ -30,7 +30,7 @@ internal fun SlovoKioskSection() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SettingChips(
             label = "Dětský režim telefonu",
-            subtitle = "Ve zamčeném dětském telefonu Slovo neukazuje vlastní aktualizace (instaluje je " +
+            subtitle = "V zamčeném dětském telefonu Slovo neukazuje vlastní aktualizace (instaluje je " +
                 "Dětský launcher) ani sdílení do jiných aplikací. „Poznat samo“ ho zapne, když je telefon zamčený.",
             options = KioskMode.Mode.entries.toList(),
             selected = mode,

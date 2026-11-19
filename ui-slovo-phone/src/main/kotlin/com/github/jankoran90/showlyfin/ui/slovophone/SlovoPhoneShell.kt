@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -110,6 +111,18 @@ private fun SlovoShellContent() {
     // v draweru zmizí Objevit/Zdroje (dospělácká vrstva správy zdrojů — user „děti je mít nebudou").
     val activeProfile by listenVm.activeProfile.collectAsStateWithLifecycle()
     val isKidsProfile = activeProfile?.isAdmin == false
+    // Dětský telefon (test 2026-11-19): při studeném startu je profil ~0,8 s neznámý (null) a dřív
+    // se na tu chvíli ukázalo DOSPĚLÉ rozhraní (záložky, drawer). Dokud profil nenaskočí, jen pozadí;
+    // pojistka 4 s, kdyby se profil neobnovil vůbec (pak jako dřív).
+    var profileWaitOver by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(PROFILE_WAIT_MS)
+        profileWaitOver = true
+    }
+    if (activeProfile == null && !profileWaitOver) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+        return
+    }
     // User (2026-08-15) dětský profil = KidsListenContent uvnitř ListenScreen (sloučený obsah, žádný
     // rozpad na Timeline/Sledované/Audioknihy) — nezměněno, jen dospělácká cesta se dnes (2026-08-16
     // 18:23, „chci mít Poslech čistý jako Domů") rozpadá na samostatné swipe strany.
@@ -487,3 +500,6 @@ private fun sourceSeriesDetail(src: PodcastSource, slug: String, seriesTitle: St
         "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, seriesTitle, seriesFilter = slug)
         else -> SlovoDetailEntry.RssPodcast(src.ref, seriesTitle, seriesFilter = slug)
     }
+
+/** Jak dlouho nejvýš čekat na obnovení aktivního profilu, než se ukáže rozhraní (viz SlovoShellContent). */
+private const val PROFILE_WAIT_MS = 4_000L

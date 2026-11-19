@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -79,7 +80,7 @@ fun SeriesCard(
     val cover = group.books.firstOrNull { it.coverUrl != null }
     com.github.jankoran90.showlyfin.core.ui.CoverCard(
         title = group.seriesName,
-        subtitle = "${group.books.size} dílů",
+        subtitle = dilyCz(group.books.size),
         imageUrl = cover?.coverUrl,
         onClick = onClick,
         modifier = modifier,

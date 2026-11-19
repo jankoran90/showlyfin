@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
@@ -33,7 +34,7 @@ internal fun sourceDownloadActions(
     val downloads by vm.downloads.collectAsStateWithLifecycle()
     val count = remember(target, downloads) { vm.downloadedCount(target.keys, target.seriesSlug) }
     val src = target.primary
-    val info = if (count > 0) "V telefonu: $count dílů" else "V telefonu zatím nic"
+    val info = if (count > 0) "V telefonu: ${dilyCz(count)}" else "V telefonu zatím nic"
     return info to listOfNotNull(
         if (!offline && src != null) ListenEpisodeAction(Icons.Default.Download, "Stáhnout všechny díly a zařadit do fronty") {
             vm.downloadAndQueue(src, target.seriesSlug, target.title)

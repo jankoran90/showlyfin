@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
@@ -77,7 +78,7 @@ internal fun PodcastSeriesRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val meta = listOfNotNull(if (asBook) "kniha · $memberCount kap." else "$memberCount dílů", latestDateLabel?.let { "nejnovější $it" })
+                val meta = listOfNotNull(if (asBook) "kniha · $memberCount kap." else dilyCz(memberCount), latestDateLabel?.let { "nejnovější $it" })
                     .joinToString(" · ")
                 Text(
                     meta,

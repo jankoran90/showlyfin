@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
@@ -117,7 +118,7 @@ class KidsShelfActionsViewModel @Inject constructor(
     fun deleteDownloaded(sourceKeys: Set<String>, seriesSlug: String?) {
         val keys = downloadedKeys(sourceKeys, seriesSlug)
         keys.forEach(offline::delete)
-        _message.value = "Odstraněno ${keys.size} dílů z telefonu."
+        _message.value = "Z telefonu odstraněno: ${dilyCz(keys.size)}."
     }
 
     /** „Stáhnout znovu" (po úpravě dílů na serveru): smaž stažené a stáhni nanovo, fronta přehrávání beze změny. */
@@ -169,7 +170,7 @@ class KidsShelfActionsViewModel @Inject constructor(
                     atFront = false,
                 )
             }
-            _message.value = if (queue) "Stahuji ${episodes.size} dílů a řadím je do fronty." else "Stahuji znovu ${episodes.size} dílů."
+            _message.value = if (queue) "Stahuji ${dilyCz(episodes.size)} a řadím je do fronty." else "Stahuji znovu ${dilyCz(episodes.size)}."
         }
     }
 }

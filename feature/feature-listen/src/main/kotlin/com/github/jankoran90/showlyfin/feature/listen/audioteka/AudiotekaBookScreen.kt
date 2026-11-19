@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.audioteka
 
+import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -180,7 +181,7 @@ fun AudiotekaSeriesScreen(
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     val owned = s.data.items.count { it.inLibrary != null }
                     Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("${s.data.items.size} dílů · máš $owned", style = MaterialTheme.typography.titleSmall)
+                        Text("${dilyCz(s.data.items.size)} · máš $owned", style = MaterialTheme.typography.titleSmall)
                         s.data.description?.let { Meta(it) }
                     }
                 }
