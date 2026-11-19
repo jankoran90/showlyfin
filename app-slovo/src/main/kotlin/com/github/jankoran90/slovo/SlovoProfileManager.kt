@@ -4,6 +4,10 @@ import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.ui.slovophone.SlovoProfiles
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,8 +38,17 @@ import javax.inject.Singleton
 class SlovoProfileManager @Inject constructor(
     private val profileRepository: ProfileRepository,
 ) {
-    /** Naseeduje 3 pevné profily (Honza + Nel + Děti), nebo migruje starší instalaci. */
-    suspend fun ensureSeeded() {
+    private val seedMutex = Mutex()
+
+    /**
+     * Naseeduje 3 pevné profily (Honza + Nel + Děti), nebo migruje starší instalaci.
+     * 🔒 2026-11-19 (g32): běží pod zámkem a NEPŘERUŠITELNĚ — první `setActive` pošle signál přepnutí
+     * profilu, skořápka na něj re-createne Activity a tím zrušila `lifecycleScope` uprostřed seedu. Profil
+     * Děti tak zůstal bez configu a oprava whitelistu mu doplnila jen Podcasty (knihovna „děti" chyběla).
+     */
+    suspend fun ensureSeeded() = seedMutex.withLock { withContext(NonCancellable) { seedLocked() } }
+
+    private suspend fun seedLocked() {
         val existing = profileRepository.getAll()
 
         if (existing.isEmpty()) {
@@ -54,11 +67,12 @@ class SlovoProfileManager @Inject constructor(
                     loginPinHash = null,
                 )
             )
-            profileRepository.setActive(honzaId)
             ensureNelProfile()
             ensureKidsProfile()
-            repairKidsPodcastWhitelist()
+            repairKidsLibraryWhitelist()
             repairKidsAbsCredentials()
+            // Aktivace AŽ po založení všech profilů (spouští signál přepnutí → re-create Activity).
+            profileRepository.setActive(honzaId)
             return
         }
 
@@ -79,7 +93,7 @@ class SlovoProfileManager @Inject constructor(
         }
         ensureNelProfile()
         ensureKidsProfile()
-        repairKidsPodcastWhitelist()
+        repairKidsLibraryWhitelist()
         repairKidsAbsCredentials()
     }
 
@@ -113,15 +127,17 @@ class SlovoProfileManager @Inject constructor(
     /**
      * OPRAVA (2026-08-15, instalace 1.0.9–1.0.11): Děti profil seedovaný staršími verzemi měl
      * v `absLibraryWhitelist` jen audioknižní knihovnu, bez knihovny Podcasty → appka nikdy
-     * nenačetla žádný podcast pro Děti. Idempotentně doplní chybějící id (jednou, pak no-op).
+     * nenačetla žádný podcast pro Děti. 2026-11-19 (g32): pahýl bez whitelistu dostal JEN Podcasty →
+     * prázdný profil; teď se doplní OBĚ knihovny. Jen MÍSTNĚ ([ProfileRepository.updateConfigLocal]):
+     * běží před přihlášením uploaderu a odeslání pahýlu by přepsalo serverový config Dětí.
      */
-    private suspend fun repairKidsPodcastWhitelist() {
+    private suspend fun repairKidsLibraryWhitelist() {
         val kids = profileRepository.getAll().firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS } ?: return
-        val cfg = ProfileConfig.fromJson(kids.configJson)
-        if (SlovoProfiles.PODCAST_LIBRARY_ID in cfg.absLibraryWhitelist.orEmpty()) return
-        Timber.i("[SLOVO] oprava: doplňuji knihovnu Podcasty do whitelistu profilu Děti")
-        profileRepository.updateConfig(kids.id) {
-            it.copy(absLibraryWhitelist = (it.absLibraryWhitelist.orEmpty() + SlovoProfiles.PODCAST_LIBRARY_ID).distinct())
+        val wl = ProfileConfig.fromJson(kids.configJson).absLibraryWhitelist.orEmpty()
+        if (SlovoProfiles.KIDS_ABS_LIBRARY_ID in wl && SlovoProfiles.PODCAST_LIBRARY_ID in wl) return
+        Timber.i("[SLOVO] oprava: doplňuji knihovny děti + Podcasty do whitelistu profilu Děti (místně)")
+        profileRepository.updateConfigLocal(kids.id) {
+            it.copy(absLibraryWhitelist = (it.absLibraryWhitelist.orEmpty() + KIDS_LIBRARIES).distinct())
         }
     }
 
@@ -145,7 +161,7 @@ class SlovoProfileManager @Inject constructor(
             ?.let { ProfileConfig.fromJson(it.configJson).credentials.abs }
             ?: return
         Timber.i("[SLOVO] oprava: doplňuji ABS přihlášení profilu Děti (dřív chybělo → mazalo přihlášení při přepnutí)")
-        profileRepository.updateConfig(kids.id) { it.copy(credentials = it.credentials.copy(abs = inheritedAbs)) }
+        profileRepository.updateConfigLocal(kids.id) { it.copy(credentials = it.credentials.copy(abs = inheritedAbs)) }
     }
 
     /**
@@ -161,7 +177,15 @@ class SlovoProfileManager @Inject constructor(
         Timber.i("[SLOVO] doplňuji profil Děti (whitelist ABS knihovny ${SlovoProfiles.KIDS_ABS_LIBRARY_ID})")
         val inheritedAbs = existing.firstOrNull { it.isDefault }
             ?.let { ProfileConfig.fromJson(it.configJson).credentials.abs }
-        val kidsId = profileRepository.upsert(
+        // Whitelist musí nést OBĚ knihovny — audioknihy (děti) i Podcasty (obecná knihovna,
+        // jednotlivé pořady filtruje hiddenPodcastIds) — jinak getPodcastLibraries() vrátí
+        // pro Děti prázdno a appka nenačte žádný podcast (bug nalezený 2026-08-15, 1.0.11).
+        // 2026-11-19: config JEDNÍM zápisem s profilem (žádný mezistav bez whitelistu) a BEZ odeslání
+        // na server — seed je jen místní výchozí stav, serverový config Dětí se převezme při aktivaci.
+        val seedConfig = ProfileConfig.DEFAULT.let { d ->
+            d.copy(absLibraryWhitelist = KIDS_LIBRARIES, credentials = d.credentials.copy(abs = inheritedAbs))
+        }
+        profileRepository.upsert(
             ProfileEntity(
                 profileUuid = SlovoProfiles.UUID_KIDS,
                 name = "Děti",
@@ -173,16 +197,12 @@ class SlovoProfileManager @Inject constructor(
                 tvDefault = false,
                 maxAgeRating = null,
                 loginPinHash = null,
+                configJson = ProfileConfig.toJson(seedConfig),
             )
         )
-        profileRepository.updateConfig(kidsId) {
-            it.copy(
-                // Whitelist musí nést OBĚ knihovny — audioknihy (děti) i Podcasty (obecná knihovna,
-                // jednotlivé pořady filtruje hiddenPodcastIds) — jinak getPodcastLibraries() vrátí
-                // pro Děti prázdno a appka nenačte žádný podcast (bug nalezený 2026-08-15, 1.0.11).
-                absLibraryWhitelist = listOf(SlovoProfiles.KIDS_ABS_LIBRARY_ID, SlovoProfiles.PODCAST_LIBRARY_ID),
-                credentials = it.credentials.copy(abs = inheritedAbs),
-            )
-        }
+    }
+
+    private companion object {
+        val KIDS_LIBRARIES = listOf(SlovoProfiles.KIDS_ABS_LIBRARY_ID, SlovoProfiles.PODCAST_LIBRARY_ID)
     }
 }

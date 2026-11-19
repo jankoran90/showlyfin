@@ -3,7 +3,6 @@ package com.github.jankoran90.showlyfin.ui.slovophone
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
-import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
 import com.github.jankoran90.showlyfin.core.domain.AbsCreds
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.data.abs.AbsPreferences
@@ -91,11 +90,13 @@ class SlovoSettingsViewModel @Inject constructor(
             val activeUser = ProfileConfig.fromJson(active.configJson).credentials.abs?.username
             profileRepository.updateConfig(active.id) { c -> c.copy(credentials = c.credentials.copy(abs = null)) }
             if (active.isDefault) {
-                profileRepository.getAll().firstOrNull { !it.isAdmin }
-                    ?.takeIf { kidsInheritsAbs(it, activeUser) }
-                    ?.let { kids ->
-                        profileRepository.updateConfig(kids.id) { c -> c.copy(credentials = c.credentials.copy(abs = null)) }
+                profileRepository.getAll().firstOrNull { !it.isAdmin }?.let { kids ->
+                    // Podmínka UVNITŘ transformace: updateConfig si config neaktivních Dětí nejdřív stáhne
+                    // ze serveru (2026-11-19) → rozhoduje se nad čerstvým účtem Dětí, ne nad místním pahýlem.
+                    profileRepository.updateConfig(kids.id) { c ->
+                        if (kidsInheritsAbs(c, activeUser)) c.copy(credentials = c.credentials.copy(abs = null)) else c
                     }
+                }
             }
             _account.update { it.copy(absConfigured = false, absBaseUrl = "", absError = null) }
         }
@@ -124,17 +125,18 @@ class SlovoSettingsViewModel @Inject constructor(
         val previousUser = ProfileConfig.fromJson(active.configJson).credentials.abs?.username
         profileRepository.updateConfig(active.id) { c -> c.copy(credentials = c.credentials.copy(abs = creds)) }
         if (active.isDefault) {
-            profileRepository.getAll().firstOrNull { !it.isAdmin }
-                ?.takeIf { kidsInheritsAbs(it, previousUser ?: creds.username) }
-                ?.let { kids ->
-                    profileRepository.updateConfig(kids.id) { c -> c.copy(credentials = c.credentials.copy(abs = creds)) }
+            profileRepository.getAll().firstOrNull { !it.isAdmin }?.let { kids ->
+                // Viz absLogout — rozhoduje se nad configem staženým ze serveru (vlastní účet Dětí maty).
+                profileRepository.updateConfig(kids.id) { c ->
+                    if (kidsInheritsAbs(c, previousUser ?: creds.username)) c.copy(credentials = c.credentials.copy(abs = creds)) else c
                 }
+            }
         }
     }
 
     /** Děti dědí ABS účet dospělého (bez vlastního, nebo se stejným uživatelem) → smí se jim zrcadlit. */
-    private fun kidsInheritsAbs(kids: ProfileEntity, adultUser: String?): Boolean {
-        val kidsUser = ProfileConfig.fromJson(kids.configJson).credentials.abs?.username ?: return true
+    private fun kidsInheritsAbs(kidsConfig: ProfileConfig, adultUser: String?): Boolean {
+        val kidsUser = kidsConfig.credentials.abs?.username ?: return true
         return adultUser != null && kidsUser.equals(adultUser, ignoreCase = true)
     }
 }

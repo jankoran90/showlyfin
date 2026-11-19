@@ -304,9 +304,19 @@ class ProfileRepository @Inject constructor(
      * kdyby override jejich hodnotu nesl (Plan WARDEN W0; tvrdé gating UI přijde ve W2/W4).
      */
     suspend fun updateConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
+        // 🔒 2026-11-19 (Slovo, g32: profil Děti po první instalaci prázdný) — úprava NEAKTIVNÍHO profilu
+        // (dospělý schvaluje dětem pořad, login zrcadlí účet Dětem…) dřív stavěla na místní kopii, která se
+        // stahuje jen při aktivaci toho profilu → mohla být týdny stará nebo jen pahýl z čerstvé instalace
+        // a celým odesláním přepsala serverový config (smazala dětem knihovnu i schválené pořady).
+        // Teď čti-uprav-zapiš: nejdřív převezmi serverovou verzi, transformaci aplikuj na ni.
+        // Neodeslaná místní změna (unpushed) má dál přednost — server se nestahuje.
+        refreshInactiveBeforeEdit(profileId)
         val profile = dao.getById(profileId) ?: return
         val newOverride = transform(ProfileConfig.fromJson(profile.configJson))
         val newJson = ProfileConfig.toJson(newOverride)
+        // Beze změny = nic nezapisuj ani neodesílej (2026-11-19): podmíněná úprava (např. zrcadlení účtu
+        // Dětem jen když ho dědí) by jinak odeslala celou místní kopii — offline i s příznakem „neodesláno".
+        if (newJson == ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson))) return
         dao.update(profile.copy(configJson = newJson))
         val updated = dao.getById(profileId)
         if (_activeProfile.value?.id == profileId && updated != null) {
@@ -320,6 +330,40 @@ class ProfileRepository @Inject constructor(
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
         Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
         pushConfigTracked(profile, newJson)
+    }
+
+    /** Viz [updateConfig] — převezme serverový config neaktivního profilu před úpravou (best-effort, 5 s). */
+    private suspend fun refreshInactiveBeforeEdit(profileId: Long) {
+        if (_activeProfile.value?.id == profileId) return
+        val profile = dao.getById(profileId) ?: return
+        val key = profile.backendKey()
+        if (key in unpushedConfigKeys() || !configGateway.isAvailable()) return
+        val remote = withTimeoutOrNull(5000) { configGateway.fetchConfig(key) }?.takeIf { it.isNotBlank() } ?: return
+        val current = dao.getById(profileId) ?: return
+        val canonical = mergeRemoteConfig(current.configJson, remote)
+        if (canonical != current.configJson) {
+            Timber.i("[PUSH] před úpravou neaktivního profilu '$key' převzat config ze serveru")
+            dao.update(current.copy(configJson = canonical))
+        }
+    }
+
+    /**
+     * Jen MÍSTNÍ úprava configu — bez odeslání na backend (2026-11-19). Pro seed a opravy místních invariantů
+     * při startu: běží dřív, než je uploader přihlášený, takže odeslání by selhalo, profil by dostal příznak
+     * „neodesláno" a při první synchronizaci by místní pahýl přepsal serverový config. Server zůstává zdrojem
+     * pravdy; místní kopie se při aktivaci profilu stejně převezme ze serveru.
+     */
+    suspend fun updateConfigLocal(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
+        val profile = dao.getById(profileId) ?: return
+        val newJson = ProfileConfig.toJson(transform(ProfileConfig.fromJson(profile.configJson)))
+        if (newJson == profile.configJson) return
+        dao.update(profile.copy(configJson = newJson))
+        val updated = dao.getById(profileId)
+        if (_activeProfile.value?.id == profileId && updated != null) {
+            val effective = effectiveConfigFor(updated)
+            configApplier.apply(effective, updated.id, updated.isChildAgeRating())
+            publishActive(updated, effective)
+        }
     }
 
     /**
@@ -642,45 +686,7 @@ class ProfileRepository @Inject constructor(
         }?.takeIf { it.isNotBlank() }
         if (remoteJson != null) {
             val current = dao.getById(profile.id) ?: profile
-            // TRVALÝ FIX (2026-07-15): Trakt token je per-PROFIL device/účet-specific — NIKDY ho nepřebírej
-            // z cross-device backend slotu. Profily se sdíleným JF účtem (honza+neli) mají stejný backendKey
-            // → jeden backend config slot → jinak si Trakt token navzájem přepisují (viz incident). Zachovej
-            // lokální `trakt` a přebírej z remote jen ostatní creds/nastavení.
-            val localCreds = ProfileConfig.fromJson(current.configJson).credentials
-            val localTraktRaw = localCreds.trakt
-            val remoteCfg = ProfileConfig.fromJson(remoteJson)
-            // CONVERGE (handoff t0 2026-07-15): lokální trakt DÁL vyhrává (ochrana z hotfixu 332 proti záměně
-            // mezi profily se sdíleným backendKey), ALE prázdný lokál (null) adoptuje token z backendu →
-            // bootstrap nového zařízení (TV nemá prohlížeč pro login; token přihlášený na telefonu se sem
-            // převezme). Bezpečné, dokud mají profily různé jellyfinUserId (kořen: slot per profileUuid — otevřeno).
-            // FIX A (2026-07-16, emulátor): i EXPIROVANÝ lokální token ber jako null → adoptuj ČERSTVÝ z backendu.
-            // Mrtvý (past-expiry) lokál jinak přebíjel čerstvý backend token pushnutý z telefonu → TV/emulátor
-            // zůstal odhlášený i po re-loginu (ověřeno živě: 401 na sync/*, dialog „Trakt tě odhlásil").
-            val nowMs = System.currentTimeMillis()
-            // 🔒 FIX (user 2026-07-20 „Trakt zlobí každý den"): „live" vyžaduje i SPRÁVNÝ TVAR tokenu (plný 64-hex),
-            // ne jen neprázdnost. Dřív se useknutý (32-znakový) remote token adoptoval a uložil do DB balíku →
-            // odtud ho přepnutí profilu vytáhlo do prefs → Trakt 401. Teď: malformovaný token není „live" →
-            // neadoptuje se z backendu → lokální dobrý token přežije. (Zrcadlí [looksLikeTraktToken] guard z applieru.)
-            fun TraktCreds?.isLive() =
-                this != null && looksLikeTraktToken(accessToken) && (expiresAtMillis <= 0L || expiresAtMillis > nowMs)
-            // Živý lokál vyhrává; jinak adoptuj živý backend; jinak ponech (i mrtvý) lokál kvůli refresh_tokenu.
-            val mergedTrakt = localTraktRaw.takeIf { it.isLive() }
-                ?: remoteCfg.credentials.trakt?.takeIf { it.isLive() }
-                ?: localTraktRaw
-            // WEATHER (user 2026-07-16): JF/ABS/uploader creds jsou často LOKÁLNÍ (device login) a NEmusí
-            // být v cross-device backend bundlu. Honza měl backend bundle BEZ JF → sync jinak vynuloval jeho
-            // device JF (applyConfig remove → „JF nenastaven"). Backend vyhrává jen když creds SKUTEČNĚ nese
-            // (nová TV se z něj bootstrapuje); jinak zachovej lokál — stejný princip jako u traktu. Per-profil
-            // izolace (b129) drží: preservuje se JEN vlastní config TOHOTO profilu, ne cizí.
-            val merged = remoteCfg.copy(
-                credentials = remoteCfg.credentials.copy(
-                    trakt = mergedTrakt,
-                    jellyfin = remoteCfg.credentials.jellyfin ?: localCreds.jellyfin,
-                    abs = remoteCfg.credentials.abs ?: localCreds.abs,
-                    uploader = remoteCfg.credentials.uploader ?: localCreds.uploader,
-                ),
-            )
-            val canonical = ProfileConfig.toJson(merged)
+            val canonical = mergeRemoteConfig(current.configJson, remoteJson)
             if (canonical != current.configJson) {
                 dao.update(current.copy(configJson = canonical))
                 changed = true
