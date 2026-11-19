@@ -64,6 +64,7 @@ import com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastDetail
 import com.github.jankoran90.showlyfin.data.abs.model.PodcastEpisode
 import com.github.jankoran90.showlyfin.core.ui.ShareLinks
+import com.github.jankoran90.showlyfin.core.ui.rememberKioskActive
 import com.github.jankoran90.showlyfin.feature.listen.PodcastDetailViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,7 +114,7 @@ fun PodcastDetailScreen(
                     },
                     actions = {
                         val pTitle = state.detail?.podcast?.title ?: "Podcast"
-                        IconButton(onClick = {
+                        if (!rememberKioskActive()) IconButton(onClick = {
                             ShareLinks.share(context, pTitle, ShareLinks.podcast(itemId))
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "Sdílet")

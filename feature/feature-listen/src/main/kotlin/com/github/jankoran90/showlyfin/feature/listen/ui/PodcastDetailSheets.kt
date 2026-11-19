@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import com.github.jankoran90.showlyfin.core.ui.rememberKioskActive
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -133,7 +134,8 @@ internal fun EpisodeActionSheet(
             DownloadStatus.NONE ->
                 ActionRow(Icons.Default.Download, "Stáhnout pro offline", onDownload)
         }
-        ActionRow(Icons.Default.Share, "Sdílet epizodu", onShare)
+        // Kiosek (dětský telefon): sdílení otevírá jiné appky → skryté.
+        if (!rememberKioskActive()) ActionRow(Icons.Default.Share, "Sdílet epizodu", onShare)
         Box(Modifier.height(12.dp))
     }
 }

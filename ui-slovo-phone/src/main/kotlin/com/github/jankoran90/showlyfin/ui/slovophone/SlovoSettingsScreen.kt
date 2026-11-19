@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.ChildCare
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.HighQuality
@@ -125,6 +126,9 @@ fun SlovoSettingsScreen(
             // kanálů nešel spustit vůbec (appka hlásila "Chybí přihlášení k Jellyfinu" bez možnosti to řešit).
             if (adult) SlovoCollapsibleSection("Jellyfin (videa Na výbornou, TV přes Jellyfin)", Icons.Rounded.LiveTv) {
                 SlovoJellyfinSection()
+            }
+            if (adult) SlovoCollapsibleSection("Dětský telefon", Icons.Rounded.ChildCare) {
+                SlovoKioskSection()
             }
             SlovoCollapsibleSection("O aplikaci", Icons.Rounded.Info) {
                 SlovoAboutSection()

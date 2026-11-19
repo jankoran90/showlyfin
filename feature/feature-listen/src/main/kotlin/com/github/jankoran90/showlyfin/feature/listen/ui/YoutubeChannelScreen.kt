@@ -69,6 +69,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.ui.ShareLinks
+import com.github.jankoran90.showlyfin.core.ui.rememberKioskActive
 import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.YtEpisode
@@ -259,7 +260,8 @@ fun YoutubeChannelScreen(
                             Icon(Icons.Default.Search, contentDescription = "Hledat v tomto kanálu")
                         }
                     }
-                    IconButton(onClick = {
+                    // Kiosek (dětský telefon): sdílení otevírá jiné appky → skryté.
+                    if (!rememberKioskActive()) IconButton(onClick = {
                         ShareLinks.share(context, chTitle, ShareLinks.youtube(channel, chTitle))
                     }) {
                         Icon(Icons.Default.Share, contentDescription = "Sdílet kanál")
@@ -402,6 +404,7 @@ fun YoutubeChannelScreen(
 
     // LEVER (SHW-61) L2: sjednocené akční menu epizody (Do fronty / Sdílet) jako u ABS/RSS.
     actionEpisode?.let { ep ->
+        val kiosk = rememberKioskActive()
         ListenEpisodeActionSheet(
             title = ep.title,
             // WEFT (SHW-75/W1): jednotné menu jako NaVýbornou/RSS — Přehrát · Video · Na TV · fronta×2 · …
@@ -435,10 +438,11 @@ fun YoutubeChannelScreen(
                 ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
                     viewModel.enqueue(ep, atFront = false)
                 },
-                ListenEpisodeAction(Icons.Default.Share, "Sdílet epizodu") {
+                // Kiosek (dětský telefon): sdílení otevírá jiné appky → skryté.
+                if (!kiosk) ListenEpisodeAction(Icons.Default.Share, "Sdílet epizodu") {
                     val chTitle = state.channelTitle ?: channelTitle
                     ShareLinks.share(context, ep.title, ShareLinks.youtube(channel, chTitle, v = ep.id))
-                },
+                } else null,
                 offlineDownloadAction(
                     status = offlineStates[viewModel.episodeKey(ep)]?.status ?: OfflineStatus.NONE,
                     progress = offlineStates[viewModel.episodeKey(ep)]?.progress ?: 0f,

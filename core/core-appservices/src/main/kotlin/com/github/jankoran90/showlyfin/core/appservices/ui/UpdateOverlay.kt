@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.github.jankoran90.showlyfin.core.appservices.services.PendingUpdate
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdateChecker
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdatePreferences
+import com.github.jankoran90.showlyfin.core.ui.KioskMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +26,8 @@ object UpdateOverlayController {
     val pending: StateFlow<PendingUpdate?> = _pending.asStateFlow()
 
     fun show(context: Context) {
+        // Kiosek: aktualizace řeší Dětský launcher, dialog by vedl na zablokovaný instalátor.
+        if (KioskMode.isActive(context)) return
         _pending.value = UpdatePreferences.read(context)
     }
 

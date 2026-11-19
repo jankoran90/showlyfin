@@ -53,6 +53,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.github.jankoran90.showlyfin.core.ui.ShareLinks
+import com.github.jankoran90.showlyfin.core.ui.rememberKioskActive
 import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDetail
 import com.github.jankoran90.showlyfin.data.abs.model.Chapter
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadState
@@ -95,7 +96,7 @@ fun AudiobookDetailScreen(
                     actions = {
                         val ctx = LocalContext.current
                         val bTitle = state.detail?.book?.title ?: "Audiokniha"
-                        IconButton(onClick = {
+                        if (!rememberKioskActive()) IconButton(onClick = {
                             ShareLinks.share(ctx, bTitle, ShareLinks.audiobook(itemId))
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "Sdílet")

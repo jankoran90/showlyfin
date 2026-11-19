@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.github.jankoran90.showlyfin.core.appservices.AppServices
 import com.github.jankoran90.showlyfin.core.appservices.services.UpdateChecker
 import com.github.jankoran90.showlyfin.core.ui.LocalUpdateLauncher
+import com.github.jankoran90.showlyfin.core.ui.rememberKioskActive
 import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 
 /**
@@ -33,6 +34,7 @@ import com.github.jankoran90.showlyfin.core.ui.UpdateCheckResult
 internal fun SlovoAboutSection() {
     val context = LocalContext.current
     val launcher = LocalUpdateLauncher.current
+    val kiosk = rememberKioskActive()
 
     val currentVersion = remember {
         runCatching { "${AppServices.config.versionName} (build ${AppServices.config.versionCode})" }
@@ -55,6 +57,16 @@ internal fun SlovoAboutSection() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        // Kiosek (dětský telefon): instalátor neprojde, aktualizace instaluje Dětský launcher sám.
+        if (kiosk) {
+            Text(
+                text = "Telefon je v dětském režimu. Aktualizace instaluje Dětský launcher sám.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@Column
+        }
 
         availableVer?.let { ver ->
             Text(

@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.github.jankoran90.showlyfin.core.ui.KioskMode
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -33,6 +34,8 @@ class UpdateCheckWorker(
 
     override suspend fun doWork(): Result {
         val ctx = applicationContext
+        // Kiosek (dětský telefon): aktualizaci instaluje Dětský launcher, systémový instalátor by tu neprošel.
+        if (KioskMode.isActive(ctx)) return Result.success()
         val checker = UpdateChecker()
         val manifest = checker.fetchManifest(ctx)
         UpdatePreferences.storeCheckAt(ctx)
