@@ -27,6 +27,14 @@ internal fun SlovoHomeLayoutSection(viewModel: HomeLayoutViewModel = hiltViewMod
             onSelect = { v -> viewModel.update { it.copy(list = v) } },
         )
         SettingChips(
+            label = "Rozposlouchané z jednoho pořadu nebo série",
+            subtitle = "Sbalit = díly jednoho pořadu (Trabantem) a knihy jedné série (Harry Potter) pod jednou kartou s počtem; ťuk ji rozbalí, ▶ pokračuje naposled poslouchaným.",
+            options = listOf(true, false),
+            selected = layout.groupContinue,
+            labelOf = { if (it) "Sbalit pod kartu" else "Každý zvlášť" },
+            onSelect = { v -> viewModel.update { it.copy(groupContinue = v) } },
+        )
+        SettingChips(
             label = "Ťuk na díl podcastu",
             subtitle = "Otevřít pořad = díl se ukáže mezi ostatními (jako u audioknih), přehrát jde tlačítkem ▶ na kartě.",
             options = listOf(true, false),

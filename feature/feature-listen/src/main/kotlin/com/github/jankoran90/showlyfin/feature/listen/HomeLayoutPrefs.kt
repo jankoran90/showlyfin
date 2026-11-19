@@ -33,6 +33,11 @@ data class HomeLayout(
     val singleSeriesOpensBook: Boolean = true,
     /** Rozposlouchaný díl ze série se na Domů ukáže jako kniha (název knihy + kapitola), ne jako díl. */
     val episodeAsBook: Boolean = true,
+    /**
+     * User 2026-11-19 („Harry Potter, Správná pětka, Trabantem … sbalené pod jednu hlavní kartu") — rozposlouchané
+     * díly jednoho pořadu a knihy jedné série pod jednou kartou, rozbalí se ťuknutím.
+     */
+    val groupContinue: Boolean = true,
 )
 
 object HomeLayoutPrefs {
@@ -44,7 +49,8 @@ object HomeLayoutPrefs {
     private const val KEY_SERIES_BOOK = "slovo_series_as_book"
     private const val KEY_SINGLE_BOOK = "slovo_single_series_opens_book"
     private const val KEY_EPISODE_BOOK = "slovo_home_episode_as_book"
-    private val KEYS = setOf(KEY_LIST, KEY_BIG_COVER, KEY_DESC_LINES, KEY_REMAINING, KEY_TAP_OPENS, KEY_SERIES_BOOK, KEY_SINGLE_BOOK, KEY_EPISODE_BOOK)
+    private const val KEY_GROUP = "slovo_home_group_continue"
+    private val KEYS = setOf(KEY_LIST, KEY_BIG_COVER, KEY_DESC_LINES, KEY_REMAINING, KEY_TAP_OPENS, KEY_SERIES_BOOK, KEY_SINGLE_BOOK, KEY_EPISODE_BOOK, KEY_GROUP)
 
     val DESC_LINE_OPTIONS = listOf(0, 2, 3, 5)
 
@@ -57,6 +63,7 @@ object HomeLayoutPrefs {
         seriesAsBook = prefs.getBoolean(KEY_SERIES_BOOK, true),
         singleSeriesOpensBook = prefs.getBoolean(KEY_SINGLE_BOOK, true),
         episodeAsBook = prefs.getBoolean(KEY_EPISODE_BOOK, true),
+        groupContinue = prefs.getBoolean(KEY_GROUP, true),
     )
 
     fun write(prefs: SharedPreferences, layout: HomeLayout) {
@@ -69,6 +76,7 @@ object HomeLayoutPrefs {
             .putBoolean(KEY_SERIES_BOOK, layout.seriesAsBook)
             .putBoolean(KEY_SINGLE_BOOK, layout.singleSeriesOpensBook)
             .putBoolean(KEY_EPISODE_BOOK, layout.episodeAsBook)
+            .putBoolean(KEY_GROUP, layout.groupContinue)
             .apply()
     }
 

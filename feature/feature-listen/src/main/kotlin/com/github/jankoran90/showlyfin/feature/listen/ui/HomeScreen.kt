@@ -7,10 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +61,9 @@ fun HomeScreen(
     // PROFIL (2026-08-16) — dlouhý stisk epizody na Domů → „Sdílet s…" (celý zdroj epizody, ne jen tuhle).
     var shareEpisode by remember { mutableStateOf<HomeViewModel.ContinueItem.Episode?>(null) }
     var shareBook by remember { mutableStateOf<HomeViewModel.ContinueItem.Book?>(null) }
+    // User 2026-11-19: rozposlouchané jednoho pořadu / série knih pod jednou hlavní kartou (Nastavení → Zobrazení Domů).
+    val entries = remember(items, layout.groupContinue) { groupHomeItems(items, layout.groupContinue) }
+    var expandedGroups by rememberSaveable { mutableStateOf(emptySet<String>()) }
 
     Box(modifier.fillMaxSize()) {
         when {
@@ -74,7 +75,18 @@ fun HomeScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center).padding(32.dp),
             )
-            else -> LazyVerticalGrid(
+            else -> {
+              // Jedna karta položky (samostatně i v rozbalené skupině) — tělo v [HomeContinueItemCard].
+              val card: @Composable (HomeViewModel.ContinueItem) -> Unit = { item ->
+                HomeContinueItemCard(
+                    item = item, vm = vm, playerVm = playerVm, bookVm = bookVm, playerState = playerState,
+                    layout = layout, seriesRules = seriesRules, otherAdultProfiles = otherAdultProfiles,
+                    kidsLibraryIds = kidsLibraryIds, onOpenBook = onOpenBook, onOpenSourceEpisode = onOpenSourceEpisode,
+                    onPlayVideo = onPlayVideo, onPlayJfVideo = onPlayJfVideo,
+                    onShareBook = { shareBook = it }, onShareEpisode = { shareEpisode = it },
+                )
+              }
+              LazyVerticalGrid(
                 // User (2026-09-29) — Nastavení → Zobrazení Domů: mřížka (default) nebo jeden sloupec.
                 columns = if (layout.list) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 150.dp),
                 modifier = Modifier.fillMaxSize(),
@@ -84,128 +96,43 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(if (layout.list) 18.dp else 14.dp),
             ) {
-                items(items, key = ::continueItemKey) { item ->
-                    when (item) {
-                        is HomeViewModel.ContinueItem.Book -> {
-                            val isPlaying = playerState.isActive && playerState.currentItemId == item.book.id
-                            // User (2026-08-16 14:42, „Sdílet s Nel u dětské knihy nedává smysl") —
-                            // vlastnictví/sdílení se knih z dětské knihovny netýká, dlouhý stisk pro ně nic nenabídne.
-                            val onLong: (() -> Unit)? =
-                                if (otherAdultProfiles.isNotEmpty() && item.book.libraryId !in kidsLibraryIds) {
-                                    { shareBook = item }
-                                } else null
-                            if (layout.list) {
-                                val b = item.book
-                                HomeListCard(
-                                    title = b.title,
-                                    subtitle = listOfNotNull(b.author, b.narrator?.let { "čte $it" }).joinToString(" · "),
-                                    description = b.seriesName?.let { s -> b.seriesSequence?.let { "$s #$it" } ?: s },
-                                    imageUrl = b.coverUrl,
-                                    wideImage = false,
-                                    // Hrající položka = živá pozice z přehrávače (uložená se obnoví až refreshem).
-                                    progress = if (isPlaying && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs.toFloat() / playerState.durationMs else b.progress.toFloat(),
-                                    posMs = if (isPlaying && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs else (b.currentTimeSec * 1000).toLong(),
-                                    durMs = if (isPlaying && playerState.isPlaying && playerState.durationMs > 0) playerState.durationMs else (b.durationSec * 1000).toLong(),
-                                    layout = layout,
-                                    placeholder = Icons.Default.Headphones,
-                                    onClick = { onOpenBook(b.id) },
-                                    isPlaying = isPlaying,
-                                    onLongClick = onLong,
-                                    onEndListening = { vm.resetBookProgress(b) },
-                                    // User (2026-09-29): Play/Pauza přímo na kartě — Domů zůstává, nic se neotevírá.
-                                    playing = isPlaying && playerState.isPlaying,
-                                    onPlayPause = { if (isPlaying) playerVm.playPause() else playerVm.open(b.id, fromStart = false) },
-                                )
-                            } else {
-                                AudiobookCard(
-                                    book = item.book,
-                                    onClick = { onOpenBook(item.book.id) },
-                                    isPlaying = isPlaying,
-                                    onLongClick = onLong,
-                                    onEndListening = { vm.resetBookProgress(item.book) },
-                                )
-                            }
-                        }
-                        is HomeViewModel.ContinueItem.Episode -> {
-                            val loadedInQueue = playerState.isActive &&
-                                playerState.currentEpisodeId == (item.episode.resumeKey ?: item.episode.id)
-                            // BUG (2026-09-04, user „dej možnost zobrazit je a rovnou naskočit"): ťuk
-                            // rovnou přehraje, dřív otvíral jen zdrojovou obrazovku (parita s knihami
-                            // zůstává jinde — epizoda na rozdíl od knihy nepotřebuje kapitolní kontext).
-                            // ADAPT (2026-09-04): spustí SPRÁVNÝ režim (video, pokud vede) — dřív vždy jen audio.
-                            // BUG (2026-09-29, user „Cukrfree na Domů nutí video, mám rozposlouchané audio"):
-                            // režim = jak se epizoda naposled hrála ([HomeViewModel.videoLaunch] → LastPlaybackMode),
-                            // neznámo = audio. (Dřívější „načtená ve frontě → audio" zrušeno: po „Přepnout na
-                            // video" zůstává audio načtené v pauze a přebilo by naposled sledované video.)
-                            val play = {
-                                when (val launch = vm.videoLaunch(item)) {
-                                    is HomeViewModel.VideoLaunch.External -> onPlayVideo(launch.url, launch.title, launch.posterUrl)
-                                    is HomeViewModel.VideoLaunch.Jellyfin -> onPlayJfVideo(launch.jfItemId, launch.title, launch.resumeKey)
-                                    null -> vm.playEpisode(item)
+                entries.forEach { entry ->
+                    when (entry) {
+                        is HomeEntry.Single -> item(key = entry.key) { card(entry.item) }
+                        is HomeEntry.Group -> {
+                            val expanded = entry.key in expandedGroups
+                            item(key = "group:${entry.key}") {
+                                val latest = entry.latest
+                                val latestLoaded = playerState.isActive && when (latest) {
+                                    is HomeViewModel.ContinueItem.Book -> playerState.currentItemId == latest.book.id
+                                    is HomeViewModel.ContinueItem.Episode ->
+                                        playerState.currentEpisodeId == (latest.episode.resumeKey ?: latest.episode.id)
                                 }
-                            }
-                            // User (2026-10-12): ťuk = otevřít pořad s dílem mezi ostatními (parita s knihou),
-                            // přehrání na ▶; staré „ťuk = přehrát" volitelně v Nastavení → Zobrazení Domů.
-                            // Starší YouTube díl mimo načtené okno nemá zdroj (sourceRef "") → nelze otevřít pořad,
-                            // ťuk ho přehraje jako dřív (Codex review).
-                            val opensShow = layout.episodeTapOpensShow && item.sourceRef.isNotBlank()
-                            val onClick = if (opensShow) {
-                                {
-                                    onOpenSourceEpisode(
-                                        item.sourceType, item.sourceRef, item.sourceTitle,
-                                        item.episode.resumeKey ?: item.episode.id,
-                                    )
-                                }
-                            } else play
-                            val onPlayPause = { if (loadedInQueue) playerVm.playPause() else vm.playEpisode(item) }
-                            val onLong: (() -> Unit)? = if (otherAdultProfiles.isNotEmpty()) ({ shareEpisode = item }) else null
-                            val bookLabel = remember(item, seriesRules, layout.seriesAsBook, layout.episodeAsBook) {
-                                if (!layout.seriesAsBook || !layout.episodeAsBook) null
-                                else homeBookLabel(
-                                    episodeTitle = item.episode.title,
-                                    sourceTitle = item.sourceTitle,
-                                    seriesTitle = item.episode.seriesTitle,
-                                    ruleTitle = bookVm.ruleTitle("${item.sourceType}:${item.sourceRef}", item.episode.title),
-                                )
-                            }
-                            if (layout.list) {
-                                HomeListCard(
-                                    title = bookLabel?.bookTitle ?: item.episode.title,
-                                    subtitle = bookLabel?.chapterLine ?: item.sourceTitle,
-                                    description = homeDescription(item.episode.description),
-                                    imageUrl = item.episode.imageUrl,
-                                    wideImage = item.sourceType == "youtube" || item.sourceType == "ctv",
-                                    progress = if (loadedInQueue && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs.toFloat() / playerState.durationMs else item.progress,
-                                    posMs = if (loadedInQueue && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs else item.posMs,
-                                    durMs = if (loadedInQueue && playerState.isPlaying && playerState.durationMs > 0) playerState.durationMs else item.durMs,
+                                HomeGroupCard(
+                                    group = entry,
+                                    expanded = expanded,
                                     layout = layout,
-                                    placeholder = Icons.Default.Podcasts,
-                                    onClick = onClick,
-                                    isPlaying = loadedInQueue,
-                                    onLongClick = onLong,
-                                    onEndListening = { vm.resetEpisodeProgress(item) },
-                                    // Play na kartě = vždy POSLECH (user: „hlavně se spustí audio, na video
-                                    // si přepnu ve frontě"); načtená epizoda jen přepne pauzu.
-                                    playing = loadedInQueue && playerState.isPlaying,
-                                    onPlayPause = onPlayPause,
+                                    latestLoaded = latestLoaded,
+                                    playing = latestLoaded && playerState.isPlaying,
+                                    onToggle = {
+                                        expandedGroups = if (expanded) expandedGroups - entry.key else expandedGroups + entry.key
+                                    },
+                                    onPlayPause = {
+                                        when {
+                                            latestLoaded -> playerVm.playPause()
+                                            latest is HomeViewModel.ContinueItem.Book -> playerVm.open(latest.book.id, fromStart = false)
+                                            latest is HomeViewModel.ContinueItem.Episode -> vm.playEpisode(latest)
+                                        }
+                                    },
                                 )
-                            } else {
-                                ContinueEpisodeCard(
-                                    episode = bookLabel?.let { item.episode.copy(title = it.bookTitle) } ?: item.episode,
-                                    sourceTitle = bookLabel?.chapterLine ?: item.sourceTitle,
-                                    progress = item.progress,
-                                    isPlaying = loadedInQueue,
-                                    onClick = onClick,
-                                    onLongClick = onLong,
-                                    onEndListening = { vm.resetEpisodeProgress(item) },
-                                    // ▶ jen když ťuk otevírá pořad (jinak ťuk sám přehrává).
-                                    onPlayPause = if (opensShow) onPlayPause else null,
-                                    playing = loadedInQueue && playerState.isPlaying,
-                                )
+                            }
+                            if (expanded) entry.items.forEach { child ->
+                                item(key = continueItemKey(child)) { card(child) }
                             }
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -242,9 +169,4 @@ fun HomeScreen(
             onDismiss = { shareBook = null },
         )
     }
-}
-
-private fun continueItemKey(item: HomeViewModel.ContinueItem): String = when (item) {
-    is HomeViewModel.ContinueItem.Book -> "book:${item.book.id}"
-    is HomeViewModel.ContinueItem.Episode -> "ep:${item.sourceType}:${item.sourceRef}:${item.episode.id}"
 }
