@@ -123,11 +123,20 @@ internal fun ImportStatusCard(
             importState.progress ?: -1f,
             "Zrušit" to onCancel,
         )
-        is AudiotekaImporter.State.Importing -> Triple(
-            "Nahrávám do knihovny ${importState.target.libraryName}…",
-            upload.progress.takeIf { upload.uploadId == importState.uploadId && it > 0f } ?: -1f,
-            null,
-        )
+        is AudiotekaImporter.State.Importing -> {
+            val mine = upload.uploadId == importState.uploadId
+            // User 2026-11-19 16:25 („visí to nekonečně?“): po odeslání všech dat server ještě až ~45 s ukládá knihu
+            // do knihovny a dohledává údaje → jiný text a neurčitý průběh, ať pruh na 100 % nevypadá zaseklý.
+            if (mine && upload.progress >= 0.999f) Triple(
+                "Soubory odeslané, server ukládá knihu do knihovny ${importState.target.libraryName} (do minuty)…",
+                -1f,
+                null,
+            ) else Triple(
+                "Nahrávám do knihovny ${importState.target.libraryName}…",
+                upload.progress.takeIf { mine && it > 0f } ?: -1f,
+                null,
+            )
+        }
         is AudiotekaImporter.State.Done -> Triple(
             "Hotovo, kniha je v knihovně ${importState.libraryName}. Najdeš ji ve Slovu mezi audioknihami.",
             null,

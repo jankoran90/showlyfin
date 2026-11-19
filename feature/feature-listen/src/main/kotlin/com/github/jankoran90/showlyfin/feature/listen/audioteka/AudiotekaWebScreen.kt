@@ -250,10 +250,13 @@ fun AudiotekaWebScreen(
             }
             if (onCheckout && !AudiotekaPrefs.webViewGooglePay(ctx)) {
                 PayInChromeBar(onPay = {
-                    // Chrome nemá košík ani přihlášení ze Slova (revize P1) → stránka knihy, odkud se koupí
-                    // na pár ťuknutí; bez známé knihy aspoň košík.
-                    val cur = viewModel.purchase.productSlug?.let { "https://audioteka.com/cz/audiokniha/$it/" }
-                        ?: webView.url ?: return@PayInChromeBar
+                    // User 2026-11-19 16:24: adresa platební stránky (brána PayU, objednávka s tokenem) v Chrome
+                    // funguje hned → tu otevřít. Košík Audioteky v Chrome prázdný (cookies Slova) → stránka knihy,
+                    // odkud se koupí na pár ťuknutí; bez známé knihy aspoň aktuální adresa.
+                    val now = webView.url
+                    val cur = now?.takeIf { isPaymentUrl(it) }
+                        ?: viewModel.purchase.productSlug?.let { "https://audioteka.com/cz/audiokniha/$it/" }
+                        ?: now ?: return@PayInChromeBar
                     if (openInChrome(ctx, cur)) {
                         paidOutside = true
                         viewModel.sendPurchaseLog("platba v Chrome")
@@ -302,7 +305,7 @@ private suspend fun autoDownload(
 ): Boolean {
     fun started() = state().let { it is AudiotekaImporter.State.Downloading || it is AudiotekaImporter.State.Importing }
     var last = ""
-    repeat(10) {
+    repeat(20) {
         delay(1500)
         if (started()) return true
         val raw = view.evalJs(AudiotekaPurchaseFlow.clickDownloadJs(vm.purchase.productSlug, vm.hints(null, null).title))
@@ -324,6 +327,15 @@ private suspend fun autoDownload(
 
 private suspend fun WebView.evalJs(js: String): String = suspendCancellableCoroutine { c ->
     evaluateJavascript(js) { r -> if (c.isActive) c.resume(r.orEmpty()) }
+}
+
+/** Platební stránka, která nese objednávku sama v adrese: cizí brána (PayU…) nebo platba / objednávka Audioteky. */
+private fun isPaymentUrl(url: String): Boolean {
+    val u = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+    val host = u.host.orEmpty()
+    if (host.isNotBlank() && !host.endsWith("audioteka.com")) return true
+    val path = u.path.orEmpty()
+    return Regex("platb|payment|objednavk|order").containsMatchIn(path) && !Regex("kosik|cart").containsMatchIn(path)
 }
 
 /** Otevře adresu v Chrome (Google Pay tam jde); bez Chrome ve výchozím prohlížeči. */

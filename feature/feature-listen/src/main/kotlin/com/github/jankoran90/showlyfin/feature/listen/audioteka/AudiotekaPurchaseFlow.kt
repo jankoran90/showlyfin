@@ -64,7 +64,10 @@ class AudiotekaPurchaseFlow {
     /** Jsi na stránce košíku / pokladny Audioteky (nabídnout zaplacení v Chrome). */
     fun isCheckoutPage(url: String): Boolean {
         val u = runCatching { Uri.parse(url) }.getOrNull() ?: return false
-        return u.host.orEmpty().endsWith("audioteka.com") && CHECKOUT.containsMatchIn(u.path.orEmpty().lowercase())
+        val host = u.host.orEmpty()
+        // 1.0.109: i platební brána (PayU…) během nákupu — její adresa v Chrome platbu rovnou připraví.
+        if (checkoutSeen && host.isNotEmpty() && !host.endsWith("audioteka.com")) return true
+        return host.endsWith("audioteka.com") && CHECKOUT.containsMatchIn(u.path.orEmpty().lowercase())
     }
 
     /** Platba proběhla mimo Slovo (Chrome): po návratu čekat knihu v Poličce. */
@@ -89,7 +92,14 @@ class AudiotekaPurchaseFlow {
             (function(slug, title){
               function norm(s){return (s||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
               var t = norm(title);
-              function dl(el){ var x = norm(el.innerText||el.textContent); return x.indexOf('stahnout')===0 && x.length<30 && x.indexOf('mp3')<0; }
+              // 1.0.109: tlačítko bývá jen ikona (text v aria-label / title) nebo má v atributech „download“.
+              function lab(el){ return norm((el.innerText||el.textContent||'')+' '+(el.getAttribute('aria-label')||'')+' '+(el.getAttribute('title')||'')); }
+              function attrs(el){ return ((el.className&&el.className.baseVal!==undefined?el.className.baseVal:el.className)||'')+' '+(el.getAttribute('data-testid')||'')+' '+(el.getAttribute('href')||''); }
+              function dl(el){
+                var x = lab(el);
+                if (x.indexOf('mp3')>=0 || x.length>=40) return false;
+                return x.indexOf('stahnout')>=0 || /download|stahn/i.test(attrs(el));
+              }
               var all = Array.prototype.slice.call(document.querySelectorAll('button,a,[role=button]'));
               var btns = all.filter(dl);
               var items = [];
@@ -106,7 +116,12 @@ class AudiotekaPurchaseFlow {
                   if (d===4) items.push(txt.substring(0,60));
                 }
               }
-              return JSON.stringify({ok:false, buttons: btns.length, items: items.slice(0,8), url: location.pathname});
+              // Diagnostika pro doladění: popisky a atributy tlačítek, odkazy na knihy.
+              var diag = all.slice(0,400).map(function(el){ return (lab(el)+' | '+attrs(el)).substring(0,70); })
+                .filter(function(x){ return x.replace(/[ |]/g,'').length>0; }).slice(0,25);
+              var books = Array.prototype.slice.call(document.querySelectorAll('a[href*="/audiokniha/"]')).length;
+              return JSON.stringify({ok:false, buttons: btns.length, items: items.slice(0,8), url: location.pathname,
+                ready: document.readyState, books: books, all: all.length, diag: diag});
             })(${JSONObject.quote(slug.orEmpty())}, ${JSONObject.quote(title.orEmpty())})
         """.trimIndent()
 
