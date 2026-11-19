@@ -59,7 +59,8 @@ internal fun groupHomeItems(items: List<ContinueItem>, enabled: Boolean): List<H
 }
 
 private fun groupKeyOf(item: ContinueItem): String? = when (item) {
-    is ContinueItem.Book -> seriesBase(item.book.seriesName)?.lowercase()?.let { "series:$it" }
+    // Revize: stejný název série v jiné knihovně = jiná série (nesloučit).
+    is ContinueItem.Book -> seriesBase(item.book.seriesName)?.lowercase()?.let { "series:${item.book.libraryId}:$it" }
     // Starší YouTube díl bez zdroje (sourceRef "") nesdružovat — nevím, ke kterému pořadu patří.
     is ContinueItem.Episode -> item.sourceRef.takeIf { it.isNotBlank() }?.let { "show:${item.sourceType}:$it" }
 }

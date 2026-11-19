@@ -114,6 +114,7 @@ fun HomeScreen(
                                     layout = layout,
                                     latestLoaded = latestLoaded,
                                     playing = latestLoaded && playerState.isPlaying,
+                                    playerState = playerState,
                                     onToggle = {
                                         expandedGroups = if (expanded) expandedGroups - entry.key else expandedGroups + entry.key
                                     },

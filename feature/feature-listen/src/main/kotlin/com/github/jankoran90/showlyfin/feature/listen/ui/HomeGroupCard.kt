@@ -29,6 +29,7 @@ import com.github.jankoran90.showlyfin.core.ui.CoverCard
 import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import com.github.jankoran90.showlyfin.feature.listen.HomeLayout
 import com.github.jankoran90.showlyfin.feature.listen.HomeViewModel.ContinueItem
+import com.github.jankoran90.showlyfin.feature.listen.player.PlayerState
 
 /**
  * Hlavní karta skupiny rozposlouchaných ([HomeEntry.Group]): obrázek série / pořadu, počet rozposlouchaných a
@@ -42,6 +43,7 @@ internal fun HomeGroupCard(
     /** Naposled poslouchaná položka skupiny je načtená v přehrávači. */
     latestLoaded: Boolean,
     playing: Boolean,
+    playerState: PlayerState,
     onToggle: () -> Unit,
     onPlayPause: () -> Unit,
 ) {
@@ -51,10 +53,15 @@ internal fun HomeGroupCard(
         is ContinueItem.Book -> l.book.title
         is ContinueItem.Episode -> l.episode.title
     }
-    val progress = when (val l = group.latest) {
-        is ContinueItem.Book -> l.book.progress.toFloat()
-        is ContinueItem.Episode -> l.progress
+    // Revize: čas a živý průběh jako u samostatné karty (hrající položka = pozice z přehrávače).
+    val live = latestLoaded && playerState.isPlaying && playerState.durationMs > 0
+    val (savedPos, savedDur, savedProgress) = when (val l = group.latest) {
+        is ContinueItem.Book -> Triple((l.book.currentTimeSec * 1000).toLong(), (l.book.durationSec * 1000).toLong(), l.book.progress.toFloat())
+        is ContinueItem.Episode -> Triple(l.posMs, l.durMs, l.progress)
     }
+    val posMs = if (live) playerState.positionMs else savedPos
+    val durMs = if (live) playerState.durationMs else savedDur
+    val progress = if (live) playerState.positionMs.toFloat() / playerState.durationMs else savedProgress
     val placeholder = if (group.isBooks) Icons.Default.Headphones else Icons.Default.Podcasts
     if (layout.list) Column {
         HomeListCard(
@@ -64,8 +71,8 @@ internal fun HomeGroupCard(
             imageUrl = group.imageUrl,
             wideImage = group.wideImage,
             progress = progress,
-            posMs = 0L,
-            durMs = 0L,
+            posMs = posMs,
+            durMs = durMs,
             layout = layout,
             placeholder = placeholder,
             onClick = onToggle,
