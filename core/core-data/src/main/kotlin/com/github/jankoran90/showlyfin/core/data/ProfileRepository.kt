@@ -47,6 +47,7 @@ class ProfileRepository @Inject constructor(
 ) {
     /** Serializuje úpravy configu (čti-uprav-zapiš-odešli), viz [updateConfig]. */
     private val configEditMutex = Mutex()
+    private val pendingEdits = PendingConfigEdits(prefs)
 
     /**
      * Klíč profilu pro backend (Plan PROFILES Fáze 4E) = **`jellyfinUserId`** (prefer) → stabilní
@@ -331,28 +332,46 @@ class ProfileRepository @Inject constructor(
         // souběžné úpravy by jinak stáhly stejný základ a druhá by tu první smazala (revize Codex+Claude).
         // Podmíněná úprava (IfChanged) ověřuje serverovou verzi VŽDY — i u aktivního profilu (kiosek g32 má
         // trvale aktivní Děti; oprava jejich whitelistu se jinak na server nikdy nedostane).
-        val canPush = refreshBeforeEdit(profileId, force = !pushIfUnchanged)
+        val baseline = refreshBeforeEdit(profileId, force = !pushIfUnchanged)
         val profile = dao.getById(profileId) ?: return@withLock
+        val key = profile.backendKey()
         val newOverride = transform(ProfileConfig.fromJson(profile.configJson))
         val newJson = ProfileConfig.toJson(newOverride)
-        if (!pushIfUnchanged && newJson == ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson))) return@withLock
-        dao.update(profile.copy(configJson = newJson))
-        val updated = dao.getById(profileId)
-        if (_activeProfile.value?.id == profileId && updated != null) {
-            val effective = effectiveConfigFor(updated)
-            // Applier PŘED publikací configu — observeři (ListenViewModel…) čtou kanonické prefs,
-            // takže je musí applier stihnout zapsat dřív, než je emise configu probudí.
-            configApplier.apply(effective, updated.id, updated.isChildAgeRating())
-            // Profil i config JEDNÍM zápisem — viz [activeProfileWithConfig].
-            publishActive(updated, effective)
+        val unchanged = newJson == ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson))
+        if (!pushIfUnchanged && unchanged) {
+            // Vynucené stažení mohlo změnit DB aktivního profilu → promítni i bez vlastní změny (revize).
+            if (baseline == EditBaseline.REFRESHED) republishIfActive(profileId)
+            return@withLock
         }
-        if (!canPush) {
-            Timber.w("[PUSH] updateConfig '${profile.backendKey()}': neaktivní profil bez ověřené serverové verze — jen místně")
+        dao.update(profile.copy(configJson = newJson))
+        republishIfActive(profileId)
+        if (baseline == EditBaseline.UNVERIFIED) {
+            // Bez ověřené serverové verze: celou kopii NEODESÍLAT, ale úpravu nezahodit — zapamatuj si rozdíl,
+            // při příštím úspěšném stažení se přenese na serverovou verzi ([PendingConfigEdits]).
+            Timber.w("[PUSH] updateConfig '$key': neaktivní profil bez ověřené serverové verze — rozdíl čeká na sloučení")
+            pendingEdits.record(key, profile.configJson ?: "{}", newJson)
             return@withLock
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
-        Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
-        pushConfigTracked(profile, newJson)
+        Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='$key'")
+        if (withTimeoutOrNull(15_000) { pushConfigTracked(profile, newJson) } == null) markUnpushed(key)
+    }
+
+    private enum class EditBaseline { LOCAL_OK, REFRESHED, UNVERIFIED }
+
+    /** Re-aplikuje efektivní config, je-li profil aktivní (applier PŘED publikací — viz [publishActive]). */
+    private suspend fun republishIfActive(profileId: Long) {
+        val updated = dao.getById(profileId) ?: return
+        if (_activeProfile.value?.id != profileId) return
+        val effective = effectiveConfigFor(updated)
+        // Applier PŘED publikací configu — observeři (ListenViewModel…) čtou kanonické prefs.
+        configApplier.apply(effective, updated.id, updated.isChildAgeRating())
+        publishActive(updated, effective)   // profil i config JEDNÍM zápisem
+    }
+
+    private fun markUnpushed(key: String) {
+        val s = unpushedConfigKeys().toMutableSet()
+        if (s.add(key)) prefs.edit().putStringSet(PREF_UNPUSHED_CONFIG_KEYS, s).apply()
     }
 
     /** Aktivní profil — i při studeném startu, kdy [_activeProfile] je do `restoreActive` ještě null. */
@@ -362,27 +381,25 @@ class ProfileRepository @Inject constructor(
 
     /**
      * Viz [updateConfig] — převezme serverový config neaktivního profilu (s [force] i aktivního) před úpravou
-     * (5 s). Vrací, jestli se výsledek smí odeslat: aktivní profil bez [force] a neodeslaná místní změna ano
-     * (jako dřív); jinak jen po úspěšném stažení, nebo když server profil vůbec nezná (nový profil).
+     * (5 s), včetně dřív zapamatovaného nepotvrzeného rozdílu. LOCAL_OK = místní kopie platí (aktivní profil,
+     * neodeslaná místní změna — jako dřív); REFRESHED = postaveno na serverové verzi; UNVERIFIED = server
+     * nedostupný / chyba / profil nezná (null z fetchConfig nerozliší 404 od výpadku → nic se neodešle).
      */
-    private suspend fun refreshBeforeEdit(profileId: Long, force: Boolean): Boolean {
-        if (!force && isActiveProfileId(profileId)) return true
-        val profile = dao.getById(profileId) ?: return true
+    private suspend fun refreshBeforeEdit(profileId: Long, force: Boolean): EditBaseline {
+        if (!force && isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
+        val profile = dao.getById(profileId) ?: return EditBaseline.LOCAL_OK
         val key = profile.backendKey()
-        if (key in unpushedConfigKeys()) return true
-        if (!configGateway.isAvailable()) return false
+        if (key in unpushedConfigKeys()) return EditBaseline.LOCAL_OK
+        if (!configGateway.isAvailable()) return EditBaseline.UNVERIFIED
         val remote = withTimeoutOrNull(5000) { configGateway.fetchConfig(key) }?.takeIf { it.isNotBlank() }
-        if (remote == null) {
-            val metas = withTimeoutOrNull(5000) { configGateway.fetchAllProfiles() } ?: return false
-            return metas.none { it.key.ifBlank { it.jellyfinUserId } == key }
-        }
-        val current = dao.getById(profileId) ?: return true
-        val canonical = mergeRemoteConfig(current.configJson, remote)
+            ?: return EditBaseline.UNVERIFIED
+        val current = dao.getById(profileId) ?: return EditBaseline.LOCAL_OK
+        val canonical = mergeRemoteConfig(current.configJson, pendingEdits.applyOnto(key, remote))
         if (canonical != current.configJson) {
-            Timber.i("[PUSH] před úpravou neaktivního profilu '$key' převzat config ze serveru")
+            Timber.i("[PUSH] před úpravou profilu '$key' převzat config ze serveru")
             dao.update(current.copy(configJson = canonical))
         }
-        return true
+        return EditBaseline.REFRESHED
     }
 
     /**
@@ -419,6 +436,8 @@ class ProfileRepository @Inject constructor(
         val unpushed = unpushedConfigKeys().toMutableSet()
         val changed = if (synced) unpushed.remove(key) else unpushed.add(key)
         if (changed) prefs.edit().putStringSet(PREF_UNPUSHED_CONFIG_KEYS, unpushed).apply()
+        // Server má poslední místní verzi → nepotvrzený rozdíl (PendingConfigEdits) je v ní obsažený.
+        if (synced) pendingEdits.clear(key)
         if (!ok) Timber.w("[PUSH] config '$key' neodeslán — lokální změna drží, odešle se při příštím syncu")
     }
 
@@ -713,23 +732,8 @@ class ProfileRepository @Inject constructor(
         // pošli; dokud neprojde, server NEstahuj (přepsal by ji starším stavem). Po úspěšném odeslání
         // stáhni výsledek: server slučuje a některá pole chrání (2026-11-03: vlastní ABS účet Dětí
         // nepřepíše stará místní kopie s účtem dospělého) → místní kopie musí převzít jeho verzi.
-        val remoteJson = if (profile.backendKey() in unpushedConfigKeys()) {
-            val local = dao.getById(profile.id) ?: profile
-            // Timeout jako u stahování — přepnutí profilu nesmí viset minuty; při timeoutu příznak zůstává.
-            withTimeoutOrNull(5000) { pushConfigTracked(local, local.configJson ?: "{}") }
-            if (profile.backendKey() in unpushedConfigKeys()) null
-            else withTimeoutOrNull(5000) { configGateway.fetchConfig(profile.backendKey()) }
-        } else withTimeoutOrNull(5000) {
-            configGateway.fetchConfig(profile.backendKey())
-        }?.takeIf { it.isNotBlank() }
-        if (remoteJson != null) {
-            val current = dao.getById(profile.id) ?: profile
-            val canonical = mergeRemoteConfig(current.configJson, remoteJson)
-            if (canonical != current.configJson) {
-                dao.update(current.copy(configJson = canonical))
-                changed = true
-            }
-        }
+        // Pod zámkem úprav: čti-sluč-zapiš nesmí proběhnout uprostřed souběžného updateConfig (revize 2026-11-19).
+        if (configEditMutex.withLock { syncConfigBundleLocked(profile) }) changed = true
 
         // 4. Re-aplikuj efektivní config, je-li profil aktivní a něco se změnilo.
         if (changed && _activeProfile.value?.id == profile.id) {
@@ -740,6 +744,32 @@ class ProfileRepository @Inject constructor(
                 publishActive(updated, effective)   // profil i config JEDNÍM zápisem
             }
         }
+    }
+
+    /** Krok 3 [syncConfigFromBackend] (volat pod [configEditMutex]); true = místní config se změnil. */
+    private suspend fun syncConfigBundleLocked(profile: ProfileEntity): Boolean {
+        val key = profile.backendKey()
+        val remoteJson = if (key in unpushedConfigKeys()) {
+            val local = dao.getById(profile.id) ?: profile
+            // Timeout jako u stahování — přepnutí profilu nesmí viset minuty; při timeoutu příznak zůstává.
+            withTimeoutOrNull(5000) { pushConfigTracked(local, local.configJson ?: "{}") }
+            if (profile.backendKey() in unpushedConfigKeys()) null
+            else withTimeoutOrNull(5000) { configGateway.fetchConfig(profile.backendKey()) }
+        } else withTimeoutOrNull(5000) {
+            configGateway.fetchConfig(profile.backendKey())
+        }?.takeIf { it.isNotBlank() } ?: return false
+        // Nepotvrzený rozdíl z úpravy bez spojení (viz [PendingConfigEdits]) přenes na serverovou verzi a odešli.
+        val hadPending = pendingEdits.has(key)
+        val current = dao.getById(profile.id) ?: profile
+        val canonical = mergeRemoteConfig(current.configJson, pendingEdits.applyOnto(key, remoteJson))
+        val changedLocal = canonical != current.configJson
+        if (changedLocal) dao.update(current.copy(configJson = canonical))
+        if (hadPending) {
+            Timber.i("[PUSH] sync '$key': čekající rozdíl sloučen se serverovou verzí → odesílám")
+            val fresh = dao.getById(profile.id) ?: current.copy(configJson = canonical)
+            if (withTimeoutOrNull(15_000) { pushConfigTracked(fresh, canonical) } == null) markUnpushed(key)
+        }
+        return changedLocal
     }
 
     suspend fun restoreActive(preferTv: Boolean = false) {
