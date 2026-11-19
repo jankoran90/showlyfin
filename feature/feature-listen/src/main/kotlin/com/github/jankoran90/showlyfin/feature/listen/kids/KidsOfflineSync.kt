@@ -434,6 +434,14 @@ class KidsOfflineSync @Inject constructor(
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
                     if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) onMeteredNetwork()
                 }
+
+                // Tester 2026-11-19 (P1): Wi-Fi spadla úplně → běžící stažení selžou dřív, než přijde „měřená síť“;
+                // průchod se pak musí naplánovat na návrat Wi-Fi (selhaná stažení zařadí znovu).
+                override fun onLost(network: Network) {
+                    if (autoQueued.isNotEmpty() && profiles.activeProfile.value?.isAdmin == false) {
+                        KidsOfflineSyncWorker.runWhenOnWifi(context)
+                    }
+                }
             })
             networkWatch = true
         }.onFailure { Timber.w(it, "[kids-sync] hlídání sítě nešlo zapnout") }
@@ -464,10 +472,10 @@ class KidsOfflineSync @Inject constructor(
             }
             autoQueued.remove(k)
         }
-        if (cancelled > 0) {
-            Timber.i("[kids-sync] mobilní data → zrušeno $cancelled stahování, dokončí se na Wi-Fi")
-            KidsOfflineSyncWorker.runWhenOnWifi(context)
-        }
+        // Tester 2026-11-19 (P1): i když už nic neběželo (stažení při přechodu sítě selhala dřív, než se dala
+        // zrušit), průchod se na Wi-Fi zopakuje — selhaná zařadí znovu, dítě nezůstane u seznamu chyb.
+        Timber.i("[kids-sync] mobilní data → zrušeno $cancelled stahování, dokončí se na Wi-Fi")
+        KidsOfflineSyncWorker.runWhenOnWifi(context)
     }
 
     private fun isStillDownloading(k: String): Boolean {
