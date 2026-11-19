@@ -349,7 +349,8 @@ class ProfileRepository @Inject constructor(
             // Bez ověřené serverové verze: celou kopii NEODESÍLAT, ale úpravu nezahodit — zapamatuj si rozdíl,
             // při příštím úspěšném stažení se přenese na serverovou verzi ([PendingConfigEdits]).
             Timber.w("[PUSH] updateConfig '$key': neaktivní profil bez ověřené serverové verze — rozdíl čeká na sloučení")
-            pendingEdits.record(key, profile.configJson ?: "{}", newJson)
+            // Base kanonicky (výchozí hodnoty doplněné) — jinak by chybějící pole vypadala jako „moje změna" (revize).
+            pendingEdits.record(key, ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson)), newJson)
             return@withLock
         }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
@@ -386,13 +387,24 @@ class ProfileRepository @Inject constructor(
      * nedostupný / chyba / profil nezná (null z fetchConfig nerozliší 404 od výpadku → nic se neodešle).
      */
     private suspend fun refreshBeforeEdit(profileId: Long, force: Boolean): EditBaseline {
-        if (!force && isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
         val profile = dao.getById(profileId) ?: return EditBaseline.LOCAL_OK
         val key = profile.backendKey()
-        if (key in unpushedConfigKeys()) return EditBaseline.LOCAL_OK
+        // Místní kopie platí jen u profilu, který se na tomhle zařízení aspoň jednou ověřil se serverem
+        // (pahýl čerstvé instalace po neúspěšném stažení při aktivaci NE) a nemá čekající rozdíl (revize).
+        val verified = pendingEdits.isVerified(key) && !pendingEdits.has(key)
+        if (!force && verified && isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
+        // Neodeslaná místní změna má přednost jen na ověřené kopii (starý příznak z ≤ 1.0.105 nad pahýlem ne).
+        if (verified && key in unpushedConfigKeys()) return EditBaseline.LOCAL_OK
         if (!configGateway.isAvailable()) return EditBaseline.UNVERIFIED
         val remote = withTimeoutOrNull(5000) { configGateway.fetchConfig(key) }?.takeIf { it.isNotBlank() }
-            ?: return EditBaseline.UNVERIFIED
+        if (remote == null) {
+            // Server profil prokazatelně nezná (seznam profilů stažen úspěšně, klíč v něm není) → nový profil,
+            // není co přepsat; při chybě serveru vrací gateway null → UNVERIFIED (revize: chyba ≠ prázdný seznam).
+            return if (withTimeoutOrNull(5000) { configGateway.profileExistsOnServer(key) } == false) {
+                EditBaseline.REFRESHED
+            } else EditBaseline.UNVERIFIED
+        }
+        pendingEdits.markVerified(key)
         val current = dao.getById(profileId) ?: return EditBaseline.LOCAL_OK
         val canonical = mergeRemoteConfig(current.configJson, pendingEdits.applyOnto(key, remote))
         if (canonical != current.configJson) {
@@ -437,7 +449,7 @@ class ProfileRepository @Inject constructor(
         val changed = if (synced) unpushed.remove(key) else unpushed.add(key)
         if (changed) prefs.edit().putStringSet(PREF_UNPUSHED_CONFIG_KEYS, unpushed).apply()
         // Server má poslední místní verzi → nepotvrzený rozdíl (PendingConfigEdits) je v ní obsažený.
-        if (synced) pendingEdits.clear(key)
+        if (synced) { pendingEdits.clear(key); pendingEdits.markVerified(key) }
         if (!ok) Timber.w("[PUSH] config '$key' neodeslán — lokální změna drží, odešle se při příštím syncu")
     }
 
@@ -749,7 +761,7 @@ class ProfileRepository @Inject constructor(
     /** Krok 3 [syncConfigFromBackend] (volat pod [configEditMutex]); true = místní config se změnil. */
     private suspend fun syncConfigBundleLocked(profile: ProfileEntity): Boolean {
         val key = profile.backendKey()
-        val remoteJson = if (key in unpushedConfigKeys()) {
+        val remoteJson = if (key in unpushedConfigKeys() && pendingEdits.isVerified(key)) {
             val local = dao.getById(profile.id) ?: profile
             // Timeout jako u stahování — přepnutí profilu nesmí viset minuty; při timeoutu příznak zůstává.
             withTimeoutOrNull(5000) { pushConfigTracked(local, local.configJson ?: "{}") }
@@ -759,6 +771,7 @@ class ProfileRepository @Inject constructor(
             configGateway.fetchConfig(profile.backendKey())
         }?.takeIf { it.isNotBlank() }
         if (remoteJson == null) return false
+        pendingEdits.markVerified(key)
         // Nepotvrzený rozdíl z úpravy bez spojení (viz [PendingConfigEdits]) přenes na serverovou verzi a odešli.
         val hadPending = pendingEdits.has(key)
         val current = dao.getById(profile.id) ?: profile

@@ -101,6 +101,12 @@ interface ProfileConfigGateway {
     suspend fun fetchAllProfiles(): List<ProfileMeta>?
 
     /**
+     * Zná server profil [key]? true / false jen při ÚSPĚŠNÉ odpovědi serveru; null = nedostupné, chyba,
+     * nepřihlášeno (2026-11-19: chyba serveru se nesmí plést s „profil neexistuje" — jinak se pošle pahýl).
+     */
+    suspend fun profileExistsOnServer(key: String): Boolean? = null
+
+    /**
      * Uloží metadata + config balík profilu na backend. Selhání se nehází, ale vrací `false`
      * (2026-10-12: ProfileRepository si neodeslanou změnu pamatuje a příští sync ji pošle DŘÍV, než
      * by ji stažení staršího configu ze serveru přepsalo — tak se ztrácelo schválení obsahu dětem).

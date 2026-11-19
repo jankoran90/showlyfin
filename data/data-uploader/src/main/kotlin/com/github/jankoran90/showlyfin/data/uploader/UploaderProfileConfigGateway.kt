@@ -86,6 +86,23 @@ internal class UploaderProfileConfigGateway @Inject constructor(
         }.onFailure { Timber.w(it, "[GATEKEY] fetchAllProfiles selhal") }.getOrNull()
     }
 
+    override suspend fun profileExistsOnServer(key: String): Boolean? {
+        if (!isAvailable() || key.isBlank()) return null
+        return runCatching {
+            // getProfilesMeta vrací null na JAKOUKOLI chybu → null (neznámo), ne prázdný seznam.
+            val raw = remote.getProfilesMeta(baseUrl(), cookie()) ?: return@runCatching null
+            // Server páruje klíč i podle jellyfinUserId a normalizace (bez pomlček, malá písmena) → porovnávej
+            // stejně volně; omylem „neexistuje" by znamenalo přepsání existujícího profilu pahýlem.
+            fun norm(s: String?) = s.orEmpty().replace("-", "").lowercase()
+            val k = norm(key)
+            JsonParser.parseString(raw).asJsonArray.any { el ->
+                val o = el.asJsonObject
+                fun str(f: String): String? = o.get(f)?.takeIf { !it.isJsonNull }?.asString
+                norm(str("key")) == k || norm(str("jellyfinUserId")) == k
+            }
+        }.onFailure { Timber.w(it, "[Profiles] profileExistsOnServer($key) selhal") }.getOrNull()
+    }
+
     override suspend fun pushConfig(key: String, json: String, name: String, isAdmin: Boolean, jellyfinUserId: String, maxAgeRating: String?): Boolean {
         Timber.i("[PUSH] gw.pushConfig key='$key' avail=${isAvailable()} url='${baseUrl()}' cookie=${cookie().isNotBlank()}")
         if (!isAvailable() || key.isBlank()) { Timber.w("[PUSH] gw.pushConfig SKIP (avail/key) '$key'"); return false }

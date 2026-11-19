@@ -21,6 +21,14 @@ internal class PendingConfigEdits(private val prefs: SharedPreferences) {
 
     fun has(key: String): Boolean = prefs.contains(prefKey(key))
 
+    /** Config profilu se na tomhle zařízení aspoň jednou úspěšně stáhl / odeslal — místní kopie není pahýl. */
+    fun isVerified(key: String): Boolean = key in prefs.getStringSet(PREF_VERIFIED, emptySet()).orEmpty()
+
+    fun markVerified(key: String) {
+        val s = prefs.getStringSet(PREF_VERIFIED, emptySet()).orEmpty()
+        if (key !in s) prefs.edit().putStringSet(PREF_VERIFIED, s + key).apply()
+    }
+
     /** Zaznamená úpravu: base zůstává z PRVNÍ nepotvrzené úpravy, mine se přepíše posledním stavem. */
     fun record(key: String, baseJson: String, mineJson: String) {
         val existingBase = read(key)?.get("base")
@@ -45,6 +53,10 @@ internal class PendingConfigEdits(private val prefs: SharedPreferences) {
     private fun read(key: String): JsonObject? =
         prefs.getString(prefKey(key), null)?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
 
+    private companion object {
+        const val PREF_VERIFIED = "profile_config_verified_keys"
+    }
+
     private fun parse(raw: String): JsonElement =
         runCatching { json.parseToJsonElement(raw.ifBlank { "{}" }) }.getOrDefault(JsonObject(emptyMap()))
 }
@@ -63,6 +75,8 @@ internal fun threeWayMerge(base: JsonElement?, mine: JsonElement?, theirs: JsonE
     }
     if (mine is JsonArray && theirs is JsonArray) {
         val b = (base as? JsonArray)?.toList().orEmpty()
+        // Jen změna pořadí (stejné položky) → pořadí je moje změna, vyhrává celé (revize: jinak by zmizela).
+        if (mine.toSet() == b.toSet()) return mine
         val added = mine.filter { it !in b }
         val removed = b.filter { it !in mine }
         return JsonArray(theirs.filter { it !in removed } + added.filter { it !in theirs })
