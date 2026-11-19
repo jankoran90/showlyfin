@@ -53,7 +53,12 @@ object KidsAutoDownloadPrefs {
 
     /** Klíče: `o:<klíč stažení>` (vlastní zdroje), `a:<id epizody>` (ABS podcast), `b:<id knihy>`. */
     fun adopted(context: Context): Set<String> = sp(context).getStringSet(KEY_ADOPTED, emptySet()).orEmpty().toSet()
-    fun setAdopted(context: Context, keys: Set<String>) = sp(context).edit().putStringSet(KEY_ADOPTED, keys).apply()
+    /** Změna evidence jako rozdíl pod zámkem (průchod samostahování a ruční stažení se nepřepíšou). */
+    @Synchronized
+    fun applyAdoptedDelta(context: Context, added: Set<String>, removed: Set<String>) {
+        if (added.isEmpty() && removed.isEmpty()) return
+        sp(context).edit().putStringSet(KEY_ADOPTED, (adopted(context) - removed) + added).commit()
+    }
 
     /** Knihovny, které kdy byly dětské (odebere-li rodič celou knihovnu, její adoptované knihy se smažou). */
     fun managedLibraries(context: Context): Set<String> = sp(context).getStringSet(KEY_LIBS, emptySet()).orEmpty().toSet()
