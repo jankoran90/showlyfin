@@ -43,7 +43,11 @@ class AudiobookPlayerViewModel @Inject constructor(
     private val videoResumeStore: VideoResumeStore,
     @Named("traktPreferences") private val prefs: SharedPreferences,
     private val sourcesRepo: com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository,
+    kidsQueueGuard: com.github.jankoran90.showlyfin.feature.listen.kids.KidsQueueGuard,
 ) : ViewModel() {
+
+    // Tester 2026-11-19: odebraný díl Dětí z fronty / mini-přehrávače (hlídač je singleton, start jen jednou).
+    init { kidsQueueGuard.start() }
 
     val state = connection.state
     val chapters = connection.chapters

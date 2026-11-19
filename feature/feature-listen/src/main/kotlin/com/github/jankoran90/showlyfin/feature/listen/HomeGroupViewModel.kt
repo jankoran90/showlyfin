@@ -8,6 +8,7 @@ import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
 import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 import com.github.jankoran90.showlyfin.feature.listen.HomeViewModel.ContinueItem
+import com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore
 import com.github.jankoran90.showlyfin.feature.listen.player.SeriesRuleStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +26,11 @@ class HomeGroupViewModel @Inject constructor(
     private val abs: AbsRepository,
     private val sourcesRepo: PodcastSourcesRepository,
     private val ruleStore: SeriesRuleStore,
+    resumeStore: DirectResumeStore,
 ) : ViewModel() {
+
+    /** Pozice direct dílů (`rss:`/`yt:`/`ctv:`) → v pruhu fajfka u dohraných (tester 2026-11-19). */
+    val resumeMarks = resumeStore.marks
 
     sealed interface Entry {
         data class Listened(val item: ContinueItem) : Entry

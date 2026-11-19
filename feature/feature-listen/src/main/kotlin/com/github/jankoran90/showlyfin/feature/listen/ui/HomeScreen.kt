@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import com.github.jankoran90.showlyfin.feature.listen.HomeGroupViewModel
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
@@ -92,9 +93,25 @@ fun HomeScreen(
                     onShareBook = { shareBook = it }, onShareEpisode = { shareEpisode = it },
                 )
               }
+              // Rozbalená skupina (pruh v [HomeGroupPanel]) = dlaždice i v seznamu → rozposlouchaná kniha v ní taky.
+              val tileLayout = remember(layout) { layout.copy(list = false) }
+              val tileCard: @Composable (HomeViewModel.ContinueItem) -> Unit = { item ->
+                HomeContinueItemCard(
+                    item = item, vm = vm, playerVm = playerVm, bookVm = bookVm, playerState = playerState,
+                    layout = tileLayout, seriesRules = seriesRules, otherAdultProfiles = otherAdultProfiles,
+                    kidsLibraryIds = kidsLibraryIds, onOpenBook = onOpenBook, onOpenSourceEpisode = onOpenSourceEpisode,
+                    onPlayVideo = onPlayVideo, onPlayJfVideo = onPlayJfVideo,
+                    onShareBook = { shareBook = it }, onShareEpisode = { shareEpisode = it },
+                )
+              }
+              BoxWithConstraints(Modifier.fillMaxSize()) {
+              // Stejný počet sloupců jako dřív GridCells.Adaptive(150.dp) (okraje 2×12, mezera 8) — známe ho kvůli
+              // [orderForGrid] (rozbalený pruh nesmí nechat prázdnou půlku řady).
+              val columns = if (layout.list) 1 else ((maxWidth - 24.dp + 8.dp) / (150.dp + 8.dp)).toInt().coerceAtLeast(1)
+              val shown = remember(entries, expandedGroups, columns) { orderForGrid(entries, expandedGroups, columns) }
               LazyVerticalGrid(
                 // User (2026-09-29) — Nastavení → Zobrazení Domů: mřížka (default) nebo jeden sloupec.
-                columns = if (layout.list) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 150.dp),
+                columns = GridCells.Fixed(columns),
                 modifier = Modifier.fillMaxSize(),
                 // BUG (2026-09-29, user screenshot): bez spodní rezervy poslední řada zůstala napořád
                 // schovaná pod mini-playerem — 96.dp stejně jako YoutubeChannelScreen aj.
@@ -102,7 +119,7 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(if (layout.list) 18.dp else 14.dp),
             ) {
-                entries.forEach { entry ->
+                shown.forEach { entry ->
                     when (entry) {
                         is HomeEntry.Single -> item(key = entry.key) { card(entry.item) }
                         is HomeEntry.Group -> {
@@ -114,7 +131,7 @@ fun HomeScreen(
                                     group = entry,
                                     layout = layout,
                                     onCollapse = { expandedGroups = expandedGroups - entry.key },
-                                    child = card,
+                                    child = tileCard,
                                     other = { e ->
                                         when (e) {
                                             is HomeGroupViewModel.Entry.Episode -> ContinueEpisodeCard(
@@ -137,7 +154,7 @@ fun HomeScreen(
                                                         onOpenSourceEpisode(it.sourceType, it.sourceRef, it.sourceTitle, it.episode.resumeKey ?: it.episode.id)
                                                     },
                                                 )
-                                                else -> card(it)
+                                                else -> tileCard(it)
                                             }
                                         }
                                     },
@@ -180,6 +197,7 @@ fun HomeScreen(
                         }
                     }
                 }
+              }
             }
             }
         }

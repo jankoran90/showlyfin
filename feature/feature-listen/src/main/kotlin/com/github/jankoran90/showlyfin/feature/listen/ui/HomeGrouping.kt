@@ -74,3 +74,26 @@ internal fun continueItemKey(item: ContinueItem): String = when (item) {
     is ContinueItem.Book -> "book:${item.book.id}"
     is ContinueItem.Episode -> "ep:${item.sourceType}:${item.sourceRef}:${item.episode.id}"
 }
+
+/**
+ * Tester 2026-11-19 („po rozbalení zůstane sousední karta sama v řádku“): rozbalená skupina je pruh přes celou
+ * šířku → kdyby začínal uprostřed řady mřížky, zbytek řady by zůstal prázdný. Pruh proto odsuneme až za konec
+ * rozpracované řady (doplní ji následující karty). [columns] = počet sloupců mřížky (1 = seznam, beze změny).
+ */
+internal fun orderForGrid(entries: List<HomeEntry>, expanded: Set<String>, columns: Int): List<HomeEntry> {
+    if (columns <= 1) return entries
+    val out = ArrayList<HomeEntry>(entries.size)
+    val pending = ArrayList<HomeEntry>()
+    var col = 0
+    for (e in entries) {
+        if (e is HomeEntry.Group && e.key in expanded) {
+            if (col == 0) out += e else pending += e
+            continue
+        }
+        out += e
+        col = (col + 1) % columns
+        if (col == 0 && pending.isNotEmpty()) { out += pending; pending.clear() }
+    }
+    out += pending
+    return out
+}

@@ -8,8 +8,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.border
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.LazyRow
@@ -25,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Headphones
@@ -183,6 +182,7 @@ internal fun HomeGroupPanel(
 ) {
     LaunchedEffect(group.key) { groupVm.load(group.key, group.items) }
     val full by groupVm.full.collectAsStateWithLifecycle()
+    val marks by groupVm.resumeMarks.collectAsStateWithLifecycle()
     val entries = full[group.key] ?: group.items.sortedBy { it.updatedAt }.map { HomeGroupViewModel.Entry.Listened(it) }
     val latestKey = continueItemKey(group.latest)
     val latestIndex = entries.indexOfFirst { it is HomeGroupViewModel.Entry.Listened && continueItemKey(it.item) == latestKey }
@@ -195,11 +195,29 @@ internal fun HomeGroupPanel(
     @Composable
     fun entryCard(e: HomeGroupViewModel.Entry, highlight: Boolean, mod: Modifier) {
         val hl = if (highlight) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier
+        val finished = when (e) {
+            is HomeGroupViewModel.Entry.Episode -> marks[e.episode.resumeKey ?: e.episode.id]?.isFinished == true
+            is HomeGroupViewModel.Entry.Book -> e.book.isFinished == true
+            is HomeGroupViewModel.Entry.Listened -> false
+        }
         Box(mod.then(hl)) {
             when (e) {
                 // Tester 2026-11-19: rozposlouchaný díl v pruhu stejným tvarem jako ostatní („7/12 název“), jen s průběhem.
                 is HomeGroupViewModel.Entry.Listened -> if (e.item is ContinueItem.Book) child(e.item) else other(e)
                 else -> other(e)
+            }
+            // Tester 2026-11-19: dohraný díl / kniha v pruhu = fajfka v rohu obalu.
+            if (finished) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Poslechnuto",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape)
+                        .size(22.dp),
+                )
             }
         }
     }
@@ -224,30 +242,18 @@ internal fun HomeGroupPanel(
         }
         val rowState = rememberLazyListState()
         LaunchedEffect(latestIndex, entries.size) {
-            if (latestIndex > 0) rowState.scrollToItem((latestIndex - if (layout.list) 0 else 1).coerceAtLeast(0))
+            if (latestIndex > 0) rowState.scrollToItem((latestIndex - 1).coerceAtLeast(0))
         }
-        if (layout.list) {
-            // Seznam: svislá řada v omezené výšce (celý pořad by jinak Domů nekonečně natáhl).
-            LazyColumn(
-                state = rowState,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                modifier = Modifier.heightIn(max = 520.dp),
-            ) {
-                itemsIndexed(entries, key = { i, e -> entryKey(e, i) }) { i, e ->
-                    entryCard(e, highlight = i == latestIndex, mod = Modifier.fillMaxWidth())
-                }
-            }
-        } else {
-            LazyRow(
-                state = rowState,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp),
-                modifier = Modifier.padding(top = 6.dp),
-            ) {
-                itemsIndexed(entries, key = { i, e -> entryKey(e, i) }) { i, e ->
-                    entryCard(e, highlight = i == latestIndex, mod = Modifier.width(160.dp))
-                }
+        // Tester 2026-11-19 + user 18:14: i v seznamu vodorovný pruh menších dlaždic (svislý seznam s obaly přes
+        // celou šířku pobral jen ~1,5 dílu). [layout] zatím jen pro budoucí odlišení.
+        LazyRow(
+            state = rowState,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp),
+            modifier = Modifier.padding(top = 6.dp),
+        ) {
+            itemsIndexed(entries, key = { i, e -> entryKey(e, i) }) { i, e ->
+                entryCard(e, highlight = i == latestIndex, mod = Modifier.width(if (layout.list) 150.dp else 160.dp))
             }
         }
     }

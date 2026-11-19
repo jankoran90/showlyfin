@@ -45,10 +45,13 @@ internal fun <T> SeriesBookGate(
     if (!layout.seriesAsBook) return false
     val groups = shelfItems.orEmpty().filterIsInstance<PodcastEpisodeSeriesGrouping.EpisodeShelfItem.SeriesGroup<T>>()
     var openedForHighlight by rememberSaveable { mutableStateOf(false) }
+    // Tester 2026-11-19: kniha otevřená kvůli dílu z Domů → Zpět vede rovnou zpět (ne na seznam pořadu, 2× Zpět).
+    var highlightSlug by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(highlightKey, groups) {
         if (!openedForHighlight && highlightKey != null) {
             groups.firstOrNull { g -> g.members.any { keyOf(it) == highlightKey } }?.let {
                 openSlug.value = it.slug
+                highlightSlug = it.slug
                 openedForHighlight = true
             }
         }
@@ -67,7 +70,7 @@ internal fun <T> SeriesBookGate(
         author = showTitle.takeIf { it != book.first },
         cover = chapters.firstOrNull()?.image,
         chapters = chapters,
-        onBack = if (openGroup != null) ({ openSlug.value = null }) else onBack,
+        onBack = if (openGroup != null && openGroup.slug != highlightSlug) ({ openSlug.value = null }) else onBack,
         onOpenAudioPlayer = onOpenAudioPlayer,
         wideCover = wideCover,
         highlightKey = highlightKey,
