@@ -93,7 +93,7 @@ class SlovoSettingsViewModel @Inject constructor(
                 profileRepository.getAll().firstOrNull { !it.isAdmin }?.let { kids ->
                     // Podmínka UVNITŘ transformace: updateConfig si config neaktivních Dětí nejdřív stáhne
                     // ze serveru (2026-11-19) → rozhoduje se nad čerstvým účtem Dětí, ne nad místním pahýlem.
-                    profileRepository.updateConfig(kids.id) { c ->
+                    profileRepository.updateConfigIfChanged(kids.id) { c ->
                         if (kidsInheritsAbs(c, activeUser)) c.copy(credentials = c.credentials.copy(abs = null)) else c
                     }
                 }
@@ -127,7 +127,7 @@ class SlovoSettingsViewModel @Inject constructor(
         if (active.isDefault) {
             profileRepository.getAll().firstOrNull { !it.isAdmin }?.let { kids ->
                 // Viz absLogout — rozhoduje se nad configem staženým ze serveru (vlastní účet Dětí maty).
-                profileRepository.updateConfig(kids.id) { c ->
+                profileRepository.updateConfigIfChanged(kids.id) { c ->
                     if (kidsInheritsAbs(c, previousUser ?: creds.username)) c.copy(credentials = c.credentials.copy(abs = creds)) else c
                 }
             }

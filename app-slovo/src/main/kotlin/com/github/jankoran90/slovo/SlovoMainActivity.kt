@@ -75,6 +75,8 @@ class SlovoMainActivity : ComponentActivity() {
             // Backend uploader login z build env PŘED aktivací profilu — nastaví `uploader_base_url`,
             // aby zdroje poslechu (podcasty/ČT/YouTube) naskočily. Idempotentní (isAvailable() guard).
             profileRepository.ensureUploaderLogin()
+            // Whitelist Dětí opravit i na serveru, dřív než restoreActive stáhne serverovou verzi (2026-11-19).
+            runCatching { slovoProfileManager.repairKidsLibrariesOnServer() }
             profileRepository.restoreActive(preferTv = false)
         }
 

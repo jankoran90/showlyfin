@@ -12,6 +12,8 @@ import com.github.jankoran90.showlyfin.core.domain.profile.ProfileSwitchSignal
 import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
 import com.github.jankoran90.showlyfin.core.domain.TraktCreds
 import timber.log.Timber
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +45,9 @@ class ProfileRepository @Inject constructor(
     private val configApplier: ProfileConfigApplier,
     private val configGateway: ProfileConfigGateway,
 ) {
+    /** Serializuje úpravy configu (čti-uprav-zapiš-odešli), viz [updateConfig]. */
+    private val configEditMutex = Mutex()
+
     /**
      * Klíč profilu pro backend (Plan PROFILES Fáze 4E) = **`jellyfinUserId`** (prefer) → stabilní
      * NAPŘÍČ ZAŘÍZENÍMI: stejný Jellyfin uživatel = stejný klíč na všech telefonech → config se stáhne
@@ -303,20 +308,34 @@ class ProfileRepository @Inject constructor(
      * config (šablona ⊕ override), je-li profil aktivní — zamčená pole tak zůstanou dle šablony i
      * kdyby override jejich hodnotu nesl (Plan WARDEN W0; tvrdé gating UI přijde ve W2/W4).
      */
-    suspend fun updateConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
+    suspend fun updateConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) =
+        updateConfigImpl(profileId, pushIfUnchanged = true, transform)
+
+    /** Jako [updateConfig], ale když transformace nic nezmění, nic se nezapíše ani neodešle (podmíněné opravy,
+     * 2026-11-19). [updateConfig] odesílá i beze změny — např. Trakt login ve Filmech na tom staví. */
+    suspend fun updateConfigIfChanged(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) =
+        updateConfigImpl(profileId, pushIfUnchanged = false, transform)
+
+    private suspend fun updateConfigImpl(
+        profileId: Long,
+        pushIfUnchanged: Boolean,
+        transform: (ProfileConfig) -> ProfileConfig,
+    ) = configEditMutex.withLock {
         // 🔒 2026-11-19 (Slovo, g32: profil Děti po první instalaci prázdný) — úprava NEAKTIVNÍHO profilu
         // (dospělý schvaluje dětem pořad, login zrcadlí účet Dětem…) dřív stavěla na místní kopii, která se
         // stahuje jen při aktivaci toho profilu → mohla být týdny stará nebo jen pahýl z čerstvé instalace
         // a celým odesláním přepsala serverový config (smazala dětem knihovnu i schválené pořady).
-        // Teď čti-uprav-zapiš: nejdřív převezmi serverovou verzi, transformaci aplikuj na ni.
-        // Neodeslaná místní změna (unpushed) má dál přednost — server se nestahuje.
-        refreshInactiveBeforeEdit(profileId)
-        val profile = dao.getById(profileId) ?: return
+        // Teď čti-uprav-zapiš: nejdřív převezmi serverovou verzi, transformaci aplikuj na ni. Bez ověřeného
+        // serverového základu se úprava neaktivního profilu uloží jen místně (žádné odeslání ani příznak
+        // „neodesláno" — ten by pahýl poslal přednostně při příští synchronizaci). Celé pod zámkem: dvě
+        // souběžné úpravy by jinak stáhly stejný základ a druhá by tu první smazala (revize Codex+Claude).
+        // Podmíněná úprava (IfChanged) ověřuje serverovou verzi VŽDY — i u aktivního profilu (kiosek g32 má
+        // trvale aktivní Děti; oprava jejich whitelistu se jinak na server nikdy nedostane).
+        val canPush = refreshBeforeEdit(profileId, force = !pushIfUnchanged)
+        val profile = dao.getById(profileId) ?: return@withLock
         val newOverride = transform(ProfileConfig.fromJson(profile.configJson))
         val newJson = ProfileConfig.toJson(newOverride)
-        // Beze změny = nic nezapisuj ani neodesílej (2026-11-19): podmíněná úprava (např. zrcadlení účtu
-        // Dětem jen když ho dědí) by jinak odeslala celou místní kopii — offline i s příznakem „neodesláno".
-        if (newJson == ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson))) return
+        if (!pushIfUnchanged && newJson == ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson))) return@withLock
         dao.update(profile.copy(configJson = newJson))
         val updated = dao.getById(profileId)
         if (_activeProfile.value?.id == profileId && updated != null) {
@@ -327,24 +346,43 @@ class ProfileRepository @Inject constructor(
             // Profil i config JEDNÍM zápisem — viz [activeProfileWithConfig].
             publishActive(updated, effective)
         }
+        if (!canPush) {
+            Timber.w("[PUSH] updateConfig '${profile.backendKey()}': neaktivní profil bez ověřené serverové verze — jen místně")
+            return@withLock
+        }
         // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
         Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='${profile.backendKey()}'")
         pushConfigTracked(profile, newJson)
     }
 
-    /** Viz [updateConfig] — převezme serverový config neaktivního profilu před úpravou (best-effort, 5 s). */
-    private suspend fun refreshInactiveBeforeEdit(profileId: Long) {
-        if (_activeProfile.value?.id == profileId) return
-        val profile = dao.getById(profileId) ?: return
+    /** Aktivní profil — i při studeném startu, kdy [_activeProfile] je do `restoreActive` ještě null. */
+    private fun isActiveProfileId(profileId: Long): Boolean =
+        _activeProfile.value?.id == profileId ||
+            (_activeProfile.value == null && prefs.getLong(PREF_ACTIVE_PROFILE_ID, 0L) == profileId)
+
+    /**
+     * Viz [updateConfig] — převezme serverový config neaktivního profilu (s [force] i aktivního) před úpravou
+     * (5 s). Vrací, jestli se výsledek smí odeslat: aktivní profil bez [force] a neodeslaná místní změna ano
+     * (jako dřív); jinak jen po úspěšném stažení, nebo když server profil vůbec nezná (nový profil).
+     */
+    private suspend fun refreshBeforeEdit(profileId: Long, force: Boolean): Boolean {
+        if (!force && isActiveProfileId(profileId)) return true
+        val profile = dao.getById(profileId) ?: return true
         val key = profile.backendKey()
-        if (key in unpushedConfigKeys() || !configGateway.isAvailable()) return
-        val remote = withTimeoutOrNull(5000) { configGateway.fetchConfig(key) }?.takeIf { it.isNotBlank() } ?: return
-        val current = dao.getById(profileId) ?: return
+        if (key in unpushedConfigKeys()) return true
+        if (!configGateway.isAvailable()) return false
+        val remote = withTimeoutOrNull(5000) { configGateway.fetchConfig(key) }?.takeIf { it.isNotBlank() }
+        if (remote == null) {
+            val metas = withTimeoutOrNull(5000) { configGateway.fetchAllProfiles() } ?: return false
+            return metas.none { it.key.ifBlank { it.jellyfinUserId } == key }
+        }
+        val current = dao.getById(profileId) ?: return true
         val canonical = mergeRemoteConfig(current.configJson, remote)
         if (canonical != current.configJson) {
             Timber.i("[PUSH] před úpravou neaktivního profilu '$key' převzat config ze serveru")
             dao.update(current.copy(configJson = canonical))
         }
+        return true
     }
 
     /**
@@ -353,10 +391,10 @@ class ProfileRepository @Inject constructor(
      * „neodesláno" a při první synchronizaci by místní pahýl přepsal serverový config. Server zůstává zdrojem
      * pravdy; místní kopie se při aktivaci profilu stejně převezme ze serveru.
      */
-    suspend fun updateConfigLocal(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) {
-        val profile = dao.getById(profileId) ?: return
+    suspend fun updateConfigLocal(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) = configEditMutex.withLock {
+        val profile = dao.getById(profileId) ?: return@withLock
         val newJson = ProfileConfig.toJson(transform(ProfileConfig.fromJson(profile.configJson)))
-        if (newJson == profile.configJson) return
+        if (newJson == ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson))) return@withLock
         dao.update(profile.copy(configJson = newJson))
         val updated = dao.getById(profileId)
         if (_activeProfile.value?.id == profileId && updated != null) {

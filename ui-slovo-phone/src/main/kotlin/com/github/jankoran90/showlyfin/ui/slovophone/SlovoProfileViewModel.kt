@@ -117,7 +117,10 @@ class SlovoProfileViewModel @Inject constructor(
                     visibleForKidsSourceKeys = if (visible) cfg.visibleForKidsSourceKeys + key else cfg.visibleForKidsSourceKeys - key,
                 )
             }
-            _kidsVisible.value = if (visible) _kidsVisible.value + podcastId else _kidsVisible.value - podcastId
+            // Z uložené verze (updateConfig si config Dětí nejdřív stáhne ze serveru — 2026-11-19), ne jen místní ±1.
+            _kidsVisible.value = profileRepository.getAll().firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS }
+                ?.let { ProfileConfig.fromJson(it.configJson).visibleForKidsSourceKeys }.orEmpty()
+                .filter { it.startsWith("abs:") }.map { it.removePrefix("abs:") }.toSet()
         }
     }
 }

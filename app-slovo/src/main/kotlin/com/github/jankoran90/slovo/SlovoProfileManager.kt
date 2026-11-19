@@ -131,6 +131,21 @@ class SlovoProfileManager @Inject constructor(
      * prázdný profil; teď se doplní OBĚ knihovny. Jen MÍSTNĚ ([ProfileRepository.updateConfigLocal]):
      * běží před přihlášením uploaderu a odeslání pahýlu by přepsalo serverový config Dětí.
      */
+    /**
+     * Po přihlášení uploaderu (2026-11-19, revize): oprav whitelist Dětí i NA SERVERU. Místní oprava
+     * ([repairKidsLibraryWhitelist]) by synchronizace při aktivaci Dětí přepsala serverovou verzí — kdyby
+     * server nesl poškozený whitelist (chyba 1.0.105), Děti by zůstaly bez knih napořád. Čti-uprav-zapiš
+     * ([ProfileRepository.updateConfigIfChanged] si config neaktivních Dětí nejdřív stáhne; beze změny nic
+     * neodešle; bez ověřené serverové verze jen místně).
+     */
+    suspend fun repairKidsLibrariesOnServer() {
+        val kids = profileRepository.getAll().firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS } ?: return
+        profileRepository.updateConfigIfChanged(kids.id) {
+            val wl = it.absLibraryWhitelist.orEmpty()
+            if (wl.containsAll(KIDS_LIBRARIES)) it else it.copy(absLibraryWhitelist = (wl + KIDS_LIBRARIES).distinct())
+        }
+    }
+
     private suspend fun repairKidsLibraryWhitelist() {
         val kids = profileRepository.getAll().firstOrNull { it.profileUuid == SlovoProfiles.UUID_KIDS } ?: return
         val wl = ProfileConfig.fromJson(kids.configJson).absLibraryWhitelist.orEmpty()
