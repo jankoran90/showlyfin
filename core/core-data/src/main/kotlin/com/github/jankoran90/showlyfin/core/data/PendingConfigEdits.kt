@@ -75,8 +75,8 @@ internal fun threeWayMerge(base: JsonElement?, mine: JsonElement?, theirs: JsonE
     }
     if (mine is JsonArray && theirs is JsonArray) {
         val b = (base as? JsonArray)?.toList().orEmpty()
-        // Jen změna pořadí (stejné položky) → pořadí je moje změna, vyhrává celé (revize: jinak by zmizela).
-        if (mine.toSet() == b.toSet()) return mine
+        // Jen změna pořadí a server obsah neměnil → moje pořadí vyhrává (jinak množinově, revize).
+        if (b.isNotEmpty() && mine.toSet() == b.toSet() && theirs.toSet() == b.toSet()) return mine
         val added = mine.filter { it !in b }
         val removed = b.filter { it !in mine }
         return JsonArray(theirs.filter { it !in removed } + added.filter { it !in theirs })

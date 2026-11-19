@@ -401,6 +401,7 @@ class ProfileRepository @Inject constructor(
             // Server profil prokazatelně nezná (seznam profilů stažen úspěšně, klíč v něm není) → nový profil,
             // není co přepsat; při chybě serveru vrací gateway null → UNVERIFIED (revize: chyba ≠ prázdný seznam).
             return if (withTimeoutOrNull(5000) { configGateway.profileExistsOnServer(key) } == false) {
+                pendingEdits.markVerified(key)   // nový profil: neúspěšné první odeslání se pak zopakuje syncem
                 EditBaseline.REFRESHED
             } else EditBaseline.UNVERIFIED
         }
