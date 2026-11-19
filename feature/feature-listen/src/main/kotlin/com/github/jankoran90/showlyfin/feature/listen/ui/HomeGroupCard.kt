@@ -1,6 +1,13 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -149,4 +156,55 @@ private fun knihyCz(count: Int): String = when {
     count == 1 -> "1 kniha"
     count in 2..4 -> "$count knihy"
     else -> "$count knih"
+}
+
+/**
+ * Rozbalená skupina (user 2026-11-19 17:33): pruh přes celou šířku mřížky — hlavička (název, počet, Sbalit) a pod ní
+ * díly / knihy skupiny. Mřížka = vodorovná řada karet, seznam = karty pod sebou.
+ */
+@Composable
+internal fun HomeGroupPanel(
+    group: HomeEntry.Group,
+    layout: HomeLayout,
+    onCollapse: () -> Unit,
+    child: @Composable (ContinueItem) -> Unit,
+) {
+    val count = group.items.size
+    val countLine = "Rozposlouchané: " + if (group.isBooks) knihyCz(count) else dilyCz(count)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.large)
+            .padding(vertical = 10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(group.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(countLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onCollapse) {
+                Icon(Icons.Default.ExpandLess, contentDescription = null)
+                Text("Sbalit")
+            }
+        }
+        if (layout.list) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            ) { group.items.forEach { child(it) } }
+        } else {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.padding(top = 6.dp),
+            ) {
+                items(group.items, key = { continueItemKey(it) }) { item ->
+                    Box(Modifier.width(160.dp)) { child(item) }
+                }
+            }
+        }
+    }
 }

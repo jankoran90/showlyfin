@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
@@ -101,7 +102,16 @@ fun HomeScreen(
                         is HomeEntry.Single -> item(key = entry.key) { card(entry.item) }
                         is HomeEntry.Group -> {
                             val expanded = entry.key in expandedGroups
-                            item(key = "group:${entry.key}") {
+                            // User 2026-11-19 17:33 („nepřijde mi to vůbec přehledné“): rozbalená skupina = pruh přes
+                            // celou šířku (hlavička + řada dílů), ne díly rozsypané v mřížce vedle hlavní karty.
+                            if (expanded) item(key = "group:${entry.key}", span = { GridItemSpan(maxLineSpan) }) {
+                                HomeGroupPanel(
+                                    group = entry,
+                                    layout = layout,
+                                    onCollapse = { expandedGroups = expandedGroups - entry.key },
+                                    child = card,
+                                )
+                            } else item(key = "group:${entry.key}") {
                                 val latest = entry.latest
                                 val latestLoaded = playerState.isActive && when (latest) {
                                     is HomeViewModel.ContinueItem.Book -> playerState.currentItemId == latest.book.id
@@ -126,9 +136,6 @@ fun HomeScreen(
                                         }
                                     },
                                 )
-                            }
-                            if (expanded) entry.items.forEach { child ->
-                                item(key = continueItemKey(child)) { card(child) }
                             }
                         }
                     }

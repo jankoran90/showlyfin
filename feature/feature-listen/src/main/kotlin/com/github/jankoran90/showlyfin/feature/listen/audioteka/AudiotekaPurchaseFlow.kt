@@ -94,7 +94,7 @@ class AudiotekaPurchaseFlow {
               var t = norm(title);
               // 1.0.109: tlačítko bývá jen ikona (text v aria-label / title) nebo má v atributech „download“.
               function lab(el){ return norm((el.innerText||el.textContent||'')+' '+(el.getAttribute('aria-label')||'')+' '+(el.getAttribute('title')||'')); }
-              function attrs(el){ return ((el.className&&el.className.baseVal!==undefined?el.className.baseVal:el.className)||'')+' '+(el.getAttribute('data-testid')||'')+' '+(el.getAttribute('href')||''); }
+              function attrs(el){ return ((el.className&&el.className.baseVal!==undefined?el.className.baseVal:el.className)||'')+' '+(el.getAttribute('data-testid')||'')+' '+(el.getAttribute('href')||'').split(/[?#]/)[0]; }
               function dl(el){
                 var x = lab(el);
                 if (x.indexOf('mp3')>=0 || x.length>=40) return false;

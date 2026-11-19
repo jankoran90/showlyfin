@@ -329,13 +329,14 @@ private suspend fun WebView.evalJs(js: String): String = suspendCancellableCorou
     evaluateJavascript(js) { r -> if (c.isActive) c.resume(r.orEmpty()) }
 }
 
-/** Platební stránka, která nese objednávku sama v adrese: cizí brána (PayU…) nebo platba / objednávka Audioteky. */
+/** Platební stránka, která nese platbu sama v adrese: cizí brána (PayU…) nebo platba Audioteky. */
 private fun isPaymentUrl(url: String): Boolean {
     val u = runCatching { Uri.parse(url) }.getOrNull() ?: return false
     val host = u.host.orEmpty()
     if (host.isNotBlank() && !host.endsWith("audioteka.com")) return true
     val path = u.path.orEmpty()
-    return Regex("platb|payment|objednavk|order").containsMatchIn(path) && !Regex("kosik|cart").containsMatchIn(path)
+    // Revize: stránka objednávky Audioteky drží stav v cookies WebView → do Chrome jen platba samotná.
+    return Regex("platb|payment").containsMatchIn(path) && !Regex("kosik|cart|objednavk|order").containsMatchIn(path)
 }
 
 /** Otevře adresu v Chrome (Google Pay tam jde); bez Chrome ve výchozím prohlížeči. */
