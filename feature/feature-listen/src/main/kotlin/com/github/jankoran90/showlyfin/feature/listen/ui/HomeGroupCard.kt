@@ -197,7 +197,8 @@ internal fun HomeGroupPanel(
         val hl = if (highlight) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier
         Box(mod.then(hl)) {
             when (e) {
-                is HomeGroupViewModel.Entry.Listened -> child(e.item)
+                // Tester 2026-11-19: rozposlouchaný díl v pruhu stejným tvarem jako ostatní („7/12 název“), jen s průběhem.
+                is HomeGroupViewModel.Entry.Listened -> if (e.item is ContinueItem.Book) child(e.item) else other(e)
                 else -> other(e)
             }
         }

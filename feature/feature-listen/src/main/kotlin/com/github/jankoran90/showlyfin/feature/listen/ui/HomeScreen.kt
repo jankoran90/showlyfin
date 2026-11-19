@@ -126,7 +126,19 @@ fun HomeScreen(
                                                 },
                                             )
                                             is HomeGroupViewModel.Entry.Book -> AudiobookCard(book = e.book, onClick = { onOpenBook(e.book.id) })
-                                            is HomeGroupViewModel.Entry.Listened -> card(e.item)
+                                            is HomeGroupViewModel.Entry.Listened -> when (val it = e.item) {
+                                                is HomeViewModel.ContinueItem.Episode -> ContinueEpisodeCard(
+                                                    episode = it.episode,
+                                                    sourceTitle = it.sourceTitle,
+                                                    progress = it.progress,
+                                                    isPlaying = playerState.isActive &&
+                                                        playerState.currentEpisodeId == (it.episode.resumeKey ?: it.episode.id),
+                                                    onClick = {
+                                                        onOpenSourceEpisode(it.sourceType, it.sourceRef, it.sourceTitle, it.episode.resumeKey ?: it.episode.id)
+                                                    },
+                                                )
+                                                else -> card(it)
+                                            }
                                         }
                                     },
                                 )
