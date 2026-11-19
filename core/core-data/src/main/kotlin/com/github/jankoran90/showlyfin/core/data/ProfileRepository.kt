@@ -757,7 +757,8 @@ class ProfileRepository @Inject constructor(
             else withTimeoutOrNull(5000) { configGateway.fetchConfig(profile.backendKey()) }
         } else withTimeoutOrNull(5000) {
             configGateway.fetchConfig(profile.backendKey())
-        }?.takeIf { it.isNotBlank() } ?: return false
+        }?.takeIf { it.isNotBlank() }
+        if (remoteJson == null) return false
         // Nepotvrzený rozdíl z úpravy bez spojení (viz [PendingConfigEdits]) přenes na serverovou verzi a odešli.
         val hadPending = pendingEdits.has(key)
         val current = dao.getById(profile.id) ?: profile
