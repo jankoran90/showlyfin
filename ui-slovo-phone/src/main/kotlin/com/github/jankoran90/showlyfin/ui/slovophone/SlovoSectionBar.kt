@@ -57,8 +57,9 @@ fun SlovoSectionBar(
                 Modifier.size(48.dp).pointerInput(onMenu) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
-                        val released = withTimeoutOrNull(MENU_UNLOCK_HOLD_MS) { waitForUpOrCancellation() }
-                        if (released == null) onMenu()
+                        // null jen při vypršení (puštění i zrušení gesta vrátí true) — revize 2026-11-19.
+                        val endedEarly = withTimeoutOrNull(MENU_UNLOCK_HOLD_MS) { waitForUpOrCancellation(); true }
+                        if (endedEarly == null) onMenu()
                     }
                 },
             )

@@ -28,6 +28,7 @@ object KidsAutoDownloadPrefs {
     private const val KEY_LIMIT = "show_limit"
     private const val KEY_ADOPTED = "adopted"
     private const val KEY_LAST = "last_summary"
+    private const val KEY_LIBS = "managed_libraries"
     private const val KEY_LAST_AT = "last_at"
 
     private fun sp(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -50,9 +51,13 @@ object KidsAutoDownloadPrefs {
     fun showLimit(context: Context): Int = sp(context).getInt(KEY_LIMIT, DEFAULT_SHOW_LIMIT)
     fun setShowLimit(context: Context, value: Int) = sp(context).edit().putInt(KEY_LIMIT, value).apply()
 
-    /** Klíče: `o:<klíč stažení>` (vlastní zdroje) a `a:<id epizody>` (ABS podcast). */
+    /** Klíče: `o:<klíč stažení>` (vlastní zdroje), `a:<id epizody>` (ABS podcast), `b:<id knihy>`. */
     fun adopted(context: Context): Set<String> = sp(context).getStringSet(KEY_ADOPTED, emptySet()).orEmpty().toSet()
     fun setAdopted(context: Context, keys: Set<String>) = sp(context).edit().putStringSet(KEY_ADOPTED, keys).apply()
+
+    /** Knihovny, které kdy byly dětské (odebere-li rodič celou knihovnu, její adoptované knihy se smažou). */
+    fun managedLibraries(context: Context): Set<String> = sp(context).getStringSet(KEY_LIBS, emptySet()).orEmpty().toSet()
+    fun setManagedLibraries(context: Context, ids: Set<String>) = sp(context).edit().putStringSet(KEY_LIBS, ids).apply()
 
     fun lastSummary(context: Context): String? = sp(context).getString(KEY_LAST, null)
     fun lastAt(context: Context): Long = sp(context).getLong(KEY_LAST_AT, 0L)

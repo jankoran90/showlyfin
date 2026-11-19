@@ -3,14 +3,17 @@ package com.github.jankoran90.showlyfin.feature.listen.kids
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.core.ui.KioskMode
 import com.github.jankoran90.showlyfin.data.abs.AbsRepository
 import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus
 import com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager
 import com.github.jankoran90.showlyfin.data.offline.OfflineRequest
+import com.github.jankoran90.showlyfin.data.offline.OfflineStatus
 import com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
@@ -29,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -39,12 +43,16 @@ import javax.inject.Singleton
  * (N nejnovějších dílů, [KidsAutoDownloadPrefs.showLimit]), série celé, jednotlivé díly. Odebrané se
  * smaže i ze staženého.
  *
- * Pojistky mazání (incident g32 2026-11-19 — pahýl configu by smazal vše):
+ * Pojistky mazání (incident g32 2026-11-19 — pahýl configu by smazal vše; revize 2026-11-19):
  * - maže se jen po configu ČERSTVĚ staženém ze serveru v tomhle běhu ([ProfileRepository.lastServerConfigFetchAt]);
- * - knihy jen z dětských knihoven, které se v tomhle běhu úspěšně načetly a nejsou prázdné;
- * - díly jen „adoptované" ([KidsAutoDownloadPrefs.adopted]) — cizí stažené dospělého zůstanou;
- * - u zdroje se schválenou sérií jen když se jeho díly podařilo načíst (jinak nevím → nechat);
- * - prázdný seznam schválených pořadů + existující stažené = podezřelé → nemazat.
+ * - jen „adoptované" stažení ([KidsAutoDownloadPrefs.adopted]) = stáhlo je samostahování nebo dítě; už
+ *   stažené cizí se adoptuje jen na dětském telefonu ([KioskMode]) → stažené dospělého zůstanou;
+ * - knihy jen z dětské knihovny, jejíž výpis se v tomhle běhu úplně načetl (neprázdný, < strop stránky),
+ *   a jen když offline postup knihy došel na server;
+ * - u zdroje se schválenou sérií jen když je zdroj známý a jeho díly se načetly (jinak nevím → nechat);
+ * - prázdný seznam schválených + existující adoptované = podezřelé → nemazat;
+ * - přepnutí na dospělého během průchodu → průchod končí (nic dalšího se nestáhne ani nesmaže).
+ * Stahování spuštěná samostahováním se při odchodu z Wi-Fi zruší ([onNetworkChanged]) a dokončí se po návratu.
  */
 @Singleton
 class KidsOfflineSync @Inject constructor(
@@ -61,22 +69,36 @@ class KidsOfflineSync @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val running = Mutex()
-    /** Názvy zdrojů pro rozpoznání série (jen během průchodu, pod [running]). */
+    /** Názvy známých zdrojů pro rozpoznání série (jen během průchodu, pod [running]). */
     private var sourceTitles: Map<String, String> = emptyMap()
+    @Volatile private var lastRunAt = 0L
+
+    /** Co samostahování právě zařadilo (`o:`/`a:`/`b:` klíč) — při odchodu z Wi-Fi se to zruší. */
+    private val autoQueued = ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var networkWatch = false
+
+    private class SwitchedAway : Exception()
 
     /**
-     * Spusť na pozadí (start appky, návrat do popředí); běží-li už, nic. Bez Wi-Fi se průchod naplánuje
-     * na připojení k Wi-Fi ([KidsOfflineSyncWorker.runWhenOnWifi]). [freshSince] = volající právě stáhl
-     * config ze serveru (čas před stažením) → nestahovat znovu.
+     * Spusť na pozadí (start appky, návrat do popředí); běží-li už nebo běželo před chvílí, nic. Bez Wi-Fi se
+     * průchod naplánuje na připojení k Wi-Fi ([KidsOfflineSyncWorker.runWhenOnWifi]). [freshSince] =
+     * volající právě stáhl config ze serveru (čas před stažením) → nestahovat znovu.
      */
-    fun trigger(reason: String, freshSince: Long? = null) {
+    fun trigger(reason: String, freshSince: Long? = null, force: Boolean = false) {
         if (!KidsAutoDownloadPrefs.isEnabled(context)) return
         if (profiles.activeProfile.value?.isAdmin != false) return
         if (!isOnUnmeteredNetwork()) {
             KidsOfflineSyncWorker.runWhenOnWifi(context)
             return
         }
+        if (!force && System.currentTimeMillis() - lastRunAt < MIN_INTERVAL_MS) return
         scope.launch { run(reason, waitForDownloads = false, freshSince = freshSince) }
+    }
+
+    /** Ruční stažení dítětem (Poslech dětí) — patří Dětem, smí se po odebrání smazat. */
+    fun adoptManual(keys: Collection<String>) {
+        if (profiles.activeProfile.value?.isAdmin != false || keys.isEmpty()) return
+        KidsAutoDownloadPrefs.setAdopted(context, KidsAutoDownloadPrefs.adopted(context) + keys)
     }
 
     /**
@@ -88,22 +110,25 @@ class KidsOfflineSync @Inject constructor(
         try {
             if (!KidsAutoDownloadPrefs.isEnabled(context)) return null
             if (profiles.activeProfile.value == null) profiles.restoreActive(preferTv = false)
-            val profile = profiles.activeProfile.value ?: return null
-            if (profile.isAdmin) return null
+            val profileId = profiles.activeProfile.value?.takeIf { !it.isAdmin }?.id ?: return null
             if (!isOnUnmeteredNetwork()) {
                 Timber.i("[kids-sync] $reason: bez Wi-Fi, přeskakuji")
                 return null
             }
+            lastRunAt = System.currentTimeMillis()
+            watchNetwork()
             val started = freshSince ?: System.currentTimeMillis().also { profiles.refreshActiveConfig() }
-            // Mezitím přepnuto na dospělého → nic (config níž by byl jeho).
-            val active = profiles.activeProfile.value?.takeIf { it.id == profile.id && !it.isAdmin } ?: return null
+            // Profil i config JEDNÍM čtením (ne dva oddělené StateFlow — revize 2026-11-19).
+            val (active, cfg) = profiles.activeProfileWithConfig.value
+            if (active == null || active.id != profileId || active.isAdmin) return null
             val freshConfig = profiles.lastServerConfigFetchAt(active) >= started
-            val cfg = profiles.activeConfig.value
             val mayDelete = freshConfig && KidsAutoDownloadPrefs.deleteRemoved(context)
-            val keys = cfg.visibleForKidsSourceKeys
-
-            val b = syncBooks(cfg.absLibraryWhitelist, mayDelete)
-            val p = syncPodcasts(keys, mayDelete)
+            val ensureKids = {
+                val now = profiles.activeProfileWithConfig.value.first
+                if (now == null || now.id != profileId || now.isAdmin) throw SwitchedAway()
+            }
+            val b = syncBooks(cfg.absLibraryWhitelist, mayDelete, ensureKids)
+            val p = syncPodcasts(cfg.visibleForKidsSourceKeys, mayDelete, ensureKids)
             val summary = buildString {
                 append("Knihy: +${b.first}")
                 if (b.second > 0) append(", smazáno ${b.second}")
@@ -115,6 +140,9 @@ class KidsOfflineSync @Inject constructor(
             KidsAutoDownloadPrefs.setLast(context, summary)
             if (waitForDownloads) awaitIdle(9 * 60_000L)
             return summary
+        } catch (e: SwitchedAway) {
+            Timber.i("[kids-sync] $reason: přepnuto na jiný profil, průchod končí")
+            return null
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -127,46 +155,77 @@ class KidsOfflineSync @Inject constructor(
 
     // ── knihy ─────────────────────────────────────────────────────────────────
     /** (nově zařazeno, smazáno). */
-    private suspend fun syncBooks(whitelist: Set<String>?, mayDelete: Boolean): Pair<Int, Int> {
+    private suspend fun syncBooks(whitelist: Collection<String>?, mayDelete: Boolean, ensureKids: () -> Unit): Pair<Int, Int> {
         if (whitelist.isNullOrEmpty()) return 0 to 0 // bez dětských knihoven nic (nikdy „všechny“)
         val libs = runCatching { abs.getAudiobookLibraries() }.getOrNull()?.filter { it.id in whitelist } ?: return 0 to 0
+        val adopted = KidsAutoDownloadPrefs.adopted(context).toMutableSet()
+        val kiosk = KioskMode.isActive(context)
+        // Knihovny, které kdy byly dětské: odebere-li rodič celou knihovnu, její adoptované knihy pryč.
+        val managed = KidsAutoDownloadPrefs.managedLibraries(context)
+        KidsAutoDownloadPrefs.setManagedLibraries(context, managed + libs.map { it.id })
         var queued = 0
-        var deleted = 0
+        val toDelete = ArrayList<String>()
         for (lib in libs) {
             val list = runCatching { abs.getAudiobooks(lib.id) }.getOrNull() ?: continue
-            list.filter { !books.isDownloaded(it.id) && books.stateFor(it.id).status != DownloadStatus.DOWNLOADING }
-                .forEach {
-                    books.download(it.id, it.title, it.author, it.coverUrl, it.libraryId, it.seriesName)
+            ensureKids()
+            list.forEach { book ->
+                if (books.isDownloaded(book.id)) {
+                    if (kiosk) adopted += "b:${book.id}"
+                } else if (books.stateFor(book.id).status != DownloadStatus.DOWNLOADING) {
+                    books.download(book.id, book.title, book.author, book.coverUrl, book.libraryId, book.seriesName)
+                    adopted += "b:${book.id}"
+                    autoQueued += "b:${book.id}"
                     queued++
                 }
-            if (!mayDelete || list.isEmpty()) continue
+            }
+            // Výpis je jedna stránka po 500 → u plné stránky nevím, jestli je celý → nemazat.
+            if (!mayDelete || list.isEmpty() || list.size >= ABS_PAGE) continue
             val ids = list.mapTo(HashSet()) { it.id }
-            val gone = books.downloads.value.filter { it.libraryId == lib.id && it.itemId !in ids }
-            if (gone.isEmpty()) continue
-            // Offline poslech té knihy nejdřív na server (postup se na serveru přenesl s přesunem knihy).
+            books.downloads.value
+                .filter { it.libraryId == lib.id && it.itemId !in ids && "b:${it.itemId}" in adopted }
+                .forEach { toDelete += it.itemId }
+        }
+        if (mayDelete) {
+            val dropped = managed - whitelist.toSet()
+            books.downloads.value
+                .filter { it.libraryId in dropped && "b:${it.itemId}" in adopted }
+                .forEach { toDelete += it.itemId }
+        }
+        var deleted = 0
+        if (toDelete.isNotEmpty()) {
+            ensureKids()
+            // Offline poslech té knihy nejdřív na server; nedošel-li, knihu zatím nechat (příště znovu).
             runCatching { books.pushOfflineProgress() }
-            gone.forEach {
-                Timber.i("[kids-sync] kniha odebrána z dětské knihovny → mažu staženou: ${it.title}")
-                books.delete(it.itemId)
+            toDelete.distinct().forEach { id ->
+                if (books.hasUnsyncedLocalProgress(id)) return@forEach
+                Timber.i("[kids-sync] kniha už Dětem nepatří → mažu staženou: ${books.downloadRecord(id)?.title}")
+                books.delete(id)
+                adopted -= "b:$id"
                 deleted++
             }
         }
+        val present = books.downloads.value.mapTo(HashSet()) { "b:${it.itemId}" }
+        adopted.removeAll { it.startsWith("b:") && it !in present && books.stateFor(it.removePrefix("b:")).status != DownloadStatus.DOWNLOADING }
+        KidsAutoDownloadPrefs.setAdopted(context, adopted)
         return queued to deleted
     }
 
     // ── pořady, série, díly ───────────────────────────────────────────────────
-    private suspend fun syncPodcasts(keys: Set<String>, mayDelete: Boolean): Pair<Int, Int> {
+    private suspend fun syncPodcasts(keys: Set<String>, mayDelete: Boolean, ensureKids: () -> Unit): Pair<Int, Int> {
         val whole = keys.filterTo(HashSet()) {
             KidsSourceAccess.parseEpisodeKey(it) == null && PodcastEpisodeSeriesGrouping.parseSeriesKey(it) == null
         }
         val series = keys.mapNotNull { PodcastEpisodeSeriesGrouping.parseSeriesKey(it) }.groupBy({ it.sourceKey }, { it.slug })
         val episodes = KidsSourceAccess.approvedEpisodes(keys).groupBy({ it.sourceKey })
+        // Studený proces (úloha na pozadí): seznam zdrojů ještě není → dotáhnout, jinak série nepoznám.
+        if (sourcesRepo.sources.value.isEmpty()) runCatching { sourcesRepo.refresh() }
         val known = sourcesRepo.sources.value.associateBy { it.key }
         sourceTitles = known.mapValues { it.value.title }
         val adopted = KidsAutoDownloadPrefs.adopted(context).toMutableSet()
+        val kiosk = KioskMode.isActive(context)
         val limit = KidsAutoDownloadPrefs.showLimit(context)
         var queued = 0
-        // Díly zdroje se schválenou sérií (id), null = feed se nepodařilo načíst → u zdroje nic nemazat.
+        // Díly zdroje se schválenou sérií (id), null = nevím (zdroj neznámý / díly se nenačetly) → nemazat.
         val seriesIds = HashMap<String, Set<String>?>()
 
         val customKeys = (whole + series.keys + episodes.keys).filterNot { it.startsWith("abs:") }.toSet()
@@ -176,20 +235,22 @@ class KidsOfflineSync @Inject constructor(
             val eps = runCatching {
                 sourcesRepo.loadEpisodes(src, limit = if (needAll) (if (src.type == "rss") 1000 else 500) else maxOf(limit, 20))
             }.getOrDefault(emptyList())
+            ensureKids()
             val wanted = LinkedHashMap<String, SourceEpisode>()
             if (sk in whole) eps.filter { it.streamUrl.isNotBlank() }.take(limit).forEach { wanted[it.id] = it }
             series[sk]?.let { slugs ->
-                val members = eps.filter { SeriesResolver.seriesSlug(ruleStore, sk, src.title, it.title, it.seriesTitle) in slugs }
-                seriesIds[sk] = if (eps.isEmpty()) null else members.mapTo(HashSet()) { it.id }
+                val members = eps.filter { SeriesResolver.seriesSlug(ruleStore, sk, known[sk]?.title, it.title, it.seriesTitle) in slugs }
+                seriesIds[sk] = if (sk !in known || members.isEmpty()) null else members.mapTo(HashSet()) { it.id }
                 members.forEach { wanted[it.id] = it }
             }
             episodes[sk]?.forEach { e -> eps.firstOrNull { it.id == e.episodeId }?.let { wanted[it.id] = it } }
             for (ep in wanted.values.reversed()) { // nejstarší první → série se stahuje od 1. dílu
                 if (ep.streamUrl.isBlank()) continue
                 val req = offlineRequest(src, ep, src.title)
-                adopted += "o:${req.key}"
                 if (offline.isDownloaded(req.key) || offline.stateFor(req.key).status.isActive()) continue
                 offline.enqueue(req)
+                adopted += "o:${req.key}"
+                autoQueued += "o:${req.key}"
                 queued++
             }
         }
@@ -199,44 +260,45 @@ class KidsOfflineSync @Inject constructor(
         for (sk in absItems) {
             val itemId = sk.removePrefix("abs:")
             val detail = runCatching { abs.getPodcastDetail(itemId) }.getOrNull() ?: continue
+            ensureKids()
             val wantedEps = buildList {
                 if (sk in whole) addAll(detail.episodes.take(limit))
                 val ids = episodes[sk].orEmpty().map { it.episodeId }.toSet()
                 addAll(detail.episodes.filter { it.id in ids })
             }.distinctBy { it.id }
             for (ep in wantedEps) {
-                adopted += "a:${ep.id}"
                 if (absEpisodes.localFile(ep.id) != null || absEpisodes.stateFor(ep.id).status == DownloadStatus.DOWNLOADING) continue
                 absEpisodes.download(ep, detail.podcast.title, detail.podcast.coverUrl)
+                adopted += "a:${ep.id}"
+                autoQueued += "a:${ep.id}"
                 queued++
             }
         }
 
-        // Adoptuj i ručně stažené díly, které jsou teď schválené (mazat se pak smí i ty).
-        offline.downloads.value.filter { it.sourceKey != null && covered(it.key, it.sourceKey!!, it.title, it.seriesTitle, whole, series, episodes, seriesIds) == true }
-            .forEach { adopted += "o:${it.key}" }
-        absEpisodes.downloads.value.filter { absCovered(it.itemId, it.episodeId, whole, episodes) }
-            .forEach { adopted += "a:${it.episodeId}" }
+        // Dětský telefon: i dřív stažené schválené díly patří Dětem (na sdíleném telefonu ne — mohou být dospělého).
+        if (kiosk) {
+            offline.downloads.value
+                .filter { it.sourceKey != null && covered(it.key, it.sourceKey!!, it.title, it.seriesTitle, whole, series, episodes, seriesIds) == true }
+                .forEach { adopted += "o:${it.key}" }
+            absEpisodes.downloads.value.filter { absCovered(it.itemId, it.episodeId, whole, episodes) }
+                .forEach { adopted += "a:${it.episodeId}" }
+        }
 
         var deleted = 0
-        val suspicious = keys.isEmpty() && adopted.isNotEmpty()
+        val suspicious = keys.isEmpty() && adopted.any { it.startsWith("o:") || it.startsWith("a:") }
         if (suspicious) Timber.w("[kids-sync] prázdný seznam schválených pořadů — mazání dílů vynechávám (pojistka)")
         if (mayDelete && !suspicious) {
-            offline.downloads.value.filter { "o:${it.key}" in adopted }.forEach { d ->
-                val sk = d.sourceKey ?: return@forEach
-                if (covered(d.key, sk, d.title, d.seriesTitle, whole, series, episodes, seriesIds) == false) {
-                    Timber.i("[kids-sync] díl už Dětem nepatří → mažu stažený: ${d.title}")
-                    offline.delete(d.key)
-                    adopted -= "o:${d.key}"
-                    deleted++
-                }
-            }
-            // Zařazené, ale nestažené (fronta) odebraného pořadu taky pryč.
-            offline.pending.value.filter { "o:${it.key}" in adopted && it.sourceKey != null }.forEach { r ->
-                if (covered(r.key, r.sourceKey!!, r.title, r.seriesTitle, whole, series, episodes, seriesIds) == false) {
-                    offline.delete(r.key)
-                    adopted -= "o:${r.key}"
-                }
+            ensureKids()
+            val gone = offline.downloads.value.filter { "o:${it.key}" in adopted }.filter { d ->
+                d.sourceKey != null && covered(d.key, d.sourceKey!!, d.title, d.seriesTitle, whole, series, episodes, seriesIds) == false
+            }.map { it.key to it.title } + offline.pending.value.filter { "o:${it.key}" in adopted }.filter { r ->
+                r.sourceKey != null && covered(r.key, r.sourceKey!!, r.title, r.seriesTitle, whole, series, episodes, seriesIds) == false
+            }.map { it.key to it.title }
+            gone.distinctBy { it.first }.forEach { (key, title) ->
+                Timber.i("[kids-sync] díl už Dětem nepatří → mažu stažený: $title")
+                offline.delete(key)
+                adopted -= "o:$key"
+                deleted++
             }
             absEpisodes.downloads.value.filter { "a:${it.episodeId}" in adopted }.forEach { d ->
                 if (!absCovered(d.itemId, d.episodeId, whole, episodes)) {
@@ -247,7 +309,7 @@ class KidsOfflineSync @Inject constructor(
                 }
             }
         }
-        // Úklid evidence: co už v telefonu není, z ní vypadne.
+        // Úklid evidence: co už v telefonu není ani se nestahuje, z ní vypadne (knihy řeší [syncBooks]).
         val present = HashSet<String>().apply {
             offline.downloads.value.forEach { add("o:${it.key}") }
             offline.pending.value.forEach { add("o:${it.key}") }
@@ -255,7 +317,7 @@ class KidsOfflineSync @Inject constructor(
         }
         adopted.retainAll { k ->
             when {
-                k in present -> true
+                k.startsWith("b:") || k in present -> true
                 k.startsWith("o:") -> offline.stateFor(k.removePrefix("o:")).status.isActive()
                 else -> absEpisodes.stateFor(k.removePrefix("a:")).status == DownloadStatus.DOWNLOADING
             }
@@ -264,7 +326,7 @@ class KidsOfflineSync @Inject constructor(
         return queued to deleted
     }
 
-    /** true = patří Dětem, false = nepatří, null = nevím (díly zdroje se nenačetly) → nemazat. */
+    /** true = patří Dětem, false = nepatří, null = nevím → nemazat. */
     private fun covered(
         key: String,
         sourceKey: String,
@@ -291,9 +353,7 @@ class KidsOfflineSync @Inject constructor(
     private fun absCovered(itemId: String, episodeId: String, whole: Set<String>, episodes: Map<String, List<KidsSourceAccess.Episode>>): Boolean =
         "abs:$itemId" in whole || episodes["abs:$itemId"].orEmpty().any { it.episodeId == episodeId }
 
-    private fun com.github.jankoran90.showlyfin.data.offline.OfflineStatus.isActive() =
-        this == com.github.jankoran90.showlyfin.data.offline.OfflineStatus.QUEUED ||
-            this == com.github.jankoran90.showlyfin.data.offline.OfflineStatus.DOWNLOADING
+    private fun OfflineStatus.isActive() = this == OfflineStatus.QUEUED || this == OfflineStatus.DOWNLOADING
 
     private fun ghostSource(key: String, title: String?) = PodcastSource(
         id = "", type = key.substringBefore(':'), ref = key.substringAfter(':'), title = title ?: "Pořad",
@@ -303,7 +363,7 @@ class KidsOfflineSync @Inject constructor(
         prefs.getString("uploader_base_url", "") ?: "", prefs.getString("uploader_session_cookie", "") ?: "", idec,
     )
 
-    /** Požadavek na stažení dílu vlastního zdroje — sdílený s ručním „Stáhnout" v Poslechu dětí. */
+    /** Požadavek na stažení dílu vlastního zdroje — sdílený s ručním „Stáhnout“ v Poslechu dětí. */
     fun offlineRequest(source: PodcastSource, ep: SourceEpisode, showTitle: String): OfflineRequest = OfflineRequest(
         key = ep.resumeKey ?: "${source.type}:${ep.id}",
         title = ep.title,
@@ -327,6 +387,41 @@ class KidsOfflineSync @Inject constructor(
             caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
     }
 
+    /**
+     * Revize 2026-11-19 (P1): přejde-li telefon během samostahování z Wi-Fi na mobilní data, zařazená a běžící
+     * stahování samostahování se zruší (nedokončená se smažou) a průchod se naplánuje na návrat Wi-Fi.
+     */
+    private fun watchNetwork() {
+        if (networkWatch) return
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        runCatching {
+            cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                    if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) onMeteredNetwork()
+                }
+            })
+            networkWatch = true
+        }.onFailure { Timber.w(it, "[kids-sync] hlídání sítě nešlo zapnout") }
+    }
+
+    private fun onMeteredNetwork() {
+        if (autoQueued.isEmpty()) return
+        var cancelled = 0
+        autoQueued.toList().forEach { k ->
+            val id = k.substring(2)
+            when (k.take(2)) {
+                "o:" -> if (offline.stateFor(id).status.isActive()) { offline.delete(id); cancelled++ }
+                "a:" -> if (absEpisodes.stateFor(id).status == DownloadStatus.DOWNLOADING) { absEpisodes.cancel(id); cancelled++ }
+                "b:" -> if (books.stateFor(id).status == DownloadStatus.DOWNLOADING) { books.cancel(id); cancelled++ }
+            }
+            autoQueued.remove(k)
+        }
+        if (cancelled > 0) {
+            Timber.i("[kids-sync] mobilní data → zrušeno $cancelled stahování, dokončí se na Wi-Fi")
+            KidsOfflineSyncWorker.runWhenOnWifi(context)
+        }
+    }
+
     /** Počkej, až žádné stahování neběží (nejdéle [timeoutMs]). */
     private suspend fun awaitIdle(timeoutMs: Long) {
         withTimeoutOrNull(timeoutMs) {
@@ -337,5 +432,10 @@ class KidsOfflineSync @Inject constructor(
                 offline.activeCount() > 0
             ) delay(5_000)
         }
+    }
+
+    private companion object {
+        const val MIN_INTERVAL_MS = 5 * 60_000L
+        const val ABS_PAGE = 500
     }
 }

@@ -21,6 +21,9 @@ object KidsSourceAccess {
     fun parseEpisodeKey(key: String): Episode? {
         val idx = key.indexOf(EP_MARKER)
         if (idx <= 0) return null
+        // „#ep:“ v názvu série (`…#series:slug|Název #ep: …`) není díl (revize 2026-11-19).
+        val seriesIdx = key.indexOf("#series:")
+        if (seriesIdx in 0 until idx) return null
         val rest = key.substring(idx + EP_MARKER.length)
         val id = rest.substringBefore('|')
         if (id.isBlank()) return null
@@ -43,7 +46,9 @@ object KidsSourceAccess {
         approvedSeries(kidsKeys, sourceKey).any { it.slug == slug }
 
     /** Všechny jednotlivě schválené díly (napříč zdroji). */
-    fun approvedEpisodes(kidsKeys: Set<String>): List<Episode> = kidsKeys.mapNotNull(::parseEpisodeKey)
+    fun approvedEpisodes(kidsKeys: Set<String>): List<Episode> =
+        // Týž díl dvakrát (jiný „|Název“ po přejmenování) = jedna karta (duplicitní klíč v gridu = pád).
+        kidsKeys.mapNotNull(::parseEpisodeKey).distinctBy { it.sourceKey to it.episodeId }
 
     fun isEpisodeApproved(kidsKeys: Set<String>, sourceKey: String, episodeId: String): Boolean =
         approvedEpisodes(kidsKeys).any { it.sourceKey == sourceKey && it.episodeId == episodeId }

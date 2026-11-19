@@ -141,6 +141,7 @@ class KidsShelfActionsViewModel @Inject constructor(
                 val req = kidsSync.offlineRequest(source, ep, title)
                 val key = req.key
                 offline.enqueue(req)
+                kidsSync.adoptManual(listOf("o:$key"))
                 if (queue) connection.enqueue(
                     QueuedEpisode(
                         itemId = source.ref,
@@ -240,6 +241,7 @@ class KidsShelfActionsViewModel @Inject constructor(
         if (e.sourceKey.startsWith("abs:")) {
             val itemId = e.sourceKey.removePrefix("abs:")
             absEpisodes.downloadByIds(itemId, e.episodeId, e.title.ifBlank { "Díl" }, abs.coverUrl(itemId))
+            kidsSync.adoptManual(listOf("a:${e.episodeId}"))
             _message.value = "Stahuji díl do telefonu."
             return
         }
@@ -250,7 +252,9 @@ class KidsShelfActionsViewModel @Inject constructor(
                 _message.value = "Díl se teď nepodařilo načíst (zkontroluj připojení)."
                 return@launch
             }
-            offline.enqueue(kidsSync.offlineRequest(src, ep, src.title.ifBlank { e.title }))
+            val req = kidsSync.offlineRequest(src, ep, src.title.ifBlank { e.title })
+            offline.enqueue(req)
+            kidsSync.adoptManual(listOf("o:${req.key}"))
             _message.value = "Stahuji díl do telefonu."
         }
     }

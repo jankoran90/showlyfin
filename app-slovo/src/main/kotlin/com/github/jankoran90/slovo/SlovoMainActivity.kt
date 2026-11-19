@@ -97,7 +97,7 @@ class SlovoMainActivity : ComponentActivity() {
             // updateConfigIfChanged po opravě sám znovu promítne.
             launch { runCatching { slovoProfileManager.repairKidsLibrariesOnServer() } }
             // Samostahování Dětí: hned po startu (config už stáhl restoreActive) + periodicky na Wi-Fi.
-            kidsOfflineSync.trigger("start appky", freshSince = restoreStartedAt)
+            kidsOfflineSync.trigger("start appky", freshSince = restoreStartedAt, force = true)
             com.github.jankoran90.showlyfin.feature.listen.kids.KidsOfflineSyncWorker.schedule(applicationContext)
         }
 
