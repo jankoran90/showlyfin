@@ -18,6 +18,10 @@ import com.github.jankoran90.showlyfin.feature.listen.player.removeFromQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.removeFinishedFromQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.github.jankoran90.showlyfin.feature.listen.player.dismissWakeMark
+import com.github.jankoran90.showlyfin.feature.listen.player.returnToWakeMark
+import com.github.jankoran90.showlyfin.feature.listen.player.setShowBoost
+import com.github.jankoran90.showlyfin.feature.listen.player.setSkipSilence
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -231,6 +235,13 @@ class AudiobookPlayerViewModel @Inject constructor(
     fun seekToChapter(startSec: Double) = connection.seekToChapter(startSec)
     fun setSpeed(speed: Float) = connection.setSpeed(speed)
     fun setSleepTimer(minutes: Int?) = connection.setSleepTimer(minutes)
+
+    // AMPHORA F4 / PR1 — zesílení pro pořad, přeskočení ticha, návrat po spánku.
+    val playerPrefs get() = connection.listenPrefs
+    fun setShowBoost(level: Int?) = connection.setShowBoost(level)
+    fun setSkipSilence(on: Boolean) = connection.setSkipSilence(on)
+    fun returnToWakeMark() = connection.returnToWakeMark()
+    fun dismissWakeMark() = connection.dismissWakeMark()
     fun setSleepEndOfCurrent() = connection.setSleepEndOfCurrent()
 
     // ──────── Fronta (podcast epizody) ────────

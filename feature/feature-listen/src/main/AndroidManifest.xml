@@ -6,6 +6,8 @@
     <!-- DROPSHIP F2d — upload audioknihy na pozadí (přežije přepnutí appky). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- AMPHORA F4: krátké cvrnknutí po zatřesení (prodloužení časovače spánku). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- 2026-11-18: Google Pay v pokladně Audioteky uvnitř WebView (PaymentRequest) — WebView musí platební
          appky najít (viditelnost balíčků od Androidu 11). -->

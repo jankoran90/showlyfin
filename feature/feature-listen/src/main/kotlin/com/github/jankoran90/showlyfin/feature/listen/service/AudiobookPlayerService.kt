@@ -63,6 +63,7 @@ class AudiobookPlayerService : MediaLibraryService() {
 
     @Inject lateinit var repo: AbsRepository
     @Inject lateinit var absPrefs: com.github.jankoran90.showlyfin.data.abs.AbsPreferences
+    @Inject lateinit var listenPrefs: com.github.jankoran90.showlyfin.feature.listen.player.ListenPlayerPrefs
 
     /** CRUISE (SHW-70): custom zdroje Poslechu (YouTube/RSS/NaVýbornou) do Android Auto browse stromu. */
     @Inject lateinit var sourcesRepo: PodcastSourcesRepository
@@ -84,10 +85,13 @@ class AudiobookPlayerService : MediaLibraryService() {
     /** Plan EVEN — DRC/normalizér napojený na audio session id přehrávače. */
     private var audioBoost: AudioBoost? = null
 
-    /** Reaguje na změnu úrovně DRC v Nastavení → přepne efekt za běhu. */
+    /** AMPHORA F4: přetočení po pauze, zesílení pro pořad, přeskočení ticha ([PlayerAudioExtras]). */
+    private var audioExtras: PlayerAudioExtras? = null
+
+    /** Reaguje na změnu úrovně DRC / ticha v Nastavení nebo zesílení v přehrávači → přepne za běhu. */
     private val drcReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            audioBoost?.apply(absPrefs.listenDrcLevel, AudioBoost.Profile.LISTEN)
+            audioExtras?.apply(intent) ?: audioBoost?.apply(absPrefs.listenDrcLevel, AudioBoost.Profile.LISTEN)
         }
     }
 
@@ -150,6 +154,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         // ať na něj jde deterministicky připojit DRC/normalizér.
         exo.setAudioSessionId(audioSessionId)
         audioBoost = AudioBoost(audioSessionId).also { it.apply(absPrefs.listenDrcLevel, AudioBoost.Profile.LISTEN) }
+        audioExtras = PlayerAudioExtras(exo, { audioBoost }, absPrefs, listenPrefs).also { exo.addListener(it); it.apply() }
         ContextCompat.registerReceiver(
             this,
             drcReceiver,
@@ -486,6 +491,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         runCatching { unregisterReceiver(drcReceiver) }
         audioBoost?.release()
         audioBoost = null
+        audioExtras = null
         session?.run {
             player.release()
             release()

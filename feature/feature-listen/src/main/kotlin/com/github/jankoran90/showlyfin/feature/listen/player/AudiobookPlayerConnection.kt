@@ -42,7 +42,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class AudiobookPlayerConnection @Inject constructor(
-    @param:ApplicationContext private val context: Context,
+    @param:ApplicationContext internal val context: Context,
     private val repo: AbsRepository,
     internal val prefs: AbsPreferences,
     private val downloads: EpisodeDownloadManager,
@@ -56,6 +56,8 @@ class AudiobookPlayerConnection @Inject constructor(
     // Stažené direct díly (RSS/YT/ČT): fronta mohla vzniknout dřív, než stažení doběhlo (síťová URL) —
     // při spuštění se proto lokální soubor dohledá VŽDY (Codex review 2026-10-12, offline fronta dětí).
     private val offline: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
+    /** AMPHORA F4: spánek, zesílení pro pořad, rychlost (extension funkce v PlayerExtras.kt). */
+    internal val listenPrefs: ListenPlayerPrefs,
 ) {
     // Internal (ne private) = čtou/píší je extension funkce fronty v AudiobookPlayerQueue.kt.
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -64,14 +66,15 @@ class AudiobookPlayerConnection @Inject constructor(
     private var lastDirectSaveMs = 0L
     private var lastDirectSavedPos = -1L
 
-    private var controller: MediaController? = null
+    internal var controller: MediaController? = null
     /** Příkazy čekající na připojení controlleru — VŠECHNY v pořadí (dřív jen poslední, Codex sweep 2026-10-12). */
     private val pending = mutableListOf<(MediaController) -> Unit>()
     private var connecting = false
     private var pollJob: Job? = null
-    private var sleepJob: Job? = null
+    /** AMPHORA F4: minutový spánek se ztišením, otřesem a „usnul jsi v…“. */
+    private val sleep = SleepTimerEngine(context, scope, listenPrefs, sleepHost())
 
-    private val _state = MutableStateFlow(PlayerState())
+    internal val _state = MutableStateFlow(PlayerState())
     val state = _state.asStateFlow()
 
     private val _chapters = MutableStateFlow<List<Chapter>>(emptyList())
@@ -236,6 +239,8 @@ class AudiobookPlayerConnection @Inject constructor(
                 queueSwipeAction = prefs.queueSwipeAction,
                 queueSwipeLeft = prefs.queueSwipeLeft,
                 queueSwipeRight = prefs.queueSwipeRight,
+                showBoost = listenPrefs.boostFor(currentShowKey()),
+                wakeOffer = wakeOffer(pos),
             )
         }
 
@@ -328,6 +333,7 @@ class AudiobookPlayerConnection @Inject constructor(
                     putDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC, t.startOffsetSec)
                     putString(AudiobookPlayerService.KEY_BOOK_TITLE, pb.title)
                     pb.author?.let { putString(AudiobookPlayerService.KEY_BOOK_AUTHOR, it) }
+                    putShowExtras(showKeyFor(episode, itemId), listenPrefs)
                 }
                 MediaItem.Builder()
                     .setUri(t.url)
@@ -353,11 +359,8 @@ class AudiobookPlayerConnection @Inject constructor(
             val startIdx = offsetsMs.indexOfLast { it <= startBookMs + 1 }.coerceAtLeast(0)
             c.setMediaItems(items, startIdx, (startBookMs - (offsetsMs.getOrNull(startIdx) ?: 0L)).coerceAtLeast(0L))
             c.prepare()
-            // Rychlost: zapamatovaná (zvlášť kniha/podcast) nebo výchozí z nastavení.
-            val targetSpeed = if (prefs.rememberSpeed) {
-                if (episode != null) prefs.lastPodcastSpeed else prefs.lastBookSpeed
-            } else prefs.defaultSpeed
-            c.setPlaybackSpeed(targetSpeed.coerceIn(0.5f, 3.5f))
+            // Rychlost: výchozí z Nastavení (user 17:36 „rychlost vždy normální“), poslední jen na přání.
+            c.setPlaybackSpeed(startSpeed(podcast = episode != null))
             c.playWhenReady = true
         }
     }
@@ -415,6 +418,7 @@ class AudiobookPlayerConnection @Inject constructor(
                 putDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC, 0.0)
                 putString(AudiobookPlayerService.KEY_BOOK_TITLE, title)
                 author?.let { putString(AudiobookPlayerService.KEY_BOOK_AUTHOR, it) }
+                putShowExtras(showKeyFor(episode, null), listenPrefs)
             }
             val item = MediaItem.Builder()
                 .setUri(url)
@@ -434,14 +438,13 @@ class AudiobookPlayerConnection @Inject constructor(
             // s resetem pozice na 0. Start pozice teď jde atomicky v témže příkazu.
             c.setMediaItems(listOf(item), 0, startMs.coerceAtLeast(0L))
             c.prepare()
-            val targetSpeed = if (prefs.rememberSpeed) prefs.lastPodcastSpeed else prefs.defaultSpeed
-            c.setPlaybackSpeed(targetSpeed.coerceIn(0.5f, 3.5f))
+            c.setPlaybackSpeed(startSpeed(podcast = true))
             c.playWhenReady = true
         }
     }
 
     /** Pozice v čase CELÉ knihy = offset aktuálního souboru + pozice v něm. */
-    private fun bookPosMs(c: MediaController): Long {
+    internal fun bookPosMs(c: MediaController): Long {
         val offSec = c.currentMediaItem?.mediaMetadata?.extras
             ?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0
         return (offSec * 1000).toLong() + c.currentPosition.coerceAtLeast(0L)
@@ -459,7 +462,7 @@ class AudiobookPlayerConnection @Inject constructor(
     }
 
     /** Skok na pozici v čase celé knihy — najde správný soubor a posun v něm. */
-    private fun seekBook(c: MediaController, bookMs: Long) {
+    internal fun seekBook(c: MediaController, bookMs: Long) {
         val target = bookMs.coerceAtLeast(0L)
         val count = c.mediaItemCount
         if (count <= 1) { c.seekTo(target); return }
@@ -508,7 +511,7 @@ class AudiobookPlayerConnection @Inject constructor(
      * Codex sweep 2026-10-12: ruční posun direct epizody ulož HNED — jinak Play do 4 s (throttle
      * ukládání) vrátil přehrávač přes [catchUpToSharedPosition] na starou uloženou pozici.
      */
-    private fun persistManualSeek(c: MediaController) {
+    internal fun persistManualSeek(c: MediaController) {
         val ep = currentEpisode?.takeIf { it.direct != null && it.episodeId.isNotBlank() } ?: return
         val pos = bookPosMs(c)
         val durMs = ((c.currentMediaItem?.mediaMetadata?.extras?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0) * 1000).toLong()
@@ -540,39 +543,33 @@ class AudiobookPlayerConnection @Inject constructor(
     fun setSpeed(speed: Float) = withController { c ->
         val s = speed.coerceIn(0.5f, 3.5f)
         c.setPlaybackSpeed(s)
-        if (prefs.rememberSpeed) {
+        if (listenPrefs.rememberLastSpeed) {
             if (_state.value.isPodcastEpisode) prefs.lastPodcastSpeed = s else prefs.lastBookSpeed = s
         }
     }
 
     /** Sleep timer v minutách; null = zrušit. */
     fun setSleepTimer(minutes: Int?) {
-        sleepJob?.cancel()
-        sleepJob = null
         // minutový časovač přebíjí „do konce kapitoly/epizody"
         sleepEndChapterMs = null
         sleepEndOfEpisode = false
-        if (minutes == null || minutes <= 0) {
-            _state.update { it.copy(sleepMinutesLeft = null, sleepAtEnd = false) }
-            return
-        }
         _state.update { it.copy(sleepAtEnd = false) }
-        sleepJob = scope.launch {
-            var left = minutes
-            while (left > 0) {
-                _state.update { it.copy(sleepMinutesLeft = left) }
-                delay(60_000)
-                left--
-            }
-            _state.update { it.copy(sleepMinutesLeft = null) }
-            controller?.pause()
+        if (minutes == null || minutes <= 0) sleep.cancel() else sleep.start(minutes)
+    }
+
+    private fun sleepHost() = object : SleepTimerEngine.Host {
+        override fun onMinutesLeft(minutes: Int?) = _state.update { it.copy(sleepMinutesLeft = minutes) }
+        override fun pausePlayback() { controller?.pause() }
+        override fun setVolume(volume: Float) { controller?.volume = volume }
+        override fun currentPosition(): Pair<String, Long>? {
+            val c = controller ?: return null
+            return wakeKey()?.let { it to bookPosMs(c) }
         }
     }
 
     /** Sleep „do konce kapitoly" (audiokniha) nebo „do konce epizody" (podcast). */
     fun setSleepEndOfCurrent() = withController { c ->
-        sleepJob?.cancel(); sleepJob = null
-        _state.update { it.copy(sleepMinutesLeft = null) }
+        sleep.cancel()
         if (_state.value.isPodcastEpisode) {
             sleepEndChapterMs = null
             sleepEndOfEpisode = true

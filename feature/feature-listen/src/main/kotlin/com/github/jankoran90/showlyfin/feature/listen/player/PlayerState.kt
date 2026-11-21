@@ -35,4 +35,8 @@ data class PlayerState(
     /** Swipe doleva / doprava ve frontě: 0 vypnuto, 1 odebrat, 2 stáhnout, 3 přehrát, 4 na začátek. */
     val queueSwipeLeft: Int = 0,
     val queueSwipeRight: Int = 0,
+    /** AMPHORA F4: zesílení hlasu jen pro tento pořad / knihu (null = jako v Nastavení). */
+    val showBoost: Int? = null,
+    /** AMPHORA F4: po spánku nabídnout návrat na místo, kde jsi ještě nespal. */
+    val wakeOffer: ListenPlayerPrefs.WakeMark? = null,
 )

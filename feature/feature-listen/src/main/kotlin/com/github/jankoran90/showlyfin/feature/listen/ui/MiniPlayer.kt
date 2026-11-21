@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +43,8 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
     isListenSection: Boolean = true,
     viewModel: AudiobookPlayerViewModel = hiltViewModel(),
+    /** AMPHORA F4 / PR3: plovoucí karta nad obsahem (Nastavení › Přehrávač), jinak lišta přes celou šířku. */
+    floating: Boolean = viewModel.playerPrefs.floatingMini,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val queue by viewModel.queue.collectAsStateWithLifecycle()
@@ -65,7 +68,13 @@ fun MiniPlayer(
     // sourozenci přímo v rodičovském Boxu — `modifier` (align BottomCenter) dostal jen Row, lišta spadla
     // do TopStart celé obrazovky. Teď jeden Column s `modifier`, lišta drží pod mini-playerem.
     ListenExpressiveTheme {
-        Column(modifier.fillMaxWidth()) {
+        val shell = if (floating) {
+            Modifier
+                .padding(horizontal = com.github.jankoran90.showlyfin.core.ui.tokens.Spacing.s, vertical = com.github.jankoran90.showlyfin.core.ui.tokens.Spacing.xs)
+                .shadow(com.github.jankoran90.showlyfin.core.ui.tokens.Spacing.s, MaterialTheme.shapes.large)
+                .clip(MaterialTheme.shapes.large)
+        } else Modifier
+        Column(modifier.fillMaxWidth().then(shell)) {
             Row(
                 Modifier
                     .fillMaxWidth()

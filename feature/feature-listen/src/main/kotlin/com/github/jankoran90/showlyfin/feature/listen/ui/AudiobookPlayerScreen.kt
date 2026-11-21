@@ -115,12 +115,24 @@ fun AudiobookPlayerScreen(
         )
     }
 
+    // AMPHORA F4 / PR3: pozadí podle barvy obalu (Nastavení › Přehrávač), jinak barvy motivu.
+    val coverTint = rememberCoverTint(state.coverUrl, viewModel.playerPrefs.colorFromCover)
+
     ListenExpressiveTheme {
         Column(
             modifier
                 .fillMaxSize()
                 .graphicsLayer { translationY = collapseOffset.value }
                 .background(MaterialTheme.colorScheme.background)
+                .then(
+                    if (coverTint != null) Modifier.background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            0f to coverTint.copy(alpha = 0.5f),
+                            0.75f to coverTint.copy(alpha = 0.12f),
+                            1f to androidx.compose.ui.graphics.Color.Transparent,
+                        ),
+                    ) else Modifier,
+                )
                 .padding(horizontal = 16.dp)
                 .padding(top = 4.dp, bottom = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -351,7 +363,10 @@ fun AudiobookPlayerScreen(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            // AMPHORA F4 / PR1: Zesílit hlas · tento pořad, Ticho pryč, nabídka po spánku.
+            PlayerExtrasRow(state, viewModel)
+
+            Spacer(Modifier.height(4.dp))
 
             // Subtilní seznam pod ovládáním: fronta (podcast) nebo kapitoly (audiokniha). Hrající zvýrazněno.
             if (state.isPodcastEpisode && queue.isNotEmpty()) {
