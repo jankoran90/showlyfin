@@ -1,56 +1,51 @@
 package com.github.jankoran90.showlyfin.ui.slovophone
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.Bookmarks
-import androidx.compose.material.icons.rounded.DirectionsCar
-import androidx.compose.material.icons.rounded.Cast
-import androidx.compose.material.icons.rounded.ChildCare
-import androidx.compose.material.icons.rounded.Speaker
-import androidx.compose.material.icons.rounded.Explore
-import androidx.compose.material.icons.rounded.HighQuality
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.LiveTv
-import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material.icons.rounded.Translate
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Sort
-import androidx.compose.material.icons.rounded.Storefront
-import androidx.compose.material.icons.rounded.ViewAgenda
-import androidx.compose.material.icons.rounded.ViewDay
-import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
-import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import com.github.jankoran90.showlyfin.feature.listen.ui.CastTargetSettingsSection
-import com.github.jankoran90.showlyfin.feature.listen.ui.SpeakerSettingsSection
-import com.github.jankoran90.showlyfin.feature.listen.ui.HiddenPodcastsSettingsSection
-import com.github.jankoran90.showlyfin.feature.listen.ui.LinguaQuotaSettingsSection
-import com.github.jankoran90.showlyfin.feature.listen.ui.ListenOfflineSettingsSection
-import com.github.jankoran90.showlyfin.feature.listen.ui.ListenOrderSettingsSection
-import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoverySettingsSection
-import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastLinksSettingsSection
-import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastVideoQualitySettingsSection
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.github.jankoran90.showlyfin.core.ui.highlightMatches
 
 /**
- * Slovo (EXCISE/SHW-103 Krok 2) — Nastavení poslechové appky (zrcadlo
- * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmySettingsScreen], ale bez filmu/profilu/PIN).
- * Kategorické sbalovací karty: Vzhled (sdílený motiv) + poslechové sekce reuse z :feature:feature-listen.
- * „Přehrávání na TV/Zenbooku" (2026-08-22) — parita s Filmy DOCK (SHW-77), cílové zařízení „Na TV".
- * Známý gap (Krok 3 app-slovo): „O aplikaci" (verze/OTA UpdateChecker) — potřebuje app kontext.
+ * Slovo — Nastavení. AMPHORA F6 (NA1, kánon ui-canon „Nastavení"): místo jednoho dlouhého seznamu
+ * sbalovacích karet ROZCESTNÍK kategorií ([SlovoSettingsCategory]) → podstránka se sekcemi z
+ * [slovoSettingEntries] + hledání napříč všemi volbami (titulek + kategorie + slova z popisků voleb).
+ * Navigace je uvnitř obrazovky (stav + [BackHandler]), navController se nedotýká.
+ * Ťuk na výsledek hledání otevře kategorii s tou sekcí rozbalenou a dorolovanou.
  */
 @Composable
 fun SlovoSettingsScreen(
@@ -58,101 +53,199 @@ fun SlovoSettingsScreen(
     modifier: Modifier = Modifier,
     /**
      * Audit dětí (2026-10-12, user „Nastavení jen co se netýká obsahu"): dětský profil vidí jen
-     * Vzhled, Zobrazení Domů, Kvalitu videa a O aplikaci. Účet, zdroje, stažené, TV/repro (platí pro
-     * celý telefon) apod. jen dospělý.
+     * Vzhled, Zobrazení Domů a O aplikaci (sekce s `adultOnly = false`).
      */
     isKidsProfile: Boolean = false,
 ) {
-    val adult = !isKidsProfile
+    val entries = remember(isKidsProfile) {
+        slovoSettingEntries.filter { !isKidsProfile || !it.adultOnly }
+    }
+    var openCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var focusTitle by rememberSaveable { mutableStateOf<String?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val category = openCategory?.let { name -> SlovoSettingsCategory.entries.firstOrNull { it.name == name } }
+
+    BackHandler(enabled = category != null) {
+        openCategory = null
+        focusTitle = null
+    }
+
     Column(modifier.fillMaxSize()) {
-        SlovoSectionBar(title = "Nastavení", onMenu = onMenu)
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (isKidsProfile) {
-                Text(
-                    "Ostatní nastavení jsou dostupná jen v profilu dospělého.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+        if (category == null) {
+            SlovoSectionBar(title = "Nastavení", onMenu = onMenu)
+            SettingsHome(
+                entries = entries,
+                isKidsProfile = isKidsProfile,
+                query = query,
+                onQuery = { query = it },
+                onOpen = { cat, focus ->
+                    openCategory = cat.name
+                    focusTitle = focus
+                },
+            )
+        } else {
+            SlovoSectionBar(onMenu = onMenu) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { openCategory = null; focusTitle = null }) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět na Nastavení")
+                    }
+                    Text(
+                        category.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            SettingsCategoryPage(
+                sections = entries.filter { it.category == category },
+                focusTitle = focusTitle,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsHome(
+    entries: List<SlovoSettingEntry>,
+    isKidsProfile: Boolean,
+    query: String,
+    onQuery: (String) -> Unit,
+    onOpen: (SlovoSettingsCategory, String?) -> Unit,
+) {
+    val hlBg = MaterialTheme.colorScheme.primary
+    val hlFg = MaterialTheme.colorScheme.onPrimary
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQuery,
+        placeholder = { Text("Hledat v nastavení") },
+        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+        trailingIcon = if (query.isNotEmpty()) {
+            { IconButton(onClick = { onQuery("") }) { Icon(Icons.Rounded.Close, contentDescription = "Vymazat") } }
+        } else null,
+        singleLine = true,
+        shape = MaterialTheme.shapes.extraLarge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (isKidsProfile) {
+            Text(
+                "Ostatní nastavení jsou dostupná jen v profilu dospělého.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
+        if (query.isBlank()) {
+            SlovoSettingsCategory.entries.forEach { cat ->
+                val inCat = entries.filter { it.category == cat }
+                if (inCat.isEmpty()) return@forEach
+                SettingsTile(
+                    icon = cat.icon,
+                    title = AnnotatedString(cat.title),
+                    subtitle = AnnotatedString(
+                        if (isKidsProfile) inCat.joinToString(" · ") { it.title } else cat.subtitle,
+                    ),
+                    onClick = { onOpen(cat, null) },
                 )
             }
-            if (adult) SlovoCollapsibleSection("Účet / Audioknihy", Icons.Rounded.AccountCircle) {
-                SlovoAccountSection()
+        } else {
+            val hits = entries.filter { it.matches(query) }
+            if (hits.isEmpty()) {
+                Text(
+                    "Nic nenalezeno. Zkus jiné slovo, třeba „rychlost“, „spánek“ nebo „stažené“.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(4.dp),
+                )
             }
-            SlovoCollapsibleSection("Vzhled", Icons.Rounded.Palette) {
-                SlovoAppearanceSection()
+            hits.forEach { entry ->
+                SettingsTile(
+                    icon = entry.icon,
+                    title = highlightMatches(entry.title, query, hlBg, hlFg),
+                    subtitle = AnnotatedString(entry.category.title),
+                    onClick = { onOpen(entry.category, entry.title) },
+                )
             }
-            SlovoCollapsibleSection("Zobrazení Domů a pořadů", Icons.Rounded.ViewAgenda) {
-                SlovoHomeLayoutSection()
+        }
+    }
+}
+
+@Composable
+private fun SettingsTile(
+    icon: ImageVector,
+    title: AnnotatedString,
+    subtitle: AnnotatedString,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            if (adult) SlovoCollapsibleSection("Řady na Domů", Icons.Rounded.ViewDay) {
-                SlovoHomeRowsSection()
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Podstránka kategorie: její sbalovací sekce. Jediná sekce nebo sekce z hledání je rovnou rozbalená. */
+@Composable
+private fun SettingsCategoryPage(
+    sections: List<SlovoSettingEntry>,
+    focusTitle: String?,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        sections.forEach { entry ->
+            val focused = entry.title == focusTitle
+            val requester = remember { BringIntoViewRequester() }
+            if (focused) {
+                LaunchedEffect(entry.title) { requester.bringIntoView() }
             }
-            if (adult) SlovoCollapsibleSection("Knihovna", Icons.AutoMirrored.Rounded.LibraryBooks) {
-                SlovoLibrarySection()
-            }
-            if (adult) SlovoCollapsibleSection("Hledání", Icons.Rounded.Search) {
-                SlovoSearchSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Přehrávač", Icons.Rounded.PlayCircle) {
-                SlovoPlayerSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Záložky", Icons.Rounded.Bookmarks) {
-                SlovoBookmarkSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Android Auto", Icons.Rounded.DirectionsCar) {
-                SlovoAutoSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Spodní lišta a nabídka Víc", Icons.Rounded.Menu) {
-                SlovoNavOrderSection()
-            }
-            if (adult) SlovoCollapsibleSection("Řazení zdrojů", Icons.Rounded.Sort) {
-                ListenOrderSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Stažené / offline", Icons.Rounded.Download) {
-                ListenOfflineSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Katalog Audioteky", Icons.Rounded.Storefront) {
-                SlovoAudiotekaSection()
-            }
-            if (adult) SlovoCollapsibleSection("Objevování podcastů", Icons.Rounded.Explore) {
-                PodcastDiscoverySettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Skryté pořady", Icons.Rounded.VisibilityOff) {
-                HiddenPodcastsSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Propojené pořady", Icons.Rounded.Link) {
-                PodcastLinksSettingsSection()
-            }
-            // Emulátor 2026-10-13: dítě má jen poslech (video volby skryté) → kvalita videa nedává smysl.
-            if (adult) SlovoCollapsibleSection("Kvalita videa", Icons.Rounded.HighQuality) {
-                PodcastVideoQualitySettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("AI překlad YouTube titulků", Icons.Rounded.Translate) {
-                LinguaQuotaSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Přehrávání na TV/Zenbooku", Icons.Rounded.Cast) {
-                CastTargetSettingsSection()
-            }
-            if (adult) SlovoCollapsibleSection("Přehrávání na repro (receiver)", Icons.Rounded.Speaker) {
-                SpeakerSettingsSection()
-            }
-            // user 2026-09-17: appka neměla ŽÁDNOU Jellyfin login obrazovku, takže cast na TV z YouTube
-            // kanálů nešel spustit vůbec (appka hlásila "Chybí přihlášení k Jellyfinu" bez možnosti to řešit).
-            if (adult) SlovoCollapsibleSection("Jellyfin (videa Na výbornou, TV přes Jellyfin)", Icons.Rounded.LiveTv) {
-                SlovoJellyfinSection()
-            }
-            if (adult) SlovoCollapsibleSection("Dětský telefon", Icons.Rounded.ChildCare) {
-                SlovoKioskSection()
-            }
-            SlovoCollapsibleSection("O aplikaci", Icons.Rounded.Info) {
-                SlovoAboutSection()
-            }
+            SlovoCollapsibleSection(
+                title = entry.title,
+                icon = entry.icon,
+                initiallyExpanded = focused || sections.size == 1,
+                modifier = Modifier.bringIntoViewRequester(requester),
+                content = entry.content,
+            )
         }
     }
 }
