@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Folder
@@ -161,7 +161,7 @@ fun UploadAudiobookScreen(
                 title = { Text("Nahrát audioknihu") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět")
                     }
                 },
             )

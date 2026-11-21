@@ -15,6 +15,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.clearQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.moveQueueItem
 import com.github.jankoran90.showlyfin.feature.listen.player.moveToFront
 import com.github.jankoran90.showlyfin.feature.listen.player.removeFromQueue
+import com.github.jankoran90.showlyfin.feature.listen.player.removeFinishedFromQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +45,7 @@ class AudiobookPlayerViewModel @Inject constructor(
     @Named("traktPreferences") private val prefs: SharedPreferences,
     private val sourcesRepo: com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository,
     kidsQueueGuard: com.github.jankoran90.showlyfin.feature.listen.kids.KidsQueueGuard,
+    private val directResume: com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore,
 ) : ViewModel() {
 
     // Tester 2026-11-19: odebraný díl Dětí z fronty / mini-přehrávače (hlídač je singleton, start jen jednou).
@@ -240,6 +242,14 @@ class AudiobookPlayerViewModel @Inject constructor(
     fun clearAll() = connection.clearAll()
     fun moveQueueItem(from: Int, to: Int) = connection.moveQueueItem(from, to)
     fun moveQueuedToFront(episodeId: String) = connection.moveToFront(episodeId)
+
+    /** AMPHORA F1 — pozice direct dílů (RSS/YT/ČT) pro průběh a „zbývá“ na obrazovce Fronta. */
+    val directMarks = directResume.marks
+
+    /** AMPHORA F1 — „Vyčistit přehrané“: odebere dohrané díly (právě hraný ne). Vrací počet. */
+    fun clearFinishedFromQueue(): Int = connection.removeFinishedFromQueue { q ->
+        directMarks.value[q.episodeId]?.isFinished == true
+    }
     /** Stáhnout položku fronty offline. ABS přes server; RSS/YT (`direct`) zatím no-op (L3 = NOMAD). */
     fun downloadQueued(ep: QueuedEpisode) {
         if (ep.direct != null) return

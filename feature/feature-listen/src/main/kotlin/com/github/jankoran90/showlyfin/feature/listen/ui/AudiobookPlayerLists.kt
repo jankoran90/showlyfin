@@ -1,5 +1,8 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -15,13 +18,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -80,7 +83,7 @@ internal fun InlineChapterList(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        if (isCur) Icons.Default.GraphicEq else Icons.Default.PlayArrow,
+                        if (isCur) Icons.Rounded.GraphicEq else Icons.Rounded.PlayArrow,
                         contentDescription = null,
                         tint = accent,
                         modifier = Modifier.size(16.dp),
@@ -120,6 +123,12 @@ internal fun InlineQueueList(
     onSwipe: (QueuedEpisode, action: Int) -> Unit,
     onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
+    /** AMPHORA F1: obrazovka Fronta má vlastní hlavičku (souhrn + akce) → tady bez. */
+    showHeader: Boolean = true,
+    contentPadding: PaddingValues = PaddingValues(),
+    /** AMPHORA F1: druhý řádek s průběhem („zbývá 42 min“) a průběh 0..1 — jen kde je znám. */
+    metaFor: (QueuedEpisode) -> String? = { null },
+    progressFor: (QueuedEpisode) -> Float? = { null },
 ) {
     val queueState = rememberUpdatedState(queue)
     val listState = rememberLazyListState()
@@ -127,11 +136,13 @@ internal fun InlineQueueList(
     var dragAccum by remember { mutableStateOf(0f) }
 
     Column(modifier) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            ListHeader("Fronta · ${queue.size}", Modifier.weight(1f))
-            TextButton(onClick = onClear) { Text("Vymazat vše") }
+        if (showHeader) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                ListHeader("Fronta · ${queue.size}", Modifier.weight(1f))
+                TextButton(onClick = onClear) { Text("Vymazat vše") }
+            }
         }
-        LazyColumn(state = listState, modifier = Modifier.fillMaxWidth()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxWidth(), contentPadding = contentPadding) {
             itemsIndexed(queue, key = { _, q -> q.episodeId }) { _, q ->
                 val isCur = q.episodeId == currentEpisodeId
                 val isDragging = q.episodeId == draggingId
@@ -165,7 +176,7 @@ internal fun InlineQueueList(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (isCur) {
-                            Icon(Icons.Default.GraphicEq, contentDescription = "Hraje", tint = accent, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Rounded.GraphicEq, contentDescription = "Hraje", tint = accent, modifier = Modifier.size(18.dp))
                         } else {
                             QueueThumb(q.coverUrl, size = 36)
                         }
@@ -187,11 +198,27 @@ internal fun InlineQueueList(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
+                            metaFor(q)?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isCur) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                            }
+                            progressFor(q)?.takeIf { it > 0f }?.let { p ->
+                                LinearProgressIndicator(
+                                    progress = { p.coerceIn(0f, 1f) },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(3.dp),
+                                    color = accent,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                            }
                             EpisodeDescriptionText(description = q.description, display = display)
                         }
                         // Velký úchyt pro přetažení (změna pořadí) — long-press + tah nahoru/dolů.
                         Icon(
-                            Icons.Default.DragHandle,
+                            Icons.Rounded.DragHandle,
                             contentDescription = "Přetáhnout pro změnu pořadí",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
@@ -237,10 +264,10 @@ private fun QueueSwipeBackground(state: SwipeToDismissBoxState, swipeLeft: Int, 
     }
     if (action == 0) { Box(Modifier.fillMaxSize()); return }
     val (icon, label) = when (action) {
-        1 -> Icons.Default.Delete to "Odebrat"
-        3 -> Icons.Default.PlayArrow to "Přehrát"
-        4 -> Icons.Default.ArrowUpward to "Na začátek"
-        else -> Icons.Default.CloudDownload to "Stáhnout"
+        1 -> Icons.Rounded.Delete to "Odebrat"
+        3 -> Icons.Rounded.PlayArrow to "Přehrát"
+        4 -> Icons.Rounded.ArrowUpward to "Na začátek"
+        else -> Icons.Rounded.CloudDownload to "Stáhnout"
     }
     val remove = action == 1
     SwipeBg(
@@ -284,7 +311,7 @@ internal fun SeekButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.size(52.dp)) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
-                Icons.Default.Replay,
+                Icons.Rounded.Replay,
                 contentDescription = (if (forward) "+" else "−") + "$seconds s",
                 tint = MaterialTheme.colorScheme.onBackground,
                 modifier = (if (forward) Modifier.scale(scaleX = -1f, scaleY = 1f) else Modifier).size(38.dp),

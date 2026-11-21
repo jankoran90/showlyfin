@@ -11,15 +11,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.HourglassTop
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -88,22 +88,22 @@ internal fun SeriesBookDownloadRow(
                     Text("Stahuji ${done + 1}/$total · $detail", style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("Ťukni pro zrušení", style = MaterialTheme.typography.labelSmall, color = muted.copy(alpha = 0.7f))
                 }
-                Icon(Icons.Default.Close, contentDescription = "Zrušit", tint = muted, modifier = Modifier.padding(start = 8.dp).size(18.dp))
+                Icon(Icons.Rounded.Close, contentDescription = "Zrušit", tint = muted, modifier = Modifier.padding(start = 8.dp).size(18.dp))
             }
             done == total -> {
-                Icon(Icons.Default.DownloadDone, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.DownloadDone, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
                 Text("Staženo ($total kap.)", style = MaterialTheme.typography.bodyMedium, color = accent, modifier = Modifier.padding(start = 8.dp))
             }
             failed > 0 -> {
-                Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                 Text("Staženo $done/$total · stáhnout znovu", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 8.dp))
             }
             done > 0 -> {
-                Icon(Icons.Default.Download, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.Download, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
                 Text("Staženo $done/$total · stáhnout zbytek", style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(start = 8.dp))
             }
             else -> {
-                Icon(Icons.Default.Download, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.Download, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
                 Text("Stáhnout", style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(start = 8.dp))
             }
         }
@@ -137,9 +137,9 @@ internal fun SeriesBookChapterRow(
     ) {
         Icon(
             when {
-                isCurrent && isPlaying -> Icons.Default.GraphicEq
-                finished -> Icons.Default.CheckCircle
-                else -> Icons.Default.PlayArrow
+                isCurrent && isPlaying -> Icons.Rounded.GraphicEq
+                finished -> Icons.Rounded.CheckCircle
+                else -> Icons.Rounded.PlayArrow
             },
             contentDescription = when { isCurrent && isPlaying -> "Hraje"; finished -> "Poslechnuto"; else -> null },
             tint = accent,
@@ -171,7 +171,7 @@ internal fun SeriesBookChapterRow(
         }
         ChapterDownloadBadge(offline)
         IconButton(onClick = onMore) {
-            Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
+            Icon(Icons.Rounded.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -182,7 +182,7 @@ private fun ChapterDownloadBadge(state: OfflineState?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     when (state?.status) {
         OfflineStatus.DOWNLOADED ->
-            Icon(Icons.Default.DownloadDone, contentDescription = "Staženo", tint = accent, modifier = Modifier.padding(start = 6.dp).size(18.dp))
+            Icon(Icons.Rounded.DownloadDone, contentDescription = "Staženo", tint = accent, modifier = Modifier.padding(start = 6.dp).size(18.dp))
         OfflineStatus.DOWNLOADING ->
             if (state.preparing) {
                 CircularProgressIndicator(modifier = Modifier.padding(start = 6.dp).size(16.dp), strokeWidth = 2.dp, color = accent)
@@ -190,9 +190,9 @@ private fun ChapterDownloadBadge(state: OfflineState?) {
                 CircularProgressIndicator(progress = { state.progress.coerceIn(0f, 1f) }, modifier = Modifier.padding(start = 6.dp).size(16.dp), strokeWidth = 2.dp, color = accent)
             }
         OfflineStatus.QUEUED ->
-            Icon(Icons.Default.HourglassTop, contentDescription = "Ve frontě", tint = muted, modifier = Modifier.padding(start = 6.dp).size(16.dp))
+            Icon(Icons.Rounded.HourglassTop, contentDescription = "Ve frontě", tint = muted, modifier = Modifier.padding(start = 6.dp).size(16.dp))
         OfflineStatus.FAILED ->
-            Icon(Icons.Default.ErrorOutline, contentDescription = "Stažení selhalo", tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 6.dp).size(16.dp))
+            Icon(Icons.Rounded.ErrorOutline, contentDescription = "Stažení selhalo", tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 6.dp).size(16.dp))
         else -> Unit
     }
 }

@@ -2,9 +2,9 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import com.github.jankoran90.showlyfin.core.ui.dilyCz
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -36,16 +36,16 @@ internal fun sourceDownloadActions(
     val src = target.primary
     val info = if (count > 0) "V telefonu: ${dilyCz(count)}" else "V telefonu zatím nic"
     return info to listOfNotNull(
-        if (!offline && src != null) ListenEpisodeAction(Icons.Default.Download, "Stáhnout všechny díly") {
+        if (!offline && src != null) ListenEpisodeAction(Icons.Rounded.Download, "Stáhnout všechny díly") {
             // User 2026-11-21 „Frontu nechci … ani u Matyho“ → jen stáhnout, fronta beze změny (dřív i do fronty).
             vm.downloadAndQueue(src, target.seriesSlug, target.title, queue = false)
         } else null,
         if (!offline && src != null && count > 0) ListenEpisodeAction(
-            Icons.Default.Refresh, "Stáhnout znovu",
+            Icons.Rounded.Refresh, "Stáhnout znovu",
             confirmMessage = "Stažené díly se smažou a stáhnou nanovo (třeba po úpravě na serveru).",
         ) { vm.redownload(src, target.keys, target.seriesSlug, target.title) } else null,
         if (count > 0) ListenEpisodeAction(
-            Icons.Default.DeleteOutline, "Odstranit stažené ($count dílů)",
+            Icons.Rounded.DeleteOutline, "Odstranit stažené ($count dílů)",
             confirmMessage = "Stažené díly se smažou z telefonu. Online je půjde poslouchat dál.",
         ) { vm.deleteDownloaded(target.keys, target.seriesSlug) } else null,
     )

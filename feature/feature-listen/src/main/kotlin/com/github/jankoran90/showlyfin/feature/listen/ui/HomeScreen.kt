@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import com.github.jankoran90.showlyfin.feature.listen.HomeGroupViewModel
-import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.Column
@@ -15,8 +15,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -164,7 +164,7 @@ fun HomeScreen(
                                 Column {
                                     card(entry.latest)
                                     TextButton(onClick = { expandedGroups = expandedGroups + entry.key }) {
-                                        Icon(Icons.Default.ExpandMore, contentDescription = null)
+                                        Icon(Icons.Rounded.ExpandMore, contentDescription = null)
                                         Text(if (entry.isBooks) "Celá série" else "Všechny díly")
                                     }
                                 }
@@ -212,7 +212,7 @@ fun HomeScreen(
             actions = otherAdultProfiles.map { target ->
                 val shared = vm.isSourceSharedWith(setOf(key), target)
                 ListenEpisodeAction(
-                    if (shared) Icons.Default.Visibility else Icons.Default.Share,
+                    if (shared) Icons.Rounded.Visibility else Icons.Rounded.Share,
                     if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
                 ) { vm.setSourceSharedWith(setOf(key), target.id, !shared) }
             },
@@ -228,7 +228,7 @@ fun HomeScreen(
             actions = otherAdultProfiles.map { target ->
                 val shared = vm.isBookSharedWith(item.book.id, target)
                 ListenEpisodeAction(
-                    if (shared) Icons.Default.Visibility else Icons.Default.Share,
+                    if (shared) Icons.Rounded.Visibility else Icons.Rounded.Share,
                     if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
                 ) { vm.setBookSharedWith(item.book.id, target.id, !shared) }
             },

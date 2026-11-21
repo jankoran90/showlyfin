@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SegmentedButton
@@ -64,12 +64,12 @@ fun PodcastTabRow(
         // tmavým motivem. User (2026-08-16 14:27, „zruš ten červený flek s číslem na filtr ikoně") —
         // dřív tu byl červený Badge s `activeFilterCount`, teď jen ikona (aktivní filtr pozná v sheetu).
         FilledTonalIconButton(onClick = onOpenFilter, modifier = Modifier.size(40.dp)) {
-            Icon(Icons.Default.Tune, contentDescription = "Filtr podcastů")
+            Icon(Icons.Rounded.Tune, contentDescription = "Filtr podcastů")
         }
 
         // 2) Hledat — TRAWL, MUSTR (ovladače do lišty, ne schované v menu).
         FilledTonalIconButton(onClick = onOpenSearch, modifier = Modifier.size(40.dp)) {
-            Icon(Icons.Default.Search, contentDescription = "Hledat v podcastech")
+            Icon(Icons.Rounded.Search, contentDescription = "Hledat v podcastech")
         }
 
         // 3) Timeline · Sledované · Objev

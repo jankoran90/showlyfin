@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,7 +76,7 @@ fun PodcastFilterSheet(
                     label = { Text("Stažené · $downloadCount") },
                     leadingIcon = {
                         Icon(
-                            Icons.Default.DownloadDone,
+                            Icons.Rounded.DownloadDone,
                             contentDescription = null,
                             modifier = Modifier.size(AssistChipDefaults.IconSize),
                         )

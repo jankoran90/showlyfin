@@ -1,7 +1,7 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.github.jankoran90.showlyfin.core.ui.CoverCard
@@ -28,6 +28,6 @@ internal fun KidsEpisodeCard(
         onClick = onClick,
         modifier = modifier,
         onLongClick = onLongClick,
-        placeholder = Icons.Default.PlayArrow,
+        placeholder = Icons.Rounded.PlayArrow,
     )
 }

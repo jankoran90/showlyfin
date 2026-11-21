@@ -19,20 +19,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OndemandVideo
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.LinkOff
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.OndemandVideo
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -134,17 +134,17 @@ fun MergedPodcastScreen(
                 title = { Text(state.title.ifBlank { title }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět")
                     }
                 },
                 actions = {
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Další akce")
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "Další akce")
                     }
                     androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Zrušit propojení") },
-                            leadingIcon = { Icon(Icons.Default.LinkOff, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Rounded.LinkOff, contentDescription = null) },
                             onClick = { menuOpen = false; viewModel.unlink(); onUnlinked() },
                         )
                     }
@@ -221,32 +221,32 @@ fun MergedPodcastScreen(
             // WEFT (SHW-75/W1): jednotné menu jako NaVýbornou/RSS — Přehrát · Video · Na TV · fronta×2 · stáhnout.
             // SLOVO-KIDS-EPISODE: dětský profil (audioOnly) = video volby se ani nenabídnou.
             actions = listOfNotNull(
-                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
+                ListenEpisodeAction(Icons.Rounded.PlayArrow, "Přehrát") {
                     viewModel.playAudio(item); onOpenAudioPlayer()
                 },
                 item.audio?.let {
-                    ListenEpisodeAction(Icons.Default.Speaker, "Na repro (receiver)") {
+                    ListenEpisodeAction(Icons.Rounded.Speaker, "Na repro (receiver)") {
                         viewModel.castAudioToSpeaker(item)
                     }
                 },
                 if (!audioOnly) {
                     item.video?.let {
-                        ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                        ListenEpisodeAction(Icons.Rounded.OndemandVideo, "Přehrát video") {
                             viewModel.videoUrl(item)?.let { url -> onPlayVideo(url, item.title, item.imageUrl) }
                         }
                     }
                 } else null,
                 if (!audioOnly) {
                     item.video?.let {
-                        ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                        ListenEpisodeAction(Icons.Rounded.Tv, "Přehrát na TV (video)") {
                             viewModel.castVideoToTv(item)
                         }
                     }
                 } else null,
-                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(item, atFront = true)
                 },
-                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistAdd, "Přidat do fronty (na konec)") {
                     viewModel.enqueue(item, atFront = false)
                 },
                 offlineDownloadAction(
@@ -258,14 +258,14 @@ fun MergedPodcastScreen(
                 // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
                 if (resumeMarks[item.key] != null) {
                     ListenEpisodeAction(
-                        Icons.Default.Close, "Ukončit poslech",
+                        Icons.Rounded.Close, "Ukončit poslech",
                         confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.resetPosition(item) }
                 } else null,
                 // User (2026-08-16 12:51, „chci volbu, která označí jako poslechnuto") — parita s audioknihami.
                 if (resumeMarks[item.key]?.isFinished != true) {
                     ListenEpisodeAction(
-                        Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                        Icons.Rounded.CheckCircle, "Označit jako poslechnuté",
                         confirmMessage = "Epizoda se označí jako poslechnutá a zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.markFinished(item) }
                 } else null,
@@ -327,7 +327,7 @@ private fun MergedEpisodeRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (downloaded) {
                         Icon(
-                            Icons.Default.DownloadDone,
+                            Icons.Rounded.DownloadDone,
                             contentDescription = "Staženo do telefonu",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
@@ -335,7 +335,7 @@ private fun MergedEpisodeRow(
                     }
                     if (isFinished) {
                         Icon(
-                            Icons.Default.CheckCircle,
+                            Icons.Rounded.CheckCircle,
                             contentDescription = "Poslechnuto",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
@@ -376,11 +376,11 @@ private fun MergedEpisodeRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val (playIcon, playLabel) = when {
-                isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
-                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"
-                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
-                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
-                else -> Icons.Default.Headphones to "Přehrát"
+                isCurrent && isPlaying -> Icons.Rounded.GraphicEq to "Hraje"
+                isCurrent -> Icons.Rounded.PlayArrow to "Pokračovat"
+                canResume && !isFinished -> Icons.Rounded.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Rounded.Headphones to "Přehrát znovu"
+                else -> Icons.Rounded.Headphones to "Přehrát"
             }
             FilledTonalButton(onClick = onPlayAudio, modifier = Modifier.weight(1f)) {
                 Icon(playIcon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -388,7 +388,7 @@ private fun MergedEpisodeRow(
             }
             if (item.video != null && showVideo) {
                 OutlinedButton(onClick = onPlayVideo, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))
                 }
             }
@@ -396,7 +396,7 @@ private fun MergedEpisodeRow(
                 EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
             }
         }
     }

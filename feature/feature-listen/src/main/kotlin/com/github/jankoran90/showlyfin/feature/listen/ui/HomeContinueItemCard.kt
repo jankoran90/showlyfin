@@ -1,8 +1,8 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.github.jankoran90.showlyfin.core.data.entity.ProfileEntity
@@ -53,7 +53,7 @@ internal fun HomeContinueItemCard(
                         posMs = if (isPlaying && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs else (b.currentTimeSec * 1000).toLong(),
                         durMs = if (isPlaying && playerState.isPlaying && playerState.durationMs > 0) playerState.durationMs else (b.durationSec * 1000).toLong(),
                         layout = layout,
-                        placeholder = Icons.Default.Headphones,
+                        placeholder = Icons.Rounded.Headphones,
                         onClick = { onOpenBook(b.id) },
                         isPlaying = isPlaying,
                         onLongClick = onLong,
@@ -125,7 +125,7 @@ internal fun HomeContinueItemCard(
                         posMs = if (loadedInQueue && playerState.isPlaying && playerState.durationMs > 0) playerState.positionMs else item.posMs,
                         durMs = if (loadedInQueue && playerState.isPlaying && playerState.durationMs > 0) playerState.durationMs else item.durMs,
                         layout = layout,
-                        placeholder = Icons.Default.Podcasts,
+                        placeholder = Icons.Rounded.Podcasts,
                         onClick = onClick,
                         isPlaying = loadedInQueue,
                         onLongClick = onLong,

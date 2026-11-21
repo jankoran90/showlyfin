@@ -19,24 +19,24 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OndemandVideo
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.OndemandVideo
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -158,7 +158,7 @@ private fun VideoVersionRow(
                 onClick = {},
                 enabled = false,
                 label = { Text("Doporučeno") },
-                leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                leadingIcon = { Icon(Icons.Rounded.Star, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 colors = AssistChipDefaults.assistChipColors(
                     disabledLabelColor = MaterialTheme.colorScheme.primary,
                     disabledLeadingIconContentColor = MaterialTheme.colorScheme.primary,
@@ -193,11 +193,11 @@ private fun VideoVersionRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("Přehrát", Modifier.padding(start = 6.dp))
             }
             OutlinedButton(onClick = onCast, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Tv, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.Tv, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("Na TV", Modifier.padding(start = 6.dp))
             }
         }

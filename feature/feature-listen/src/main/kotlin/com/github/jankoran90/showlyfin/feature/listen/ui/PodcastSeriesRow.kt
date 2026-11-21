@@ -11,10 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -65,7 +65,7 @@ internal fun PodcastSeriesRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                if (asBook) Icons.AutoMirrored.Filled.MenuBook else Icons.Default.Layers,
+                if (asBook) Icons.AutoMirrored.Rounded.MenuBook else Icons.Rounded.Layers,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.width(18.dp).height(18.dp),
@@ -90,7 +90,7 @@ internal fun PodcastSeriesRow(
             }
         }
         Icon(
-            if (expanded && !asBook) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
+            if (expanded && !asBook) Icons.Rounded.ExpandMore else Icons.Rounded.ChevronRight,
             contentDescription = if (asBook) "Otevřít knihu" else if (expanded) "Sbalit" else "Rozbalit",
             tint = MaterialTheme.colorScheme.onSecondaryContainer,
         )

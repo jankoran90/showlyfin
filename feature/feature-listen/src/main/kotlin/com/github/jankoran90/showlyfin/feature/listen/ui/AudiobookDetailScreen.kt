@@ -17,15 +17,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -94,7 +94,7 @@ fun AudiobookDetailScreen(
                     title = { Text(state.detail?.book?.title ?: "Audiokniha", maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět")
                         }
                     },
                     actions = {
@@ -103,7 +103,7 @@ fun AudiobookDetailScreen(
                         if (!rememberKioskActive()) IconButton(onClick = {
                             ShareLinks.share(ctx, bTitle, ShareLinks.audiobook(itemId))
                         }) {
-                            Icon(Icons.Default.Share, contentDescription = "Sdílet")
+                            Icon(Icons.Rounded.Share, contentDescription = "Sdílet")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -228,7 +228,7 @@ private fun DetailContent(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Button(onClick = { onPlay(false, null) }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                     Text(
                         if (canResume) "Pokračovat ${formatDuration(resumeSec)}" else "Přehrát",
                         modifier = Modifier.padding(start = 6.dp),
@@ -238,7 +238,7 @@ private fun DetailContent(
                 }
                 if (canResume) {
                     FilledTonalButton(onClick = { onPlay(true, null) }) {
-                        Icon(Icons.Default.Replay, contentDescription = "Od začátku", modifier = Modifier.size(20.dp))
+                        Icon(Icons.Rounded.Replay, contentDescription = "Od začátku", modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -317,7 +317,7 @@ private fun AudiobookDownloadRow(
     ) {
         when (state.status) {
             DownloadStatus.DOWNLOADED -> {
-                Icon(Icons.Default.DownloadDone, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.DownloadDone, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
                 Text("Staženo", style = MaterialTheme.typography.bodyMedium, color = accent, modifier = Modifier.padding(start = 8.dp))
             }
             DownloadStatus.DOWNLOADING -> {
@@ -328,14 +328,14 @@ private fun AudiobookDownloadRow(
                     color = accent,
                 )
                 Text("Stahuji… ${(state.progress * 100).toInt()} %", style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(start = 8.dp))
-                Icon(Icons.Default.Close, contentDescription = "Zrušit", tint = muted, modifier = Modifier.padding(start = 8.dp).size(18.dp))
+                Icon(Icons.Rounded.Close, contentDescription = "Zrušit", tint = muted, modifier = Modifier.padding(start = 8.dp).size(18.dp))
             }
             DownloadStatus.FAILED -> {
-                Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                 Text("Stáhnout znovu", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 8.dp))
             }
             DownloadStatus.NONE -> {
-                Icon(Icons.Default.Download, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.Download, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
                 Text("Stáhnout", style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(start = 8.dp))
             }
         }
@@ -354,7 +354,7 @@ private fun ChapterRow(ch: Chapter, isCurrent: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (isCurrent) Icons.Default.GraphicEq else Icons.Default.PlayArrow,
+            if (isCurrent) Icons.Rounded.GraphicEq else Icons.Rounded.PlayArrow,
             contentDescription = if (isCurrent) "Hraje" else null,
             tint = accent,
             modifier = Modifier.size(18.dp).padding(end = 2.dp),

@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -130,7 +130,7 @@ fun PodcastDiscoveryScreen(
                                 if (state.excluded.isNotEmpty()) Badge { Text("${state.excluded.size}") }
                             }) {
                                 IconButton(onClick = { showFilterSheet = true }) {
-                                    Icon(Icons.Default.FilterList, contentDescription = "Filtr kategorií")
+                                    Icon(Icons.Rounded.FilterList, contentDescription = "Filtr kategorií")
                                 }
                             }
                         }

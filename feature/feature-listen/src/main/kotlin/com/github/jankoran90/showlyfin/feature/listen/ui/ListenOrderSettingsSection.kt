@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -116,10 +116,10 @@ private fun ReorderRow(
             modifier = Modifier.weight(1f),
         )
         IconButton(onClick = onUp, enabled = canUp) {
-            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Nahoru")
+            Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Nahoru")
         }
         IconButton(onClick = onDown, enabled = canDown) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Dolů")
+            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Dolů")
         }
     }
 }

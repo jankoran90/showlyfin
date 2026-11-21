@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -47,7 +47,7 @@ fun ContinueEpisodeCard(
         onClick = onClick,
         modifier = modifier,
         onLongClick = onLongClick,
-        placeholder = Icons.Default.Podcasts,
+        placeholder = Icons.Rounded.Podcasts,
         overlay = {
             if (progress > 0.001f) {
                 LinearProgressIndicator(
@@ -62,7 +62,7 @@ fun ContinueEpisodeCard(
             }
             if (isPlaying) {
                 Icon(
-                    imageVector = Icons.Default.GraphicEq,
+                    imageVector = Icons.Rounded.GraphicEq,
                     contentDescription = "Hraje",
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
@@ -86,7 +86,7 @@ fun ContinueEpisodeCard(
                     modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(36.dp),
                 ) {
                     Icon(
-                        if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = if (playing) "Pauza" else "Poslouchat",
                     )
                 }

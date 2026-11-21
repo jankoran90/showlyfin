@@ -16,8 +16,8 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -260,11 +260,11 @@ private fun SearchList(vm: SourceManagerViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 label = { Text("Najít podcast nebo YouTube kanál podle názvu") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (state.query.isNotEmpty()) {
                         IconButton(onClick = { vm.onQueryChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Vymazat")
+                            Icon(Icons.Rounded.Clear, contentDescription = "Vymazat")
                         }
                     }
                 },

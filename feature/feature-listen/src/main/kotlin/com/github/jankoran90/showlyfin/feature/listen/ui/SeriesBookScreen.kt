@@ -18,16 +18,16 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.OndemandVideo
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.OndemandVideo
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -120,20 +120,20 @@ fun SeriesBookScreen(
                 TopAppBar(
                     title = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět") }
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět") }
                     },
                     actions = {
                         if (kidsVisible != null) {
                             IconButton(onClick = { onToggleKids(!kidsVisible) }) {
                                 Icon(
-                                    Icons.Default.ChildCare,
+                                    Icons.Rounded.ChildCare,
                                     contentDescription = if (kidsVisible) "Skrýt dětem" else "Zobrazit dětem",
                                     tint = if (kidsVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
                         if (onEdit != null) {
-                            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "Upravit knihu") }
+                            IconButton(onClick = onEdit) { Icon(Icons.Rounded.Edit, contentDescription = "Upravit knihu") }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -217,12 +217,12 @@ fun SeriesBookScreen(
                             enabled = chapters.isNotEmpty(),
                             modifier = Modifier.weight(1f),
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                             Text(label, modifier = Modifier.padding(start = 6.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         if (anyProgress) {
                             FilledTonalButton(onClick = { viewModel.playFromStart(chapters); onOpenAudioPlayer() }) {
-                                Icon(Icons.Default.Replay, contentDescription = "Od začátku", modifier = Modifier.size(20.dp))
+                                Icon(Icons.Rounded.Replay, contentDescription = "Od začátku", modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -268,25 +268,25 @@ fun SeriesBookScreen(
         ListenEpisodeActionSheet(
             title = ch.title,
             actions = listOfNotNull(
-                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát od této kapitoly") {
+                ListenEpisodeAction(Icons.Rounded.PlayArrow, "Přehrát od této kapitoly") {
                     viewModel.playFrom(chapters, idx); onOpenAudioPlayer()
                 },
-                ch.onVideo?.let { v -> ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video", onClick = v) },
+                ch.onVideo?.let { v -> ListenEpisodeAction(Icons.Rounded.OndemandVideo, "Přehrát video", onClick = v) },
                 when {
                     ch.download == null -> null
                     dl == OfflineStatus.DOWNLOADED -> ListenEpisodeAction(
-                        Icons.Default.Delete, "Smazat z telefonu", confirmMessage = "Stažený díl se smaže z telefonu.",
+                        Icons.Rounded.Delete, "Smazat z telefonu", confirmMessage = "Stažený díl se smaže z telefonu.",
                     ) { viewModel.deleteDownload(ch) }
                     dl == OfflineStatus.QUEUED || dl == OfflineStatus.DOWNLOADING ->
-                        ListenEpisodeAction(Icons.Default.Close, "Zrušit stahování") { viewModel.cancelDownloads(listOf(ch)) }
-                    else -> ListenEpisodeAction(Icons.Default.Download, "Stáhnout do telefonu") { viewModel.download(ch) }
+                        ListenEpisodeAction(Icons.Rounded.Close, "Zrušit stahování") { viewModel.cancelDownloads(listOf(ch)) }
+                    else -> ListenEpisodeAction(Icons.Rounded.Download, "Stáhnout do telefonu") { viewModel.download(ch) }
                 },
                 if (p?.isFinished != true) {
-                    ListenEpisodeAction(Icons.Default.CheckCircle, "Označit jako poslechnuté") { viewModel.markFinished(ch) }
+                    ListenEpisodeAction(Icons.Rounded.CheckCircle, "Označit jako poslechnuté") { viewModel.markFinished(ch) }
                 } else null,
                 if (p != null) {
                     ListenEpisodeAction(
-                        Icons.Default.Close, "Ukončit poslech",
+                        Icons.Rounded.Close, "Ukončit poslech",
                         confirmMessage = "Smaže se uložená pozice poslechu této kapitoly.",
                     ) { viewModel.resetPosition(ch) }
                 } else null,
@@ -300,7 +300,7 @@ fun SeriesBookScreen(
             title = "Smazat staženou knihu?",
             infoLine = "Smažou se všechny stažené kapitoly této série z telefonu.",
             actions = listOf(
-                ListenEpisodeAction(Icons.Default.Delete, "Smazat všechny stažené kapitoly") { viewModel.deleteAllDownloads(chapters) },
+                ListenEpisodeAction(Icons.Rounded.Delete, "Smazat všechny stažené kapitoly") { viewModel.deleteAllDownloads(chapters) },
             ),
             onDismiss = { confirmDeleteAll = false },
         )

@@ -21,12 +21,12 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Podcasts
-import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Podcasts
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -76,7 +76,7 @@ internal fun OfflineBanner() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
-            Icons.Default.CloudOff,
+            Icons.Rounded.CloudOff,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(18.dp),
@@ -169,7 +169,7 @@ private fun DownloadEntryRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Default.PlayArrow,
+            Icons.Rounded.PlayArrow,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(22.dp),
@@ -192,7 +192,7 @@ private fun DownloadEntryRow(
             }
         }
         IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, contentDescription = "Smazat stažení", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Rounded.Delete, contentDescription = "Smazat stažení", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -307,7 +307,7 @@ private fun OfflinePodcastCard(
         subtitle = "${show.sourceLabel} · ${show.episodes.size} ${episodesWord(show.episodes.size)}",
         imageUrl = show.poster,
         onClick = onClick,
-        placeholder = Icons.Default.Podcasts,
+        placeholder = Icons.Rounded.Podcasts,
         overlay = {
             Badge(
                 modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
@@ -361,7 +361,7 @@ private fun OfflinePodcastDetailScreen(
                 title = { Text(show.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět")
                     }
                 },
                 actions = {
@@ -370,7 +370,7 @@ private fun OfflinePodcastDetailScreen(
                         viewModel.offlinePodcastNewestFirst = newestFirst
                     }) {
                         Icon(
-                            Icons.Default.SwapVert,
+                            Icons.Rounded.SwapVert,
                             contentDescription = if (newestFirst) "Řazení: nejnovější nahoře (ťuk = obrátit)"
                             else "Řazení: nejstarší nahoře (ťuk = obrátit)",
                         )
@@ -471,10 +471,10 @@ private fun OfflinePodcastDetailScreen(
         ListenEpisodeActionSheet(
             title = dl.title,
             actions = listOf(
-                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
+                ListenEpisodeAction(Icons.Rounded.PlayArrow, "Přehrát") {
                     viewModel.playOfflinePodcast(dl); actionEp = null
                 },
-                ListenEpisodeAction(Icons.Default.Delete, "Smazat z telefonu") {
+                ListenEpisodeAction(Icons.Rounded.Delete, "Smazat z telefonu") {
                     viewModel.deleteOfflinePodcast(dl.key); actionEp = null
                 },
             ),

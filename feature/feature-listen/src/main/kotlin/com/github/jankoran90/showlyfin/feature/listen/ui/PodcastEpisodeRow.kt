@@ -13,13 +13,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OndemandVideo
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.OndemandVideo
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -112,7 +112,7 @@ internal fun PodcastEpisodeRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (downloaded) {
                         Icon(
-                            Icons.Default.DownloadDone,
+                            Icons.Rounded.DownloadDone,
                             contentDescription = "Staženo do telefonu",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
@@ -120,7 +120,7 @@ internal fun PodcastEpisodeRow(
                     }
                     if (isFinished) {
                         Icon(
-                            Icons.Default.CheckCircle,
+                            Icons.Rounded.CheckCircle,
                             contentDescription = "Poslechnuto",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
@@ -164,11 +164,11 @@ internal fun PodcastEpisodeRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val (playIcon, playLabel) = when {
-                isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
-                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
-                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
-                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
-                else -> Icons.Default.Headphones to "Poslech"
+                isCurrent && isPlaying -> Icons.Rounded.GraphicEq to "Hraje"
+                isCurrent -> Icons.Rounded.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
+                canResume && !isFinished -> Icons.Rounded.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Rounded.Headphones to "Přehrát znovu"
+                else -> Icons.Rounded.Headphones to "Poslech"
             }
             FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
                 Icon(playIcon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -177,7 +177,7 @@ internal fun PodcastEpisodeRow(
             // Druhé tlačítko Video u epizod, co mají video verzi (NaVýbornou online / lokální video offline).
             if (hasVideo) {
                 OutlinedButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.OndemandVideo, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))
                 }
             }
@@ -185,7 +185,7 @@ internal fun PodcastEpisodeRow(
                 EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
             }
         }
     }

@@ -4,13 +4,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,28 +55,28 @@ fun AudiobookActionSheet(
         title = book.title,
         infoLine = infoLine,
         actions = listOfNotNull(
-            if (!isDownloaded) ListenEpisodeAction(Icons.Default.Download, "Stáhnout", enabled = canDownload, onClick = onDownload) else null,
+            if (!isDownloaded) ListenEpisodeAction(Icons.Rounded.Download, "Stáhnout", enabled = canDownload, onClick = onDownload) else null,
             if (isDownloaded) onRedownload?.let {
-                ListenEpisodeAction(Icons.Default.Refresh, "Stáhnout znovu", onClick = it)
+                ListenEpisodeAction(Icons.Rounded.Refresh, "Stáhnout znovu", onClick = it)
             } else null,
             if (isDownloaded) onDeleteDownload?.let {
                 ListenEpisodeAction(
-                    Icons.Default.DeleteOutline, "Odstranit z telefonu",
+                    Icons.Rounded.DeleteOutline, "Odstranit z telefonu",
                     confirmMessage = "Stažená kniha se smaže z telefonu. Na serveru zůstane, poslouchat jde dál online.",
                     onClick = it,
                 )
             } else null,
-            onEdit?.let { ListenEpisodeAction(Icons.Default.Edit, "Upravit", onClick = it) },
+            onEdit?.let { ListenEpisodeAction(Icons.Rounded.Edit, "Upravit", onClick = it) },
             if (inProgress) {
                 ListenEpisodeAction(
-                    Icons.Default.Close, "Ukončit poslech",
+                    Icons.Rounded.Close, "Ukončit poslech",
                     confirmMessage = "Smaže se uložená pozice poslechu a kniha zmizí z Domů z „Pokračovat“.",
                     onClick = onResetProgress,
                 )
             } else null,
             if (inProgress) {
                 ListenEpisodeAction(
-                    Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                    Icons.Rounded.CheckCircle, "Označit jako poslechnuté",
                     confirmMessage = "Kniha se označí jako dočtená a zmizí z Domů z „Pokračovat“.",
                     onClick = onMarkFinished,
                 )
@@ -84,7 +84,7 @@ fun AudiobookActionSheet(
         ) + shareActions + listOfNotNull(
             onDelete?.let {
                 ListenEpisodeAction(
-                    Icons.Default.Delete, "Smazat",
+                    Icons.Rounded.Delete, "Smazat",
                     confirmMessage = "Kniha zmizí z appky. Soubory zůstanou na serveru, dá se vrátit zpět.",
                     onClick = it,
                 )

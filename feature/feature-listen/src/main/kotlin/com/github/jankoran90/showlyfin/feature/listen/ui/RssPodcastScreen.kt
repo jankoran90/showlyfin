@@ -19,25 +19,25 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OndemandVideo
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.OndemandVideo
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -319,7 +319,7 @@ fun RssPodcastScreen(
                 title = { Text(state.title ?: title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět")
                     }
                 },
                 actions = {
@@ -327,7 +327,7 @@ fun RssPodcastScreen(
                     if (seriesFilter == null && !seriesOnlyGroups.isNullOrEmpty()) {
                         IconButton(onClick = { seriesOnly = !seriesOnly }) {
                             Icon(
-                                Icons.Default.Layers,
+                                Icons.Rounded.Layers,
                                 contentDescription = if (seriesOnly) "Zobrazit vše" else "Jen série",
                                 tint = if (seriesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -336,7 +336,7 @@ fun RssPodcastScreen(
                     // FOCUS (2026-09-03) — hledání scoped na tenhle feed.
                     if (seriesFilter == null) {
                         IconButton(onClick = { showSearch = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Hledat v tomto podcastu")
+                            Icon(Icons.Rounded.Search, contentDescription = "Hledat v tomto podcastu")
                         }
                     }
                 },
@@ -400,24 +400,24 @@ fun RssPodcastScreen(
         ListenEpisodeActionSheet(
             title = ep.title.ifBlank { fallbackTitle },
             actions = listOfNotNull(
-                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
+                ListenEpisodeAction(Icons.Rounded.PlayArrow, "Přehrát") {
                     viewModel.playAudio(ep, fallbackTitle); onOpenAudioPlayer()
                 },
-                ListenEpisodeAction(Icons.Default.Speaker, "Na repro (receiver)") {
+                ListenEpisodeAction(Icons.Rounded.Speaker, "Na repro (receiver)") {
                     viewModel.castAudioToSpeaker(ep, fallbackTitle)
                 },
                 // EXODUS E2: video epizoda (v JF knihovně) → přehrát video / poslat na TV.
                 // SLOVO-KIDS-EPISODE: dětský profil = vždy jen audio, video volby se ani nenabídnou.
                 if (!audioOnly) {
                     ep.jfItemId?.let {
-                        ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                        ListenEpisodeAction(Icons.Rounded.OndemandVideo, "Přehrát video") {
                             onPlayVideo(it, ep.title.ifBlank { fallbackTitle }, viewModel.episodeKey(ep))
                         }
                     }
                 } else null,
                 if (!audioOnly) {
                     ep.jfItemId?.let {
-                        ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                        ListenEpisodeAction(Icons.Rounded.Tv, "Přehrát na TV (video)") {
                             viewModel.castVideoToTv(ep)
                         }
                     }
@@ -425,20 +425,20 @@ fun RssPodcastScreen(
                 // AGORA (F5): u epizod BEZ vlastního JF videa dohledej video verze na YouTube
                 // → otevři picker s kandidáty, uživatel si sám vybere (+ Přehrát / Na TV per kandidát).
                 if (ep.jfItemId == null && !audioOnly) {
-                    ListenEpisodeAction(Icons.Default.OndemandVideo, "Video verze (YouTube)") {
+                    ListenEpisodeAction(Icons.Rounded.OndemandVideo, "Video verze (YouTube)") {
                         videoForEpisode = ep
                         viewModel.requestVideoVersions(ep, fallbackTitle)
                     }
                 } else null,
-                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, fallbackTitle, atFront = true)
                 },
                 if (isAdmin) {
-                    ListenEpisodeAction(Icons.AutoMirrored.Filled.MenuBook, "Udělat knihu z dílů…") {
+                    ListenEpisodeAction(Icons.AutoMirrored.Rounded.MenuBook, "Udělat knihu z dílů…") {
                         ruleDraft.value = SeriesRuleDraft.fromEpisode(ep.title)
                     }
                 } else null,
-                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistAdd, "Přidat do fronty (na konec)") {
                     viewModel.enqueue(ep, fallbackTitle, atFront = false)
                 },
                 offlineDownloadAction(
@@ -450,14 +450,14 @@ fun RssPodcastScreen(
                 // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
                 if (resumeMarks[viewModel.episodeKey(ep)] != null) {
                     ListenEpisodeAction(
-                        Icons.Default.Close, "Ukončit poslech",
+                        Icons.Rounded.Close, "Ukončit poslech",
                         confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.resetPosition(ep) }
                 } else null,
                 // User (2026-08-16 12:51, „chci volbu, která označí jako poslechnuto") — parita s audioknihami.
                 if (resumeMarks[viewModel.episodeKey(ep)]?.isFinished != true) {
                     ListenEpisodeAction(
-                        Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                        Icons.Rounded.CheckCircle, "Označit jako poslechnuté",
                         confirmMessage = "Epizoda se označí jako poslechnutá a zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.markFinished(ep) }
                 } else null,
@@ -474,7 +474,7 @@ fun RssPodcastScreen(
             title = group.title,
             actions = listOf(
                 ListenEpisodeAction(
-                    if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
+                    if (visibleToKids) Icons.Rounded.ChildCare else Icons.Rounded.Visibility,
                     if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
                 ) { onSetSeriesVisibleForKids(seriesKey, !visibleToKids) },
             ),

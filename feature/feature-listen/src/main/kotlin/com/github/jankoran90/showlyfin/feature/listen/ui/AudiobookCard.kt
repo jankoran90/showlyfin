@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +44,7 @@ fun AudiobookCard(
         onClick = onClick,
         modifier = modifier,
         onLongClick = onLongClick,
-        placeholder = Icons.Default.Headphones,
+        placeholder = Icons.Rounded.Headphones,
         overlay = {
             if (book.progress > 0.001 && !book.isFinished) {
                 LinearProgressIndicator(
@@ -60,7 +60,7 @@ fun AudiobookCard(
             // Plan CASTAWAY — odznak „staženo" (dostupné i offline).
             if (downloaded) {
                 Icon(
-                    imageVector = Icons.Default.DownloadDone,
+                    imageVector = Icons.Rounded.DownloadDone,
                     contentDescription = "Staženo",
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
@@ -74,7 +74,7 @@ fun AudiobookCard(
             // User (2026-08-15 16:49) — odznak „hraje", když je kniha zrovna ve frontě/přehrává se.
             if (isPlaying) {
                 Icon(
-                    imageVector = Icons.Default.GraphicEq,
+                    imageVector = Icons.Rounded.GraphicEq,
                     contentDescription = "Hraje",
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier
@@ -89,7 +89,7 @@ fun AudiobookCard(
             // dřív se dokončenost projevila jen zmizením progress baru (nerozeznatelné od nikdy-nespuštěné).
             if (book.isFinished && !isPlaying) {
                 Icon(
-                    imageVector = Icons.Default.CheckCircle,
+                    imageVector = Icons.Rounded.CheckCircle,
                     contentDescription = "Poslechnuto",
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier

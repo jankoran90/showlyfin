@@ -11,8 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -123,7 +123,7 @@ fun MiniPlayer(
                 }
                 IconButton(onClick = { startOrToggle() }) {
                     Icon(
-                        if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = if (state.isPlaying) "Pauza" else "Přehrát",
                         tint = MaterialTheme.colorScheme.onSurface,
                     )

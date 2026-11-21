@@ -16,9 +16,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -137,11 +137,11 @@ fun SourceManagerScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text("Najít podcast nebo YouTube kanál podle názvu") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                     trailingIcon = {
                         if (state.query.isNotEmpty()) {
                             IconButton(onClick = { viewModel.onQueryChange("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Vymazat")
+                                Icon(Icons.Rounded.Clear, contentDescription = "Vymazat")
                             }
                         }
                     },
@@ -253,7 +253,7 @@ private fun SourceRow(source: PodcastSource, onRemove: () -> Unit, onOpen: (() -
         // EXODUS (SHW-67): prémiový zdroj rodiny (NaVýbornou) nelze odebrat → mazání skryté.
         if (!source.premium) {
             IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Delete, contentDescription = "Odebrat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Rounded.Delete, contentDescription = "Odebrat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

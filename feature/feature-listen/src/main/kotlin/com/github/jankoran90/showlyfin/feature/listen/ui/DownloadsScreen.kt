@@ -16,11 +16,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -83,7 +83,7 @@ fun DownloadsScreen(
                 Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                     Column(Modifier.padding(10.dp)) {
                         DownloadRow(a.request.posterUrl, a.request.title, a.request.subtitle) {
-                            IconButton(onClick = { viewModel.cancel(a.request.key) }) { Icon(Icons.Default.Close, contentDescription = "Zrušit") }
+                            IconButton(onClick = { viewModel.cancel(a.request.key) }) { Icon(Icons.Rounded.Close, contentDescription = "Zrušit") }
                         }
                         val s = a.state
                         if (s.preparing) {
@@ -116,7 +116,7 @@ fun DownloadsScreen(
             }
             items(st.queued, key = { "q_${it.request.key}" }) { q ->
                 DownloadRow(q.request.posterUrl, q.request.title, listOfNotNull(q.request.subtitle, q.request.durationSec.takeIf { it > 0 }?.let(DownloadFormat::duration)).joinToString(" · ")) {
-                    IconButton(onClick = { viewModel.cancel(q.request.key) }) { Icon(Icons.Default.Close, contentDescription = "Odebrat z fronty") }
+                    IconButton(onClick = { viewModel.cancel(q.request.key) }) { Icon(Icons.Rounded.Close, contentDescription = "Odebrat z fronty") }
                 }
             }
         }
@@ -124,8 +124,8 @@ fun DownloadsScreen(
             item(key = "h_failed") { SectionTitle("Selhalo (${st.failed.size})") }
             items(st.failed, key = { "f_${it.request.key}" }) { f ->
                 DownloadRow(f.request.posterUrl, f.request.title, f.state.error ?: "Stažení selhalo") {
-                    IconButton(onClick = { viewModel.retry(f.request.key) }) { Icon(Icons.Default.Refresh, contentDescription = "Zkusit znovu") }
-                    IconButton(onClick = { viewModel.cancel(f.request.key) }) { Icon(Icons.Default.Close, contentDescription = "Odebrat") }
+                    IconButton(onClick = { viewModel.retry(f.request.key) }) { Icon(Icons.Rounded.Refresh, contentDescription = "Zkusit znovu") }
+                    IconButton(onClick = { viewModel.cancel(f.request.key) }) { Icon(Icons.Rounded.Close, contentDescription = "Odebrat") }
                 }
             }
         }
@@ -142,9 +142,9 @@ fun DownloadsScreen(
                     listOfNotNull(d.subtitle, DownloadFormat.bytes(d.sizeBytes)).joinToString(" · "),
                     onClick = { viewModel.play(d); onOpenAudioPlayer() },
                 ) {
-                    IconButton(onClick = { viewModel.play(d); onOpenAudioPlayer() }) { Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát") }
+                    IconButton(onClick = { viewModel.play(d); onOpenAudioPlayer() }) { Icon(Icons.Rounded.PlayArrow, contentDescription = "Přehrát") }
                     if (!st.isKids) {
-                        IconButton(onClick = { confirmDelete = d }) { Icon(Icons.Default.Delete, contentDescription = "Smazat") }
+                        IconButton(onClick = { confirmDelete = d }) { Icon(Icons.Rounded.Delete, contentDescription = "Smazat") }
                     }
                 }
             }
@@ -155,7 +155,7 @@ fun DownloadsScreen(
         ListenEpisodeActionSheet(
             title = d.title,
             infoLine = "Stažený díl se smaže z telefonu (${DownloadFormat.bytes(d.sizeBytes)}).",
-            actions = listOf(ListenEpisodeAction(Icons.Default.Delete, "Smazat z telefonu") { viewModel.delete(d.key) }),
+            actions = listOf(ListenEpisodeAction(Icons.Rounded.Delete, "Smazat z telefonu") { viewModel.delete(d.key) }),
             onDismiss = { confirmDelete = null },
         )
     }
@@ -189,7 +189,7 @@ private fun DownloadRow(
                 modifier = Modifier.width(72.dp).height(48.dp).clip(RoundedCornerShape(8.dp)),
             )
         } else {
-            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(48.dp).padding(12.dp))
+            Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(48.dp).padding(12.dp))
         }
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
             Text(title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)

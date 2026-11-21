@@ -2,7 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material3.Badge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,7 +29,7 @@ fun PodcastCard(
         onClick = onClick,
         modifier = modifier,
         onLongClick = onLongClick,
-        placeholder = Icons.Default.Podcasts,
+        placeholder = Icons.Rounded.Podcasts,
         overlay = {
             if (podcast.numUnfinished > 0) {
                 Badge(

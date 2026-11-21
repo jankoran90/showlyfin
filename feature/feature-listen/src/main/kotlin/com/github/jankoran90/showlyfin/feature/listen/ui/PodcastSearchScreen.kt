@@ -19,16 +19,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -110,7 +110,7 @@ fun PodcastSearchScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět")
             }
             TextField(
                 value = state.query,
@@ -118,11 +118,11 @@ fun PodcastSearchScreen(
                 modifier = Modifier.weight(1f).focusRequester(focusRequester),
                 placeholder = { Text(if (scopeLabel != null) "Hledat v $scopeLabel…" else "Hledat v podcastech…") },
                 singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (state.query.isNotEmpty()) {
                         IconButton(onClick = { viewModel.setQuery("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Vymazat")
+                            Icon(Icons.Rounded.Close, contentDescription = "Vymazat")
                         }
                     }
                 },
@@ -294,11 +294,11 @@ private fun SearchResultRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val (playIcon, playLabel) = when {
-                isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
-                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"
-                canResume -> Icons.Default.PlayArrow to "Pokračovat"
-                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
-                else -> Icons.Default.Headphones to "Poslech"
+                isCurrent && isPlaying -> Icons.Rounded.GraphicEq to "Hraje"
+                isCurrent -> Icons.Rounded.PlayArrow to "Pokračovat"
+                canResume -> Icons.Rounded.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Rounded.Headphones to "Přehrát znovu"
+                else -> Icons.Rounded.Headphones to "Poslech"
             }
             FilledTonalButton(onClick = onPlay, modifier = Modifier.weight(1f)) {
                 Icon(playIcon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -306,22 +306,22 @@ private fun SearchResultRow(
             }
             if (onVideo != null) {
                 FilledTonalButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))
                 }
             }
             IconButton(onClick = onEnqueue) {
-                Icon(Icons.Default.PlaylistAdd, contentDescription = "Přidat do fronty")
+                Icon(Icons.Rounded.PlaylistAdd, contentDescription = "Přidat do fronty")
             }
             when (offlineStatus) {
                 OfflineStatus.DOWNLOADED -> IconButton(onClick = onDeleteOffline) {
-                    Icon(Icons.Default.Delete, contentDescription = "Smazat staženou epizodu", tint = accent)
+                    Icon(Icons.Rounded.Delete, contentDescription = "Smazat staženou epizodu", tint = accent)
                 }
                 OfflineStatus.DOWNLOADING, OfflineStatus.QUEUED -> IconButton(onClick = {}, enabled = false) {
-                    Icon(Icons.Default.Download, contentDescription = "Stahuje se")
+                    Icon(Icons.Rounded.Download, contentDescription = "Stahuje se")
                 }
                 else -> IconButton(onClick = onDownload) {
-                    Icon(Icons.Default.Download, contentDescription = "Stáhnout do telefonu")
+                    Icon(Icons.Rounded.Download, contentDescription = "Stáhnout do telefonu")
                 }
             }
         }

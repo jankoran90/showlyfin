@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -80,11 +80,11 @@ fun SourceResultCard(
                 onClick = {},
                 enabled = false,
                 label = { Text("Přidáno") },
-                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                leadingIcon = { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp)) },
             )
         } else {
             FilledTonalButton(onClick = onAdd, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text("Přidat", Modifier.padding(start = 4.dp))
             }
         }

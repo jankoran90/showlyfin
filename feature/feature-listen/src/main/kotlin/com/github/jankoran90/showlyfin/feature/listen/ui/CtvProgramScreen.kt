@@ -22,24 +22,24 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OndemandVideo
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.OndemandVideo
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -237,7 +237,7 @@ fun CtvProgramScreen(
                 title = { Text(state.showTitle ?: title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět")
                     }
                 },
                 actions = {
@@ -245,7 +245,7 @@ fun CtvProgramScreen(
                     if (seriesFilter == null && !seriesOnlyGroups.isNullOrEmpty()) {
                         IconButton(onClick = { seriesOnly = !seriesOnly }) {
                             Icon(
-                                Icons.Default.Layers,
+                                Icons.Rounded.Layers,
                                 contentDescription = if (seriesOnly) "Zobrazit vše" else "Jen série",
                                 tint = if (seriesOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -254,7 +254,7 @@ fun CtvProgramScreen(
                     // FOCUS (2026-09-03) — hledání scoped na tenhle pořad.
                     if (seriesFilter == null) {
                         IconButton(onClick = { showSearch = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Hledat v tomto pořadu")
+                            Icon(Icons.Rounded.Search, contentDescription = "Hledat v tomto pořadu")
                         }
                     }
                 },
@@ -381,7 +381,7 @@ fun CtvProgramScreen(
             title = group.title,
             actions = listOf(
                 ListenEpisodeAction(
-                    if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
+                    if (visibleToKids) Icons.Rounded.ChildCare else Icons.Rounded.Visibility,
                     if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
                 ) { onSetSeriesVisibleForKids(seriesKey, !visibleToKids) },
             ),
@@ -394,48 +394,48 @@ fun CtvProgramScreen(
             title = ep.title,
             // SLOVO-KIDS-EPISODE: dětský profil (audioOnly) = video volby se ani nenabídnou.
             actions = listOfNotNull(
-                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") {
+                ListenEpisodeAction(Icons.Rounded.PlayArrow, "Přehrát") {
                     viewModel.playAudio(ep); onOpenAudioPlayer()
                 },
-                ListenEpisodeAction(Icons.Default.Speaker, "Na repro (receiver)") {
+                ListenEpisodeAction(Icons.Rounded.Speaker, "Na repro (receiver)") {
                     viewModel.castAudioToSpeaker(ep)
                 },
                 if (!audioOnly) {
-                    ListenEpisodeAction(Icons.Default.OndemandVideo, "Přehrát video") {
+                    ListenEpisodeAction(Icons.Rounded.OndemandVideo, "Přehrát video") {
                         onPlayVideo(viewModel.videoUrl(ep), ep.title, ep.image)
                     }
                 } else null,
                 if (!audioOnly) {
-                    ListenEpisodeAction(Icons.Default.Tv, "Přehrát na TV (video)") {
+                    ListenEpisodeAction(Icons.Rounded.Tv, "Přehrát na TV (video)") {
                         viewModel.castVideoToTv(ep)
                     }
                 } else null,
                 // Slovo 2026-10-13: ČT díl jde stáhnout (server ho složí do jednoho souboru).
-                ListenEpisodeAction(Icons.Default.Download, "Stáhnout do telefonu") {
+                ListenEpisodeAction(Icons.Rounded.Download, "Stáhnout do telefonu") {
                     bookViewModel.download(chapterOf(ep))
                 },
-                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") {
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přidat do fronty (další)") {
                     viewModel.enqueue(ep, atFront = true)
                 },
                 if (isAdmin) {
-                    ListenEpisodeAction(Icons.AutoMirrored.Filled.MenuBook, "Udělat knihu z dílů…") {
+                    ListenEpisodeAction(Icons.AutoMirrored.Rounded.MenuBook, "Udělat knihu z dílů…") {
                         ruleDraft.value = SeriesRuleDraft.fromEpisode(ep.title)
                     }
                 } else null,
-                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") {
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistAdd, "Přidat do fronty (na konec)") {
                     viewModel.enqueue(ep, atFront = false)
                 },
                 // User (2026-08-15 16:49) — „Reset poslechu" jen u rozposlouchané epizody.
                 if (resumeMarks[viewModel.episodeKey(ep)] != null) {
                     ListenEpisodeAction(
-                        Icons.Default.Close, "Ukončit poslech",
+                        Icons.Rounded.Close, "Ukončit poslech",
                         confirmMessage = "Smaže se uložená pozice poslechu a epizoda zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.resetPosition(ep) }
                 } else null,
                 // User (2026-08-16 12:51, „chci volbu, která označí jako poslechnuto") — parita s audioknihami.
                 if (resumeMarks[viewModel.episodeKey(ep)]?.isFinished != true) {
                     ListenEpisodeAction(
-                        Icons.Default.CheckCircle, "Označit jako poslechnuté",
+                        Icons.Rounded.CheckCircle, "Označit jako poslechnuté",
                         confirmMessage = "Epizoda se označí jako poslechnutá a zmizí z Domů z „Pokračovat“.",
                     ) { viewModel.markFinished(ep) }
                 } else null,
@@ -500,7 +500,7 @@ private fun EpisodeRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (isFinished) {
                         Icon(
-                            Icons.Default.CheckCircle,
+                            Icons.Rounded.CheckCircle,
                             contentDescription = "Poslechnuto",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
@@ -544,16 +544,16 @@ private fun EpisodeRow(
         ) {
             if (showVideo) {
                 FilledTonalButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))
                 }
             }
             val (audioIcon, audioLabel) = when {
-                isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
-                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"
-                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
-                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
-                else -> Icons.Default.Headphones to "Poslech"
+                isCurrent && isPlaying -> Icons.Rounded.GraphicEq to "Hraje"
+                isCurrent -> Icons.Rounded.PlayArrow to "Pokračovat"
+                canResume && !isFinished -> Icons.Rounded.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Rounded.Headphones to "Přehrát znovu"
+                else -> Icons.Rounded.Headphones to "Poslech"
             }
             OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {
                 Icon(audioIcon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -563,7 +563,7 @@ private fun EpisodeRow(
                 EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
             }
         }
     }

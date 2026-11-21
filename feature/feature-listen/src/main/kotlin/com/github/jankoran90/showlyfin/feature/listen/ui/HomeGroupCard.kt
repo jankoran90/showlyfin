@@ -23,13 +23,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -77,7 +77,7 @@ internal fun HomeGroupCard(
     val posMs = if (live) playerState.positionMs else savedPos
     val durMs = if (live) playerState.durationMs else savedDur
     val progress = if (live) playerState.positionMs.toFloat() / playerState.durationMs else savedProgress
-    val placeholder = if (group.isBooks) Icons.Default.Headphones else Icons.Default.Podcasts
+    val placeholder = if (group.isBooks) Icons.Rounded.Headphones else Icons.Rounded.Podcasts
     if (layout.list) Column {
         HomeListCard(
             title = group.title,
@@ -127,7 +127,7 @@ internal fun HomeGroupCard(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                     Icon(
-                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                         contentDescription = if (expanded) "Sbalit" else "Rozbalit",
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(18.dp),
@@ -138,7 +138,7 @@ internal fun HomeGroupCard(
                     modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(36.dp),
                 ) {
                     Icon(
-                        if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = if (playing) "Pauza" else "Pokračovat naposled poslouchaným",
                     )
                 }
@@ -154,7 +154,7 @@ private fun ExpandHint(expanded: Boolean, onToggle: () -> Unit) {
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
     ) {
         TextButton(onClick = onToggle) {
-            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+            Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, contentDescription = null)
             Text(if (expanded) "Sbalit" else "Rozbalit")
         }
     }
@@ -209,7 +209,7 @@ internal fun HomeGroupPanel(
             // Tester 2026-11-19: dohraný díl / kniha v pruhu = fajfka v rohu obalu.
             if (finished) {
                 Icon(
-                    imageVector = Icons.Default.CheckCircle,
+                    imageVector = Icons.Rounded.CheckCircle,
                     contentDescription = "Poslechnuto",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
@@ -236,7 +236,7 @@ internal fun HomeGroupPanel(
                 Text(countLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onCollapse) {
-                Icon(Icons.Default.ExpandLess, contentDescription = null)
+                Icon(Icons.Rounded.ExpandLess, contentDescription = null)
                 Text("Sbalit")
             }
         }

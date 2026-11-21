@@ -7,6 +7,10 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.LibraryBooks
+import androidx.compose.material.icons.rounded.Podcasts
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Storefront
@@ -23,10 +27,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 enum class SlovoSection(val label: String, val icon: ImageVector) {
     DOMU("Domů", Icons.Rounded.Home),
+    /** AMPHORA F1 (KO1) — místa spodní lišty: Knihovna (audioknihy), Pořady (Sledované + Nové), Hledat, Fronta. */
+    KNIHOVNA("Knihovna", Icons.Rounded.LibraryBooks),
+    PORADY("Pořady", Icons.Rounded.Podcasts),
+    HLEDAT("Hledat", Icons.Rounded.Search),
+    FRONTA("Fronta", Icons.AutoMirrored.Rounded.QueueMusic),
     /**
-     * User (2026-08-16 17:06, „Domů jedna sekce, Poslech se swipne horizontalně vedle") — Poslech
-     * přestal být samostatnou sekcí draweru: je to 2. strana pageru sekce Domů. Hodnota zůstává
-     * (label pro titulek lišty + redirect starých uložených stavů ve [SlovoPhoneShell]).
+     * Dětský profil: sloučený poslech (KidsListenContent) — místo v dětské liště (Domů · Poslech · Stažené).
+     * Dospělý ho nemá (AMPHORA F1: nahradily ho Knihovna a Pořady).
      */
     POSLECH("Poslech", Icons.Rounded.Headphones),
     OBJEVIT("Objevit", Icons.Rounded.Explore),
@@ -45,39 +53,56 @@ enum class SlovoSection(val label: String, val icon: ImageVector) {
  */
 object SlovoShellPrefs {
     private const val PREFS = "slovo_prefs"
+    // Klíče zůstaly z doby draweru (pořadí Objevit/Zdroje/…) — dnes je to nabídka Víc pod avatarem.
     private const val KEY_DRAWER_ORDER = "drawer_order"
     private const val KEY_DRAWER_HIDDEN = "drawer_hidden"
+    private const val KEY_BAR_ORDER = "bar_order"
+    private const val KEY_BAR_HIDDEN = "bar_hidden"
+    private const val KEY_RESELECT_TOP = "bar_reselect_top"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /** Výchozí sekce při otevření appky — Domů (user 2026-08-15: „home obrazovka, co se vždy otevře"). */
     fun startSection(@Suppress("UNUSED_PARAMETER") ctx: Context): SlovoSection = SlovoSection.DOMU
 
-    /**
-     * User (2026-08-16 18:23–18:30, „pořadí umožníme měnit v appce a co se tam zobrazí taky, pořadí
-     * si nastavim sám") — Domů je vždy první a nejde skrýt (2. strana pageru), zbytek (Objevit/Zdroje)
-     * jde v Nastavení → Pořadí menu přeskládat i skrýt. Persistováno v `slovo_prefs` (bez VM, jako
-     * zbytek tohohle objektu) — čte se znovu při každém překreslení draweru (viz [SlovoDrawer]), takže
-     * změna v Nastavení se projeví hned při příštím otevření menu, bez restartu appky.
-     */
-    private val reorderableSections = listOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE, SlovoSection.STAHOVANI, SlovoSection.KATALOG)
+    // ── Spodní lišta (AMPHORA F1, KO1) ── Domů je vždy první a nejde skrýt; zbytek pořadí + viditelnost.
+    val barSections = listOf(SlovoSection.KNIHOVNA, SlovoSection.PORADY, SlovoSection.HLEDAT, SlovoSection.FRONTA)
 
-    private fun savedOrder(ctx: Context): List<SlovoSection> {
-        val saved = prefs(ctx).getString(KEY_DRAWER_ORDER, null)
-            ?.split(",")
-            ?.mapNotNull { name -> reorderableSections.firstOrNull { it.name == name } }
-            .orEmpty()
-        // Nové sekce (přibylé v novější appce), co v uloženém pořadí ještě nejsou, dopiš na konec.
-        return saved + reorderableSections.filter { it !in saved }
+    private fun savedBarOrder(ctx: Context): List<SlovoSection> = mergedOrder(prefs(ctx).getString(KEY_BAR_ORDER, null), barSections)
+    private fun hiddenBar(ctx: Context): Set<SlovoSection> = hiddenOf(prefs(ctx).getStringSet(KEY_BAR_HIDDEN, emptySet()), barSections)
+
+    /** Místa v liště dospělého profilu (Domů + viditelná ve zvoleném pořadí). */
+    fun barOrder(ctx: Context): List<SlovoSection> {
+        val hidden = hiddenBar(ctx)
+        return listOf(SlovoSection.DOMU) + savedBarOrder(ctx).filter { it !in hidden }
     }
 
-    private fun hiddenSections(ctx: Context): Set<SlovoSection> =
-        prefs(ctx).getStringSet(KEY_DRAWER_HIDDEN, emptySet())
-            ?.mapNotNull { name -> reorderableSections.firstOrNull { it.name == name } }
-            ?.toSet()
-            .orEmpty()
+    fun barWithVisibility(ctx: Context): List<Pair<SlovoSection, Boolean>> {
+        val hidden = hiddenBar(ctx)
+        return savedBarOrder(ctx).map { it to (it !in hidden) }
+    }
 
-    /** Pro editor v Nastavení — VŠECHNY přeskládatelné sekce ve svém pořadí + jestli jsou skryté. */
+    fun setBarOrder(ctx: Context, order: List<SlovoSection>) {
+        prefs(ctx).edit().putString(KEY_BAR_ORDER, order.joinToString(",") { it.name }).apply()
+    }
+
+    fun setBarHidden(ctx: Context, section: SlovoSection, hidden: Boolean) {
+        val current = hiddenBar(ctx).toMutableSet()
+        if (hidden) current.add(section) else current.remove(section)
+        prefs(ctx).edit().putStringSet(KEY_BAR_HIDDEN, current.map { it.name }.toSet()).apply()
+    }
+
+    /** Ťuk na místo, které už je otevřené: vrátit ho na začátek (výchozí zapnuto). */
+    fun reselectToTop(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_RESELECT_TOP, true)
+    fun setReselectToTop(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(KEY_RESELECT_TOP, on).apply() }
+
+    // ── Nabídka Víc pod avatarem (dřív drawer): Objevit, Zdroje, Stahování, Katalog ──
+    private val reorderableSections = listOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE, SlovoSection.STAHOVANI, SlovoSection.KATALOG)
+
+    private fun savedOrder(ctx: Context): List<SlovoSection> = mergedOrder(prefs(ctx).getString(KEY_DRAWER_ORDER, null), reorderableSections)
+    private fun hiddenSections(ctx: Context): Set<SlovoSection> = hiddenOf(prefs(ctx).getStringSet(KEY_DRAWER_HIDDEN, emptySet()), reorderableSections)
+
+    /** Pro editor v Nastavení — VŠECHNY položky Víc ve svém pořadí + jestli jsou skryté. */
     fun reorderableWithVisibility(ctx: Context): List<Pair<SlovoSection, Boolean>> {
         val hidden = hiddenSections(ctx)
         return savedOrder(ctx).map { it to (it !in hidden) }
@@ -93,10 +118,18 @@ object SlovoShellPrefs {
         prefs(ctx).edit().putStringSet(KEY_DRAWER_HIDDEN, current.map { it.name }.toSet()).apply()
     }
 
-    /** Pořadí sekcí v draweru skupiny „Poslech" (bez POSLECH — ten je 2. strana pageru Domů; bez
-     * skrytých). Domů je vždy první. */
-    fun drawerOrder(ctx: Context): List<SlovoSection> {
+    /** Položky nabídky Víc (bez skrytých), pod nimi vždy Nastavení. */
+    fun moreOrder(ctx: Context): List<SlovoSection> {
         val hidden = hiddenSections(ctx)
-        return listOf(SlovoSection.DOMU) + savedOrder(ctx).filter { it !in hidden }
+        return savedOrder(ctx).filter { it !in hidden }
     }
+
+    /** Uložené pořadí + nové položky (přibylé v novější appce) na konec. */
+    private fun mergedOrder(saved: String?, all: List<SlovoSection>): List<SlovoSection> {
+        val list = saved?.split(",")?.mapNotNull { name -> all.firstOrNull { it.name == name } }?.distinct().orEmpty()
+        return list + all.filter { it !in list }
+    }
+
+    private fun hiddenOf(names: Set<String>?, all: List<SlovoSection>): Set<SlovoSection> =
+        names.orEmpty().mapNotNull { name -> all.firstOrNull { it.name == name } }.toSet()
 }

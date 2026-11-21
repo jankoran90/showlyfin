@@ -14,11 +14,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -262,7 +262,7 @@ fun BooksContent(
                         shareActions = if (isKidsBook) emptyList() else otherAdults.map { target ->
                             val shared = viewModel.isBookSharedWith(book.id, target)
                             ListenEpisodeAction(
-                                if (shared) Icons.Default.Visibility else Icons.Default.Share,
+                                if (shared) Icons.Rounded.Visibility else Icons.Rounded.Share,
                                 if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
                             ) { viewModel.setBookSharedWith(book.id, target.id, !shared) }
                         },

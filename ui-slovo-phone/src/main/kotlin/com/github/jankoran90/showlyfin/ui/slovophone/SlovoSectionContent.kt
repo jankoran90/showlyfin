@@ -1,0 +1,278 @@
+package com.github.jankoran90.showlyfin.ui.slovophone
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.util.lerp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.github.jankoran90.showlyfin.core.ui.tokens.Spacing
+import com.github.jankoran90.showlyfin.data.uploader.model.PodcastSource
+import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
+import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AUDIOTEKA_SHELF_URL
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaCatalogScreen
+import com.github.jankoran90.showlyfin.feature.listen.audioteka.AudiotekaPrefs
+import com.github.jankoran90.showlyfin.feature.listen.ui.BooksContent
+import com.github.jankoran90.showlyfin.feature.listen.ui.DownloadsScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.FollowingContent
+import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastSearchScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.QueueScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
+import com.github.jankoran90.showlyfin.feature.listen.ui.TimelinePage
+import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
+
+/**
+ * AMPHORA (SHW-124) F1 — obsah jedné sekce (místa lišty nebo položky z Víc). Vyčleněno ze
+ * [SlovoPhoneShell] (anti-monolit). Pořady = Sledované | Nové (dřívější Timeline) jako dvě přejížděcí
+ * strany; Knihovna = audioknihy (ve F2 přepínač Knihy | Pořady | Stažené); Hledat = hledání v pořadech
+ * (ve F3 jedno hledání pro všechno).
+ */
+@Composable
+internal fun SlovoSectionContent(
+    section: SlovoSection,
+    isKidsProfile: Boolean,
+    listenVm: ListenViewModel,
+    podcastLinkLookup: PodcastLinkLookupViewModel,
+    onMenu: () -> Unit,
+    onPush: (SlovoDetailEntry) -> Unit,
+    onSelectSection: (SlovoSection) -> Unit,
+    expandMiniPlayer: () -> Unit,
+) {
+    val listenState by listenVm.uiState.collectAsStateWithLifecycle()
+    val podcastDownloads by listenVm.offlinePodcasts.collectAsStateWithLifecycle()
+    val onOpenBook: (String) -> Unit = { onPush(SlovoDetailEntry.AudiobookDetail(it)) }
+    val onOpenSourceEpisode: (String, String, String, String) -> Unit = { type, ref, srcTitle, epKey ->
+        onPush(linkedOrPlain(podcastLinkLookup, type, ref, srcTitle, epKey))
+    }
+    // ADAPT (2026-09-04): sdílený video launcher (YouTube/ČT externí URL) — AI titulky + 360p záložka,
+    // parita s [SlovoDetailHost.playYoutubeVideo].
+    val playExternalVideo: (url: String, title: String, poster: String?) -> Unit = { url, title, poster ->
+        onPush(
+            SlovoDetailEntry.VideoPlayer(
+                externalUrl = url, title = title, posterUrl = poster,
+                subtitleQuery = youtubeSubtitleQuery(url, title),
+                fallbackUrl = youtube360Fallback(url),
+            ),
+        )
+    }
+    val playJfVideo: (jfItemId: String, title: String, resumeKey: String) -> Unit = { jfItemId, title, resumeKey ->
+        onPush(SlovoDetailEntry.VideoPlayer(itemId = jfItemId, title = title, resumeKey = resumeKey))
+    }
+
+    when (section) {
+        SlovoSection.DOMU -> SlovoSectionScaffold("Slovo", onMenu) {
+            if (isKidsProfile) {
+                HomeScreen(onOpenBook = onOpenBook, onOpenSourceEpisode = onOpenSourceEpisode, modifier = Modifier.fillMaxSize())
+            } else {
+                HomeScreen(
+                    onOpenBook = onOpenBook,
+                    onOpenSourceEpisode = onOpenSourceEpisode,
+                    onPlayVideo = playExternalVideo,
+                    onPlayJfVideo = playJfVideo,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        // Dětský sloučený poslech (schválené pořady a knihy) — beze změny, jen vlastní místo v liště.
+        SlovoSection.POSLECH -> SlovoSectionScaffold("Poslech", onMenu) {
+            ListenScreen(
+                onOpenBook = onOpenBook,
+                onEditBook = { id, title, author -> onPush(SlovoDetailEntry.AudiobookEdit(id, title, author)) },
+                onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
+                onPlayEpisode = { itemId, episodeId ->
+                    onPush(SlovoDetailEntry.AudiobookPlayer(itemId, fromStart = false, episodeId = episodeId))
+                },
+                onOpenSource = { src -> onPush(sourceDetail(src)) },
+                onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
+                onOpenSourceEpisode = onOpenSourceEpisode,
+                // SLOVO-KIDS-EPISODE / WATCHDOG — dítě otevře jen schválenou sérii, routing podle typu.
+                onOpenSourceSeries = { src, slug, seriesTitle -> onPush(sourceSeriesDetail(src, slug, seriesTitle)) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        SlovoSection.KNIHOVNA -> SlovoSectionScaffold(section.label, onMenu) {
+            if (!listenState.isConfigured) NotConfigured()
+            else BooksContent(
+                state = listenState,
+                viewModel = listenVm,
+                onOpenBook = onOpenBook,
+                onEditBook = { id, title, author -> onPush(SlovoDetailEntry.AudiobookEdit(id, title, author)) },
+            )
+        }
+        SlovoSection.PORADY -> {
+            val pager = rememberPagerState(initialPage = 0) { 2 }
+            val scope = rememberCoroutineScope()
+            SlovoSectionScaffold(
+                onMenu = onMenu,
+                titleContent = {
+                    PagerTabs(pager, listOf("Sledované", "Nové")) { page -> scope.launch { pager.animateScrollToPage(page) } }
+                },
+            ) {
+                if (!listenState.isConfigured) NotConfigured()
+                else HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+                    if (page == 0) {
+                        FollowingContent(
+                            state = listenState,
+                            viewModel = listenVm,
+                            onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
+                            onOpenSource = { src -> onPush(sourceDetail(src)) },
+                            onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
+                            downloadCount = podcastDownloads.size,
+                            sourceType = "all",
+                        )
+                    } else {
+                        TimelinePage(
+                            state = listenState,
+                            viewModel = listenVm,
+                            podcastDownloads = podcastDownloads,
+                            onOpenSourceEpisode = onOpenSourceEpisode,
+                            onGoToObjevit = { onSelectSection(SlovoSection.OBJEVIT) },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+        }
+        // Hledání v pořadech (FOCUS 2026-09-03, dřív plovoucí lupa na Timeline/Sledované).
+        SlovoSection.HLEDAT -> PodcastSearchScreen(
+            onBack = { onSelectSection(SlovoSection.DOMU) },
+            onPlayVideo = playExternalVideo,
+            modifier = Modifier.fillMaxSize(),
+        )
+        SlovoSection.FRONTA -> SlovoSectionScaffold(section.label, onMenu) {
+            QueueScreen(onOpenPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize())
+        }
+        SlovoSection.OBJEVIT -> SlovoSectionScaffold(section.label, onMenu) {
+            PodcastDiscoveryScreen(modifier = Modifier.fillMaxSize(), showTitle = false)
+        }
+        SlovoSection.ZDROJE -> SlovoSectionScaffold(section.label, onMenu) {
+            SourceManagerScreen(
+                modifier = Modifier.fillMaxSize(),
+                onUploadAudiobook = { onPush(SlovoDetailEntry.UploadAudiobook) },
+                showTitle = false,
+                onOpenSource = { src -> onPush(sourceDetail(src)) },
+            )
+        }
+        SlovoSection.STAHOVANI -> SlovoSectionScaffold(if (isKidsProfile) "Stažené" else section.label, onMenu) {
+            DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize())
+        }
+        SlovoSection.KATALOG -> SlovoSectionScaffold(section.label, onMenu) {
+            AudiotekaCatalogScreen(
+                onOpen = { onPush(audiotekaEntry(it)) },
+                modifier = Modifier.fillMaxSize(),
+                onOpenShelf = { onPush(SlovoDetailEntry.AudiotekaWeb(AUDIOTEKA_SHELF_URL)) }
+                    .takeIf { AudiotekaPrefs.buyInApp(LocalContext.current) },
+            )
+        }
+        SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu, isKidsProfile = isKidsProfile)
+        SlovoSection.PROFIL -> SlovoProfileScreen(onMenu = onMenu)
+    }
+}
+
+@Composable
+private fun NotConfigured() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            "Poslech zatím není nastaven.\nPřihlas se k Audiobookshelf serveru v Nastavení → Účet / Audioknihy.",
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(Spacing.xl),
+        )
+    }
+}
+
+/** Obal sekce: horní pruh (avatar + název) + obsah pod ním. */
+@Composable
+private fun SlovoSectionScaffold(
+    title: String,
+    onMenu: () -> Unit,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        SlovoSectionBar(title = title, onMenu = onMenu, trailing = trailing)
+        Box(Modifier.fillMaxSize()) { content() }
+    }
+}
+
+/** Varianta s vlastním obsahem titulku místo prostého textu (viz [PagerTabs]). */
+@Composable
+private fun SlovoSectionScaffold(
+    onMenu: () -> Unit,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    titleContent: @Composable BoxScope.() -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        SlovoSectionBar(onMenu = onMenu, trailing = trailing, content = titleContent)
+        Box(Modifier.fillMaxSize()) { content() }
+    }
+}
+
+/**
+ * Strany pageru viditelné v liště zároveň — aktivní svítí, neaktivní ztlumené, přechod sleduje prst
+ * (user 2026-08-16 17:38). Ťuk na název = přeskok na stranu.
+ */
+@Composable
+private fun PagerTabs(pagerState: PagerState, labels: List<String>, onSelect: (Int) -> Unit) {
+    val maxIndex = (labels.size - 1).coerceAtLeast(0)
+    val position = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, maxIndex.toFloat())
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.l),
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val distance = (position - index).absoluteValue.coerceIn(0f, 1f)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = if (index == pagerState.currentPage) FontWeight.Bold else FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = lerp(0.4f, 1f, 1f - distance)),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { onSelect(index) },
+            )
+        }
+    }
+}
+
+/** Sdíleno mezi kartou zdroje ve Sledovaných a Timeline řádkem (viz [SlovoDetailHost.linkedOrPlain]). */
+private fun sourceDetail(src: PodcastSource): SlovoDetailEntry = when (src.type) {
+    "youtube" -> SlovoDetailEntry.YoutubeChannel(src.ref, src.title)
+    "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, src.title)
+    else -> SlovoDetailEntry.RssPodcast(src.ref, src.title)
+}
+
+/** SLOVO-KIDS-EPISODE / WATCHDOG — dítě otevře jen schválenou sérii, routing podle typu zdroje. */
+private fun sourceSeriesDetail(src: PodcastSource, slug: String, seriesTitle: String): SlovoDetailEntry =
+    when (src.type) {
+        "youtube" -> SlovoDetailEntry.YoutubeChannel(src.ref, seriesTitle, seriesFilter = slug)
+        "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, seriesTitle, seriesFilter = slug)
+        else -> SlovoDetailEntry.RssPodcast(src.ref, seriesTitle, seriesFilter = slug)
+    }

@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,16 +29,39 @@ import androidx.compose.ui.input.pointer.pointerInput
 
 /**
  * Rodičovská správa (user 2026-11-19 15:57: „sidebar bych mu tam znepřístupnil … zbytečně odvádí
- * pozornost") — v dětském profilu lišta nemá ☰. Rodič menu otevře podržením levého horního rohu 3 s
+ * pozornost") — v dětském profilu lišta nemá avatar. Rodič nabídku otevře podržením levého horního rohu 3 s
  * (odtud Profil s PINem → zpět na dospělého).
  */
 val LocalSlovoMenuLocked = staticCompositionLocalOf { false }
 
 private const val MENU_UNLOCK_HOLD_MS = 3_000L
 
+/** Jméno aktivního profilu pro avatar v liště (AMPHORA F1) — dodává shell. */
+val LocalSlovoProfileName = staticCompositionLocalOf<String?> { null }
+
+/** Kulatý avatar s počátečním písmenem profilu (bez jména ikona osoby). */
+@Composable
+fun SlovoAvatar(name: String?, size: androidx.compose.ui.unit.Dp = 32.dp) {
+    Box(
+        Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        val initial = name?.trim()?.firstOrNull()?.uppercaseChar()
+        if (initial != null) {
+            Text(
+                initial.toString(),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        } else {
+            Icon(Icons.Rounded.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+    }
+}
+
 /**
  * Slovo (EXCISE/SHW-103) — sjednocená horní lišta telefonní sekce (zrcadlo
- * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmySectionBar]). Jeden tenký pruh: ☰ (otevře menu) +
+ * [com.github.jankoran90.showlyfin.ui.filmyphone.FilmySectionBar]). Jeden tenký pruh: avatar (otevře Víc) +
  * ovladače/titulek sekce ([content]) + volitelné akce vpravo ([trailing]). Barvy z motivu (AMOLED).
  */
 @Composable
@@ -64,9 +89,8 @@ fun SlovoSectionBar(
                 },
             )
         } else {
-            IconButton(onClick = onMenu) {
-                Icon(Icons.Rounded.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
-            }
+            // AMPHORA F1 (KO1): místo ☰ avatar profilu → nabídka Víc (profil, Objevit, Zdroje, …).
+            IconButton(onClick = onMenu) { SlovoAvatar(LocalSlovoProfileName.current) }
         }
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart, content = content)
         trailing?.invoke(this)

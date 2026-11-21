@@ -14,11 +14,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -183,7 +183,7 @@ fun FollowingContent(
             otherAdultProfiles.map { target ->
                 val shared = viewModel.isSourceSharedWith(card.hideKeys, target)
                 ListenEpisodeAction(
-                    if (shared) Icons.Default.Visibility else Icons.Default.Share,
+                    if (shared) Icons.Rounded.Visibility else Icons.Rounded.Share,
                     if (shared) "Přestat sdílet s ${target.name}" else "Sdílet s ${target.name}",
                 ) { viewModel.setSourceSharedWith(card.hideKeys, target.id, !shared) }
             }
@@ -211,14 +211,14 @@ fun FollowingContent(
             } else null,
             actions = downloadActions + listOfNotNull(
                 (card as? LibraryCard.Plain)?.let { c ->
-                    ListenEpisodeAction(Icons.Default.Link, "Propojit s jinou verzí (audio + video)") {
+                    ListenEpisodeAction(Icons.Rounded.Link, "Propojit s jinou verzí (audio + video)") {
                         linkFor = c.source
                     }
                 },
                 if (absPodcastId != null && activeProfile?.isAdmin == true) {
                     val visibleToKids = "abs:$absPodcastId" in kidsVisibleSources
                     ListenEpisodeAction(
-                        if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
+                        if (visibleToKids) Icons.Rounded.ChildCare else Icons.Rounded.Visibility,
                         if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
                     ) { viewModel.setPodcastVisibleForKids(absPodcastId, !visibleToKids) }
                 } else null,
@@ -226,15 +226,15 @@ fun FollowingContent(
                 if ((card is LibraryCard.Plain || card is LibraryCard.Merged) && activeProfile?.isAdmin == true) {
                     val visibleToKids = card.hideKeys.any { it in kidsVisibleSources }
                     ListenEpisodeAction(
-                        if (visibleToKids) Icons.Default.ChildCare else Icons.Default.Visibility,
+                        if (visibleToKids) Icons.Rounded.ChildCare else Icons.Rounded.Visibility,
                         if (visibleToKids) "Skrýt dětem" else "Zobrazit dětem",
                     ) { viewModel.setSourceVisibleForKids(card.hideKeys, !visibleToKids) }
                 } else null,
             ) + shareActions + listOfNotNull(
-                ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt ve Sledovaných") {
+                ListenEpisodeAction(Icons.Rounded.VisibilityOff, "Skrýt ve Sledovaných") {
                     viewModel.setHidden(card.hideKeys, timeline = false, hidden = true)
                 },
-                ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt na časové ose") {
+                ListenEpisodeAction(Icons.Rounded.VisibilityOff, "Skrýt na časové ose") {
                     viewModel.setHidden(card.hideKeys, timeline = true, hidden = true)
                 },
             ),

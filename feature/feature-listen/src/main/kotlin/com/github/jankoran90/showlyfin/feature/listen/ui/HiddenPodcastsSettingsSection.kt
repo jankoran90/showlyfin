@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -95,7 +95,7 @@ private fun HiddenSourceRow(label: String, onRestore: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onRestore) {
-                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                Icon(Icons.Rounded.Visibility, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
                 Text("Obnovit")
             }
         }

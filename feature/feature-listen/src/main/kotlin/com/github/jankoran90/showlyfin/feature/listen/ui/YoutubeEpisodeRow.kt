@@ -21,25 +21,25 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.OndemandVideo
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.OndemandVideo
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -140,7 +140,7 @@ internal fun YoutubeEpisodeRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (downloaded) {
                         Icon(
-                            Icons.Default.DownloadDone,
+                            Icons.Rounded.DownloadDone,
                             contentDescription = "Staženo do telefonu",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
@@ -148,7 +148,7 @@ internal fun YoutubeEpisodeRow(
                     }
                     if (isFinished) {
                         Icon(
-                            Icons.Default.CheckCircle,
+                            Icons.Rounded.CheckCircle,
                             contentDescription = "Poslechnuto",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp),
@@ -192,16 +192,16 @@ internal fun YoutubeEpisodeRow(
         ) {
             if (showVideo) {
                 FilledTonalButton(onClick = onVideo, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Video", Modifier.padding(start = 6.dp))
                 }
             }
             val (audioIcon, audioLabel) = when {
-                isCurrent && isPlaying -> Icons.Default.GraphicEq to "Hraje"
-                isCurrent -> Icons.Default.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
-                canResume && !isFinished -> Icons.Default.PlayArrow to "Pokračovat"
-                isFinished -> Icons.Default.Headphones to "Přehrát znovu"
-                else -> Icons.Default.Headphones to "Poslech"
+                isCurrent && isPlaying -> Icons.Rounded.GraphicEq to "Hraje"
+                isCurrent -> Icons.Rounded.PlayArrow to "Pokračovat"   // načtená, pozastavená → resume
+                canResume && !isFinished -> Icons.Rounded.PlayArrow to "Pokračovat"
+                isFinished -> Icons.Rounded.Headphones to "Přehrát znovu"
+                else -> Icons.Rounded.Headphones to "Poslech"
             }
             OutlinedButton(onClick = onAudio, modifier = Modifier.weight(1f)) {
                 Icon(audioIcon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -211,7 +211,7 @@ internal fun YoutubeEpisodeRow(
                 EndListeningButton(onConfirm = onEndListening)
             }
             IconButton(onClick = onMore) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.MoreVert, contentDescription = "Další akce", modifier = Modifier.size(20.dp))
             }
         }
     }

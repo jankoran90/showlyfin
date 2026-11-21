@@ -88,8 +88,8 @@ fun SlovoSettingsScreen(
             if (adult) SlovoCollapsibleSection("Přehrávač", Icons.Rounded.PlayCircle) {
                 SlovoPlayerSettingsSection()
             }
-            if (adult) SlovoCollapsibleSection("Pořadí menu", Icons.Rounded.Menu) {
-                SlovoDrawerOrderSection()
+            if (adult) SlovoCollapsibleSection("Spodní lišta a nabídka Víc", Icons.Rounded.Menu) {
+                SlovoNavOrderSection()
             }
             if (adult) SlovoCollapsibleSection("Řazení zdrojů", Icons.Rounded.Sort) {
                 ListenOrderSettingsSection()

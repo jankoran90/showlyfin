@@ -15,9 +15,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -116,7 +116,7 @@ private fun LinkCandidateRow(
                 )
             } else {
                 Icon(
-                    if (source.type == "youtube") Icons.Default.PlayArrow else Icons.Default.Podcasts,
+                    if (source.type == "youtube") Icons.Rounded.PlayArrow else Icons.Rounded.Podcasts,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -141,14 +141,14 @@ private fun LinkCandidateRow(
             AssistChip(
                 onClick = onClick,
                 label = { Text("Možná stejný pořad") },
-                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 colors = AssistChipDefaults.assistChipColors(
                     labelColor = MaterialTheme.colorScheme.primary,
                     leadingIconContentColor = MaterialTheme.colorScheme.primary,
                 ),
             )
         } else {
-            Icon(Icons.Default.Link, contentDescription = "Propojit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Rounded.Link, contentDescription = "Propojit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

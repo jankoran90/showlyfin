@@ -2,7 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.text.Collator

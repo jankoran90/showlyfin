@@ -11,14 +11,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.LiveTv
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Podcasts
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Podcasts
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -54,9 +54,9 @@ fun SourceCard(
     onLongClick: (() -> Unit)? = null,
 ) {
     val typeIcon: ImageVector = when (source.type) {
-        "youtube" -> Icons.Default.PlayArrow
-        "ctv" -> Icons.Default.LiveTv
-        else -> Icons.Default.Podcasts
+        "youtube" -> Icons.Rounded.PlayArrow
+        "ctv" -> Icons.Rounded.LiveTv
+        else -> Icons.Rounded.Podcasts
     }
     CoverCard(
         title = source.title,
@@ -89,7 +89,7 @@ fun SourceCard(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
                 ) {
-                    Icon(Icons.Default.Star, contentDescription = "Prémiový", modifier = Modifier.padding(3.dp).size(16.dp))
+                    Icon(Icons.Rounded.Star, contentDescription = "Prémiový", modifier = Modifier.padding(3.dp).size(16.dp))
                 }
             }
         },
@@ -117,7 +117,7 @@ fun MergedSourceCard(
         onClick = onClick,
         modifier = modifier,
         onLongClick = onLongClick,
-        placeholder = Icons.Default.Podcasts,
+        placeholder = Icons.Rounded.Podcasts,
         overlay = {
             // Odznak propojení (audio + video pod jednou kartou).
             Surface(
@@ -130,8 +130,8 @@ fun MergedSourceCard(
                     Modifier.padding(horizontal = 5.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Default.Podcasts, contentDescription = null, modifier = Modifier.size(13.dp))
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Rounded.Podcasts, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(13.dp))
                 }
             }
         },
@@ -158,9 +158,9 @@ fun DiscoveryCard(
     showEpisodeCount: Boolean = true,
 ) {
     val typeIcon: ImageVector = when (result.type) {
-        "youtube" -> Icons.Default.PlayArrow
-        "ctv" -> Icons.Default.LiveTv
-        else -> Icons.Default.Podcasts
+        "youtube" -> Icons.Rounded.PlayArrow
+        "ctv" -> Icons.Rounded.LiveTv
+        else -> Icons.Rounded.Podcasts
     }
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -203,7 +203,7 @@ fun DiscoveryCard(
                     onToggleFavorite?.let { toggle ->
                         IconButton(onClick = toggle, modifier = Modifier.size(36.dp)) {
                             Icon(
-                                imageVector = if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                imageVector = if (favorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                                 contentDescription = if (favorite) "Odebrat z oblíbených" else "Přidat do oblíbených",
                                 tint = if (favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp),
@@ -254,11 +254,11 @@ fun DiscoveryCard(
                         AssistChip(
                             onClick = {}, enabled = false,
                             label = { Text("Přidáno") },
-                            leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            leadingIcon = { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         )
                     } else {
                         FilledTonalButton(onClick = onAdd) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Text("Přidat", Modifier.padding(start = 4.dp))
                         }
                     }

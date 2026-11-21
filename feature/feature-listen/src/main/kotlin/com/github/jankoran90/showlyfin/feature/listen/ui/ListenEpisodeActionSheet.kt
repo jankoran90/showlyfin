@@ -11,10 +11,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.Downloading
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -121,13 +121,13 @@ fun offlineDownloadAction(
     onDelete: () -> Unit,
 ): ListenEpisodeAction = when (status) {
     OfflineStatus.DOWNLOADED ->
-        ListenEpisodeAction(Icons.Default.DownloadDone, "Smazat z telefonu", onClick = onDelete)
+        ListenEpisodeAction(Icons.Rounded.DownloadDone, "Smazat z telefonu", onClick = onDelete)
     OfflineStatus.DOWNLOADING ->
-        ListenEpisodeAction(Icons.Default.Downloading, "Stahuje se… ${(progress * 100).toInt()} %", enabled = false) {}
+        ListenEpisodeAction(Icons.Rounded.Downloading, "Stahuje se… ${(progress * 100).toInt()} %", enabled = false) {}
     OfflineStatus.QUEUED ->
-        ListenEpisodeAction(Icons.Default.Download, "Čeká na stažení…", enabled = false) {}
+        ListenEpisodeAction(Icons.Rounded.Download, "Čeká na stažení…", enabled = false) {}
     else ->
-        ListenEpisodeAction(Icons.Default.Download, "Stáhnout do telefonu", onClick = onDownload)
+        ListenEpisodeAction(Icons.Rounded.Download, "Stáhnout do telefonu", onClick = onDownload)
 }
 
 /**
@@ -142,7 +142,7 @@ fun EndListeningButton(modifier: Modifier = Modifier, compact: Boolean = false, 
     var confirming by remember { mutableStateOf(false) }
     if (compact) {
         Icon(
-            imageVector = Icons.Default.Close,
+            imageVector = Icons.Rounded.Close,
             contentDescription = "Ukončit poslech",
             tint = MaterialTheme.colorScheme.onPrimary,
             modifier = modifier
@@ -153,7 +153,7 @@ fun EndListeningButton(modifier: Modifier = Modifier, compact: Boolean = false, 
         )
     } else {
         IconButton(onClick = { confirming = true }, modifier = modifier) {
-            Icon(Icons.Default.Close, contentDescription = "Ukončit poslech", modifier = Modifier.size(20.dp))
+            Icon(Icons.Rounded.Close, contentDescription = "Ukončit poslech", modifier = Modifier.size(20.dp))
         }
     }
     if (confirming) {

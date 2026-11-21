@@ -17,12 +17,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Podcasts
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Podcasts
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -184,7 +184,7 @@ private fun TimelineRow(
                     )
                 } else {
                     Icon(
-                        if (item.sourceType == "youtube") Icons.Default.PlayArrow else Icons.Default.Podcasts,
+                        if (item.sourceType == "youtube") Icons.Rounded.PlayArrow else Icons.Rounded.Podcasts,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -224,7 +224,7 @@ private fun TimelineRow(
             }
             if (isPlaying) {
                 Icon(
-                    Icons.Default.GraphicEq,
+                    Icons.Rounded.GraphicEq,
                     contentDescription = "Právě hraje",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp).padding(start = 4.dp),
@@ -237,9 +237,9 @@ private fun TimelineRow(
         ListenEpisodeActionSheet(
             title = ep.title,
             actions = listOf(
-                ListenEpisodeAction(Icons.Default.PlayArrow, "Přehrát") { onPlay() },
-                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)") { onEnqueueNext() },
-                ListenEpisodeAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)") { onEnqueueEnd() },
+                ListenEpisodeAction(Icons.Rounded.PlayArrow, "Přehrát") { onPlay() },
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přidat do fronty (další)") { onEnqueueNext() },
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistAdd, "Přidat do fronty (na konec)") { onEnqueueEnd() },
                 offlineDownloadAction(
                     status = offlineStatus,
                     progress = 0f,
@@ -247,8 +247,8 @@ private fun TimelineRow(
                     onDelete = onDelete,
                 ),
                 // WEFT (SHW-75/W5): per-profil skrytí pořadu (dvě nezávislé dimenze).
-                ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt pořad na časové ose") { onHideTimeline() },
-                ListenEpisodeAction(Icons.Default.VisibilityOff, "Skrýt pořad ve Sledovaných") { onHideFollowing() },
+                ListenEpisodeAction(Icons.Rounded.VisibilityOff, "Skrýt pořad na časové ose") { onHideTimeline() },
+                ListenEpisodeAction(Icons.Rounded.VisibilityOff, "Skrýt pořad ve Sledovaných") { onHideFollowing() },
             ),
             onDismiss = { showMenu = false },
         )

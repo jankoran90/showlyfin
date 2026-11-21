@@ -21,16 +21,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -109,7 +109,7 @@ fun PodcastDetailScreen(
                     title = { Text(state.detail?.podcast?.title ?: "Podcast", maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět")
                         }
                     },
                     actions = {
@@ -117,7 +117,7 @@ fun PodcastDetailScreen(
                         if (!rememberKioskActive()) IconButton(onClick = {
                             ShareLinks.share(context, pTitle, ShareLinks.podcast(itemId))
                         }) {
-                            Icon(Icons.Default.Share, contentDescription = "Sdílet")
+                            Icon(Icons.Rounded.Share, contentDescription = "Sdílet")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -281,7 +281,7 @@ private fun DetailContent(
                         AssistChip(
                             onClick = onFindEpisodes,
                             label = { Text("Prohledat epizody") },
-                            leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            leadingIcon = { Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         )
                     }
                 }
@@ -299,7 +299,7 @@ private fun DetailContent(
                     AssistChip(
                         onClick = onOpenQueue,
                         label = { Text("Fronta · $queueSize") },
-                        leadingIcon = { Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        leadingIcon = { Icon(Icons.Rounded.QueueMusic, contentDescription = null, modifier = Modifier.size(18.dp)) },
                     )
                 }
                 if (deviceAutoDownloadSelective) {
@@ -307,7 +307,7 @@ private fun DetailContent(
                         selected = deviceAutoDownloadOn,
                         onClick = onToggleDeviceAutoDownload,
                         label = { Text("Auto do telefonu") },
-                        leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        leadingIcon = { Icon(Icons.Rounded.PhoneAndroid, contentDescription = null, modifier = Modifier.size(18.dp)) },
                     )
                 }
             }
@@ -383,9 +383,9 @@ private fun EpisodeRow(
     ) {
         Icon(
             when {
-                isCurrent -> Icons.Default.GraphicEq
-                ep.isFinished -> Icons.Default.CheckCircle
-                else -> Icons.Default.PlayArrow
+                isCurrent -> Icons.Rounded.GraphicEq
+                ep.isFinished -> Icons.Rounded.CheckCircle
+                else -> Icons.Rounded.PlayArrow
             },
             contentDescription = null,
             tint = if (ep.isFinished && !isCurrent) MaterialTheme.colorScheme.onSurfaceVariant else accent,
@@ -435,11 +435,11 @@ private fun EpisodeRow(
             DownloadControl(state = downloadState, onDownload = onDownload, onCancel = onCancelDownload, modifier = trailingMod)
         } else when (quickAction) {
             1 -> IconButton(onClick = onEnqueueNext, modifier = trailingMod) {
-                Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = "Přidat do fronty (další)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, contentDescription = "Přidat do fronty (další)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             2 -> DownloadControl(state = downloadState, onDownload = onDownload, onCancel = onCancelDownload, modifier = trailingMod)
             else -> IconButton(onClick = onEnqueueEnd, modifier = trailingMod) {
-                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Přidat do fronty (na konec)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = "Přidat do fronty (na konec)", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

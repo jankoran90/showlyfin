@@ -131,3 +131,15 @@ fun AudiobookPlayerConnection.moveToFront(episodeId: String) {
     val idx = q.indexOfFirst { it.episodeId == episodeId }
     if (idx > 0) moveQueueItem(idx, 0)
 }
+
+/**
+ * AMPHORA F1 (Fronta, „vyčistit přehrané“) — odebere z fronty dohrané díly. Právě načtený díl nechá
+ * (o ten se stará přehrávač po dohrání). Vrací počet odebraných.
+ */
+fun AudiobookPlayerConnection.removeFinishedFromQueue(isFinished: (QueuedEpisode) -> Boolean): Int {
+    val q = _queue.value
+    val curId = currentEpisode?.episodeId
+    val keep = q.filter { it.episodeId == curId || !isFinished(it) }
+    if (keep.size != q.size) setQueue(keep)
+    return q.size - keep.size
+}

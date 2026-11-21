@@ -15,18 +15,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -65,7 +65,7 @@ internal fun DownloadControl(
     Box(modifier.size(40.dp), contentAlignment = Alignment.Center) {
         when (state.status) {
             DownloadStatus.DOWNLOADED -> Icon(
-                Icons.Default.DownloadDone,
+                Icons.Rounded.DownloadDone,
                 contentDescription = "Staženo (offline)",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp),
@@ -78,14 +78,14 @@ internal fun DownloadControl(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Zrušit stahování", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Rounded.Close, contentDescription = "Zrušit stahování", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             DownloadStatus.FAILED -> IconButton(onClick = onDownload) {
-                Icon(Icons.Default.ErrorOutline, contentDescription = "Stažení selhalo — zkusit znovu", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Rounded.ErrorOutline, contentDescription = "Stažení selhalo — zkusit znovu", tint = MaterialTheme.colorScheme.error)
             }
             DownloadStatus.NONE -> IconButton(onClick = onDownload) {
-                Icon(Icons.Default.Download, contentDescription = "Stáhnout pro offline", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Rounded.Download, contentDescription = "Stáhnout pro offline", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -116,26 +116,26 @@ internal fun EpisodeActionSheet(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-        ActionRow(Icons.Default.PlayArrow, "Přehrát", onPlay)
+        ActionRow(Icons.Rounded.PlayArrow, "Přehrát", onPlay)
         ActionRow(
-            if (episode.isFinished) Icons.Outlined.Circle else Icons.Default.CheckCircle,
+            if (episode.isFinished) Icons.Outlined.Circle else Icons.Rounded.CheckCircle,
             if (episode.isFinished) "Označit jako nedokončené" else "Označit jako dokončené",
             onToggleFinished,
         )
-        ActionRow(Icons.AutoMirrored.Filled.PlaylistPlay, "Přidat do fronty (další)", onEnqueueNext)
-        ActionRow(Icons.AutoMirrored.Filled.PlaylistAdd, "Přidat do fronty (na konec)", onEnqueueEnd)
+        ActionRow(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přidat do fronty (další)", onEnqueueNext)
+        ActionRow(Icons.AutoMirrored.Rounded.PlaylistAdd, "Přidat do fronty (na konec)", onEnqueueEnd)
         when (downloadStatus) {
             DownloadStatus.DOWNLOADED ->
-                ActionRow(Icons.Default.Delete, "Smazat stažení", onDeleteDownload)
+                ActionRow(Icons.Rounded.Delete, "Smazat stažení", onDeleteDownload)
             DownloadStatus.DOWNLOADING ->
-                ActionRow(Icons.Default.Close, "Zrušit stahování", onCancelDownload)
+                ActionRow(Icons.Rounded.Close, "Zrušit stahování", onCancelDownload)
             DownloadStatus.FAILED ->
-                ActionRow(Icons.Default.Download, "Stáhnout znovu", onDownload)
+                ActionRow(Icons.Rounded.Download, "Stáhnout znovu", onDownload)
             DownloadStatus.NONE ->
-                ActionRow(Icons.Default.Download, "Stáhnout pro offline", onDownload)
+                ActionRow(Icons.Rounded.Download, "Stáhnout pro offline", onDownload)
         }
         // Kiosek (dětský telefon): sdílení otevírá jiné appky → skryté.
-        if (!rememberKioskActive()) ActionRow(Icons.Default.Share, "Sdílet epizodu", onShare)
+        if (!rememberKioskActive()) ActionRow(Icons.Rounded.Share, "Sdílet epizodu", onShare)
         Box(Modifier.height(12.dp))
     }
 }
@@ -188,9 +188,9 @@ internal fun QueueSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (isCur) {
-                            Icon(Icons.Default.GraphicEq, contentDescription = "Hraje", tint = accent, modifier = Modifier.size(18.dp).padding(end = 8.dp, top = 2.dp).align(Alignment.Top))
+                            Icon(Icons.Rounded.GraphicEq, contentDescription = "Hraje", tint = accent, modifier = Modifier.size(18.dp).padding(end = 8.dp, top = 2.dp).align(Alignment.Top))
                         } else {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Přehrát", tint = accent, modifier = Modifier.size(18.dp).padding(end = 8.dp, top = 2.dp).align(Alignment.Top))
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = "Přehrát", tint = accent, modifier = Modifier.size(18.dp).padding(end = 8.dp, top = 2.dp).align(Alignment.Top))
                         }
                         Column(Modifier.weight(1f)) {
                             GuestBanner(q.guest, display)
@@ -213,7 +213,7 @@ internal fun QueueSheet(
                             EpisodeDescriptionText(description = q.description, display = display)
                         }
                         IconButton(onClick = { onRemove(q.episodeId) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Odebrat z fronty", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Rounded.Delete, contentDescription = "Odebrat z fronty", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
@@ -316,7 +316,7 @@ internal fun FindEpisodesSheet(
                 if (state.submitting) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 } else {
-                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("  Stáhnout na server (${state.selectedIds.size})")
                 }
             }

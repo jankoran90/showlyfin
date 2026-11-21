@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -126,7 +126,7 @@ fun HomeListCard(
 private fun BoxScope.CoverBadges(isPlaying: Boolean, onEndListening: (() -> Unit)?) {
     if (isPlaying) {
         Icon(
-            imageVector = Icons.Default.GraphicEq,
+            imageVector = Icons.Rounded.GraphicEq,
             contentDescription = "Hraje",
             tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
@@ -171,7 +171,7 @@ private fun TimeLine(progress: Float, posMs: Long, durMs: Long, remaining: Boole
                 modifier = Modifier.padding(start = 10.dp).size(40.dp),
             ) {
                 Icon(
-                    if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                     contentDescription = if (playing) "Pauza" else "Poslouchat",
                 )
             }

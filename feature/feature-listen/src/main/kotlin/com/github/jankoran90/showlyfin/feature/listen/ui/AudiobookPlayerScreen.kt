@@ -17,14 +17,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -131,11 +131,11 @@ fun AudiobookPlayerScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zpět", tint = MaterialTheme.colorScheme.onBackground)
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět", tint = MaterialTheme.colorScheme.onBackground)
                 }
                 Spacer(Modifier.weight(1f))
                 Icon(
-                    Icons.Default.DragHandle,
+                    Icons.Rounded.DragHandle,
                     contentDescription = "Stáhnout přehrávač",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
@@ -234,7 +234,7 @@ fun AudiobookPlayerScreen(
                     },
                     modifier = Modifier.padding(top = 4.dp),
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Přepnout na video", Modifier.padding(start = 6.dp))
                 }
             }
@@ -269,7 +269,7 @@ fun AudiobookPlayerScreen(
                     Box {
                         IconButton(onClick = { speedMenu = true }, modifier = Modifier.size(40.dp)) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Speed, contentDescription = "Rychlost", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Rounded.Speed, contentDescription = "Rychlost", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
                                 Text("${trimSpeed(state.speed)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground)
                             }
                         }
@@ -283,7 +283,7 @@ fun AudiobookPlayerScreen(
 
                 IconButton(onClick = { if (state.isPodcastEpisode) viewModel.playPrevInQueue() else viewModel.prevChapter() }, modifier = Modifier.size(44.dp)) {
                     Icon(
-                        Icons.Default.SkipPrevious,
+                        Icons.Rounded.SkipPrevious,
                         contentDescription = if (state.isPodcastEpisode) "Předchozí epizoda z fronty" else "Předchozí kapitola",
                         tint = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.size(28.dp),
@@ -298,7 +298,7 @@ fun AudiobookPlayerScreen(
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
                 ) {
                     Icon(
-                        if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = if (state.isPlaying) "Pauza" else "Přehrát",
                         modifier = Modifier.size(36.dp),
                         tint = MaterialTheme.colorScheme.onPrimary,
@@ -314,7 +314,7 @@ fun AudiobookPlayerScreen(
                     modifier = Modifier.size(44.dp),
                 ) {
                     Icon(
-                        Icons.Default.SkipNext,
+                        Icons.Rounded.SkipNext,
                         contentDescription = if (state.isPodcastEpisode) "Další epizoda z fronty" else "Další kapitola",
                         tint = MaterialTheme.colorScheme.onBackground.copy(alpha = if (canSkipNext) 1f else 0.3f),
                         modifier = Modifier.size(28.dp),
@@ -327,7 +327,7 @@ fun AudiobookPlayerScreen(
                         IconButton(onClick = { sleepMenu = true }, modifier = Modifier.size(40.dp)) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    Icons.Default.Bedtime,
+                                    Icons.Rounded.Bedtime,
                                     contentDescription = "Časovač spánku",
                                     tint = if (sleepActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
                                     modifier = Modifier.size(24.dp),

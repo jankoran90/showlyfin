@@ -10,7 +10,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.LibraryBooks
+import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -84,7 +84,7 @@ fun SeriesCard(
         imageUrl = cover?.coverUrl,
         onClick = onClick,
         modifier = modifier,
-        placeholder = Icons.AutoMirrored.Filled.LibraryBooks,
+        placeholder = Icons.AutoMirrored.Rounded.LibraryBooks,
     )
 }
 
