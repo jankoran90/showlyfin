@@ -75,6 +75,10 @@ class AudiobookPlayerService : MediaLibraryService() {
     @Inject lateinit var profileRepository: com.github.jankoran90.showlyfin.core.data.ProfileRepository
     @Inject lateinit var audiobookOwnership: com.github.jankoran90.showlyfin.data.uploader.AudiobookOwnershipRepository
 
+    /** AMPHORA F5: záložky (dvojklik sluchátek, tlačítko a karta v Autě) + karty Auta z Nastavení. */
+    @Inject lateinit var bookmarkStore: com.github.jankoran90.showlyfin.feature.listen.bookmarks.BookmarkStore
+    @Inject lateinit var autoTabs: AutoTabsPrefs
+
     private var session: MediaLibrarySession? = null
     private var player: ExoPlayer? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -104,13 +108,17 @@ class AudiobookPlayerService : MediaLibraryService() {
     internal var currentPlayback: AbsPlayback? = null
 
     /** AMPHORA F4: klíč pořadu / knihy spuštěné z Auta (zesílení hlasu i po skoku na kapitolu). */
-    private var autoShowKey: String? = null
+    internal var autoShowKey: String? = null
+
+    /** AMPHORA F5: dvojklik na sluchátkách = záložka ([HeadsetButtons], ServiceBookmarks.kt). */
+    private val headset by lazy { HeadsetButtons(listenPrefs, scope, { player }) { player?.let { bookmarkFromPlayer(it) } } }
 
     // ---- Custom session commands (Android Auto / notifikace) ----
     private val cmdPrevChapter = SessionCommand(ACTION_PREV_CHAPTER, Bundle.EMPTY)
     private val cmdNextChapter = SessionCommand(ACTION_NEXT_CHAPTER, Bundle.EMPTY)
     private val cmdSpeed = SessionCommand(ACTION_SPEED, Bundle.EMPTY)
     private val cmdSleep = SessionCommand(ACTION_SLEEP, Bundle.EMPTY)
+    private val cmdBookmark = SessionCommand(ACTION_BOOKMARK, Bundle.EMPTY)
 
     private val customLayout: ImmutableList<CommandButton> by lazy {
         ImmutableList.of(
@@ -118,6 +126,7 @@ class AudiobookPlayerService : MediaLibraryService() {
             commandButton(cmdNextChapter, "Další kapitola", R.drawable.ic_auto_next_chapter),
             commandButton(cmdSpeed, "Rychlost", R.drawable.ic_auto_speed),
             commandButton(cmdSleep, "Časovač spánku", R.drawable.ic_auto_sleep),
+            commandButton(cmdBookmark, "Záložka", R.drawable.ic_auto_bookmark),
         )
     }
 
@@ -219,6 +228,7 @@ class AudiobookPlayerService : MediaLibraryService() {
                 .add(cmdNextChapter)
                 .add(cmdSpeed)
                 .add(cmdSleep)
+                .add(cmdBookmark)
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
@@ -237,9 +247,16 @@ class AudiobookPlayerService : MediaLibraryService() {
                 ACTION_NEXT_CHAPTER -> nextChapter()
                 ACTION_SPEED -> cycleSpeed()
                 ACTION_SLEEP -> cycleSleep()
+                ACTION_BOOKMARK -> player?.let { bookmarkFromPlayer(it) }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
+
+        override fun onMediaButtonEvent(
+            session: MediaSession,
+            controllerInfo: MediaSession.ControllerInfo,
+            intent: Intent,
+        ): Boolean = headset.handle(intent)
 
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
@@ -272,6 +289,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                     parentId == NODE_CONTINUE -> continueItems()
                     parentId == NODE_PODCASTS -> podcastSection()
                     parentId == NODE_LATEST -> latestEpisodes()
+                    parentId == NODE_BOOKS -> booksSection()
+                    parentId == NODE_BOOKMARKS -> bookmarkItems()
                     parentId.startsWith(PREFIX_SRC) -> sourceEpisodes(parentId.removePrefix(PREFIX_SRC))
                     parentId.startsWith(PREFIX_LIB) -> if (repo.isConfigured) libraryBooks(parentId.removePrefix(PREFIX_LIB)) else emptyList()
                     parentId.startsWith(PREFIX_PLIB) -> if (repo.isConfigured) libraryPodcasts(parentId.removePrefix(PREFIX_PLIB)) else emptyList()
@@ -318,17 +337,12 @@ class AudiobookPlayerService : MediaLibraryService() {
                     )
                 }
             }
-            // Auto: jediná položka `abs:<id>` bez URI → expanduj na multi-track playlist + resume.
-            if (mediaItems.size == 1 && first != null &&
-                first.localConfiguration == null && first.mediaId.startsWith(PREFIX_BOOK)
-            ) {
-                val itemId = first.mediaId.removePrefix(PREFIX_BOOK)
+            // Auto: kniha `abs:`, díl pořadu `direct:` (celá řada dílů, ⏮⏭), záložka `bmk:` a hlas
+            // („pusť …“) bez URI → playlist se startovní pozicí ([resolveAutoRequest], AutoRequests.kt).
+            if (mediaItems.size == 1 && first != null && isAutoRequest(first)) {
                 return future {
-                    val pb = repo.startPlayback(itemId).also { currentPlayback = it }
-                    Timber.i("[AUTO] play kniha '%s' tracks=%d", pb.title, pb.tracks.size)
-                    val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
-                    autoShowKey = "book:$itemId"
-                    MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey), idx, pos)
+                    resolveAutoRequest(first)
+                        ?: MediaSession.MediaItemsWithStartPosition(mediaItems, 0, startPositionMs.coerceAtLeast(0L))
                 }
             }
             // Auto: epizoda `epi:<itemId>|<episodeId>` bez URI → single-track play session + resume.
@@ -343,29 +357,6 @@ class AudiobookPlayerService : MediaLibraryService() {
                         val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
                         autoShowKey = "show:${parts[0]}"
                         MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey), idx, pos)
-                    }
-                }
-            }
-            // CRUISE: direct epizoda custom zdroje (`direct:<sourceId>|<episodeId>`) → načti CELOU frontu
-            // epizod zdroje (skip ⏮⏭ na předchozí/další epizodu + auto-navázání), spusť od tapnuté.
-            if (mediaItems.size == 1 && first != null &&
-                first.localConfiguration == null && first.mediaId.startsWith(PREFIX_DIRECT)
-            ) {
-                val rest = first.mediaId.removePrefix(PREFIX_DIRECT).split("|", limit = 2)
-                if (rest.size == 2) {
-                    return future {
-                        val items = directSourceEpisodes(rest[0])
-                        if (items.isEmpty()) {
-                            MediaSession.MediaItemsWithStartPosition(mediaItems, 0, startPositionMs.coerceAtLeast(0L))
-                        } else {
-                            val idx = items.indexOfFirst { it.mediaId == first.mediaId }.coerceAtLeast(0)
-                            // CRUISE: navázat na uloženou pozici (resume sdílený s in-app přehrávačem).
-                            // DOHRANOU epizodu (2026-08-16, isFinished) spusť znovu od začátku.
-                            val resumeMs = items.getOrNull(idx)?.mediaMetadata?.extras
-                                ?.getString(KEY_DIRECT_KEY)
-                                ?.let { directResume.get(it)?.takeUnless { m -> m.isFinished }?.posMs } ?: 0L
-                            MediaSession.MediaItemsWithStartPosition(items.toMutableList(), idx, resumeMs)
-                        }
                     }
                 }
             }
@@ -384,21 +375,9 @@ class AudiobookPlayerService : MediaLibraryService() {
             mediaItems: MutableList<MediaItem>,
         ): ListenableFuture<MutableList<MediaItem>> {
             val first = mediaItems.firstOrNull()
-            if (mediaItems.size == 1 && first != null &&
-                first.localConfiguration == null && first.mediaId.startsWith(PREFIX_BOOK)
-            ) {
-                val itemId = first.mediaId.removePrefix(PREFIX_BOOK)
-                autoShowKey = "book:$itemId"
-                return future { trackItems(repo.startPlayback(itemId).also { currentPlayback = it }, autoShowKey).toMutableList() }
-            }
-            // CRUISE: direct epizoda custom zdroje → celá fronta epizod zdroje (skip ⏮⏭ + auto-navázání).
-            if (mediaItems.size == 1 && first != null &&
-                first.localConfiguration == null && first.mediaId.startsWith(PREFIX_DIRECT)
-            ) {
-                val rest = first.mediaId.removePrefix(PREFIX_DIRECT).split("|", limit = 2)
-                if (rest.size == 2) {
-                    return future { directSourceEpisodes(rest[0]).ifEmpty { mediaItems }.toMutableList() }
-                }
+            // Kniha / díl pořadu (celá řada dílů) / záložka / hlas → položky s adresou.
+            if (mediaItems.size == 1 && first != null && isAutoRequest(first)) {
+                return future { resolveAutoRequest(first)?.mediaItems?.toMutableList() ?: mediaItems }
             }
             return Futures.immediateFuture(mediaItems)
         }
@@ -592,7 +571,10 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val NODE_CONTINUE = "node:continue"
         const val NODE_CHAPTERS = "node:chapters"
         const val NODE_PODCASTS = "node:podcasts"
-        const val NODE_LATEST = "node:latest"       // CRUISE: „Nejnovější epizody" (uvnitř Podcasty)
+        const val NODE_LATEST = "node:latest"       // CRUISE: „Nejnovější epizody" (uvnitř Podcasty / karta Nové díly)
+        const val NODE_BOOKS = "node:books"         // AMPHORA F5: karta Knihy (knihovny pod ní)
+        const val NODE_BOOKMARKS = "node:bookmarks" // AMPHORA F5: záložky
+        const val PREFIX_BOOKMARK = "bmk:"          // AMPHORA F5: záložka (playable, `bmk:<id>`)
         const val PREFIX_LIB = "abslib:"
         const val PREFIX_BOOK = "abs:"
         const val PREFIX_CHAPTER = "chap:"
@@ -606,6 +588,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val ACTION_NEXT_CHAPTER = "com.github.jankoran90.showlyfin.NEXT_CHAPTER"
         const val ACTION_SPEED = "com.github.jankoran90.showlyfin.SPEED"
         const val ACTION_SLEEP = "com.github.jankoran90.showlyfin.SLEEP"
+        const val ACTION_BOOKMARK = "com.github.jankoran90.showlyfin.BOOKMARK"
         private val SPEEDS = floatArrayOf(1.0f, 1.2f, 1.5f, 1.7f, 2.0f, 0.8f)
         private val SLEEP_STEPS = intArrayOf(15, 30, 45, 60)
         // Internal = čtou je browse extension funkce v AudiobookBrowseTree.kt.

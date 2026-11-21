@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":data:data-maestro")) // 2026-10-03: probuzení boxu + spuštění Filmy na TV před castem
     implementation(libs.hilt.android)
     implementation(libs.timber)
+    implementation(libs.gson)  // AMPHORA F5: zalozky (BookmarkStore, delta sync payload)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.core.ktx)

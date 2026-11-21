@@ -11,23 +11,40 @@ import com.github.jankoran90.showlyfin.data.uploader.model.SourceEpisode
 // položek jsou v AudiobookAutoMedia.kt (top-level internal, stejný balíček).
 
 /**
- * Root = CRUISE (SHW-70) přesně 4 záložky (AA strop ~4, bez overflow „víc"): **Pokračovat | Podcasty
- * | <audioknihovny jako vlastní záložky, label Dětské/Dospělý>**. Kapitoly (jen při hrané knize
- * s kapitolami) jdou ÚPLNĚ NAKONEC — kdyby přetekly přes 4, schová se nepodstatná Kapitoly, ne hlavní 4.
+ * Root = karty nahoře (AMPHORA F5 / IN2, Nastavení › Android Auto): výchozí **Pokračovat | Nové díly |
+ * Podcasty | Knihy**, volitelně Záložky a knihovny jako samostatné karty. AA ukáže nejvýš ~4 (bez „víc“),
+ * proto se bere [AutoTabsPrefs.MAX_TABS] prvních. Kapitoly (jen při hrané knize s kapitolami) jdou ÚPLNĚ
+ * NAKONEC — kdyby přetekly, schová se nepodstatná Kapitoly, ne hlavní karty.
  */
 internal suspend fun AudiobookPlayerService.rootChildren(): List<MediaItem> {
-    val nodes = mutableListOf(
-        browsableNode(AudiobookPlayerService.NODE_CONTINUE, "Pokračovat"),
-        browsableNode(AudiobookPlayerService.NODE_PODCASTS, "Podcasty"),
-    )
-    // Každá audioknihovní knihovna = vlastní záložka (Dětské/Dospělý — oddělené knihovny, každá své obecenstvo).
-    if (repo.isConfigured) {
-        runCatching { repo.getAudiobookLibraries() }.getOrDefault(emptyList())
-            .let(::visibleLibraries)
-            .forEach { nodes += browsableNode("${AudiobookPlayerService.PREFIX_LIB}${it.id}", audiobookTabLabel(it.name)) }
+    val nodes = mutableListOf<MediaItem>()
+    for (tab in autoTabs.tabs) when (tab) {
+        AutoTabsPrefs.Tab.CONTINUE -> nodes += browsableNode(AudiobookPlayerService.NODE_CONTINUE, tab.label)
+        AutoTabsPrefs.Tab.NEW -> nodes += browsableNode(AudiobookPlayerService.NODE_LATEST, tab.label)
+        AutoTabsPrefs.Tab.PODCASTS -> nodes += browsableNode(AudiobookPlayerService.NODE_PODCASTS, tab.label)
+        AutoTabsPrefs.Tab.BOOKMARKS -> nodes += browsableNode(AudiobookPlayerService.NODE_BOOKMARKS, tab.label)
+        AutoTabsPrefs.Tab.BOOKS -> if (repo.isConfigured) {
+            val libs = runCatching { repo.getAudiobookLibraries() }.getOrDefault(emptyList()).let(::visibleLibraries)
+            when {
+                libs.isEmpty() -> Unit
+                // Každá knihovna = vlastní karta (Dětské/Dospělý — oddělené knihovny, každá své obecenstvo).
+                autoTabs.librariesAsTabs ->
+                    libs.forEach { nodes += browsableNode("${AudiobookPlayerService.PREFIX_LIB}${it.id}", audiobookTabLabel(it.name)) }
+                else -> nodes += browsableNode(AudiobookPlayerService.NODE_BOOKS, tab.label)
+            }
+        }
     }
-    if (currentPlayback?.chapters?.isNotEmpty() == true) nodes += browsableNode(AudiobookPlayerService.NODE_CHAPTERS, "Kapitoly")
-    return nodes
+    val top = nodes.take(AutoTabsPrefs.MAX_TABS).toMutableList()
+    if (currentPlayback?.chapters?.isNotEmpty() == true) top += browsableNode(AudiobookPlayerService.NODE_CHAPTERS, "Kapitoly")
+    return top
+}
+
+/** Karta Knihy: jedna knihovna → rovnou knihy, víc → složka na každou knihovnu (Dětské, Dospělý). */
+internal suspend fun AudiobookPlayerService.booksSection(): List<MediaItem> {
+    if (!repo.isConfigured) return emptyList()
+    val libs = runCatching { repo.getAudiobookLibraries() }.getOrDefault(emptyList()).let(::visibleLibraries)
+    if (libs.size == 1) return libraryBooks(libs.first().id)
+    return libs.map { browsableNode("${AudiobookPlayerService.PREFIX_LIB}${it.id}", audiobookTabLabel(it.name)) }
 }
 
 /**
@@ -50,7 +67,7 @@ internal suspend fun AudiobookPlayerService.podcastSection(): List<MediaItem> {
     if (custom.isEmpty() && absLibs.size == 1) return libraryPodcasts(absLibs.first().id)
     // CRUISE: „Nejnovější epizody" (čerstvé napříč zdroji) jako PRVNÍ položka v Podcasty (5. věc, co se
     // nevejde jako 5. záložka nahoře → AA strop ~4). Jen když máme custom zdroje, ze kterých agregovat.
-    val latest = if (custom.isNotEmpty()) listOf(browsableNode(AudiobookPlayerService.NODE_LATEST, "🆕 Nejnovější epizody")) else emptyList()
+    val latest = if (custom.isNotEmpty() && AutoTabsPrefs.Tab.NEW !in autoTabs.tabs) listOf(browsableNode(AudiobookPlayerService.NODE_LATEST, "🆕 Nejnovější epizody")) else emptyList()
     return latest + custom + absLibs.map { browsableNode("${AudiobookPlayerService.PREFIX_PLIB}${it.id}", it.name) }
 }
 
@@ -106,7 +123,8 @@ internal suspend fun AudiobookPlayerService.continueItems(): List<MediaItem> {
                 .map { (it.lastUpdate ?: 0L) to bookItem(it) }
         }.getOrDefault(emptyList())
     } else emptyList()
-    return (books + continueDirectEntries())
+    // AMPHORA F5: záložky na začátek, když nejsou samostatná karta.
+    return bookmarksEntry() + (books + continueDirectEntries())
         .sortedByDescending { it.first }
         .map { it.second }
         .take(AudiobookPlayerService.CONTINUE_LIMIT)

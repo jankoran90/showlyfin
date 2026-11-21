@@ -8,6 +8,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Bookmarks
+import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.ChildCare
 import androidx.compose.material.icons.rounded.Speaker
@@ -99,6 +101,12 @@ fun SlovoSettingsScreen(
             }
             if (adult) SlovoCollapsibleSection("Přehrávač", Icons.Rounded.PlayCircle) {
                 SlovoPlayerSettingsSection()
+            }
+            if (adult) SlovoCollapsibleSection("Záložky", Icons.Rounded.Bookmarks) {
+                SlovoBookmarkSettingsSection()
+            }
+            if (adult) SlovoCollapsibleSection("Android Auto", Icons.Rounded.DirectionsCar) {
+                SlovoAutoSettingsSection()
             }
             if (adult) SlovoCollapsibleSection("Spodní lišta a nabídka Víc", Icons.Rounded.Menu) {
                 SlovoNavOrderSection()

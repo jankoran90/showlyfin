@@ -64,6 +64,28 @@ class ListenPlayerPrefs @Inject constructor(
         get() = prefs.getBoolean("slovo_floating_mini", true)
         set(v) = prefs.edit { putBoolean("slovo_floating_mini", v) }
 
+    // ── Záložky (AMPHORA F5 / PR2) ──
+
+    /** Dvojklik na sluchátkách: [HEADSET_BOOKMARK] (výchozí) nebo [HEADSET_SYSTEM] (další položka, jak to dělá systém). */
+    var headsetDoubleTap: Int
+        get() = prefs.getInt("slovo_headset_double_tap", HEADSET_BOOKMARK)
+        set(v) = prefs.edit { putInt("slovo_headset_double_tap", v) }
+
+    /** Po záložce z přehrávače se hned zeptat na poznámku (jinak jen potvrzení s tlačítkem Poznámka). */
+    var bookmarkAskNote: Boolean
+        get() = prefs.getBoolean("slovo_bookmark_ask_note", false)
+        set(v) = prefs.edit { putBoolean("slovo_bookmark_ask_note", v) }
+
+    /** Záložka ze sluchátek nebo z auta krátce pípne (potvrzení bez displeje). */
+    var bookmarkBeep: Boolean
+        get() = prefs.getBoolean("slovo_bookmark_beep", true)
+        set(v) = prefs.edit { putBoolean("slovo_bookmark_beep", v) }
+
+    /** Značky záložek nad časovou osou přehrávače. */
+    var bookmarkMarks: Boolean
+        get() = prefs.getBoolean("slovo_bookmark_marks", true)
+        set(v) = prefs.edit { putBoolean("slovo_bookmark_marks", v) }
+
     /** Úroveň zesílení hlasu pro pořad / knihu ([showKey]); null = jako v Nastavení (globální DRC). */
     fun boostFor(showKey: String?): Int? =
         showKey?.let { k -> prefs.getInt(boostKey(k), -1).takeIf { it >= 0 } }
@@ -101,6 +123,9 @@ class ListenPlayerPrefs @Inject constructor(
         }
 
     companion object {
+        const val HEADSET_BOOKMARK = 0
+        const val HEADSET_SYSTEM = 1
+
         /** Extra k [ListenNavSignal.ACTION_LISTEN_DRC_CHANGED]: zesílení právě hrané položky (-1 = globální). */
         const val EXTRA_SHOW_BOOST = "slovo_show_boost"
 

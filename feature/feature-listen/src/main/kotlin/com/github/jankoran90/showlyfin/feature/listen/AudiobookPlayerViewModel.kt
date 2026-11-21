@@ -10,6 +10,10 @@ import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManage
 import com.github.jankoran90.showlyfin.data.abs.download.EpisodeDownloadManager
 import com.github.jankoran90.showlyfin.data.uploader.UploaderRemoteDataSource
 import com.github.jankoran90.showlyfin.data.uploader.youtubeVideoUrl
+import com.github.jankoran90.showlyfin.feature.listen.bookmarks.Bookmark
+import com.github.jankoran90.showlyfin.feature.listen.bookmarks.addAt
+import com.github.jankoran90.showlyfin.feature.listen.bookmarks.currentBookmarkKey
+import com.github.jankoran90.showlyfin.feature.listen.bookmarks.currentBookmarkTarget
 import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection
 import com.github.jankoran90.showlyfin.feature.listen.player.clearQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.moveQueueItem
@@ -50,6 +54,7 @@ class AudiobookPlayerViewModel @Inject constructor(
     private val sourcesRepo: com.github.jankoran90.showlyfin.data.uploader.PodcastSourcesRepository,
     kidsQueueGuard: com.github.jankoran90.showlyfin.feature.listen.kids.KidsQueueGuard,
     private val directResume: com.github.jankoran90.showlyfin.feature.listen.player.DirectResumeStore,
+    private val bookmarkStore: com.github.jankoran90.showlyfin.feature.listen.bookmarks.BookmarkStore,
 ) : ViewModel() {
 
     // Tester 2026-11-19: odebraný díl Dětí z fronty / mini-přehrávače (hlídač je singleton, start jen jednou).
@@ -243,6 +248,14 @@ class AudiobookPlayerViewModel @Inject constructor(
     fun returnToWakeMark() = connection.returnToWakeMark()
     fun dismissWakeMark() = connection.dismissWakeMark()
     fun setSleepEndOfCurrent() = connection.setSleepEndOfCurrent()
+
+    // AMPHORA F5 / PR2 — záložky právě hrané položky (tlačítko, seznam, značky na ose).
+    val bookmarks = bookmarkStore.bookmarks
+    fun currentBookmarkKey(): String? = connection.currentBookmarkKey()
+    fun addBookmark(): Bookmark? = connection.currentBookmarkTarget()?.let { bookmarkStore.addAt(it) }
+    fun updateBookmarkNote(id: String, note: String) = bookmarkStore.updateNote(id, note)
+    fun deleteBookmark(id: String) = bookmarkStore.delete(id)
+    fun seekToBookmark(b: Bookmark) = connection.seekTo(b.posMs)
 
     // ──────── Fronta (podcast epizody) ────────
     fun playQueued(episode: QueuedEpisode) = connection.playQueued(episode)

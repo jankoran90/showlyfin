@@ -1,5 +1,8 @@
 package com.github.jankoran90.showlyfin.ui.slovophone
 
+import com.github.jankoran90.showlyfin.feature.listen.bookmarks.BookmarkOpeners
+import com.github.jankoran90.showlyfin.feature.listen.bookmarks.BookmarksScreen
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -229,6 +232,15 @@ internal fun SlovoSectionContent(
                 onOpenShelf = { onPush(SlovoDetailEntry.AudiotekaWeb(AUDIOTEKA_SHELF_URL)) }
                     .takeIf { AudiotekaPrefs.buyInApp(LocalContext.current) },
             )
+        }
+        SlovoSection.ZALOZKY -> SlovoSectionScaffold(section.label, onMenu) {
+            val openers = remember(onPush, expandMiniPlayer) {
+                BookmarkOpeners(
+                    onOpenAt = { itemId, episodeId, sec -> onPush(SlovoDetailEntry.AudiobookPlayer(itemId, false, sec, episodeId)) },
+                    onOpenPlayer = expandMiniPlayer,
+                )
+            }
+            BookmarksScreen(openers = openers, modifier = Modifier.fillMaxSize())
         }
         SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu, isKidsProfile = isKidsProfile)
         SlovoSection.PROFIL -> SlovoProfileScreen(onMenu = onMenu)

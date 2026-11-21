@@ -91,6 +91,13 @@ fun AudiobookPlayerScreen(
 
     val chapters by viewModel.chapters.collectAsStateWithLifecycle()
     val queue by viewModel.queue.collectAsStateWithLifecycle()
+    // AMPHORA F5 / PR2: záložky právě hrané položky (značky na ose, seznam pod ovládáním).
+    val allBookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
+    val bookmarkKey = remember(state.currentItemId, state.currentEpisodeId) { viewModel.currentBookmarkKey() }
+    val itemBookmarks = remember(allBookmarks, bookmarkKey) {
+        allBookmarks.filter { it.itemKey == bookmarkKey }.sortedBy { it.posMs }
+    }
+    var showBookmarks by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubMs by remember { mutableStateOf(0f) }
     var speedMenu by remember { mutableStateOf(false) }
@@ -255,6 +262,7 @@ fun AudiobookPlayerScreen(
 
             val dur = state.durationMs.coerceAtLeast(1L)
             val sliderValue = if (scrubbing) scrubMs else state.positionMs.toFloat()
+            if (!audioOnly && viewModel.playerPrefs.bookmarkMarks) BookmarkMarks(itemBookmarks, state.durationMs)
             Slider(
                 value = sliderValue.coerceIn(0f, dur.toFloat()),
                 onValueChange = { scrubbing = true; scrubMs = it },
@@ -364,12 +372,30 @@ fun AudiobookPlayerScreen(
             }
 
             // AMPHORA F4 / PR1: Zesílit hlas · tento pořad, Ticho pryč, nabídka po spánku.
-            PlayerExtrasRow(state, viewModel)
+            PlayerExtrasRow(state, viewModel, canBookmark = !audioOnly)
 
             Spacer(Modifier.height(4.dp))
 
             // Subtilní seznam pod ovládáním: fronta (podcast) nebo kapitoly (audiokniha). Hrající zvýrazněno.
-            if (state.isPodcastEpisode && queue.isNotEmpty()) {
+            // AMPHORA F5: má-li položka záložky, přepínač Kapitoly / Fronta ↔ Záložky (bez jiného seznamu rovnou záložky).
+            val otherList = when {
+                state.isPodcastEpisode && queue.isNotEmpty() -> "Fronta"
+                !state.isPodcastEpisode && chapters.isNotEmpty() -> "Kapitoly"
+                else -> null
+            }
+            val bookmarksShown = !audioOnly && itemBookmarks.isNotEmpty() && (showBookmarks || otherList == null)
+            if (!audioOnly && itemBookmarks.isNotEmpty()) {
+                PlayerListToggle(otherList, itemBookmarks.size, bookmarksShown) { showBookmarks = it }
+            }
+            if (bookmarksShown) {
+                PlayerBookmarkList(
+                    bookmarks = itemBookmarks,
+                    onSeek = viewModel::seekToBookmark,
+                    onSaveNote = { b, note -> viewModel.updateBookmarkNote(b.id, note) },
+                    onDelete = { viewModel.deleteBookmark(it.id) },
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+            } else if (state.isPodcastEpisode && queue.isNotEmpty()) {
                 InlineQueueList(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     queue = queue,

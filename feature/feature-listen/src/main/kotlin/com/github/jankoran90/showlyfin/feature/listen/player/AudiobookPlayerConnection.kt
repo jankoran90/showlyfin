@@ -613,7 +613,8 @@ class AudiobookPlayerConnection @Inject constructor(
      * LEVER (SHW-61): sjednocené spuštění položky fronty bez ohledu na typ zdroje — RSS/YouTube
      * (`direct`) přes přímou URL ([playDirect]), klasická ABS epizoda přes ABS play session.
      */
-    private fun startEpisode(episode: QueuedEpisode) {
+    /** [startOverrideMs] = start z daného místa (záložka), jinak navázání na uloženou pozici. */
+    private fun startEpisode(episode: QueuedEpisode, startOverrideMs: Long? = null) {
         // Codex sweep 2026-10-12: jediný řízený start — rychlé A→B nebo přepnutí profilu dřív nechalo
         // doběhnout starý síťový start a přehrát/zařadit cizí epizodu.
         episodeStartJob?.cancel()
@@ -632,7 +633,7 @@ class AudiobookPlayerConnection @Inject constructor(
                 // [choosePlaybackResume]). Fronta hraje vždy audio proud, takže i když „vede" video
                 // (delší pozice), navazuje se aspoň zvukem ze SPRÁVNÉHO místa — skutečné přepnutí na
                 // video přehrávač řeší volající mimo frontu (Domů „Pokračovat", viz [HomeViewModel]).
-                startMs = run {
+                startMs = startOverrideMs ?: run {
                     val audio = resumeStore.get(episode.episodeId)?.takeUnless { it.isFinished }
                     val video = videoResumeStore.get(episode.episodeId)
                     val start = choosePlaybackResume(audio?.posMs, audio?.durMs, false, video?.posMs, video?.durMs, audio?.updatedAt ?: 0L, video?.updatedAt ?: 0L)?.posMs ?: 0L
@@ -658,7 +659,9 @@ class AudiobookPlayerConnection @Inject constructor(
                 }
             }
                 // isActive: vnitřní runCatching mohl spolknout zrušení a spadnout do offline větve.
-                .onSuccess { pb -> if (isActive) playBook(pb, fromStart = false, episode = episode, itemId = episode.itemId) }
+                .onSuccess { pb ->
+                    if (isActive) playBook(pb, fromStart = false, startOverrideSec = startOverrideMs?.let { it / 1000.0 }, episode = episode, itemId = episode.itemId)
+                }
                 .onFailure { Timber.w(it, "[Listen] přehrání epizody z fronty selhalo") }
         }
     }
@@ -667,6 +670,9 @@ class AudiobookPlayerConnection @Inject constructor(
 
     /** Přehraj konkrétní epizodu z fronty hned (klik v seznamu). NEodebírá ji z fronty. */
     fun playQueued(episode: QueuedEpisode) = startEpisode(episode)
+
+    /** AMPHORA F5: díl od daného místa (záložka). */
+    fun playEpisodeAt(episode: QueuedEpisode, startMs: Long) = startEpisode(episode, startMs.coerceAtLeast(0L))
 
     /** Přehraj přímou RSS/YouTube epizodu HNED + zařaď do fronty (auto-advance). Vstup z VM. */
     fun playDirectEpisode(episode: QueuedEpisode) = startEpisode(episode)

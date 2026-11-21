@@ -27,10 +27,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.github.jankoran90.showlyfin.core.ui.tokens.Spacing
 import com.github.jankoran90.showlyfin.feature.listen.AudiobookPlayerViewModel
+import com.github.jankoran90.showlyfin.feature.listen.bookmarks.Bookmark
+import com.github.jankoran90.showlyfin.feature.listen.bookmarks.formatBookmarkTime
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import com.github.jankoran90.showlyfin.feature.listen.player.PlayerState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/** Jak dlouho visí potvrzení uložené záložky. */
+private const val BANNER_MS = 6_000L
 
 /** Úroveň „Zesílit hlas“ pro pořad / knihu (DRC Silná). */
 private const val BOOST_LEVEL = 3
@@ -40,9 +47,21 @@ private const val BOOST_LEVEL = 3
  * knihu a „Ticho pryč“ (přeskočení ticha, platí všude). Nad nimi případná nabídka po spánku.
  */
 @Composable
-internal fun PlayerExtrasRow(state: PlayerState, viewModel: AudiobookPlayerViewModel) {
+internal fun PlayerExtrasRow(state: PlayerState, viewModel: AudiobookPlayerViewModel, canBookmark: Boolean = true) {
     var skipSilence by remember { mutableStateOf(viewModel.playerPrefs.skipSilence) }
+    // AMPHORA F5 / PR2: právě uložená záložka (potvrzení) a dialog poznámky.
+    var saved by remember { mutableStateOf<Bookmark?>(null) }
+    var noteFor by remember { mutableStateOf<Bookmark?>(null) }
+    LaunchedEffect(saved) { if (saved != null) { delay(BANNER_MS); saved = null } }
     Column(Modifier.fillMaxWidth()) {
+        saved?.let { b -> BookmarkSavedBanner(b, onNote = { noteFor = b; saved = null }, onDismiss = { saved = null }) }
+        noteFor?.let { b ->
+            BookmarkNoteDialog(
+                initial = b.note, time = formatBookmarkTime(b.posMs),
+                onSave = { viewModel.updateBookmarkNote(b.id, it); noteFor = null },
+                onDismiss = { noteFor = null },
+            )
+        }
         state.wakeOffer?.let { mark ->
             WakeBanner(
                 atMs = mark.atMs,
@@ -55,6 +74,16 @@ internal fun PlayerExtrasRow(state: PlayerState, viewModel: AudiobookPlayerViewM
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = Spacing.xs),
             horizontalArrangement = Arrangement.spacedBy(Spacing.s, Alignment.CenterHorizontally),
         ) {
+            if (canBookmark) {
+                FilterChip(
+                    selected = false,
+                    onClick = {
+                        viewModel.addBookmark()?.let { b -> if (viewModel.playerPrefs.bookmarkAskNote) noteFor = b else saved = b }
+                    },
+                    label = { Text("Záložka") },
+                    leadingIcon = { BookmarkChipIcon() },
+                )
+            }
             val boosted = (state.showBoost ?: 0) > 0
             FilterChip(
                 selected = boosted,

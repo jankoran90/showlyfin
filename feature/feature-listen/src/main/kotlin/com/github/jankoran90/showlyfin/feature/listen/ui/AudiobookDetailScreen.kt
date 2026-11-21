@@ -40,6 +40,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.animation.animateContentSize
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -273,6 +274,19 @@ private fun DetailContent(
                     modifier = Modifier.padding(top = 18.dp),
                 )
             }
+        }
+
+        // AMPHORA F5 / PR2: záložky knihy (ťuk = přehrát odtud), nad kapitolami.
+        item(key = "bookmarks") {
+            val openers = remember(onPlay) {
+                com.github.jankoran90.showlyfin.feature.listen.bookmarks.BookmarkOpeners(
+                    onOpenAt = { _, _, sec -> onPlay(false, sec) }, onOpenPlayer = {},
+                )
+            }
+            com.github.jankoran90.showlyfin.feature.listen.bookmarks.ItemBookmarksSection(
+                itemKey = com.github.jankoran90.showlyfin.feature.listen.bookmarks.bookmarkKeyFor("book", book.id, null),
+                openers = openers,
+            )
         }
 
         if (detail.chapters.isNotEmpty()) {
