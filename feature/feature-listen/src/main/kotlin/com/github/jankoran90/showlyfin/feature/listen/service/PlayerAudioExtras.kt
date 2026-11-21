@@ -51,8 +51,13 @@ internal class PlayerAudioExtras(
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-        if (mediaItem?.mediaId != lastMediaId) {
-            lastMediaId = mediaItem?.mediaId
+        // Stažené položky mají mediaId jen „_0“, „_1“… (bez session) → identita i s pořadem a dílem (revize F8).
+        val ex = mediaItem?.mediaMetadata?.extras
+        val identity = mediaItem?.let {
+            "${it.mediaId}|${ex?.getString(KEY_SHOW_KEY)}|${ex?.getString(AudiobookPlayerService.KEY_ABS_EPISODE_ID)}"
+        }
+        if (identity != lastMediaId) {
+            lastMediaId = identity
             pausedAt = null // nová položka / další soubor knihy → žádné přetočení
         }
         val extras = mediaItem?.mediaMetadata?.extras

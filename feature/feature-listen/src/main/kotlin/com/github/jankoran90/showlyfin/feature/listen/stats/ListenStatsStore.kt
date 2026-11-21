@@ -137,6 +137,7 @@ class ListenStatsStore @Inject constructor(
         val savedSec = (saved / 1000.0).toLong()
         // Zbytek pod sekundu zůstává v mezisoučtu (jinak by se při častých pauzách ztrácel).
         pendingMs = ms - sec * 1000L
+        pendingSavedMs = saved - savedSec * 1000.0
         mutate(sync, pendingProfile) { rows ->
             upsert(rows, day, item) { it.copy(seconds = it.seconds + sec, savedSec = it.savedSec + savedSec) }
         }
@@ -290,7 +291,8 @@ class ListenStatsStore @Inject constructor(
         private const val DAY_LEN = 10
         /** Mezera mezi tiky delší než tohle (uspaný proces) se nepočítá celá. */
         private const val MAX_GAP_MS = 30_000L
-        private const val FLUSH_MS = 60_000L
+        /** Zápis do telefonu: při zabití procesu během hraní se ztratí nejvýš tolik. */
+        private const val FLUSH_MS = 20_000L
         private const val SYNC_MS = 10 * 60_000L
         private const val MIN_FLUSH_MS = 1_000L
         private const val KEEP_DAYS = 400L

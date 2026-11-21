@@ -46,6 +46,15 @@ fun AudiobookPlayerConnection.currentBookmarkTarget(): BookmarkTarget? {
         )
     }
     val itemId = s.currentItemId?.takeIf { it.isNotBlank() } ?: return null
+    // Po znovupřipojení ke službě (appka spuštěná během hraní) díl nemá frontovou položku (revize F8).
+    val stateEpisodeId = s.currentEpisodeId?.takeIf { it.isNotBlank() }
+    if (s.isPodcastEpisode && stateEpisodeId != null) {
+        return BookmarkTarget(
+            kind = Bookmark.KIND_EPISODE, itemId = itemId, episodeId = stateEpisodeId,
+            title = s.title, subtitle = s.author, coverUrl = s.coverUrl, posMs = s.positionMs, durationMs = s.durationMs,
+            chapter = null, url = controller?.currentMediaItem?.let(::originUrlOf),
+        )
+    }
     return BookmarkTarget(
         kind = Bookmark.KIND_BOOK, itemId = itemId, episodeId = null, title = s.title, subtitle = s.author,
         coverUrl = s.coverUrl, posMs = s.positionMs, durationMs = s.durationMs,
@@ -57,7 +66,12 @@ fun AudiobookPlayerConnection.currentBookmarkTarget(): BookmarkTarget? {
 fun AudiobookPlayerConnection.currentBookmarkKey(): String? {
     val ep = currentEpisode
     if (ep != null && ep.episodeId.isNotBlank()) return bookmarkKeyFor(Bookmark.KIND_EPISODE, ep.itemId, ep.episodeId)
-    return state.value.currentItemId?.takeIf { it.isNotBlank() }?.let { bookmarkKeyFor(Bookmark.KIND_BOOK, it, null) }
+    val s = state.value
+    val stateEpisodeId = s.currentEpisodeId?.takeIf { it.isNotBlank() }
+    if (s.isPodcastEpisode && stateEpisodeId != null && !s.currentItemId.isNullOrBlank()) {
+        return bookmarkKeyFor(Bookmark.KIND_EPISODE, s.currentItemId, stateEpisodeId)
+    }
+    return s.currentItemId?.takeIf { it.isNotBlank() }?.let { bookmarkKeyFor(Bookmark.KIND_BOOK, it, null) }
 }
 
 /** Díl ze záložky jako položka fronty (přímá adresa); null = ABS díl nebo kniha (ty jdou přes ABS). */
@@ -86,20 +100,22 @@ internal fun bookmarkTargetFromItem(item: MediaItem, posInItemMs: Long, playerDu
     val durMs = ((extras?.getDouble(AudiobookPlayerService.KEY_DURATION_SEC) ?: 0.0) * 1000).toLong()
         .takeIf { it > 0 } ?: playerDurationMs.coerceAtLeast(0L)
     val cover = meta.artworkUri?.toString()
+    val absEpisodeId = extras?.getString(AudiobookPlayerService.KEY_ABS_EPISODE_ID)?.takeIf { it.isNotBlank() }
+    // Stažená kniha / ABS díl má prázdnou session → mediaId „_0“, „_1“… (soubor knihy), NE klíč dílu (revize F8 P1).
     val directKey = extras?.getString(AudiobookPlayerService.KEY_DIRECT_KEY)?.takeIf { it.isNotBlank() }
         ?: item.mediaId.takeIf {
-            sessionId.isNullOrBlank() && it.isNotBlank() && !it.startsWith(AudiobookPlayerService.PREFIX_DIRECT)
+            sessionId.isNullOrBlank() && it.isNotBlank() && !it.startsWith(AudiobookPlayerService.PREFIX_DIRECT) &&
+                !ABS_TRACK_ID.matches(it) && absEpisodeId == null && showKey?.startsWith("book:") != true
         }
     if (directKey != null) {
         return BookmarkTarget(
             kind = Bookmark.KIND_EPISODE, itemId = showKey?.removePrefix("show:").orEmpty(), episodeId = directKey,
             title = title, subtitle = subtitle, coverUrl = cover, posMs = posInItemMs.coerceAtLeast(0L),
             durationMs = durMs, chapter = null,
-            url = item.localConfiguration?.uri?.toString()?.takeIf { it.startsWith("http") },
+            url = originUrlOf(item),
         )
     }
     // ABS díl (podcast z Audiobookshelfu): klíč pořadu `show:<itemId>` + ID dílu v extras; přehrává se přes ABS.
-    val absEpisodeId = extras?.getString(AudiobookPlayerService.KEY_ABS_EPISODE_ID)?.takeIf { it.isNotBlank() }
     if (absEpisodeId != null && showKey?.startsWith("show:") == true) {
         val offMs = ((extras?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0) * 1000).toLong()
         return BookmarkTarget(
@@ -117,3 +133,14 @@ internal fun bookmarkTargetFromItem(item: MediaItem, posInItemMs: Long, playerDu
         chapter = chapter ?: meta.title?.toString()?.takeIf { it.isNotBlank() && it != title }, url = null,
     )
 }
+
+/** Extras položky: síťová adresa dílu, i když hraje stažený soubor (záložka pak jde přehrát i jinde). */
+internal const val KEY_ORIGIN_URL = "slovo_origin_url"
+
+/** Soubor knihy / ABS dílu bez session (stažené): „_0“, „_1“… */
+private val ABS_TRACK_ID = Regex("^_\\d+$")
+
+/** Síťová adresa dílu: z extras (stažený díl hraje z lokálního souboru), jinak URI položky, je-li síťová. */
+internal fun originUrlOf(item: MediaItem): String? =
+    item.mediaMetadata.extras?.getString(KEY_ORIGIN_URL)?.takeIf { it.startsWith("http") }
+        ?: item.localConfiguration?.uri?.toString()?.takeIf { it.startsWith("http") }

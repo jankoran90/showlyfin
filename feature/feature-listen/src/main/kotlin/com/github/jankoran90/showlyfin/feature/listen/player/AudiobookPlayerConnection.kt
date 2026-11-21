@@ -171,6 +171,12 @@ class AudiobookPlayerConnection @Inject constructor(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    /**
+     * Revize F8: služba ji volá při startu hraní, aby statistiky poslechu (tik v [pushState]) běžely i
+     * když přehrávání spustilo Android Auto nebo sluchátka bez otevřené appky.
+     */
+    fun ensureAttached() = withController { }
+
     private fun withController(block: (MediaController) -> Unit) {
         val c = controller
         if (c != null) block(c) else { pending += block; ensureController() }
@@ -426,6 +432,9 @@ class AudiobookPlayerConnection @Inject constructor(
                 putString(AudiobookPlayerService.KEY_BOOK_TITLE, title)
                 author?.let { putString(AudiobookPlayerService.KEY_BOOK_AUTHOR, it) }
                 putShowExtras(showKeyFor(episode, null), listenPrefs)
+                // Revize F8: síťová adresa dílu i při hraní staženého souboru (záložka ze sluchátek / Auta).
+                (episode?.direct?.url ?: url).takeIf { it.startsWith("http") }
+                    ?.let { putString(com.github.jankoran90.showlyfin.feature.listen.bookmarks.KEY_ORIGIN_URL, it) }
             }
             val item = MediaItem.Builder()
                 .setUri(url)

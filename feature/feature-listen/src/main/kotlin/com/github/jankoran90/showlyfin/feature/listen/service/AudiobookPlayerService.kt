@@ -78,6 +78,8 @@ class AudiobookPlayerService : MediaLibraryService() {
     /** AMPHORA F5: záložky (dvojklik sluchátek, tlačítko a karta v Autě) + karty Auta z Nastavení. */
     @Inject lateinit var bookmarkStore: com.github.jankoran90.showlyfin.feature.listen.bookmarks.BookmarkStore
     @Inject lateinit var autoTabs: AutoTabsPrefs
+    /** Revize F8: statistiky poslechu tikají ve spojení appky — služba ho připojí i při startu z Auta. */
+    @Inject lateinit var playerConnection: dagger.Lazy<com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConnection>
 
     private var session: MediaLibrarySession? = null
     private var player: ExoPlayer? = null
@@ -176,6 +178,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) { startSync(); startMetaTicker() } else { stopSync(); stopMetaTicker(); syncNow() }
+                if (isPlaying) runCatching { playerConnection.get().ensureAttached() }
                 // EVERGREEN — tichá auto-instalace na pozadí nesmí utnout poslech (i se zhasnutou obrazovkou).
                 InstallGuard.playbackActive = isPlaying
                 notifyListenWidget()

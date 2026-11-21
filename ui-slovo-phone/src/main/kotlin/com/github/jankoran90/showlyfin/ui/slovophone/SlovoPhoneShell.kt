@@ -106,7 +106,10 @@ private fun SlovoShellContent() {
     // AMPHORA F7 (Z1): kam se Děti otevřou, nastavuje rodič (Pro rodiče / Rodičovská appka). Jen jednou
     // po startu — pozdější přepnutí sekce dítětem nepřebíjí.
     var kidsStartApplied by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(isKidsProfile) {
+    LaunchedEffect(isKidsProfile, activeProfile != null) {
+        // Revize F8: příznak přežívá recreate při přepnutí profilu → u dospělého ho shoď, ať se po
+        // návratu na Děti volba rodiče znovu použije.
+        if (activeProfile != null && !isKidsProfile) kidsStartApplied = false
         if (isKidsProfile && !kidsStartApplied) {
             kidsStartApplied = true
             val start = listenVm.profileConfig.value.kidsDisplay?.start
