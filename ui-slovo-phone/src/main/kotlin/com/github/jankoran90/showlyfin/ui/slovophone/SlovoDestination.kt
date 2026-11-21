@@ -92,6 +92,12 @@ object SlovoShellPrefs {
         prefs(ctx).edit().putStringSet(KEY_BAR_HIDDEN, current.map { it.name }.toSet()).apply()
     }
 
+    /** Místa skrytá z lišty — nabídka Víc je ukáže, ať zůstanou dostupná (revize F1). */
+    fun hiddenBarSections(ctx: Context): List<SlovoSection> {
+        val hidden = hiddenBar(ctx)
+        return savedBarOrder(ctx).filter { it in hidden }
+    }
+
     /** Ťuk na místo, které už je otevřené: vrátit ho na začátek (výchozí zapnuto). */
     fun reselectToTop(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_RESELECT_TOP, true)
     fun setReselectToTop(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(KEY_RESELECT_TOP, on).apply() }

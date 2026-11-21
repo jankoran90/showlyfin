@@ -39,7 +39,7 @@ fun SlovoNavOrderSection() {
     var reselect by remember { mutableStateOf(SlovoShellPrefs.reselectToTop(ctx)) }
 
     Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xs), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
-        Hint("Spodní lišta — Domů je vždy první. Šipky mění pořadí, oko místo skryje.")
+        Hint("Spodní lišta — Domů je vždy první. Šipky mění pořadí, oko místo skryje (pak je v nabídce Víc).")
         OrderList(
             rows = bar,
             onToggle = { section, visible ->

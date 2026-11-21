@@ -108,7 +108,7 @@ fun SlovoMoreSheet(
                 Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HorizontalDivider(Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.xs))
-            val items = if (isKids) emptyList() else SlovoShellPrefs.moreOrder(ctx)
+            val items = if (isKids) emptyList() else SlovoShellPrefs.hiddenBarSections(ctx) + SlovoShellPrefs.moreOrder(ctx)
             items.forEach { MoreRow(it, onSelect) }
             if (items.isNotEmpty()) HorizontalDivider(Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.xs))
             MoreRow(SlovoSection.NASTAVENI, onSelect)
