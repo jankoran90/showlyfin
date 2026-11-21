@@ -656,6 +656,26 @@ class ListenViewModel @Inject constructor(
     /** Souhrnný postup "Stáhnout vše" (null = žádná dávka neběží) — pro UI "staženo X/Y". */
     val batchDownloadProgress = audiobookDownloads.batchProgress
 
+    /**
+     * Knihy znovu ze serveru při každém otevření Knihovny / Domů (user 2026-11-21 21:10: skřítek ukončený
+     * křížkem na Domů dál visel v Rozposlouchaných — jiná instance VM držela starý průběh). Bez spinneru,
+     * seznam zůstává, dokud nepřijde nový.
+     */
+    fun reloadBooksQuietly() {
+        val libId = _uiState.value.selectedLibraryId ?: return
+        if (_uiState.value.isOffline || _uiState.value.isLoading) return
+        viewModelScope.launch {
+            runCatching { repo.getAudiobooks(libId) }
+                .onSuccess { books ->
+                    if (_uiState.value.selectedLibraryId == libId) {
+                        val visible = filterVisibleBooks(books)
+                        _uiState.update { it.copy(books = visible) }
+                    }
+                }
+                .onFailure { Timber.w(it, "[Listen] tiché načtení knih selhalo") }
+        }
+    }
+
     fun selectLibrary(libraryId: String) {
         if (libraryId == _uiState.value.selectedLibraryId) return
         _uiState.update { it.copy(selectedLibraryId = libraryId) }

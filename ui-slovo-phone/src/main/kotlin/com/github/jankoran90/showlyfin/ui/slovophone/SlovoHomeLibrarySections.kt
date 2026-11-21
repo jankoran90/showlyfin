@@ -90,7 +90,7 @@ fun SlovoLibrarySection() {
     var list by remember { mutableStateOf(LibraryPrefs.listMode(ctx)) }
     Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xs), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
         SettingChips(
-            label = "Otevřít na záložce",
+            label = "Otevřít na záložce (pro tento profil)",
             options = LibraryPrefs.tabs.indices.toList(),
             selected = tab,
             labelOf = { LibraryPrefs.tabs[it] },

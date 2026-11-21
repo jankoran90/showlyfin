@@ -265,6 +265,11 @@ fun rememberHomeRowsState(
         if (needsBooks) androidx.hilt.navigation.compose.hiltViewModel() else null
     val tl = timelineVm?.state?.let { it.collectAsStateWithLifecycle().value }
     val books = listenVm?.uiState?.let { it.collectAsStateWithLifecycle().value.books }.orEmpty()
+    // Čerstvé knihy při návratu na Domů (ukončený poslech / nový nákup se ukáže v „Nově v knihovně“).
+    androidx.lifecycle.compose.LifecycleResumeEffect(listenVm) {
+        listenVm?.reloadBooksQuietly()
+        onPauseOrDispose { }
+    }
     val marks by playerVm.directMarks.collectAsStateWithLifecycle()
     val timeline = remember(tl?.buckets) { tl?.buckets?.flatMap { it.items }.orEmpty() }
     val data = remember(order, timeline, books, marks, shortMin) {

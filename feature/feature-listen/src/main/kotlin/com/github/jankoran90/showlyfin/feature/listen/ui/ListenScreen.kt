@@ -174,6 +174,11 @@ fun BooksContent(
     onOpenBook: (String) -> Unit,
     onEditBook: (String, String, String?) -> Unit,
 ) {
+    // Při každém otevření Knihovny čerstvý průběh (ukončení poslechu jinde, poslech na jiném zařízení).
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        viewModel.reloadBooksQuietly()
+        onPauseOrDispose { }
+    }
     when {
         state.isLoading && state.books.isEmpty() ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

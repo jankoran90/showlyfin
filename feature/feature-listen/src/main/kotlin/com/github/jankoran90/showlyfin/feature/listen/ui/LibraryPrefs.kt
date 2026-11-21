@@ -16,8 +16,19 @@ object LibraryPrefs {
 
     val tabs = listOf("Knihy", "Pořady", "Stažené")
 
-    fun defaultTab(ctx: Context): Int = p(ctx).getInt("default_tab", 0).coerceIn(0, tabs.lastIndex)
-    fun setDefaultTab(ctx: Context, v: Int) = p(ctx).edit().putInt("default_tab", v).apply()
+    // User 2026-11-21 21:09: „má jít nastavit per profil, zda jsou první knihy, nebo pořady“ → klíč per profil,
+    // bez vlastní volby profilu platí dřívější společná hodnota. Aktivní profil = `trakt_prefs.active_profile_id`
+    // (zapisuje ProfileRepository.setActive, čte i DebugCaptureManager).
+    private fun profileKey(ctx: Context): String? =
+        ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE).getLong("active_profile_id", 0L)
+            .takeIf { it > 0L }?.let { "default_tab_p$it" }
+
+    fun defaultTab(ctx: Context): Int {
+        val pr = p(ctx)
+        val v = profileKey(ctx)?.takeIf { pr.contains(it) }?.let { pr.getInt(it, 0) } ?: pr.getInt("default_tab", 0)
+        return v.coerceIn(0, tabs.lastIndex)
+    }
+    fun setDefaultTab(ctx: Context, v: Int) = p(ctx).edit().putInt(profileKey(ctx) ?: "default_tab", v).apply()
 
     fun sort(ctx: Context): BookSort = BookSort.entries.getOrElse(p(ctx).getInt("book_sort", 0)) { BookSort.RECENT }
     fun setSort(ctx: Context, v: BookSort) = p(ctx).edit().putInt("book_sort", v.ordinal).apply()
@@ -45,7 +56,9 @@ enum class BookFilter(val label: String) {
     FINISHED("Dohrané"),
 }
 
-private fun Audiobook.started(): Boolean = !isFinished && (progress > 0.0 || currentTimeSec > 0.0)
+// Rozposlouchaná až od 15 s poslechu (user 2026-11-21: Baron Prášil s uloženými 0,7 s visel v Rozposlouchaných).
+private fun Audiobook.started(): Boolean = !isFinished && currentTimeSec >= STARTED_MIN_SEC
+private const val STARTED_MIN_SEC = 15.0
 
 fun List<Audiobook>.filteredBy(f: BookFilter): List<Audiobook> = when (f) {
     BookFilter.ALL -> this
