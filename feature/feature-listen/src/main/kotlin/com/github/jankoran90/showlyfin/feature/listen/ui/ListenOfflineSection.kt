@@ -390,41 +390,12 @@ private fun OfflinePodcastDetailScreen(
             contentPadding = PaddingValues(16.dp),
         ) {
             item {
-                Row {
-                    Box(
-                        Modifier
-                            .size(120.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    ) {
-                        if (show.poster != null) {
-                            AsyncImage(
-                                model = show.poster,
-                                contentDescription = show.title,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop,
-                            )
-                        }
-                    }
-                    Column(
-                        Modifier.padding(start = 16.dp).height(120.dp).weight(1f),
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text(
-                            show.sourceLabel,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            "${show.episodes.size} ${episodesWord(show.episodes.size)} · staženo",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
-                    }
-                }
+                // Test F8 (P2): i stažený pořad má obal jako hrdina.
+                SourceHero(
+                    coverUrl = show.poster,
+                    title = show.title,
+                    subtitle = "${show.sourceLabel} · ${show.episodes.size} ${episodesWord(show.episodes.size)} · staženo",
+                )
             }
             item {
                 Text(

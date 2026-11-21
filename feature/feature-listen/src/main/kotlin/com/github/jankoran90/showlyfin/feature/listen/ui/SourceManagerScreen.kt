@@ -272,5 +272,6 @@ private fun Thumb(url: String?) {
 private fun typeLabel(type: String): String = when (type) {
     "youtube" -> "YouTube kanál"
     "rss" -> "Podcast"
+    "ctv" -> "Pořad ČT"
     else -> type
 }

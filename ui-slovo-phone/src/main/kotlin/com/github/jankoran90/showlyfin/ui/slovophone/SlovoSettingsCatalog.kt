@@ -89,7 +89,7 @@ internal fun SlovoSettingEntry.matches(query: String): Boolean {
 internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
     // ── Přehrávač
     SlovoSettingEntry(
-        "Přehrávač", Icons.Rounded.PlayCircle, SlovoSettingsCategory.PLAYER,
+        "Přehrávání a zvuk", Icons.Rounded.PlayCircle, SlovoSettingsCategory.PLAYER,
         "rychlost výchozí pamatovat skok zpět vpřed přetočit po pauze spánek časovač ztišit zatřesení " +
             "usnul vyrovnání hlasitosti přeskakovat ticho zesílit hlas zvuk mini přehrávač barva obalu",
     ) { SlovoPlayerSettingsSection() },

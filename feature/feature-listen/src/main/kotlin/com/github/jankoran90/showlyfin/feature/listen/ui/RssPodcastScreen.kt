@@ -193,9 +193,10 @@ fun RssPodcastScreen(
     var scrolledToHighlight by remember { mutableStateOf(false) }
     LaunchedEffect(highlightEpisodeKey, filteredEpisodes) {
         if (!scrolledToHighlight && highlightEpisodeKey != null && filteredEpisodes.isNotEmpty()) {
-            val idx = filteredEpisodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
+            // Index v kresleném seznamu (rozposlouchané nahoře, série), ne ve filteredEpisodes (test F8 P1).
+            val idx = renderedIndexOf(orderedEpisodes, orderedShelfItems, expandedSeries) { viewModel.episodeKey(it) == highlightEpisodeKey }
             if (idx >= 0) {
-                listState.scrollToItem(idx + 1) // +1 = hlavička (SourceHero)
+                listState.scrollToItem(idx)
                 scrolledToHighlight = true
             }
         }

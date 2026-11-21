@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -126,6 +128,7 @@ fun AudiobookPlayerScreen(
     val coverTint = rememberCoverTint(state.coverUrl, viewModel.playerPrefs.colorFromCover)
 
     ListenExpressiveTheme {
+        PlayerStatusBarIcons(MaterialTheme.colorScheme.background)
         Column(
             modifier
                 .fillMaxSize()
@@ -140,6 +143,9 @@ fun AudiobookPlayerScreen(
                         ),
                     ) else Modifier,
                 )
+                // Test F8 (P2): shell od F1 insety nedává → šipka Zpět ležela pod hodinami stavové lišty.
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp)
                 .padding(top = 4.dp, bottom = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

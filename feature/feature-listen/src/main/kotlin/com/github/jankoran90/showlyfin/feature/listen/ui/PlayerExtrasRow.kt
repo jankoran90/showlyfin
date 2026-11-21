@@ -25,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.Box
 import com.github.jankoran90.showlyfin.core.ui.tokens.Spacing
 import com.github.jankoran90.showlyfin.feature.listen.AudiobookPlayerViewModel
 import com.github.jankoran90.showlyfin.feature.listen.bookmarks.Bookmark
@@ -37,7 +39,9 @@ import java.util.Date
 import java.util.Locale
 
 /** Jak dlouho visí potvrzení uložené záložky. */
-private const val BANNER_MS = 6_000L
+private const val BANNER_MS = 10_000L
+/** Po zmizení potvrzení chvíli nebrat ťuky na pilulky (ťuk mířil na Poznámku, test F8). */
+private const val TAP_GUARD_MS = 800L
 
 /** Úroveň „Zesílit hlas“ pro pořad / knihu (DRC Silná). */
 private const val BOOST_LEVEL = 3
@@ -52,9 +56,12 @@ internal fun PlayerExtrasRow(state: PlayerState, viewModel: AudiobookPlayerViewM
     // AMPHORA F5 / PR2: právě uložená záložka (potvrzení) a dialog poznámky.
     var saved by remember { mutableStateOf<Bookmark?>(null) }
     var noteFor by remember { mutableStateOf<Bookmark?>(null) }
-    LaunchedEffect(saved) { if (saved != null) { delay(BANNER_MS); saved = null } }
+    var guardUntil by remember { mutableStateOf(0L) }
+    LaunchedEffect(saved) {
+        if (saved != null) { delay(BANNER_MS); saved = null; guardUntil = android.os.SystemClock.uptimeMillis() + TAP_GUARD_MS }
+    }
+    val tapOk = { android.os.SystemClock.uptimeMillis() >= guardUntil }
     Column(Modifier.fillMaxWidth()) {
-        saved?.let { b -> BookmarkSavedBanner(b, onNote = { noteFor = b; saved = null }, onDismiss = { saved = null }) }
         noteFor?.let { b ->
             BookmarkNoteDialog(
                 initial = b.note, time = formatBookmarkTime(b.posMs),
@@ -70,15 +77,17 @@ internal fun PlayerExtrasRow(state: PlayerState, viewModel: AudiobookPlayerViewM
                 onDismiss = viewModel::dismissWakeMark,
             )
         }
+        // Potvrzení záložky leží PŘES pilulky (ne nad nimi) → po zmizení nic neodskočí (test F8 P2).
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = Spacing.xs),
+            Modifier.fillMaxWidth().alpha(if (saved != null) 0f else 1f).horizontalScroll(rememberScrollState()).padding(vertical = Spacing.xs),
             horizontalArrangement = Arrangement.spacedBy(Spacing.s, Alignment.CenterHorizontally),
         ) {
             if (canBookmark) {
                 FilterChip(
                     selected = false,
                     onClick = {
-                        viewModel.addBookmark()?.let { b -> if (viewModel.playerPrefs.bookmarkAskNote) noteFor = b else saved = b }
+                        if (tapOk() && saved == null) viewModel.addBookmark()?.let { b -> if (viewModel.playerPrefs.bookmarkAskNote) noteFor = b else saved = b }
                     },
                     label = { Text("Záložka") },
                     leadingIcon = { BookmarkChipIcon() },
@@ -87,16 +96,18 @@ internal fun PlayerExtrasRow(state: PlayerState, viewModel: AudiobookPlayerViewM
             val boosted = (state.showBoost ?: 0) > 0
             FilterChip(
                 selected = boosted,
-                onClick = { viewModel.setShowBoost(if (boosted) null else BOOST_LEVEL) },
+                onClick = { if (tapOk() && saved == null) viewModel.setShowBoost(if (boosted) null else BOOST_LEVEL) },
                 label = { Text(if (state.isPodcastEpisode) "Zesílit hlas · tento pořad" else "Zesílit hlas · tato kniha") },
                 leadingIcon = { Icon(Icons.Rounded.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(Spacing.l)) },
             )
             FilterChip(
                 selected = skipSilence,
-                onClick = { skipSilence = !skipSilence; viewModel.setSkipSilence(skipSilence) },
+                onClick = { if (tapOk() && saved == null) { skipSilence = !skipSilence; viewModel.setSkipSilence(skipSilence) } },
                 label = { Text("Ticho pryč") },
                 leadingIcon = { Icon(Icons.Rounded.GraphicEq, contentDescription = null, modifier = Modifier.size(Spacing.l)) },
             )
+        }
+        saved?.let { b -> BookmarkSavedBanner(b, onNote = { noteFor = b; saved = null }, onDismiss = { saved = null }) }
         }
     }
 }
