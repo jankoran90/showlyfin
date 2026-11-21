@@ -61,6 +61,17 @@ internal fun SlovoParentHost(
     val ui by vm.uiState.collectAsStateWithLifecycle()
     var unlocked by remember { mutableStateOf(false) }
     val pin = ui.guardPinHash
+    if (!ui.loaded) {
+        // Revize F7 P1: než je jasné, jestli PIN existuje, nic neotvírat (krátké čekání, ťuk mimo = zpět).
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onClose,
+            title = { Text("Pro rodiče") },
+            text = { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) },
+            confirmButton = {},
+            dismissButton = { androidx.compose.material3.TextButton(onClick = onClose) { Text("Zrušit") } },
+        )
+        return
+    }
     if (!unlocked && pin != null) {
         SlovoPinDialog(
             profileName = ui.guardProfileName ?: "rodiče",

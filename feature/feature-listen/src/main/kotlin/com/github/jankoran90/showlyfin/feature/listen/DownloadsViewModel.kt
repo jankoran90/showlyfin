@@ -85,9 +85,10 @@ class DownloadsViewModel @Inject constructor(
             queueEtaSec = queueEta(active, queued, podcastDone),
             isKids = kidsKeys != null,
             books = bookDls.filter { b ->
-                // Dítě: jen knihy z knihoven, které mu rodič povolil (starý záznam bez knihovny se ukáže).
+                // Dítě: jen knihy z knihoven, které mu rodič povolil; starý záznam bez knihovny se skryje
+                // (mohl ho stáhnout jiný profil — revize F7 P1).
                 val whitelist = if (kidsKeys != null) config.absLibraryWhitelist else null
-                whitelist == null || b.libraryId == null || b.libraryId in whitelist
+                whitelist == null || (b.libraryId != null && b.libraryId in whitelist)
             }.sortedBy { it.title.lowercase() },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())

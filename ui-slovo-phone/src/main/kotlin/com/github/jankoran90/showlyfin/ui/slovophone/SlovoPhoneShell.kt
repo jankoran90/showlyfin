@@ -97,9 +97,10 @@ private fun SlovoShellContent() {
         if (isKidsProfile && !kidsStartApplied) {
             kidsStartApplied = true
             val start = listenVm.profileConfig.value.kidsDisplay?.start
-            if (start == com.github.jankoran90.showlyfin.core.domain.KidsDisplayPrefs.START_POLICKA) {
-                current = SlovoSection.POSLECH
-            }
+            // Explicitně i Domů (revize F7 P2: jinak by zůstala sekce dospělého / předchozího profilu).
+            current = if (start == com.github.jankoran90.showlyfin.core.domain.KidsDisplayPrefs.START_POLICKA) {
+                SlovoSection.POSLECH
+            } else SlovoSection.DOMU
         }
     }
     // Po návratu z Nastavení (pořadí knihoven/podcastů) ať se změna projeví.

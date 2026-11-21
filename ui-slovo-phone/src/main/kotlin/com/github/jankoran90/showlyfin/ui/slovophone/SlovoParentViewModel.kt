@@ -6,12 +6,14 @@ import com.github.jankoran90.showlyfin.core.data.ProfileRepository
 import com.github.jankoran90.showlyfin.core.domain.KidsDisplayPrefs
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 /** Co rodič na obrazovce Pro rodiče vidí o schváleném obsahu (z whitelistu configu Dětí). */
@@ -25,6 +27,8 @@ data class SlovoParentUiState(
     val approved: KidsApprovedSummary = KidsApprovedSummary(),
     /** false = v appce není dětský profil (Nastavení dospělého pak sekci nenabízí). */
     val hasKidsProfile: Boolean = false,
+    /** false = ještě se načítá (PINy / profily) → Pro rodiče se nesmí otevřít bez PINu. */
+    val loaded: Boolean = false,
 )
 
 /**
@@ -37,16 +41,28 @@ class SlovoParentViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
 ) : ViewModel() {
 
+    /** Revize F7 P1: dokud PINy nejsou stažené a profily načtené, nevíme, jestli PIN chybí → zavřeno. */
+    private val pinsPulled = MutableStateFlow(false)
+
     init {
-        // PIN nastavený na jiném zařízení platí i tady (vzor SlovoProfileViewModel).
-        viewModelScope.launch { profileRepository.pullLoginPins() }
+        // PIN nastavený na jiném zařízení platí i tady (vzor SlovoProfileViewModel). Offline nečekat věčně.
+        viewModelScope.launch {
+            try {
+                withTimeoutOrNull(PIN_PULL_TIMEOUT_MS) { profileRepository.pullLoginPins() }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            } finally {
+                pinsPulled.value = true
+            }
+        }
     }
 
     val uiState: StateFlow<SlovoParentUiState> = combine(
         profileRepository.observeAll(),
         profileRepository.activeProfile,
         profileRepository.activeConfig,
-    ) { profiles, active, activeCfg ->
+        pinsPulled,
+    ) { profiles, active, activeCfg, pulled ->
         val guard = profiles.firstOrNull { it.isAdmin && !it.loginPinHash.isNullOrBlank() }
         // Dětský profil = aktivní (Pro rodiče v telefonu dítěte), z dospělého = první dětský profil
         // (Nastavení › Děti a profily) — jeho místní kopie configu, úprava se ověří proti serveru.
@@ -58,6 +74,8 @@ class SlovoParentViewModel @Inject constructor(
             display = cfg?.kidsDisplay ?: KidsDisplayPrefs.DEFAULT,
             approved = cfg?.let(::summarize) ?: KidsApprovedSummary(),
             hasKidsProfile = cfg != null,
+            // Načteno = PINy stažené (nebo vypršel čas) a DB má aspoň aktivní profil.
+            loaded = pulled && profiles.isNotEmpty(),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SlovoParentUiState())
 
@@ -87,3 +105,5 @@ class SlovoParentViewModel @Inject constructor(
         return KidsApprovedSummary(shows, series, episodes)
     }
 }
+
+private const val PIN_PULL_TIMEOUT_MS = 4_000L
