@@ -181,7 +181,7 @@ fun BooksContent(
         state.error != null && state.books.isEmpty() -> CenteredMessage(state.error)
 
         else -> Column(Modifier.fillMaxSize()) {
-            if (state.libraries.size > 1) {
+            if (state.libraries.size > 1 && state.books.isEmpty()) {
                 LibraryChips(
                     libraries = state.libraries.map { it.id to it.name },
                     selectedId = state.selectedLibraryId,
@@ -213,9 +213,6 @@ fun BooksContent(
                 val batchProgress by viewModel.batchDownloadProgress.collectAsStateWithLifecycle()
                 val playerState by viewModel.playerState.collectAsStateWithLifecycle()
                 Column(Modifier.fillMaxSize()) {
-                    if (!state.isOffline && (notDownloaded || batchProgress != null)) {
-                        DownloadAllRow(progress = batchProgress, onClick = viewModel::downloadAllBooks)
-                    }
                     LibraryToolbar(
                         filter = bookFilter,
                         sort = bookSort,
@@ -223,6 +220,11 @@ fun BooksContent(
                         onFilter = { bookFilter = it; LibraryPrefs.setFilter(ctx, it) },
                         onSort = { bookSort = it; LibraryPrefs.setSort(ctx, it) },
                         onListMode = { listMode = it; LibraryPrefs.setListMode(ctx, it) },
+                        libraries = state.libraries.map { it.id to it.name },
+                        selectedLibraryId = state.selectedLibraryId,
+                        onSelectLibrary = viewModel::selectLibrary,
+                        batchProgress = batchProgress.takeIf { !state.isOffline },
+                        onDownloadAll = if (!state.isOffline && notDownloaded) viewModel::downloadAllBooks else null,
                     )
                     if (shelfItems.isEmpty()) {
                         CenteredMessage("Žádná kniha neodpovídá filtru „${bookFilter.label}“.")

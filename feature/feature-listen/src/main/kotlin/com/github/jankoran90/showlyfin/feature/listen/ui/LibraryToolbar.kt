@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,7 +15,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.automirrored.rounded.ViewList
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -22,6 +25,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,8 +36,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.github.jankoran90.showlyfin.core.ui.tokens.Spacing
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
+import com.github.jankoran90.showlyfin.data.abs.model.BatchDownloadProgress
 
-/** AMPHORA F2 / KN1 — nad knihami: filtr stavu (čipy), řazení (nabídka) a mřížka / seznam. */
+/**
+ * AMPHORA F2 / KN1 — nad knihami JEDEN řádek (user 2026-11-21 20:58: „strašně velká hlavička… obsah začíná
+ * pozdě“, „dej to do jednoho přepínače nebo listu filtru“): knihovna a stav jako rozbalovací čipy
+ * („dospělý ▾“, „Vše ▾“), řazení, mřížka/seznam a ⋮ se „Stáhnout vše“. Běžící dávka = tenký pruh pod řádkem.
+ */
 @Composable
 internal fun LibraryToolbar(
     filter: BookFilter,
@@ -42,39 +51,117 @@ internal fun LibraryToolbar(
     onFilter: (BookFilter) -> Unit,
     onSort: (BookSort) -> Unit,
     onListMode: (Boolean) -> Unit,
+    libraries: List<Pair<String, String>> = emptyList(),
+    selectedLibraryId: String? = null,
+    onSelectLibrary: (String) -> Unit = {},
+    batchProgress: BatchDownloadProgress? = null,
+    onDownloadAll: (() -> Unit)? = null,
 ) {
     var sortOpen by remember { mutableStateOf(false) }
-    Row(
-        Modifier.fillMaxWidth().padding(start = Spacing.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    var moreOpen by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            Modifier.fillMaxWidth().padding(start = Spacing.s),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            BookFilter.entries.forEach { f ->
-                FilterChip(selected = f == filter, onClick = { onFilter(f) }, label = { Text(f.label) })
-            }
-        }
-        Box {
-            IconButton(onClick = { sortOpen = true }) {
-                Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = "Řazení: ${sort.label}")
-            }
-            DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-                BookSort.entries.forEach { s ->
-                    DropdownMenuItem(
-                        text = { Text(s.label) },
-                        leadingIcon = { if (s == sort) Icon(Icons.Rounded.Check, contentDescription = null) },
-                        onClick = { sortOpen = false; onSort(s) },
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            ) {
+                if (libraries.size > 1) {
+                    DropdownChip(
+                        label = libraries.firstOrNull { it.first == selectedLibraryId }?.second ?: "Knihovna",
+                        options = libraries,
+                        selected = selectedLibraryId,
+                        onSelect = onSelectLibrary,
                     )
+                }
+                DropdownChip(
+                    label = filter.label,
+                    options = BookFilter.entries.map { it.name to it.label },
+                    selected = filter.name,
+                    onSelect = { name -> BookFilter.entries.firstOrNull { it.name == name }?.let(onFilter) },
+                    highlighted = filter != BookFilter.ALL,
+                )
+            }
+            Box {
+                IconButton(onClick = { sortOpen = true }) {
+                    Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = "Řazení: ${sort.label}")
+                }
+                DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+                    BookSort.entries.forEach { s ->
+                        DropdownMenuItem(
+                            text = { Text(s.label) },
+                            leadingIcon = { if (s == sort) Icon(Icons.Rounded.Check, contentDescription = null) },
+                            onClick = { sortOpen = false; onSort(s) },
+                        )
+                    }
+                }
+            }
+            IconButton(onClick = { onListMode(!listMode) }) {
+                Icon(
+                    if (listMode) Icons.Rounded.GridView else Icons.AutoMirrored.Rounded.ViewList,
+                    contentDescription = if (listMode) "Zobrazit jako mřížku" else "Zobrazit jako seznam",
+                )
+            }
+            if (onDownloadAll != null || batchProgress != null) {
+                Box {
+                    IconButton(onClick = { moreOpen = true }) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "Další volby")
+                    }
+                    DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                        if (batchProgress != null) {
+                            DropdownMenuItem(
+                                text = { Text("Stahuji ${batchProgress.completed}/${batchProgress.total}…") },
+                                leadingIcon = { Icon(Icons.Rounded.Download, contentDescription = null) },
+                                enabled = false,
+                                onClick = {},
+                            )
+                        } else if (onDownloadAll != null) {
+                            DropdownMenuItem(
+                                text = { Text("Stáhnout vše") },
+                                leadingIcon = { Icon(Icons.Rounded.Download, contentDescription = null) },
+                                onClick = { moreOpen = false; onDownloadAll() },
+                            )
+                        }
+                    }
                 }
             }
         }
-        IconButton(onClick = { onListMode(!listMode) }) {
-            Icon(
-                if (listMode) Icons.Rounded.GridView else Icons.AutoMirrored.Rounded.ViewList,
-                contentDescription = if (listMode) "Zobrazit jako mřížku" else "Zobrazit jako seznam",
+        if (batchProgress != null && batchProgress.total > 0) {
+            LinearProgressIndicator(
+                progress = { batchProgress.completed.toFloat() / batchProgress.total },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.m),
             )
+        }
+    }
+}
+
+/** Čip s rozbalovací nabídkou („dospělý ▾“) — jeden přepínač místo řady čipů. */
+@Composable
+private fun DropdownChip(
+    label: String,
+    options: List<Pair<String, String>>,
+    selected: String?,
+    onSelect: (String) -> Unit,
+    highlighted: Boolean = false,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            selected = highlighted,
+            onClick = { open = true },
+            label = { Text(label) },
+            trailingIcon = { Icon(Icons.Rounded.ArrowDropDown, contentDescription = null) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { (id, name) ->
+                DropdownMenuItem(
+                    text = { Text(name) },
+                    leadingIcon = { if (id == selected) Icon(Icons.Rounded.Check, contentDescription = null) },
+                    onClick = { open = false; onSelect(id) },
+                )
+            }
         }
     }
 }
