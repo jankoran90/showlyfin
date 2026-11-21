@@ -70,6 +70,8 @@ private fun SlovoShellContent() {
     // Lehký back-stack detailů (push na klik, pop na back). Prázdný = sekce.
     var detailStack by remember { mutableStateOf<List<SlovoDetailEntry>>(emptyList()) }
     var showMore by remember { mutableStateOf(false) }
+    // AMPHORA F7 (DE1): dětský skrytý vchod (podržení rohu 3 s) → PIN → Pro rodiče (dřív rovnou Víc).
+    var showParent by remember { mutableStateOf(false) }
     // Activity-scoped → tytéž instance jako uvnitř ListenScreen/přehrávače (jednotný stav poslechu).
     val listenVm: ListenViewModel = hiltViewModel()
     val podcastLinkLookup: PodcastLinkLookupViewModel = hiltViewModel()
@@ -87,6 +89,18 @@ private fun SlovoShellContent() {
     if (activeProfile == null && !profileWaitOver) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
         return
+    }
+    // AMPHORA F7 (Z1): kam se Děti otevřou, nastavuje rodič (Pro rodiče / Rodičovská appka). Jen jednou
+    // po startu — pozdější přepnutí sekce dítětem nepřebíjí.
+    var kidsStartApplied by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(isKidsProfile) {
+        if (isKidsProfile && !kidsStartApplied) {
+            kidsStartApplied = true
+            val start = listenVm.profileConfig.value.kidsDisplay?.start
+            if (start == com.github.jankoran90.showlyfin.core.domain.KidsDisplayPrefs.START_POLICKA) {
+                current = SlovoSection.POSLECH
+            }
+        }
     }
     // Po návratu z Nastavení (pořadí knihoven/podcastů) ať se změna projeví.
     LaunchedEffect(Unit) { listenVm.reloadOrderPrefs() }
@@ -186,7 +200,7 @@ private fun SlovoShellContent() {
                                 isKidsProfile = isKidsProfile,
                                 listenVm = listenVm,
                                 podcastLinkLookup = podcastLinkLookup,
-                                onMenu = { showMore = true },
+                                onMenu = { if (isKidsProfile) showParent = true else showMore = true },
                                 onPush = onPush,
                                 onSelectSection = selectSection,
                                 expandMiniPlayer = expandMiniPlayer,
@@ -203,6 +217,17 @@ private fun SlovoShellContent() {
                     )
                 }
             }
+        }
+        if (showParent && isKidsProfile) {
+            val listenState by listenVm.uiState.collectAsStateWithLifecycle()
+            SlovoParentHost(
+                booksCount = listenState.books.size,
+                onClose = { showParent = false },
+                onSelect = { section ->
+                    showParent = false
+                    selectSection(section)
+                },
+            )
         }
         if (showMore) {
             SlovoMoreSheet(

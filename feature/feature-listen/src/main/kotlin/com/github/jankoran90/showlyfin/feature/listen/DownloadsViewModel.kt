@@ -14,6 +14,8 @@ import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 import com.github.jankoran90.showlyfin.feature.listen.player.SeriesRuleStore
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastEpisodeSeriesGrouping
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
+import com.github.jankoran90.showlyfin.data.abs.download.AudiobookDownloadManager
+import com.github.jankoran90.showlyfin.data.abs.model.AudiobookDownload
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,8 +26,8 @@ import javax.inject.Inject
 
 /**
  * Slovo 2026-10-13 (user „sekce stahování v sidebaru, kde je vidět fronta, staženo a stahování a
- * rychlost a ETA") — přehled stahování dílů do telefonu (RSS / YouTube / ČT). Audioknihy mají vlastní
- * správce stažení a tady zatím nejsou.
+ * rychlost a ETA") — přehled stahování dílů do telefonu (RSS / YouTube / ČT). AMPHORA F7 (Z3): i stažené
+ * audioknihy (vlastní správce [AudiobookDownloadManager]) — dítě dřív ve Stažených knihy nevidělo.
  */
 @HiltViewModel
 class DownloadsViewModel @Inject constructor(
@@ -33,6 +35,7 @@ class DownloadsViewModel @Inject constructor(
     private val connection: AudiobookPlayerConnection,
     private val profiles: ProfileRepository,
     private val ruleStore: SeriesRuleStore,
+    private val books: AudiobookDownloadManager,
 ) : ViewModel() {
 
     data class Item(val request: OfflineRequest, val state: OfflineState)
@@ -48,11 +51,15 @@ class DownloadsViewModel @Inject constructor(
         val queueEtaSec: Long? = null,
         /** Dětský profil: jen schválené pořady/série, bez mazání. */
         val isKids: Boolean = false,
-    )
+        /** Stažené audioknihy (dítě jen z povolených knihoven). */
+        val books: List<AudiobookDownload> = emptyList(),
+    ) {
+        val isEmpty: Boolean get() = active == null && queued.isEmpty() && failed.isEmpty() && downloaded.isEmpty() && books.isEmpty()
+    }
 
     val state: StateFlow<UiState> = combine(
-        offline.pending, offline.states, offline.downloads, profiles.activeProfileWithConfig,
-    ) { pending, states, done, (profile, config) ->
+        offline.pending, offline.states, offline.downloads, profiles.activeProfileWithConfig, books.downloads,
+    ) { pending, states, done, (profile, config), bookDls ->
         // User 2026-10-13 („děti nemají Stahování v sidebaru") — dítě vidí jen díly schválených pořadů / sérií
         // (whitelist, neznámý zdroj = skrýt), stejné pravidlo jako jeho offline Poslech.
         val kidsKeys = if (profile?.isAdmin == false) config.visibleForKidsSourceKeys else null
@@ -77,6 +84,11 @@ class DownloadsViewModel @Inject constructor(
             freeBytes = offline.freeBytes(),
             queueEtaSec = queueEta(active, queued, podcastDone),
             isKids = kidsKeys != null,
+            books = bookDls.filter { b ->
+                // Dítě: jen knihy z knihoven, které mu rodič povolil (starý záznam bez knihovny se ukáže).
+                val whitelist = if (kidsKeys != null) config.absLibraryWhitelist else null
+                whitelist == null || b.libraryId == null || b.libraryId in whitelist
+            }.sortedBy { it.title.lowercase() },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 

@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
@@ -54,7 +55,7 @@ internal enum class SlovoSettingsCategory(
     LIBRARY("Knihovna a zdroje", "Knihovna, Audioteka, objevování a skryté pořady", Icons.AutoMirrored.Rounded.LibraryBooks),
     DOWNLOADS("Stahování", "Stažené díly a knihy v telefonu", Icons.Rounded.Download),
     DEVICES("Zařízení", "TV, Zenbook, repro (receiver), Jellyfin", Icons.Rounded.Devices),
-    KIDS("Děti a profily", "Dětský telefon, samo stahování obsahu Dětí", Icons.Rounded.ChildCare),
+    KIDS("Děti a profily", "Zobrazení pro Děti, dětský telefon, samo stahování", Icons.Rounded.ChildCare),
     ACCOUNT("Účet", "Přihlášení k audioknihám (Audiobookshelf)", Icons.Rounded.AccountCircle),
     ABOUT("O aplikaci", "Verze a aktualizace", Icons.Rounded.Info),
 }
@@ -180,6 +181,10 @@ internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
     ) { SlovoJellyfinSection() },
 
     // ── Děti a profily
+    SlovoSettingEntry(
+        "Zobrazení pro Děti", Icons.Rounded.GridView, SlovoSettingsCategory.KIDS,
+        "děti dětský velikost obrázků dlaždice sloupce názvy pod obrázky otevře na poslech domů pro rodiče",
+    ) { SlovoKidsDisplaySection() },
     SlovoSettingEntry(
         "Dětský telefon", Icons.Rounded.ChildCare, SlovoSettingsCategory.KIDS,
         "děti dětský režim kiosek wi-fi wifi samo stahovat odebrané smazat profil",

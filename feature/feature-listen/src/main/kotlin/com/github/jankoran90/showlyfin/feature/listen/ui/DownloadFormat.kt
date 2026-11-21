@@ -3,7 +3,7 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 import java.util.Locale
 
 /** Slovo 2026-10-13 — popisky stahování (velikost, rychlost, zbývající čas) pro knihu ze série i sekci Stahování. */
-internal object DownloadFormat {
+object DownloadFormat {
     private val cs = Locale("cs")
 
     fun bytes(b: Long): String = when {

@@ -181,6 +181,8 @@ fun KidsListenContent(
             // Rodičovská správa R3: jednotlivé díly. Přeskoč díl, jehož pořad nebo série je schválená celá
             // (karta pořadu / série už ho nese). Offline jen stažené.
             val absEpDls by shelfActions.absEpisodeDownloads.collectAsStateWithLifecycle()
+            val offStates by shelfActions.offlineStates.collectAsStateWithLifecycle()
+            val absStates by shelfActions.absEpisodeStates.collectAsStateWithLifecycle()
             val episodeCovers by shelfActions.episodeCovers.collectAsStateWithLifecycle()
             val absPodcastIds = remember(state.podcasts) { state.podcasts.mapTo(HashSet()) { "abs:${it.id}" } }
             val episodeItems = remember(visibleKeys, byKey, seriesItems, offlineDls, absEpDls, offline, absPodcastIds) {
@@ -247,12 +249,18 @@ fun KidsListenContent(
                     if (!state.isOffline && (notDownloaded || batchProgress != null)) {
                         DownloadAllRow(progress = batchProgress, onClick = viewModel::downloadAllBooks)
                     }
+                    // AMPHORA F7 (DE1 + Z1): velké dlaždice, počet sloupců a názvy pod obaly řídí rodič
+                    // (Pro rodiče v appce / Rodičovská appka na webu → config profilu Dětí).
+                    val display = cfg.kidsDisplay ?: com.github.jankoran90.showlyfin.core.domain.KidsDisplayPrefs.DEFAULT
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        com.github.jankoran90.showlyfin.core.ui.LocalCoverCardTitles provides display.showTitles,
+                    ) {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 150.dp),
+                        columns = GridCells.Fixed(display.safeColumns),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         items(items, key = { it.itemKey }) { item ->
                             when (item) {
@@ -303,17 +311,22 @@ fun KidsListenContent(
                                 is KidsShelfItem.EpisodeItem -> {
                                     LaunchedEffect(item.itemKey) { shelfActions.requestEpisodeCover(item.episode, item.source) }
                                     val coverKey = "${item.episode.sourceKey}#ep:${item.episode.episodeId}"
+                                    val dlState = remember(offlineDls, absEpDls, offStates, absStates) {
+                                        shelfActions.episodeDownloadState(item.episode, offStates, absStates)
+                                    }
                                     KidsEpisodeCard(
                                         title = item.episode.title.ifBlank { "Díl" },
                                         showTitle = item.source?.title,
                                         imageUrl = episodeCovers[coverKey] ?: item.source?.thumbnail,
-                                        downloaded = remember(offlineDls, absEpDls) { shelfActions.isEpisodeDownloaded(item.episode) },
+                                        downloaded = dlState == true,
+                                        downloading = dlState == false,
                                         onClick = { shelfActions.playEpisode(item.episode, item.source) },
                                         onLongClick = if (offline) null else ({ shelfActions.downloadEpisode(item.episode, item.source) }),
                                     )
                                 }
                             }
                         }
+                    }
                     }
                 }
 

@@ -19,11 +19,20 @@ internal fun KidsEpisodeCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    /** AMPHORA F7 (Z2): stahuje se / ve frontě → „stahuje se…" hned po podržení. */
+    downloading: Boolean = false,
 ) {
     CoverCard(
         title = title,
-        subtitle = listOfNotNull("Díl", showTitle?.takeIf { it.isNotBlank() }, "v telefonu".takeIf { downloaded })
-            .joinToString(" · "),
+        subtitle = listOfNotNull(
+            "Díl",
+            showTitle?.takeIf { it.isNotBlank() },
+            when {
+                downloaded -> "v telefonu"
+                downloading -> "stahuje se…"
+                else -> null
+            },
+        ).joinToString(" · "),
         imageUrl = imageUrl,
         onClick = onClick,
         modifier = modifier,

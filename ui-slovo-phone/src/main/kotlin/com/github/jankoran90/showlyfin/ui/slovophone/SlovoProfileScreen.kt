@@ -235,20 +235,23 @@ private fun SlovoProfileCard(profile: ProfileEntity, active: Boolean, onClick: (
 }
 
 @Composable
-private fun SlovoPinDialog(
+internal fun SlovoPinDialog(
     profileName: String,
     onDismiss: () -> Unit,
     onVerified: () -> Unit,
     verify: (String) -> Boolean,
+    title: String = "PIN pro $profileName",
+    message: String = "Zadej PIN pro přepnutí na tento profil.",
+    confirmLabel: String = "Přepnout",
 ) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("PIN pro $profileName") },
+        title = { Text(title) },
         text = {
             Column {
-                Text("Zadej PIN pro přepnutí na tento profil.", style = MaterialTheme.typography.bodyMedium)
+                Text(message, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.size(8.dp))
                 OutlinedTextField(
                     value = pin,
@@ -264,7 +267,7 @@ private fun SlovoPinDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (verify(pin)) onVerified() else error = true }) { Text("Přepnout") }
+            TextButton(onClick = { if (verify(pin)) onVerified() else error = true }) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
     )

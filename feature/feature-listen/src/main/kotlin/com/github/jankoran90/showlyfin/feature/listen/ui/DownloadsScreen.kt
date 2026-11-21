@@ -55,12 +55,14 @@ import com.github.jankoran90.showlyfin.feature.listen.DownloadsViewModel
 fun DownloadsScreen(
     onOpenAudioPlayer: () -> Unit,
     modifier: Modifier = Modifier,
+    /** AMPHORA F7 (Z3): ťuk na staženou knihu (detail knihy); null = knihy bez ťuku. */
+    onOpenBook: ((String) -> Unit)? = null,
     viewModel: DownloadsViewModel = hiltViewModel(),
 ) {
     val st by viewModel.state.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf<OfflineDownload?>(null) }
 
-    if (st.active == null && st.queued.isEmpty() && st.failed.isEmpty() && st.downloaded.isEmpty()) {
+    if (st.isEmpty) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
                 "Nic se nestahuje a nic není staženo.\nDíl stáhneš v menu ⋮ u dílu, celou sérii v knize tlačítkem Stáhnout.",
@@ -120,10 +122,24 @@ fun DownloadsScreen(
                 }
             }
         }
-        if (st.failed.isNotEmpty()) {
-            item(key = "h_failed") { SectionTitle("Selhalo (${st.failed.size})") }
+        if (st.failed.isNotEmpty() && st.isKids) {
+            // AMPHORA F7 (Z2): dítěti žádný seznam chyb — jedna věta a jedno tlačítko.
+            item(key = "h_failed_kids") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Některé díly se nestáhly (${st.failed.size}). Až bude internet, ťukni na Zkusit znovu.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { st.failed.forEach { viewModel.retry(it.request.key) } }) { Text("Zkusit znovu") }
+                }
+            }
+        }
+        if (st.failed.isNotEmpty() && !st.isKids) {
+            item(key = "h_failed") { SectionTitle("Nestáhlo se (${st.failed.size})") }
             items(st.failed, key = { "f_${it.request.key}" }) { f ->
-                DownloadRow(f.request.posterUrl, f.request.title, f.state.error ?: "Stažení selhalo") {
+                DownloadRow(f.request.posterUrl, f.request.title, DownloadErrorText.cz(f.state.error, forKids = false)) {
                     IconButton(onClick = { viewModel.retry(f.request.key) }) { Icon(Icons.Rounded.Refresh, contentDescription = "Zkusit znovu") }
                     IconButton(onClick = { viewModel.cancel(f.request.key) }) { Icon(Icons.Rounded.Close, contentDescription = "Odebrat") }
                 }
@@ -147,6 +163,22 @@ fun DownloadsScreen(
                         IconButton(onClick = { confirmDelete = d }) { Icon(Icons.Rounded.Delete, contentDescription = "Smazat") }
                     }
                 }
+            }
+        }
+
+        if (st.books.isNotEmpty()) {
+            item(key = "h_books") {
+                Column {
+                    SectionTitle("Knihy v telefonu (${st.books.size})")
+                    Meta("Zabráno ${DownloadFormat.bytes(st.books.sumOf { it.sizeBytes })}")
+                }
+            }
+            items(st.books, key = { "b_${it.itemId}" }) { b ->
+                DownloadRow(
+                    b.localCoverPath ?: b.coverUrl, b.title,
+                    listOfNotNull(b.author?.takeIf { it.isNotBlank() }, DownloadFormat.bytes(b.sizeBytes)).joinToString(" · "),
+                    onClick = onOpenBook?.let { open -> { open(b.itemId) } },
+                ) {}
             }
         }
     }

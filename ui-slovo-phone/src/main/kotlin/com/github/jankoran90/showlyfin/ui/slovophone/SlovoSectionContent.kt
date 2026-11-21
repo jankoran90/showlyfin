@@ -138,7 +138,7 @@ internal fun SlovoSectionContent(
             ) {
                 HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 0) { page ->
                     when {
-                        page == 2 -> DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize())
+                        page == 2 -> DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, onOpenBook = onOpenBook, modifier = Modifier.fillMaxSize())
                         !listenState.isConfigured -> NotConfigured()
                         page == 0 -> BooksContent(
                             state = listenState,
@@ -223,7 +223,7 @@ internal fun SlovoSectionContent(
             )
         }
         SlovoSection.STAHOVANI -> SlovoSectionScaffold(if (isKidsProfile) "Stažené" else section.label, onMenu) {
-            DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize())
+            DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, onOpenBook = onOpenBook, modifier = Modifier.fillMaxSize())
         }
         SlovoSection.KATALOG -> SlovoSectionScaffold(section.label, onMenu) {
             AudiotekaCatalogScreen(

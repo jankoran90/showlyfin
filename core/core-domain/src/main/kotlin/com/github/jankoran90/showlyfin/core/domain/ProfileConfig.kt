@@ -212,6 +212,12 @@ data class ProfileConfig(
      * Prázdné = nic zamčené (legacy/bez šablony = plná volnost).
      */
     val lockedKeys: Set<String> = emptySet(),
+    /**
+     * AMPHORA F7 (Z1, nápad N9 „Zobrazení Domů Dětí nastavuje rodič") — jak dětský profil vidí svoji
+     * poličku. Nastavuje rodič v appce (Pro rodiče za PINem) nebo v Rodičovské appce na webu; telefon
+     * si ho stáhne se zbytkem configu. null = výchozí (velké dlaždice, viz [KidsDisplayPrefs]).
+     */
+    val kidsDisplay: KidsDisplayPrefs? = null,
 ) {
     /** Plan STRATA — blocklist: sekce je viditelná, dokud není ve [hiddenSections]. */
     fun isSectionVisible(key: String): Boolean = key !in hiddenSections

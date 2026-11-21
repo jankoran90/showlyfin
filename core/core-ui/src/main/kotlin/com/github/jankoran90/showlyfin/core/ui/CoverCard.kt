@@ -38,6 +38,12 @@ import coil3.compose.AsyncImage
 val CoverCardShape = RoundedCornerShape(16.dp)
 
 /**
+ * AMPHORA F7 (Slovo Děti, Z1): false = karty ukazují jen obal, bez názvu a podtitulku (rodič to vypne
+ * dítěti, které nečte). Výchozí true → ostatní appky beze změny. Název zůstává v popisu pro TalkBack.
+ */
+val LocalCoverCardTitles = androidx.compose.runtime.staticCompositionLocalOf { true }
+
+/**
  * Kanonická čtvercová karta obálky. [imageUrl] vyplní obálku (1:1), jinak [placeholder] uprostřed.
  * [overlay] běží v [BoxScope] obálky (odznaky přes `Modifier.align(...)`, progress dole). [title]
  * = titleSmall, [subtitle] = bodySmall (barva [subtitleColor], default onSurfaceVariant; null =
@@ -90,6 +96,7 @@ fun CoverCard(
             }
             overlay?.invoke(this)
         }
+        if (!LocalCoverCardTitles.current) return@Column
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall,

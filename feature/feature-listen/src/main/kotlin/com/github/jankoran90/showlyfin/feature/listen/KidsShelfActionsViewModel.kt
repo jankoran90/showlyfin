@@ -190,6 +190,31 @@ class KidsShelfActionsViewModel @Inject constructor(
         if (e.sourceKey.startsWith("abs:")) absEpisodes.localFile(e.episodeId) != null
         else offline.isDownloaded(KidsSourceAccess.resumeKeyFor(e.sourceKey, e.episodeId))
 
+    /** AMPHORA F7 (Z2): živé stavy stahování → štítek na kartě dílu hned po podržení, ne až po znovuvstupu. */
+    val offlineStates = offline.states
+    val absEpisodeStates = absEpisodes.states
+
+    /** Stav karty dílu z živých map stavů: true = v telefonu, false = stahuje se / ve frontě, null = nic. */
+    fun episodeDownloadState(
+        e: KidsSourceAccess.Episode,
+        offStates: Map<String, com.github.jankoran90.showlyfin.data.offline.OfflineState>,
+        absStates: Map<String, com.github.jankoran90.showlyfin.data.abs.model.DownloadState>,
+    ): Boolean? {
+        if (e.sourceKey.startsWith("abs:")) {
+            return when (absStates[e.episodeId]?.status) {
+                com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus.DOWNLOADED -> true
+                com.github.jankoran90.showlyfin.data.abs.model.DownloadStatus.DOWNLOADING -> false
+                else -> if (absEpisodes.localFile(e.episodeId) != null) true else null
+            }
+        }
+        val key = KidsSourceAccess.resumeKeyFor(e.sourceKey, e.episodeId)
+        return when (offStates[key]?.status) {
+            OfflineStatus.DOWNLOADED -> true
+            OfflineStatus.QUEUED, OfflineStatus.DOWNLOADING -> false
+            else -> if (offline.isDownloaded(key)) true else null
+        }
+    }
+
     /** Obal karty dílu: ABS = obal pořadu, jinak obrázek dílu z feedu (offline z paměti feedu / stažený). */
     fun requestEpisodeCover(e: KidsSourceAccess.Episode, source: PodcastSource?) {
         val key = coverKey(e)
