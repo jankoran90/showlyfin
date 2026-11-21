@@ -99,7 +99,7 @@ internal fun sourceNode(s: PodcastSource): MediaItem =
  * (YT proxy / RSS enclosure). Cachuje se v itemCache → onSetMediaItems ji při tapnutí najde i po
  * stripnutí URI (AA přenáší jen mediaId). Bez ABS session → syncNow() ji přeskočí.
  */
-internal fun directEpisodeItem(sourceId: String, ep: SourceEpisode): MediaItem =
+internal fun directEpisodeItem(sourceId: String, ep: SourceEpisode, showKey: String? = null): MediaItem =
     MediaItem.Builder()
         .setUri(ep.streamUrl)
         .setMediaId("${AudiobookPlayerService.PREFIX_DIRECT}$sourceId|${ep.id}")
@@ -113,13 +113,18 @@ internal fun directEpisodeItem(sourceId: String, ep: SourceEpisode): MediaItem =
                 .setIsPlayable(true)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
                 // CRUISE: resume klíč (sdílený s in-app) → zápis pozice z auta + „Pokračovat".
-                .setExtras(Bundle().apply { ep.resumeKey?.let { putString(AudiobookPlayerService.KEY_DIRECT_KEY, it) } })
+                .setExtras(
+                    Bundle().apply {
+                        ep.resumeKey?.let { putString(AudiobookPlayerService.KEY_DIRECT_KEY, it) }
+                        showKey?.let { putString(PlayerAudioExtras.KEY_SHOW_KEY, it) } // AMPHORA F4: zesílení pořadu i v autě
+                    },
+                )
                 .build(),
         )
         .build()
 
 /** Multi-track playlist z play session (shodné s AudiobookPlayerConnection). */
-internal fun trackItems(pb: AbsPlayback): List<MediaItem> {
+internal fun trackItems(pb: AbsPlayback, showKey: String? = null): List<MediaItem> {
     val artwork = pb.coverUrl?.let(Uri::parse)
     return pb.tracks.map { t ->
         val extras = Bundle().apply {
@@ -128,6 +133,7 @@ internal fun trackItems(pb: AbsPlayback): List<MediaItem> {
             putDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC, t.startOffsetSec)
             putString(AudiobookPlayerService.KEY_BOOK_TITLE, pb.title)
             pb.author?.let { putString(AudiobookPlayerService.KEY_BOOK_AUTHOR, it) }
+            showKey?.let { putString(PlayerAudioExtras.KEY_SHOW_KEY, it) }
         }
         MediaItem.Builder()
             .setUri(t.url)

@@ -15,7 +15,7 @@ import timber.log.Timber
  * sluchátka a Android Auto, nejen pro appku):
  *  - **přetočení po pauze**: po pauze / přerušení (hovor) přetočí zpět podle délky pauzy, max
  *    [ListenPlayerPrefs.rewindMaxSec]; ruční posun nebo nová položka v pauze přetočení zruší,
- *  - **zesílení hlasu pro pořad / knihu**: úroveň z extras položky ([KEY_SHOW_KEY]/[KEY_SHOW_BOOST]) nebo
+ *  - **zesílení hlasu pro pořad / knihu**: uložená úroveň pořadu z klíče v extras položky ([KEY_SHOW_KEY]) nebo
  *    z broadcastu po přepnutí v přehrávači, jinak globální DRC z Nastavení,
  *  - **přeskočení ticha** ([ListenPlayerPrefs.skipSilence]).
  */
@@ -59,7 +59,8 @@ internal class PlayerAudioExtras(
         val showKey = extras?.getString(KEY_SHOW_KEY)
         if (showKey != lastShowKey) {
             lastShowKey = showKey
-            showBoost = extras?.getInt(KEY_SHOW_BOOST, -1)?.takeIf { it >= 0 }
+            // Úroveň vždy z uložené volby pořadu (in-app i Android Auto položky nesou jen klíč).
+            showBoost = prefs.boostFor(showKey)
             apply()
         }
     }
@@ -81,15 +82,28 @@ internal class PlayerAudioExtras(
         if (!prefs.rewindAfterPause) return
         val back = rewindMs(SystemClock.elapsedRealtime() - at, prefs.rewindMaxSec * 1000L)
         if (back <= 0L) return
-        val target = (player.currentPosition - back).coerceAtLeast(0L)
-        Timber.i("[PR1] po pauze přetočeno o %d ms", player.currentPosition - target)
-        player.seekTo(target)
+        // Vícesouborová kniha: pozice v čase celé knihy (offset souboru + pozice), přetočení smí přejít
+        // do předchozího souboru (revize F4).
+        val idx = player.currentMediaItemIndex
+        val bookPos = offsetMs(idx) + player.currentPosition
+        val target = (bookPos - back).coerceAtLeast(0L)
+        var tIdx = idx
+        while (tIdx > 0 && offsetMs(tIdx) > target) tIdx--
+        Timber.i("[PR1] po pauze přetočeno o %d ms", bookPos - target)
+        if (tIdx == idx) player.seekTo((target - offsetMs(idx)).coerceAtLeast(0L))
+        else player.seekTo(tIdx, (target - offsetMs(tIdx)).coerceAtLeast(0L))
+    }
+
+    private fun offsetMs(index: Int): Long {
+        if (index < 0 || index >= player.mediaItemCount) return 0L
+        val sec = player.getMediaItemAt(index).mediaMetadata.extras
+            ?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0
+        return (sec * 1000).toLong()
     }
 
     companion object {
-        /** Extras položky: klíč pořadu / knihy a jeho zesílení (-1 / chybí = globální). */
+        /** Extras položky: klíč pořadu / knihy (zesílení se čte z [ListenPlayerPrefs.boostFor]). */
         const val KEY_SHOW_KEY = "slovo_show_key"
-        const val KEY_SHOW_BOOST = "slovo_show_boost"
 
         /** Pauza < 10 s nic; do 1 min 1/6 maxima, do 5 min 1/3, do 30 min 2/3, déle celé maximum. */
         fun rewindMs(pauseMs: Long, maxMs: Long): Long = when {

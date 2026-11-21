@@ -114,6 +114,7 @@ class AudiobookPlayerConnection @Inject constructor(
     /** Zastaví přehrávání a vyprázdní stav BEZ zápisu do perzistované fronty (ta patří starému
      * profilu a zůstává netknutá — na rozdíl od [clearAll], což je uživatelská akce „vyprázdnit"). */
     private fun stopPlaybackForProfileSwitch() {
+        cancelSleepTimers()
         episodeStartJob?.cancel() // rozběhnutý start ABS epizody starého profilu nesmí doběhnout (Codex sweep)
         withController { c -> c.stop(); c.clearMediaItems() }
         currentEpisode = null
@@ -125,6 +126,7 @@ class AudiobookPlayerConnection @Inject constructor(
      * záměrně OPAČNÉ než výš: služba při zastavení ukládá pozici (onIsPlayingChanged → syncNow) —
      * s už prázdným playerem nemá co uložit, takže nevrátí právě ukončenou položku do „Pokračovat". */
     internal fun ejectCurrent() {
+        cancelSleepTimers()
         withController { c -> c.clearMediaItems(); c.stop() }
         currentEpisode = null
         _chapters.value = emptyList()
@@ -557,6 +559,14 @@ class AudiobookPlayerConnection @Inject constructor(
         if (minutes == null || minutes <= 0) sleep.cancel() else sleep.start(minutes)
     }
 
+    /** Revize F4: vyprázdnění přehrávače / přepnutí profilu ruší i spánek (jinak by uspal novou položku). */
+    private fun cancelSleepTimers() {
+        sleepEndChapterMs = null
+        sleepEndOfEpisode = false
+        sleep.cancel()
+        _state.update { it.copy(sleepAtEnd = false) }
+    }
+
     private fun sleepHost() = object : SleepTimerEngine.Host {
         override fun onMinutesLeft(minutes: Int?) = _state.update { it.copy(sleepMinutesLeft = minutes) }
         override fun pausePlayback() { controller?.pause() }
@@ -588,6 +598,7 @@ class AudiobookPlayerConnection @Inject constructor(
 
     /** Vymaže CELOU frontu včetně aktuálně přehrávaného → přehrávač zůstane prázdný (neaktivní). */
     fun clearAll() {
+        cancelSleepTimers()
         withController { c ->
             c.stop()
             c.clearMediaItems()

@@ -103,6 +103,9 @@ class AudiobookPlayerService : MediaLibraryService() {
      *  čte ji browse strom v [AudiobookBrowseTree]. */
     internal var currentPlayback: AbsPlayback? = null
 
+    /** AMPHORA F4: klíč pořadu / knihy spuštěné z Auta (zesílení hlasu i po skoku na kapitolu). */
+    private var autoShowKey: String? = null
+
     // ---- Custom session commands (Android Auto / notifikace) ----
     private val cmdPrevChapter = SessionCommand(ACTION_PREV_CHAPTER, Bundle.EMPTY)
     private val cmdNextChapter = SessionCommand(ACTION_NEXT_CHAPTER, Bundle.EMPTY)
@@ -311,7 +314,7 @@ class AudiobookPlayerService : MediaLibraryService() {
                     val bookMs = ((pb.chapters.getOrNull(idx)?.startSec ?: 0.0) * 1000).toLong()
                     val (tIdx, pos) = trackPositionForBookMs(pb, bookMs)
                     return Futures.immediateFuture(
-                        MediaSession.MediaItemsWithStartPosition(trackItems(pb), tIdx, pos),
+                        MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey), tIdx, pos),
                     )
                 }
             }
@@ -324,7 +327,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                     val pb = repo.startPlayback(itemId).also { currentPlayback = it }
                     Timber.i("[AUTO] play kniha '%s' tracks=%d", pb.title, pb.tracks.size)
                     val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
-                    MediaSession.MediaItemsWithStartPosition(trackItems(pb), idx, pos)
+                    autoShowKey = "book:$itemId"
+                    MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey), idx, pos)
                 }
             }
             // Auto: epizoda `epi:<itemId>|<episodeId>` bez URI → single-track play session + resume.
@@ -337,7 +341,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                         val pb = repo.startEpisodePlayback(parts[0], parts[1]).also { currentPlayback = it }
                         Timber.i("[AUTO] play epizoda '%s' tracks=%d", pb.title, pb.tracks.size)
                         val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
-                        MediaSession.MediaItemsWithStartPosition(trackItems(pb), idx, pos)
+                        autoShowKey = "show:${parts[0]}"
+                        MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey), idx, pos)
                     }
                 }
             }
@@ -383,7 +388,8 @@ class AudiobookPlayerService : MediaLibraryService() {
                 first.localConfiguration == null && first.mediaId.startsWith(PREFIX_BOOK)
             ) {
                 val itemId = first.mediaId.removePrefix(PREFIX_BOOK)
-                return future { trackItems(repo.startPlayback(itemId).also { currentPlayback = it }).toMutableList() }
+                autoShowKey = "book:$itemId"
+                return future { trackItems(repo.startPlayback(itemId).also { currentPlayback = it }, autoShowKey).toMutableList() }
             }
             // CRUISE: direct epizoda custom zdroje → celá fronta epizod zdroje (skip ⏮⏭ + auto-navázání).
             if (mediaItems.size == 1 && first != null &&

@@ -26,7 +26,6 @@ internal fun AudiobookPlayerConnection.wakeKey(): String? =
 internal fun Bundle.putShowExtras(showKey: String?, prefs: ListenPlayerPrefs) {
     if (showKey == null) return
     putString(PlayerAudioExtras.KEY_SHOW_KEY, showKey)
-    prefs.boostFor(showKey)?.let { putInt(PlayerAudioExtras.KEY_SHOW_BOOST, it) }
 }
 
 /** Rychlost při spuštění: výchozí z Nastavení (user 17:36 „rychlost vždy normální“), poslední jen na přání. */

@@ -57,13 +57,13 @@ internal suspend fun AudiobookPlayerService.podcastSection(): List<MediaItem> {
 /** CRUISE: „Nejnovější epizody" napříč VŠEMI custom zdroji — round-robin nejnovějších (feedy jsou newest-first). */
 internal suspend fun AudiobookPlayerService.latestEpisodes(): List<MediaItem> {
     sourcesRepo.refresh()
-    val perSource = visibleSources().map { it.id to sourcesRepo.loadEpisodes(it) }
+    val perSource = visibleSources().map { it to sourcesRepo.loadEpisodes(it) }
     val result = mutableListOf<MediaItem>()
     var i = 0
     while (result.size < AudiobookPlayerService.LATEST_LIMIT) {
         var added = false
-        for ((sid, eps) in perSource) {
-            eps.getOrNull(i)?.let { result += directEpisodeItem(sid, it); added = true }
+        for ((src, eps) in perSource) {
+            eps.getOrNull(i)?.let { result += directEpisodeItem(src.id, it, "show:${src.ref}"); added = true }
             if (result.size >= AudiobookPlayerService.LATEST_LIMIT) break
         }
         if (!added) break
@@ -75,7 +75,7 @@ internal suspend fun AudiobookPlayerService.latestEpisodes(): List<MediaItem> {
 /** CRUISE: epizody custom zdroje jako přehratelné položky S URI (cache v itemCache → play je najde). */
 internal suspend fun AudiobookPlayerService.sourceEpisodes(sourceId: String): List<MediaItem> {
     val src = visibleSources().firstOrNull { it.id == sourceId } ?: return emptyList()
-    return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
+    return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it, "show:${src.ref}") }
 }
 
 /**
@@ -88,7 +88,7 @@ internal suspend fun AudiobookPlayerService.directSourceEpisodes(sourceId: Strin
     val src = visibleSources().firstOrNull { it.id == sourceId }
         ?: run { sourcesRepo.refresh(); visibleSources().firstOrNull { it.id == sourceId } }
         ?: return emptyList()
-    return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it) }
+    return sourcesRepo.loadEpisodes(src).map { directEpisodeItem(sourceId, it, "show:${src.ref}") }
         .also { items -> items.forEach { itemCache[it.mediaId] = it } }
 }
 
