@@ -117,7 +117,7 @@ fun nextInSeriesRow(books: List<Audiobook>): List<HomeRowItem> =
 fun recentBooksRow(books: List<Audiobook>, now: Long = System.currentTimeMillis()): List<HomeRowItem> =
     books.filter { b ->
         val added = b.addedAt ?: return@filter false
-        now - added <= RECENT_DAYS * 86_400_000L && !b.isFinished && b.progress <= 0.0 && b.currentTimeSec <= 0.0
+        now - added <= RECENT_DAYS * 86_400_000L && !b.isFinished && b.currentTimeSec < STARTED_MIN_SEC
     }.sortedByDescending { it.addedAt }.take(ROW_LIMIT).map { HomeRowItem.Book(it) }
 
 private const val ROW_LIMIT = 20

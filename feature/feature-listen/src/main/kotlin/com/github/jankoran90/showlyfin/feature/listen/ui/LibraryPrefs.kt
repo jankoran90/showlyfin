@@ -58,7 +58,8 @@ enum class BookFilter(val label: String) {
 
 // Rozposlouchaná až od 15 s poslechu (user 2026-11-21: Baron Prášil s uloženými 0,7 s visel v Rozposlouchaných).
 private fun Audiobook.started(): Boolean = !isFinished && currentTimeSec >= STARTED_MIN_SEC
-private const val STARTED_MIN_SEC = 15.0
+/** Sdílená hranice „rozposlouchané“ — Knihovna, Domů Pokračovat i Nově v knihovně. */
+internal const val STARTED_MIN_SEC = 15.0
 
 fun List<Audiobook>.filteredBy(f: BookFilter): List<Audiobook> = when (f) {
     BookFilter.ALL -> this

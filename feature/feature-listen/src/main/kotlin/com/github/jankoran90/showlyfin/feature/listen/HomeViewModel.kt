@@ -451,7 +451,7 @@ class HomeViewModel @Inject constructor(
                     // viděl dětský profil úplně VŠECHNY rozposlouchané knihy napříč knihovnami (i
                     // adminovy osobní), protože appka jede na jednom sdíleném ABS admin účtu a profilové
                     // omezení je čistě appkové (client-side), ne serverové. Fix: filtr na obě větve.
-                    filterVisibleBooks(fetched.filter { it.progress > 0.001 && !it.isFinished })
+                    filterVisibleBooks(fetched.filter { it.currentTimeSec >= com.github.jankoran90.showlyfin.feature.listen.ui.STARTED_MIN_SEC && !it.isFinished })
                 }.getOrDefault(emptyList())
             }
             val episodesDeferred = async { runCatching { continueDirectEpisodes() }.getOrDefault(emptyList()) }
@@ -464,7 +464,7 @@ class HomeViewModel @Inject constructor(
             val networkIds = networkBooks.mapTo(mutableSetOf()) { it.id }
             val offlineExtra = runCatching {
                 audiobookDownloads.downloads.value
-                    .filter { it.itemId !in networkIds && it.localPositionSec > 0.5 && !it.localIsFinished }
+                    .filter { it.itemId !in networkIds && it.localPositionSec >= com.github.jankoran90.showlyfin.feature.listen.ui.STARTED_MIN_SEC && !it.localIsFinished }
                     .map { it.toAudiobook() }
                     .let { filterVisibleBooks(it) }
             }.getOrDefault(emptyList())

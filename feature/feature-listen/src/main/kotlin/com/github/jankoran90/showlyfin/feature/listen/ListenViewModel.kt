@@ -667,10 +667,9 @@ class ListenViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { repo.getAudiobooks(libId) }
                 .onSuccess { books ->
-                    if (_uiState.value.selectedLibraryId == libId) {
-                        val visible = filterVisibleBooks(books)
-                        _uiState.update { it.copy(books = visible) }
-                    }
+                    val visible = filterVisibleBooks(books)
+                    // Knihovna se mohla přepnout během načítání/filtru → zapsat jen pod tutéž knihovnu (revize P2).
+                    _uiState.update { if (it.selectedLibraryId == libId) it.copy(books = visible) else it }
                 }
                 .onFailure { Timber.w(it, "[Listen] tiché načtení knih selhalo") }
         }
