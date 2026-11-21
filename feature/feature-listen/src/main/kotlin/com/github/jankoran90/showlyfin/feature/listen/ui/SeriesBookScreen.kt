@@ -154,49 +154,17 @@ fun SeriesBookScreen(
                 ),
             ) {
                 item(key = "header") {
-                    Column {
-                        if (wideCover && cover != null) {
-                            AsyncImage(
-                                model = cover,
-                                contentDescription = title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp)),
-                            )
-                        }
-                        Row(Modifier.padding(top = if (wideCover) 12.dp else 0.dp)) {
-                            if (!wideCover) {
-                                Box(
-                                    Modifier.size(140.dp).clip(RoundedCornerShape(16.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                                ) {
-                                    if (cover != null) {
-                                        AsyncImage(model = cover, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                    }
-                                }
-                            }
-                            Column(
-                                Modifier.weight(1f).padding(start = if (wideCover) 0.dp else 16.dp)
-                                    .then(if (wideCover) Modifier else Modifier.height(140.dp)),
-                                verticalArrangement = if (wideCover) Arrangement.Top else Arrangement.SpaceBetween,
-                            ) {
-                                Column {
-                                    author?.let {
-                                        Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    }
-                                    val meta = listOfNotNull(yearLabel, DownloadFormat.duration(totalSec).takeIf { totalSec > 0 }, "${chapters.size} kap.")
-                                        .joinToString(" · ")
-                                    Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                                }
-                                SeriesBookDownloadRow(
-                                    chapters = chapters,
-                                    states = offlineStates,
-                                    onDownloadAll = { viewModel.downloadAll(chapters) },
-                                    onCancel = { viewModel.cancelDownloads(chapters) },
-                                    onDeleteAll = { confirmDeleteAll = true },
-                                    modifier = Modifier.padding(top = if (wideCover) 8.dp else 0.dp),
-                                )
-                            }
-                        }
+                    // AMPHORA F8 (DS2): obal jako hrdina (16:9 u YouTube/ČT série).
+                    val meta = listOfNotNull(author, yearLabel, DownloadFormat.duration(totalSec).takeIf { totalSec > 0 }, "${chapters.size} kap.")
+                        .joinToString(" · ")
+                    SourceHero(coverUrl = cover, title = title, subtitle = meta, wide = wideCover) {
+                        SeriesBookDownloadRow(
+                            chapters = chapters,
+                            states = offlineStates,
+                            onDownloadAll = { viewModel.downloadAll(chapters) },
+                            onCancel = { viewModel.cancelDownloads(chapters) },
+                            onDeleteAll = { confirmDeleteAll = true },
+                        )
                     }
                 }
                 item(key = "play") {

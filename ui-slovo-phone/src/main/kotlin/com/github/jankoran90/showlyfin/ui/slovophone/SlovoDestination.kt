@@ -62,6 +62,9 @@ object SlovoShellPrefs {
     private const val KEY_BAR_ORDER = "bar_order"
     private const val KEY_BAR_HIDDEN = "bar_hidden"
     private const val KEY_RESELECT_TOP = "bar_reselect_top"
+    private const val KEY_TRANSITIONS = "transitions"
+    private const val KEY_HERO_BACKDROP = "hero_backdrop"
+    private const val KEY_HERO_TINT = "hero_tint"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -104,6 +107,21 @@ object SlovoShellPrefs {
     /** Ťuk na místo, které už je otevřené: vrátit ho na začátek (výchozí zapnuto). */
     fun reselectToTop(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_RESELECT_TOP, true)
     fun setReselectToTop(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(KEY_RESELECT_TOP, on).apply() }
+
+    // ── AMPHORA F8 (DS2): přechody mezi obrazovkami a hlavička detailu ──
+    enum class Transitions(val label: String) { FULL("Plné"), REDUCED("Jen prolnutí"), OFF("Vypnuté") }
+
+    fun transitions(ctx: Context): Transitions =
+        Transitions.entries.firstOrNull { it.name == prefs(ctx).getString(KEY_TRANSITIONS, null) } ?: Transitions.FULL
+    fun setTransitions(ctx: Context, value: Transitions) { prefs(ctx).edit().putString(KEY_TRANSITIONS, value.name).apply() }
+
+    /** Rozmazaný obal za hlavičkou detailu pořadu / knihy (výchozí zapnuto). */
+    fun heroBackdrop(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_HERO_BACKDROP, true)
+    fun setHeroBackdrop(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(KEY_HERO_BACKDROP, on).apply() }
+
+    /** Nádech barvy z obalu v hlavičce detailu (výchozí zapnuto). */
+    fun heroTint(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_HERO_TINT, true)
+    fun setHeroTint(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(KEY_HERO_TINT, on).apply() }
 
     // ── Nabídka Víc pod avatarem (dřív drawer): Objevit, Zdroje, Stahování, Katalog ──
     private val reorderableSections = listOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE, SlovoSection.STAHOVANI, SlovoSection.KATALOG, SlovoSection.ZALOZKY)

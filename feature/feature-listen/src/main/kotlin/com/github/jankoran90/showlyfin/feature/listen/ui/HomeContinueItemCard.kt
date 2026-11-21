@@ -63,12 +63,36 @@ internal fun HomeContinueItemCard(
                         onPlayPause = { if (isPlaying) playerVm.playPause() else playerVm.open(b.id, fromStart = false) },
                     )
                 } else {
-                    AudiobookCard(
-                        book = item.book,
-                        onClick = { onOpenBook(item.book.id) },
-                        isPlaying = isPlaying,
+                    // AMPHORA F8: mřížka = jednotná karta Slova (obal, průběh, „zbývá“, dohráno).
+                    val b = item.book
+                    val live = isPlaying && playerState.isPlaying && playerState.durationMs > 0
+                    val posMs = if (live) playerState.positionMs else (b.currentTimeSec * 1000).toLong()
+                    val durMs = if (live) playerState.durationMs else (b.durationSec * 1000).toLong()
+                    val started = b.progress > 0.001 && !b.isFinished
+                    SlovoMediaCard(
+                        model = SlovoMediaModel(
+                            title = b.title,
+                            // DROPSHIP série: pod názvem autor + název série („Enid Blyton · Správná pětka").
+                            subtitle = listOfNotNull(b.author, b.seriesName).joinToString(" · ").ifBlank { null },
+                            coverUrl = b.coverUrl,
+                            progress = if (live) posMs.toFloat() / durMs else b.progress.toFloat(),
+                            meta = if (started) remainingLabel(posMs, durMs) else null,
+                            finished = b.isFinished,
+                            playing = isPlaying,
+                            placeholder = Icons.Rounded.Headphones,
+                        ),
+                        onClick = { onOpenBook(b.id) },
+                        width = null,
                         onLongClick = onLong,
-                        onEndListening = { vm.resetBookProgress(item.book) },
+                        overlay = {
+                            ContinueCoverControls(
+                                loaded = isPlaying,
+                                playing = isPlaying && playerState.isPlaying,
+                                finished = b.isFinished,
+                                onEndListening = if (started) ({ vm.resetBookProgress(b) }) else null,
+                                onPlayPause = { if (isPlaying) playerVm.playPause() else playerVm.open(b.id, fromStart = false) },
+                            )
+                        },
                     )
                 }
             }
@@ -136,17 +160,32 @@ internal fun HomeContinueItemCard(
                         onPlayPause = onPlayPause,
                     )
                 } else {
-                    ContinueEpisodeCard(
-                        episode = bookLabel?.let { item.episode.copy(title = it.bookTitle) } ?: item.episode,
-                        sourceTitle = bookLabel?.chapterLine ?: item.sourceTitle,
-                        progress = item.progress,
-                        isPlaying = loadedInQueue,
+                    val live = loadedInQueue && playerState.isPlaying && playerState.durationMs > 0
+                    val posMs = if (live) playerState.positionMs else item.posMs
+                    val durMs = if (live) playerState.durationMs else item.durMs
+                    SlovoMediaCard(
+                        model = SlovoMediaModel(
+                            title = bookLabel?.bookTitle ?: item.episode.title,
+                            subtitle = bookLabel?.chapterLine ?: item.sourceTitle,
+                            coverUrl = item.episode.imageUrl,
+                            progress = if (live) posMs.toFloat() / durMs else item.progress,
+                            meta = remainingLabel(posMs, durMs),
+                            playing = loadedInQueue,
+                            placeholder = Icons.Rounded.Podcasts,
+                        ),
                         onClick = onClick,
+                        width = null,
                         onLongClick = onLong,
-                        onEndListening = { vm.resetEpisodeProgress(item) },
-                        // ▶ jen když ťuk otevírá pořad (jinak ťuk sám přehrává).
-                        onPlayPause = if (opensShow) onPlayPause else null,
-                        playing = loadedInQueue && playerState.isPlaying,
+                        overlay = {
+                            ContinueCoverControls(
+                                loaded = loadedInQueue,
+                                playing = loadedInQueue && playerState.isPlaying,
+                                finished = false,
+                                onEndListening = { vm.resetEpisodeProgress(item) },
+                                // ▶ jen když ťuk otevírá pořad (jinak ťuk sám přehrává).
+                                onPlayPause = if (opensShow) onPlayPause else null,
+                            )
+                        },
                     )
                 }
             }

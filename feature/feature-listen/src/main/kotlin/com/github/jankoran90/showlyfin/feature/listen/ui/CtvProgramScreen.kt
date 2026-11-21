@@ -177,7 +177,7 @@ fun CtvProgramScreen(
         if (!scrolledToHighlight && highlightEpisodeKey != null && filteredEpisodes.isNotEmpty()) {
             val idx = filteredEpisodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
             if (idx >= 0) {
-                listState.scrollToItem(idx)
+                listState.scrollToItem(idx + 1) // +1 = hlavička (SourceHero)
                 scrolledToHighlight = true
             }
         }
@@ -345,6 +345,10 @@ fun CtvProgramScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // AMPHORA F8 (DS2): obal jako hrdina nad díly.
+                item(key = "source_hero") {
+                    SourceHero(coverUrl = filteredEpisodes.firstNotNullOfOrNull { it.image }, title = state.showTitle ?: title, subtitle = "ČT · " + episodeCountLabel(filteredEpisodes.size), wide = true)
+                }
                 if (shelfItems == null) {
                     items(orderedEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
                 } else if (seriesOnly) {

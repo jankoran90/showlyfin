@@ -109,7 +109,7 @@ fun MergedPodcastScreen(
         if (!scrolledToHighlight && highlightEpisodeKey != null && state.episodes.isNotEmpty()) {
             val idx = state.episodes.indexOfFirst { matchesHighlight(it) }
             if (idx >= 0) {
-                listState.scrollToItem(idx)
+                listState.scrollToItem(idx + 1) // +1 = hlavička (SourceHero)
                 scrolledToHighlight = true
             }
         }
@@ -173,6 +173,10 @@ fun MergedPodcastScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // AMPHORA F8 (DS2): obal jako hrdina nad díly.
+                item(key = "source_hero") {
+                    SourceHero(coverUrl = state.image, title = state.title.ifBlank { title }, subtitle = episodeCountLabel(state.episodes.size), wide = false)
+                }
                 val shownEpisodes = if (!onlyDownloaded) state.episodes
                 else state.episodes.filter { offlineStates[it.key]?.status == OfflineStatus.DOWNLOADED }
                 items(shownEpisodes, key = { it.key }) { item ->

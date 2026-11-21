@@ -177,7 +177,7 @@ fun YoutubeChannelScreen(
         if (!scrolledToHighlight && highlightEpisodeKey != null && filteredEpisodes.isNotEmpty()) {
             val idx = filteredEpisodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
             if (idx >= 0) {
-                listState.scrollToItem(idx)
+                listState.scrollToItem(idx + 1) // +1 = hlavička (SourceHero)
                 scrolledToHighlight = true
             }
         }
@@ -358,6 +358,10 @@ fun YoutubeChannelScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // AMPHORA F8 (DS2): obal jako hrdina nad díly.
+                item(key = "source_hero") {
+                    SourceHero(coverUrl = state.channelThumbnail ?: filteredEpisodes.firstOrNull()?.thumbnail, title = state.channelTitle ?: channelTitle, subtitle = "YouTube · " + episodeCountLabel(filteredEpisodes.size), wide = state.channelThumbnail == null)
+                }
                 if (shelfItems == null) {
                     items(orderedEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }
                 } else if (seriesOnly) {

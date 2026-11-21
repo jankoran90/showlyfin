@@ -236,54 +236,20 @@ private fun DetailContent(
 
     LazyColumn(modifier, contentPadding = PaddingValues(16.dp)) {
         item {
-            // Hlavička: cover vlevo, info vpravo VYPLNÍ výšku coveru (název je jen v app-baru).
-            Row {
-                Box(
-                    Modifier
-                        .size(120.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                ) {
-                    if (podcast.coverUrl != null) {
-                        AsyncImage(
-                            model = podcast.coverUrl,
-                            contentDescription = podcast.title,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                }
-                Column(
-                    Modifier
-                        .padding(start = 16.dp)
-                        .height(120.dp)
-                        .weight(1f),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column {
-                        podcast.author?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        val meta = buildList {
-                            add("${podcast.numEpisodes} epizod")
-                            if (podcast.numUnfinished > 0) add("${podcast.numUnfinished} nepřehraných")
-                        }.joinToString(" · ")
-                        Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                    }
-                    // „Prohledat epizody" = ABS upload-akce → jen admin profil (ostatní účty 403). Bug 2026-06-12.
-                    if (canManageEpisodes) {
-                        AssistChip(
-                            onClick = onFindEpisodes,
-                            label = { Text("Prohledat epizody") },
-                            leadingIcon = { Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        )
-                    }
+            // AMPHORA F8 (DS2): obal jako hrdina — velký obal, název, autor a počty dílů.
+            val meta = buildList {
+                podcast.author?.takeIf { it.isNotBlank() }?.let { add(it) }
+                add("${podcast.numEpisodes} epizod")
+                if (podcast.numUnfinished > 0) add("${podcast.numUnfinished} nepřehraných")
+            }.joinToString(" · ")
+            SourceHero(coverUrl = podcast.coverUrl, title = podcast.title, subtitle = meta) {
+                // „Prohledat epizody" = ABS upload-akce → jen admin profil (ostatní účty 403). Bug 2026-06-12.
+                if (canManageEpisodes) {
+                    AssistChip(
+                        onClick = onFindEpisodes,
+                        label = { Text("Prohledat epizody") },
+                        leadingIcon = { Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    )
                 }
             }
         }

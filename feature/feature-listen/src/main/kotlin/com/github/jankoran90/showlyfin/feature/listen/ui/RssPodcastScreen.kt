@@ -195,7 +195,7 @@ fun RssPodcastScreen(
         if (!scrolledToHighlight && highlightEpisodeKey != null && filteredEpisodes.isNotEmpty()) {
             val idx = filteredEpisodes.indexOfFirst { viewModel.episodeKey(it) == highlightEpisodeKey }
             if (idx >= 0) {
-                listState.scrollToItem(idx)
+                listState.scrollToItem(idx + 1) // +1 = hlavička (SourceHero)
                 scrolledToHighlight = true
             }
         }
@@ -364,6 +364,10 @@ fun RssPodcastScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // AMPHORA F8 (DS2): obal jako hrdina nad díly.
+                item(key = "source_hero") {
+                    SourceHero(coverUrl = state.image, title = state.title ?: title, subtitle = episodeCountLabel(filteredEpisodes.size), wide = false)
+                }
                 if (shelfItems == null) {
                     // Dětská cesta (seriesFilter) NEBO fallback — plochý seznam, žádné seskupení.
                     items(orderedEpisodes, key = { it.id }) { ep -> EpisodeRowFor(ep) }

@@ -1,6 +1,17 @@
 package com.github.jankoran90.showlyfin.ui.slovophone
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -31,7 +42,9 @@ import com.github.jankoran90.showlyfin.core.theme.ThemePrefsViewModel
 import com.github.jankoran90.showlyfin.feature.listen.AudiobookPlayerViewModel
 import com.github.jankoran90.showlyfin.feature.listen.ListenViewModel
 import com.github.jankoran90.showlyfin.feature.listen.PodcastLinkLookupViewModel
+import com.github.jankoran90.showlyfin.feature.listen.ui.LocalSourceHeroPrefs
 import com.github.jankoran90.showlyfin.feature.listen.ui.MiniPlayer
+import com.github.jankoran90.showlyfin.feature.listen.ui.SourceHeroPrefs
 
 /**
  * Slovo (EXCISE/SHW-103 Krok 2) — kořen telefonní poslechové appky. Obaluje sdílený motiv
@@ -184,7 +197,9 @@ private fun SlovoShellContent() {
                     .padding(padding)
                     .consumeWindowInsets(padding),
             ) {
-                if (detailEntry != null) {
+                if (fullscreen && detailEntry != null) {
+                    // Přehrávače (audio i video) bez animace: dvě souběžné instance by sdílely jeden
+                    // přehrávač a jeho onDispose (uvolnění controlleru) by doběhl až po startu nového.
                     SlovoDetail(
                         entry = detailEntry,
                         onPush = onPush,
@@ -194,18 +209,44 @@ private fun SlovoShellContent() {
                         podcastLinkLookup = podcastLinkLookup,
                     )
                 } else {
-                    Box(Modifier.fillMaxSize().statusBarsPadding()) {
-                        sectionStateHolder.SaveableStateProvider(sectionKey(current, resetTicks[current] ?: 0)) {
-                            SlovoSectionContent(
-                                section = current,
-                                isKidsProfile = isKidsProfile,
-                                listenVm = listenVm,
-                                podcastLinkLookup = podcastLinkLookup,
-                                onMenu = { if (isKidsProfile) showParent = true else showMore = true },
-                                onPush = onPush,
-                                onSelectSection = selectSection,
-                                expandMiniPlayer = expandMiniPlayer,
-                            )
+                    // AMPHORA F8 (DS2): přechody detail ↔ sekce (Nastavení › Domů a vzhled › Detaily a přechody).
+                    val screen = ShellScreen(detailStack, current, resetTicks[current] ?: 0)
+                    val heroPrefs = remember(detailStack, current) {
+                        SourceHeroPrefs(backdrop = SlovoShellPrefs.heroBackdrop(ctx), tint = SlovoShellPrefs.heroTint(ctx))
+                    }
+                    CompositionLocalProvider(LocalSourceHeroPrefs provides heroPrefs) {
+                        AnimatedContent(
+                            targetState = screen,
+                            contentKey = { it.contentKey() },
+                            transitionSpec = { shellTransition(SlovoShellPrefs.transitions(ctx)) },
+                            label = "slovoShell",
+                        ) { st ->
+                            val entry = st.stack.lastOrNull()
+                            if (entry != null) {
+                                SlovoDetail(
+                                    entry = entry,
+                                    onPush = onPush,
+                                    onPop = onPop,
+                                    onGoToPoslech = onGoToPoslech,
+                                    listenVm = listenVm,
+                                    podcastLinkLookup = podcastLinkLookup,
+                                )
+                            } else {
+                                Box(Modifier.fillMaxSize().statusBarsPadding()) {
+                                    sectionStateHolder.SaveableStateProvider(sectionKey(st.section, st.tick)) {
+                                        SlovoSectionContent(
+                                            section = st.section,
+                                            isKidsProfile = isKidsProfile,
+                                            listenVm = listenVm,
+                                            podcastLinkLookup = podcastLinkLookup,
+                                            onMenu = { if (isKidsProfile) showParent = true else showMore = true },
+                                            onPush = onPush,
+                                            onSelectSection = selectSection,
+                                            expandMiniPlayer = expandMiniPlayer,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -242,6 +283,32 @@ private fun SlovoShellContent() {
 }
 
 private fun sectionKey(section: SlovoSection, tick: Int): String = "${section.name}#$tick"
+
+/** Co shell právě ukazuje (cíl animace): stack detailů, sekce a „ťuk na začátek“ počítadlo. */
+private data class ShellScreen(val stack: List<SlovoDetailEntry>, val section: SlovoSection, val tick: Int) {
+    /** Sekce podle klíče stavu, detail podle hloubky a cíle (stejný cíl dvakrát v řadě = dva detaily). */
+    fun contentKey(): Any = if (stack.isEmpty()) sectionKey(section, tick) else stack.size to stack.last()
+}
+
+/** Vpřed = nový zprava, zpět = starý odjede doprava, mezi sekcemi jen prolnutí. */
+private fun AnimatedContentTransitionScope<ShellScreen>.shellTransition(mode: SlovoShellPrefs.Transitions): ContentTransform {
+    val from = initialState.stack.size
+    val to = targetState.stack.size
+    return when (mode) {
+        SlovoShellPrefs.Transitions.OFF -> EnterTransition.None togetherWith ExitTransition.None
+        SlovoShellPrefs.Transitions.REDUCED -> fadeIn(tween(FADE_MS)) togetherWith fadeOut(tween(FADE_MS))
+        SlovoShellPrefs.Transitions.FULL -> when {
+            to > from -> (slideInHorizontally(tween(SLIDE_MS)) { it / 5 } + fadeIn(tween(SLIDE_MS))) togetherWith
+                (slideOutHorizontally(tween(SLIDE_MS)) { -it / 10 } + fadeOut(tween(FADE_MS)))
+            to < from -> (slideInHorizontally(tween(SLIDE_MS)) { -it / 10 } + fadeIn(tween(SLIDE_MS))) togetherWith
+                (slideOutHorizontally(tween(SLIDE_MS)) { it / 5 } + fadeOut(tween(FADE_MS)))
+            else -> fadeIn(tween(FADE_MS)) togetherWith fadeOut(tween(FADE_MS))
+        }
+    }
+}
+
+private const val SLIDE_MS = 260
+private const val FADE_MS = 160
 
 /** Jak dlouho nejvýš čekat na obnovení aktivního profilu, než se ukáže rozhraní (viz SlovoShellContent). */
 private const val PROFILE_WAIT_MS = 4_000L

@@ -86,6 +86,8 @@ class YoutubeChannelViewModel @Inject constructor(
         val isLoading: Boolean = false,
         val error: String? = null,
         val channelTitle: String? = null,
+        /** AMPHORA F8 (DS2): obrázek kanálu z feedu (hlavička detailu); null = první díl. */
+        val channelThumbnail: String? = null,
         val episodes: List<YtEpisode> = emptyList(),
     )
 
@@ -127,12 +129,12 @@ class YoutubeChannelViewModel @Inject constructor(
         if (loadedFor == channel && _rawEpisodes.value.isNotEmpty() && !fromOfflineCache) return
         loadedFor = channel
         fromOfflineCache = false
-        _state.update { it.copy(isLoading = true, error = null) }
+        _state.update { it.copy(isLoading = true, error = null, channelThumbnail = null) }
         viewModelScope.launch {
             runCatching { uploaderDs.getYtFeed(baseUrl, cookie, channel, limit = YoutubeFeedPrefs.limit(prefs)) }
                 .onSuccess { feed ->
                     _rawEpisodes.value = feed.entries
-                    _state.update { it.copy(isLoading = false, channelTitle = feed.channel) }
+                    _state.update { it.copy(isLoading = false, channelTitle = feed.channel, channelThumbnail = feed.thumbnail) }
                     // Slovo 2026-10-13: offline záloha seznamu dílů (parita s RSS).
                     launch {
                         offlineEpisodes.save("youtube:$channel", feed.entries.map { ep ->

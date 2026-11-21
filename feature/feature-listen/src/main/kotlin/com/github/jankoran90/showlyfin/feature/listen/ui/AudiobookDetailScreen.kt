@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -157,69 +158,34 @@ private fun DetailContent(
 
     LazyColumn(modifier, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
         item {
-            // Hlavička: cover vlevo, info vpravo VYPLNÍ přesnou výšku coveru (název je jen v app-baru).
-            Row {
-                Box(
-                    Modifier
-                        .size(140.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                ) {
-                    if (book.coverUrl != null) {
-                        AsyncImage(
-                            model = book.coverUrl,
-                            contentDescription = book.title,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
+            // AMPHORA F8 (DS2): obal jako hrdina — velký obal, pod ním název, autor, čte, série, údaje.
+            SourceHero(coverUrl = book.coverUrl, title = book.title, subtitle = book.author) {
+                val lines = buildList {
+                    book.narrator?.let { add("Čte: $it") }
+                    // DROPSHIP série: „Série: Správná pětka · 1. díl" (sequence jen v detailu).
+                    book.seriesName?.let { s -> add("Série: $s" + book.seriesSequence?.let { " · $it. díl" }.orEmpty()) }
+                    buildList {
+                        detail.publishedYear?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        if (book.durationSec > 0) add(formatDuration(book.durationSec))
+                        if (detail.chapters.isNotEmpty()) add("${detail.chapters.size} kap.")
+                    }.joinToString(" · ").takeIf { it.isNotBlank() }?.let { add(it) }
                 }
-                Column(
-                    Modifier
-                        .padding(start = 16.dp)
-                        .height(140.dp)
-                        .weight(1f),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column {
-                        book.author?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        book.narrator?.let {
-                            Text("Čte: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-                        }
-                        // DROPSHIP série: „Série: Správná pětka · 1. díl" (sequence jen v detailu).
-                        book.seriesName?.let { s ->
-                            val seq = book.seriesSequence?.let { " · $it. díl" }.orEmpty()
-                            Text(
-                                "Série: $s$seq",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                        val meta = buildList {
-                            detail.publishedYear?.takeIf { it.isNotBlank() }?.let { add(it) }
-                            if (book.durationSec > 0) add(formatDuration(book.durationSec))
-                            if (detail.chapters.isNotEmpty()) add("${detail.chapters.size} kap.")
-                        }.joinToString(" · ")
-                        if (meta.isNotBlank()) {
-                            Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                        }
-                    }
-                    AudiobookDownloadRow(
-                        state = downloadState,
-                        onDownload = onDownload,
-                        onCancel = onCancelDownload,
-                        onDelete = onDeleteDownload,
+                lines.forEach {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
+                AudiobookDownloadRow(
+                    state = downloadState,
+                    onDownload = onDownload,
+                    onCancel = onCancelDownload,
+                    onDelete = onDeleteDownload,
+                )
             }
         }
 

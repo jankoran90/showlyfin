@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -66,18 +67,21 @@ fun SlovoMediaCard(
     model: SlovoMediaModel,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    width: Dp = CoverSize.card,
+    /** null = přes celou šířku buňky (mřížka Pokračovat na Domů). */
+    width: Dp? = CoverSize.card,
     onLongClick: (() -> Unit)? = null,
     /** AMPHORA AK1: viditelné ⋮ vedle názvu (stejná nabídka jako podržení). */
     onMore: (() -> Unit)? = null,
+    /** AMPHORA F8: ovládání přes obal (▶/⏸, Ukončit poslech) — Pokračovat na Domů. */
+    overlay: (@Composable BoxScope.() -> Unit)? = null,
 ) {
     Column(
         modifier
-            .width(width)
+            .then(if (width != null) Modifier.width(width) else Modifier.fillMaxWidth())
             .clip(MaterialTheme.shapes.medium)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        MediaCover(model, Modifier.fillMaxWidth().aspectRatio(if (model.wide) 16f / 9f else 1f))
+        MediaCover(model, Modifier.fillMaxWidth().aspectRatio(if (model.wide) 16f / 9f else 1f), overlay = overlay)
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 Text(
@@ -133,7 +137,12 @@ fun SlovoMediaRow(
 }
 
 @Composable
-private fun MediaCover(model: SlovoMediaModel, modifier: Modifier, compact: Boolean = false) {
+private fun MediaCover(
+    model: SlovoMediaModel,
+    modifier: Modifier,
+    compact: Boolean = false,
+    overlay: (@Composable BoxScope.() -> Unit)? = null,
+) {
     Box(
         modifier
             .clip(if (compact) MaterialTheme.shapes.small else MaterialTheme.shapes.medium)
@@ -176,6 +185,7 @@ private fun MediaCover(model: SlovoMediaModel, modifier: Modifier, compact: Bool
                 trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
             )
         }
+        overlay?.invoke(this)
     }
 }
 

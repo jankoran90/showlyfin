@@ -26,4 +26,6 @@ object CoverSize {
     val card = 132.dp
     val row = 52.dp
     val thumb = 40.dp
+    /** DS2 obal jako hrdina — velký obal v hlavičce detailu. */
+    val hero = 176.dp
 }

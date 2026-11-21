@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.ui.slovophone
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
+import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.Cast
@@ -51,7 +52,7 @@ internal enum class SlovoSettingsCategory(
     val icon: ImageVector,
 ) {
     PLAYER("Přehrávač", "Rychlost, spánek, zvuk, záložky, Android Auto", Icons.Rounded.PlayCircle),
-    HOME("Domů a vzhled", "Barvy, písmo, řady na Domů, spodní lišta, hledání", Icons.Rounded.Home),
+    HOME("Domů a vzhled", "Barvy, písmo, řady na Domů, detaily a přechody, spodní lišta, hledání", Icons.Rounded.Home),
     LIBRARY("Knihovna a zdroje", "Knihovna, Audioteka, objevování a skryté pořady", Icons.AutoMirrored.Rounded.LibraryBooks),
     DOWNLOADS("Stahování", "Stažené díly a knihy v telefonu", Icons.Rounded.Download),
     DEVICES("Zařízení", "TV, Zenbook, repro (receiver), Jellyfin", Icons.Rounded.Devices),
@@ -120,6 +121,11 @@ internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
             "série kniha cover obal popis epizody časový údaj zbývá poslechnuto",
         adultOnly = false,
     ) { SlovoHomeLayoutSection() },
+    SlovoSettingEntry(
+        "Detaily a přechody", Icons.Rounded.Animation, SlovoSettingsCategory.HOME,
+        "detail hlavička obal velký rozmazaný pozadí barva z obalu animace přechody posun prolnutí vypnout",
+        adultOnly = false,
+    ) { SlovoDetailLookSection() },
     SlovoSettingEntry(
         "Řady na Domů", Icons.Rounded.ViewDay, SlovoSettingsCategory.HOME,
         "řady nové díly další v sérii krátké díly nově v knihovně pořadí skrýt zobrazit",
