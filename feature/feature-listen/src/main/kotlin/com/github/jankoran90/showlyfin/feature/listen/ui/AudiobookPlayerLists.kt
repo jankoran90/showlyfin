@@ -170,7 +170,15 @@ internal fun InlineQueueList(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .background(if (isCur) accent.copy(alpha = 0.16f) else MaterialTheme.colorScheme.background)
+                            .background(
+                                when {
+                                    isCur -> accent.copy(alpha = 0.16f)
+                                    // Průhledný řádek, ať barva z obalu v přehrávači projde až dolů (user 2026-11-21 21:02);
+                                    // plné pozadí jen během tažení do strany, aby nebylo vidět barevné pozadí akce.
+                                    dismissState.dismissDirection == SwipeToDismissBoxValue.Settled && !isDragging -> Color.Transparent
+                                    else -> MaterialTheme.colorScheme.background
+                                },
+                            )
                             .clickable { onPlay(q) }
                             .padding(horizontal = 6.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
