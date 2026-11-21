@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.ViewAgenda
@@ -92,6 +93,9 @@ fun SlovoSettingsScreen(
             }
             if (adult) SlovoCollapsibleSection("Knihovna", Icons.AutoMirrored.Rounded.LibraryBooks) {
                 SlovoLibrarySection()
+            }
+            if (adult) SlovoCollapsibleSection("Hledání", Icons.Rounded.Search) {
+                SlovoSearchSettingsSection()
             }
             if (adult) SlovoCollapsibleSection("Přehrávač", Icons.Rounded.PlayCircle) {
                 SlovoPlayerSettingsSection()

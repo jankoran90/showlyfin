@@ -42,7 +42,7 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.LibraryPrefs
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
-import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastSearchScreen
+import com.github.jankoran90.showlyfin.feature.listen.search.UnifiedSearchScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.QueueScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.SourceManagerScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.TimelinePage
@@ -52,8 +52,7 @@ import kotlin.math.absoluteValue
 /**
  * AMPHORA (SHW-124) F1 — obsah jedné sekce (místa lišty nebo položky z Víc). Vyčleněno ze
  * [SlovoPhoneShell] (anti-monolit). Pořady = Nové (dřívější Timeline) | Sledované jako dvě přejížděcí
- * strany; Knihovna = Knihy | Pořady | Stažené; Hledat = hledání v pořadech
- * (ve F3 jedno hledání pro všechno).
+ * strany; Knihovna = Knihy | Pořady | Stažené; Hledat = jedno hledání pro všechno (F3).
  */
 @Composable
 internal fun SlovoSectionContent(
@@ -192,12 +191,20 @@ internal fun SlovoSectionContent(
                 }
             }
         }
-        // Hledání v pořadech (FOCUS 2026-09-03, dřív plovoucí lupa na Timeline/Sledované).
-        SlovoSection.HLEDAT -> PodcastSearchScreen(
-            onBack = { onSelectSection(SlovoSection.DOMU) },
-            onPlayVideo = playExternalVideo,
-            modifier = Modifier.fillMaxSize(),
-        )
+        // AMPHORA F3 / HL1: jedno hledání (knihy, pořady, díly, Audioteka, nové pořady).
+        SlovoSection.HLEDAT -> SlovoSectionScaffold(section.label, onMenu) {
+            UnifiedSearchScreen(
+                books = listenState.books,
+                sources = listenState.customSources,
+                onOpenBook = onOpenBook,
+                onOpenSource = { src -> onPush(sourceDetail(src)) },
+                onOpenNewShow = { r -> onPush(sourceDetail(PodcastSource(id = "", type = r.type, ref = r.ref, title = r.title))) },
+                onOpenAudioteka = { onPush(audiotekaEntry(it)) },
+                onPlayVideo = playExternalVideo,
+                isKidsProfile = isKidsProfile,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         SlovoSection.FRONTA -> SlovoSectionScaffold(section.label, onMenu) {
             QueueScreen(onOpenPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize())
         }

@@ -91,11 +91,7 @@ fun PodcastSearchScreen(
     viewModel: PodcastSearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val player by viewModel.playerState.collectAsStateWithLifecycle()
-    val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
-    // BUG (2026-09-04, user „nevidím pokračovat"): hledání nemělo žádný resume stav vůbec.
-    val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
-    val videoResumeMarks by viewModel.videoResumeMarks.collectAsStateWithLifecycle()
+    // BUG (2026-09-04, user „nevidím pokračovat"): resume stav řeší [EpisodeSearchResult].
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     LaunchedEffect(scopeSource) { viewModel.setScope(scopeSource) }
@@ -162,35 +158,51 @@ fun PodcastSearchScreen(
                 state.searched && state.results.isEmpty() -> CenteredHint("Nic nenalezeno pro dotaz: ${state.query}")
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValuesVertical) {
                     items(state.results, key = { it.resumeKey ?: it.id }) { ep ->
-                        val key = ep.resumeKey ?: ep.id
-                        val videoUrl = if (audioOnly) null else viewModel.videoUrl(ep)
-                        // ADAPT (2026-09-04): vyhrává POKROČILEJŠÍ pozice (ne poslední zápis, ne pouhá
-                        // přítomnost videa) — parita s RssPodcastScreen/YoutubeChannelScreen/CtvProgramScreen.
-                        val videoMark = videoResumeMarks[key]
-                        val mark = resumeMarks[key]
-                        val choice = choosePlaybackResume(mark?.posMs, mark?.durMs, mark?.isFinished == true, videoMark?.posMs, videoMark?.durMs, mark?.updatedAt ?: 0L, videoMark?.updatedAt ?: 0L)
-                        val markPos = choice?.posMs
-                        val markDur = choice?.durMs
-                        val isFinished = choice?.isFinished == true
-                        SearchResultRow(
-                            episode = ep,
-                            isCurrent = player.currentEpisodeId == key,
-                            isPlaying = player.isPlaying && player.currentEpisodeId == key,
-                            markPos = markPos,
-                            markDur = markDur,
-                            isFinished = isFinished,
-                            offlineStatus = offlineStates[key]?.status ?: OfflineStatus.NONE,
-                            onPlay = { viewModel.play(ep) },
-                            onVideo = videoUrl?.let { url -> { viewModel.onVideoTap(ep); onPlayVideo(url, ep.title, ep.imageUrl) } },
-                            onEnqueue = { viewModel.enqueue(ep) },
-                            onDownload = { viewModel.download(ep) },
-                            onDeleteOffline = { viewModel.deleteOffline(ep) },
-                        )
+                        EpisodeSearchResult(ep, viewModel, audioOnly, onPlayVideo)
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * Jeden nalezený díl se stavem poslechu, staženosti a akcemi. Sdíleno s jednotným hledáním
+ * (AMPHORA F3, skupina Díly) — stejné chování jako hledání ve zdroji.
+ */
+@Composable
+internal fun EpisodeSearchResult(
+    ep: SourceEpisode,
+    viewModel: PodcastSearchViewModel,
+    audioOnly: Boolean,
+    onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit,
+    onBeforeAction: () -> Unit = {},
+) {
+    val player by viewModel.playerState.collectAsStateWithLifecycle()
+    val offlineStates by viewModel.offlineStates.collectAsStateWithLifecycle()
+    val resumeMarks by viewModel.resumeMarks.collectAsStateWithLifecycle()
+    val videoResumeMarks by viewModel.videoResumeMarks.collectAsStateWithLifecycle()
+    val key = ep.resumeKey ?: ep.id
+    val videoUrl = if (audioOnly) null else viewModel.videoUrl(ep)
+    // ADAPT (2026-09-04): vyhrává POKROČILEJŠÍ pozice (ne poslední zápis, ne pouhá
+    // přítomnost videa) — parita s RssPodcastScreen/YoutubeChannelScreen/CtvProgramScreen.
+    val videoMark = videoResumeMarks[key]
+    val mark = resumeMarks[key]
+    val choice = choosePlaybackResume(mark?.posMs, mark?.durMs, mark?.isFinished == true, videoMark?.posMs, videoMark?.durMs, mark?.updatedAt ?: 0L, videoMark?.updatedAt ?: 0L)
+    SearchResultRow(
+        episode = ep,
+        isCurrent = player.currentEpisodeId == key,
+        isPlaying = player.isPlaying && player.currentEpisodeId == key,
+        markPos = choice?.posMs,
+        markDur = choice?.durMs,
+        isFinished = choice?.isFinished == true,
+        offlineStatus = offlineStates[key]?.status ?: OfflineStatus.NONE,
+        onPlay = { onBeforeAction(); viewModel.play(ep) },
+        onVideo = videoUrl?.let { url -> { onBeforeAction(); viewModel.onVideoTap(ep); onPlayVideo(url, ep.title, ep.imageUrl) } },
+        onEnqueue = { onBeforeAction(); viewModel.enqueue(ep) },
+        onDownload = { onBeforeAction(); viewModel.download(ep) },
+        onDeleteOffline = { viewModel.deleteOffline(ep) },
+    )
 }
 
 private val PaddingValuesVertical = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)

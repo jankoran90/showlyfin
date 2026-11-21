@@ -132,7 +132,7 @@ class PodcastSearchViewModel @Inject constructor(
     }
 
     /** Globální hledání jen ve zdrojích, které aktivní profil vidí (viz [PodcastSource.isVisibleTo]). */
-    private fun isSourceVisible(src: PodcastSource): Boolean {
+    fun isSourceVisible(src: PodcastSource): Boolean {
         val cfg = profileRepository.activeConfig.value
         val active = profileRepository.activeProfile.value
         return src.isVisibleTo(active?.profileUuid, active?.isAdmin == false, cfg.sharedSourceKeys, cfg.visibleForKidsSourceKeys)

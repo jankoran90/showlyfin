@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.github.jankoran90.showlyfin.core.ui.tokens.Spacing
+import com.github.jankoran90.showlyfin.feature.listen.search.SearchPrefs
 import com.github.jankoran90.showlyfin.feature.listen.ui.BookFilter
 import com.github.jankoran90.showlyfin.feature.listen.ui.BookSort
 import com.github.jankoran90.showlyfin.feature.listen.ui.HomeRow
@@ -114,6 +116,52 @@ fun SlovoLibrarySection() {
             checked = list,
             onCheckedChange = { LibraryPrefs.setListMode(ctx, it); list = it },
         )
+    }
+}
+
+/** AMPHORA F3 — Nastavení › Hledání: skupiny výsledků, počet dílů hned, nedávná hledání. */
+@Composable
+fun SlovoSearchSettingsSection() {
+    val ctx = LocalContext.current
+    var audioteka by remember { mutableStateOf(SearchPrefs.showAudioteka(ctx)) }
+    var newShows by remember { mutableStateOf(SearchPrefs.showNewShows(ctx)) }
+    var episodes by remember { mutableStateOf(SearchPrefs.episodesShown(ctx)) }
+    var rememberRecent by remember { mutableStateOf(SearchPrefs.rememberRecent(ctx)) }
+    var recentCount by remember { mutableStateOf(SearchPrefs.recent(ctx).size) }
+    Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xs), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
+        SettingSwitchRow(
+            title = "Hledat i v Audiotéce",
+            subtitle = "Knihy a série z katalogu Audioteky pod vlastními výsledky",
+            checked = audioteka,
+            onCheckedChange = { SearchPrefs.setShowAudioteka(ctx, it); audioteka = it },
+        )
+        SettingSwitchRow(
+            title = "Nabízet nové pořady",
+            subtitle = "Podcasty a kanály, které ještě nesleduješ, s tlačítkem Sledovat",
+            checked = newShows,
+            onCheckedChange = { SearchPrefs.setShowNewShows(ctx, it); newShows = it },
+        )
+        SettingChips(
+            label = "Dílů ukázat hned (zbytek pod „Všechny díly“)",
+            options = SearchPrefs.episodeChoices,
+            selected = episodes,
+            labelOf = { "$it" },
+            onSelect = { SearchPrefs.setEpisodesShown(ctx, it); episodes = it },
+        )
+        SettingSwitchRow(
+            title = "Pamatovat nedávná hledání",
+            subtitle = "Vypnutím se uložená hledání smažou",
+            checked = rememberRecent,
+            onCheckedChange = {
+                SearchPrefs.setRememberRecent(ctx, it); rememberRecent = it
+                recentCount = SearchPrefs.recent(ctx).size
+            },
+        )
+        if (recentCount > 0) {
+            TextButton(onClick = { SearchPrefs.clearRecent(ctx); recentCount = 0 }) {
+                Text("Vymazat nedávná hledání ($recentCount)")
+            }
+        }
     }
 }
 
