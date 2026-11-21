@@ -199,7 +199,7 @@ fun FollowingContent(
             is LibraryCard.Abs -> null
         }
         val (downloadInfo, downloadActions) = downloadTarget
-            ?.let { sourceDownloadActions(it, state.isOffline, shelfActions, queue = false) } ?: ((null as String?) to emptyList<ListenEpisodeAction>())
+            ?.let { sourceDownloadActions(it, state.isOffline, shelfActions) } ?: ((null as String?) to emptyList<ListenEpisodeAction>())
         ListenEpisodeActionSheet(
             title = card.sortTitle,
             infoLine = if (card is LibraryCard.Plain || card is LibraryCard.Merged) {

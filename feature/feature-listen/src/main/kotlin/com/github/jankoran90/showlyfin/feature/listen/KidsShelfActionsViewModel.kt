@@ -127,8 +127,8 @@ class KidsShelfActionsViewModel @Inject constructor(
         downloadAndQueue(source, seriesSlug, title, queue = false, again = true)
     }
 
-    /** [seriesSlug] != null = jen díly téhle série (dítěti schválená jen série). [queue] = false u dospělých
-     *  (user 2026-11-21 „Frontu nechci“) — jen stáhnout; [again] = volá „Stáhnout znovu“. */
+    /** [seriesSlug] != null = jen díly téhle série (dítěti schválená jen série). [queue] = false
+     *  (user 2026-11-21 „Frontu nechci … ani u Matyho“) — jen stáhnout; [again] = volá „Stáhnout znovu“. */
     fun downloadAndQueue(
         source: PodcastSource, seriesSlug: String?, title: String, queue: Boolean = true, again: Boolean = false,
     ) {

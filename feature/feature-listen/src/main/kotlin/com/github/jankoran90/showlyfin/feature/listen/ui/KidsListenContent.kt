@@ -220,7 +220,7 @@ fun KidsListenContent(
                         episodeItems
                     ).sortedWith(compareBy(collator) { it.sortKey })
             }
-            // Dlouhý stisk na pořadu/sérii → „Stáhnout všechny díly a zařadit do fronty" (user 2026-10-12).
+            // Dlouhý stisk na pořadu/sérii → „Stáhnout všechny díly" (user 2026-10-12; od 2026-11-21 bez fronty).
             val shelfMessage by shelfActions.message.collectAsStateWithLifecycle()
             val seriesCovers by shelfActions.seriesCovers.collectAsStateWithLifecycle()
             val context = LocalContext.current
@@ -329,7 +329,7 @@ fun KidsListenContent(
 
                 downloadFor?.let { target ->
                     // User 2026-10-13 („nabízí jen stažení, ne odstranění; po úpravách musím stáhnout znovu").
-                    val (info, actions) = sourceDownloadActions(target, offline, shelfActions, queue = true)
+                    val (info, actions) = sourceDownloadActions(target, offline, shelfActions)
                     ListenEpisodeActionSheet(title = target.title, infoLine = info, actions = actions, onDismiss = { downloadFor = null })
                 }
 
