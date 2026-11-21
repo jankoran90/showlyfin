@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Animation
+import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.Cast
@@ -51,7 +52,7 @@ internal enum class SlovoSettingsCategory(
     val subtitle: String,
     val icon: ImageVector,
 ) {
-    PLAYER("Přehrávač", "Rychlost, spánek, zvuk, záložky, Android Auto", Icons.Rounded.PlayCircle),
+    PLAYER("Přehrávač", "Rychlost, spánek, zvuk, záložky, Android Auto, statistiky", Icons.Rounded.PlayCircle),
     HOME("Domů a vzhled", "Barvy, písmo, řady na Domů, detaily a přechody, spodní lišta, hledání", Icons.Rounded.Home),
     LIBRARY("Knihovna a zdroje", "Knihovna, Audioteka, objevování a skryté pořady", Icons.AutoMirrored.Rounded.LibraryBooks),
     DOWNLOADS("Stahování", "Stažené díly a knihy v telefonu", Icons.Rounded.Download),
@@ -100,6 +101,10 @@ internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
         "Android Auto", Icons.Rounded.DirectionsCar, SlovoSettingsCategory.PLAYER,
         "auto auto karty pokračovat nové díly podcasty knihy knihovny samostatné karty",
     ) { SlovoAutoSettingsSection() },
+    SlovoSettingEntry(
+        "Statistiky poslechu", Icons.Rounded.BarChart, SlovoSettingsCategory.PLAYER,
+        "statistiky poslech čas hodiny dny v řadě slovo za rok rok shrnutí počítat vypnout",
+    ) { SlovoStatsSettingsSection() },
     SlovoSettingEntry(
         "Kvalita videa", Icons.Rounded.HighQuality, SlovoSettingsCategory.PLAYER,
         "video kvalita rozlišení youtube kanál počet epizod",

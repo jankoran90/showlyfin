@@ -58,6 +58,8 @@ class AudiobookPlayerConnection @Inject constructor(
     private val offline: com.github.jankoran90.showlyfin.data.offline.OfflineDownloadManager,
     /** AMPHORA F4: spánek, zesílení pro pořad, rychlost (extension funkce v PlayerExtras.kt). */
     internal val listenPrefs: ListenPlayerPrefs,
+    /** AMPHORA F8 (CH2): statistiky poslechu (opravdu přehraný čas, viz [ListenStatsHook]). */
+    private val listenStats: com.github.jankoran90.showlyfin.feature.listen.stats.ListenStatsStore,
 ) {
     // Internal (ne private) = čtou/píší je extension funkce fronty v AudiobookPlayerQueue.kt.
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -245,6 +247,8 @@ class AudiobookPlayerConnection @Inject constructor(
                 wakeOffer = wakeOffer(pos),
             )
         }
+
+        listenStats.tick(listenItemNow(), c.isPlaying, c.playbackParameters.speed)
 
         // L2b: periodicky ulož pozici DIRECT epizody (RSS/YT) do lokálního resume storu (ekvivalent
         // serverového ABS progresu). Throttle ~4 s, ať netlučeme do SharedPreferences každých 500 ms.
@@ -701,6 +705,7 @@ class AudiobookPlayerConnection @Inject constructor(
      */
     private fun onPlaybackEnded() {
         if (advancing) return
+        listenItemNow()?.let(listenStats::markFinished)
         val ended = currentEpisode
         if (ended == null) {
             // Audiokniha (ne epizoda) dohrána offline — server o tom neví (offline session nemá

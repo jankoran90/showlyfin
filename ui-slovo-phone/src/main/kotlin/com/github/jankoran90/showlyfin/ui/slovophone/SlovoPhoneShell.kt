@@ -126,7 +126,8 @@ private fun SlovoShellContent() {
     // dětský Poslech (starší uložený stav) → Domů.
     LaunchedEffect(isKidsProfile, current) {
         val allowed = if (isKidsProfile) {
-            current in KidsBarSections || current == SlovoSection.NASTAVENI || current == SlovoSection.PROFIL
+            current in KidsBarSections || current == SlovoSection.NASTAVENI || current == SlovoSection.PROFIL ||
+                current == SlovoSection.STATISTIKY // F8: z Pro rodiče › Poslech dítěte
         } else current != SlovoSection.POSLECH
         if (!allowed) current = SlovoSection.DOMU
     }

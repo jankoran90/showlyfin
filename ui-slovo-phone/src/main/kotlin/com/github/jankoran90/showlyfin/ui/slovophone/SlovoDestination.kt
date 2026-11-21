@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.ui.slovophone
 import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Explore
@@ -46,6 +47,8 @@ enum class SlovoSection(val label: String, val icon: ImageVector) {
     KATALOG("Katalog", Icons.Rounded.Storefront),
     /** AMPHORA F5 / PR2 — záložky s poznámkou ze všech knih a dílů. */
     ZALOZKY("Záložky", Icons.Rounded.Bookmarks),
+    /** AMPHORA F8 / CH2 — statistiky poslechu a Slovo za rok. */
+    STATISTIKY("Statistiky", Icons.Rounded.BarChart),
     NASTAVENI("Nastavení", Icons.Rounded.Settings),
     PROFIL("Profil", Icons.Rounded.AccountCircle),
 }
@@ -124,7 +127,7 @@ object SlovoShellPrefs {
     fun setHeroTint(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(KEY_HERO_TINT, on).apply() }
 
     // ── Nabídka Víc pod avatarem (dřív drawer): Objevit, Zdroje, Stahování, Katalog ──
-    private val reorderableSections = listOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE, SlovoSection.STAHOVANI, SlovoSection.KATALOG, SlovoSection.ZALOZKY)
+    private val reorderableSections = listOf(SlovoSection.OBJEVIT, SlovoSection.ZDROJE, SlovoSection.STAHOVANI, SlovoSection.KATALOG, SlovoSection.ZALOZKY, SlovoSection.STATISTIKY)
 
     private fun savedOrder(ctx: Context): List<SlovoSection> = mergedOrder(prefs(ctx).getString(KEY_DRAWER_ORDER, null), reorderableSections)
     private fun hiddenSections(ctx: Context): Set<SlovoSection> = hiddenOf(prefs(ctx).getStringSet(KEY_DRAWER_HIDDEN, emptySet()), reorderableSections)

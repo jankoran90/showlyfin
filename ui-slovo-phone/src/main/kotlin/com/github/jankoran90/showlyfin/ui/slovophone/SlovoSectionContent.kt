@@ -242,6 +242,9 @@ internal fun SlovoSectionContent(
             }
             BookmarksScreen(openers = openers, modifier = Modifier.fillMaxSize())
         }
+        SlovoSection.STATISTIKY -> SlovoSectionScaffold(section.label, onMenu) {
+            com.github.jankoran90.showlyfin.feature.listen.stats.StatsScreen(modifier = Modifier.fillMaxSize())
+        }
         SlovoSection.NASTAVENI -> SlovoSettingsScreen(onMenu = onMenu, isKidsProfile = isKidsProfile)
         SlovoSection.PROFIL -> SlovoProfileScreen(onMenu = onMenu)
     }

@@ -152,6 +152,11 @@ private fun SlovoParentScreen(
                     )
                     Hint("Volno ${DownloadFormat.bytes(dl.freeBytes)}. Ťukni pro seznam stažených.")
                 }
+                // AMPHORA F8 (CH2): kolik dítě poslouchá (statistiky dětského profilu).
+                ParentCard(SlovoSection.STATISTIKY.icon, "Poslech dítěte", onClick = { onSelect(SlovoSection.STATISTIKY) }) {
+                    com.github.jankoran90.showlyfin.feature.listen.stats.ListenWeekLine()
+                    Hint("Ťukni pro celé statistiky (nejposlouchanější pořady, posledních 7 dní).")
+                }
                 ParentCard(Icons.Rounded.GridView, "Zobrazení pro dítě") {
                     KidsDisplayControls(ui.display, onDisplay)
                 }
