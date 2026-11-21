@@ -109,8 +109,9 @@ internal fun AudiobookPlayerService.bookmarkItems(): List<MediaItem> =
     bookmarkStore.bookmarks.value.map(::bookmarkItem)
 
 /** Vstup „🔖 Záložky (N)“ na začátek Pokračovat, když Záložky nejsou samostatná karta. */
-internal fun AudiobookPlayerService.bookmarksEntry(): List<MediaItem> {
-    if (AutoTabsPrefs.Tab.BOOKMARKS in autoTabs.tabs) return emptyList()
+internal suspend fun AudiobookPlayerService.bookmarksEntry(): List<MediaItem> {
+    // Jen když se karta Záložky opravdu vešla mezi zobrazené (limit karet, knihovny jako samostatné karty).
+    if (AutoTabsPrefs.Tab.BOOKMARKS in autoTabs.tabs && rootChildren().any { it.mediaId == AudiobookPlayerService.NODE_BOOKMARKS }) return emptyList()
     val n = bookmarkStore.bookmarks.value.size
     return if (n == 0) emptyList() else listOf(browsableNode(AudiobookPlayerService.NODE_BOOKMARKS, "🔖 Záložky ($n)"))
 }

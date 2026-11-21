@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,18 +63,6 @@ class BookmarkStore @Inject constructor(
     /** Záložky aktivního profilu (bez smazaných), nejnovější první. */
     val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
 
-    init {
-        scope.launch {
-            profileRepository.activeProfile
-                .map { it?.profileUuid?.takeIf { uuid -> uuid.isNotBlank() } }
-                .distinctUntilChanged()
-                .collect { key ->
-                    mutex.withLock { publish(key ?: LOCAL) }
-                    if (key != null) syncNow(key)
-                }
-        }
-    }
-
     /** Záložky jedné položky (kniha / díl) seřazené podle času v nahrávce. */
     fun forItem(itemKey: String): List<Bookmark> =
         _bookmarks.value.filter { it.itemKey == itemKey }.sortedBy { it.posMs }
@@ -122,9 +111,15 @@ class BookmarkStore @Inject constructor(
     private fun activeKey(): String? =
         profileRepository.activeProfile.value?.profileUuid?.takeIf { it.isNotBlank() }
 
+    /** Změny jdou jednou frontou v pořadí volání (poznámka / smazání hned po vytvoření se neztratí). */
+    private val ops = Channel<Pair<String, (MutableList<Row>) -> Unit>>(Channel.UNLIMITED)
+
     private fun mutate(block: (MutableList<Row>) -> Unit) {
-        val key = activeKey() ?: LOCAL
-        scope.launch {
+        ops.trySend((activeKey() ?: LOCAL) to block)
+    }
+
+    private suspend fun applyOps() {
+        for ((key, block) in ops) {
             mutex.withLock {
                 val rows = load(key)
                 block(rows)
@@ -195,6 +190,20 @@ class BookmarkStore @Inject constructor(
                 local[i] = local[i].copy(dirty = false, version = v)
             }
             save(profileKey, local)
+        }
+    }
+
+    // init AŽ po všech vlastnostech (ops, syncAdapter) — korutiny na IO je čtou hned po startu.
+    init {
+        scope.launch { applyOps() }
+        scope.launch {
+            profileRepository.activeProfile
+                .map { it?.profileUuid?.takeIf { uuid -> uuid.isNotBlank() } }
+                .distinctUntilChanged()
+                .collect { key ->
+                    mutex.withLock { publish(key ?: LOCAL) }
+                    if (key != null) syncNow(key)
+                }
         }
     }
 

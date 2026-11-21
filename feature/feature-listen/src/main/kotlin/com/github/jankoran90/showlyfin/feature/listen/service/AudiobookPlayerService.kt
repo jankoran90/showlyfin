@@ -356,7 +356,7 @@ class AudiobookPlayerService : MediaLibraryService() {
                         Timber.i("[AUTO] play epizoda '%s' tracks=%d", pb.title, pb.tracks.size)
                         val (idx, pos) = trackPositionForBookMs(pb, (pb.startPositionSec * 1000).toLong())
                         autoShowKey = "show:${parts[0]}"
-                        MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey), idx, pos)
+                        MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey, parts[1]), idx, pos)
                     }
                 }
             }
@@ -583,6 +583,7 @@ class AudiobookPlayerService : MediaLibraryService() {
         const val PREFIX_EPISODE = "epi:"           // ABS epizoda (playable, `epi:<itemId>|<episodeId>`)
         const val PREFIX_SRC = "src:"               // CRUISE: custom zdroj (browsable → epizody)
         const val PREFIX_DIRECT = "direct:"         // CRUISE: direct epizoda (`direct:<sourceId>|<episodeId>`)
+        const val KEY_ABS_EPISODE_ID = "abs_episode_id"   // AMPHORA F5: ABS díl (záložka ze služby)
         const val KEY_DIRECT_KEY = "direct_resume_key"   // CRUISE: resume klíč direct epizody (`rss:`/`yt:`)
         const val ACTION_PREV_CHAPTER = "com.github.jankoran90.showlyfin.PREV_CHAPTER"
         const val ACTION_NEXT_CHAPTER = "com.github.jankoran90.showlyfin.NEXT_CHAPTER"

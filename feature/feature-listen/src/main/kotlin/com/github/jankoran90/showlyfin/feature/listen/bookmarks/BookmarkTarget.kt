@@ -98,6 +98,16 @@ internal fun bookmarkTargetFromItem(item: MediaItem, posInItemMs: Long, playerDu
             url = item.localConfiguration?.uri?.toString()?.takeIf { it.startsWith("http") },
         )
     }
+    // ABS díl (podcast z Audiobookshelfu): klíč pořadu `show:<itemId>` + ID dílu v extras; přehrává se přes ABS.
+    val absEpisodeId = extras?.getString(AudiobookPlayerService.KEY_ABS_EPISODE_ID)?.takeIf { it.isNotBlank() }
+    if (absEpisodeId != null && showKey?.startsWith("show:") == true) {
+        val offMs = ((extras?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0) * 1000).toLong()
+        return BookmarkTarget(
+            kind = Bookmark.KIND_EPISODE, itemId = showKey.removePrefix("show:"), episodeId = absEpisodeId,
+            title = title, subtitle = subtitle, coverUrl = cover, posMs = offMs + posInItemMs.coerceAtLeast(0L),
+            durationMs = durMs, chapter = null, url = null,
+        )
+    }
     val bookId = showKey?.takeIf { it.startsWith("book:") }?.removePrefix("book:")?.takeIf { it.isNotBlank() } ?: return null
     val offsetMs = ((extras?.getDouble(AudiobookPlayerService.KEY_TRACK_OFFSET_SEC) ?: 0.0) * 1000).toLong()
     return BookmarkTarget(

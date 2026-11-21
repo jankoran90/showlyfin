@@ -124,7 +124,7 @@ internal fun directEpisodeItem(sourceId: String, ep: SourceEpisode, showKey: Str
         .build()
 
 /** Multi-track playlist z play session (shodné s AudiobookPlayerConnection). */
-internal fun trackItems(pb: AbsPlayback, showKey: String? = null): List<MediaItem> {
+internal fun trackItems(pb: AbsPlayback, showKey: String? = null, absEpisodeId: String? = null): List<MediaItem> {
     val artwork = pb.coverUrl?.let(Uri::parse)
     return pb.tracks.map { t ->
         val extras = Bundle().apply {
@@ -134,6 +134,7 @@ internal fun trackItems(pb: AbsPlayback, showKey: String? = null): List<MediaIte
             putString(AudiobookPlayerService.KEY_BOOK_TITLE, pb.title)
             pb.author?.let { putString(AudiobookPlayerService.KEY_BOOK_AUTHOR, it) }
             showKey?.let { putString(PlayerAudioExtras.KEY_SHOW_KEY, it) }
+            absEpisodeId?.let { putString(AudiobookPlayerService.KEY_ABS_EPISODE_ID, it) } // AMPHORA F5: záložka ABS dílu
         }
         MediaItem.Builder()
             .setUri(t.url)

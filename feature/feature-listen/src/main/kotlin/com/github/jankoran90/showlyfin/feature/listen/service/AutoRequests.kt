@@ -75,7 +75,7 @@ private suspend fun AudiobookPlayerService.playBookmark(b: Bookmark): MediaSessi
         val pb = repo.startEpisodePlayback(b.itemId, ep).also { currentPlayback = it }
         autoShowKey = "show:${b.itemId}"
         val (idx, pos) = trackPositionForBookMs(pb, b.posMs)
-        return MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey), idx, pos)
+        return MediaSession.MediaItemsWithStartPosition(trackItems(pb, autoShowKey, ep), idx, pos)
     }
     currentPlayback = null
     val extras = Bundle().apply {

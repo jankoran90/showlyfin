@@ -336,6 +336,7 @@ class AudiobookPlayerConnection @Inject constructor(
                     putString(AudiobookPlayerService.KEY_BOOK_TITLE, pb.title)
                     pb.author?.let { putString(AudiobookPlayerService.KEY_BOOK_AUTHOR, it) }
                     putShowExtras(showKeyFor(episode, itemId), listenPrefs)
+                    episode?.let { putString(AudiobookPlayerService.KEY_ABS_EPISODE_ID, it.episodeId) }
                 }
                 MediaItem.Builder()
                     .setUri(t.url)
