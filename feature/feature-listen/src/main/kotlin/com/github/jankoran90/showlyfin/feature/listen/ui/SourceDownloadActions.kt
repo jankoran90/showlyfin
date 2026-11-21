@@ -30,14 +30,18 @@ internal fun sourceDownloadActions(
     target: SourceDownloadTarget,
     offline: Boolean,
     vm: KidsShelfActionsViewModel,
+    /** Děti: stažené díly rovnou do fronty (user 2026-10-12); dospělí jen stahují (user 2026-11-21 „Frontu nechci“). */
+    queue: Boolean,
 ): Pair<String, List<ListenEpisodeAction>> {
     val downloads by vm.downloads.collectAsStateWithLifecycle()
     val count = remember(target, downloads) { vm.downloadedCount(target.keys, target.seriesSlug) }
     val src = target.primary
     val info = if (count > 0) "V telefonu: ${dilyCz(count)}" else "V telefonu zatím nic"
     return info to listOfNotNull(
-        if (!offline && src != null) ListenEpisodeAction(Icons.Default.Download, "Stáhnout všechny díly a zařadit do fronty") {
-            vm.downloadAndQueue(src, target.seriesSlug, target.title)
+        if (!offline && src != null) ListenEpisodeAction(
+            Icons.Default.Download, if (queue) "Stáhnout všechny díly a zařadit do fronty" else "Stáhnout všechny díly",
+        ) {
+            vm.downloadAndQueue(src, target.seriesSlug, target.title, queue = queue)
         } else null,
         if (!offline && src != null && count > 0) ListenEpisodeAction(
             Icons.Default.Refresh, "Stáhnout znovu",

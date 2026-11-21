@@ -329,7 +329,7 @@ fun KidsListenContent(
 
                 downloadFor?.let { target ->
                     // User 2026-10-13 („nabízí jen stažení, ne odstranění; po úpravách musím stáhnout znovu").
-                    val (info, actions) = sourceDownloadActions(target, offline, shelfActions)
+                    val (info, actions) = sourceDownloadActions(target, offline, shelfActions, queue = true)
                     ListenEpisodeActionSheet(title = target.title, infoLine = info, actions = actions, onDismiss = { downloadFor = null })
                 }
 

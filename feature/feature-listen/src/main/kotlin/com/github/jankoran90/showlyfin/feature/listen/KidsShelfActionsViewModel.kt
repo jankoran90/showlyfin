@@ -124,11 +124,14 @@ class KidsShelfActionsViewModel @Inject constructor(
     /** „Stáhnout znovu" (po úpravě dílů na serveru): smaž stažené a stáhni nanovo, fronta přehrávání beze změny. */
     fun redownload(source: PodcastSource, sourceKeys: Set<String>, seriesSlug: String?, title: String) {
         downloadedKeys(sourceKeys, seriesSlug).forEach(offline::delete)
-        downloadAndQueue(source, seriesSlug, title, queue = false)
+        downloadAndQueue(source, seriesSlug, title, queue = false, again = true)
     }
 
-    /** [seriesSlug] != null = jen díly téhle série (dítěti schválená jen série). */
-    fun downloadAndQueue(source: PodcastSource, seriesSlug: String?, title: String, queue: Boolean = true) {
+    /** [seriesSlug] != null = jen díly téhle série (dítěti schválená jen série). [queue] = false u dospělých
+     *  (user 2026-11-21 „Frontu nechci“) — jen stáhnout; [again] = volá „Stáhnout znovu“. */
+    fun downloadAndQueue(
+        source: PodcastSource, seriesSlug: String?, title: String, queue: Boolean = true, again: Boolean = false,
+    ) {
         viewModelScope.launch {
             val episodes = episodesOf(source)
                 .filter { ep -> seriesSlug == null || slugOf(source, ep) == seriesSlug }
@@ -160,7 +163,11 @@ class KidsShelfActionsViewModel @Inject constructor(
                 )
             }
             kidsSync.adoptManual(adoptKeys)
-            _message.value = if (queue) "Stahuji ${dilyCz(episodes.size)} a řadím je do fronty." else "Stahuji znovu ${dilyCz(episodes.size)}."
+            _message.value = when {
+                queue -> "Stahuji ${dilyCz(episodes.size)} a řadím je do fronty."
+                again -> "Stahuji znovu ${dilyCz(episodes.size)}."
+                else -> "Stahuji ${dilyCz(episodes.size)}."
+            }
         }
     }
 
