@@ -197,8 +197,16 @@ fun BooksContent(
                     },
                 )
             } else {
+                // AMPHORA F2 / KN1: filtr stavu, řazení a mřížka/seznam (zapamatované, viz [LibraryPrefs]).
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                var bookSort by remember { mutableStateOf(LibraryPrefs.sort(ctx)) }
+                var bookFilter by remember { mutableStateOf(LibraryPrefs.filter(ctx)) }
+                var listMode by remember { mutableStateOf(LibraryPrefs.listMode(ctx)) }
+                val sortedBooks = remember(state.books, bookSort, bookFilter) {
+                    state.books.filteredBy(bookFilter).sortedForShelf(bookSort)
+                }
                 // DROPSHIP série v knihovně: víc dílů stejné série → jedna karta, tap otevře díly.
-                val shelfItems = remember(state.books) { groupBooksBySeries(state.books) }
+                val shelfItems = remember(sortedBooks, bookSort) { orderShelf(groupBooksBySeries(sortedBooks), sortedBooks, bookSort) }
                 var openSeries by remember { mutableStateOf<BookShelfItem.SeriesGroup?>(null) }
                 var actionBook by remember { mutableStateOf<Audiobook?>(null) }
                 val notDownloaded = state.books.any { it.id !in state.downloadedBookIds }
@@ -208,10 +216,28 @@ fun BooksContent(
                     if (!state.isOffline && (notDownloaded || batchProgress != null)) {
                         DownloadAllRow(progress = batchProgress, onClick = viewModel::downloadAllBooks)
                     }
-                    LazyVerticalGrid(
+                    LibraryToolbar(
+                        filter = bookFilter,
+                        sort = bookSort,
+                        listMode = listMode,
+                        onFilter = { bookFilter = it; LibraryPrefs.setFilter(ctx, it) },
+                        onSort = { bookSort = it; LibraryPrefs.setSort(ctx, it) },
+                        onListMode = { listMode = it; LibraryPrefs.setListMode(ctx, it) },
+                    )
+                    if (shelfItems.isEmpty()) {
+                        CenteredMessage("Žádná kniha neodpovídá filtru „${bookFilter.label}“.")
+                    } else if (listMode) {
+                        BookShelfList(
+                            items = shelfItems,
+                            playingId = state.books.firstOrNull { playerState.isActive && playerState.currentItemId == it.id }?.id,
+                            onOpenBook = onOpenBook,
+                            onOpenSeries = { openSeries = it },
+                            onBookActions = { actionBook = it },
+                        )
+                    } else LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 150.dp),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(8.dp),
+                        contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = com.github.jankoran90.showlyfin.core.ui.tokens.Spacing.miniPlayerReserve),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {

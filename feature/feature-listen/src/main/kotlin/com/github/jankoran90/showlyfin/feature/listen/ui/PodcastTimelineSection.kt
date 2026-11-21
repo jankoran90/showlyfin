@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -228,6 +229,15 @@ private fun TimelineRow(
                     contentDescription = "Právě hraje",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp).padding(start = 4.dp),
+                )
+            }
+            // AMPHORA AK1: viditelné ⋮ se stejnou nabídkou jako dlouhý stisk (Přehrát, fronta, stáhnout, skrýt).
+            androidx.compose.material3.IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Rounded.MoreVert,
+                    contentDescription = "Další akce",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }

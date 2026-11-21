@@ -46,8 +46,8 @@ private fun Audiobook.sortTitle() = title.lowercase(Locale("cs"))
 /** ABS konvence: minifikovaný seriesName je „Název série #N" (N chybí, pokud pořadí není zadané). */
 private val SERIES_SEQUENCE_SUFFIX = Regex("""^(.*) #([0-9]+(?:\.[0-9]+)?)$""")
 
-private fun seriesBaseName(raw: String): String = SERIES_SEQUENCE_SUFFIX.find(raw)?.groupValues?.get(1) ?: raw
-private fun seriesSequenceOf(raw: String): Double? = SERIES_SEQUENCE_SUFFIX.find(raw)?.groupValues?.get(2)?.toDoubleOrNull()
+internal fun seriesBaseName(raw: String): String = SERIES_SEQUENCE_SUFFIX.find(raw)?.groupValues?.get(1) ?: raw
+internal fun seriesSequenceOf(raw: String): Double? = SERIES_SEQUENCE_SUFFIX.find(raw)?.groupValues?.get(2)?.toDoubleOrNull()
 
 fun groupBooksBySeries(books: List<Audiobook>): List<BookShelfItem> {
     val bySeriesBase = books.groupBy { it.seriesName?.takeIf { s -> s.isNotBlank() }?.let(::seriesBaseName) }

@@ -52,6 +52,9 @@ fun HomeScreen(
     // podle [HomeViewModel.ContinueItem.Episode.mode] — externí URL (YouTube/ČT) nebo JF video (RSS).
     onPlayVideo: (url: String, title: String, posterUrl: String?) -> Unit = { _, _, _ -> },
     onPlayJfVideo: (jfItemId: String, title: String, resumeKey: String) -> Unit = { _, _, _ -> },
+    /** AMPHORA F2 / DO1: řady Nové díly, Další v sérii, Krátké, Nově v knihovně (dítě ne). */
+    showRows: Boolean = false,
+    onShowAllRow: (HomeRow) -> Unit = {},
 ) {
     val vm: HomeViewModel = hiltViewModel()
     val items by vm.items.collectAsStateWithLifecycle()
@@ -71,11 +74,12 @@ fun HomeScreen(
     // User 2026-11-19: rozposlouchané jednoho pořadu / série knih pod jednou hlavní kartou (Nastavení → Zobrazení Domů).
     val entries = remember(items, layout.groupContinue) { groupHomeItems(items, layout.groupContinue) }
     var expandedGroups by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    val rows = rememberHomeRowsState(showRows, playerVm)
 
     Box(modifier.fillMaxSize()) {
         when {
             isLoading && items.isEmpty() -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-            items.isEmpty() -> Text(
+            items.isEmpty() && rows.extra.isEmpty() -> Text(
                 "Zatím nic rozposloucháno.\nZačni poslouchat audioknihu nebo epizodu a najdeš ji tady.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -119,6 +123,31 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(if (layout.list) 18.dp else 14.dp),
             ) {
+              rows.order.forEach { row ->
+                if (row != HomeRow.CONTINUE) {
+                  rows.data[row]?.takeIf { it.isNotEmpty() }?.let { data ->
+                    item(key = "row:${row.name}", span = { GridItemSpan(maxLineSpan) }) {
+                        HomeRowStrip(
+                            title = rows.title(row),
+                            items = data,
+                            playingKey = rows.playingKey(playerState),
+                            onShowAll = { onShowAllRow(row) },
+                            onPlay = { rows.play(it) },
+                            actionsFor = { rows.actionsFor(it, onOpenBook, onOpenSourceEpisode) },
+                        )
+                    }
+                  }
+                } else {
+                if (rows.extra.isNotEmpty() && shown.isNotEmpty()) {
+                    item(key = "row:CONTINUE", span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            HomeRow.CONTINUE.label,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                        )
+                    }
+                }
                 shown.forEach { entry ->
                     when (entry) {
                         is HomeEntry.Single -> item(key = entry.key) { card(entry.item) }
@@ -197,6 +226,8 @@ fun HomeScreen(
                         }
                     }
                 }
+                }
+              }
               }
             }
             }

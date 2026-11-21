@@ -23,6 +23,8 @@ import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.ViewDay
+import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.runtime.Composable
@@ -84,6 +86,12 @@ fun SlovoSettingsScreen(
             }
             SlovoCollapsibleSection("Zobrazení Domů a pořadů", Icons.Rounded.ViewAgenda) {
                 SlovoHomeLayoutSection()
+            }
+            if (adult) SlovoCollapsibleSection("Řady na Domů", Icons.Rounded.ViewDay) {
+                SlovoHomeRowsSection()
+            }
+            if (adult) SlovoCollapsibleSection("Knihovna", Icons.AutoMirrored.Rounded.LibraryBooks) {
+                SlovoLibrarySection()
             }
             if (adult) SlovoCollapsibleSection("Přehrávač", Icons.Rounded.PlayCircle) {
                 SlovoPlayerSettingsSection()

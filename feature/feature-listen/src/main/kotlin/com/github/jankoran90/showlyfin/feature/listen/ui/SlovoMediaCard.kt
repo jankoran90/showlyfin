@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +68,8 @@ fun SlovoMediaCard(
     modifier: Modifier = Modifier,
     width: Dp = CoverSize.card,
     onLongClick: (() -> Unit)? = null,
+    /** AMPHORA AK1: viditelné ⋮ vedle názvu (stejná nabídka jako podržení). */
+    onMore: (() -> Unit)? = null,
 ) {
     Column(
         modifier
@@ -74,15 +78,24 @@ fun SlovoMediaCard(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         MediaCover(model, Modifier.fillMaxWidth().aspectRatio(if (model.wide) 16f / 9f else 1f))
-        Text(
-            model.title,
-            style = MaterialTheme.typography.titleSmall,
-            color = if (model.playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = Spacing.s),
-        )
-        MediaMetaLine(model)
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    model.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (model.playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = Spacing.s),
+                )
+                MediaMetaLine(model)
+            }
+            if (onMore != null) {
+                IconButton(onClick = onMore, modifier = Modifier.size(Spacing.xxl)) {
+                    Icon(Icons.Rounded.MoreVert, contentDescription = "Akce", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
     }
 }
 

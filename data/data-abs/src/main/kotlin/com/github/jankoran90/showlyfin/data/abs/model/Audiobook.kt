@@ -32,6 +32,8 @@ data class Audiobook(
      * nevrací bez extra volání, detail se s ním nefiltruje).
      */
     val libraryId: String = "",
+    /** AMPHORA F2 (Knihovna řazení „Přidáno“, Domů „Nově v knihovně“): kdy kniha přibyla do ABS (epoch ms). */
+    val addedAt: Long? = null,
 )
 
 data class AudiobookDetail(

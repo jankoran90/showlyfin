@@ -115,6 +115,7 @@ class AbsRepository @Inject constructor(
                 lastUpdate = p?.lastUpdate,
                 progressId = p?.id,
                 libraryId = libraryId,
+                addedAt = item.addedAt,
             )
         }
     }

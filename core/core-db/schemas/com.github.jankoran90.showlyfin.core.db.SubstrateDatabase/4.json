@@ -1,0 +1,375 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 4,
+    "identityHash": "c2f19ad087d50bc328fffc0099019005",
+    "entities": [
+      {
+        "tableName": "favorite",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileKey` TEXT NOT NULL, `kind` TEXT NOT NULL, `refId` INTEGER NOT NULL, `name` TEXT NOT NULL, `imageUrl` TEXT, `year` INTEGER, `addedAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `syncVersion` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, PRIMARY KEY(`profileKey`, `kind`, `refId`))",
+        "fields": [
+          {
+            "fieldPath": "profileKey",
+            "columnName": "profileKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "refId",
+            "columnName": "refId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "year",
+            "columnName": "year",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "addedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "syncVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profileKey",
+            "kind",
+            "refId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_favorite_profileKey",
+            "unique": false,
+            "columnNames": [
+              "profileKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_favorite_profileKey` ON `${TABLE_NAME}` (`profileKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sync_meta",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileKey` TEXT NOT NULL, `domain` TEXT NOT NULL, `lastPullVersion` INTEGER NOT NULL, PRIMARY KEY(`profileKey`, `domain`))",
+        "fields": [
+          {
+            "fieldPath": "profileKey",
+            "columnName": "profileKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "domain",
+            "columnName": "domain",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastPullVersion",
+            "columnName": "lastPullVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profileKey",
+            "domain"
+          ]
+        }
+      },
+      {
+        "tableName": "playback_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileKey` TEXT NOT NULL, `mediaKey` TEXT NOT NULL, `posMs` INTEGER NOT NULL, `durMs` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `syncVersion` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, PRIMARY KEY(`profileKey`, `mediaKey`))",
+        "fields": [
+          {
+            "fieldPath": "profileKey",
+            "columnName": "profileKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaKey",
+            "columnName": "mediaKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "posMs",
+            "columnName": "posMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durMs",
+            "columnName": "durMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "syncVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profileKey",
+            "mediaKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playback_state_profileKey",
+            "unique": false,
+            "columnNames": [
+              "profileKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_state_profileKey` ON `${TABLE_NAME}` (`profileKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "saved_show",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileKey` TEXT NOT NULL, `type` TEXT NOT NULL, `ref` TEXT NOT NULL, `title` TEXT NOT NULL, `subtitle` TEXT, `thumbnail` TEXT, `summary` TEXT, `episodeCount` INTEGER, `category` TEXT, `addedAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `syncVersion` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, PRIMARY KEY(`profileKey`, `type`, `ref`))",
+        "fields": [
+          {
+            "fieldPath": "profileKey",
+            "columnName": "profileKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ref",
+            "columnName": "ref",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtitle",
+            "columnName": "subtitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "thumbnail",
+            "columnName": "thumbnail",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "summary",
+            "columnName": "summary",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "episodeCount",
+            "columnName": "episodeCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "addedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "syncVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profileKey",
+            "type",
+            "ref"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_saved_show_profileKey",
+            "unique": false,
+            "columnNames": [
+              "profileKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_saved_show_profileKey` ON `${TABLE_NAME}` (`profileKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "ctv_watched",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileKey` TEXT NOT NULL, `mediaKey` TEXT NOT NULL, `watchedAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `syncVersion` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, PRIMARY KEY(`profileKey`, `mediaKey`))",
+        "fields": [
+          {
+            "fieldPath": "profileKey",
+            "columnName": "profileKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaKey",
+            "columnName": "mediaKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "watchedAt",
+            "columnName": "watchedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncVersion",
+            "columnName": "syncVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profileKey",
+            "mediaKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_ctv_watched_profileKey",
+            "unique": false,
+            "columnNames": [
+              "profileKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ctv_watched_profileKey` ON `${TABLE_NAME}` (`profileKey`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c2f19ad087d50bc328fffc0099019005')"
+    ]
+  }
+}
