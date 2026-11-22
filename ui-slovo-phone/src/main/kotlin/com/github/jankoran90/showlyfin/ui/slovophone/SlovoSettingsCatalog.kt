@@ -148,6 +148,7 @@ internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
     SlovoSettingEntry(
         "Knihovna", Icons.AutoMirrored.Rounded.LibraryBooks, SlovoSettingsCategory.LIBRARY,
         "knihy záložka řazení seznam mřížka obalů ukázat",
+        adultOnly = false,
     ) { SlovoLibrarySection() },
     SlovoSettingEntry(
         "Řazení zdrojů", Icons.Rounded.Sort, SlovoSettingsCategory.LIBRARY,

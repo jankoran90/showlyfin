@@ -53,7 +53,7 @@ fun SlovoSettingsScreen(
     modifier: Modifier = Modifier,
     /**
      * Audit dětí (2026-10-12, user „Nastavení jen co se netýká obsahu"): dětský profil vidí jen
-     * Vzhled, Zobrazení Domů a O aplikaci (sekce s `adultOnly = false`).
+     * Vzhled, Zobrazení Domů, Knihovnu (záložka, řazení, mřížka) a O aplikaci (sekce s `adultOnly = false`).
      */
     isKidsProfile: Boolean = false,
 ) {
