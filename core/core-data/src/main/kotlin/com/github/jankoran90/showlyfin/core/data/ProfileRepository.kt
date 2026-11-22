@@ -410,17 +410,14 @@ class ProfileRepository @Inject constructor(
             // Server profil prokazatelně nezná (seznam profilů stažen úspěšně, klíč v něm není) → nový profil,
             // není co přepsat; při chybě serveru vrací gateway null → UNVERIFIED (revize: chyba ≠ prázdný seznam).
             return if (withTimeoutOrNull(5000) { configGateway.profileExistsOnServer(key) } == false) {
-                pendingEdits.markVerified(key)   // nový profil: neúspěšné první odeslání se pak zopakuje syncem
-                // Server profil nezná → do záplaty patří CELÝ místní config (vše, co se liší od výchozích hodnot,
-                // např. seed Dětí s whitelistem knihoven), ne jen rozdíl první úpravy (revize 2026-11-22).
-                // Případný rozdíl z úpravy bez spojení je v místní kopii obsažený → zahodit (jinak by ho příští sync
-                // znovu přenesl a starým „mine" přebil novější úpravu — revize 2026-11-22).
-                pendingEdits.take(key)
-                dao.getById(profileId)?.let { p ->
-                    pendingPatch.add(key, ProfileConfig.toJson(ProfileConfig.DEFAULT), ProfileConfig.toJson(ProfileConfig.fromJson(p.configJson)))
-                }
+                seedWholeLocalAsPatch(key, profileId)   // nový profil: odeslání se při neúspěchu zopakuje syncem
                 EditBaseline.REFRESHED
             } else EditBaseline.UNVERIFIED
+        }
+        when (serverConfigIsEmpty(remote)) {
+            null -> return EditBaseline.UNVERIFIED   // neplatná odpověď: nic nepřepisovat ani neověřovat
+            true -> { seedWholeLocalAsPatch(key, profileId); return EditBaseline.REFRESHED }   // `{}` = profil bez configu
+            false -> Unit
         }
         pendingEdits.markVerified(key)
         val current = dao.getById(profileId) ?: return EditBaseline.LOCAL_OK
@@ -498,6 +495,19 @@ class ProfileRepository @Inject constructor(
      * serveru přenesená v místní kopii [canonical] → její klíče přejdou do záplaty (ta je trvalá v prefs) a záznam
      * se zahodí. Dřív se rozdíl smazal až po odeslání CELÉHO configu; záplata nese jen klíče té úpravy.
      */
+    /**
+     * Server profil nezná nebo má prázdný config → do záplaty patří CELÝ místní config (vše, co se liší od výchozích
+     * hodnot, např. seed Dětí s whitelistem knihoven), ne jen rozdíl první úpravy (revize 2026-11-22). Případný
+     * rozdíl z úpravy bez spojení je v místní kopii obsažený → zahodit (jinak by ho příští sync znovu přenesl
+     * a starým „mine" přebil novější úpravu).
+     */
+    private suspend fun seedWholeLocalAsPatch(key: String, profileId: Long) {
+        pendingEdits.markVerified(key)
+        pendingEdits.take(key)
+        val p = dao.getById(profileId) ?: return
+        pendingPatch.add(key, ProfileConfig.toJson(ProfileConfig.DEFAULT), ProfileConfig.toJson(ProfileConfig.fromJson(p.configJson)))
+    }
+
     private fun pendingEditsToPatch(key: String, canonical: String) {
         // Vyzvednutí + smazání atomicky (souběžný record z cest mimo configEditMutex zůstane na příští kolo).
         val (base, mine) = pendingEdits.take(key) ?: return
@@ -843,6 +853,19 @@ class ProfileRepository @Inject constructor(
             configGateway.fetchConfig(profile.backendKey())
         }?.takeIf { it.isNotBlank() }
         if (remoteJson == null) return false
+        when (serverConfigIsEmpty(remoteJson)) {
+            null -> {   // neplatná odpověď: místní kopii nepřepisovat ani neoznačit za ověřenou
+                Timber.w("[PUSH] sync '$key': neplatná odpověď serveru na config — ignorováno")
+                return false
+            }
+            true -> {   // `{}` = profil na serveru bez configu → místní config tam patří celý (dřív ho přepsal výchozí)
+                Timber.w("[PUSH] sync '$key': server má prázdný config → odesílám celý místní")
+                seedWholeLocalAsPatch(key, profile.id)
+                withTimeoutOrNull(15_000) { pushPendingPatch(dao.getById(profile.id) ?: profile) }
+                return false
+            }
+            false -> Unit
+        }
         pendingEdits.markVerified(key)
         serverConfigFetchedAt[key] = System.currentTimeMillis()
         // Nepotvrzený rozdíl z úpravy bez spojení (viz [PendingConfigEdits]) přenes na serverovou verzi a odešli.

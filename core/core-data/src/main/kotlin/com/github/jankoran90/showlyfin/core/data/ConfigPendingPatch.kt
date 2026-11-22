@@ -96,5 +96,12 @@ internal fun mergePatch(existing: String?, oldJson: String?, newJson: String): S
     return if (patch.isEmpty()) null else JsonObject(patch).toString()
 }
 
+/**
+ * Odpověď serveru na config profilu: null = neplatná (ne JSON objekt — nesmí přepsat místní kopii ani označit profil
+ * za ověřený), true = prázdný objekt `{}` (profil bez configu → místní config patří na server celý), false = config.
+ * Převzato z Filmů (revize 2026-11-22: `{}` dřív přepsal místní kopii výchozími hodnotami).
+ */
+internal fun serverConfigIsEmpty(raw: String): Boolean? = parseObject(raw)?.isEmpty()
+
 /** Klíče, které server slučuje po položkách (služby přihlášení) — záplata nese jen změněné položky. */
 private val PER_SERVICE_KEYS = setOf("credentials")
