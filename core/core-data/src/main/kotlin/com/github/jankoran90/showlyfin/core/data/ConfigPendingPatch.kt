@@ -30,13 +30,22 @@ internal class ConfigPendingPatch(private val prefs: SharedPreferences) {
     }
 
     /**
-     * Přidá do záplaty hodnoty klíčů [keys] z [json] — pro úpravy, které se dřív uložily jen místně
-     * ([PendingConfigEdits]) a po stažení serverové verze se přenesly do místní kopie.
+     * Přidá do záplaty úpravu, která se dřív uložila jen místně ([PendingConfigEdits]: [baseJson] → [mineJson]) a po
+     * stažení serverové verze je přenesená v místní kopii [canonical]. Klíče (u credentials jen služby), které ta
+     * úprava změnila, se berou s hodnotou z [canonical] (výsledek tříbodového sloučení se serverem).
      */
-    fun addKeys(key: String, json: String, keys: Set<String>) = synchronized(this) {
-        val src = parseObject(json) ?: return@synchronized
+    fun addEdit(key: String, canonical: String, baseJson: String, mineJson: String) = synchronized(this) {
+        val changed = parseObject(mergePatch(null, baseJson, mineJson)) ?: return@synchronized
+        val src = parseObject(canonical) ?: return@synchronized
         val patch = LinkedHashMap(parseObject(get(key)).orEmpty())
-        keys.forEach { k -> src[k]?.let { patch[k] = it } }
+        for ((k, v) in changed) {
+            val cur = src[k] ?: continue
+            patch[k] = if (k in PER_SERVICE_KEYS && v is JsonObject && cur is JsonObject) {
+                val acc = LinkedHashMap((patch[k] as? JsonObject).orEmpty())
+                for (s in v.keys) acc[s] = cur[s] ?: JsonNull
+                JsonObject(acc)
+            } else cur
+        }
         if (patch.isNotEmpty()) prefs.edit().putString(PREFIX + key, JsonObject(patch).toString()).apply()
     }
 

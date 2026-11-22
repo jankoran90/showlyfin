@@ -98,11 +98,26 @@ class ConfigPendingPatchTest {
         val mine = ProfileConfig.toJson(ProfileConfig.fromJson(base).copy(visibleForKidsSourceKeys = setOf("rss:k")))
         edits.record("k", base, mine)
         val merged = edits.applyOnto("k", server)
-        assertEquals(setOf("visibleForKidsSourceKeys"), edits.changedKeys("k"))
-        patch.addKeys("k", canon(merged), edits.changedKeys("k"))
+        val (b, m) = edits.take("k")!!
+        assertNull(edits.take("k"))
+        patch.addEdit("k", canon(merged), b, m)
         val sent = obj(patch.get("k")!!)
         assertEquals(setOf("visibleForKidsSourceKeys"), sent.keys)
         assertTrue("rss:k" in sent.getValue("visibleForKidsSourceKeys").toString())
+    }
+
+    @Test
+    fun `uprava bez spojeni v credentials prejde jen se zmenenou sluzbou`() {
+        val prefs = FakePrefs()
+        val edits = PendingConfigEdits(prefs)
+        val patch = ConfigPendingPatch(prefs)
+        val base = """{"credentials":{"trakt":{"accessToken":"T1"},"abs":{"username":"a"}}}"""
+        val mine = """{"credentials":{"trakt":{"accessToken":"T2"},"abs":{"username":"a"}}}"""
+        edits.record("k", base, mine)
+        val (b, m) = edits.take("k")!!
+        patch.addEdit("k", """{"credentials":{"trakt":{"accessToken":"T2"},"abs":{"username":"server"}}}""", b, m)
+        val creds = obj(patch.get("k")!!).getValue("credentials").jsonObject
+        assertEquals(setOf("trakt"), creds.keys)
     }
 }
 

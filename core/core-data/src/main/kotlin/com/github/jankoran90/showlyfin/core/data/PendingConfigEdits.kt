@@ -46,15 +46,17 @@ internal class PendingConfigEdits(private val prefs: SharedPreferences) {
         return merged.toString()
     }
 
-    /** Top-level klíče, které zaznamenaná úprava změnila (mine proti base); bez záznamu prázdné. */
-    fun changedKeys(key: String): Set<String> {
-        val entry = read(key) ?: return emptySet()
-        val base = entry["base"] as? JsonObject ?: JsonObject(emptyMap())
-        val mine = entry["mine"] as? JsonObject ?: return emptySet()
-        return mine.keys.filter { mine[it] != base[it] }.toSet()
+    /**
+     * Atomicky vyzvedne zaznamenanou úpravu (base, mine) a záznam smaže — pod stejným zámkem jako [record], takže
+     * souběžně zapsaný rozdíl se nemůže smazat dřív, než se převede do záplaty (revize 2026-11-22). Bez záznamu null.
+     */
+    fun take(key: String): Pair<String, String>? = synchronized(this) {
+        val entry = read(key) ?: return@synchronized null
+        prefs.edit().remove(prefKey(key)).apply()
+        (entry["base"] ?: JsonObject(emptyMap())).toString() to (entry["mine"] ?: JsonObject(emptyMap())).toString()
     }
 
-    fun clear(key: String) {
+    fun clear(key: String) = synchronized(this) {
         if (has(key)) prefs.edit().remove(prefKey(key)).apply()
     }
 

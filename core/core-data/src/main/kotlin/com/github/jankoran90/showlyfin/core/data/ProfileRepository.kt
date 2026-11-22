@@ -395,12 +395,13 @@ class ProfileRepository @Inject constructor(
         // (pahýl čerstvé instalace po neúspěšném stažení při aktivaci NE) a nemá čekající rozdíl (revize).
         val verified = pendingEdits.isVerified(key) && !pendingEdits.has(key)
         if (!force && verified && isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
-        if (verified && pendingPatch.get(key) != null) {
-            // Neodeslaná místní změna (čekající záplata): u aktivního profilu má přednost místní kopie (stažení by
-            // ji přebilo serverem). U NEAKTIVNÍHO je kopie možná týdny stará → nejdřív záplatu odešli a pak stáhni
-            // čerstvou verzi; neprojde-li, úprava jen místně jako rozdíl (revize 2026-11-22: jinak by nová úprava
-            // celého klíče vrátila starý seznam a smazala, co mezitím přibylo z webu / jiného zařízení).
-            if (isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
+        if (pendingEdits.isVerified(key) && pendingPatch.get(key) != null) {
+            // Neodeslaná místní změna (čekající záplata): u aktivního profilu bez čekajícího rozdílu má přednost
+            // místní kopie (stažení by ji přebilo serverem). Jinak (neaktivní profil — kopie možná týdny stará — nebo
+            // visí i rozdíl z úpravy bez spojení) nejdřív záplatu odešli a pak stáhni čerstvou verzi; neprojde-li,
+            // úprava jen místně jako rozdíl (revize 2026-11-22: jinak by stažení záplatu v místní kopii přebilo a nová
+            // úprava celého klíče ji pak trvale ztratila, nebo vrátila starý seznam a smazala, co přibylo z webu).
+            if (verified && isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
             if (withTimeoutOrNull(5000) { pushPendingPatch(profile) } != true) return EditBaseline.UNVERIFIED
         }
         if (!configGateway.isAvailable()) return EditBaseline.UNVERIFIED
@@ -412,6 +413,9 @@ class ProfileRepository @Inject constructor(
                 pendingEdits.markVerified(key)   // nový profil: neúspěšné první odeslání se pak zopakuje syncem
                 // Server profil nezná → do záplaty patří CELÝ místní config (vše, co se liší od výchozích hodnot,
                 // např. seed Dětí s whitelistem knihoven), ne jen rozdíl první úpravy (revize 2026-11-22).
+                // Případný rozdíl z úpravy bez spojení je v místní kopii obsažený → zahodit (jinak by ho příští sync
+                // znovu přenesl a starým „mine" přebil novější úpravu — revize 2026-11-22).
+                pendingEdits.take(key)
                 dao.getById(profileId)?.let { p ->
                     pendingPatch.add(key, ProfileConfig.toJson(ProfileConfig.DEFAULT), ProfileConfig.toJson(ProfileConfig.fromJson(p.configJson)))
                 }
@@ -495,9 +499,9 @@ class ProfileRepository @Inject constructor(
      * se zahodí. Dřív se rozdíl smazal až po odeslání CELÉHO configu; záplata nese jen klíče té úpravy.
      */
     private fun pendingEditsToPatch(key: String, canonical: String) {
-        if (!pendingEdits.has(key)) return
-        pendingPatch.addKeys(key, canonical, pendingEdits.changedKeys(key))
-        pendingEdits.clear(key)
+        // Vyzvednutí + smazání atomicky (souběžný record z cest mimo configEditMutex zůstane na příští kolo).
+        val (base, mine) = pendingEdits.take(key) ?: return
+        pendingPatch.addEdit(key, canonical, base, mine)
     }
 
     private fun unpushedConfigKeys(): Set<String> =
