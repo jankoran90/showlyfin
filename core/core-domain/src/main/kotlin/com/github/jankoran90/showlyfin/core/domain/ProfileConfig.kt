@@ -2,6 +2,12 @@ package com.github.jankoran90.showlyfin.core.domain
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
+import timber.log.Timber
 
 /**
  * Kompletní „config balík" navázaný na app-profil (Plan PROFILES). Je nadřazen chování celé
@@ -218,6 +224,17 @@ data class ProfileConfig(
      * si ho stáhne se zbytkem configu. null = výchozí (velké dlaždice, viz [KidsDisplayPrefs]).
      */
     val kidsDisplay: KidsDisplayPrefs? = null,
+    /**
+     * 🔒 2026-11-22 (Slovo, user „skrývám pořad z osy, pořád se vrací"): pole, která tahle verze appky
+     * NEUMÍ přečíst (typicky výčet, který přidala jiná appka sdílející stejný serverový profil — Filmy
+     * uložily řadu `PORADY_SMART` do [homeLayoutPhone]), v PŮVODNÍ podobě. Dřív jedno takové pole shodilo
+     * dekódování celého configu na [DEFAULT] → appka zapomněla skryté pořady i všechno ostatní a při
+     * další úpravě poslala na server výchozí hodnoty (smazala Filmům titulky, kurátora, Filmotéku…).
+     * Místně se drží beze změny ([toJson] je vrací zpět), na server se NEPOSÍLAJÍ ([toPushJson]) —
+     * server chybějící klíč ponechá, takže hodnotu té druhé appky nepřepíšeme ani zastaralou kopií.
+     */
+    @kotlinx.serialization.Transient
+    val unreadable: Map<String, JsonElement> = emptyMap(),
 ) {
     /** Plan STRATA — blocklist: sekce je viditelná, dokud není ve [hiddenSections]. */
     fun isSectionVisible(key: String): Boolean = key !in hiddenSections
@@ -323,12 +340,39 @@ data class ProfileConfig(
             encodeDefaults = true
         }
 
-        fun fromJson(raw: String?): ProfileConfig =
-            if (raw.isNullOrBlank()) DEFAULT
-            else runCatching { json.decodeFromString<ProfileConfig>(raw).migrateLegacySections() }
-                .getOrDefault(DEFAULT)
+        fun fromJson(raw: String?): ProfileConfig {
+            if (raw.isNullOrBlank()) return DEFAULT
+            runCatching { return json.decodeFromString<ProfileConfig>(raw).migrateLegacySections() }
+            // Celek nejde přečíst → přečti, co jde, a nečitelná pole drž stranou v původní podobě
+            // (viz [unreadable]); jedno cizí pole nesmí smazat skryté pořady ani zbytek configu.
+            val obj = runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return DEFAULT
+            val bad = obj.filter { (k, v) ->
+                runCatching { json.decodeFromJsonElement<ProfileConfig>(JsonObject(mapOf(k to v))) }.isFailure
+            }
+            val good = runCatching { json.decodeFromJsonElement<ProfileConfig>(JsonObject(obj - bad.keys)) }
+                .getOrNull() ?: return DEFAULT
+            Timber.w("[Profiles] config: nečitelná pole %s ponechána beze změny", bad.keys)
+            return good.copy(unreadable = bad).migrateLegacySections()
+        }
 
-        fun toJson(config: ProfileConfig): String = json.encodeToString(config)
+        /** Místní uložení: nečitelná pole ([unreadable]) se vrátí v původní podobě. */
+        fun toJson(config: ProfileConfig): String {
+            if (config.unreadable.isEmpty()) return json.encodeToString(config)
+            val known = json.encodeToJsonElement(config).jsonObject
+            return JsonObject(known + config.unreadable).toString()
+        }
+
+        /**
+         * Co se posílá na server: místní config BEZ polí, která tahle verze neumí přečíst ([unreadable]) —
+         * server chybějící klíč ponechá (`_put_config`), takže hodnotu jiné appky nepřepíšeme.
+         */
+        fun toPushJson(raw: String): String {
+            val config = fromJson(raw)
+            if (config.unreadable.isEmpty()) return raw
+            // Klíč úplně vynechat — výchozí hodnota (null / prázdno) by na serveru hodnotu přepsala.
+            val known = json.encodeToJsonElement(config).jsonObject
+            return JsonObject(known - config.unreadable.keys).toString()
+        }
 
         /**
          * Plan WARDEN W0 / finální sémantika Plan VAULT V9 (#42, 2026-06-11):

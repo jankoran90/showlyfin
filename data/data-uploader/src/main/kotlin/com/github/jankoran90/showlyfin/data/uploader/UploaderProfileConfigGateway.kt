@@ -3,6 +3,7 @@ package com.github.jankoran90.showlyfin.data.uploader
 import android.content.SharedPreferences
 import com.github.jankoran90.showlyfin.core.domain.JellyfinLibraryRef
 import com.github.jankoran90.showlyfin.core.domain.MirrorRefreshResult
+import com.github.jankoran90.showlyfin.core.domain.ProfileConfig
 import com.github.jankoran90.showlyfin.core.domain.ProfileConfigGateway
 import com.github.jankoran90.showlyfin.core.domain.ProfileMeta
 import com.github.jankoran90.showlyfin.core.domain.TemplatePayload
@@ -108,7 +109,8 @@ internal class UploaderProfileConfigGateway @Inject constructor(
         if (!isAvailable() || key.isBlank()) { Timber.w("[PUSH] gw.pushConfig SKIP (avail/key) '$key'"); return false }
         return runCatching {
             remote.putProfile(baseUrl(), cookie(), key, name, isAdmin, jellyfinUserId, maxAgeRating = maxAgeRating)
-            remote.putProfileConfig(baseUrl(), cookie(), key, json)
+            // Bez polí, která tahle verze neumí přečíst — server je ponechá (hodnota jiné appky, 2026-11-22).
+            remote.putProfileConfig(baseUrl(), cookie(), key, ProfileConfig.toPushJson(json))
         }.onSuccess { Timber.i("[PUSH] gw.pushConfig OK '$key'") }
             .onFailure { Timber.w(it, "[PUSH] gw.pushConfig FAIL '$key': ${it.message}") }
             .isSuccess
