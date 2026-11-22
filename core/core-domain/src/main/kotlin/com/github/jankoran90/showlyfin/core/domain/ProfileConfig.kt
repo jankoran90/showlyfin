@@ -236,6 +236,12 @@ data class ProfileConfig(
     @kotlinx.serialization.Transient
     val unreadable: Map<String, JsonElement> = emptyMap(),
 ) {
+    /**
+     * Pole [key] tahle verze appky neumí přečíst ([unreadable]) — typované pole je pak null / výchozí, ale na serveru
+     * má hodnotu jiné appky. Kód „null → nalij místní stav / migruj" ho proto nesmí přepsat (2026-11-22, jako Filmy).
+     */
+    fun isUnreadable(key: String): Boolean = key in unreadable
+
     /** Plan STRATA — blocklist: sekce je viditelná, dokud není ve [hiddenSections]. */
     fun isSectionVisible(key: String): Boolean = key !in hiddenSections
 

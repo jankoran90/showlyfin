@@ -211,7 +211,7 @@ class PlaybackViewModel @Inject constructor(
                 // 2026-11-22: jen když styl v configu opravdu chybí — nečitelný (jiná appka sdíleného profilu uložila
                 // hodnotu, kterou tahle verze nezná) je taky null, ale přepsat ho místním by smazalo cizí nastavení.
                 profileRepository.updateConfigIfChanged(id) {
-                    if (it.subtitleStyle != null || "subtitleStyle" in it.unreadable) it
+                    if (it.subtitleStyle != null || it.isUnreadable("subtitleStyle")) it
                     else it.copy(subtitleStyle = SubtitleStylePrefs(s.fontScale, s.colorArgb, s.bottomPaddingFraction, s.edge.toPref(), s.edgeStrength, s.font.toFontPref(), s.weight))
                 }
             }
