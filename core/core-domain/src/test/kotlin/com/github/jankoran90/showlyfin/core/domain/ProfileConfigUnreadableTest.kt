@@ -58,6 +58,17 @@ class ProfileConfigUnreadableTest {
     }
 
     @Test
+    fun `vyslovna uprava necitelneho pole se ulozi i odesle`() {
+        val c = ProfileConfig.fromJson(serverJson)
+        val edited = c.copy(homeLayoutPhone = HomeLayoutPrefs(immersiveHeaderLines = 3))
+        val stored = ProfileConfig.toJson(edited)
+        val back = ProfileConfig.fromJson(stored)
+        assertEquals(3, back.homeLayoutPhone?.immersiveHeaderLines)
+        assertTrue(back.unreadable.isEmpty())
+        assertTrue("homeLayoutPhone" in Json.parseToJsonElement(ProfileConfig.toPushJson(stored)).jsonObject)
+    }
+
+    @Test
     fun `bezny config se chova jako driv`() {
         val json = ProfileConfig.toJson(ProfileConfig(hiddenTimelineSourceKeys = setOf("a")))
         assertTrue(ProfileConfig.fromJson(json).unreadable.isEmpty())

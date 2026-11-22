@@ -340,9 +340,17 @@ data class ProfileConfig(
             encodeDefaults = true
         }
 
+        /** Výchozí hodnoty polí jako JSON — nečitelné pole se při čtení nastaví právě na ně. */
+        private val defaultFields: JsonObject by lazy { json.encodeToJsonElement(DEFAULT).jsonObject }
+
+        /** Pomalá cesta (nečitelné pole) se volá často z UI → poslední vstup a výsledek si pamatuj (revize P3). */
+        @Volatile private var lastSlow: Pair<String, ProfileConfig>? = null
+        @Volatile private var lastWarned: Set<String> = emptySet()
+
         fun fromJson(raw: String?): ProfileConfig {
             if (raw.isNullOrBlank()) return DEFAULT
             runCatching { return json.decodeFromString<ProfileConfig>(raw).migrateLegacySections() }
+            lastSlow?.let { (r, c) -> if (r == raw) return c }
             // Celek nejde přečíst → přečti, co jde, a nečitelná pole drž stranou v původní podobě
             // (viz [unreadable]); jedno cizí pole nesmí smazat skryté pořady ani zbytek configu.
             val obj = runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return DEFAULT
@@ -351,27 +359,38 @@ data class ProfileConfig(
             }
             val good = runCatching { json.decodeFromJsonElement<ProfileConfig>(JsonObject(obj - bad.keys)) }
                 .getOrNull() ?: return DEFAULT
-            Timber.w("[Profiles] config: nečitelná pole %s ponechána beze změny", bad.keys)
-            return good.copy(unreadable = bad).migrateLegacySections()
-        }
-
-        /** Místní uložení: nečitelná pole ([unreadable]) se vrátí v původní podobě. */
-        fun toJson(config: ProfileConfig): String {
-            if (config.unreadable.isEmpty()) return json.encodeToString(config)
-            val known = json.encodeToJsonElement(config).jsonObject
-            return JsonObject(known + config.unreadable).toString()
+            if (bad.keys != lastWarned) {
+                lastWarned = bad.keys
+                Timber.w("[Profiles] config: nečitelná pole %s ponechána beze změny", bad.keys)
+            }
+            return good.copy(unreadable = bad).migrateLegacySections().also { lastSlow = raw to it }
         }
 
         /**
-         * Co se posílá na server: místní config BEZ polí, která tahle verze neumí přečíst ([unreadable]) —
-         * server chybějící klíč ponechá (`_put_config`), takže hodnotu jiné appky nepřepíšeme.
+         * Nečitelná pole, která appka od čtení NEZMĚNILA (pořád mají výchozí hodnotu, na kterou je čtení
+         * nastavilo). Pole, které appka výslovně upravila, se bere podle nové hodnoty (revize P2: jinak by
+         * původní hodnota úpravu tiše přebila).
+         */
+        private fun untouchedUnreadable(config: ProfileConfig, known: JsonObject): Map<String, JsonElement> =
+            config.unreadable.filterKeys { k -> known[k] == defaultFields[k] }
+
+        /** Místní uložení: nezměněná nečitelná pole ([unreadable]) se vrátí v původní podobě. */
+        fun toJson(config: ProfileConfig): String {
+            if (config.unreadable.isEmpty()) return json.encodeToString(config)
+            val known = json.encodeToJsonElement(config).jsonObject
+            return JsonObject(known + untouchedUnreadable(config, known)).toString()
+        }
+
+        /**
+         * Co se posílá na server: místní config BEZ nezměněných polí, která tahle verze neumí přečíst
+         * ([unreadable]) — server chybějící klíč ponechá (`_put_config`), takže hodnotu jiné appky nepřepíšeme.
          */
         fun toPushJson(raw: String): String {
             val config = fromJson(raw)
             if (config.unreadable.isEmpty()) return raw
             // Klíč úplně vynechat — výchozí hodnota (null / prázdno) by na serveru hodnotu přepsala.
             val known = json.encodeToJsonElement(config).jsonObject
-            return JsonObject(known - config.unreadable.keys).toString()
+            return JsonObject(known - untouchedUnreadable(config, known).keys).toString()
         }
 
         /**
