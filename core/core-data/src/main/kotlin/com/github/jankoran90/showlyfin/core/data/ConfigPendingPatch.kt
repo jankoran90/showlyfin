@@ -1,0 +1,73 @@
+package com.github.jankoran90.showlyfin.core.data
+
+import android.content.SharedPreferences
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+
+/**
+ * Záplata configu profilu na server — převzato z Filmů (`ConfigPendingPatch`, incident 2026-10-14), ve Slovu od
+ * 2026-11-22 (user „vyřešte to společně pořádně, vše musí být pevné"): Slovo posílalo CELÝ místní config. Profil
+ * Honza sdílí serverový záznam s Filmy (Dospělý) → zastaralá místní kopie polí Filmů (titulky, zvuk, kurátor…)
+ * přepsala jejich novější hodnoty a Filmy stejně tak mohly vrátit pořady skryté ve Slovu.
+ *
+ * Na server jde jen ZÁPLATA — top-level klíče, které konkrétní úprava změnila (starý → nový kanonický JSON,
+ * `ProfileConfig.toJson`). Server chybějící klíče ponechá (`_put_config`), takže na pole, na která appka nesáhla,
+ * už nic nepřepíše. Neodeslaná záplata čeká v prefs a přibírá další změny, dokud neprojde (nahrazuje dřívější
+ * příznak „neodesláno" + celý config). Kanonická podoba (výchozí hodnoty doplněné) je nutná: proti pahýlu „{}"
+ * by jinak vypadalo jako změněné každé pole (Filmy, incident 2026-10-14 večer).
+ *
+ * Proti Filmům jen jiný JSON parser (kotlinx místo org.json — kvůli JVM unit testům); chování stejné.
+ */
+internal class ConfigPendingPatch(private val prefs: SharedPreferences) {
+
+    /** Přidá do čekající záplaty klíče, které se mezi [oldJson] a [newJson] změnily. */
+    fun add(key: String, oldJson: String?, newJson: String) {
+        val merged = mergePatch(get(key), oldJson, newJson) ?: return
+        prefs.edit().putString(PREFIX + key, merged).apply()
+    }
+
+    /**
+     * Přidá do záplaty hodnoty klíčů [keys] z [json] — pro úpravy, které se dřív uložily jen místně
+     * ([PendingConfigEdits]) a po stažení serverové verze se přenesly do místní kopie.
+     */
+    fun addKeys(key: String, json: String, keys: Set<String>) {
+        val src = parseObject(json) ?: return
+        val patch = LinkedHashMap(parseObject(get(key)).orEmpty())
+        keys.forEach { k -> src[k]?.let { patch[k] = it } }
+        if (patch.isNotEmpty()) prefs.edit().putString(PREFIX + key, JsonObject(patch).toString()).apply()
+    }
+
+    /** Zahoď čekající záplatu. */
+    fun clear(key: String) {
+        if (prefs.contains(PREFIX + key)) prefs.edit().remove(PREFIX + key).apply()
+    }
+
+    fun get(key: String): String? = prefs.getString(PREFIX + key, null)?.takeIf { it.isNotBlank() && it != "{}" }
+
+    /** Odeslaná záplata = hotovo; jen pokud mezitím nepřibyla další změna (ta počká na příští kolo). */
+    fun clearIfSame(key: String, sent: String) {
+        if (get(key) == sent) prefs.edit().remove(PREFIX + key).apply()
+    }
+
+    private companion object {
+        const val PREFIX = "profile_config_patch_"
+    }
+}
+
+private val patchJson = Json { ignoreUnknownKeys = true }
+
+private fun parseObject(raw: String?): JsonObject? =
+    raw?.let { runCatching { patchJson.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+
+/**
+ * Čistá logika záplaty (testovatelná bez prefs): k [existing] přidá klíče, které se mezi [oldJson] a [newJson]
+ * změnily (nebo v [oldJson] chyběly). Vrací novou záplatu, nebo null, když není co uložit.
+ * Klíč, který z [newJson] zmizel, se do záplaty nedává — chybějící klíč server ponechá.
+ */
+internal fun mergePatch(existing: String?, oldJson: String?, newJson: String): String? {
+    val new = parseObject(newJson) ?: return null
+    val old = parseObject(oldJson) ?: JsonObject(emptyMap())
+    val patch = LinkedHashMap(parseObject(existing).orEmpty())
+    for ((k, v) in new) if (old[k] != v) patch[k] = v
+    return if (patch.isEmpty()) null else JsonObject(patch).toString()
+}

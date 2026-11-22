@@ -382,15 +382,19 @@ data class ProfileConfig(
         }
 
         /**
-         * Co se posílá na server: místní config BEZ nezměněných polí, která tahle verze neumí přečíst
-         * ([unreadable]) — server chybějící klíč ponechá (`_put_config`), takže hodnotu jiné appky nepřepíšeme.
+         * Co se posílá na server: odesílaný JSON (od 2026-11-22 ZÁPLATA jen změněných klíčů, viz core-data
+         * `ConfigPendingPatch`) BEZ klíčů, jejichž hodnotu tahle verze neumí přečíst — takovou hodnotu appka sama
+         * nevytvořila (vlastní úpravu by přečíst uměla), je to jen kopie pole jiné appky a server chybějící klíč
+         * ponechá (`_put_config`). Ostatní klíče jdou PŘESNĚ tak, jak přišly: žádné doplňování výchozích hodnot
+         * (dřívější verze z neúplné záplaty s nečitelným polem vyrobila celý výchozí config — revize 2026-11-22).
          */
         fun toPushJson(raw: String): String {
-            val config = fromJson(raw)
-            if (config.unreadable.isEmpty()) return raw
-            // Klíč úplně vynechat — výchozí hodnota (null / prázdno) by na serveru hodnotu přepsala.
-            val known = json.encodeToJsonElement(config).jsonObject
-            return JsonObject(known - untouchedUnreadable(config, known).keys).toString()
+            if (runCatching { json.decodeFromString<ProfileConfig>(raw) }.isSuccess) return raw
+            val obj = runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return raw
+            val bad = obj.keys.filter { k ->
+                runCatching { json.decodeFromJsonElement<ProfileConfig>(JsonObject(mapOf(k to obj.getValue(k)))) }.isFailure
+            }
+            return if (bad.isEmpty()) raw else JsonObject(obj - bad.toSet()).toString()
         }
 
         /**

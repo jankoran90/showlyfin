@@ -24,7 +24,10 @@ import javax.inject.Named
 import javax.inject.Singleton
 
 private const val PREF_ACTIVE_PROFILE_ID = "active_profile_id"
-/** backendKey profilů, jejichž config se nepodařilo odeslat na backend (viz [ProfileRepository.pushConfigTracked]). */
+/**
+ * ≤ 1.0.115: backendKey profilů, jejichž CELÝ config se nepodařilo odeslat. Od 2026-11-22 nahrazeno záplatou
+ * ([ConfigPendingPatch]); starý příznak se při syncu zahodí (celý config už nikdy neposíláme).
+ */
 private const val PREF_UNPUSHED_CONFIG_KEYS = "profile_config_unpushed_keys"
 
 /** 🔒 2026-08-24 — čte [com.github.jankoran90.showlyfin.data.trakt.token.TraktTokenProvider.saveTokens]
@@ -48,6 +51,8 @@ class ProfileRepository @Inject constructor(
     /** Serializuje úpravy configu (čti-uprav-zapiš-odešli), viz [updateConfig]. */
     private val configEditMutex = Mutex()
     private val pendingEdits = PendingConfigEdits(prefs)
+    /** Záplata změněných klíčů, která čeká na odeslání (2026-11-22, viz [ConfigPendingPatch]). */
+    private val pendingPatch = ConfigPendingPatch(prefs)
 
     /**
      * Klíč profilu pro backend (Plan PROFILES Fáze 4E) = **`jellyfinUserId`** (prefer) → stabilní
@@ -353,9 +358,10 @@ class ProfileRepository @Inject constructor(
             pendingEdits.record(key, ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson)), newJson)
             return@withLock
         }
-        // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká).
+        // Plan PROFILES Fáze 2: write-through na backend (best-effort, gateway chyby polyká). Jen záplata klíčů,
+        // které tahle úprava změnila (2026-11-22); při timeoutu záplata čeká v prefs a odešle se při příštím syncu.
         Timber.i("[PUSH] updateConfig → push profile='${profile.name}' key='$key'")
-        if (withTimeoutOrNull(15_000) { pushConfigTracked(profile, newJson) } == null) markUnpushed(key)
+        withTimeoutOrNull(15_000) { pushConfigTracked(profile, newJson) }
     }
 
     private enum class EditBaseline { LOCAL_OK, REFRESHED, UNVERIFIED }
@@ -368,11 +374,6 @@ class ProfileRepository @Inject constructor(
         // Applier PŘED publikací configu — observeři (ListenViewModel…) čtou kanonické prefs.
         configApplier.apply(effective, updated.id, updated.isChildAgeRating())
         publishActive(updated, effective)   // profil i config JEDNÍM zápisem
-    }
-
-    private fun markUnpushed(key: String) {
-        val s = unpushedConfigKeys().toMutableSet()
-        if (s.add(key)) prefs.edit().putStringSet(PREF_UNPUSHED_CONFIG_KEYS, s).apply()
     }
 
     /** Aktivní profil — i při studeném startu, kdy [_activeProfile] je do `restoreActive` ještě null. */
@@ -393,8 +394,8 @@ class ProfileRepository @Inject constructor(
         // (pahýl čerstvé instalace po neúspěšném stažení při aktivaci NE) a nemá čekající rozdíl (revize).
         val verified = pendingEdits.isVerified(key) && !pendingEdits.has(key)
         if (!force && verified && isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
-        // Neodeslaná místní změna má přednost jen na ověřené kopii (starý příznak z ≤ 1.0.105 nad pahýlem ne).
-        if (verified && key in unpushedConfigKeys()) return EditBaseline.LOCAL_OK
+        // Neodeslaná místní změna (čekající záplata) má přednost — stažení by ji v místní kopii přebilo serverem.
+        if (verified && pendingPatch.get(key) != null) return EditBaseline.LOCAL_OK
         if (!configGateway.isAvailable()) return EditBaseline.UNVERIFIED
         val remote = withTimeoutOrNull(5000) { configGateway.fetchConfig(key) }?.takeIf { it.isNotBlank() }
         if (remote == null) {
@@ -412,6 +413,7 @@ class ProfileRepository @Inject constructor(
             Timber.i("[PUSH] před úpravou profilu '$key' převzat config ze serveru")
             dao.update(current.copy(configJson = canonical))
         }
+        pendingEditsToPatch(key, canonical)
         return EditBaseline.REFRESHED
     }
 
@@ -440,18 +442,47 @@ class ProfileRepository @Inject constructor(
      * configem ze serveru — např. admin schválí dětem pořad, push neprojde, přepnutí na Děti stáhne
      * server bez schválení a pořad zmizí. Neodeslaný profil se teď pošle znovu DŘÍV, než se stahuje.
      */
-    private suspend fun pushConfigTracked(profile: ProfileEntity, json: String) {
+    /**
+     * 🔒🔒 2026-11-22 (user „vyřešte to společně pořádně, vše musí být pevné") — na server jde jen ZÁPLATA klíčů,
+     * které se mezi [ProfileEntity.configJson] profilu (stav PŘED úpravou) a [newJson] změnily ([ConfigPendingPatch],
+     * převzato z Filmů). Dřív odcházel CELÝ místní config: profil Honza sdílí serverový záznam s Filmy (Dospělý)
+     * a zastaralá místní kopie jejich polí (titulky, zvuk, kurátor) přepsala novější hodnoty.
+     * Zařízení, které config profilu nikdy neověřilo se serverem (pahýl čerstvé instalace), nepíše vůbec —
+     * jeho „změna" by byla jen odhad z výchozích hodnot (Filmy `configPulled`, Slovo incident g32 2026-11-19).
+     * Vrací true, když na serveru nic nečeká.
+     */
+    private suspend fun pushConfigTracked(profile: ProfileEntity, newJson: String): Boolean {
         val key = profile.backendKey()
-        val ok = configGateway.pushConfig(key, json, profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
-        // Příznak smaž jen když server dostal POSLEDNÍ lokální verzi — souběžná novější editace
-        // (její push mohl selhat) jinak přijde o ochranu před přepsáním (Codex review).
-        val synced = ok && (dao.getById(profile.id)?.configJson ?: "{}") == json
-        val unpushed = unpushedConfigKeys().toMutableSet()
-        val changed = if (synced) unpushed.remove(key) else unpushed.add(key)
-        if (changed) prefs.edit().putStringSet(PREF_UNPUSHED_CONFIG_KEYS, unpushed).apply()
-        // Server má poslední místní verzi → nepotvrzený rozdíl (PendingConfigEdits) je v ní obsažený.
-        if (synced) { pendingEdits.clear(key); pendingEdits.markVerified(key) }
-        if (!ok) Timber.w("[PUSH] config '$key' neodeslán — lokální změna drží, odešle se při příštím syncu")
+        if (!pendingEdits.isVerified(key)) {
+            Timber.w("[PUSH] config '$key' na zařízení ještě neověřen se serverem → úprava jen místně")
+            return false
+        }
+        // Starý config v KANONICKÉ podobě (výchozí hodnoty doplněné) — proti pahýlu „{}" by jinak vypadalo
+        // jako změněné každé pole (Filmy, incident 2026-10-14 večer).
+        val oldNormalized = ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson))
+        pendingPatch.add(key, oldNormalized, newJson)
+        return pushPendingPatch(profile)
+    }
+
+    /** Pošli čekající záplatu configu profilu; true = nic nečeká (odesláno, nebo nebylo co). */
+    private suspend fun pushPendingPatch(profile: ProfileEntity): Boolean {
+        val key = profile.backendKey()
+        val patch = pendingPatch.get(key) ?: return true
+        val ok = configGateway.pushConfig(key, patch, profile.name, profile.isAdmin, profile.jellyfinUserId, profile.maxAgeRating)
+        if (ok) pendingPatch.clearIfSame(key, patch)
+        else Timber.w("[PUSH] záplata configu '$key' neodeslána — drží se, odešle se při příštím syncu")
+        return ok && pendingPatch.get(key) == null
+    }
+
+    /**
+     * Úprava uložená dřív jen místně ([PendingConfigEdits], profil bez ověřené serverové verze) je po stažení
+     * serveru přenesená v místní kopii [canonical] → její klíče přejdou do záplaty (ta je trvalá v prefs) a záznam
+     * se zahodí. Dřív se rozdíl smazal až po odeslání CELÉHO configu; záplata nese jen klíče té úpravy.
+     */
+    private fun pendingEditsToPatch(key: String, canonical: String) {
+        if (!pendingEdits.has(key)) return
+        pendingPatch.addKeys(key, canonical, pendingEdits.changedKeys(key))
+        pendingEdits.clear(key)
     }
 
     private fun unpushedConfigKeys(): Set<String> =
@@ -771,11 +802,23 @@ class ProfileRepository @Inject constructor(
     /** Krok 3 [syncConfigFromBackend] (volat pod [configEditMutex]); true = místní config se změnil. */
     private suspend fun syncConfigBundleLocked(profile: ProfileEntity): Boolean {
         val key = profile.backendKey()
-        val remoteJson = if (key in unpushedConfigKeys() && pendingEdits.isVerified(key)) {
+        // ≤ 1.0.115 držel jen příznak „neodesláno" a posílal CELÝ config — přesně tudy by stará kopie přepsala
+        // novější hodnoty (i druhé appky). Příznak se zahodí: ztratit jednu neodeslanou změnu je menší škoda
+        // než přepsat celý profil (stejně Filmy 2026-10-14).
+        if (key in unpushedConfigKeys()) {
+            Timber.w("[PUSH] starý příznak neodeslaného configu '$key' zahozen (celý config se už neposílá)")
+            prefs.edit().putStringSet(PREF_UNPUSHED_CONFIG_KEYS, unpushedConfigKeys() - key).apply()
+        }
+        if (!pendingEdits.isVerified(key) && pendingPatch.get(key) != null) {
+            Timber.w("[PUSH] záplata '$key' z doby před ověřením se serverem zahozena")
+            pendingPatch.clear(key)
+        }
+        val remoteJson = if (pendingPatch.get(key) != null) {
             val local = dao.getById(profile.id) ?: profile
-            // Timeout jako u stahování — přepnutí profilu nesmí viset minuty; při timeoutu příznak zůstává.
-            withTimeoutOrNull(5000) { pushConfigTracked(local, local.configJson ?: "{}") }
-            if (profile.backendKey() in unpushedConfigKeys()) null
+            // Timeout jako u stahování — přepnutí profilu nesmí viset minuty; při timeoutu záplata zůstává.
+            val sent = withTimeoutOrNull(5000) { pushPendingPatch(local) } == true
+            // Záplata prošla → stáhni server (má i změny jiných zařízení); neprošla → nestahuj, přepsal by ji.
+            if (!sent) null
             else withTimeoutOrNull(5000) { configGateway.fetchConfig(profile.backendKey()) }
         } else withTimeoutOrNull(5000) {
             configGateway.fetchConfig(profile.backendKey())
@@ -790,9 +833,11 @@ class ProfileRepository @Inject constructor(
         val changedLocal = canonical != current.configJson
         if (changedLocal) dao.update(current.copy(configJson = canonical))
         if (hadPending) {
-            Timber.i("[PUSH] sync '$key': čekající rozdíl sloučen se serverovou verzí → odesílám")
+            Timber.i("[PUSH] sync '$key': čekající rozdíl sloučen se serverovou verzí → odesílám jeho klíče")
+            pendingEditsToPatch(key, canonical)
             val fresh = dao.getById(profile.id) ?: current.copy(configJson = canonical)
-            if (withTimeoutOrNull(15_000) { pushConfigTracked(fresh, canonical) } == null) markUnpushed(key)
+            // Při timeoutu záplata čeká v prefs a odešle se při příštím syncu.
+            withTimeoutOrNull(15_000) { pushPendingPatch(fresh) }
         }
         return changedLocal
     }

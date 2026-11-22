@@ -46,6 +46,14 @@ internal class PendingConfigEdits(private val prefs: SharedPreferences) {
         return merged.toString()
     }
 
+    /** Top-level klíče, které zaznamenaná úprava změnila (mine proti base); bez záznamu prázdné. */
+    fun changedKeys(key: String): Set<String> {
+        val entry = read(key) ?: return emptySet()
+        val base = entry["base"] as? JsonObject ?: JsonObject(emptyMap())
+        val mine = entry["mine"] as? JsonObject ?: return emptySet()
+        return mine.keys.filter { mine[it] != base[it] }.toSet()
+    }
+
     fun clear(key: String) {
         if (has(key)) prefs.edit().remove(prefKey(key)).apply()
     }
