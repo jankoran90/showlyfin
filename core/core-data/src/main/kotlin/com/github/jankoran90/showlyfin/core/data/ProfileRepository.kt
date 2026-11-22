@@ -317,8 +317,9 @@ class ProfileRepository @Inject constructor(
     suspend fun updateConfig(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) =
         updateConfigImpl(profileId, pushIfUnchanged = true, transform)
 
-    /** Jako [updateConfig], ale když transformace nic nezmění, nic se nezapíše ani neodešle (podmíněné opravy,
-     * 2026-11-19). [updateConfig] odesílá i beze změny — např. Trakt login ve Filmech na tom staví. */
+    /** Jako [updateConfig], ale když transformace nic nezmění, nic se nezapíše ani neodešle a profil se vždy
+     * nejdřív ověří se serverem (podmíněné opravy, 2026-11-19). Od 2026-11-22 ani [updateConfig] beze změny nic
+     * nového neposílá (odchází jen záplata změněných klíčů); jen dožene dřív neodeslanou záplatu. */
     suspend fun updateConfigIfChanged(profileId: Long, transform: (ProfileConfig) -> ProfileConfig) =
         updateConfigImpl(profileId, pushIfUnchanged = false, transform)
 
@@ -394,8 +395,14 @@ class ProfileRepository @Inject constructor(
         // (pahýl čerstvé instalace po neúspěšném stažení při aktivaci NE) a nemá čekající rozdíl (revize).
         val verified = pendingEdits.isVerified(key) && !pendingEdits.has(key)
         if (!force && verified && isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
-        // Neodeslaná místní změna (čekající záplata) má přednost — stažení by ji v místní kopii přebilo serverem.
-        if (verified && pendingPatch.get(key) != null) return EditBaseline.LOCAL_OK
+        if (verified && pendingPatch.get(key) != null) {
+            // Neodeslaná místní změna (čekající záplata): u aktivního profilu má přednost místní kopie (stažení by
+            // ji přebilo serverem). U NEAKTIVNÍHO je kopie možná týdny stará → nejdřív záplatu odešli a pak stáhni
+            // čerstvou verzi; neprojde-li, úprava jen místně jako rozdíl (revize 2026-11-22: jinak by nová úprava
+            // celého klíče vrátila starý seznam a smazala, co mezitím přibylo z webu / jiného zařízení).
+            if (isActiveProfileId(profileId)) return EditBaseline.LOCAL_OK
+            if (withTimeoutOrNull(5000) { pushPendingPatch(profile) } != true) return EditBaseline.UNVERIFIED
+        }
         if (!configGateway.isAvailable()) return EditBaseline.UNVERIFIED
         val remote = withTimeoutOrNull(5000) { configGateway.fetchConfig(key) }?.takeIf { it.isNotBlank() }
         if (remote == null) {
@@ -403,6 +410,11 @@ class ProfileRepository @Inject constructor(
             // není co přepsat; při chybě serveru vrací gateway null → UNVERIFIED (revize: chyba ≠ prázdný seznam).
             return if (withTimeoutOrNull(5000) { configGateway.profileExistsOnServer(key) } == false) {
                 pendingEdits.markVerified(key)   // nový profil: neúspěšné první odeslání se pak zopakuje syncem
+                // Server profil nezná → do záplaty patří CELÝ místní config (vše, co se liší od výchozích hodnot,
+                // např. seed Dětí s whitelistem knihoven), ne jen rozdíl první úpravy (revize 2026-11-22).
+                dao.getById(profileId)?.let { p ->
+                    pendingPatch.add(key, ProfileConfig.toJson(ProfileConfig.DEFAULT), ProfileConfig.toJson(ProfileConfig.fromJson(p.configJson)))
+                }
                 EditBaseline.REFRESHED
             } else EditBaseline.UNVERIFIED
         }
@@ -453,13 +465,16 @@ class ProfileRepository @Inject constructor(
      */
     private suspend fun pushConfigTracked(profile: ProfileEntity, newJson: String): Boolean {
         val key = profile.backendKey()
-        if (!pendingEdits.isVerified(key)) {
-            Timber.w("[PUSH] config '$key' na zařízení ještě neověřen se serverem → úprava jen místně")
-            return false
-        }
         // Starý config v KANONICKÉ podobě (výchozí hodnoty doplněné) — proti pahýlu „{}" by jinak vypadalo
         // jako změněné každé pole (Filmy, incident 2026-10-14 večer).
         val oldNormalized = ProfileConfig.toJson(ProfileConfig.fromJson(profile.configJson))
+        if (!pendingEdits.isVerified(key)) {
+            // Úpravu nezahodit (šablona, Trakt token mimo updateConfig — revize 2026-11-22): zapamatuj rozdíl,
+            // po prvním úspěšném stažení se přenese na serverovou verzi a odešle jen se svými klíči.
+            Timber.w("[PUSH] config '$key' na zařízení ještě neověřen se serverem → rozdíl čeká na sloučení")
+            pendingEdits.record(key, oldNormalized, newJson)
+            return false
+        }
         pendingPatch.add(key, oldNormalized, newJson)
         return pushPendingPatch(profile)
     }

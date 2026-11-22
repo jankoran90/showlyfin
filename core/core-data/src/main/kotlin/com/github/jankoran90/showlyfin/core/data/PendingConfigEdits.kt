@@ -30,7 +30,7 @@ internal class PendingConfigEdits(private val prefs: SharedPreferences) {
     }
 
     /** Zaznamená úpravu: base zůstává z PRVNÍ nepotvrzené úpravy, mine se přepíše posledním stavem. */
-    fun record(key: String, baseJson: String, mineJson: String) {
+    fun record(key: String, baseJson: String, mineJson: String) = synchronized(this) {
         val existingBase = read(key)?.get("base")
         val entry = buildJsonObject {
             put("base", existingBase ?: parse(baseJson))

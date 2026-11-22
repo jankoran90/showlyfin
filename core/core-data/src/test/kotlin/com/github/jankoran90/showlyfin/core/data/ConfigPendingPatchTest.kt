@@ -54,6 +54,18 @@ class ConfigPendingPatchTest {
     }
 
     @Test
+    fun `credentials nesou jen zmenenou sluzbu, odhlaseni jako null`() {
+        val old = """{"credentials":{"trakt":{"accessToken":"T1"},"abs":{"username":"a"},"jellyfin":null}}"""
+        val login = """{"credentials":{"trakt":{"accessToken":"T1"},"abs":{"username":"b"},"jellyfin":null}}"""
+        val c1 = obj(mergePatch(null, old, login)!!).getValue("credentials").jsonObject
+        assertEquals(setOf("abs"), c1.keys)
+        val logout = """{"credentials":{"trakt":{"accessToken":"T1"},"abs":null,"jellyfin":null}}"""
+        val c2 = obj(mergePatch(null, login, logout)!!).getValue("credentials").jsonObject
+        assertEquals(kotlinx.serialization.json.JsonNull, c2.getValue("abs"))
+        assertEquals(setOf("abs"), c2.keys)
+    }
+
+    @Test
     fun `pahyl proti kanonicke podobe nese jen zmenene pole`() {
         val stub = canon("{}")
         val edited = ProfileConfig.toJson(ProfileConfig.fromJson(stub).copy(hiddenPodcastIds = setOf("p1")))
@@ -94,9 +106,21 @@ class ConfigPendingPatchTest {
     }
 }
 
+class ConfigPendingPatchConcurrencyTest {
+    @Test
+    fun `soubezne doplnovani zaplaty neztrati zadny klic`() {
+        val p = ConfigPendingPatch(FakePrefs())
+        val threads = (0 until 8).map { i ->
+            Thread { repeat(50) { j -> p.add("k", "{}", """{"k${i}_$j": $j}""") } }
+        }
+        threads.forEach { it.start() }; threads.forEach { it.join() }
+        assertEquals(400, Json.parseToJsonElement(p.get("k")!!).jsonObject.size)
+    }
+}
+
 /** Minimální SharedPreferences v paměti pro JVM testy. */
 private class FakePrefs : SharedPreferences {
-    private val m = HashMap<String, Any?>()
+    private val m = java.util.concurrent.ConcurrentHashMap<String, Any?>()
     override fun getAll(): MutableMap<String, *> = m
     override fun getString(key: String?, defValue: String?): String? = m[key] as? String ?: defValue
     @Suppress("UNCHECKED_CAST")
@@ -110,8 +134,8 @@ private class FakePrefs : SharedPreferences {
     override fun registerOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener?) {}
     override fun unregisterOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener?) {}
     override fun edit(): SharedPreferences.Editor = object : SharedPreferences.Editor {
-        override fun putString(key: String?, value: String?) = apply { m[key!!] = value }
-        override fun putStringSet(key: String?, values: MutableSet<String>?) = apply { m[key!!] = values?.toSet() }
+        override fun putString(key: String?, value: String?) = apply { if (value == null) m.remove(key!!) else m[key!!] = value }
+        override fun putStringSet(key: String?, values: MutableSet<String>?) = apply { if (values == null) m.remove(key!!) else m[key!!] = values.toSet() }
         override fun putInt(key: String?, value: Int) = apply { m[key!!] = value }
         override fun putLong(key: String?, value: Long) = apply { m[key!!] = value }
         override fun putFloat(key: String?, value: Float) = apply { m[key!!] = value }

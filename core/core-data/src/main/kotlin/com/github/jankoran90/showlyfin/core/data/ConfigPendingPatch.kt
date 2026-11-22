@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.core.data
 
 import android.content.SharedPreferences
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -18,11 +19,13 @@ import kotlinx.serialization.json.JsonObject
  *
  * Proti Filmům jen jiný JSON parser (kotlinx místo org.json — kvůli JVM unit testům); chování stejné.
  */
+// Čti-uprav-zapiš nad prefs je pod zámkem instance: záplatu doplňují i cesty mimo configEditMutex
+// (Trakt token ze setActive, přiřazení šablony) — souběžný zápis by jinak zahodil klíče druhého (revize 2026-11-22).
 internal class ConfigPendingPatch(private val prefs: SharedPreferences) {
 
     /** Přidá do čekající záplaty klíče, které se mezi [oldJson] a [newJson] změnily. */
-    fun add(key: String, oldJson: String?, newJson: String) {
-        val merged = mergePatch(get(key), oldJson, newJson) ?: return
+    fun add(key: String, oldJson: String?, newJson: String) = synchronized(this) {
+        val merged = mergePatch(get(key), oldJson, newJson) ?: return@synchronized
         prefs.edit().putString(PREFIX + key, merged).apply()
     }
 
@@ -30,22 +33,22 @@ internal class ConfigPendingPatch(private val prefs: SharedPreferences) {
      * Přidá do záplaty hodnoty klíčů [keys] z [json] — pro úpravy, které se dřív uložily jen místně
      * ([PendingConfigEdits]) a po stažení serverové verze se přenesly do místní kopie.
      */
-    fun addKeys(key: String, json: String, keys: Set<String>) {
-        val src = parseObject(json) ?: return
+    fun addKeys(key: String, json: String, keys: Set<String>) = synchronized(this) {
+        val src = parseObject(json) ?: return@synchronized
         val patch = LinkedHashMap(parseObject(get(key)).orEmpty())
         keys.forEach { k -> src[k]?.let { patch[k] = it } }
         if (patch.isNotEmpty()) prefs.edit().putString(PREFIX + key, JsonObject(patch).toString()).apply()
     }
 
     /** Zahoď čekající záplatu. */
-    fun clear(key: String) {
+    fun clear(key: String) = synchronized(this) {
         if (prefs.contains(PREFIX + key)) prefs.edit().remove(PREFIX + key).apply()
     }
 
     fun get(key: String): String? = prefs.getString(PREFIX + key, null)?.takeIf { it.isNotBlank() && it != "{}" }
 
     /** Odeslaná záplata = hotovo; jen pokud mezitím nepřibyla další změna (ta počká na příští kolo). */
-    fun clearIfSame(key: String, sent: String) {
+    fun clearIfSame(key: String, sent: String) = synchronized(this) {
         if (get(key) == sent) prefs.edit().remove(PREFIX + key).apply()
     }
 
@@ -68,6 +71,21 @@ internal fun mergePatch(existing: String?, oldJson: String?, newJson: String): S
     val new = parseObject(newJson) ?: return null
     val old = parseObject(oldJson) ?: JsonObject(emptyMap())
     val patch = LinkedHashMap(parseObject(existing).orEmpty())
-    for ((k, v) in new) if (old[k] != v) patch[k] = v
+    for ((k, v) in new) {
+        if (old[k] == v) continue
+        val oldObj = old[k] as? JsonObject
+        val newObj = v as? JsonObject
+        patch[k] = if (k in PER_SERVICE_KEYS && oldObj != null && newObj != null) {
+            // Jen změněné služby (null = výslovné odhlášení) — server je od 2026-11-22 slučuje po službách
+            // (jellyfin-uploader 920404a); celé credentials by vrátily starou kopii ostatních služeb (revize).
+            val acc = LinkedHashMap((patch[k] as? JsonObject).orEmpty())
+            for ((s, sv) in newObj) if (oldObj[s] != sv) acc[s] = sv
+            for (s in oldObj.keys - newObj.keys) acc[s] = JsonNull
+            JsonObject(acc)
+        } else v
+    }
     return if (patch.isEmpty()) null else JsonObject(patch).toString()
 }
+
+/** Klíče, které server slučuje po položkách (služby přihlášení) — záplata nese jen změněné položky. */
+private val PER_SERVICE_KEYS = setOf("credentials")
