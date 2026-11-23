@@ -104,7 +104,7 @@ internal fun SlovoSectionContent(
         } else {
             val ctx = LocalContext.current
             val profile by listenVm.activeProfile.collectAsStateWithLifecycle()
-            val baseTabs = remember(profile?.id) { LibraryPrefs.visibleTabs(ctx) }
+            val baseTabs = remember(profile?.id, LibraryPrefs.tabsVersion) { LibraryPrefs.visibleTabs(ctx) }
             // Revize 2026-11-23: cíl skoku ve skryté záložce se dočasně připojí na konec (jinak by odkaz nikam nevedl).
             var extraTab by remember(baseTabs) { mutableStateOf<LibraryTab?>(null) }
             val tabs = if (extraTab != null && extraTab !in baseTabs) baseTabs + extraTab!! else baseTabs

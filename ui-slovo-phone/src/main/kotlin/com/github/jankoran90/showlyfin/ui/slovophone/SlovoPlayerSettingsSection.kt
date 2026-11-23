@@ -154,7 +154,7 @@ internal fun SlovoPlayerSettingsSection(
 
         Group("Fronta")
         SettingChips(
-            label = "Fronta: swipe doleva",
+            label = "Fronta: tah doleva",
             subtitle = "Vypnuto = položka fronty se tažením nehne (žádné omylem odebrané díly).",
             options = QueueGestureSettingsViewModel.OPTIONS,
             selected = left,
@@ -162,7 +162,7 @@ internal fun SlovoPlayerSettingsSection(
             onSelect = viewModel::setLeft,
         )
         SettingChips(
-            label = "Fronta: swipe doprava",
+            label = "Fronta: tah doprava",
             options = QueueGestureSettingsViewModel.OPTIONS,
             selected = right,
             labelOf = QueueGestureSettingsViewModel::label,
@@ -172,10 +172,27 @@ internal fun SlovoPlayerSettingsSection(
         var showContinue by remember { mutableStateOf(com.github.jankoran90.showlyfin.feature.listen.ui.QueuePrefs.showContinue(ctx)) }
         SettingSwitchRow(
             title = "Rozposlouchané pod frontou",
-            subtitle = "Obrazovka Fronta ukáže i rozjeté knihy a díly (tah doprava = přehrát další, doleva = ukončit poslech)",
             checked = showContinue,
             onCheckedChange = { com.github.jankoran90.showlyfin.feature.listen.ui.QueuePrefs.setShowContinue(ctx, it); showContinue = it },
         )
+        if (showContinue) {
+            var cLeft by remember { mutableStateOf(com.github.jankoran90.showlyfin.feature.listen.ui.QueuePrefs.swipeLeft(ctx)) }
+            var cRight by remember { mutableStateOf(com.github.jankoran90.showlyfin.feature.listen.ui.QueuePrefs.swipeRight(ctx)) }
+            SettingChips(
+                label = "Rozposlouchané: tah doleva",
+                options = com.github.jankoran90.showlyfin.feature.listen.ui.ContinueSwipe.entries.toList(),
+                selected = cLeft,
+                labelOf = { it.label },
+                onSelect = { com.github.jankoran90.showlyfin.feature.listen.ui.QueuePrefs.setSwipeLeft(ctx, it); cLeft = it },
+            )
+            SettingChips(
+                label = "Rozposlouchané: tah doprava",
+                options = com.github.jankoran90.showlyfin.feature.listen.ui.ContinueSwipe.entries.toList(),
+                selected = cRight,
+                labelOf = { it.label },
+                onSelect = { com.github.jankoran90.showlyfin.feature.listen.ui.QueuePrefs.setSwipeRight(ctx, it); cRight = it },
+            )
+        }
     }
 }
 

@@ -2,6 +2,8 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import android.content.Context
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import java.text.Collator
 import java.util.Locale
@@ -31,7 +33,9 @@ object LibraryPrefs {
             val list = saved.split(",").mapNotNull { n -> LibraryTab.entries.firstOrNull { it.name == n } }.distinct()
             list + LibraryTab.entries.filter { it !in list }
         } else legacyOrder(ctx)
-        val hidden = pr.getStringSet(profileKey(ctx, "tab_hidden"), emptySet()).orEmpty()
+        // User 2026-11-23 09:50 „chci ať to u Nel je sekcované jako u mě… přehled tam nechci“ → bez vlastní volby
+        // je Přehled skrytý (stejně jako u Honzy).
+        val hidden = pr.getStringSet(profileKey(ctx, "tab_hidden"), null) ?: setOf(LibraryTab.OVERVIEW.name)
         return order.map { it to (it.name !in hidden) }
     }
 
@@ -39,24 +43,27 @@ object LibraryPrefs {
     fun visibleTabs(ctx: Context): List<LibraryTab> =
         tabsWithVisibility(ctx).filter { it.second }.map { it.first }.ifEmpty { listOf(LibraryTab.OVERVIEW) }
 
-    fun setTabOrder(ctx: Context, order: List<LibraryTab>) =
+    /** Změna záložek v Nastavení → Domů se přestaví hned (ne až po restartu appky). */
+    var tabsVersion by androidx.compose.runtime.mutableIntStateOf(0)
+        private set
+
+    fun setTabOrder(ctx: Context, order: List<LibraryTab>) {
         p(ctx).edit().putString(profileKey(ctx, "tab_order"), order.joinToString(",") { it.name }).apply()
+        tabsVersion++
+    }
 
     fun setTabHidden(ctx: Context, tab: LibraryTab, hidden: Boolean) {
         val key = profileKey(ctx, "tab_hidden")
-        val cur = p(ctx).getStringSet(key, emptySet()).orEmpty().toMutableSet()
+        val cur = (p(ctx).getStringSet(key, null) ?: setOf(LibraryTab.OVERVIEW.name)).toMutableSet()
         if (hidden) cur.add(tab.name) else cur.remove(tab.name)
         p(ctx).edit().putStringSet(key, cur).apply()
+        tabsVersion++
     }
 
-    /** Bez uloženého pořadí: Přehled první, za ním dřívější „výchozí záložka Knihovny“ (0 Knihy, 1 Pořady, 2 Stažené). */
-    private fun legacyOrder(ctx: Context): List<LibraryTab> {
-        val pr = p(ctx)
-        val pk = profileKey(ctx, "default_tab")
-        val old = if (pr.contains(pk)) pr.getInt(pk, 0) else pr.getInt("default_tab", 0)
-        val second = when (old) { 1 -> LibraryTab.SHOWS; 2 -> LibraryTab.DOWNLOADS; else -> LibraryTab.BOOKS }
-        return listOf(LibraryTab.OVERVIEW, second) + LibraryTab.entries.filter { it != LibraryTab.OVERVIEW && it != second }
-    }
+    /** Bez uloženého pořadí: Knihy · Nové díly · Pořady · Stažené · Přehled (user 2026-11-23 09:50, rozložení Honzy). */
+    @Suppress("UNUSED_PARAMETER")
+    private fun legacyOrder(ctx: Context): List<LibraryTab> =
+        listOf(LibraryTab.BOOKS, LibraryTab.NEW, LibraryTab.SHOWS, LibraryTab.DOWNLOADS, LibraryTab.OVERVIEW)
 
     fun sort(ctx: Context): BookSort = BookSort.entries.getOrElse(p(ctx).getInt("book_sort", 0)) { BookSort.RECENT }
     fun setSort(ctx: Context, v: BookSort) = p(ctx).edit().putInt("book_sort", v.ordinal).apply()

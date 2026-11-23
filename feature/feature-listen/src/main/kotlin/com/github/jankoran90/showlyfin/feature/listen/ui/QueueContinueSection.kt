@@ -40,8 +40,10 @@ internal fun LazyListScope.continueSection(
     items: List<ContinueItem>,
     onPlay: (ContinueItem) -> Unit,
     onActions: (ContinueItem) -> Unit,
-    onPlayNext: (ContinueItem.Episode) -> Unit,
-    onAskEnd: (ContinueItem) -> Unit,
+    /** Akce tahu podle Nastavení › Přehrávač › Fronta ([ContinueSwipe]). */
+    swipeLeft: ContinueSwipe,
+    swipeRight: ContinueSwipe,
+    onSwipe: (ContinueItem, ContinueSwipe) -> Unit,
 ) {
     if (items.isEmpty()) return
     item(key = "continue_header") {
@@ -53,11 +55,13 @@ internal fun LazyListScope.continueSection(
         )
     }
     items(items, key = { "continue_" + it.continueKey() }) { item ->
+        val left = swipeLeft.takeIf { it.appliesTo(item) } ?: ContinueSwipe.OFF
+        val right = swipeRight.takeIf { it.appliesTo(item) } ?: ContinueSwipe.OFF
         val state = rememberSwipeToDismissBoxState(
             confirmValueChange = { v ->
                 when (v) {
-                    SwipeToDismissBoxValue.StartToEnd -> (item as? ContinueItem.Episode)?.let(onPlayNext)
-                    SwipeToDismissBoxValue.EndToStart -> onAskEnd(item)
+                    SwipeToDismissBoxValue.StartToEnd -> if (right != ContinueSwipe.OFF) onSwipe(item, right)
+                    SwipeToDismissBoxValue.EndToStart -> if (left != ContinueSwipe.OFF) onSwipe(item, left)
                     else -> Unit
                 }
                 false // položka se vždy vrátí; zmizí až po skutečné akci (fronta / ukončení)
@@ -65,12 +69,30 @@ internal fun LazyListScope.continueSection(
         )
         SwipeToDismissBox(
             state = state,
-            enableDismissFromStartToEnd = item is ContinueItem.Episode,
-            backgroundContent = { ContinueSwipeBackground(state.dismissDirection) },
+            enableDismissFromStartToEnd = right != ContinueSwipe.OFF,
+            enableDismissFromEndToStart = left != ContinueSwipe.OFF,
+            backgroundContent = {
+                ContinueSwipeBackground(
+                    state.dismissDirection,
+                    if (state.dismissDirection == SwipeToDismissBoxValue.StartToEnd) right else left,
+                )
+            },
         ) {
             ContinueRow(item, onPlay, onActions, solid = state.dismissDirection != SwipeToDismissBoxValue.Settled)
         }
     }
+}
+
+/** Akce tahu u Rozposlouchaných (user 2026-11-23 09:54 „nastavení actions, co dělá doleva doprava“). */
+enum class ContinueSwipe(val label: String) {
+    OFF("Vypnuto"),
+    PLAY_NEXT("Přehrát další"),
+    QUEUE_END("Na konec fronty"),
+    PLAY("Pokračovat"),
+    END("Ukončit poslech");
+
+    /** Knihu do fronty zařadit nejde (fronta = díly). */
+    fun appliesTo(item: ContinueItem): Boolean = !(item is ContinueItem.Book && (this == PLAY_NEXT || this == QUEUE_END))
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -99,18 +121,22 @@ private fun ContinueRow(item: ContinueItem, onPlay: (ContinueItem) -> Unit, onAc
 }
 
 @androidx.compose.runtime.Composable
-private fun ContinueSwipeBackground(direction: SwipeToDismissBoxValue) {
-    val (icon, label, align) = when (direction) {
-        SwipeToDismissBoxValue.StartToEnd -> Triple(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přehrát další", Alignment.CenterStart)
-        SwipeToDismissBoxValue.EndToStart -> Triple(Icons.Rounded.Close, "Ukončit poslech", Alignment.CenterEnd)
-        else -> { Box(Modifier.fillMaxSize()); return }
+private fun ContinueSwipeBackground(direction: SwipeToDismissBoxValue, action: ContinueSwipe) {
+    if (direction == SwipeToDismissBoxValue.Settled || action == ContinueSwipe.OFF) { Box(Modifier.fillMaxSize()); return }
+    val icon = when (action) {
+        ContinueSwipe.PLAY_NEXT -> Icons.AutoMirrored.Rounded.PlaylistPlay
+        ContinueSwipe.QUEUE_END -> Icons.AutoMirrored.Rounded.PlaylistAdd
+        ContinueSwipe.PLAY -> Icons.Rounded.Headphones
+        else -> Icons.Rounded.Close
     }
-    val color = if (direction == SwipeToDismissBoxValue.EndToStart) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
-    val onColor = if (direction == SwipeToDismissBoxValue.EndToStart) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+    val danger = action == ContinueSwipe.END
+    val color = if (danger) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
+    val onColor = if (danger) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+    val align = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
     Box(Modifier.fillMaxSize().background(color).padding(horizontal = Spacing.xl), contentAlignment = align) {
         androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = onColor)
-            Text(label, color = onColor, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = Spacing.s))
+            Text(action.label, color = onColor, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = Spacing.s))
         }
     }
 }
@@ -147,4 +173,8 @@ object QueuePrefs {
     private fun p(ctx: Context) = ctx.getSharedPreferences("slovo_queue", Context.MODE_PRIVATE)
     fun showContinue(ctx: Context): Boolean = p(ctx).getBoolean("show_continue", true)
     fun setShowContinue(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("show_continue", v).apply()
+    fun swipeLeft(ctx: Context): ContinueSwipe = ContinueSwipe.entries.getOrElse(p(ctx).getInt("swipe_left", ContinueSwipe.END.ordinal)) { ContinueSwipe.END }
+    fun setSwipeLeft(ctx: Context, v: ContinueSwipe) = p(ctx).edit().putInt("swipe_left", v.ordinal).apply()
+    fun swipeRight(ctx: Context): ContinueSwipe = ContinueSwipe.entries.getOrElse(p(ctx).getInt("swipe_right", ContinueSwipe.PLAY_NEXT.ordinal)) { ContinueSwipe.PLAY_NEXT }
+    fun setSwipeRight(ctx: Context, v: ContinueSwipe) = p(ctx).edit().putInt("swipe_right", v.ordinal).apply()
 }

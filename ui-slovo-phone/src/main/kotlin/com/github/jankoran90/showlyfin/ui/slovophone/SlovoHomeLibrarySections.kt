@@ -84,18 +84,11 @@ fun SlovoHomeRowsSection() {
     }
 }
 
+/** Nastavení › Domů a vzhled › Záložky na Domů (user 2026-11-23 09:52 „skrytí přehledu nevidím v nastavení“). */
 @Composable
-fun SlovoLibrarySection() {
+fun SlovoHomeTabsSection() {
     val ctx = LocalContext.current
     var tabs by remember { mutableStateOf(LibraryPrefs.tabsWithVisibility(ctx)) }
-    var sort by remember { mutableStateOf(LibraryPrefs.sort(ctx)) }
-    var filter by remember { mutableStateOf(LibraryPrefs.filter(ctx)) }
-    var list by remember { mutableStateOf(LibraryPrefs.listMode(ctx)) }
-    var rowSize by remember { mutableStateOf(LibraryPrefs.rowSize(ctx)) }
-    var showSort by remember { mutableStateOf(LibraryPrefs.showSort(ctx)) }
-    var showFilter by remember { mutableStateOf(LibraryPrefs.showFilter(ctx)) }
-    var showList by remember { mutableStateOf(LibraryPrefs.showListMode(ctx)) }
-    var showRow by remember { mutableStateOf(LibraryPrefs.showRowSize(ctx)) }
     Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xs), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
         // User 2026-11-23: „pořadí si každý změní a výchozí je první“ — záložky Domů per profil.
         Text(
@@ -104,10 +97,15 @@ fun SlovoLibrarySection() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Column {
+            val firstVisible = tabs.indexOfFirst { it.second }
             tabs.forEachIndexed { i, (tab, visible) ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (i == 0) "${tab.label} · otevře se první" else tab.label,
+                        when {
+                            !visible -> "${tab.label} · skrytá"
+                            i == firstVisible -> "${tab.label} · otevře se první"
+                            else -> tab.label
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (visible) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -128,6 +126,21 @@ fun SlovoLibrarySection() {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun SlovoLibrarySection() {
+    val ctx = LocalContext.current
+    var sort by remember { mutableStateOf(LibraryPrefs.sort(ctx)) }
+    var filter by remember { mutableStateOf(LibraryPrefs.filter(ctx)) }
+    var list by remember { mutableStateOf(LibraryPrefs.listMode(ctx)) }
+    var rowSize by remember { mutableStateOf(LibraryPrefs.rowSize(ctx)) }
+    var showSort by remember { mutableStateOf(LibraryPrefs.showSort(ctx)) }
+    var showFilter by remember { mutableStateOf(LibraryPrefs.showFilter(ctx)) }
+    var showList by remember { mutableStateOf(LibraryPrefs.showListMode(ctx)) }
+    var showRow by remember { mutableStateOf(LibraryPrefs.showRowSize(ctx)) }
+    Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xs), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
         SettingChips(
             label = "Řazení knih",
             options = BookSort.entries.toList(),

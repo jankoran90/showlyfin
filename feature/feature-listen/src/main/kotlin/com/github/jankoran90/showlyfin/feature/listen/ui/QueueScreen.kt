@@ -89,6 +89,8 @@ fun QueueScreen(
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { homeVm.refresh(); onPauseOrDispose { } }
     val continueAll by homeVm.items.collectAsStateWithLifecycle()
     val showContinue = remember { QueuePrefs.showContinue(ctx) }
+    val continueSwipeLeft = remember { QueuePrefs.swipeLeft(ctx) }
+    val continueSwipeRight = remember { QueuePrefs.swipeRight(ctx) }
     val queueKeys = queue.map { it.episodeId }.toSet()
     val continueItems = if (!showContinue) emptyList() else continueAll.filter { item ->
         when (item) {
@@ -112,20 +114,21 @@ fun QueueScreen(
         }
     }
     val footer: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
-        if (queue.isEmpty()) item(key = "queue_empty_hint") {
-            Text(
-                "Ve frontě nic není. Díl přidáš tahem doprava níž, podržením nebo přes ⋮ → Přehrát další.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s),
-            )
-        }
         continueSection(
             items = continueItems,
             onPlay = playContinue,
             onActions = { continueAction = it },
-            onPlayNext = { homeVm.enqueueEpisode(it, atFront = true) },
-            onAskEnd = { confirmEnd = it },
+            swipeLeft = continueSwipeLeft,
+            swipeRight = continueSwipeRight,
+            onSwipe = { item, action ->
+                when (action) {
+                    ContinueSwipe.PLAY_NEXT -> (item as? HomeContinue.Episode)?.let { homeVm.enqueueEpisode(it, atFront = true) }
+                    ContinueSwipe.QUEUE_END -> (item as? HomeContinue.Episode)?.let { homeVm.enqueueEpisode(it, atFront = false) }
+                    ContinueSwipe.PLAY -> playContinue(item)
+                    ContinueSwipe.END -> confirmEnd = item
+                    ContinueSwipe.OFF -> Unit
+                }
+            },
         )
     }
 
@@ -196,7 +199,7 @@ fun QueueScreen(
             ) {
                 Icon(Icons.AutoMirrored.Rounded.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Spacing.xxl * 2))
                 Text(
-                    "Ve frontě nic není.\nDíl přidáš podržením nebo přes ⋮ → Přehrát další / Na konec fronty.",
+                    "Ve frontě nic není.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

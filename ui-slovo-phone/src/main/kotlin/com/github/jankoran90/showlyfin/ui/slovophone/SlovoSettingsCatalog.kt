@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.Animation
+import androidx.compose.material.icons.rounded.Tab
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Bookmarks
@@ -116,6 +117,10 @@ internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
 
     // ── Domů a vzhled
     SlovoSettingEntry(
+        "Záložky na Domů", Icons.Rounded.Tab, SlovoSettingsCategory.HOME,
+        "záložky domů přehled knihy pořady nové díly stažené pořadí skrýt skrytá první otevřít",
+    ) { SlovoHomeTabsSection() },
+    SlovoSettingEntry(
         "Vzhled", Icons.Rounded.Palette, SlovoSettingsCategory.HOME,
         "barva akcent pozadí tónování světlost kontrast sytost písmo patkové newsreader velikost textu motiv amoled",
         adultOnly = false,
@@ -147,7 +152,7 @@ internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
     // ── Knihovna a zdroje
     SlovoSettingEntry(
         "Knihovna", Icons.AutoMirrored.Rounded.LibraryBooks, SlovoSettingsCategory.LIBRARY,
-        "knihy pořady záložky domů přehled nové díly stažené pořadí skrýt řazení seznam mřížka obalů velikost řádku náhledu ukázat",
+        "knihy pořady řazení filtr seznam mřížka obalů velikost řádku náhledu ukázat",
         adultOnly = false,
     ) { SlovoLibrarySection() },
     SlovoSettingEntry(
