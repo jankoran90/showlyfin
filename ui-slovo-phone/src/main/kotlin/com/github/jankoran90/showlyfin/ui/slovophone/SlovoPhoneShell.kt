@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.ui.slovophone
 
+import com.github.jankoran90.showlyfin.feature.listen.ui.LibraryTab
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -161,12 +162,20 @@ private fun SlovoShellContent() {
             resetTicks[section] = old + 1
         }
         detailStack = emptyList()
-        current = section
+        // Knihovna a Pořady jsou od 1.0.117 záložky Domů (user 2026-11-23) → staré cíle přesměrovat na záložku.
+        current = when (section) {
+            SlovoSection.KNIHOVNA -> { HomeTabRequest.tab = LibraryTab.BOOKS; SlovoSection.DOMU }
+            SlovoSection.PORADY -> { HomeTabRequest.tab = LibraryTab.NEW; SlovoSection.DOMU }
+            else -> section
+        }
     }
     // Offline epizoda z přehrávače → seznam stažených (dítě Poslech, dospělý Pořady › Sledované).
     val onGoToPoslech: () -> Unit = {
         detailStack = emptyList()
-        current = if (isKidsProfile) SlovoSection.POSLECH else SlovoSection.PORADY
+        current = if (isKidsProfile) SlovoSection.POSLECH else {
+            HomeTabRequest.tab = LibraryTab.SHOWS
+            SlovoSection.DOMU
+        }
     }
     val expandMiniPlayer: () -> Unit = { onPush(SlovoDetailEntry.AudiobookPlayer(itemId = null, fromStart = false)) }
 

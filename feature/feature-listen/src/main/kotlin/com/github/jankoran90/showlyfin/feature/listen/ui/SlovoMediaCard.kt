@@ -112,6 +112,8 @@ fun SlovoMediaRow(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    /** User 2026-11-23: „list view dej možnost volit velikost řádku/náhledu“ — viz [RowSize]. */
+    coverSize: Dp = CoverSize.row,
 ) {
     Row(
         modifier
@@ -121,11 +123,11 @@ fun SlovoMediaRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.m),
     ) {
-        MediaCover(model, Modifier.size(CoverSize.row), compact = true)
+        MediaCover(model, Modifier.size(coverSize), compact = true)
         Column(Modifier.weight(1f)) {
             Text(
                 model.title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (coverSize > CoverSize.row) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
                 color = if (model.playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

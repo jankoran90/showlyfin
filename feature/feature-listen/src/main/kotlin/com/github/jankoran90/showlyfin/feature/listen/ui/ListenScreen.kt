@@ -207,6 +207,7 @@ fun BooksContent(
                 var bookSort by remember { mutableStateOf(LibraryPrefs.sort(ctx)) }
                 var bookFilter by remember { mutableStateOf(LibraryPrefs.filter(ctx)) }
                 var listMode by remember { mutableStateOf(LibraryPrefs.listMode(ctx)) }
+                var rowSize by remember { mutableStateOf(LibraryPrefs.rowSize(ctx)) }
                 val sortedBooks = remember(state.books, bookSort, bookFilter) {
                     state.books.filteredBy(bookFilter).sortedForShelf(bookSort)
                 }
@@ -219,12 +220,18 @@ fun BooksContent(
                 val playerState by viewModel.playerState.collectAsStateWithLifecycle()
                 Column(Modifier.fillMaxSize()) {
                     LibraryToolbar(
-                        filter = bookFilter,
-                        sort = bookSort,
+                        filterOptions = BookFilter.entries.map { it.name to it.label },
+                        selectedFilter = bookFilter.name,
+                        onFilter = { n -> BookFilter.entries.firstOrNull { it.name == n }?.let { bookFilter = it; LibraryPrefs.setFilter(ctx, it) } },
+                        sortOptions = BookSort.entries.map { it.name to it.label },
+                        selectedSort = bookSort.name,
+                        onSort = { n -> BookSort.entries.firstOrNull { it.name == n }?.let { bookSort = it; LibraryPrefs.setSort(ctx, it) } },
                         listMode = listMode,
-                        onFilter = { bookFilter = it; LibraryPrefs.setFilter(ctx, it) },
-                        onSort = { bookSort = it; LibraryPrefs.setSort(ctx, it) },
-                        onListMode = { listMode = it; LibraryPrefs.setListMode(ctx, it) },
+                        rowSize = rowSize,
+                        onView = { list, size ->
+                            listMode = list; rowSize = size
+                            LibraryPrefs.setListMode(ctx, list); LibraryPrefs.setRowSize(ctx, size)
+                        },
                         libraries = state.libraries.map { it.id to it.name },
                         selectedLibraryId = state.selectedLibraryId,
                         onSelectLibrary = viewModel::selectLibrary,
@@ -240,6 +247,7 @@ fun BooksContent(
                             onOpenBook = onOpenBook,
                             onOpenSeries = { openSeries = it },
                             onBookActions = { actionBook = it },
+                            rowSize = rowSize,
                         )
                     } else LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 150.dp),

@@ -75,7 +75,8 @@ object SlovoShellPrefs {
     fun startSection(@Suppress("UNUSED_PARAMETER") ctx: Context): SlovoSection = SlovoSection.DOMU
 
     // ── Spodní lišta (AMPHORA F1, KO1) ── Domů je vždy první a nejde skrýt; zbytek pořadí + viditelnost.
-    val barSections = listOf(SlovoSection.KNIHOVNA, SlovoSection.PORADY, SlovoSection.HLEDAT, SlovoSection.FRONTA)
+    // User 2026-11-23: Knihovna a Pořady jsou záložky Domů (Nastavení › Knihovna), v liště už nejsou.
+    val barSections = listOf(SlovoSection.HLEDAT, SlovoSection.FRONTA)
 
     private fun savedBarOrder(ctx: Context): List<SlovoSection> = mergedOrder(prefs(ctx).getString(KEY_BAR_ORDER, null), barSections)
     private fun hiddenBar(ctx: Context): Set<SlovoSection> = hiddenOf(prefs(ctx).getStringSet(KEY_BAR_HIDDEN, emptySet()), barSections)

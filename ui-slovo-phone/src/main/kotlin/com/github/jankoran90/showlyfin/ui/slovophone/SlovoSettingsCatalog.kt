@@ -147,7 +147,7 @@ internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
     // ── Knihovna a zdroje
     SlovoSettingEntry(
         "Knihovna", Icons.AutoMirrored.Rounded.LibraryBooks, SlovoSettingsCategory.LIBRARY,
-        "knihy záložka řazení seznam mřížka obalů ukázat",
+        "knihy pořady záložky domů přehled nové díly stažené pořadí skrýt řazení seznam mřížka obalů velikost řádku náhledu ukázat",
         adultOnly = false,
     ) { SlovoLibrarySection() },
     SlovoSettingEntry(

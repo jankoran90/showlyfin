@@ -53,7 +53,7 @@ fun SlovoNavOrderSection() {
         )
         SettingSwitchRow(
             title = "Ťuk na otevřené místo vrátí na začátek",
-            subtitle = "Např. v Knihovně nebo Pořadech odroluje zpět nahoru",
+            subtitle = "Např. na Domů nebo ve Frontě odroluje zpět nahoru",
             checked = reselect,
             onCheckedChange = { SlovoShellPrefs.setReselectToTop(ctx, it); reselect = it },
         )

@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,9 @@ import com.github.jankoran90.showlyfin.feature.listen.ui.FollowingContent
 import com.github.jankoran90.showlyfin.feature.listen.ui.HomeRow
 import com.github.jankoran90.showlyfin.feature.listen.ui.HomeScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.LibraryPrefs
+import com.github.jankoran90.showlyfin.feature.listen.ui.LibraryTab
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import com.github.jankoran90.showlyfin.feature.listen.ui.ListenScreen
 import com.github.jankoran90.showlyfin.feature.listen.ui.PodcastDiscoveryScreen
 import com.github.jankoran90.showlyfin.feature.listen.search.UnifiedSearchScreen
@@ -55,7 +59,7 @@ import kotlin.math.absoluteValue
 /**
  * AMPHORA (SHW-124) F1 — obsah jedné sekce (místa lišty nebo položky z Víc). Vyčleněno ze
  * [SlovoPhoneShell] (anti-monolit). Pořady = Nové (dřívější Timeline) | Sledované jako dvě přejížděcí
- * strany; Knihovna = Knihy | Pořady | Stažené; Hledat = jedno hledání pro všechno (F3).
+ * strany (dnes záložky Domů, user 2026-11-23); Hledat = jedno hledání pro všechno (F3).
  */
 @Composable
 internal fun SlovoSectionContent(
@@ -90,24 +94,69 @@ internal fun SlovoSectionContent(
     }
 
     when (section) {
-        SlovoSection.DOMU -> SlovoSectionScaffold("Slovo", onMenu) {
-            if (isKidsProfile) {
+        // Dítě: Domů beze změny. Dospělý (user 2026-11-23 „vše v jednom… přejmenuj knihovnu na domov“): Domů =
+        // záložky Přehled · Knihy · Pořady · Nové díly · Stažené, pořadí a skrytí per profil (Nastavení › Knihovna).
+        SlovoSection.DOMU, SlovoSection.KNIHOVNA, SlovoSection.PORADY -> if (isKidsProfile) {
+            SlovoSectionScaffold("Slovo", onMenu) {
                 HomeScreen(onOpenBook = onOpenBook, onOpenSourceEpisode = onOpenSourceEpisode, modifier = Modifier.fillMaxSize())
-            } else {
-                HomeScreen(
-                    onOpenBook = onOpenBook,
-                    onOpenSourceEpisode = onOpenSourceEpisode,
-                    onPlayVideo = playExternalVideo,
-                    onPlayJfVideo = playJfVideo,
-                    modifier = Modifier.fillMaxSize(),
-                    showRows = true,
-                    // Celý seznam řady: díly → Pořady (Nové), knihy → Knihovna.
-                    onShowAllRow = { row ->
-                        onSelectSection(
-                            if (row == HomeRow.NEW_EPISODES || row == HomeRow.SHORT) SlovoSection.PORADY else SlovoSection.KNIHOVNA,
+            }
+        } else {
+            val ctx = LocalContext.current
+            val profile by listenVm.activeProfile.collectAsStateWithLifecycle()
+            val tabs = remember(profile?.id) { LibraryPrefs.visibleTabs(ctx) }
+            val pager = key(tabs) { rememberPagerState(initialPage = 0) { tabs.size } }
+            val scope = rememberCoroutineScope()
+            val goTo: (LibraryTab) -> Unit = { t -> tabs.indexOf(t).takeIf { it >= 0 }?.let { scope.launch { pager.animateScrollToPage(it) } } }
+            // Skok na záložku zvenku (Přehled › Zobrazit vše, offline díl z přehrávače).
+            val request = HomeTabRequest.tab
+            LaunchedEffect(request) { request?.let { goTo(it); HomeTabRequest.tab = null } }
+            SlovoSectionScaffold(
+                onMenu = onMenu,
+                titleContent = { PagerTabs(pager, tabs.map { it.label }) { page -> scope.launch { pager.animateScrollToPage(page) } } },
+            ) {
+                HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 0) { page ->
+                    val tab = tabs[page]
+                    when {
+                        tab == LibraryTab.OVERVIEW -> HomeScreen(
+                            onOpenBook = onOpenBook,
+                            onOpenSourceEpisode = onOpenSourceEpisode,
+                            onPlayVideo = playExternalVideo,
+                            onPlayJfVideo = playJfVideo,
+                            modifier = Modifier.fillMaxSize(),
+                            showRows = true,
+                            // Celý seznam řady: díly → Nové díly, knihy → Knihy.
+                            onShowAllRow = { row ->
+                                goTo(if (row == HomeRow.NEW_EPISODES || row == HomeRow.SHORT) LibraryTab.NEW else LibraryTab.BOOKS)
+                            },
                         )
-                    },
-                )
+                        tab == LibraryTab.DOWNLOADS -> DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, onOpenBook = onOpenBook, modifier = Modifier.fillMaxSize())
+                        !listenState.isConfigured -> NotConfigured()
+                        tab == LibraryTab.BOOKS -> BooksContent(
+                            state = listenState,
+                            viewModel = listenVm,
+                            onOpenBook = onOpenBook,
+                            onEditBook = { id, title, author -> onPush(SlovoDetailEntry.AudiobookEdit(id, title, author)) },
+                        )
+                        tab == LibraryTab.SHOWS -> FollowingContent(
+                            state = listenState,
+                            viewModel = listenVm,
+                            onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
+                            onOpenSource = { src -> onPush(sourceDetail(src)) },
+                            onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
+                            downloadCount = podcastDownloads.size,
+                            sourceType = "all",
+                            withToolbar = true,
+                        )
+                        else -> TimelinePage(
+                            state = listenState,
+                            viewModel = listenVm,
+                            podcastDownloads = podcastDownloads,
+                            onOpenSourceEpisode = onOpenSourceEpisode,
+                            onGoToObjevit = { onSelectSection(SlovoSection.OBJEVIT) },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
             }
         }
         // Dětský sloučený poslech (schválené pořady a knihy) — beze změny, jen vlastní místo v liště.
@@ -126,73 +175,6 @@ internal fun SlovoSectionContent(
                 onOpenSourceSeries = { src, slug, seriesTitle -> onPush(sourceSeriesDetail(src, slug, seriesTitle)) },
                 modifier = Modifier.fillMaxSize(),
             )
-        }
-        // AMPHORA F2 / KN1: Knihy | Pořady | Stažené (výchozí záložka v Nastavení › Knihovna).
-        SlovoSection.KNIHOVNA -> {
-            val ctx = LocalContext.current
-            val pager = rememberPagerState(initialPage = LibraryPrefs.defaultTab(ctx)) { LibraryPrefs.tabs.size }
-            val scope = rememberCoroutineScope()
-            SlovoSectionScaffold(
-                onMenu = onMenu,
-                titleContent = { PagerTabs(pager, LibraryPrefs.tabs) { page -> scope.launch { pager.animateScrollToPage(page) } } },
-            ) {
-                HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 0) { page ->
-                    when {
-                        page == 2 -> DownloadsScreen(onOpenAudioPlayer = expandMiniPlayer, onOpenBook = onOpenBook, modifier = Modifier.fillMaxSize())
-                        !listenState.isConfigured -> NotConfigured()
-                        page == 0 -> BooksContent(
-                            state = listenState,
-                            viewModel = listenVm,
-                            onOpenBook = onOpenBook,
-                            onEditBook = { id, title, author -> onPush(SlovoDetailEntry.AudiobookEdit(id, title, author)) },
-                        )
-                        else -> FollowingContent(
-                            state = listenState,
-                            viewModel = listenVm,
-                            onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
-                            onOpenSource = { src -> onPush(sourceDetail(src)) },
-                            onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
-                            downloadCount = podcastDownloads.size,
-                            sourceType = "all",
-                        )
-                    }
-                }
-            }
-        }
-        SlovoSection.PORADY -> {
-            val pager = rememberPagerState(initialPage = 0) { 2 }
-            val scope = rememberCoroutineScope()
-            SlovoSectionScaffold(
-                onMenu = onMenu,
-                titleContent = {
-                    PagerTabs(pager, listOf("Nové", "Sledované")) { page -> scope.launch { pager.animateScrollToPage(page) } }
-                },
-            ) {
-                if (!listenState.isConfigured) NotConfigured()
-                else HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-                    // F2: Nové díly první (Sledované jsou i v Knihovně › Pořady).
-                    if (page == 1) {
-                        FollowingContent(
-                            state = listenState,
-                            viewModel = listenVm,
-                            onOpenPodcast = { onPush(SlovoDetailEntry.PodcastDetail(it)) },
-                            onOpenSource = { src -> onPush(sourceDetail(src)) },
-                            onOpenMerged = { gid, gTitle -> onPush(SlovoDetailEntry.MergedPodcast(gid, gTitle)) },
-                            downloadCount = podcastDownloads.size,
-                            sourceType = "all",
-                        )
-                    } else {
-                        TimelinePage(
-                            state = listenState,
-                            viewModel = listenVm,
-                            podcastDownloads = podcastDownloads,
-                            onOpenSourceEpisode = onOpenSourceEpisode,
-                            onGoToObjevit = { onSelectSection(SlovoSection.OBJEVIT) },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                }
-            }
         }
         // AMPHORA F3 / HL1: jedno hledání (knihy, pořady, díly, Audioteka, nové pořady).
         SlovoSection.HLEDAT -> SlovoSectionScaffold(section.label, onMenu) {
@@ -295,7 +277,7 @@ private fun SlovoSectionScaffold(
  * (user 2026-08-16 17:38). Ťuk na název = přeskok na stranu.
  */
 @Composable
-private fun PagerTabs(pagerState: PagerState, labels: List<String>, onSelect: (Int) -> Unit) {
+internal fun PagerTabs(pagerState: PagerState, labels: List<String>, onSelect: (Int) -> Unit) {
     val maxIndex = (labels.size - 1).coerceAtLeast(0)
     val position = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, maxIndex.toFloat())
     Row(
@@ -331,3 +313,8 @@ private fun sourceSeriesDetail(src: PodcastSource, slug: String, seriesTitle: St
         "ctv" -> SlovoDetailEntry.CtvProgram(src.ref, seriesTitle, seriesFilter = slug)
         else -> SlovoDetailEntry.RssPodcast(src.ref, seriesTitle, seriesFilter = slug)
     }
+
+/** Požadavek na přepnutí záložky Domů zvenku (shell: offline díl → Pořady; staré cíle Knihovna/Pořady). */
+internal object HomeTabRequest {
+    var tab by androidx.compose.runtime.mutableStateOf<LibraryTab?>(null)
+}

@@ -2,6 +2,7 @@ package com.github.jankoran90.showlyfin.feature.listen.ui
 
 import android.content.Context
 import com.github.jankoran90.showlyfin.data.abs.model.Audiobook
+import androidx.compose.ui.unit.dp
 import java.text.Collator
 import java.util.Locale
 
@@ -14,21 +15,48 @@ object LibraryPrefs {
     private const val PREFS = "slovo_library"
     private fun p(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    val tabs = listOf("Knihy", "Pořady", "Stažené")
-
-    // User 2026-11-21 21:09: „má jít nastavit per profil, zda jsou první knihy, nebo pořady“ → klíč per profil,
-    // bez vlastní volby profilu platí dřívější společná hodnota. Aktivní profil = `trakt_prefs.active_profile_id`
-    // (zapisuje ProfileRepository.setActive, čte i DebugCaptureManager).
-    private fun profileKey(ctx: Context): String? =
+    // User 2026-11-21 21:09: „má jít nastavit per profil, zda jsou první knihy, nebo pořady“ → klíče per profil.
+    // Aktivní profil = `trakt_prefs.active_profile_id` (zapisuje ProfileRepository.setActive).
+    private fun profileId(ctx: Context): Long =
         ctx.getSharedPreferences("trakt_prefs", Context.MODE_PRIVATE).getLong("active_profile_id", 0L)
-            .takeIf { it > 0L }?.let { "default_tab_p$it" }
+    private fun profileKey(ctx: Context, base: String): String = profileId(ctx).takeIf { it > 0L }?.let { "${base}_p$it" } ?: base
 
-    fun defaultTab(ctx: Context): Int {
+    // User 2026-11-23: „vše v jednom pod knihovnou… přejmenuj knihovnu na domov“ + „pořadí si každý změní a výchozí
+    // je první“ → Domů = záložky [LibraryTab]; pořadí a skrytí per profil, appka se otevře na první viditelné.
+    /** Všechny záložky v pořadí profilu + jestli jsou vidět (editor v Nastavení). */
+    fun tabsWithVisibility(ctx: Context): List<Pair<LibraryTab, Boolean>> {
         val pr = p(ctx)
-        val v = profileKey(ctx)?.takeIf { pr.contains(it) }?.let { pr.getInt(it, 0) } ?: pr.getInt("default_tab", 0)
-        return v.coerceIn(0, tabs.lastIndex)
+        val saved = pr.getString(profileKey(ctx, "tab_order"), null)
+        val order = if (saved != null) {
+            val list = saved.split(",").mapNotNull { n -> LibraryTab.entries.firstOrNull { it.name == n } }.distinct()
+            list + LibraryTab.entries.filter { it !in list }
+        } else legacyOrder(ctx)
+        val hidden = pr.getStringSet(profileKey(ctx, "tab_hidden"), emptySet()).orEmpty()
+        return order.map { it to (it.name !in hidden) }
     }
-    fun setDefaultTab(ctx: Context, v: Int) = p(ctx).edit().putInt(profileKey(ctx) ?: "default_tab", v).apply()
+
+    /** Viditelné záložky; nikdy prázdné (všechno skryté = Přehled). */
+    fun visibleTabs(ctx: Context): List<LibraryTab> =
+        tabsWithVisibility(ctx).filter { it.second }.map { it.first }.ifEmpty { listOf(LibraryTab.OVERVIEW) }
+
+    fun setTabOrder(ctx: Context, order: List<LibraryTab>) =
+        p(ctx).edit().putString(profileKey(ctx, "tab_order"), order.joinToString(",") { it.name }).apply()
+
+    fun setTabHidden(ctx: Context, tab: LibraryTab, hidden: Boolean) {
+        val key = profileKey(ctx, "tab_hidden")
+        val cur = p(ctx).getStringSet(key, emptySet()).orEmpty().toMutableSet()
+        if (hidden) cur.add(tab.name) else cur.remove(tab.name)
+        p(ctx).edit().putStringSet(key, cur).apply()
+    }
+
+    /** Bez uloženého pořadí: Přehled první, za ním dřívější „výchozí záložka Knihovny“ (0 Knihy, 1 Pořady, 2 Stažené). */
+    private fun legacyOrder(ctx: Context): List<LibraryTab> {
+        val pr = p(ctx)
+        val pk = profileKey(ctx, "default_tab")
+        val old = if (pr.contains(pk)) pr.getInt(pk, 0) else pr.getInt("default_tab", 0)
+        val second = when (old) { 1 -> LibraryTab.SHOWS; 2 -> LibraryTab.DOWNLOADS; else -> LibraryTab.BOOKS }
+        return listOf(LibraryTab.OVERVIEW, second) + LibraryTab.entries.filter { it != LibraryTab.OVERVIEW && it != second }
+    }
 
     fun sort(ctx: Context): BookSort = BookSort.entries.getOrElse(p(ctx).getInt("book_sort", 0)) { BookSort.RECENT }
     fun setSort(ctx: Context, v: BookSort) = p(ctx).edit().putInt("book_sort", v.ordinal).apply()
@@ -38,6 +66,49 @@ object LibraryPrefs {
 
     fun listMode(ctx: Context): Boolean = p(ctx).getBoolean("book_list", false)
     fun setListMode(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("book_list", v).apply()
+
+    fun rowSize(ctx: Context): RowSize = RowSize.entries.getOrElse(p(ctx).getInt("book_row", 1)) { RowSize.MEDIUM }
+    fun setRowSize(ctx: Context, v: RowSize) = p(ctx).edit().putInt("book_row", v.ordinal).apply()
+
+    // Pořady: stejná lišta jako knihy (user 2026-11-23 „proč pořady nemají lištu filtrů a řazení“).
+    fun showSort(ctx: Context): ShowSort = ShowSort.entries.getOrElse(p(ctx).getInt("show_sort", 0)) { ShowSort.TITLE }
+    fun setShowSort(ctx: Context, v: ShowSort) = p(ctx).edit().putInt("show_sort", v.ordinal).apply()
+    fun showFilter(ctx: Context): ShowFilter = ShowFilter.entries.getOrElse(p(ctx).getInt("show_filter", 0)) { ShowFilter.ALL }
+    fun setShowFilter(ctx: Context, v: ShowFilter) = p(ctx).edit().putInt("show_filter", v.ordinal).apply()
+    fun showListMode(ctx: Context): Boolean = p(ctx).getBoolean("show_list", false)
+    fun setShowListMode(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("show_list", v).apply()
+    fun showRowSize(ctx: Context): RowSize = RowSize.entries.getOrElse(p(ctx).getInt("show_row", 1)) { RowSize.MEDIUM }
+    fun setShowRowSize(ctx: Context, v: RowSize) = p(ctx).edit().putInt("show_row", v.ordinal).apply()
+}
+
+/** Záložky Domů (dřív Domů + Knihovna + Pořady zvlášť). */
+enum class LibraryTab(val label: String) {
+    OVERVIEW("Přehled"),
+    BOOKS("Knihy"),
+    SHOWS("Pořady"),
+    NEW("Nové díly"),
+    DOWNLOADS("Stažené"),
+}
+
+/** Velikost řádku seznamu (náhled + písmo). */
+enum class RowSize(val label: String, val cover: androidx.compose.ui.unit.Dp) {
+    SMALL("Malé řádky", 40.dp),
+    MEDIUM("Střední řádky", 56.dp),
+    LARGE("Velké řádky", 88.dp),
+}
+
+enum class ShowSort(val label: String) {
+    TITLE("Název"),
+    NEWEST("Nejnovější díl"),
+    ADDED("Naposledy přidané"),
+}
+
+/** Filtr typu pořadu; [type] = `PodcastSource.type` (ABS podcasty patří k Podcastům). */
+enum class ShowFilter(val label: String, val type: String) {
+    ALL("Vše", "all"),
+    PODCAST("Podcasty", "rss"),
+    YOUTUBE("YouTube", "youtube"),
+    CTV("ČT", "ctv"),
 }
 
 enum class BookSort(val label: String) {

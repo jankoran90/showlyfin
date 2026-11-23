@@ -45,12 +45,17 @@ import com.github.jankoran90.showlyfin.data.abs.model.BatchDownloadProgress
  */
 @Composable
 internal fun LibraryToolbar(
-    filter: BookFilter,
-    sort: BookSort,
+    /** Filtr jako (id, popisek); id prvního = „vše“ (nezvýrazněný). Sdílené knihami i pořady (user 2026-11-23). */
+    filterOptions: List<Pair<String, String>>,
+    selectedFilter: String,
+    onFilter: (String) -> Unit,
+    sortOptions: List<Pair<String, String>>,
+    selectedSort: String,
+    onSort: (String) -> Unit,
     listMode: Boolean,
-    onFilter: (BookFilter) -> Unit,
-    onSort: (BookSort) -> Unit,
-    onListMode: (Boolean) -> Unit,
+    rowSize: RowSize,
+    /** Mřížka (false) nebo seznam s velikostí řádku. */
+    onView: (listMode: Boolean, rowSize: RowSize) -> Unit,
     libraries: List<Pair<String, String>> = emptyList(),
     selectedLibraryId: String? = null,
     onSelectLibrary: (String) -> Unit = {},
@@ -59,6 +64,7 @@ internal fun LibraryToolbar(
 ) {
     var sortOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
+    var viewOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().padding(start = Spacing.s),
@@ -77,32 +83,52 @@ internal fun LibraryToolbar(
                     )
                 }
                 DropdownChip(
-                    label = filter.label,
-                    options = BookFilter.entries.map { it.name to it.label },
-                    selected = filter.name,
-                    onSelect = { name -> BookFilter.entries.firstOrNull { it.name == name }?.let(onFilter) },
-                    highlighted = filter != BookFilter.ALL,
+                    label = filterOptions.firstOrNull { it.first == selectedFilter }?.second ?: filterOptions.first().second,
+                    options = filterOptions,
+                    selected = selectedFilter,
+                    onSelect = onFilter,
+                    highlighted = selectedFilter != filterOptions.first().first,
                 )
             }
             Box {
                 IconButton(onClick = { sortOpen = true }) {
-                    Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = "Řazení: ${sort.label}")
+                    Icon(
+                        Icons.AutoMirrored.Rounded.Sort,
+                        contentDescription = "Řazení: ${sortOptions.firstOrNull { it.first == selectedSort }?.second.orEmpty()}",
+                    )
                 }
                 DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-                    BookSort.entries.forEach { s ->
+                    sortOptions.forEach { (id, label) ->
                         DropdownMenuItem(
-                            text = { Text(s.label) },
-                            leadingIcon = { if (s == sort) Icon(Icons.Rounded.Check, contentDescription = null) },
-                            onClick = { sortOpen = false; onSort(s) },
+                            text = { Text(label) },
+                            leadingIcon = { if (id == selectedSort) Icon(Icons.Rounded.Check, contentDescription = null) },
+                            onClick = { sortOpen = false; onSort(id) },
                         )
                     }
                 }
             }
-            IconButton(onClick = { onListMode(!listMode) }) {
-                Icon(
-                    if (listMode) Icons.Rounded.GridView else Icons.AutoMirrored.Rounded.ViewList,
-                    contentDescription = if (listMode) "Zobrazit jako mřížku" else "Zobrazit jako seznam",
-                )
+            // User 2026-11-23: „list view dej možnost volit velikost řádku/náhledu“ → mřížka nebo seznam ve 3 velikostech.
+            Box {
+                IconButton(onClick = { viewOpen = true }) {
+                    Icon(
+                        if (listMode) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
+                        contentDescription = "Zobrazení",
+                    )
+                }
+                DropdownMenu(expanded = viewOpen, onDismissRequest = { viewOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Mřížka") },
+                        leadingIcon = { if (!listMode) Icon(Icons.Rounded.Check, contentDescription = null) },
+                        onClick = { viewOpen = false; onView(false, rowSize) },
+                    )
+                    RowSize.entries.forEach { size ->
+                        DropdownMenuItem(
+                            text = { Text("Seznam – ${size.label.lowercase()}") },
+                            leadingIcon = { if (listMode && size == rowSize) Icon(Icons.Rounded.Check, contentDescription = null) },
+                            onClick = { viewOpen = false; onView(true, size) },
+                        )
+                    }
+                }
             }
             if (onDownloadAll != null || batchProgress != null) {
                 Box {
@@ -174,6 +200,7 @@ internal fun BookShelfList(
     onOpenBook: (String) -> Unit,
     onOpenSeries: (BookShelfItem.SeriesGroup) -> Unit,
     onBookActions: (Audiobook) -> Unit,
+    rowSize: RowSize = RowSize.MEDIUM,
 ) {
     LazyColumn(contentPadding = PaddingValues(bottom = Spacing.miniPlayerReserve)) {
         items(items, key = { it.itemKey }) { item ->
@@ -184,6 +211,7 @@ internal fun BookShelfList(
                         model = bookModel(b, playing = b.id == playingId),
                         onClick = { onOpenBook(b.id) },
                         onLongClick = { onBookActions(b) },
+                        coverSize = rowSize.cover,
                         trailing = {
                             IconButton(onClick = { onBookActions(b) }) { Icon(Icons.Rounded.MoreVert, contentDescription = "Akce") }
                         },
@@ -197,6 +225,7 @@ internal fun BookShelfList(
                         placeholder = Icons.AutoMirrored.Rounded.LibraryBooks,
                     ),
                     onClick = { onOpenSeries(item) },
+                    coverSize = rowSize.cover,
                 )
             }
         }

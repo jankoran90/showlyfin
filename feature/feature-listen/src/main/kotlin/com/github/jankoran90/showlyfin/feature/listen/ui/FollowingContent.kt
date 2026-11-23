@@ -60,7 +60,29 @@ fun FollowingContent(
     onOpenMerged: (groupId: String, title: String) -> Unit,
     downloadCount: Int,
     sourceType: String,
+    /** User 2026-11-23: „proč pořady nemají lištu filtrů a řazení nebo tlačítka pohledu jako knihy“ — Domů › Pořady. */
+    withToolbar: Boolean = false,
 ) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var showFilter by remember { mutableStateOf(LibraryPrefs.showFilter(ctx)) }
+    var showSort by remember { mutableStateOf(LibraryPrefs.showSort(ctx)) }
+    var listMode by remember { mutableStateOf(LibraryPrefs.showListMode(ctx)) }
+    var rowSize by remember { mutableStateOf(LibraryPrefs.showRowSize(ctx)) }
+    val effType = if (withToolbar) showFilter.type else sourceType
+    // Nejnovější díl pořadu = z časové osy (Nové díly), klíč `type:ref`; pořad mimo osu = 0 (řadí se nakonec).
+    val newestByKey: Map<String, Long> = if (withToolbar && showSort == ShowSort.NEWEST) {
+        val timelineVm: com.github.jankoran90.showlyfin.feature.listen.PodcastTimelineViewModel = hiltViewModel()
+        val tl by timelineVm.state.collectAsStateWithLifecycle()
+        remember(tl.buckets) {
+            val m = HashMap<String, Long>()
+            tl.buckets.forEach { b -> b.items.forEach { i ->
+                val k = "${i.sourceType}:${i.sourceRef}"
+                if (i.timestampMs > (m[k] ?: 0L)) m[k] = i.timestampMs
+            } }
+            m
+        }
+    } else emptyMap()
+
     // WEFT (SHW-75/W5): per-profil skrytí pořadů ve Sledovaných + akční sheet při dlouhém stisku karty.
     val cfg by viewModel.profileConfig.collectAsStateWithLifecycle()
     val hiddenFollowing = cfg.hiddenFollowingSourceKeys
@@ -76,8 +98,8 @@ fun FollowingContent(
     }
     // Filtr typu zdroje (z filtru): all|rss|youtube — aplikuje se na vlastní zdroje. ABS podcasty
     // ukazujeme jen u „Vše" nebo „Podcasty" (jsou to RSS-like pořady, ne YouTube).
-    val sources = visibleSources.filter { sourceType == "all" || it.type == sourceType }
-    val showAbs = sourceType == "all" || sourceType == "rss"
+    val sources = visibleSources.filter { effType == "all" || it.type == effType }
+    val showAbs = effType == "all" || effType == "rss"
 
     // TWINE (SHW-74 / plán F7): slinkované zdroje (audio+video = týž pořad) → 1 sloučená karta.
     val links by viewModel.sourceLinks.collectAsStateWithLifecycle()
@@ -92,19 +114,31 @@ fun FollowingContent(
     // WEFT (SHW-75/W3+W5): sloučené + samostatné + ABS karty do JEDNOHO abecedně řazeného gridu
     // (dřív sloučené vždy první → nepůsobilo „podle abecedy"), odfiltrované o per-profil skryté
     // ve Sledovaných (W5). Sloučená karta zmizí, až když jsou skryté VŠECHNY její verze.
-    val libraryCards = remember(links, byKey, plainSources, state.podcasts, showAbs, sourceType, hiddenFollowing) {
+    val libraryCards = remember(links, byKey, plainSources, state.podcasts, showAbs, effType, hiddenFollowing, showSort, newestByKey) {
         buildList<LibraryCard> {
             links.forEach { g ->
                 val members = g.members.mapNotNull { byKey[it] }
                 if (members.isEmpty()) return@forEach
-                if (sourceType != "all" && members.none { it.type == sourceType }) return@forEach
+                if (effType != "all" && members.none { it.type == effType }) return@forEach
                 add(LibraryCard.Merged(g.id, g.title ?: members.first().title, g.thumbnail ?: members.firstNotNullOfOrNull { it.thumbnail }, g.members))
             }
             plainSources.forEach { add(LibraryCard.Plain(it, viewModel.sourceKey(it))) }
             if (showAbs) state.podcasts.forEach { add(LibraryCard.Abs(it)) }
         }
             .filter { card -> card.hideKeys.any { it !in hiddenFollowing } }
-            .sortedBy { it.sortTitle.lowercase(java.util.Locale("cs")) }
+            .let { cards ->
+                val collator = java.text.Collator.getInstance(java.util.Locale("cs"))
+                val byTitle = compareBy<LibraryCard, String>(collator) { it.sortTitle }
+                when (if (withToolbar) showSort else ShowSort.TITLE) {
+                    ShowSort.TITLE -> cards.sortedWith(byTitle)
+                    ShowSort.NEWEST -> cards.sortedWith(
+                        compareByDescending<LibraryCard> { c -> c.hideKeys.maxOfOrNull { newestByKey[it] ?: 0L } ?: 0L }.then(byTitle),
+                    )
+                    ShowSort.ADDED -> cards.sortedWith(
+                        compareByDescending<LibraryCard> { c -> c.addedAt(byKey) }.then(byTitle),
+                    )
+                }
+            }
     }
     val hasContent = libraryCards.isNotEmpty()
 
@@ -125,6 +159,22 @@ fun FollowingContent(
             state.error != null && !hasContent -> CenteredMessage(state.error)
 
             else -> {
+                if (withToolbar) {
+                    LibraryToolbar(
+                        filterOptions = ShowFilter.entries.map { it.name to it.label },
+                        selectedFilter = showFilter.name,
+                        onFilter = { n -> ShowFilter.entries.firstOrNull { it.name == n }?.let { showFilter = it; LibraryPrefs.setShowFilter(ctx, it) } },
+                        sortOptions = ShowSort.entries.map { it.name to it.label },
+                        selectedSort = showSort.name,
+                        onSort = { n -> ShowSort.entries.firstOrNull { it.name == n }?.let { showSort = it; LibraryPrefs.setShowSort(ctx, it) } },
+                        listMode = listMode,
+                        rowSize = rowSize,
+                        onView = { list, size ->
+                            listMode = list; rowSize = size
+                            LibraryPrefs.setShowListMode(ctx, list); LibraryPrefs.setShowRowSize(ctx, size)
+                        },
+                    )
+                }
                 if (showAbs && state.podcastLibraries.size > 1) {
                     LibraryChips(
                         libraries = state.podcastLibraries.map { it.id to it.name },
@@ -133,7 +183,24 @@ fun FollowingContent(
                     )
                 }
                 if (!hasContent && !state.isLoading) {
-                    CenteredMessage("Zatím nesleduješ žádné podcasty.\nPřidej zdroje v záložce Objev.")
+                    CenteredMessage(
+                        if (withToolbar && showFilter != ShowFilter.ALL) "Žádný pořad neodpovídá filtru „${showFilter.label}“."
+                        else "Zatím nesleduješ žádné podcasty.\nPřidej zdroje v záložce Objev.",
+                    )
+                } else if (withToolbar && listMode) {
+                    ShowShelfList(
+                        cards = libraryCards,
+                        rowSize = rowSize,
+                        newestByKey = newestByKey,
+                        onClick = { card ->
+                            when (card) {
+                                is LibraryCard.Merged -> onOpenMerged(card.groupId, card.title)
+                                is LibraryCard.Plain -> onOpenSource(card.source)
+                                is LibraryCard.Abs -> onOpenPodcast(card.podcast.id)
+                            }
+                        },
+                        onActions = { actionCard = it },
+                    )
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 150.dp),
