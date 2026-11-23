@@ -91,7 +91,7 @@ internal val slovoSettingEntries: List<SlovoSettingEntry> = listOf(
     SlovoSettingEntry(
         "Přehrávání a zvuk", Icons.Rounded.PlayCircle, SlovoSettingsCategory.PLAYER,
         "rychlost výchozí pamatovat skok zpět vpřed přetočit po pauze spánek časovač ztišit zatřesení " +
-            "usnul vyrovnání hlasitosti přeskakovat ticho zesílit hlas zvuk mini přehrávač barva obalu",
+            "usnul vyrovnání hlasitosti přeskakovat ticho zesílit hlas zvuk mini přehrávač barva obalu fronta swipe tah rozposlouchané",
     ) { SlovoPlayerSettingsSection() },
     SlovoSettingEntry(
         "Záložky", Icons.Rounded.Bookmarks, SlovoSettingsCategory.PLAYER,

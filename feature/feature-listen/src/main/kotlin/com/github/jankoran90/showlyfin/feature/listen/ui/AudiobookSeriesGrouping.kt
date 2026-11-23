@@ -9,6 +9,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -80,7 +85,7 @@ fun SeriesCard(
     val cover = group.books.firstOrNull { it.coverUrl != null }
     com.github.jankoran90.showlyfin.core.ui.CoverCard(
         title = group.seriesName,
-        subtitle = dilyCz(group.books.size),
+        subtitle = seriesSummary(group, withAuthor = false),
         imageUrl = cover?.coverUrl,
         onClick = onClick,
         modifier = modifier,
@@ -88,7 +93,44 @@ fun SeriesCard(
     )
 }
 
-/** Sheet s díly jedné série, seřazenými podle pořadí — tap na díl otevře jeho detail. */
+/**
+ * User 2026-11-23 („styl výpisu série… takové o ničem a zobrazení příliš velké“): souhrn série do řádku
+ * a podtitulku sheetu — autor · počet dílů · celková délka · stav poslechu.
+ */
+internal fun seriesSummary(group: BookShelfItem.SeriesGroup, withAuthor: Boolean = true): String {
+    val books = group.books
+    val author = books.mapNotNull { it.author?.takeIf { a -> a.isNotBlank() } }.distinct().singleOrNull()
+    val totalMs = (books.sumOf { it.durationSec } * 1000).toLong()
+    val finished = books.count { it.isFinished }
+    val current = books.indexOfFirst { !it.isFinished && it.currentTimeSec >= STARTED_MIN_SEC }
+    val state = when {
+        finished == books.size -> "vše dohráno"
+        current >= 0 -> "poslouchám ${current + 1}. díl"
+        finished > 0 -> "dohráno $finished z ${books.size}"
+        else -> null
+    }
+    return listOfNotNull(
+        author.takeIf { withAuthor },
+        dilyCz(books.size),
+        totalMs.takeIf { it > 0 }?.let { durationLabel(it) },
+        state,
+    ).joinToString(" · ")
+}
+
+/** Číslo dílu v sérii (z ABS „Série #N“), jinak pořadí v seznamu. */
+private fun volumeNumber(book: Audiobook, index: Int): String {
+    val seq = book.seriesName?.let(::seriesSequenceOf)
+    return when {
+        seq == null -> "${index + 1}"
+        seq % 1.0 == 0.0 -> seq.toLong().toString()
+        else -> seq.toString()
+    }
+}
+
+/**
+ * Sheet s díly jedné série, seřazenými podle pořadí — tap na díl otevře jeho detail. Dospělý: seznam řádků
+ * (číslo dílu, délka/zbývá, průběh, ⋮); dítě ([asGrid]): velké obaly.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SeriesVolumesSheet(
@@ -97,28 +139,58 @@ fun SeriesVolumesSheet(
     onOpenBook: (String) -> Unit,
     onLongClickBook: (Audiobook) -> Unit,
     onDismiss: () -> Unit,
+    asGrid: Boolean = false,
+    playingId: String? = null,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Text(
             group.seriesName,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         )
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
-            modifier = Modifier.fillMaxWidth().height(420.dp),
-            contentPadding = PaddingValues(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(group.books, key = { it.id }) { book ->
-                AudiobookCard(
-                    book = book,
-                    onClick = { onOpenBook(book.id) },
-                    downloaded = book.id in downloadedBookIds,
-                    onLongClick = { onLongClickBook(book) },
-                )
+        Text(
+            seriesSummary(group),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 8.dp),
+        )
+        if (asGrid) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 150.dp),
+                modifier = Modifier.fillMaxWidth().height(420.dp),
+                contentPadding = PaddingValues(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(group.books, key = { it.id }) { book ->
+                    AudiobookCard(
+                        book = book,
+                        onClick = { onOpenBook(book.id) },
+                        downloaded = book.id in downloadedBookIds,
+                        onLongClick = { onLongClickBook(book) },
+                    )
+                }
+            }
+        } else {
+            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                itemsIndexed(group.books, key = { _, b -> b.id }) { i, book ->
+                    val base = bookModel(book, playing = book.id == playingId)
+                    SlovoMediaRow(
+                        model = base.copy(
+                            subtitle = listOfNotNull(
+                                "${volumeNumber(book, i)}. díl",
+                                "staženo".takeIf { book.id in downloadedBookIds },
+                            ).joinToString(" · "),
+                        ),
+                        onClick = { onOpenBook(book.id) },
+                        onLongClick = { onLongClickBook(book) },
+                        coverSize = RowSize.MEDIUM.cover,
+                        trailing = {
+                            IconButton(onClick = { onLongClickBook(book) }) { Icon(Icons.Rounded.MoreVert, contentDescription = "Akce") }
+                        },
+                    )
+                }
             }
         }
     }

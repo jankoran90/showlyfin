@@ -5,6 +5,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,7 +110,7 @@ internal fun InlineChapterList(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 internal fun InlineQueueList(
     modifier: Modifier,
@@ -129,6 +130,10 @@ internal fun InlineQueueList(
     /** AMPHORA F1: druhý řádek s průběhem („zbývá 42 min“) a průběh 0..1 — jen kde je znám. */
     metaFor: (QueuedEpisode) -> String? = { null },
     progressFor: (QueuedEpisode) -> Float? = { null },
+    /** User 2026-11-23 „ve frontě chybí větší správa… longpress“ — nabídka akcí dílu. */
+    onLongPress: ((QueuedEpisode) -> Unit)? = null,
+    /** Obrazovka Fronta: položky pod frontou (Rozposlouchané) ve stejném seznamu. */
+    footer: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null,
 ) {
     val queueState = rememberUpdatedState(queue)
     val listState = rememberLazyListState()
@@ -179,7 +184,7 @@ internal fun InlineQueueList(
                                     else -> MaterialTheme.colorScheme.background
                                 },
                             )
-                            .clickable { onPlay(q) }
+                            .combinedClickable(onClick = { onPlay(q) }, onLongClick = onLongPress?.let { { it(q) } })
                             .padding(horizontal = 6.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -257,6 +262,7 @@ internal fun InlineQueueList(
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             }
+            footer?.invoke(this)
         }
     }
 }

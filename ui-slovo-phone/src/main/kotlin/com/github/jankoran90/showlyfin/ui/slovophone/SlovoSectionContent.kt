@@ -191,7 +191,7 @@ internal fun SlovoSectionContent(
             )
         }
         SlovoSection.FRONTA -> SlovoSectionScaffold(section.label, onMenu) {
-            QueueScreen(onOpenPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize())
+            QueueScreen(onOpenPlayer = expandMiniPlayer, modifier = Modifier.fillMaxSize(), onOpenBook = onOpenBook, onOpenSourceEpisode = onOpenSourceEpisode)
         }
         SlovoSection.OBJEVIT -> SlovoSectionScaffold(section.label, onMenu) {
             PodcastDiscoveryScreen(modifier = Modifier.fillMaxSize(), showTitle = false)

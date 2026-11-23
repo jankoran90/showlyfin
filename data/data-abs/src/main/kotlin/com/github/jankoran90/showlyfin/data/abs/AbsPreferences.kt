@@ -221,14 +221,15 @@ class AbsPreferences @Inject constructor(
     /**
      * Slovo 2026-10-13 (user „swipe doleva/doprava ve frontě přehrávače do Nastavení: zapnout/vypnout
      * a jakou má mít funkci") — akce swipu položky fronty pro každý směr zvlášť:
-     * 0 = vypnuto (výchozí), 1 = odebrat z fronty, 2 = stáhnout do telefonu, 3 = přehrát hned, 4 = na začátek fronty.
+     * 0 = vypnuto, 1 = odebrat z fronty, 2 = stáhnout do telefonu, 3 = přehrát hned, 4 = na začátek fronty.
      */
     var queueSwipeLeft: Int
-        get() = prefs.getInt(KEY_QUEUE_SWIPE_LEFT, 0)
+        // User 2026-11-23 „ve frontě chybí větší správa… swipe quick action“ → výchozí doleva odebrat, doprava přehrát další.
+        get() = prefs.getInt(KEY_QUEUE_SWIPE_LEFT, 1)
         set(value) = prefs.edit { putInt(KEY_QUEUE_SWIPE_LEFT, value.coerceIn(0, 4)) }
 
     var queueSwipeRight: Int
-        get() = prefs.getInt(KEY_QUEUE_SWIPE_RIGHT, 0)
+        get() = prefs.getInt(KEY_QUEUE_SWIPE_RIGHT, 4)
         set(value) = prefs.edit { putInt(KEY_QUEUE_SWIPE_RIGHT, value.coerceIn(0, 4)) }
 
     /** Zobrazit tlačítko rychlosti v přehrávači. */

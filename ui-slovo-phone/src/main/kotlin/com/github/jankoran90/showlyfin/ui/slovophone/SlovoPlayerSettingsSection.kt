@@ -152,7 +152,7 @@ internal fun SlovoPlayerSettingsSection(
             checked = sleepBtn, onCheckedChange = { abs.showSleepButton = it; sleepBtn = it },
         )
 
-        Group("Fronta v přehrávači")
+        Group("Fronta")
         SettingChips(
             label = "Fronta: swipe doleva",
             subtitle = "Vypnuto = položka fronty se tažením nehne (žádné omylem odebrané díly).",
@@ -167,6 +167,14 @@ internal fun SlovoPlayerSettingsSection(
             selected = right,
             labelOf = QueueGestureSettingsViewModel::label,
             onSelect = viewModel::setRight,
+        )
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        var showContinue by remember { mutableStateOf(com.github.jankoran90.showlyfin.feature.listen.ui.QueuePrefs.showContinue(ctx)) }
+        SettingSwitchRow(
+            title = "Rozposlouchané pod frontou",
+            subtitle = "Obrazovka Fronta ukáže i rozjeté knihy a díly (tah doprava = přehrát další, doleva = ukončit poslech)",
+            checked = showContinue,
+            onCheckedChange = { com.github.jankoran90.showlyfin.feature.listen.ui.QueuePrefs.setShowContinue(ctx, it); showContinue = it },
         )
     }
 }

@@ -220,7 +220,7 @@ internal fun BookShelfList(
                 is BookShelfItem.SeriesGroup -> SlovoMediaRow(
                     model = SlovoMediaModel(
                         title = item.seriesName,
-                        subtitle = "série · ${item.books.size} " + if (item.books.size in 2..4) "díly" else "dílů",
+                        subtitle = "série · " + seriesSummary(item),
                         coverUrl = item.books.firstOrNull { it.coverUrl != null }?.coverUrl,
                         placeholder = Icons.AutoMirrored.Rounded.LibraryBooks,
                     ),

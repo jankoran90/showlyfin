@@ -281,6 +281,7 @@ fun BooksContent(
                         onOpenBook = { id -> openSeries = null; onOpenBook(id) },
                         onLongClickBook = { book -> openSeries = null; actionBook = book },
                         onDismiss = { openSeries = null },
+                        playingId = playerState.currentItemId.takeIf { playerState.isActive },
                     )
                 }
                 actionBook?.let { book ->

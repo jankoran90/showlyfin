@@ -1,5 +1,11 @@
 package com.github.jankoran90.showlyfin.feature.listen.ui
 
+import com.github.jankoran90.showlyfin.feature.listen.HomeViewModel.ContinueItem as HomeContinue
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.VerticalAlignBottom
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,7 +56,10 @@ import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
 fun QueueScreen(
     onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenBook: (String) -> Unit = {},
+    onOpenSourceEpisode: (sourceType: String, ref: String, title: String, episodeKey: String) -> Unit = { _, _, _, _ -> },
     viewModel: AudiobookPlayerViewModel = hiltViewModel(),
+    homeVm: com.github.jankoran90.showlyfin.feature.listen.HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val queue by viewModel.queue.collectAsStateWithLifecycle()
@@ -75,6 +84,50 @@ fun QueueScreen(
     val unknown = queue.size - known.size
     val finishedCount = queue.count { it.episodeId != state.currentEpisodeId && marks[it.episodeId]?.isFinished == true }
     val playingOutsideQueue = state.isActive && queue.none { it.episodeId == state.currentEpisodeId }
+
+    // User 2026-11-23: Rozposlouchané pod frontou (bez toho, co už je ve frontě nebo právě hraje).
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { homeVm.refresh(); onPauseOrDispose { } }
+    val continueAll by homeVm.items.collectAsStateWithLifecycle()
+    val showContinue = remember { QueuePrefs.showContinue(ctx) }
+    val queueKeys = queue.map { it.episodeId }.toSet()
+    val continueItems = if (!showContinue) emptyList() else continueAll.filter { item ->
+        when (item) {
+            is HomeContinue.Book -> !(state.isActive && state.currentItemId == item.book.id)
+            is HomeContinue.Episode -> (item.episode.resumeKey ?: item.episode.id).let { k -> k !in queueKeys && k != state.currentEpisodeId }
+        }
+    }
+    var queueAction by remember { mutableStateOf<QueuedEpisode?>(null) }
+    var continueAction by remember { mutableStateOf<HomeContinue?>(null) }
+    var confirmEnd by remember { mutableStateOf<HomeContinue?>(null) }
+    val playContinue: (HomeContinue) -> Unit = { item ->
+        when (item) {
+            is HomeContinue.Book -> viewModel.open(item.book.id, fromStart = false)
+            is HomeContinue.Episode -> homeVm.playEpisode(item)
+        }
+    }
+    val endContinue: (HomeContinue) -> Unit = { item ->
+        when (item) {
+            is HomeContinue.Book -> homeVm.resetBookProgress(item.book)
+            is HomeContinue.Episode -> homeVm.resetEpisodeProgress(item)
+        }
+    }
+    val footer: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
+        if (queue.isEmpty()) item(key = "queue_empty_hint") {
+            Text(
+                "Ve frontě nic není. Díl přidáš tahem doprava níž, podržením nebo přes ⋮ → Přehrát další.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s),
+            )
+        }
+        continueSection(
+            items = continueItems,
+            onPlay = playContinue,
+            onActions = { continueAction = it },
+            onPlayNext = { homeVm.enqueueEpisode(it, atFront = true) },
+            onAskEnd = { confirmEnd = it },
+        )
+    }
 
     Column(modifier.fillMaxSize()) {
         Row(
@@ -135,7 +188,7 @@ fun QueueScreen(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
         }
-        if (queue.isEmpty()) {
+        if (queue.isEmpty() && continueItems.isEmpty()) {
             Column(
                 Modifier.fillMaxSize().padding(Spacing.xl),
                 verticalArrangement = Arrangement.Center,
@@ -164,6 +217,8 @@ fun QueueScreen(
                 onClear = { confirmClear = true },
                 showHeader = false,
                 contentPadding = PaddingValues(bottom = Spacing.miniPlayerReserve),
+                onLongPress = { queueAction = it },
+                footer = footer,
                 metaFor = { q ->
                     val mark = marks[q.episodeId]
                     when {
@@ -181,6 +236,52 @@ fun QueueScreen(
                 },
             )
         }
+    }
+
+    queueAction?.let { q ->
+        val idx = queue.indexOfFirst { it.episodeId == q.episodeId }
+        ListenEpisodeActionSheet(
+            title = q.title,
+            infoLine = q.podcastTitle,
+            actions = listOf(
+                ListenEpisodeAction(Icons.Rounded.PlayArrow, "Přehrát teď") { viewModel.playQueued(q) },
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přehrát další", enabled = idx > 0) { viewModel.onQueueSwipe(q, 4) },
+                ListenEpisodeAction(Icons.Rounded.VerticalAlignBottom, "Na konec fronty", enabled = idx in 0 until queue.lastIndex) {
+                    viewModel.moveQueueItem(idx, queue.lastIndex)
+                },
+                ListenEpisodeAction(Icons.Rounded.Download, "Stáhnout do telefonu", enabled = q.direct?.url?.startsWith("file:") != true) { viewModel.onQueueSwipe(q, 2) },
+                ListenEpisodeAction(Icons.Rounded.Delete, "Odebrat z fronty") { viewModel.onQueueSwipe(q, 1) },
+            ),
+            onDismiss = { queueAction = null },
+        )
+    }
+    continueAction?.let { item ->
+        ListenEpisodeActionSheet(
+            title = when (item) { is HomeContinue.Book -> item.book.title; is HomeContinue.Episode -> item.episode.title },
+            infoLine = when (item) { is HomeContinue.Book -> item.book.author; is HomeContinue.Episode -> item.sourceTitle },
+            actions = continueActions(
+                item,
+                onPlay = { playContinue(item) },
+                onEnqueue = { front -> (item as? HomeContinue.Episode)?.let { homeVm.enqueueEpisode(it, atFront = front) } },
+                onOpen = {
+                    when (item) {
+                        is HomeContinue.Book -> onOpenBook(item.book.id)
+                        is HomeContinue.Episode -> onOpenSourceEpisode(item.sourceType, item.sourceRef, item.sourceTitle, item.episode.resumeKey ?: item.episode.id)
+                    }
+                },
+                onEnd = { endContinue(item) },
+            ),
+            onDismiss = { continueAction = null },
+        )
+    }
+    confirmEnd?.let { item ->
+        AlertDialog(
+            onDismissRequest = { confirmEnd = null },
+            title = { Text("Ukončit poslech?") },
+            text = { Text(endMessage(item)) },
+            confirmButton = { TextButton(onClick = { confirmEnd = null; endContinue(item) }) { Text("Ukončit") } },
+            dismissButton = { TextButton(onClick = { confirmEnd = null }) { Text("Zrušit") } },
+        )
     }
 
     if (confirmClear) {

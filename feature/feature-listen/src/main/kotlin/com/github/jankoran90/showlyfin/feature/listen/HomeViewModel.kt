@@ -1,5 +1,6 @@
 package com.github.jankoran90.showlyfin.feature.listen
 
+import com.github.jankoran90.showlyfin.feature.listen.player.enqueue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jankoran90.showlyfin.core.data.ProfileRepository
@@ -212,9 +213,18 @@ class HomeViewModel @Inject constructor(
     fun playEpisode(item: ContinueItem.Episode) {
         val ep = item.episode
         val key = ep.resumeKey ?: ep.id
+        connection.playDirectEpisode(queuedOf(item))
+        enqueueSeriesRest(item)
+    }
+
+    /** User 2026-11-23: Fronta › Rozposlouchané — díl do fronty (další / na konec). */
+    fun enqueueEpisode(item: ContinueItem.Episode, atFront: Boolean) = connection.enqueue(queuedOf(item), atFront = atFront)
+
+    private fun queuedOf(item: ContinueItem.Episode): QueuedEpisode {
+        val ep = item.episode
+        val key = ep.resumeKey ?: ep.id
         val localUrl = offline.localVideo(key)?.let { android.net.Uri.fromFile(it).toString() }
-        connection.playDirectEpisode(
-            QueuedEpisode(
+        return QueuedEpisode(
                 // 2026-10-13 (emulátor): dřív `ep.subtitle` (= NÁZEV pořadu) → ťuk na obrázek v přehrávači
                 // hledal pořad „Po jedné stopě" místo jeho ID a u dětí neotevřel nic. ID zdroje má přednost.
                 itemId = item.sourceRef.ifBlank { null } ?: ep.sourceKey?.substringAfter(':') ?: ep.subtitle ?: "",
@@ -226,8 +236,11 @@ class HomeViewModel @Inject constructor(
                 // Stream URL YouTube/ČT nese session klíč — ze snímku Domů ([HomeSnapshotStore]) může být
                 // zastaralý, proto se staví znovu s aktuálním. RSS = přímá enclosure, beze změny.
                 direct = DirectAudio(url = localUrl ?: freshStreamUrl(item), durationSec = ep.durationSec, author = item.sourceTitle),
-            ),
-        )
+            )
+    }
+
+    private fun enqueueSeriesRest(item: ContinueItem.Episode) {
+        val ep = item.episode
         // Díl ze série = kapitola knihy → za něj zbytek knihy (fronta pak navazuje jako v knize).
         viewModelScope.launch {
             seriesQueue.enqueueRestOfSeries(item.sourceType, item.sourceRef, ep) { e ->
