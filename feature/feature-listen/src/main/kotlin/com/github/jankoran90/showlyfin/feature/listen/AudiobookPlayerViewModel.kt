@@ -18,6 +18,7 @@ import com.github.jankoran90.showlyfin.feature.listen.player.AudiobookPlayerConn
 import com.github.jankoran90.showlyfin.feature.listen.player.clearQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.moveQueueItem
 import com.github.jankoran90.showlyfin.feature.listen.player.moveToFront
+import com.github.jankoran90.showlyfin.feature.listen.player.moveAfterCurrent
 import com.github.jankoran90.showlyfin.feature.listen.player.removeFromQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.removeFinishedFromQueue
 import com.github.jankoran90.showlyfin.feature.listen.player.QueuedEpisode
@@ -287,7 +288,7 @@ class AudiobookPlayerViewModel @Inject constructor(
             1 -> removeFromQueue(ep.episodeId)
             2 -> downloadQueued(ep)
             3 -> connection.playQueued(ep)
-            4 -> connection.moveToFront(ep.episodeId)
+            4 -> connection.moveAfterCurrent(ep.episodeId)
         }
     }
 

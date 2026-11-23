@@ -245,7 +245,7 @@ fun QueueScreen(
             infoLine = q.podcastTitle,
             actions = listOf(
                 ListenEpisodeAction(Icons.Rounded.PlayArrow, "Přehrát teď") { viewModel.playQueued(q) },
-                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přehrát další", enabled = idx > 0) { viewModel.onQueueSwipe(q, 4) },
+                ListenEpisodeAction(Icons.AutoMirrored.Rounded.PlaylistPlay, "Přehrát další", enabled = q.episodeId != state.currentEpisodeId) { viewModel.onQueueSwipe(q, 4) },
                 ListenEpisodeAction(Icons.Rounded.VerticalAlignBottom, "Na konec fronty", enabled = idx in 0 until queue.lastIndex) {
                     viewModel.moveQueueItem(idx, queue.lastIndex)
                 },

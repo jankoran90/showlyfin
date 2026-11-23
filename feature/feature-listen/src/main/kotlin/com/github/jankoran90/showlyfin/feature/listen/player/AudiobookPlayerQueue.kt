@@ -132,6 +132,16 @@ fun AudiobookPlayerConnection.moveToFront(episodeId: String) {
     if (idx > 0) moveQueueItem(idx, 0)
 }
 
+/** „Přehrát další“ (Fronta, swipe/nabídka; revize 2026-11-23): díl hned ZA právě hraný, bez něj na začátek. */
+fun AudiobookPlayerConnection.moveAfterCurrent(episodeId: String) {
+    if (episodeId == currentEpisode?.episodeId) return
+    val q = _queue.value
+    val ep = q.firstOrNull { it.episodeId == episodeId } ?: return
+    val without = q.filterNot { it.episodeId == episodeId }
+    val curIdx = without.indexOfFirst { it.episodeId == currentEpisode?.episodeId }
+    setQueue(without.toMutableList().apply { add(if (curIdx >= 0) curIdx + 1 else 0, ep) })
+}
+
 /**
  * AMPHORA F1 (Fronta, „vyčistit přehrané“) — odebere z fronty dohrané díly. Právě načtený díl nechá
  * (o ten se stará přehrávač po dohrání). Vrací počet odebraných.

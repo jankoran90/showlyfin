@@ -30,7 +30,7 @@ class QueueGestureSettingsViewModel @Inject constructor(
             1 -> "Odebrat"
             2 -> "Stáhnout"
             3 -> "Přehrát"
-            4 -> "Na začátek"
+            4 -> "Přehrát další"
             else -> "Vypnuto"
         }
     }

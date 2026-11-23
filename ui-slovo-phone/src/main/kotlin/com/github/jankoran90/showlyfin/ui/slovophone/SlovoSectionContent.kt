@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -103,10 +104,19 @@ internal fun SlovoSectionContent(
         } else {
             val ctx = LocalContext.current
             val profile by listenVm.activeProfile.collectAsStateWithLifecycle()
-            val tabs = remember(profile?.id) { LibraryPrefs.visibleTabs(ctx) }
-            val pager = key(tabs) { rememberPagerState(initialPage = 0) { tabs.size } }
+            val baseTabs = remember(profile?.id) { LibraryPrefs.visibleTabs(ctx) }
+            // Revize 2026-11-23: cíl skoku ve skryté záložce se dočasně připojí na konec (jinak by odkaz nikam nevedl).
+            var extraTab by remember(baseTabs) { mutableStateOf<LibraryTab?>(null) }
+            val tabs = if (extraTab != null && extraTab !in baseTabs) baseTabs + extraTab!! else baseTabs
+            val pager = key(baseTabs) { rememberPagerState(initialPage = 0) { tabs.size } }
             val scope = rememberCoroutineScope()
-            val goTo: (LibraryTab) -> Unit = { t -> tabs.indexOf(t).takeIf { it >= 0 }?.let { scope.launch { pager.animateScrollToPage(it) } } }
+            var pendingTab by remember { mutableStateOf<LibraryTab?>(null) }
+            val goTo: (LibraryTab) -> Unit = { t -> if (t !in baseTabs) extraTab = t; pendingTab = t }
+            LaunchedEffect(pendingTab, tabs) {
+                val t = pendingTab ?: return@LaunchedEffect
+                val idx = tabs.indexOf(t)
+                if (idx >= 0) { pendingTab = null; pager.animateScrollToPage(idx) }
+            }
             // Skok na záložku zvenku (Přehled › Zobrazit vše, offline díl z přehrávače).
             val request = HomeTabRequest.tab
             LaunchedEffect(request) { request?.let { goTo(it); HomeTabRequest.tab = null } }
